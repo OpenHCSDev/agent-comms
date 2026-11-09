@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from agent_comms.native_build_inputs import GitLaunch
+from .installer.native_build_inputs import GitLaunch
 from agent_comms.storage.maintenance_barrier import FreshIngress
 
 

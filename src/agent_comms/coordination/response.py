@@ -40,7 +40,7 @@ from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.coordinator import Coordination
 from ..messaging.message_bus import MessageBus
 from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
-from agent_comms.native_input_owner import RegistryOwner
+from ..execution.native_input_owner import RegistryOwner
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable

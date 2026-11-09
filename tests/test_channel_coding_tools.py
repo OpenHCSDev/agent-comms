@@ -25,7 +25,10 @@ from agent_comms.envelope_claim_transitions import (
     WritableFileClaim,
 )
 from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
-from agent_comms.native_tools import CodingTool, NativeToolDeclaration
+from agent_comms.transport.native_tools import (
+    CodingTool,
+    NativeToolDeclaration,
+)
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import AssistantMessage, ReportedFlag, ReportedParts, ReportedText, ToolCallContent
 from agent_comms.storage_room import NoRoomNeeded
@@ -159,7 +162,7 @@ def test_coding_names_and_argument_types_come_from_declarations():
 def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments):
     from agent_comms.tool_denial import SelectedToolDenied
 
-    from agent_comms.native_tool_call import RefusedCodingCall
+    from agent_comms.transport.native_tool_call import RefusedCodingCall
 
     call = NativeToolDeclaration.decode("bad-argument-shape", name, arguments)
     assert isinstance(call, RefusedCodingCall)
@@ -168,8 +171,8 @@ def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments)
 
 
 def test_an_offered_mcp_tool_decodes_as_its_call_and_an_unoffered_one_is_refused():
-    from agent_comms.native_tool_call import RefusedCodingCall
-    from agent_comms.native_tools import McpToolCall
+    from agent_comms.transport.native_tool_call import RefusedCodingCall
+    from agent_comms.transport.native_tools import McpToolCall
     from agent_comms.registry.thread_identity import (
     ReportedTools,
     ToolName,
@@ -297,7 +300,7 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(
         await socket.close()
     assert "Unhandled exception" not in caplog.text
     answer = "refused" if refused else "allowed"
-    warnings = [record for record in caplog.records if record.name == "agent_comms.native_tool_transport"]
+    warnings = [record for record in caplog.records if record.name == "agent_comms.transport.native_tool_transport"]
     assert len(warnings) == 1
     assert f"stopped waiting for a tool check before its answer ({answer})" in caplog.text
 

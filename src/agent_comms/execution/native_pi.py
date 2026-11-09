@@ -10,38 +10,64 @@ import os
 import re
 import shutil
 import sys
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+)
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.participant_identity import ParticipantIdentity
+from agent_comms.execution.selected.session import SelectedSession
 
-from .active_route import (
+from ..active_route import (
     ActiveRoute,
     resolve_comms_route,
 )
-from .coordination.errors import IdentityConflict
-from .nominal.field_codec import (
-    InputId,
+from ..coordination.errors import IdentityConflict
+from ..launch_root import (
+    LaunchRoot,
+    started,
 )
-from .launch_root import LaunchRoot, started
-from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
-from .native_arguments import NativeArguments, SelectedModel
-from .native_failures import NativePiUnavailable, NativeRequestFailure
-from .native_input_proof import NativeContextProof
-from .native_package import MANIFEST, SYSTEM_PROMPT, VerifiedNativePackage
-from .native_session_files import NativeAgentSettings, NativeSessionFiles
-from .native_tool_transport import NativeToolMode
-from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
-
+from ..launch_runtime import (
+    LaunchRuntime,
+    RestartEnvironment,
+    ThreadLaunch,
+)
+from .native_arguments import (
+    NativeArguments,
+    SelectedModel,
+)
+from .native_entries import (
+    NO_EVIDENCE_READ,
+    NoEvidenceRead,
+)
 from .native_evidence_read import NativeInputUncommitted
+from .native_failures import (
+    NativePiUnavailable,
+    NativeRequestFailure,
+)
+from .native_input_proof import NativeContextProof
+from ..installer.native_package import (
+    MANIFEST,
+    SYSTEM_PROMPT,
+    VerifiedNativePackage,
+)
+from .native_session_files import (
+    NativeAgentSettings,
+    NativeSessionFiles,
+)
+from ..transport.native_tool_transport import NativeToolMode
+from ..nominal.field_codec import InputId
+from ..participant_identity import ParticipantIdentity
+from ..pi_vocabulary import (
+    NoThinkingOverride,
+    ThinkingChoice,
+)
 
-from .native_entries import NO_EVIDENCE_READ, NoEvidenceRead
-from agent_comms.execution.selected.session import SelectedSession
 if TYPE_CHECKING:
-    from . import pi_events as pi
+    from .turn_failure import TurnFailure
+    from .. import pi_events as pi
     from .native_entries import NativeEvidenceRead
-    from .execution.turn_failure import TurnFailure
 
 CAPABILITY = "pi-native-input-v1-live-only"
 
@@ -239,7 +265,7 @@ class NativePiRpcLaunch:
 
         The launch is the caller's root's; without one, this process's selection.
         """
-        from .active_route import resolve_comms_route
+        from ..active_route import resolve_comms_route
 
         package = resolve_comms_route(root).launch().launched_package()
         cls._command_selection(command, runtime, package)
@@ -380,8 +406,6 @@ class NativePiRpcLaunch:
             arguments.extend(("--session", str(session_file)))
         env, configuration = session.launch_environment(agent_dir, environment)
         return cls._build(package, tuple(arguments), worktree, env, session, configuration, runtime, root)
-
-
 
 
 def read_tracked_input_commitment(

@@ -11,7 +11,7 @@ from conftest import installed_comms
 from agent_comms.pi_payloads import PiToolResult
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import NoSentMessage, NoToolDiff, ToolDiff, tool_result_content
-from agent_comms.native_entries import TranscriptProjection
+from agent_comms.execution.native_entries import TranscriptProjection
 from conftest import transcript_records
 from agent_comms.registry.threads import NativeThread
 

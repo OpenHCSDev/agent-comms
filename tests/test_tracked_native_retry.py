@@ -8,10 +8,13 @@ from agent_comms.execution.turn_inbox import SteerInputPolicy
 from agent_comms.nominal.field_codec import InputId, TurnId
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import TurnInputKey
-from agent_comms.native_arguments import SelectedModel
-from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.native_pi import NativeEmptyAnswer, NativePiTerminalFailure
-from agent_comms.native_startup import NativeStartupPolicy
+from agent_comms.execution.native_arguments import SelectedModel
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_pi import (
+    NativeEmptyAnswer,
+    NativePiTerminalFailure,
+)
+from agent_comms.execution.native_startup import NativeStartupPolicy
 from agent_comms.pi_events import NativeRetryEnd
 from agent_comms.pi_payloads import FailedProviderRetry, PiMessage, SucceededProviderRetry
 from agent_comms.tracked_turn import (

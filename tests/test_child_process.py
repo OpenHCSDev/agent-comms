@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.native_build_inputs import DetachedChildStdio
+from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import (
     AttachedChild,
     BoundedRun,

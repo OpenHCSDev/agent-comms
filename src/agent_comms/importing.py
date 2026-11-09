@@ -128,7 +128,11 @@ class ImportSnapshot(ImportedConversation):
 
     def pi_session(self, project: Path) -> str:
         """A valid Pi v3 tree, using text-only portable historical context."""
-        from .native_entries import ImportedSessionWriter, NativeEntry, SessionEntry
+        from .execution.native_entries import (
+            ImportedSessionWriter,
+            NativeEntry,
+            SessionEntry,
+        )
 
         timestamp = datetime.now(UTC)
         iso = timestamp.isoformat()

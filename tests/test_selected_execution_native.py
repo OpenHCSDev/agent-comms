@@ -21,11 +21,17 @@ from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.historical_native_inputs import read_historical_native_inputs
-from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
-from agent_comms.native_pi import CommittedInput, read_tracked_input_commitment
-from agent_comms.native_package import VerifiedNativePackage
+from agent_comms.execution.native_input_record import (
+    TriageNativeExecution,
+    FullNativeExecution,
+)
+from agent_comms.execution.native_pi import (
+    CommittedInput,
+    read_tracked_input_commitment,
+)
+from agent_comms.installer.native_package import VerifiedNativePackage
 
-from agent_comms.native_tools import NativeToolDeclaration
+from agent_comms.transport.native_tools import NativeToolDeclaration
 from agent_comms.cursor_owner import CursorOwner
 from agent_comms.selected_actions import CodingSelectedAction
 from agent_comms.selected_tool_broker import SelectedToolIntent

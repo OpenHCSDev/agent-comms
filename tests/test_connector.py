@@ -74,7 +74,7 @@ from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RecordP
 from agent_comms.host_services.connector import ConnectorService
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.native_transcript import NativeTranscript
+from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.send_result import MessagePublished
 from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.session_file import RegistrySessionLocation

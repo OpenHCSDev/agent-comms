@@ -47,7 +47,7 @@ from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier, MaintenanceHolder, MaintenanceOperator, NoMaintenanceHolder,
 )
 from agent_comms.messages import BusProjectionTables, BusRow, ClaimOperations, HeldResources
-from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.cohort_schema import PrivateCoordinatorSchema
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.triage_native_sources import TriageNativeSource

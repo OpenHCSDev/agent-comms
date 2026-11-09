@@ -26,9 +26,13 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.fresh_private_session import create_fresh_private_session
-from agent_comms.native_arguments import GivenArguments, GivenBinary, NativeArguments
-from agent_comms.native_child import PiSessionChild
-from agent_comms.native_package import VerifiedNativePackage
+from agent_comms.execution.native_arguments import (
+    GivenArguments,
+    GivenBinary,
+    NativeArguments,
+)
+from agent_comms.execution.native_child import PiSessionChild
+from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.projects.storage_rules import StorageRule

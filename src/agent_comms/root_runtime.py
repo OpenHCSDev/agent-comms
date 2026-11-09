@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Annotated, TextIO
 
 from .bus import Bus
-from .native_build_inputs import DetachedChildStdio
+from .installer.native_build_inputs import DetachedChildStdio
 from .child_process import NoProcess, ObservedProcess, OutlivesLauncherLifetime, ProcessIdentity, ProcessState, SpawnedProcess
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError

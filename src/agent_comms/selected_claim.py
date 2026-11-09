@@ -30,7 +30,7 @@ from .envelope_claim_transitions import (
     WakeClaim,
 )
 from .errors import RelationViolationError
-from .native_input_owner import RegistryOwner
+from .execution.native_input_owner import RegistryOwner
 from .private_registry_guard import RegistryPrivacy
 from .registry.registry_document import RegistrySnapshot
 from .registry.threads import NativeThread, Thread

@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Never
 
 from .execution.turn_failure import TerminalFailure
-from .native_input_proof import NativeInputCommit
+from .execution.native_input_proof import NativeInputCommit
 from .execution.turn_inbox import TurnInboxItem
-from .native_pi import NativePiInputNotSent
+from .execution.native_pi import NativePiInputNotSent
 from .pi_events import AgentSettled, MessageStart, Response
 
 if TYPE_CHECKING:

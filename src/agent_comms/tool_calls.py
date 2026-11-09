@@ -21,7 +21,14 @@ from .nominal.field_codec import (
     MalformedRecord,
     ToolCallId,
 )
-from .native_tools import BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool
+from .transport.native_tools import (
+    BashTool,
+    EditTool,
+    GlobTool,
+    GrepTool,
+    ReadTool,
+    WriteTool,
+)
 from .tool_declaration import ContextRows, ReplacementEdit, ToolDeclaration
 from .tool_results import ToolDiff
 from .transcript_events import ToolEndTranscript, ToolStartTranscript

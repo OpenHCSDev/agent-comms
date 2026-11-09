@@ -6,7 +6,7 @@ import json
 import pytest
 
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.registry.native_settings import NativeThreadDefaults
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.thread_model import DeclaredModel
 

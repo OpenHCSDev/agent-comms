@@ -1,16 +1,16 @@
 """Native SDK input observations, decoded once by the existing Pi boundary."""
 
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+)
 from functools import partial
-from typing import TYPE_CHECKING, Annotated
+from typing import (
+    Annotated,
+    TYPE_CHECKING,
+)
 
-from agent_comms.nominal import field_codec
-
-from .coordination.coordinator import Coordination
-
-from .pi_payloads import PiResponseData, StrictFields
-from .registry.thread_identity import OfferedTools
-from .execution.turn_context import (
+from .turn_context import (
     ContextManifest,
     DispatchRequest,
     MeasuredNativeSegment,
@@ -18,10 +18,17 @@ from .execution.turn_context import (
     SegmentManifest,
     UnobservedDispatchRequest,
 )
+from ..agent_events import AgentEvent
+from ..coordination.coordinator import Coordination
+from ..nominal import field_codec
+from ..pi_payloads import (
+    PiResponseData,
+    StrictFields,
+)
+from ..registry.thread_identity import OfferedTools
 
-from agent_comms.agent_events import AgentEvent
 if TYPE_CHECKING:
-    from .context_store import CapturedContext
+    from ..context_store import CapturedContext
 
 
 @dataclass(frozen=True)

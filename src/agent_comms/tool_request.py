@@ -27,7 +27,10 @@ from .nominal.field_codec import (
     MalformedRecord,
     ToolCallId,
 )
-from .native_tools import CoordinationCall, NativeToolDeclaration
+from .transport.native_tools import (
+    CoordinationCall,
+    NativeToolDeclaration,
+)
 from .registry.threads import ThreadCommandAvailability
 from .tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
 from .tool_declaration import NativeRequestTools

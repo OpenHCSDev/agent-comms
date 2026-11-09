@@ -11,7 +11,11 @@ from typing import ClassVar
 
 from agent_comms_hooks.shell_commands import ShellCommand
 
-from .native_build_inputs import GitLaunch, GitOptions, NamedProgram
+from .installer.native_build_inputs import (
+    GitLaunch,
+    GitOptions,
+    NamedProgram,
+)
 from .projects.checkouts import CheckoutStart
 from .projects.repository_sources import RepositorySource
 from .storage_admission import StorageAdmission

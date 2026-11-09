@@ -46,7 +46,7 @@ from ..input_disposition import InputDispositions
 from ..launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
 from ..storage.maintenance_barrier import MaintenanceBarrier
 from ..messaging.message_bus import MessageBus
-from ..native_arguments import (
+from .native_arguments import (
     ConfiguredBinary,
     InheritedArguments,
     LaunchArguments,

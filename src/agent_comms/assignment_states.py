@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from .coordination.tables.assignments import WakeAssignment
     from .coordination.tables.responses import ResponseObligation
     from .historical_native_inputs import FailedTriageHistoricalNativeInput, HistoricalNativeInput
-    from .native_input_record import TriageNativeExecution
+    from .execution.native_input_record import TriageNativeExecution
     from .notification_assignment import AssignmentActivity
     from .message_notification import MessageNotification
 

@@ -9,7 +9,10 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from .nominal.field_codec import AssignmentId, InputId
-from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from .execution.native_runtime_input import (
+    NativeRuntimeInput,
+    NativeRuntimeTable,
+)
 from .storage.typed_table import (
     Column,
     GuardedInserts,

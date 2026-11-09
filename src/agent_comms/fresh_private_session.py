@@ -8,11 +8,14 @@ from pathlib import Path
 
 from agent_comms.child_process import Platform
 from .nominal.field_codec import FieldCodec
-from .native_entries import SessionEntry
-from .native_failures import NativePiUnavailable
-from agent_comms.native_session_files import NativeSessionFiles
-from .native_session_files import PrivateSession, BusTranscriptFile
-from .native_session_reopen import NativeSessionIdentity
+from .execution.native_entries import SessionEntry
+from .execution.native_failures import NativePiUnavailable
+from .execution.native_session_files import NativeSessionFiles
+from .execution.native_session_files import (
+    PrivateSession,
+    BusTranscriptFile,
+)
+from .execution.native_session_reopen import NativeSessionIdentity
 from .storage.private_path import PrivateFileRole
 
 

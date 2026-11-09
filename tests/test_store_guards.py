@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.bus import Bus
-from agent_comms.native_build_inputs import ConfiguredChildStdio
+from agent_comms.installer.native_build_inputs import ConfiguredChildStdio
 from agent_comms.child_process import SpawnedProcess
 from agent_comms.planning.orders import TodoStore
 from agent_comms.storage.locked_store import SQLiteFile

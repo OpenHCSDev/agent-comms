@@ -14,7 +14,7 @@ from agent_comms.history_result import (
     EverythingHistoryPageResult,
 )
 from agent_comms.messages import InfoKind
-from agent_comms.native_arguments import (
+from agent_comms.execution.native_arguments import (
     ConfiguredBinary,
     GivenArguments,
     GivenBinary,

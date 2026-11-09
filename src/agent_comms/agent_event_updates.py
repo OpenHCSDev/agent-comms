@@ -54,7 +54,7 @@ from .execution.turn_effects import TurnEffects
 
 if TYPE_CHECKING:
     from .acp_extension import AgentCommsUpdate
-    from .native_output import NativeRecordLocation
+    from .execution.native_output import NativeRecordLocation
     from .transcripts import NativeCommittedPrefix
 
 

@@ -64,7 +64,10 @@ from agent_comms.cli_bridges.opencode import OpenCodeServer, OpenCodeConnection
 from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Session
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
-from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
+from agent_comms.execution.native_entries import (
+    NativeEntry,
+    ImportedMetadataEntry,
+)
 from agent_comms.registry.threads import ThreadProvenance, ExternalThread, NativeThread
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.runtime_updates import FinishedItem, TurnEnded
@@ -72,7 +75,7 @@ from agent_comms.ui_model.message_category import AgentCategory, ThinkingCategor
 from agent_comms.execution.turn_context import CodexRolloutProvenance
 from agent_comms.child_process import NO_PROCESS
 from agent_comms.errors import RelationViolationError
-from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.execution.native_failures import NativePiUnavailable
 
 
 def lines(path: Path, records: Iterable[dict[str, JsonValue]], tail: str = "") -> Path:

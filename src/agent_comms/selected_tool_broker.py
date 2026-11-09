@@ -30,14 +30,21 @@ from .nominal.field_codec import (
     SlotId,
     ToolCallId,
 )
-from .native_input_record import FullNativeExecution, NativeInputIdentity
-from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable, SelectedToolSlot
-from .native_tool_transport import NativeToolMode
-from .native_tool_call import (
+from .execution.native_input_record import (
+    FullNativeExecution,
+    NativeInputIdentity,
+)
+from .execution.native_runtime_input import (
+    NativeRuntimeInput,
+    NativeRuntimeTable,
+    SelectedToolSlot,
+)
+from .transport.native_tool_transport import NativeToolMode
+from .transport.native_tool_call import (
     NativeToolCall,
     SelectedToolBusy,
 )
-from .native_tool_transport import (
+from .transport.native_tool_transport import (
     GatedToolTransport,
     NativeToolRound,
     ToolListener,

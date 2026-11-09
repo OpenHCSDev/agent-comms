@@ -31,13 +31,16 @@ from .nominal.field_codec import (
     WireTransient,
 )
 from .image_input import ImageInput
-from .native_entries import NativeEvidenceScope
-from .native_failures import NativePiUnavailable
-from .native_input_proof import NativeContextProof, NativeInputCommit
-from .native_package import VerifiedNativePackage
-from .native_pi import NativePiRpcLaunch
-from .native_session_reopen import NativeSessionIdentity
-from .native_tool_transport import OwnerToolConnection
+from .execution.native_entries import NativeEvidenceScope
+from .execution.native_failures import NativePiUnavailable
+from .execution.native_input_proof import (
+    NativeContextProof,
+    NativeInputCommit,
+)
+from .installer.native_package import VerifiedNativePackage
+from .execution.native_pi import NativePiRpcLaunch
+from .execution.native_session_reopen import NativeSessionIdentity
+from .transport.native_tool_transport import OwnerToolConnection
 from agent_comms.pi_wire import PiOmitted, PiRequestId, RequestId
 from .pi_payloads import CompactionData, EmptyData, ModelsData, NativeContextData, PiResponseData, QueueClearedData, ReportedText, SessionStatsData, SessionSwitchData, StateData, ThinkingLevelsData, UnknownData
 from .execution.turn_context import (
@@ -294,7 +297,7 @@ class CatalogQuery(NativeQuery):
         configuration: RestartEnvironment, worktree: Path, root: Path,
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
-        from .native_child import PiChild
+        from .execution.native_child import PiChild
         from .pi_rpc import PiRpcChannel
 
         try:

@@ -17,7 +17,7 @@ from .activity import (
 )
 from .coordination.errors import DrainDeferred, DrainUnavailable
 from .coordination.coordinator import Coordination
-from .native_failures import NativeRequestFailure
+from .execution.native_failures import NativeRequestFailure
 
 # Failures raised outside our hierarchy, which cannot inherit the drain capabilities.
 EXTERNAL_UNAVAILABLE_ERRORS = (OSError, sqlite3.Error)

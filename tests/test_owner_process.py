@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.installer.native_package import MANIFEST
 from agent_comms.owner_release import NoRelease
 from agent_comms.projects.checkouts import Checkout
 import asyncio
@@ -20,7 +21,6 @@ import pytest
 
 import agent_comms
 import agent_comms_hooks
-from agent_comms import native_package
 from agent_comms.execution.turn_failure import FailedTurnResolution
 from agent_comms.child_process import NoProcess, SpawnedProcess
 from agent_comms.comms import wire
@@ -31,7 +31,10 @@ from agent_comms.nominal.field_codec import AcpSessionId, GoalId, TurnId, compil
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.owner_connection import socket_path
-from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.execution.native_arguments import (
+    GivenArguments,
+    GivenBinary,
+)
 from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.session_file import NoSessionFile
@@ -252,7 +255,7 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
         shutil.copytree(package, checkout / "src" / package.name,
                         ignore=shutil.ignore_patterns("__pycache__", "node_modules"))
     (checkout / "stack").mkdir()
-    shutil.copy2(native_package.MANIFEST, checkout / "stack" / native_package.MANIFEST.name)
+    shutil.copy2(MANIFEST, checkout / "stack" / MANIFEST.name)
     # A source checkout stamps its build from its own repository's HEAD.
     for command in (("init", "-q"), ("add", "-A"), ("commit", "-q", "-m", "unprepared")):
         fixture_git.run(checkout, *command)

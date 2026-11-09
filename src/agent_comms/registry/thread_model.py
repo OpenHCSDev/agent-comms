@@ -8,11 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..native_arguments import (
+from ..execution.native_arguments import (
     NativeArguments,
     SelectedModel,
 )
-from ..native_failures import NativePiUnavailable
+from ..execution.native_failures import NativePiUnavailable
 from ..nominal.field_codec import (
     SubclassUnion,
     boundary_decoder,
@@ -29,7 +29,7 @@ from .thread_text import (
 )
 
 if TYPE_CHECKING:
-    from ..native_arguments import ProviderChoice
+    from ..execution.native_arguments import ProviderChoice
     from ..pi_commands import SetModel
 
 

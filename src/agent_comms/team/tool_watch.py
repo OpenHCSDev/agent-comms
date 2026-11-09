@@ -1,9 +1,9 @@
 """Follow live native sessions and print turn digests for teammate judgment."""
 import argparse, os, time, glob, collections
 
-from ..native_tools import NativeToolDeclaration
+from ..transport.native_tools import NativeToolDeclaration
 from ..lifecycle_capability import Successful
-from ..native_entries import NativeEntry
+from ..execution.native_entries import NativeEntry
 from ..pi_payloads import PiMessage, StorageDenialToolDetails
 from ..tool_declaration import one_line
 from ..registry.registration import Registration

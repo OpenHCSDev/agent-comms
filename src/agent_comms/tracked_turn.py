@@ -23,21 +23,31 @@ from .external_transcript import DraftPublication, DraftRow
 from .nominal.field_codec import InputId, MalformedRecord
 from .following_inputs import FollowingInputs
 from .storage.maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
-from .native_arguments import SelectedModel
-from .native_attestation import AttestationError, ObservedAttestation
-from .native_failures import NativePiUnavailable
-from .native_package import VerifiedNativePackage
-from .native_input_proof import NativeContextProof, NativeInputCommit
-from .native_entries import NativeEvidenceScope
-from .native_pi import (
+from .execution.native_arguments import SelectedModel
+from .execution.native_attestation import (
+    AttestationError,
+    ObservedAttestation,
+)
+from .execution.native_failures import NativePiUnavailable
+from .installer.native_package import VerifiedNativePackage
+from .execution.native_input_proof import (
+    NativeContextProof,
+    NativeInputCommit,
+)
+from .execution.native_entries import NativeEvidenceScope
+from .execution.native_pi import (
     NativeEmptyAnswer,
     NativePiPromptRejected,
     NativePiRpcLaunch,
     NativeTurnResult,
 )
-from .native_prompt_send import UNGUARDED_PROMPT, PromptBoundary, PromptSendFailure
-from .native_startup import NativeStartup
-from .native_tool_transport import NativeToolMode
+from .execution.native_prompt_send import (
+    UNGUARDED_PROMPT,
+    PromptBoundary,
+    PromptSendFailure,
+)
+from .execution.native_startup import NativeStartup
+from .transport.native_tool_transport import NativeToolMode
 from .pi_rpc import PiRpcChannel
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver

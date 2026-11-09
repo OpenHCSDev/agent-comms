@@ -11,8 +11,11 @@ from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.notification_progress import UnansweredResponse
-from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof
-from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.native_input_proof import (
+    NativeContextJournal,
+    NativeContextProof,
+)
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.private_send_claim import PrivateSendClaim
 from agent_comms.private_sidecar import native_request_digest

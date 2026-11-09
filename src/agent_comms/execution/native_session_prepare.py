@@ -2,25 +2,31 @@
 
 from __future__ import annotations
 
-from agent_comms.participant_identity import ParticipantIdentity
-
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import (
+    Awaitable,
+    Callable,
+    Iterable,
+    Sequence,
+)
 from contextlib import aclosing
-from pathlib import Path
 from functools import partial
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from . import agent_events as events
-from . import backend
+from .. import (
+    agent_events as events,
+    backend,
+    prompt_state,
+)
+from ..coordination.coordinator import Coordination
 from .native_failures import NativePiUnavailable
-from .native_package import VerifiedNativePackage
+from ..installer.native_package import VerifiedNativePackage
 from .native_startup import NativeStartup
-from .coordination.coordinator import Coordination
-from .pi_payloads import StateData
-from . import prompt_state
+from ..participant_identity import ParticipantIdentity
+from ..pi_payloads import StateData
 
 if TYPE_CHECKING:
-    from .pi_native_backend import PersistentPiSession
+    from ..pi_native_backend import PersistentPiSession
 
 
 class NativeSessionPreparation(backend.NativeSession):

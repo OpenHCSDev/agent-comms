@@ -3,7 +3,7 @@
 import pytest
 from agent_comms.pi_vocabulary import HighThinkingLevel, NoThinkingOverride, OffThinkingLevel
 
-from agent_comms.native_arguments import (
+from agent_comms.execution.native_arguments import (
     InheritedArguments,
     NamedOption,
     NativeArguments,

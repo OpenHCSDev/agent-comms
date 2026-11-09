@@ -134,7 +134,7 @@ from ...messages import (
     Message,
     NoticeRole,
 )
-from ...native_tools import CommunicationCall
+from ..native_tools import CommunicationCall
 from ...nominal.declared_family import (
     DeclaredFamily,
     UnknownFamilyMember,

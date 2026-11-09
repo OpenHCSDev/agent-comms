@@ -16,7 +16,7 @@ from .storage_rules import (
     UnitStorage,
 )
 from ..comms import Comms
-from ..native_tool_call import CodingCall
+from ..transport.native_tool_call import CodingCall
 from ..registry.registry_document import RegistrySnapshot
 from ..registry.threads import Thread
 from ..shell_effects import StorageEffect

@@ -13,7 +13,7 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.lifecycle_capability import Active
 from agent_comms.pi_counts import PiCount
 from agent_comms.owner_connection import socket_path
-from agent_comms.native_arguments import GivenBinary
+from agent_comms.execution.native_arguments import GivenBinary
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.routing import NoTurnRouting
 from agent_comms.registry.thread_model import DeclaredModel

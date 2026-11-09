@@ -18,22 +18,50 @@ import shutil
 import stat
 import tempfile
 from _hashlib import HASH
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from dataclasses import (
+    dataclass,
+    field,
+)
 from pathlib import Path
-from typing import Annotated, ClassVar, Literal
+from typing import (
+    Annotated,
+    ClassVar,
+    Literal,
+)
 
-from agent_comms.child_process import Platform
-from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
-from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs, built_tree_pin
-from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.storage.private_path import PrivateDirectoryRole, TrustedAncestorRole
-
-from .storage.store_files import AtomicFile
+from ..child_process import Platform
+from .native_build_inputs import (
+    INPUTS_PREFIX,
+    NativeBuildInputs,
+    built_tree_pin,
+)
+from ..execution.native_failures import NativePiUnavailable
+from ..nominal.field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    PathText,
+    Sha256Text,
+    WireName,
+)
+from ..storage.private_path import (
+    PrivateDirectoryRole,
+    TrustedAncestorRole,
+)
+from ..storage.store_files import AtomicFile
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
+
+
 MAX_ENTRIES = 30_000
+
+
 MAX_BYTES = 512 * 1024**2
+
+
 MAX_DEPTH = 32
 
 
@@ -59,8 +87,14 @@ def resource_root(package: Path) -> Path:
 
 # The package directory this file sits in, at whatever depth its dotted name puts it.
 RESOURCES = resource_root(Path(__file__).resolve().parents[(__package__ or "").count(".")])
+
+
 MANIFEST = RESOURCES / "pi-native.sha256"
+
+
 OWNER_INSTRUCTIONS = RESOURCES / "AGENTS.md"
+
+
 # The system prompt a Core-launched session carries: OWNER_INSTRUCTIONS and the whole deal,
 # derived at preparation by deal_prompt.DealPrompt, with the reads it carries beside it.
 SYSTEM_PROMPT = RESOURCES / "SYSTEM_PROMPT.md"

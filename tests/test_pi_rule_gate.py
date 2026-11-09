@@ -21,8 +21,12 @@ from agent_comms import agent_events as events
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.team.package import TeamPackage
 from agent_comms.context_reading import ContextUsage
-from agent_comms.native_tool_call import CodingCall
-from agent_comms.native_tools import McpToolCall, NativeToolDeclaration, ReadTool
+from agent_comms.transport.native_tool_call import CodingCall
+from agent_comms.transport.native_tools import (
+    McpToolCall,
+    NativeToolDeclaration,
+    ReadTool,
+)
 from agent_comms.pi_rule_gate import PiRedeal, RulesUnread
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.selected_tool_broker import SelectedToolRequest, SelectedWriteArguments

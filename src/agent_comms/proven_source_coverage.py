@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.lifecycle_capability import Active
-from agent_comms.native_runtime_input import NativeRuntimeTable
+from .execution.native_runtime_input import NativeRuntimeTable
 
 from .frozen_recipient import FrozenRecipient
 from .bus import Bus
@@ -28,14 +28,21 @@ from .coordination.session import NativeCapture
 from .nominal.field_codec import FieldCodec, RootId, ThreadLookup
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
 from .messaging.message_bus import MessageBus
-from .native_input_record import NumberNativeColumn, TextNativeColumn, UnrecordedNativeColumn
-from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
+from .execution.native_input_record import (
+    NumberNativeColumn,
+    TextNativeColumn,
+    UnrecordedNativeColumn,
+)
+from .execution.native_runtime_input import (
+    CurrentNativeCursor,
+    NativeRuntimeInput,
+)
 from .storage.private_path import FileIdentity, ObservedPath, PresentPath
 from .wake_policy import RecipientDecision
 
 if TYPE_CHECKING:
     from .cursor_owner import CursorOwner, CursorState
-    from .native_entries import NativeEvidenceScope
+    from .execution.native_entries import NativeEvidenceScope
     from .private_registry_guard import RegistryPrivacy
 
 @dataclass(frozen=True)

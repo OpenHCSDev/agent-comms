@@ -11,14 +11,20 @@ import pytest
 
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.native_entries import NativeEntry, NativeEvidenceScope
-from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.native_input_proof import NativeContextJournal, NativeInputLocation
+from agent_comms.execution.native_entries import (
+    NativeEntry,
+    NativeEvidenceScope,
+)
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_input_proof import (
+    NativeContextJournal,
+    NativeInputLocation,
+)
 from agent_comms.nominal.field_codec import InputId
-from agent_comms.native_session_reopen import PiSessionId
+from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.turn_item import FreshNativeId
-from agent_comms.native_evidence_read import PrivateEvidenceRead
-from agent_comms.native_transcript import NativeTranscript
+from agent_comms.execution.native_evidence_read import PrivateEvidenceRead
+from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.storage.store_files import (
     ExclusiveLock,
     StoreLockContention,

@@ -8,16 +8,22 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from agent_comms.nominal.field_codec import InputId, RootId, ThreadLookup
-from agent_comms.native_runtime_input import NativeRuntimeTable
+from .execution.native_runtime_input import NativeRuntimeTable
 
 from .acp_extension import CursorObservation, EmptyCursorObservation, VerifiedCursorObservation
 from .coordination.database import CoordinationStore
 from .coordination.errors import IdentityConflict, StaleFence
 from .coordination.coordinator import Coordination
 from .messaging.message_bus import MessageBus
-from .native_input_owner import ParticipantOwner, RegistryOwner
-from .native_input_record import NativeInputReference
-from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
+from .execution.native_input_owner import (
+    ParticipantOwner,
+    RegistryOwner,
+)
+from .execution.native_input_record import NativeInputReference
+from .execution.native_runtime_input import (
+    CurrentNativeCursor,
+    NativeRuntimeInput,
+)
 from .private_send_rules import RunningTurnRegistryCheck
 from .proven_source_coverage import SourceCoverage, SourcePrefix
 from .registry.thread_identity import GenerationCounter
@@ -28,7 +34,7 @@ if TYPE_CHECKING:
     from .coordination.session import NativeCapture
     from .coordination.tables.participants import OwnerGenerations
     from .historical_native_inputs import HistoricalNativeInput
-    from .native_entries import NativeEvidenceScope
+    from .execution.native_entries import NativeEvidenceScope
     from .proven_source_coverage import CoverageInput, NoInjectedInput, ProvenSourceCoverage
 
 

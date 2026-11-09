@@ -9,31 +9,47 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from collections.abc import (
+    Awaitable,
+    Callable,
+)
+from dataclasses import (
+    dataclass,
+    field,
+)
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Never
+from typing import (
+    ClassVar,
+    Never,
+    TYPE_CHECKING,
+)
 
-from .nominal.field_codec import (
+from ..lifecycle_capability import (
+    Complete,
+    Executing,
+    LifecycleCapability,
+)
+from ..nominal.field_codec import (
     InputId,
     SlotId,
     ToolCallId,
 )
-from .lifecycle_capability import Complete, Executing, LifecycleCapability
-from .storage_room import NoRoomNeeded, RoomReservation
-from .tool_denial import SelectedToolDenied
+from ..storage_room import (
+    NoRoomNeeded,
+    RoomReservation,
+)
+from ..tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
-    from .envelope_claim_transitions import FileClaimPath
-    from .pi_payloads import PiToolResult
-    from .pi_rule_gate import PiRuleGate
-    from .shell_effects import StorageEffect
-    from .execution.turn_goal_permission import TurnGoalPermission
-
-
-
-
+    from ..envelope_claim_transitions import FileClaimPath
+    from ..execution.turn_goal_permission import TurnGoalPermission
+    from ..pi_payloads import PiToolResult
+    from ..pi_rule_gate import PiRuleGate
+    from ..shell_effects import StorageEffect
 
 
 class ToolNotExecuting(SelectedToolDenied):
@@ -309,7 +325,7 @@ class CodingCall(NativeToolCall):
     def commit_terminal(
         self, is_error: bool, coordination_path: Path, input_id: InputId, round_number: int
     ) -> None:
-        from .selected_tool_broker import record_selected_terminal
+        from ..selected_tool_broker import record_selected_terminal
 
         slot = self.slot(input_id, round_number)
         record_selected_terminal(coordination_path, slot, self.call_id)
@@ -318,8 +334,6 @@ class CodingCall(NativeToolCall):
         # A denied ordinary tool may report an error and let Pi explain it. The
         # consumed call cannot be retried; this grants no mutation authority.
         pass
-
-
 
 
 @dataclass

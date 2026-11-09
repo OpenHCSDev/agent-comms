@@ -24,7 +24,7 @@ from .storage.typed_table import Column, DurableStore, StoreRows, TextStorage, W
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
-    from .native_entries import TranscriptProjection
+    from .execution.native_entries import TranscriptProjection
     from .pi_payloads import UserMessage
 
 

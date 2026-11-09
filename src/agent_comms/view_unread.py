@@ -20,8 +20,12 @@ from .coordination.errors import CoordinationReadUnavailable
 from .storage.locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
 from .storage.store_files import StoreBusy
 from .bus import Bus
-from .native_entries import NativeEntry
-from .native_transcript import SessionCut, record_end, reverse_records
+from .execution.native_entries import NativeEntry
+from .execution.native_transcript import (
+    SessionCut,
+    record_end,
+    reverse_records,
+)
 from .storage.private_path import FileObservation, FileRevision, MissingFile
 from .messaging.read_ledger import (
     ReadDocument,

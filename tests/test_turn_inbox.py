@@ -14,7 +14,7 @@ from agent_comms.execution.turn_inbox import (
     TurnInboxItem,
     UseSettings,
 )
-from agent_comms.native_session_prepare import NativeSessionPreparation
+from agent_comms.execution.native_session_prepare import NativeSessionPreparation
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.registry.thread_model import UndeclaredModel
 from agent_comms.execution.turn_failure import (

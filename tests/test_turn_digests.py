@@ -46,7 +46,7 @@ from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
-from agent_comms.native_session_reopen import PiSessionId
+from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.watched import FileSource
 
 

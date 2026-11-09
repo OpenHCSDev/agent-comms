@@ -61,7 +61,7 @@ from .head_review import (
     UnpromotedHeadReview,
 )
 from .launch_runtime import CheckoutSource, RestoredRuntime
-from .native_build_inputs import DetachedChildStdio
+from .installer.native_build_inputs import DetachedChildStdio
 from .projects.git_errors import GitCommandError
 from .projects.repo import Repo
 from .projects.checkouts import (

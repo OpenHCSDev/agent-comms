@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from .history_view import OwnHistory
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import AcpSessionId, InputId
-from .native_input_proof import NativeContextProof
+from .execution.native_input_proof import NativeContextProof
 from .pi_counts import PiCount
 from .registry.thread_model import (
     ThreadModel,

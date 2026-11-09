@@ -15,7 +15,10 @@ from pydantic import JsonValue
 import pytest
 
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.native_entries import CompactionEntry, ModelChangeEntry
+from agent_comms.execution.native_entries import (
+    CompactionEntry,
+    ModelChangeEntry,
+)
 from agent_comms.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
 from agent_comms.channels import AnyChannel
 from agent_comms.activity import ActivityState

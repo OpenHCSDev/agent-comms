@@ -33,12 +33,22 @@ from .nominal.field_codec import (
     WireOmitDefault,
     boundary_decoder,
 )
-from .native_failures import NativePiUnavailable
-from .native_input_proof import NativeContextRecord, NativeInputCommit, NativeInputLocation
-from .native_output import NativeOutputLocation, NativeRecordLocation
-from .native_pi import NativePiOperationFailed
-from .native_session_reopen import PiSessionId
-from .native_turn_context import ContextObserved, NativeContextManifestData
+from .execution.native_failures import NativePiUnavailable
+from .execution.native_input_proof import (
+    NativeContextRecord,
+    NativeInputCommit,
+    NativeInputLocation,
+)
+from .execution.native_output import (
+    NativeOutputLocation,
+    NativeRecordLocation,
+)
+from .execution.native_pi import NativePiOperationFailed
+from .execution.native_session_reopen import PiSessionId
+from .execution.native_turn_context import (
+    ContextObserved,
+    NativeContextManifestData,
+)
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from agent_comms.pi_wire import AnonymousRequest, OpenPayload, PiOmitted, PiRequestId, PiUsage
 from agent_comms.pi_wire import Opaque, UnknownPayload
@@ -49,7 +59,7 @@ from .tool_declaration import ToolDeclaration
 
 if TYPE_CHECKING:
     from .backend import TurnSession
-    from .native_attestation import NativeAttestation
+    from .execution.native_attestation import NativeAttestation
 
 
 @dataclass(frozen=True)

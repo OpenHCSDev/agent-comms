@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from .projects.checkouts import Checkout
 
-from .native_output import NativeOutputScope
+from .execution.native_output import NativeOutputScope
 
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
@@ -54,7 +54,7 @@ from .planning.goal_presentation import (
 )
 from .input_attempt import InputAttempt
 from .input_origin import InputOrigin, UnattributedInputOrigin
-from .native_runtime_input import CurrentNativeCursor
+from .execution.native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
 from agent_comms.pi_wire import McpLiveAcknowledgement
 from .reported_turn import ReportedTurn, ReportedTurnState

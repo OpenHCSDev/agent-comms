@@ -29,7 +29,10 @@ from agent_comms.registry.thread_identity import (
     OwnerIdentity,
 )
 from agent_comms.registry.thread_status import StoppedThreadStatus
-from agent_comms.native_arguments import ConfiguredBinary, InheritedArguments
+from agent_comms.execution.native_arguments import (
+    ConfiguredBinary,
+    InheritedArguments,
+)
 from agent_comms.registry.threads import NativeThread
 
 

@@ -48,7 +48,7 @@ from agent_comms.planning.goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
-from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_wire import PiUsage
 from agent_comms.registry.threads import NativeThread

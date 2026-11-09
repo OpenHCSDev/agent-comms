@@ -7,14 +7,20 @@ import sys
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import (
+    Annotated,
+    ClassVar,
+)
 
-from agent_comms.nominal import field_codec
-
-from .child_process import ChildResult
-from .launch_runtime import LaunchRuntime
+from ..child_process import ChildResult
+from ..launch_runtime import LaunchRuntime
 from .native_session_reopen import NativeSessionIdentity
-from .pi_helper import PiHelper, PiHelperFailed, SessionHelperRequest
+from ..nominal import field_codec
+from ..pi_helper import (
+    PiHelper,
+    PiHelperFailed,
+    SessionHelperRequest,
+)
 
 
 @dataclass(frozen=True)
@@ -76,7 +82,7 @@ class RuntimeForkHelper(ForkSessionHelper):
     @classmethod
     def launch(cls, request, environment):
         return ((str(request.runtime.interpreter), "-I", "-c",
-                 "from agent_comms.native_fork import main; main()", request.package),
+                 "from agent_comms.execution.native_fork import main; main()", request.package),
                 request.runtime.environment(environment))
 
 

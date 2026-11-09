@@ -1225,7 +1225,7 @@ class ExecutionOwnersPhase(ModuleOwnershipPhase):
 
     after = (MessagingOwnersPhase,)
     evidence = AllEvidence((
-        PathsAbsent(("src/agent_comms/worker.py", "src/agent_comms/native_pi.py")),
+        PathsAbsent(("src/agent_comms/worker.py", "src/agent_comms/execution/native_pi.py")),
         PatternAbsent(r"from agent_comms[.](worker|native_pi)\b", ("src",)),
     ))
 

@@ -8,7 +8,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.agent_events import NativeMetadataObservation
 from agent_comms.config_options import ModelConfigOption
 from agent_comms.registry.thread_configuration import ThreadConfiguration
-from agent_comms.native_arguments import NativeArguments
+from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.thread_model import (
     DeclaredModel,

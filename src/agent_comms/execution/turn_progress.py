@@ -55,7 +55,7 @@ from ..messages import (
     AlertKind,
     NoticeRole,
 )
-from ..native_turn_context import ContextObserved
+from .native_turn_context import ContextObserved
 from ..nominal.field_codec import AcpSessionId
 from ..publication_measurements import PublicationMeasurements
 from ..send_result import SendResult

@@ -28,10 +28,10 @@ from .coordination.snapshot import RecoverySnapshot
 from .coordination.coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .following_inputs import FollowingInputs
-from .native_package import VerifiedNativePackage
-from .native_pi import NativePiRpcLaunch
-from .native_failures import NativePiUnavailable
-from agent_comms.native_session_files import NativeSessionFiles
+from .installer.native_package import VerifiedNativePackage
+from .execution.native_pi import NativePiRpcLaunch
+from .execution.native_failures import NativePiUnavailable
+from .execution.native_session_files import NativeSessionFiles
 from .pi_native_backend import PersistentPiSession
 from .selected_actions import CodingSelectedAction, SelectedAction
 from agent_comms.execution.selected.participant import (

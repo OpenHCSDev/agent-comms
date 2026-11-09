@@ -17,7 +17,10 @@ from agent_comms.planning.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.execution.native_arguments import (
+    GivenArguments,
+    GivenBinary,
+)
 
 
 def goal_updates(metadata) -> tuple[GoalChangedUpdate, ...]:

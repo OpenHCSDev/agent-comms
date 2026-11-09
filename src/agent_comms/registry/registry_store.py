@@ -21,7 +21,7 @@ from ..errors import RelationViolationError
 from ..nominal.field_codec import FieldCodec, NullMember, TurnId
 from ..storage.locked_store import DocumentBytes, LockedStore, PublishedProperty, RegistryFile
 from ..storage.maintenance_barrier import CarriedDocument
-from ..native_input_owner import RegistryOwner
+from ..execution.native_input_owner import RegistryOwner
 from ..presence import PresenceStore
 from ..storage.private_path import FileObservation, FileRevision, MissingFile
 from ..private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy

@@ -30,7 +30,7 @@ from .cursor_owner import CommittedCursorOwner, CursorOwner, CursorState
 from .publication_measurements import PublicationMeasurements
 from .nominal.field_codec import AcpSessionId, InputId
 from .messaging.message_bus import MessageBus
-from .native_entries import NativeEvidenceScope
+from .execution.native_entries import NativeEvidenceScope
 from .publisher import ResponseWrites
 from .runtime_server import RuntimeServer
 

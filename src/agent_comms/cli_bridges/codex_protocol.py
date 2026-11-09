@@ -27,7 +27,7 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
     boundary_decoder,
 )
-from agent_comms.native_tools import FilePatchTool
+from ..transport.native_tools import FilePatchTool
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.runtime_updates import (
     HiddenItem,

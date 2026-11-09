@@ -57,7 +57,7 @@ class AssignmentStore:
         self, recipient_lookup: ThreadLookup, sources: frozenset[MessageReference],
     ) -> tuple[WakeAssignment, ...]:
         """Paused following deliveries with neither send binding nor native source."""
-        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from .execution.native_runtime_input import NativeRuntimeInput
 
         if not sources:
             return ()

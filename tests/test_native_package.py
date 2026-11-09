@@ -11,12 +11,15 @@ from pathlib import Path
 
 import pytest
 
-import agent_comms.native_package as native_package
+import agent_comms.installer.native_package as native_package
 from agent_comms.bus import Bus
 from agent_comms.core_stamp import WheelStamp
-from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
-from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.native_package import (
+from agent_comms.installer.native_build_inputs import (
+    INPUTS_PREFIX,
+    NativeBuildInputs,
+)
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.installer.native_package import (
     NativePackageError,
     NativePackageStore,
     package_tree_digest,
@@ -132,7 +135,7 @@ def stamp_prepared(stack, env):
         env.get("PI_MCP_DEPENDENCY_PACKAGE", ""),
     )
     prepared = NativePackageStore.at_home(Path.home()).package_for(manifest).parents[2]
-    namespace = load_resource_module(stack.parent / "src/agent_comms/native_package.py")
+    namespace = load_resource_module(stack.parent / "src/agent_comms/installer/native_package.py")
     namespace["VerifiedNativePackage"].prepare(prepared / native_package.PACKAGE_LAYOUT)
     (prepared / ".prepared-inputs.sha256").write_text(stamp + "\n")
 
@@ -201,7 +204,7 @@ def launcher(tmp_path, monkeypatch):
 @pytest.mark.skipif(not shutil.which("node"), reason="Local Node fixture only")
 def test_qualified_build_uses_only_verified_copied_bootstrap(launcher, tmp_path):
     stack, root = launcher
-    namespace = load_resource_module(stack.parent / "src/agent_comms/native_package.py")
+    namespace = load_resource_module(stack.parent / "src/agent_comms/installer/native_package.py")
     package = namespace["VerifiedNativePackage"].qualify(root)
     marker = tmp_path / "untrusted-ran"
     preload = tmp_path / "untrusted.mjs"

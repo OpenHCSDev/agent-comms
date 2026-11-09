@@ -34,8 +34,11 @@ from agent_comms.installer.runtime_resolution import (
     ConsoleScriptPackage, ProjectMetadata, ResolvedLock, RuntimePackage, RuntimeResolution,
 )
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
-from agent_comms.native_build_inputs import NativeBuildInputs
-from agent_comms.native_package import NativePackageStore, pinned_package_for
+from .native_build_inputs import NativeBuildInputs
+from .native_package import (
+    NativePackageStore,
+    pinned_package_for,
+)
 from ..projects.checkouts import Checkout
 from ..projects.storage_rules import StorageRule
 

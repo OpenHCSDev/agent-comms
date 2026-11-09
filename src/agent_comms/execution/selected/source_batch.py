@@ -13,7 +13,7 @@ from agent_comms.messages import (
     InfoKind,
     Message,
 )
-from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.nominal.field_codec import (
     AssignmentId,
     FieldCodec,

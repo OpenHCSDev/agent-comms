@@ -23,7 +23,7 @@ from ..planning.goal_scope import (
     AllGoals,
     GoalScope,
 )
-from ..native_input_owner import RegistryOwner
+from ..execution.native_input_owner import RegistryOwner
 from ..registration_change import RegistrationChange
 from .registry_document import FoundProjectThread, ProjectThreadSelection, RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore

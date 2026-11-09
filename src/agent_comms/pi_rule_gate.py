@@ -33,7 +33,7 @@ from .tool_denial import SelectedToolDenied
 from .registry.threads import Thread
 
 if TYPE_CHECKING:
-    from .native_tool_call import NativeToolCall
+    from .transport.native_tool_call import NativeToolCall
     from .registry.registry_document import RegistrySnapshot
     from .transcript_sources import TranscriptSource
 

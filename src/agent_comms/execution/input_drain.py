@@ -61,7 +61,7 @@ from ..input_effects import InputEffects
 from ..lifecycle_capability import Executing
 from ..storage.maintenance_barrier import MaintenanceIngress
 from ..storage.locked_store import GoalWakeFile
-from ..native_input_owner import RegistryOwner
+from .native_input_owner import RegistryOwner
 from ..proven_source_coverage import SourcePrefix
 from ..queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
 from ..registry.registry_document import RegistryDocument, RegistryEntry

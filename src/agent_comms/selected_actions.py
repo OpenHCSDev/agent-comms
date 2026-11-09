@@ -11,8 +11,8 @@ from .coordination.errors import IdentityConflict
 from .coordination.tables.assignments import WakeAssignment
 from .envelope_claim_transitions import ExistingFileClaim
 from .nominal.field_codec import ClaimId
-from .native_tool_transport import NativeToolMode
-from .native_tool_transport import ToolTransport
+from .transport.native_tool_transport import NativeToolMode
+from .transport.native_tool_transport import ToolTransport
 from .selected_claim import (
     publish_selected_resource_claim,
     write_selected_claimed_file,

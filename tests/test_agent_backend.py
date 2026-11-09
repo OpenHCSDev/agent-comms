@@ -22,7 +22,7 @@ from agent_comms.execution.turn_inbox import (
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.native_arguments import NativeArguments
+from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.pi_durable_backend import PiDurableBackend
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
 from agent_comms.registry.threads import Thread, NativeThread
@@ -254,7 +254,10 @@ async def test_runner_obtains_one_backend_per_session_from_the_thread_declaratio
     from agent_comms.acp import CommsAgent
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.errors import RelationViolationError
-    from agent_comms.native_arguments import GivenArguments, GivenBinary
+    from agent_comms.execution.native_arguments import (
+        GivenArguments,
+        GivenBinary,
+    )
     from agent_comms.pi_native_backend import PersistentPiSession
 
     agent = CommsAgent(

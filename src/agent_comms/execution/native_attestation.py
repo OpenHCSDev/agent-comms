@@ -3,27 +3,37 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+)
 from typing import TYPE_CHECKING
 
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.pi_wire import RequestId
-
-from . import pi_commands as commands
-from .execution.turn_failure import (
+from .turn_failure import (
     IdentityUncertain,
     InputIdUnavailable,
     TurnFailure,
 )
-from .native_pi import CAPABILITY
+from .turn_item import PiRequestKey
+from .. import pi_commands as commands
 from .native_failures import NativePiUnavailable
-from .native_session_reopen import NativeSessionIdentity, NoSessionRetention, SessionRetention
-from .pi_events import PiEvent
-from .pi_payloads import NativeSessionSnapshot, SnapshotAttestation, StateData
-from .execution.turn_item import PiRequestKey
+from .native_pi import CAPABILITY
+from .native_session_reopen import (
+    NativeSessionIdentity,
+    NoSessionRetention,
+    SessionRetention,
+)
+from ..nominal.field_codec import FieldCodec
+from ..pi_events import PiEvent
+from ..pi_payloads import (
+    NativeSessionSnapshot,
+    SnapshotAttestation,
+    StateData,
+)
+from ..pi_wire import RequestId
 
 if TYPE_CHECKING:
-    from .backend import TurnSession
+    from ..backend import TurnSession
 
 
 class AttestationError(ValueError):
@@ -167,5 +177,3 @@ class ObservedAttestation(NativeAttestation):
 class LostAttestation(NativeAttestation):
     observed = False
     uncertain = True
-
-

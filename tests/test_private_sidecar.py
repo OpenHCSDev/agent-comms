@@ -10,10 +10,16 @@ import sys
 import pytest
 
 import agent_comms.private_sidecar as sidecar
-from agent_comms.native_input_record import TriageNativeExecution, UnrecordedNativeColumn
+from agent_comms.execution.native_input_record import (
+    TriageNativeExecution,
+    UnrecordedNativeColumn,
+)
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.nominal.field_codec import FieldCodec, InputId, RootId, ThreadLookup
-from agent_comms.native_prompt_binding import PromptBinding, PromptBindings
+from agent_comms.execution.native_prompt_binding import (
+    PromptBinding,
+    PromptBindings,
+)
 from agent_comms.storage.maintenance_barrier import MaintenanceNotHeldError
 from agent_comms.storage.typed_table import ReconciledFile
 from conftest import maintenance_held
@@ -246,8 +252,8 @@ _WORKER = r"""
 import os, signal, sys
 from pathlib import Path
 import agent_comms.private_sidecar as s
-from agent_comms.native_input_record import TriageNativeExecution, UnrecordedNativeColumn
-from agent_comms.native_prompt_binding import PromptBinding, PromptBindings
+from agent_comms.execution.native_input_record import TriageNativeExecution, UnrecordedNativeColumn
+from agent_comms.execution.native_prompt_binding import PromptBinding, PromptBindings
 from agent_comms.nominal.field_codec import FieldCodec, InputId, RootId, ThreadLookup
 p = Path(sys.argv[1])
 print('READY', flush=True)

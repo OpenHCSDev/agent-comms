@@ -13,12 +13,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .coordination.errors import StaleFence
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import JsonShapeFamily, JsonShapeMember
-from .pi_vocabulary import PendingStopReason, PiStopReason
-from .registry.thread_identity import (
+from ..coordination.errors import StaleFence
+from ..errors import RelationViolationError
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
+    JsonShapeFamily,
+    JsonShapeMember,
+)
+from ..pi_vocabulary import (
+    PendingStopReason,
+    PiStopReason,
+)
+from ..registry.thread_identity import (
     ClaimedIdentity,
     GenerationCounter,
 )

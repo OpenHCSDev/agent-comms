@@ -5,11 +5,11 @@ from __future__ import annotations
 from agent_comms.coordination.response import PublicationAppendDispatches
 
 
-from agent_comms.native_session_files import NativeSessionFiles
+from .execution.native_session_files import NativeSessionFiles
 from agent_comms.child_process import ProcessIdentity
 
-from .native_entries import NativeEntry
-from .native_failures import NativePiUnavailable
+from .execution.native_entries import NativeEntry
+from .execution.native_failures import NativePiUnavailable
 
 import os
 import shutil
@@ -39,13 +39,19 @@ from agent_comms.coordination.tables.recovery import (
 )
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
-from agent_comms.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from .execution.native_runtime_input import (
+    NativeRuntimeInput,
+    NativeRuntimeTable,
+)
 from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
 from .coordination.database import CoordinationStore
 from .coordination.session import NativeCapture
-from .native_input_record import FullNativeExecution, TriageNativeExecution
-from .native_prompt_binding import (
+from .execution.native_input_record import (
+    FullNativeExecution,
+    TriageNativeExecution,
+)
+from .execution.native_prompt_binding import (
     expected_prompt_bindings,
     expected_prompt_matches_journal,
 )

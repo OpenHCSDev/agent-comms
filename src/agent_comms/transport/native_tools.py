@@ -2,17 +2,31 @@
 
 from __future__ import annotations
 
-
 import json
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+)
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import (
+    Annotated,
+    ClassVar,
+    TYPE_CHECKING,
+)
 
-from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
-from .nominal.declared_family import UnknownFamilyMember
-from .registry.thread_identity import OfferedTools, UnobservedTools
-from .nominal.field_codec import (
+from .request import ArgumentTool
+from ..envelope_claim_transitions import (
+    ExistingFileClaim,
+    FileClaimPath,
+    WritableFileClaim,
+)
+from .native_tool_call import (
+    CodingCall,
+    RefusedCodingCall,
+)
+from ..nominal.declared_family import UnknownFamilyMember
+from ..nominal.field_codec import (
     FieldCodec,
     MalformedRecord,
     NullMember,
@@ -20,12 +34,20 @@ from .nominal.field_codec import (
     WireContext,
     WireOmitDefault,
 )
-from .native_tool_call import CodingCall, RefusedCodingCall
-from agent_comms.pi_wire import PiReported
-from .recorded_time import EventTime
-from .rule_deal import ReadSpan
-from .shell_effects import ShellOutput, WriteStorageEffect, physical_path, shell_storage_effects
-from .tool_declaration import (
+from ..pi_wire import PiReported
+from ..recorded_time import EventTime
+from ..registry.thread_identity import (
+    OfferedTools,
+    UnobservedTools,
+)
+from ..rule_deal import ReadSpan
+from ..shell_effects import (
+    ShellOutput,
+    WriteStorageEffect,
+    physical_path,
+    shell_storage_effects,
+)
+from ..tool_declaration import (
     ContextRows,
     EditAction,
     EditCall,
@@ -38,13 +60,12 @@ from .tool_declaration import (
     ToolDeclaration,
     one_line,
 )
-from .tool_denial import SelectedToolDenied
-from .transport.request import ArgumentTool
+from ..tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
-    from .pi_payloads import PiToolResult
-    from .pi_rule_gate import PiRuleGate
-    from .execution.turn_goal_permission import TurnGoalPermission
+    from ..execution.turn_goal_permission import TurnGoalPermission
+    from ..pi_payloads import PiToolResult
+    from ..pi_rule_gate import PiRuleGate
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,8 +147,6 @@ class NativeExecutableTool(NativeToolDeclaration, CodingCall):
     @classmethod
     def create_call(cls, call_id: ToolCallId, arguments: dict[str, object]) -> NativeExecutableTool:
         return cls.parse_arguments(arguments, call_id=call_id)
-
-
 
 
 @dataclass(frozen=True, kw_only=True)

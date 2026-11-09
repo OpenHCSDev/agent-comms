@@ -31,7 +31,7 @@ from .input_origin import (
     UndeliveredInput,
 )
 from .lifecycle_capability import LifecycleCapability, Unresolved
-from .native_input_proof import NativeContextProof
+from .execution.native_input_proof import NativeContextProof
 from .notification_evidence import ConsumptionEvidence
 from .notification_progress import DeliveryProgress, ShownToModelProgress
 from .reported_turn import ReportedTurnState

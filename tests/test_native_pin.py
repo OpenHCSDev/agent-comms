@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from agent_comms.native_build_inputs import NativeBuildInputs
+from agent_comms.installer.native_build_inputs import NativeBuildInputs
 
 ROOT = Path(__file__).resolve().parents[1]
 

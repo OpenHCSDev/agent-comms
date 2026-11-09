@@ -109,7 +109,12 @@ from agent_comms.selected_write_authority import BoundSelectedWriteAuthority
 if TYPE_CHECKING:
     from .coordination.tables.assignments import WakeAssignment
 
-from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
+from .execution.native_arguments import (
+    ConfiguredBinary,
+    InheritedArguments,
+    LaunchArguments,
+    LaunchBinary,
+)
 from .execution.turn_runner import RELAY_PREFIX
 
 

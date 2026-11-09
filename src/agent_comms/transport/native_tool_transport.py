@@ -8,40 +8,62 @@ import logging
 import os
 import socket
 import struct
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from collections.abc import Callable
-from contextlib import AsyncExitStack, ExitStack
+from contextlib import (
+    AsyncExitStack,
+    ExitStack,
+)
 from dataclasses import (
     dataclass,
     field,
 )
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import (
+    Generic,
+    TYPE_CHECKING,
+    TypeVar,
+)
 
 from agent_comms_hooks import ToolRefusedError
 
-from .child_process import join_retirement
-from .coordination.database import CoordinationStore
-from .errors import RelationViolationError
-from .nominal.field_codec import FieldCodec, InputId, MalformedRecord, Token256Text
-from .lifecycle_capability import Complete
+from ..child_process import join_retirement
+from ..coordination.database import CoordinationStore
+from ..errors import RelationViolationError
+from ..lifecycle_capability import Complete
 from .native_tool_call import (
     DuplicateToolCallIdentity,
     NativeToolCall,
     SelectedToolBusy,
     ToolOutcomeUnknown,
 )
-from .pi_payloads import AssistantMessage
-from .storage.private_path import PrivateDirectoryRole, PrivateSocketRole
-from .tool_denial import SelectedToolDenied
+from ..nominal.field_codec import (
+    FieldCodec,
+    InputId,
+    MalformedRecord,
+    Token256Text,
+)
+from ..pi_payloads import AssistantMessage
+from ..storage.private_path import (
+    PrivateDirectoryRole,
+    PrivateSocketRole,
+)
+from ..tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
-    from .backend import TurnSession
-    from .pi_events import ToolExecutionEnd, ToolExecutionStart
-    from .pi_rule_gate import PiRuleGate
+    from ..backend import TurnSession
+    from ..pi_events import (
+        ToolExecutionEnd,
+        ToolExecutionStart,
+    )
+    from ..pi_rule_gate import PiRuleGate
 
 _LOG = logging.getLogger(__name__)
+
 
 Call = TypeVar("Call", bound=NativeToolCall)
 

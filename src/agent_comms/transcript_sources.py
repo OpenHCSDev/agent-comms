@@ -15,15 +15,19 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 from .history_view import HistoryView
-from .native_entries import TranscriptProjection
+from .execution.native_entries import TranscriptProjection
 
 if TYPE_CHECKING:
     from .context_store import ContextStore
     from .external_transcript import ExternalPageRow
     from .message_reference import MessageReference
-    from .native_entries import TranscriptProjection
-    from .native_output import NativeRecordLocation
-    from .native_transcript import NativeRecord, NativeTranscript, SessionCut
+    from .execution.native_entries import TranscriptProjection
+    from .execution.native_output import NativeRecordLocation
+    from .execution.native_transcript import (
+        NativeRecord,
+        NativeTranscript,
+        SessionCut,
+    )
     from .registry.threads import Thread, ThreadProvenance
     from .transcript_events import TextTranscript, TranscriptEvent
     from .transcript_routes import TranscriptRoutes, _SessionRoutes
@@ -36,7 +40,10 @@ from .bus_publication import Delivered
 from .coordination.errors import StaleRevision, TranscriptChanged
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, MalformedRecord, NullMember
-from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+from .execution.native_runtime_input import (
+    NativeRuntimeInput,
+    PublishedReplyRevision,
+)
 from .recorded_time import EventTime, UnrecordedEventTime
 from .storage.private_path import FileIdentity, MissingFile
 from .routing import TurnRouting

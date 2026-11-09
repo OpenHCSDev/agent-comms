@@ -45,7 +45,7 @@ from .coordination.cohort import _claim_record
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, RootId, ThreadLookup
 from .message_reference import MessageReference
-from .native_input_owner import RegistryOwner
+from .execution.native_input_owner import RegistryOwner
 from .private_registry_guard import RegistryPrivacy
 from .registry.registration import Registration
 from .storage.store_files import StoreBusy
