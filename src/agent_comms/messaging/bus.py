@@ -12,6 +12,10 @@ from pathlib import Path
 from typing import Self
 
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
+from agent_comms.messaging.claim_registry_read import ClaimRegistryRead
+from agent_comms.registry.presence_reads import PresenceThread
+from agent_comms.registry.registry_names import RegistryNames
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
 from agent_comms.messaging.activity_clocks import ActivityClocks, ChannelActivity
 from agent_comms.messaging.bus_activity_index import BusActivityIndex
 from agent_comms.messaging.bus_display_index import BusDisplayIndex
@@ -174,7 +178,7 @@ class BusReader(
     """One query implementation for individual reads and a held read snapshot."""
 
     def answering(self, references: tuple[MessageReference, ...], route: NamedTarget,
-                  snapshot: registry_document.RegistrySnapshot) -> tuple[MessageReference, ...]:
+                  snapshot: RegistryNames[ThreadIdentitySource]) -> tuple[MessageReference, ...]:
         """Select answer links on this reader's own connection."""
         with self.observing() as connection:
             return MessageIdentitySource.answering(connection, references, route, snapshot)
@@ -663,8 +667,8 @@ class Bus(
     def resource_claim(self, db: sqlite3.Connection, resource: str) -> ResourceClaim:
         return HeldResources.owner_for(db, resource)
 
-    def prepare_claim[Change: ClaimTransition](
-        self, db: sqlite3.Connection, transition: Change, registry: registry_document.RegistrySnapshot,
+    def prepare_claim[Change: ClaimTransition, Owner: PresenceThread](
+        self, db: sqlite3.Connection, transition: Change, registry: ClaimRegistryRead[Owner],
     ) -> Change:
         previous = HeldResources.all_claims(db)
         projected = transition.apply(previous, registry)
@@ -674,8 +678,8 @@ class Bus(
             if resource not in projected and resource not in transition.resources
         ))
 
-    def acquire_resource_claim(
-        self, resource: str, claim: RecordedScope, registry: registry_document.RegistrySnapshot, build: RecordBuilder,
+    def acquire_resource_claim[Owner: PresenceThread](
+        self, resource: str, claim: RecordedScope, registry: ClaimRegistryRead[Owner], build: RecordBuilder,
     ) -> ClaimOwner:
         def acquire(db: sqlite3.Connection) -> int:
             def publish() -> ClaimOwner:
@@ -712,4 +716,3 @@ class BusSnapshot(PresentPath, BusReader):
     def reading(self) -> Iterator[BusSnapshot]:
         yield self
 
-from agent_comms.registry import registry_document

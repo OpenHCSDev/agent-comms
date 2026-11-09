@@ -36,7 +36,7 @@ from agent_comms.native_failure_reads import (
     NativeOperationFailureRead, NativeResponseErrorRead, NativeResponseFailureRead,
 )
 from agent_comms.pi_events import NativeOperationError, Response
-from agent_comms.pi_payloads import ReportedText
+from agent_comms.execution.provider_records import ReportedText
 from agent_comms.pi_wire import PiDiagnostic, PiOmitted
 from agent_comms.planning.goal_attempt_phase import GoalAttemptTransition
 from agent_comms.planning.goal_attempts import LaunchPermit

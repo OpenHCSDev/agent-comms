@@ -1,4 +1,5 @@
 from agent_comms.cli_verbs.target_command_bindings import TargetCommandBindings
+from agent_comms.messaging.claim_registry_read import ClaimRegistryRead
 from agent_comms.registry.activity_registry_reads import ActivityRegistryRead
 from agent_comms.registry.presence_reads import PresenceEntry, PresenceSnapshot
 
@@ -1154,6 +1155,7 @@ class RegistrySnapshot(
     InputRegistry[Thread],
     PresenceSnapshot,
     ActivityRegistryRead,
+    ClaimRegistryRead[Thread],
 ):
     purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)]
     threads: Annotated[ThreadRows, SlicePolicy(ThreadRowsSlice)]
