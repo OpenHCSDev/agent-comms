@@ -31,8 +31,10 @@ Readers do not read the file; they read revisions of it. `RegistryCut`, `Registr
   by thread name. A change is one transaction touching its rows.
 - A revision is the table's commit counter, not a file stat. A cut is a read transaction pinned at
   that counter; a pair cut opens both stores' transactions in one declared order.
-- The private guard's whole-file digest becomes the database's own integrity: private file mode,
-  `PRAGMA quick_check` at open, and writes only through the store.
+- The private guard (`registry/private_registry_guard.py`) has two roles. Its two-slot digest of
+  registry.json's bytes is a crash-consistency protocol for atomically replacing a whole file
+  (pending digest, rename, commit); SQLite's transaction is that atomicity, so this role is deleted
+  with the JSON path, not rebuilt. Its native-namespace and coordinator-cohort ownership stays.
 - `RegistryDocument` stops being the stored form. Readers that need many rows ask the table
   (children of a parent, threads in a project) instead of walking a decoded document.
 
