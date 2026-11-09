@@ -41,7 +41,15 @@ from functools import cache, cached_property, partial
 from io import BufferedReader
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import IO, TYPE_CHECKING, Annotated, Any, BinaryIO, ClassVar, NoReturn, Self
+from typing import (
+    IO,
+    Annotated,
+    Any,
+    BinaryIO,
+    ClassVar,
+    NoReturn,
+    Self,
+)
 
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -73,14 +81,6 @@ from .registry.thread_identity import (
 )
 from .systemd_unit import AgentsSlice, SystemdUnit
 
-if TYPE_CHECKING:
-    from .registration_change import RegistrationChange, UpdatedRegistration
-    from .registry.thread_presentation import ThreadOwnerBinding
-    from .registry.thread_presentation import ThreadPresentation
-    from .registry.thread_status import (
-    ActiveThreadPresence,
-    ThreadStatus,
-)
 
 STOP_GRACE_SECONDS = 2.0
 
@@ -170,6 +170,61 @@ class ChildRetirementCancelled(asyncio.CancelledError, ChildRetirementError):
     """Preserve cancellation and an independently failed retirement acknowledgement."""
 
 
+class ProcessSighting[Status](ABC):
+    """A thread's live presence, answering for the process state its owner has."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def heartbeat_seen(self, last_seen: float) -> Status:
+        """The presence when no process is recorded: the heartbeat is the evidence."""
+
+    @abstractmethod
+    def process_seen(self, process: ProcessState) -> Status:
+        """The presence when a process is recorded for it."""
+
+
+class ProcessFence[Status](ABC):
+    """A stored stop, answering for whether a process still binds it."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def unbound(self) -> Status:
+        """The stop when no process binds it."""
+
+    @abstractmethod
+    def fenced(self) -> Status:
+        """The stop while its process still binds it."""
+
+
+class NativeBinding[Presentation](ABC):
+    """A registry lease that presents its thread natively once a process holds it."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def native_presentation(self, ordinary: Presentation) -> Presentation: ...
+
+
+class ProcessRestart[Change](ABC):
+    """A registration change over a prior incarnation, kept or restarted by its processes."""
+
+    __slots__ = ()
+
+    @property
+    @abstractmethod
+    def previous_incarnation(self) -> ThreadIncarnation: ...
+
+    @abstractmethod
+    def kept(self) -> Change:
+        """The change as requested: no process restarts it."""
+
+    @abstractmethod
+    def restarted(self) -> Change:
+        """The change once a process replaces the prior incarnation's."""
+
+
 class ProcessState(SubclassUnion, affix=""):
     """An exact recorded process or a worker which has never started."""
 
@@ -184,19 +239,19 @@ class ProcessState(SubclassUnion, affix=""):
     def conflicts_with(self, previous: ProcessState) -> bool: ...
 
     @abstractmethod
-    def registration_change(
-        self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
-    ) -> RegistrationChange: ...
+    def registration_change[Change](
+        self, previous: ProcessState, change: ProcessRestart[Change], incarnation: ThreadIncarnation,
+    ) -> Change: ...
 
     @abstractmethod
-    def restarted_registration(
-        self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
-    ) -> RegistrationChange: ...
+    def restarted_registration[Change](
+        self, change: ProcessRestart[Change], incarnation: ThreadIncarnation,
+    ) -> Change: ...
 
     @abstractmethod
-    def native_presentation(
-        self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
-    ) -> ThreadPresentation: ...
+    def native_presentation[Presentation](
+        self, ordinary: Presentation, binding: NativeBinding[Presentation],
+    ) -> Presentation: ...
 
     @abstractmethod
     def applied(self, previous: ProcessState) -> ProcessState: ...
@@ -211,10 +266,10 @@ class ProcessState(SubclassUnion, affix=""):
     def alive(self) -> bool: ...
 
     @abstractmethod
-    def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus: ...
+    def thread_status[Status](self, presence: ProcessSighting[Status], last_seen: float) -> Status: ...
 
     @abstractmethod
-    def stopped_seen(self, stopped: ThreadStatus) -> ThreadStatus:
+    def stopped_seen[Status](self, stopped: ProcessFence[Status]) -> Status:
         """A stored stop with no process is stopped; one still bound is a fence."""
 
     @abstractmethod
@@ -245,19 +300,19 @@ class NoProcess(NullMember, ProcessState):
     def conflicts_with(self, previous: ProcessState) -> bool:
         return False
 
-    def registration_change(
-        self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
-    ) -> RegistrationChange:
-        return change
+    def registration_change[Change](
+        self, previous: ProcessState, change: ProcessRestart[Change], incarnation: ThreadIncarnation,
+    ) -> Change:
+        return change.kept()
 
-    def restarted_registration(
-        self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
-    ) -> RegistrationChange:
-        return change
+    def restarted_registration[Change](
+        self, change: ProcessRestart[Change], incarnation: ThreadIncarnation,
+    ) -> Change:
+        return change.kept()
 
-    def native_presentation(
-        self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
-    ) -> ThreadPresentation:
+    def native_presentation[Presentation](
+        self, ordinary: Presentation, binding: NativeBinding[Presentation],
+    ) -> Presentation:
         return ordinary
 
     def applied(self, previous: ProcessState) -> ProcessState:
@@ -272,11 +327,11 @@ class NoProcess(NullMember, ProcessState):
     def alive(self) -> bool:
         return False
 
-    def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus:
+    def thread_status[Status](self, presence: ProcessSighting[Status], last_seen: float) -> Status:
         return presence.heartbeat_seen(last_seen)
 
-    def stopped_seen(self, stopped: ThreadStatus) -> ThreadStatus:
-        return stopped
+    def stopped_seen[Status](self, stopped: ProcessFence[Status]) -> Status:
+        return stopped.unbound()
 
     def runs_here(self) -> bool:
         return False
@@ -344,9 +399,9 @@ class ProcessIdentity(RecordMember, ProcessState):
     def offline(self) -> bool:
         return not self.alive()
 
-    def native_presentation(
-        self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
-    ) -> ThreadPresentation:
+    def native_presentation[Presentation](
+        self, ordinary: Presentation, binding: NativeBinding[Presentation],
+    ) -> Presentation:
         return binding.native_presentation(ordinary)
 
     def applied(self, previous: ProcessState) -> ProcessState:
@@ -417,21 +472,21 @@ class ProcessIdentity(RecordMember, ProcessState):
         release()
         return ()
 
-    def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus:
+    def thread_status[Status](self, presence: ProcessSighting[Status], last_seen: float) -> Status:
         return presence.process_seen(self)
 
-    def stopped_seen(self, stopped: ThreadStatus) -> ThreadStatus:
+    def stopped_seen[Status](self, stopped: ProcessFence[Status]) -> Status:
         return stopped.fenced()
 
-    def registration_change(
-        self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
-    ) -> RegistrationChange:
+    def registration_change[Change](
+        self, previous: ProcessState, change: ProcessRestart[Change], incarnation: ThreadIncarnation,
+    ) -> Change:
         return previous.restarted_registration(change, incarnation)
 
-    def restarted_registration(
-        self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
-    ) -> RegistrationChange:
-        return change.restarted() if incarnation != change.previous.incarnation else change
+    def restarted_registration[Change](
+        self, change: ProcessRestart[Change], incarnation: ThreadIncarnation,
+    ) -> Change:
+        return change.restarted() if incarnation != change.previous_incarnation else change.kept()
 
     def members(self, platform: Platform) -> tuple[ProcessIdentity, ...]:
         return ()  # A stored, exited identity cannot grant group ownership.
