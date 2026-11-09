@@ -1,0 +1,77 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-bind-original-message-module-owners",
+          "reason": "sending.py imports individual declarations from messaging.messages, but binds neither messages nor retained_task_facts as a module. Seven provider imports incorrectly require those absent attributes from sending, which also pulls Registration/Messaging/task assembly into their bootstrap. Bind the actual original messaging.messages and messaging.retained_task_facts modules directly. Keep each existing local module name, concrete record annotation, dataclass field, default, method body, constructor and acquisition/refusal/I/O sequence. No declaration movement, replacement record, re-export shim, guarded promotion or local import. Normal native reproof checks the integrated source; no runtime success or SCC reduction is claimed from this artifact.",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus_record_builder.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.messaging.sending import messages",
+                  "new_source": "import agent_comms.messaging.messages as messages"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/initial_origin.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.messaging.sending import messages",
+                  "new_source": "import agent_comms.messaging.messages as messages"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/message_writer.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.messaging.sending import messages",
+                  "new_source": "import agent_comms.messaging.messages as messages"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/retained_task_facts.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.messaging.sending import messages",
+                  "new_source": "import agent_comms.messaging.messages as messages"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/messages.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.messaging.sending import retained_task_facts as task_facts",
+                  "new_source": "import agent_comms.messaging.retained_task_facts as task_facts"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/task_sources.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.messaging.sending import retained_task_facts as task_facts\nfrom agent_comms.messaging.sending import messages",
+                  "new_source": "import agent_comms.messaging.retained_task_facts as task_facts\nimport agent_comms.messaging.messages as messages"
+                }
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

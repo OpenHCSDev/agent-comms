@@ -1,0 +1,43 @@
+{
+  "base": "356d83cc039ce74469a30a2817c8275fe90bf527",
+  "checks": [
+    {
+      "source": "bus_record_builder.py",
+      "target": "bus_record_builder.py",
+      "source_sha256": "ba9dc50155c43e9cdf50b2beb495f0fa4685af32c034194a479402a255ebd217",
+      "declarations_and_bodies_unchanged": true
+    },
+    {
+      "source": "messaging/initial_origin.py",
+      "target": "messaging/initial_origin.py",
+      "source_sha256": "94774fddabfbc0eb006c2b5f3bd95a86d70146197921a054cf7a36c06108b6a6",
+      "declarations_and_bodies_unchanged": true
+    },
+    {
+      "source": "messaging/message_writer.py",
+      "target": "messaging/message_writer.py",
+      "source_sha256": "a0ba6b346dcd5cb974a5e2c800477569302a2855f945c8bf9bacee7a8205f3fa",
+      "declarations_and_bodies_unchanged": true
+    },
+    {
+      "source": "messaging/retained_task_facts.py",
+      "target": "messaging/retained_task_facts.py",
+      "source_sha256": "c50d933979958e0c62113c1166b57cf36278901bb9fc4e389bbda075051d32cc",
+      "declarations_and_bodies_unchanged": true
+    },
+    {
+      "source": "messaging/messages.py",
+      "target": "messaging/messages.py",
+      "source_sha256": "d46f595e4389c559fbb6009c9d9a7e9e2c0e189414d719538ceb92f93d60e913",
+      "declarations_and_bodies_unchanged": true
+    },
+    {
+      "source": "messaging/task_sources.py",
+      "target": "messaging/task_sources.py",
+      "source_sha256": "055a1e80248ea666cb07beeefc92970176c0414524e1c65829b3fef4f1532a31",
+      "declarations_and_bodies_unchanged": true
+    }
+  ],
+  "plan_sha256": "36868780cf397479d96ff90c714df105c5120aa1a6fa983c905e79688249a49e",
+  "scope": "Source checks only; native application remains with friction"
+}
