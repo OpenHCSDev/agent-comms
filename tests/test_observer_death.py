@@ -24,7 +24,7 @@ from agent_comms.nominal.field_codec import MessageId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.runtime_requests import OwnerLiveRead
+from agent_comms.transport.serving.served_requests import OwnerLiveRead
 from agent_comms.transport.owner_connection import OwnerIdentityChangedError
 from agent_comms.transport.tools.reads import InputDeliveryRead
 from agent_comms.ui_model.observation import (

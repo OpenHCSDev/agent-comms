@@ -220,7 +220,7 @@ class GoalAction[Result: GoalDeclaration](
         cls, thread: ThreadIncarnation,
         invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], goal: Goal,
     ) -> GoalDeclaration:
-        from agent_comms.runtime_requests import GoalSnapshotReply
+        from agent_comms.transport.serving.served_requests import GoalSnapshotReply
         from agent_comms.transport.runtime_requests import UpdateGoalRuntimeRequest
 
         reply = await invoke(UpdateGoalRuntimeRequest(
@@ -587,7 +587,7 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
         observe: Callable[[], Awaitable[GoalSnapshot]],
         invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], text: str = "",
     ) -> GoalDeclaration:
-        from agent_comms.runtime_requests import GoalReply
+        from agent_comms.transport.serving.served_requests import GoalReply
         from agent_comms.transport.runtime_requests import SetGoalRuntimeRequest
 
         reply = await invoke(SetGoalRuntimeRequest(thread=thread.name, captured=CapturedOwner(thread), text=text))
@@ -806,7 +806,7 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
         cls, thread: ThreadIncarnation,
         invoke: Callable[[AttachedRuntimeRequest], Awaitable[JsonValue]], goal: Goal,
     ) -> GoalDeclaration:
-        from agent_comms.runtime_requests import GoalReply
+        from agent_comms.transport.serving.served_requests import GoalReply
         from agent_comms.transport.runtime_requests import RetryGoalRuntimeRequest
 
         reply = await invoke(RetryGoalRuntimeRequest(

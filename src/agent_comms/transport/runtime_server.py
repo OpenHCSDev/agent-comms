@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any, Self
 
 from pydantic import BaseModel
 
-import agent_comms
+from agent_comms.transport import serving
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import CoordinationError, IdentityConflict, Refused
 from agent_comms.errors import RelationViolationError
@@ -411,7 +411,7 @@ class ServedRuntimeRequest[Ctx: RuntimeRequestContext](
         Clients only need the transport declarations. The serving boundary acquires
         their implementations through the existing package discovery, not import order.
         """
-        cls.discover_package(agent_comms)
+        cls.discover_package(serving)
         return super()._member_declarations()
 
     @abstractmethod

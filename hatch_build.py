@@ -20,7 +20,7 @@ class CoreBuildHook(BuildHookInterface):
         # Load the stamp under its package name, so the generated value imports its type
         # from the same place at runtime.
         spec = spec_from_file_location(
-            "agent_comms.core_stamp", root / "src/agent_comms/core_stamp.py"
+            "agent_comms.installer.core_stamp", root / "src/agent_comms/installer/core_stamp.py"
         )
         types = module_from_spec(spec)
         spec.loader.exec_module(types)

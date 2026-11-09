@@ -38,7 +38,7 @@ from agent_comms.coordination.tables.refusals import SendRefusal
 from agent_comms.coordination.working_memory_annotations import WorkingMemoryAnnotations
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.input_origin import HumanInputOrigin
-from agent_comms.execution.owner_launch import HostResources
+from agent_comms.transport.serving.owner_launch import HostResources
 from agent_comms.execution.owner_lifecycle import OwnerStartResult
 from agent_comms.execution.pi_vocabulary import ServiceTier, ThinkingLevelField
 from agent_comms.execution.restart_queue import QueuedRestart, RestartQueue, RestartQueued

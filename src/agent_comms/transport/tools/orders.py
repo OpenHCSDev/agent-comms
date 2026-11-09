@@ -84,7 +84,7 @@ from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.projects.head_review import HeadReviewOrder, PreparedHeadReview, PullRequestHead
 from agent_comms.projects.work_branches import WorkBranchError
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.runtime_requests import OwnedRead, OwnerLiveRead
+from agent_comms.transport.serving.served_requests import OwnedRead, OwnerLiveRead
 from agent_comms.team.team_hud import TeamFrame, TeamHud, TeamLoad
 from agent_comms.team.team_hud_records import Teammate, TeammateDetail, TeamOrderDetail
 from agent_comms.transcript.transcripts import TranscriptRead

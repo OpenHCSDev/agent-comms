@@ -1,7 +1,7 @@
 # Behaviour catalog
 
-Generated from `agent_comms.behaviour_patterns` by
-`python -m agent_comms.behaviour_patterns > docs/agents/behaviour-catalog.md`; do not edit by hand.
+Generated from `agent_comms.team.behaviour_patterns` by
+`python -m agent_comms.team.behaviour_patterns > docs/agents/behaviour-catalog.md`; do not edit by hand.
 
 Each behaviour failure pattern is declared once in Core with its signature (what it looks like in state, readable without trusting a report) and the existing checks that enforce it. Patterns in code, rather than in behaviour, are NominalRefactorAdvisor's catalog (`nominal_refactor_advisor/audit/patterns/README.md`).
 

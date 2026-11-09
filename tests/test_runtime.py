@@ -458,7 +458,7 @@ def test_a_queue_action_reply_reaches_its_caller():
     """The owner answers a queue action with the reply it encodes; one the codec cannot encode
     closed the socket after the action ran, and every steer Toad sent showed an unknown outcome."""
     from agent_comms.execution.owner_protocol import OwnerLine, OwnerResult
-    from agent_comms.runtime_requests import QueueActionReply
+    from agent_comms.transport.serving.served_requests import QueueActionReply
 
     line = FieldCodec.compact(FieldCodec.encode(OwnerResult(result=FieldCodec.encode(QueueActionReply()))))
     assert OwnerLine.read(line.encode() if isinstance(line, str) else line).reply() is not None
