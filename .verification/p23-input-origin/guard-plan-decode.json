@@ -1,0 +1,13 @@
+{
+  "scope": "Native payload decode only; no simulation, tests or product writes",
+  "plans": [
+    {
+      "plan": ".verification/p23-input-origin/channel-display-layer-placement.plan.json",
+      "native_decode": "passed"
+    },
+    {
+      "plan": ".verification/p23-input-origin/bus-choice-declared-action.plan.json",
+      "native_decode": "passed"
+    }
+  ]
+}

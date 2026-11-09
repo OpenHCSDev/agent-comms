@@ -1,0 +1,8 @@
+{
+  "scope": "Static source and native selection only; no simulation, module execution or tests",
+  "bus_choice_unique_patch_hunks": 3,
+  "bus_choice_parse": "passed",
+  "original_ListsBuses_body": "unchanged",
+  "original_BusChoices_bases": "unchanged",
+  "channel_display_selection": "whole original decorated test"
+}

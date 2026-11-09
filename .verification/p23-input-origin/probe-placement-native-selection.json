@@ -1,0 +1,24 @@
+{
+  "toad_commit": "6587aee50bc73af398d16a33c6807c33bdeec038",
+  "scope": "Native declaration selection only; no simulation, tests, probe execution or product writes.",
+  "records": [
+    {
+      "source": "tests/native/command_target_probe.py",
+      "destination": "tests/support/command_target_probe.py",
+      "source_sha256": "2aac65303799060a2989b7d027e2f3a76b8082a56ba0a0d67706f1046c050629",
+      "symbols": [
+        "declaration_name"
+      ],
+      "status": "refused",
+      "error": "'/home/ts/wt/comms-friction--P23--toad/tests/native/command_target_probe.py' would keep 'importlib.import_module(sys.argv[1])' at line 7 once every declaration leaves: it neither moves with one nor stays as an import, and nothing would import the module to run it"
+    },
+    {
+      "source": "tests/native/goal_read_probe.py",
+      "destination": "tests/support/goal_read_probe.py",
+      "source_sha256": "8d028a84d4e8e0090a1ec6de8095ea5213939941d32782b3de49da791b2a5a26",
+      "symbols": [],
+      "status": "refused",
+      "error": "'/home/ts/wt/comms-friction--P23--toad/tests/native/goal_read_probe.py' would keep 'importlib.import_module(sys.argv[1])' at line 8 once every declaration leaves: it neither moves with one nor stays as an import, and nothing would import the module to run it"
+    }
+  ]
+}

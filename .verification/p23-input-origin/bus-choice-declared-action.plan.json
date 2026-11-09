@@ -1,0 +1,58 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "declare-bus-choice-forget-action",
+          "reason": "Separate unchanged-main keymap guard repair on Toad 6587aee50. Declare the bus picker's Delete key on an actual WidgetAction and delete its raw Binding and handwritten action dispatcher. The real ListsBuses.forget_highlighted body remains unchanged. Restrict PriorityActions to the existing DismissAction: the original raw Delete Binding had priority=False, so this repair must not promote Delete above a focused address editor. No source application or runtime qualification is claimed by this artifact.",
+          "operations": [
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P23--toad/src/toad/screens/bus_choice.py",
+              "import_source": "from textual.document._editing import EditingMode"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P23--toad/src/toad/screens/bus_choice.py",
+              "import_source": "from toad.widget_actions import DismissAction, WidgetAction"
+            },
+            {
+              "operation": "insert_before_target",
+              "file_path": "/home/ts/wt/comms-friction--P23--toad/src/toad/screens/bus_choice.py",
+              "target_qualname": "BusChoices",
+              "source": "class ForgetSavedBusAction(WidgetAction):\n    \"\"\"Forget the highlighted saved bus.\"\"\"\n\n    title = \"Forget this bus\"\n    keys = {EditingMode: (\"delete\",)}\n    show = True\n\n    def apply(self, context: ListsBuses) -> None:\n        context.forget_highlighted()\n"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P23--toad/src/toad/screens/bus_choice.py",
+              "target_qualname": "BusChoices",
+              "replacements": [
+                {
+                  "old_source": "class BusChoices(CenteredScreen, PriorityActions, ListsBuses, DismissibleScreen[PickerRow]):",
+                  "new_source": "class BusChoices(CenteredScreen, PriorityActions, ListsBuses, DismissibleScreen[PickerRow],\n                 actions=(ForgetSavedBusAction,), scopes={PriorityActions: (DismissAction,)}):"
+                },
+                {
+                  "old_source": "    BINDINGS = [Binding(\"delete\", \"forget\", \"Forget this bus\", show=True)]\n\n",
+                  "new_source": ""
+                },
+                {
+                  "old_source": "    def action_forget(self) -> None:\n        self.forget_highlighted()\n\n",
+                  "new_source": ""
+                }
+              ]
+            },
+            {
+              "operation": "remove_import_names",
+              "file_path": "/home/ts/wt/comms-friction--P23--toad/src/toad/screens/bus_choice.py",
+              "module_name": "textual.binding",
+              "import_names": ["Binding"]
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

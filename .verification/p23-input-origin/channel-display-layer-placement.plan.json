@@ -1,0 +1,41 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "place-channel-display-check-in-textual-layer",
+          "reason": "Separate unchanged-main guard repair at Toad 6587aee50: this test reads ui.textual and the actual PaintedApp.has_shown frame history, so it belongs in tests/textual. Relocate the original decorated test unchanged; preserve all five heights, real application acquisition, ledger assertions and hidden-channel expansion behavior. Do not weaken the guard or replace the frame history with a neutral mock.",
+          "operations": [
+            {
+              "operation": "relocate_symbols_to_new_module",
+              "file_path": "/home/ts/wt/comms-friction--P23--toad/tests/app/test_channel_display_basis.py",
+              "symbol_qualnames": ["test_shown_messages_are_read_exactly_and_hidden_expansion_stays_unread"],
+              "destination_path": "/home/ts/wt/comms-friction--P23--toad/tests/textual/test_channel_display_basis.py"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "remove-channel-display-old-test-location",
+          "reason": "Remove the emptied app-layer module so pytest collects the original test exactly once, from its actual Textual layer. Follow any tracked module/path consumers through the native successor proof; retain no compatibility test or re-export.",
+          "operations": [
+            {
+              "operation": "dissolve_module",
+              "file_path": "/home/ts/wt/comms-friction--P23--toad/tests/app/test_channel_display_basis.py",
+              "successor_path": "/home/ts/wt/comms-friction--P23--toad/tests/textual/test_channel_display_basis.py"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}
