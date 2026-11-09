@@ -1,0 +1,23 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-input-publication-remove-redundant-abc-ancestor",
+          "reason": "The applied BusReader lists ABC before InputPublicationSource. The original implementation source inherits InputPublicationRead, which already inherits ABC, so C3 cannot linearize that direct ancestor before its descendant. Remove only BusReader's redundant direct ABC base with the existing native operation; ABC membership and abstract-method machinery remain inherited through InputPublicationSource and the other read capabilities. No provider body, store acquisition, concrete record, or caller refusal/check changes. This corrects the author's API-split recipe, not the NRA engine.",
+          "operations": [
+            {
+              "operation": "remove_class_base",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus.py",
+              "target_qualname": "BusReader",
+              "base_name": "ABC"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

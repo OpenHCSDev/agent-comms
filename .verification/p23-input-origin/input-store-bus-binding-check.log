@@ -1,0 +1,6 @@
+All original class declarations and method bodies match after original-module name normalization
+Original BusReader annotation remains postponed; original Bus constructor remains in harness_attempts
+No bare Bus/BusReader lookup remains at declaration time; no local or guarded import added
+Source SHA256: 2cf3e493b8643655fc125184f27075eccda47957529fc24cd567c5b2aa118b1a
+Plan SHA256: c39b4980c9922d25a0634d550acc27680b3fc1692b097ea2d6a3a306c79b5f3d
+Proposal only; native apply and complete cold/runtime consumers NOT run

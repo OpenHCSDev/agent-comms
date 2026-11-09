@@ -1,0 +1,19 @@
+Base: 45ca1ad3a5750d4260e9ece469540016b674b803
+HumanInputOrigin.capture: original body unchanged
+HumanInputOrigin._require_owner: original body unchanged
+HumanInputOrigin.require_ingress: original body unchanged
+HumanInputOrigin.applies: original body unchanged
+HumanInputOrigin.matches_owner: original body unchanged
+HumanInputOrigin: original own field declarations unchanged
+InputProvenance: original own field declarations unchanged
+NativeInputConstraintPin: original origin/root/author/recipient/project checks unchanged after lookup
+UserThreadLookup: original declaration moved without change
+FoundUserThread: original declaration moved without change
+NoUserThread: original declaration moved without change
+3a7a1025ea698aea95205d9814c622535fd705ff2d0f9661c3468dbcc4dce073 input_origin.py
+9db06c78dc2db17d5300c4a7ccf212b42cf3e7639599d3d32fabd24ba83c03f2 input_ingress.py
+19f8cc5690da5b24250c795a69ae719f3e65b3f7101345e6e882e36843239426 input_publication_read.py
+ca4ee5db71e0c179cc6a9040f70b7f9fd10906030e8e8eeda2c47e87aaf03b0f input_publication_source.py
+52696261dfea68311361163ed362ea93cb7e249a7b3207b8c580cc284667d4e4 task_sources.py
+fcd763325c6220a90fc983f641a27b478c0d4544f0b0ac44dc9e36e4d3a1e3bd bus.py
+Source preservation only. Imports, MRO, runtime annotations and consumers are not certified.

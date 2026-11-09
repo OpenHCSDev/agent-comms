@@ -1,0 +1,296 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-original-user-selection-family",
+          "reason": "Preserve the original InputOrigin family and wire fields. Actual RegistrySnapshot, RegistryCut, RegistryStore, Registration, Messaging, Comms and RegistryPrivacy inherit state-free contracts; no provider body, storage field or refusal policy is copied. Capture keeps both snapshot_with_authority calls around user_identity and the root/claim rechecks unchanged. Public text constructs the actual InputDispositions at the same call site and time, using its original constructor bound on Comms, with no new forwarding function or cache. Relocate the original UserThreadLookup family and migrate consumers with the native operation. DEPENDENCY: compose after friction InputLookup and InitialOrigin relocations, and after ordinary module-qualified original Message/StoredInput fact bindings in retained_task_facts; its direct from-input_attempt import cannot remain when InputOrigin binds task_facts. This contribution is not qualification or a final delivery claim; run combined cold/concrete-field/ingress consumers before acceptance.",
+          "operations": [
+            {
+              "operation": "relocate_symbols_to_new_module",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_document.py",
+              "symbol_qualnames": [
+                "UserThreadLookup",
+                "FoundUserThread",
+                "NoUserThread"
+              ],
+              "destination_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/user_thread_lookup.py"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-input-origin-strong-acquisition",
+          "reason": "Preserve the original InputOrigin family and wire fields. Actual RegistrySnapshot, RegistryCut, RegistryStore, Registration, Messaging, Comms and RegistryPrivacy inherit state-free contracts; no provider body, storage field or refusal policy is copied. Capture keeps both snapshot_with_authority calls around user_identity and the root/claim rechecks unchanged. Public text constructs the actual InputDispositions at the same call site and time, using its original constructor bound on Comms, with no new forwarding function or cache. Relocate the original UserThreadLookup family and migrate consumers with the native operation. DEPENDENCY: compose after friction InputLookup and InitialOrigin relocations, and after ordinary module-qualified original Message/StoredInput fact bindings in retained_task_facts; its direct from-input_attempt import cannot remain when InputOrigin binds task_facts. This contribution is not qualification or a final delivery claim; run combined cold/concrete-field/ingress consumers before acceptance.",
+          "operations": [
+            {
+              "operation": "create_file",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_ingress.py",
+              "source": "\"\"\"Native input acquisition contracts implemented by the original live owners.\"\"\"\n\nfrom __future__ import annotations\n\nfrom abc import ABC, abstractmethod\nfrom collections.abc import Callable\nfrom pathlib import Path\n\nfrom agent_comms.input_lookup import InputLookup\nfrom agent_comms.nominal.field_codec import RootId\nfrom agent_comms.projects.checkouts import Checkout\nfrom agent_comms.registry.thread_identity import ClaimedIdentity\nfrom agent_comms.registry.user_thread_lookup import UserThreadLookup\nfrom agent_comms.task_owner import TaskOwner\nfrom agent_comms.task_registry import TaskRegistry\n\n\nclass InputRootAuthority(ABC):\n    __slots__ = ()\n\n    @property\n    @abstractmethod\n    def namespace(self) -> RootId:\n        \"\"\"Require the original native namespace; a public registry has none.\"\"\"\n\n    @abstractmethod\n    def require_root(self, root_id: RootId, error: Exception) -> None: ...\n\n\nclass InputRegistry[Owner: TaskOwner](TaskRegistry[Owner]):\n    __slots__ = ()\n\n    @abstractmethod\n    def require_active(self, name: str) -> Owner: ...\n\n    @abstractmethod\n    def claimed_identity(self, name: str) -> ClaimedIdentity: ...\n\n    @abstractmethod\n    def user_thread(self) -> UserThreadLookup[Owner]: ...\n\n\nclass InputAuthorityCut[Owner: TaskOwner](ABC):\n    __slots__ = ()\n    snapshot: InputRegistry[Owner]\n    privacy: InputRootAuthority\n\n\nclass InputRegistryStore[Owner: TaskOwner](ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def snapshot_with_authority(self) -> InputAuthorityCut[Owner]: ...\n\n    @abstractmethod\n    def privacy(self) -> InputRootAuthority: ...\n\n\nclass InputRegistration[Owner: TaskOwner](ABC):\n    __slots__ = ()\n    store: InputRegistryStore[Owner]\n\n\nclass InputUserIdentity[Owner: TaskOwner](ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def user_identity(self, worktree: Checkout) -> Owner: ...\n\n\nclass InputIngressContext[Owner: TaskOwner](ABC):\n    __slots__ = ()\n    registry: InputRegistration[Owner]\n    messaging: InputUserIdentity[Owner]\n\n\nclass InputTextContext[Attempt](ABC):\n    __slots__ = ()\n    root: Path\n    input_dispositions: Callable[[Path], InputLookup[Attempt]]\n"
+            },
+            {
+              "operation": "replace_class_base",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/private_registry_guard.py",
+              "target_qualname": "RegistryPrivacy",
+              "base_name": "ABC",
+              "replacement_base_name": "InputRootAuthority"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/private_registry_guard.py",
+              "replacements": [
+                {
+                  "old_source": "    @property\n    @abstractmethod\n    def namespace(self) -> RootId:\n        \"\"\"Require the original native namespace; a public registry has none.\"\"\"\n\n",
+                  "new_source": ""
+                },
+                {
+                  "old_source": "    @abstractmethod\n    def require_root(self, root_id: RootId, error: Exception) -> None: ...\n\n",
+                  "new_source": ""
+                }
+              ]
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/private_registry_guard.py",
+              "import_source": "from agent_comms.input_ingress import InputRootAuthority"
+            },
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_document.py",
+              "target_qualname": "RegistrySnapshot",
+              "base_name": "InputRegistry[Thread]"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_document.py",
+              "import_source": "from agent_comms.input_ingress import InputRegistry"
+            },
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_store.py",
+              "target_qualname": "RegistryCut",
+              "base_name": "InputAuthorityCut[Thread]"
+            },
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_store.py",
+              "target_qualname": "RegistryStore",
+              "base_name": "InputRegistryStore[Thread]"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_store.py",
+              "import_source": "from agent_comms.input_ingress import InputAuthorityCut, InputRegistryStore"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_store.py",
+              "import_source": "from agent_comms.registry.threads import Thread"
+            },
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registration.py",
+              "target_qualname": "Registration",
+              "base_name": "InputRegistration[Thread]"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registration.py",
+              "import_source": "from agent_comms.input_ingress import InputRegistration"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registration.py",
+              "import_source": "from agent_comms.registry.threads import Thread"
+            },
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/sending.py",
+              "target_qualname": "Messaging",
+              "base_name": "InputUserIdentity[Thread]"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/sending.py",
+              "import_source": "from agent_comms.input_ingress import InputUserIdentity"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/comms.py",
+              "replacements": [
+                {
+                  "old_source": "class Comms(ActivityClient, ContextAssembly):",
+                  "new_source": "class Comms(ActivityClient, ContextAssembly, InputIngressContext[Thread],\n            InputTextContext[InputAttempt]):\n    input_dispositions: ClassVar[Callable[[Path], InputLookup[InputAttempt]]] = InputDispositions\n"
+                }
+              ]
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/comms.py",
+              "import_source": "from agent_comms.input_ingress import InputIngressContext, InputTextContext"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/comms.py",
+              "import_source": "from agent_comms.input_attempt import InputAttempt"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/comms.py",
+              "import_source": "from agent_comms.input_disposition import InputDispositions"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/comms.py",
+              "import_source": "from agent_comms.input_lookup import InputLookup"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/comms.py",
+              "import_source": "from agent_comms.registry.threads import Thread"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/comms.py",
+              "import_source": "from collections.abc import Callable"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_origin.py",
+              "replacements": [
+                {
+                  "old_source": "from typing import TYPE_CHECKING, Annotated",
+                  "new_source": "from typing import Annotated"
+                },
+                {
+                  "old_source": "if TYPE_CHECKING:\n    from agent_comms.comms import Comms\n    from agent_comms.input_attempt import StoredInput\n    from agent_comms.registry.registry_document import RegistrySnapshot\n    from agent_comms.registry.threads import Thread\n",
+                  "new_source": ""
+                },
+                {
+                  "old_source": "    def require_ingress(self, comms: Comms, snapshot: RegistrySnapshot,\n                        claim_scope: ClaimedIdentity, controller) -> None:",
+                  "new_source": "    def require_ingress[Owner: TaskOwner](\n        self, comms: InputIngressContext[Owner], snapshot: InputRegistry[Owner],\n        claim_scope: ClaimedIdentity, controller,\n    ) -> None:"
+                },
+                {
+                  "old_source": "    def retained_fact(self, source: StoredInput):\n        from agent_comms.retained_task_facts import InputTaskFact\n\n        return InputTaskFact(source)",
+                  "new_source": "    def retained_fact(self, source: input_attempt.StoredInput):\n        return task_facts.InputTaskFact(source)"
+                },
+                {
+                  "old_source": "    def public_text(self, comms) -> str:\n        from agent_comms.input_disposition import InputDispositions\n\n        return self.require_original(InputDispositions(comms.root)).source_text",
+                  "new_source": "    def public_text(self, comms: InputTextContext[input_attempt.InputAttempt]) -> str:\n        return self.require_original(comms.input_dispositions(comms.root)).source_text"
+                },
+                {
+                  "old_source": "    def require_original(self, inputs):",
+                  "new_source": "    def require_original(self, inputs: InputLookup[input_attempt.InputAttempt]) -> input_attempt.StoredInput:"
+                },
+                {
+                  "old_source": "    def capture(cls, comms: Comms, claim_scope: ClaimedIdentity) -> HumanInputOrigin:",
+                  "new_source": "    def capture[Owner: TaskOwner](\n        cls, comms: InputIngressContext[Owner], claim_scope: ClaimedIdentity,\n    ) -> HumanInputOrigin:"
+                },
+                {
+                  "old_source": "    def _require_owner(snapshot: RegistrySnapshot, claim_scope: ClaimedIdentity) -> Thread:",
+                  "new_source": "    def _require_owner[Owner: TaskOwner](\n        snapshot: InputRegistry[Owner], claim_scope: ClaimedIdentity,\n    ) -> Owner:"
+                },
+                {
+                  "old_source": "    def retained_fact(self, source):\n        from agent_comms.retained_task_facts import HumanInputTaskFact\n\n        return HumanInputTaskFact(source)",
+                  "new_source": "    def retained_fact(self, source: input_attempt.StoredInput):\n        return task_facts.HumanInputTaskFact(source)"
+                },
+                {
+                  "old_source": "    def applies(self, owner: Thread, snapshot: RegistrySnapshot) -> bool:",
+                  "new_source": "    def applies(self, owner: TaskOwner, snapshot: TaskRegistry[TaskOwner]) -> bool:"
+                }
+              ]
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_origin.py",
+              "import_source": "from agent_comms.input_ingress import InputIngressContext, InputRegistry, InputTextContext"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_origin.py",
+              "import_source": "from agent_comms.input_lookup import InputLookup"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_origin.py",
+              "import_source": "from agent_comms.task_owner import TaskOwner"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_origin.py",
+              "import_source": "from agent_comms.task_registry import TaskRegistry"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_origin.py",
+              "replacements": [
+                {
+                  "old_source": "                and authorized.created_at == original.created_at)",
+                  "new_source": "                and authorized.created_at == original.created_at)\n\n\nimport agent_comms.input_attempt as input_attempt\nimport agent_comms.retained_task_facts as task_facts"
+                }
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-native-input-publication-read",
+          "reason": "Task bootstrap imports only the low generic InputPublicationRead API. The actual BusReader inherits InputPublicationSource, which inherits that API with original Provenance and StoredInput types. Store imports execute only on this implementation side, not through task_sources. Original NativeInputConstraintPin I/O is inherited by the actual root-bearing BusReader. It acquires original RegistryStore.privacy(), then looks up and checks original input provenance using actual InputDispositions. It returns the same privacy object and StoredInput; no namespace value or surrogate record is captured. origin.require_human and privacy.namespace remain in the caller after that read, preserving PublicRegistry namespace refusal order and all author/recipient/project checks. This stage follows friction message-read provider headers and the InputOrigin strong contracts. Concrete callback annotations use ordinary original-module bindings after provider declaration.",
+          "operations": [
+            {
+              "operation": "create_file",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_publication_read.py",
+              "source": "\"\"\"Input-publication reads without opening a store or importing its implementation.\"\"\"\n\nfrom abc import ABC, abstractmethod\n\nfrom agent_comms.input_ingress import InputRootAuthority\n\n\nclass InputPublicationRead[Subject, Original](ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def input_publication(self, subject: Subject) -> tuple[InputRootAuthority, Original]: ...\n"
+            },
+            {
+              "operation": "create_file",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_publication_source.py",
+              "source": "\"\"\"The original input-publication I/O, inherited by the actual bus reader.\"\"\"\n\nfrom __future__ import annotations\n\nfrom pathlib import Path\n\nfrom agent_comms.input_ingress import InputRootAuthority\nfrom agent_comms.input_publication_read import InputPublicationRead\n\nimport agent_comms.execution.turn_context as turn_context\nimport agent_comms.input_attempt as input_attempt\n\n\nclass InputPublicationSource(\n    InputPublicationRead[turn_context.Provenance, input_attempt.StoredInput],\n):\n    __slots__ = ()\n    path: Path\n\n    def input_publication(\n        self, subject: turn_context.Provenance,\n    ) -> tuple[InputRootAuthority, input_attempt.StoredInput]:\n        privacy = registry_store.RegistryStore.at(self.path.parent).privacy()\n        row = subject.require_human_input().require_original(\n            input_disposition.InputDispositions(self.path.parent))\n        return privacy, row\n\n\nimport agent_comms.input_disposition as input_disposition\nimport agent_comms.registry.registry_store as registry_store\n"
+            },
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus.py",
+              "target_qualname": "BusReader",
+              "base_name": "InputPublicationSource"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus.py",
+              "import_source": "from agent_comms.input_publication_source import InputPublicationSource"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/task_sources.py",
+              "replacements": [
+                {
+                  "old_source": "    def require_wording_publication(self, registry: TaskRegistry[TaskOwner], original_source: BusReader) -> None:\n        from agent_comms.input_disposition import InputDispositions\n        from agent_comms.registry.registry_store import RegistryStore\n\n        privacy = RegistryStore.at(original_source.path.parent).privacy()\n        row = self.subject.require_human_input().require_original(\n            InputDispositions(original_source.path.parent))",
+                  "new_source": "    def require_wording_publication(self, registry: TaskRegistry[TaskOwner], original_source: InputPublicationRead[Provenance, input_attempt.StoredInput]) -> None:\n        privacy, row = original_source.input_publication(self.subject)"
+                }
+              ]
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/task_sources.py",
+              "import_source": "from agent_comms.input_publication_read import InputPublicationRead"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

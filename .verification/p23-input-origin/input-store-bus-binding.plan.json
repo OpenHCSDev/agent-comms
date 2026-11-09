@@ -1,0 +1,68 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-input-store-original-bus-module-binding",
+          "reason": "The retained cold failure enters input_disposition from Bus's implementation mixin while agent_comms.bus is already initializing. Only two original class reads exist: InputDocument.answered_by's postponed BusReader annotation, and the Bus constructor inside InputDispositions.harness_attempts. Neither needs a Bus class at module declaration time. Bind the original module, not eager classes; this does not defer module execution, it reuses the already-initializing module without reading unavailable attributes. No store, wire field, provider, acquisition order or policy changes.",
+          "operations": [
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_disposition.py",
+              "import_source": "import agent_comms.bus as bus"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-input-store-keep-original-bus-reader-and-constructor",
+          "reason": "Keep original BusReader and Bus identities through the module binding. answered_by retains the concrete BusReader annotation under existing future annotations. harness_attempts constructs the same actual Bus with the same Bus.path_in(self.root), at the same point after _harness_deliveries, and keeps its exact original message query and reservation construction. This is not an API substitute, a local import, a new factory, or a forwarding facade.",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_disposition.py",
+              "replacements": [
+                {
+                  "old_source": "self, lease: TurnLeaseFence, source: BusReader, snapshot: RegistrySnapshot,",
+                  "new_source": "self, lease: TurnLeaseFence, source: bus.BusReader, snapshot: RegistrySnapshot,"
+                },
+                {
+                  "old_source": "messages = Bus(Bus.path_in(self.root)).input_messages_for_references(",
+                  "new_source": "messages = bus.Bus(bus.Bus.path_in(self.root)).input_messages_for_references("
+                }
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-input-store-remove-eager-bus-class-bindings",
+          "reason": "Remove the now-unneeded eager class bindings only after the existing native rewrite stages. Declaration-time input-disposition tables and fields contain no Bus/BusReader lookup. The full resulting source requires the original module, not Bus's not-yet-declared class values; original runtime callbacks read those values after initialization. Preserve the original input-publication privacy then lookup then caller origin then namespace procedure unchanged.",
+          "operations": [
+            {
+              "operation": "remove_import_names",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_disposition.py",
+              "module_name": "agent_comms.bus",
+              "import_names": ["Bus", "BusReader"]
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}
