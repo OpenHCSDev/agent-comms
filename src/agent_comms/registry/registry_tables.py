@@ -128,9 +128,10 @@ class RegistryNamedRow(RevisionStamped, declared_name=None):
 
     @classmethod
     def mapping_in(cls, raw: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
+        """An absent section is one with no rows, as an older stored form may lack it."""
         value: JsonValue = raw
         for key in cls.section():
-            value = value[key]
+            value = value.get(key, {})
         return value
 
     @classmethod
@@ -141,7 +142,8 @@ class RegistryNamedRow(RevisionStamped, declared_name=None):
     @staticmethod
     def _placed(raw: RawDocument, path: tuple[str, ...], mapping: dict[str, JsonValue]) -> RawDocument:
         head, *rest = path
-        return {**raw, head: RegistryNamedRow._placed(raw[head], tuple(rest), mapping) if rest else mapping}
+        return {**raw, head: RegistryNamedRow._placed(raw.get(head, {}), tuple(rest), mapping)
+                if rest else mapping}
 
 
 class WireStoredRow(RegistryNamedRow, declared_name=None):

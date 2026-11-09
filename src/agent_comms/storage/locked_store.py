@@ -1110,6 +1110,13 @@ class RegistryFile(RollbackRetained, PublishedSQLiteFile, GoalWakeFile):
         return ()
 
     @classmethod
+    def committed_revision(cls, root: Path) -> FileObservation:
+        """The registry's committed revision as a file observation: its commit signal's, since a
+        WAL commit leaves the database file itself untouched until a checkpoint."""
+        (signal,) = cls.source_paths(root)
+        return FileRevision.capture(signal)
+
+    @classmethod
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
         """The copy names no live process: a signal, stop or wake aimed through it would reach
         the source root's units."""
@@ -1117,11 +1124,16 @@ class RegistryFile(RollbackRetained, PublishedSQLiteFile, GoalWakeFile):
 
         registry = RegistryStore(source)
         with registry.guarded_read():
+            # The rows copy as a SQLite backup, which carries their WAL; the guard and turn files
+            # beside them are plain root files.
             copied = frozenset(path for path in registry.cut_paths if path.exists())
-            for path in copied:
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            if source in copied:
+                cls.copy_file(source, target)
+            for path in copied & frozenset(registry.companion_paths):
                 destination = target.parent / path.relative_to(source.parent)
                 destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-                cls.copy_file(path, destination)
+                RootFile.copy_file(path, destination)
         RegistryStore(target).retire_processes()
         return copied
 

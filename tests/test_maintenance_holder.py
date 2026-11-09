@@ -114,7 +114,7 @@ async def test_async_recovery_borrows_registry_without_blocking_event_loop(tmp_p
             async with barrier.ingress_async():
                 pytest.fail("The detecting input must be refused")
 
-        async with _async_store_lock(root / 'registry.json', ExclusiveLock(), StoreGuard.contention):
+        async with _async_store_lock(RegistryFile.path_in(root), ExclusiveLock(), StoreGuard.contention):
             attempt = asyncio.create_task(incoming())
             await asyncio.sleep(0.025)
             assert not attempt.done()

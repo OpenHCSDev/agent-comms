@@ -1,6 +1,5 @@
 """Registry persistence retains identity and goal behavior, never synthesizes authority."""
 
-import json
 import os
 import subprocess
 import sys
@@ -18,6 +17,7 @@ from agent_comms.planning.goal_states import (
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.locked_store import RegistryFile
 
@@ -64,15 +64,15 @@ def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
     path = RegistryFile.path_in(tmp_path)
     registry = Registration(path)
     registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
-    raw = json.loads(path.read_text())
+    raw = RegistryStore(path).stored()
     for field in ("owners", "claims"):
         incomplete = dict(raw)
         incomplete.pop(field)
-        path.write_text(json.dumps(incomplete))
+        RegistryStore(path).rewrite_stored(lambda _, stored=incomplete: stored)
         with pytest.raises(RelationViolationError):
             Registration(path).live_owner_with_claim("owner")
     raw["threads"]["owner"].pop("created_at")
-    path.write_text(json.dumps(raw))
+    RegistryStore(path).rewrite_stored(lambda _, stored=raw: stored)
     with pytest.raises(RelationViolationError) as rejected:
         Registration(path).require("owner")
     assert isinstance(rejected.value.__cause__, ValueError)
@@ -83,8 +83,8 @@ def test_retained_colliding_creation_dates_remain_readable(tmp_path):
     registry = Registration(path)
     registry.register(NativeThread('one', frozenset(), Checkout(tmp_path)))
     registry.register(NativeThread('two', frozenset(), Checkout(tmp_path)))
-    raw = json.loads(path.read_text())
+    raw = RegistryStore(path).stored()
     raw["threads"]["two"]["created_at"] = raw["threads"]["one"]["created_at"]
-    path.write_text(json.dumps(raw))
+    RegistryStore(path).rewrite_stored(lambda _, stored=raw: stored)
     reopened = Registration(path)
     assert reopened.require("one").created_at == reopened.require("two").created_at

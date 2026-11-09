@@ -369,9 +369,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
     record_type = RegistryDocument
 
     def stored_files(self) -> tuple[Path, ...]:
-        """The files that together are this registry: its rows with their WAL, and the presence
-        rows every declared thread must have. A copy that leaves one behind cannot be read."""
-        return (*self.rows.files(self.path), self.presence.path)
+        """The files that together are this registry: its rows (a SQLite backup carries their
+        WAL), and the presence rows every declared thread must have. A copy that leaves one
+        behind cannot be read."""
+        return self.path, self.presence.path
 
     def empty(self) -> RegistryDocument:
         return RegistryDocument()
@@ -507,16 +508,21 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         return PrivateRegistryGuard.path_in(self.path.parent)
 
     @property
-    def written(self) -> tuple[Path, ...]:
+    def written(self) -> tuple[Path, Path]:
         """The files every commit writes together, as ``revision_unlocked`` reads them."""
-        return (*self.rows.files(self.path), self.guard_path)
+        return self.path, self.guard_path
 
     @property
     def cut_paths(self) -> tuple[Path, ...]:
         """The files one hold of the registry lock keeps consistent: every write replaces
         ``written`` together, and a turn claim publishes its turn file in the same
         transaction. Read under that lock, so a claim cannot fall between them."""
-        return (*self.written, *sorted(StoredTurnRecord.matching_in(self.path.parent)))
+        return (self.path, *self.companion_paths)
+
+    @property
+    def companion_paths(self) -> tuple[Path, ...]:
+        """The plain files a cut keeps consistent with the rows: the guard and the turn files."""
+        return (self.guard_path, *sorted(StoredTurnRecord.matching_in(self.path.parent)))
 
     def revision_unlocked(self) -> tuple[RegistryRevisionMark, FileObservation]:
         """The committed row revision and the owner guard that brackets every commit."""
@@ -582,14 +588,31 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
     def retire_processes(self) -> None:
         """A copied registry's turns and processes belong to the root it was copied from, never to
         the copy. An install copies the registry before its carries run, so the copy can hold a
-        form the current decoder refuses: this edits the stored rows' process and turn keys only,
-        and commits nothing when no row changes, so an idle copy keeps the source's revision."""
+        form the current decoder refuses: this edits the stored rows' process and turn keys only."""
         threads = FieldCodec.record_key(RegistryDocument, "threads")
+        self.rewrite_stored(lambda raw: {
+            **raw, threads: {name: self.retired_row(row) for name, row in raw[threads].items()}})
+
+    def stored(self) -> dict:
+        """A copy of the committed rows in their stored wire form, before any decoding."""
+        with self.guarded_read():
+            return FieldCodec.parse(FieldCodec.compact(self._capture_unlocked().raw))
+
+    def rewrite_stored(self, change: Callable[[dict], dict]) -> None:
+        """Rewrite the stored rows without decoding them (a copy's retired processes, or a form
+        the current decoder may refuse), under the exclusive lock and through the guard; ``change``
+        gets its own copy, and nothing is committed when no row changes, so an idle copy keeps
+        the source's revision."""
         with self.guarded_write():
+            entry = self.cache.entry
             original = self._capture_unlocked()
-            rows = {name: self.retired_row(row) for name, row in original.raw[threads].items()}
-            if rows != original.raw[threads]:
-                self._commit_unlocked({**original.raw, threads: rows}, original)
+            raw = change(FieldCodec.parse(FieldCodec.compact(original.raw)))
+            if raw != original.raw:
+                self._commit_unlocked(raw, original)
+                # The earlier revision stays cached: the next read applies only the rows this
+                # commit changed, and decodes them then, so a form the decoder refuses is refused
+                # by its reader, never here.
+                self.cache.entry = entry
 
     @staticmethod
     def retired_row(row: dict) -> dict:

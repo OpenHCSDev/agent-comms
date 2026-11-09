@@ -57,7 +57,7 @@ def _new_turn(registry, leased, lease, tmp_path):
 def test_registration_transition_preserves_or_revokes_exact_lease(
     tmp_path, transition, advances_owner, preserves_record,
 ):
-    registry = Registration(tmp_path / 'registry.json')
+    registry = Registration(RegistryFile.path_in(tmp_path))
     thread = NativeThread('owner', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     registry.register(thread)
     leased, _ = registry.lease_local_turn('owner', TurnId('9b473845f684444f80a26586ae298d2b'))
@@ -90,7 +90,7 @@ def tools(version, *names):
     ('new-owner', UnreportedTools('1'), UnreportedTools('2'), ('runtime 1 -> 2, tool set unreported',)),
 ])
 def test_owner_restart_compares_tools_with_last_real_record(tmp_path, restart, before, after, lost):
-    registry = Registration(tmp_path / 'registry.json')
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path)))
     registry.observe_offered_tools(registry.require('owner').incarnation, before)
     stops = restart.count('stop')
@@ -104,7 +104,7 @@ def test_owner_restart_compares_tools_with_last_real_record(tmp_path, restart, b
 
 
 def test_rename_preserves_exact_turn_release_but_not_reused_identity(tmp_path):
-    registry = Registration(tmp_path / 'registry.json')
+    registry = Registration(RegistryFile.path_in(tmp_path))
     thread = NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     registry.register(thread)
     leased, _ = registry.lease_local_turn('owner', TurnId('058be655fae2a4c37a21d2c091ba7661'))
@@ -118,7 +118,7 @@ def test_rename_preserves_exact_turn_release_but_not_reused_identity(tmp_path):
 
 
 def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
-    registry = Registration(tmp_path / 'registry.json')
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path)))
     original = registry.snapshot()
     expected = original.threads['owner']

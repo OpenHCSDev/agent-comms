@@ -301,10 +301,10 @@ class TestRegistration:
         comms.registry.declare(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt')), process_identity=ProcessIdentity.capture(os.getpid())))
         prepare_native_comms(comms)
         registry_path = RegistryFile.path_in(root)
-        data = json.loads(registry_path.read_text())
+        data = comms.registry.store.stored()
         for field in ("owners", "claims"):
             data.pop(FieldCodec.record_key(RegistryDocument, field))
-        registry_path.write_text(json.dumps(data))
+        comms.registry.store.rewrite_stored(lambda _: data)
         with pytest.raises(RelationViolationError):
             comms.agents.begin_turn("a", TurnId('18e37571ddd8a9cd1f2b7ffa63493bb6'))
         with pytest.raises(RelationViolationError):

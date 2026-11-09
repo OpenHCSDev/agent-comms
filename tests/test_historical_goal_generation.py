@@ -30,6 +30,7 @@ from agent_comms.planning.goal_states import BlockedGoal
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 
 UNKNOWN_ORIGINAL_KEY = AcpInputKey(InputId.mint())
 
@@ -47,14 +48,14 @@ def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_pat
                   claim_scope=comms.registry.snapshot().claim_generation(thread.name),
                   target=thread.name, text='This uncertain original must not replay')
     original_inputs = inputs.path.read_bytes()
-    original_registry = (comms.root / 'registry.json').read_bytes()
+    original_registry = comms.registry.store.rows.mark()
     with pytest.raises(MissingGoalGenerationError):
         store.require_generation(goal.id)
 
     # The one-time tool calls this existing writer after backup and absence
     # checks. This is a new unreserved generation, not evidence of no past run.
     store.create_goal(goal.id)
-    assert (comms.root / 'registry.json').read_bytes() == original_registry
+    assert comms.registry.store.rows.mark() == original_registry
     reopened = GoalAttemptStore.at(comms.root / 'goal-private')
     assert reopened.require_generation(goal.id).lifecycle == ReadyGeneration()
     expect = GoalPrecondition(goal_id=OneGoal(goal.id), expected_checkpoint=goal.captured,

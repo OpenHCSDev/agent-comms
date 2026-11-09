@@ -73,7 +73,7 @@ def test_maintenance_operator_rejects_invalid_external_text(text: object) -> Non
 
 
 def test_draining_lends_existing_turn_but_holds_new_prompt(tmp_path: Path) -> None:
-    gate = MaintenanceBarrier(tmp_path / 'wire' / 'registry.json')
+    gate = MaintenanceBarrier(RegistryFile.path_in(tmp_path / 'wire'))
     hold = gate.begin(MaintenanceOperator.current())
     assert hold.phase is DrainingPhase
     with gate.read().phase.send_new(None) as new:
@@ -302,7 +302,7 @@ async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: P
             with status.phase.send_running(None, None, "native", "original"):
                 entered.set()
 
-    async with _async_store_lock(root / 'registry.json', ExclusiveLock(), StoreGuard.contention):
+    async with _async_store_lock(RegistryFile.path_in(root), ExclusiveLock(), StoreGuard.contention):
         send = asyncio.create_task(native_write())
         try:
             # The original exclusive owner must resume on the same loop while
@@ -348,7 +348,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     sender.join(5)
     closer.join(5)
     assert changed.is_set()
-    with _store_lock(root / 'registry.json', ExclusiveLock(), StoreGuard.contention), pytest.raises(RelationViolationError):
+    with _store_lock(RegistryFile.path_in(root), ExclusiveLock(), StoreGuard.contention), pytest.raises(RelationViolationError):
         gate.assert_open_unlocked()
 
 
@@ -367,13 +367,13 @@ def test_activity_updates_runtime_state_without_publication_while_draining(tmp_p
         assert cli('register', '--name', name, '--worktree', '/wt')[0] == 0
     before = bus.revision()
     registry_before = (RegistryFile.path_in(tmp_path)).read_bytes()
-    gate = MaintenanceBarrier(tmp_path / 'registry.json')
+    gate = MaintenanceBarrier(RegistryFile.path_in(tmp_path))
     hold = gate.begin(MaintenanceOperator.current())
     code, out = cli('activity', '--name', 'a', '--state', 'working')
     assert code == 0, out
     assert ActivityStore(tmp_path).current('a').state is ActivityState.WORKING
     assert bus.revision() == before
-    assert (tmp_path / 'registry.json').read_bytes() == registry_before
+    assert RegistryFile.path_in(tmp_path).read_bytes() == registry_before
     gate.clear(hold)
     assert cli('send', '--from', 'a', '--to', 'b', '--body', 'hi')[0] == 0
 

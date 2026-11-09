@@ -75,8 +75,8 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
             edit.document.last_seen[thread.name] = time.time() - age
             edit.commit()
         before = comms.registry.snapshot()
-        saved = comms.registry.store.path.read_bytes()
-        raw = json.loads(saved)
+        saved = comms.registry.store.rows.mark()
+        raw = comms.registry.store.stored()
         assert FieldCodec.decode(ThreadStatus, raw["statuses"]["owner"]) == status.declaration()
         assert raw["threads"]["owner"]["created_at"] == 12.5
         reopened = Registration(comms.registry.store.path)
@@ -112,7 +112,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
         expected = status.declaration().registered(thread, before.seen_at(thread.name))
         assert reopened.status("owner") == expected
         assert comms.agents.is_live(thread.incarnation, reopened.snapshot()) == expected.running
-        assert comms.registry.store.path.read_bytes() == saved
+        assert comms.registry.store.rows.mark() == saved
     finally:
         child.kill()
         child.wait(timeout=5)

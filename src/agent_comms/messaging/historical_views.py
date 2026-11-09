@@ -399,7 +399,7 @@ class HistorySource(MessageHistory):
         return HistorySource(
             str(destination.resolve()), self.original_root, self.bus_identity,
             RecordedBusIdentity.capture(archived.path), self.snapshot_bus_revision,
-            FileRevision.capture(RegistryFile.path_in(destination)), self.provenance,
+            RegistryFile.committed_revision(destination), self.provenance,
         )
 
     def validate(self) -> None:
@@ -410,7 +410,7 @@ class HistorySource(MessageHistory):
         current = replace(
             self,
             snapshot_bus_revision=Bus(Bus.path_in(root)).revision(),
-            snapshot_registry_revision=FileRevision.capture(RegistryFile.path_in(root)),
+            snapshot_registry_revision=RegistryFile.committed_revision(root),
         )
         if current != self:
             raise error
