@@ -21,7 +21,7 @@ from agent_comms.nominal.field_codec import (
     Id128Text,
     MalformedRecord,
 )
-from agent_comms.native_startup import NativeStartupPolicy
+from agent_comms.execution.native_startup import NativeStartupPolicy
 from agent_comms.pi_events import PiEvent
 from agent_comms.pi_wire import PiDiagnostic, PiPayload
 from agent_comms.pi_wire import UnknownPayload
@@ -109,7 +109,7 @@ def test_open_payload_derives_unknown_selection_from_each_family(family, wire):
 
 
 def test_opaque_entry_and_tool_data_keep_the_original_external_shape():
-    from agent_comms.native_entries import NativeEntry
+    from agent_comms.execution.native_entries import NativeEntry
 
     for family, wire in (
         (NativeEntry, {"type": "future_entry", "timestamp": "2026-10-21T00:00:00Z", "extra": [1]}),

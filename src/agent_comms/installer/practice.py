@@ -15,10 +15,10 @@ from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.tables.annotations import ContextSpanRows
 from agent_comms.coordination.tables.participants import Participants
 from agent_comms.input_disposition import InputDispositions, InputDocument, SnapshotInputDispositions
-from agent_comms.native_runtime_input import NativeRuntimeInput
+from ..execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.participant_store import ParticipantRows, ParticipantStore
 from agent_comms.registry.registry_document import RegistryEntry
-from agent_comms.native_session_reopen import NativeSessionIdentity
+from ..execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.nominal.field_codec import ThreadLookup, boundary_decoder
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.backup import pinned_bus_files, saved_bus_files

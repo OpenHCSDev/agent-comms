@@ -20,13 +20,13 @@ from agent_comms.coordination.errors import IdentityConflict, PublicationActivat
 from .bus import Bus
 from .storage.locked_store import RegistryFile
 
-from .native_arguments import NativeArguments
-from .native_package import (
+from .execution.native_arguments import NativeArguments
+from .installer.native_package import (
     NativePackageError,
     VerifiedNativePackage,
     pinned_native_package,
 )
-from agent_comms.native_session_files import NativeSessionFiles
+from .execution.native_session_files import NativeSessionFiles
 
 if TYPE_CHECKING:
     from .active_route import CommsRoute

@@ -11,9 +11,9 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
 import pytest
+from coding_owner_fixture import OwnerDouble
 
 from agent_comms.channel_coding_tools import CodingToolSocket
-from agent_comms.registry.thread_identity import UnobservedTools
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination.session import NativeCapture
@@ -25,8 +25,7 @@ from agent_comms.envelope_claim_transitions import (
     WritableFileClaim,
 )
 from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
-from agent_comms.native_tool_call import CodingCall
-from agent_comms.native_tools import CodingTool
+from agent_comms.transport.native_tools import CodingTool, NativeToolDeclaration
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import AssistantMessage, ReportedFlag, ReportedParts, ReportedText, ToolCallContent
 from agent_comms.storage_room import NoRoomNeeded
@@ -128,16 +127,16 @@ def test_create_claim_preserves_physical_paths_without_aliases(tmp_path):
 
 def test_coding_names_and_argument_types_come_from_declarations():
     assert set(CodingTool.names()) == {"read", "bash", "edit", "write"}
-    call = CodingCall.decode("call", "write", {"path": "x", "content": "value"})
+    call = NativeToolDeclaration.decode("call", "write", {"path": "x", "content": "value"})
     assert isinstance(call.claim, WritableFileClaim)
     with pytest.raises((TypeError, ValueError)):
-        CodingCall.decode("call", "write", {"path": True, "content": "v"}).allowed_claim()
+        NativeToolDeclaration.decode("call", "write", {"path": True, "content": "v"}).allowed_claim()
     # Pi's full tool schema stays authoritative, including its current edits[]
     # representation; only the mutation path is decoded by the claim policy.
     args = {"path": "x", "edits": [{"oldText": "a", "newText": "b"}]}
-    assert CodingCall.decode("edit", "edit", args).arguments == args
+    assert NativeToolDeclaration.decode("edit", "edit", args).arguments == args
     with pytest.raises(ValueError):
-        CodingCall.decode("call", "forged", {}).allowed_claim()
+        NativeToolDeclaration.decode("call", "forged", {}).allowed_claim()
 
 
 @pytest.mark.parametrize("name,arguments", [
@@ -160,17 +159,17 @@ def test_coding_names_and_argument_types_come_from_declarations():
 def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments):
     from agent_comms.tool_denial import SelectedToolDenied
 
-    from agent_comms.native_tool_call import RefusedCodingCall
+    from agent_comms.transport.native_tool_call import RefusedCodingCall
 
-    call = CodingCall.decode("bad-argument-shape", name, arguments)
+    call = NativeToolDeclaration.decode("bad-argument-shape", name, arguments)
     assert isinstance(call, RefusedCodingCall)
     with pytest.raises(SelectedToolDenied):
         call.allowed_claim()
 
 
 def test_an_offered_mcp_tool_decodes_as_its_call_and_an_unoffered_one_is_refused():
-    from agent_comms.native_tool_call import RefusedCodingCall
-    from agent_comms.native_tools import McpToolCall
+    from agent_comms.transport.native_tool_call import RefusedCodingCall
+    from agent_comms.transport.native_tools import McpToolCall
     from agent_comms.registry.thread_identity import (
     ReportedTools,
     ToolName,
@@ -178,11 +177,11 @@ def test_an_offered_mcp_tool_decodes_as_its_call_and_an_unoffered_one_is_refused
 
     name, arguments = "mcp_fixture_echo_092c79e8f8", {"message": "ACCEPTANCE_ECHO"}
     offered = ReportedTools("pi-test", frozenset({ToolName("read"), ToolName(name)}))
-    call = CodingCall.decode("echo-1", name, arguments, offered)
+    call = NativeToolDeclaration.decode("echo-1", name, arguments, offered)
     assert call == McpToolCall(call_id="echo-1", declared_name=name, arguments=arguments)
     assert call.allowed_claim() is None
     # A name this turn was not offered is refused, digest suffix or not.
-    other = CodingCall.decode("echo-2", "mcp_fixture_echo_ffffffffff", arguments, offered)
+    other = NativeToolDeclaration.decode("echo-2", "mcp_fixture_echo_ffffffffff", arguments, offered)
     assert isinstance(other, RefusedCodingCall)
 
 
@@ -192,7 +191,7 @@ def test_family_selector_is_denied_but_record_presentation_stays_readable():
 
     arguments = {"path": "x", "tool": "write"}
     with pytest.raises(SelectedToolDenied):
-        CodingCall.decode("selector", "read", arguments)
+        NativeToolDeclaration.decode("selector", "read", arguments)
     assert ToolDeclaration.record("read", arguments, call_id="refused") == NoToolRecord()
 
 
@@ -205,7 +204,7 @@ def test_family_selector_is_denied_but_record_presentation_stays_readable():
 def test_pi_argument_fields_own_roundtrip_and_display(name, arguments, title):
     from agent_comms.agent_events import ToolStart
 
-    call = CodingCall.decode("typed-argument-shape", name, arguments)
+    call = NativeToolDeclaration.decode("typed-argument-shape", name, arguments)
     assert call.arguments == arguments
     assert ToolStart.from_call("typed", name, arguments).title == title
 
@@ -215,15 +214,6 @@ def _request(socket, id, name, args):
         json.dumps({"token": socket.listener.token, "call_id": id, "name": name, "arguments": args}) + "\n"
     ).encode()
 
-
-class OwnerDouble:
-    """A coding owner whose thread was offered nothing beyond the declared tools; each
-    test overrides only how it answers ``allow``."""
-
-    offered = UnobservedTools()
-
-    def __init__(self) -> None:
-        self.input_id = secrets.token_hex(16)
 
 
 @pytest.mark.asyncio
@@ -307,7 +297,7 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(
         await socket.close()
     assert "Unhandled exception" not in caplog.text
     answer = "refused" if refused else "allowed"
-    warnings = [record for record in caplog.records if record.name == "agent_comms.native_tool_transport"]
+    warnings = [record for record in caplog.records if record.name == "agent_comms.transport.native_tool_transport"]
     assert len(warnings) == 1
     assert f"stopped waiting for a tool check before its answer ({answer})" in caplog.text
 

@@ -13,7 +13,7 @@ from pathlib import Path
 from threading import Lock
 from typing import BinaryIO
 
-from agent_comms.native_build_inputs import ConfiguredChildStdio
+from .native_build_inputs import ConfiguredChildStdio
 from ..execution.child_process import (
     SpawnedProcess,
     SynchronousProcess,

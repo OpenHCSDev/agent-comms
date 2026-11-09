@@ -6,7 +6,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 
 from .nominal.declared_family import DeclaredFamily
-from .native_session_files import NativeSessionFiles
+from .execution.native_session_files import NativeSessionFiles
 from .storage.private_path import FileRevision
 
 

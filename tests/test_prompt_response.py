@@ -12,7 +12,7 @@ from agent_comms.execution.turn_inbox import (
 )
 from agent_comms.nominal.field_codec import FieldCodec, InputId
 from agent_comms.image_input import ImageInput
-from agent_comms.native_tool_call import OwnerToolConnection
+from agent_comms.transport.native_tool_transport import OwnerToolConnection
 from agent_comms.pi_commands import ClearQueue, FollowingPrompt, GetSessionStats, GetState, PiCommand, Prompt, SettingCommand
 from agent_comms.pi_wire import AnonymousRequest, RequestId
 from agent_comms.pi_rpc import PiRpcChannel
@@ -24,7 +24,7 @@ from agent_comms.execution.turn_stats import (
 )
 from agent_comms.execution.turn_failure import PromptSendFailed
 from agent_comms.agent_events import FollowingInputRefused, InputCleared
-from agent_comms.native_session_prepare import NativeSessionPreparation
+from agent_comms.execution.native_session_prepare import NativeSessionPreparation
 from native_response_fixture import native_response_session
 from agent_comms.execution.turn_item import PiRequestKey
 

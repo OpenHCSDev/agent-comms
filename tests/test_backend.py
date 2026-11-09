@@ -96,7 +96,7 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
 
 class TestNativeInputBinding:
     def test_only_original_response_can_promote_pending_attestation(self):
-        from agent_comms.native_attestation import AttestationError, PendingAttestation
+        from agent_comms.execution.native_attestation import AttestationError, PendingAttestation
         from agent_comms.pi_rpc import PiRpcChannel
 
         pending = PendingAttestation()

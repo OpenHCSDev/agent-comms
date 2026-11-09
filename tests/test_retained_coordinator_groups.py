@@ -24,8 +24,8 @@ from agent_comms.coordination.tables.recovery import RecoveryAudit
 from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.harness_delivery_states import EmittedOutcome, ReceivingMonitor
 from agent_comms.message_reference import MessageReference
-from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution
-from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.native_input_record import FullNativeExecution, TriageNativeExecution
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.nominal.field_codec import AssignmentId, MessageId, ThreadLookup, TranscriptRecordIdText
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.participant_store import ParticipantRows, ParticipantStore

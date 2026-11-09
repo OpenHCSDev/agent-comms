@@ -1,9 +1,9 @@
 """Follow live native sessions and print turn digests for teammate judgment."""
 import argparse, os, time, glob, collections
 
-from ..native_tool_call import CodingCall
+from ..transport.native_tools import NativeToolDeclaration
 from ..lifecycle_capability import Successful
-from ..native_entries import NativeEntry
+from ..execution.native_entries import NativeEntry
 from ..pi_payloads import PiMessage, StorageDenialToolDetails
 from ..tool_declaration import one_line
 from ..registry.registration import Registration
@@ -50,7 +50,7 @@ def follow(ctx: Team, turns: dict[str, list[str]], thread: str, data: bytes) -> 
 def walk(ctx: Team, turns: dict[str, list[str]], thread: str,
          message: PiMessage) -> None:
     for pi_call in message.tool_calls:
-        coding_call = CodingCall.decode(pi_call.id, pi_call.name, pi_call.arguments)
+        coding_call = NativeToolDeclaration.decode(pi_call.id, pi_call.name, pi_call.arguments)
         digest = coding_call.digest()
         turns[thread].append(digest)
         if len(turns[thread]) >= 25:

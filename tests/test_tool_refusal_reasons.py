@@ -4,12 +4,13 @@ import sqlite3
 import pytest
 
 from agent_comms_hooks import ToolRefusedError
-from agent_comms.native_tool_call import AwaitingClaim, CodingCall, ExecutingCall
+from agent_comms.transport.native_tool_call import AwaitingClaim, ExecutingCall
+from agent_comms.transport.native_tools import NativeToolDeclaration
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.nominal.field_codec import InputId
-from agent_comms.native_tool_call import SelectedToolBusy
+from agent_comms.transport.native_tool_call import SelectedToolBusy
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.execution.selected.tool_broker import verify_sent_full_input
 
@@ -22,7 +23,7 @@ def reply(error: Exception) -> str:
 def test_edit_of_a_missing_file_inside_the_project_says_it_does_not_exist(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
-    edit = CodingCall.decode(
+    edit = NativeToolDeclaration.decode(
         "call", "edit", {"path": "absent.py", "edits": [{"oldText": "1", "newText": "2"}]}
     )
     with pytest.raises(ToolRefusedError) as refused:
@@ -38,7 +39,7 @@ def test_a_terminal_before_any_claim_records_the_refusal_instead_of_failing_the_
     turned a refused call into a failed turn under a message naming the wrong cause.
     """
     def pending():
-        return CodingCall.decode(
+        return NativeToolDeclaration.decode(
             "call", "edit", {"path": "owner.py", "edits": [{"oldText": "1", "newText": "2"}]}
         )
 

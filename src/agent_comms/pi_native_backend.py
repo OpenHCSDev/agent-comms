@@ -18,7 +18,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.native_session_files import ForkedSession, NativeSessionFiles, NativeSessionLocks
+from .execution.native_session_files import ForkedSession, NativeSessionFiles, NativeSessionLocks
 from agent_comms.pi_wire import PiOmitted
 from agent_comms.pi_payloads import PiResponseData
 
@@ -31,16 +31,17 @@ from .execution.turn_inbox import InputContent
 from .coordination.coordinator import Coordination
 from .nominal.field_codec import AcpSessionId
 from .fresh_private_session import create_fresh_private_session
-from .native_arguments import NativeArguments
-from .native_failures import NativePiUnavailable
-from .native_fork import (
+from .execution.native_arguments import NativeArguments
+from .execution.native_failures import NativePiUnavailable
+from .execution.native_fork import (
     RuntimeForkHelper,
     RuntimeForkRequest,
 )
-from .native_package import SYSTEM_PROMPT
-from .native_pi import NativePiRpcLaunch
-from .native_session_reopen import NativeSessionIdentity
-from .native_transcript import NativeTranscript
+from .installer.native_package import SYSTEM_PROMPT
+from .execution.native_pi import NativePiRpcLaunch
+from .execution.native_entries import NativeEvidenceScope
+from .execution.native_session_reopen import NativeSessionIdentity
+from .execution.native_transcript import NativeTranscript
 from .pi_commands import Compact, NativeQuery
 from .rule_deal import SystemPromptDelivery
 from agent_comms.execution.selected.session import SavedSelectedSession
@@ -55,8 +56,8 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .config_options import ConfigOptions
     from .launch_runtime import LaunchRuntime
-    from .native_child import NativeChildState, PiSessionChild
-    from .native_session_reopen import NativeSessionIdentity
+    from .execution.native_child import NativeChildState, PiSessionChild
+    from .execution.native_session_reopen import NativeSessionIdentity
     from .execution.owned_turn import TurnDelivery
     from .pi_payloads import StateData
     from .registry.threads import Thread
@@ -97,9 +98,7 @@ class PiSessionFile(RuntimeLocation):
         path = Path(self.path).absolute()
         retained = execution.retained_source(path)
         identity = (retained.identity if retained is not None else
-                    NativeSessionIdentity.from_evidence(
-                        source_reads.for_source(path)
-                    ))
+                    source_reads.for_source(path).session_identity())
         return SavedSelectedSession(directory, identity=identity,
                                     owner=participant.owner.thread.incarnation.require_recorded())
 
@@ -118,7 +117,7 @@ class PiSessionFile(RuntimeLocation):
 
     def session_observation(self, root: Path, thread: Thread) -> SessionObservation:
         return SessionRevision.observe(NativeSessionFiles.for_identity(
-            NativeSessionIdentity.locate(self.path),
+            NativeEvidenceScope.locate_session(self.path),
             root=root, owner=thread.incarnation.require_recorded()))
 
     @property
@@ -132,7 +131,7 @@ class PersistentPiSession:
     """Serialize borrowing and retirement of one native session's actual child."""
 
     def __init__(self) -> None:
-        from .native_child import EmptyNative
+        from .execution.native_child import EmptyNative
 
         self.lock = asyncio.Lock()
         self.child_state: NativeChildState = EmptyNative()
@@ -142,7 +141,7 @@ class PersistentPiSession:
         return self.child_state.available
 
     async def open(self, launch, *, reuse, startup, watchdog) -> PiSessionChild:
-        from .native_child import BorrowedNative, EmptyNative, PiSessionChild
+        from .execution.native_child import BorrowedNative, EmptyNative, PiSessionChild
 
         key = (launch, launch.configuration.auth_revision())
         child = self.child_state.reuse(key) if reuse else None
@@ -165,7 +164,7 @@ class PersistentPiSession:
             return await self.child_state.context_for_input(thread, context)
 
     def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:
-        from .native_child import RetainedNative
+        from .execution.native_child import RetainedNative
 
         if not child.proc.alive():
             return False
@@ -239,7 +238,7 @@ class PiNativeBackend(
 
     async def prepare(self, thread: Thread, *, open_native=None) -> StateData:
         """Launch (or reuse) and attest the idle child for ``thread``'s saved session."""
-        from .native_session_prepare import NativeSessionPreparation
+        from .execution.native_session_prepare import NativeSessionPreparation
 
         if open_native is None:
             open_native = NativeSessionPreparation.open

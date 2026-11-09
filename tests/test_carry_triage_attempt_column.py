@@ -7,7 +7,7 @@ from cutover.carry_triage_attempt_column import TriageAttemptColumn
 
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.nominal.field_codec import AssignmentId, InputId, ThreadLookup
-from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.triage_native_sources import TriageNativeSource
 

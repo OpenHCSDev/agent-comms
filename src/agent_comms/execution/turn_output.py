@@ -18,7 +18,7 @@ from ..acp_failure import (
     ProviderRetryResult,
     UnrecordedFailureSource,
 )
-from ..native_arguments import SelectedModel
+from .native_arguments import SelectedModel
 from ..pi_payloads import NativeMessageFailureSource
 
 if TYPE_CHECKING:

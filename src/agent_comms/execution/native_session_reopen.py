@@ -2,22 +2,18 @@
 
 from __future__ import annotations
 
-from .native_failures import NativePiUnavailable
-
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, TYPE_CHECKING
-from .nominal.field_codec import FieldCodec, MalformedRecord, NullMember, PresentMember, WireName
-from abc import ABC, abstractmethod
-from .storage.private_path import FileRevision
-from .execution.turn_item import FreshNativeId
+
+from .turn_item import FreshNativeId
+from ..nominal.field_codec import FieldCodec, MalformedRecord, NullMember, PresentMember, WireName
 
 if TYPE_CHECKING:
     from .native_child import PiSessionChild
     from .native_runtime_input import NativeRuntimeInput
-    from .native_entries import NativeEvidenceRead
-    from .native_input_proof import NativeContextProof
-    from .pi_native_backend import PersistentPiSession
+    from ..pi_native_backend import PersistentPiSession
 
 
 class NativeReopenError(ValueError):
@@ -112,12 +108,8 @@ class NativeSessionIdentity(PresentMember, SessionRetention):
         if not self.same_session(other):
             raise NativeReopenError("Native saved source identity changed")
 
-    @staticmethod
-    def from_context(context: NativeContextProof) -> NativeSessionIdentity:
-        return NativeSessionIdentity(context.session_id, str(context.session_file))
-
     def require_context(self, context) -> None:
-        self.require_same_session(self.from_context(context))
+        self.require_same_session(context.session_identity())
 
     def same_session(self, other: NativeSessionIdentity) -> bool:
         """A cutpoint may extend this identity without changing its meaning."""
@@ -126,43 +118,3 @@ class NativeSessionIdentity(PresentMember, SessionRetention):
     def require_session(self, canonical: str) -> None:
         if self.session_file != canonical:
             raise ValueError("Native identity differs from owner's canonical session")
-
-    def covers(self, evidence: NativeEvidenceRead, revision: FileRevision,
-               *other_revisions: FileRevision) -> bool:
-        """Corroborate this session and its recorded positions in a held source.
-
-        Revisions are the original prepared/returned observations, not freshly
-        reconstructed positions. Later appends are allowed; original bytes and
-        ancestry remain under the acquired evidence reader's validation. This
-        relation grants neither enrollment nor permission to replay an input.
-        """
-        source = evidence.source
-        return (
-            self.path == source.path
-            and self.session_id == evidence.entries[0].require_entry_id()
-            and all(
-                source.identity == revision.identity and source.size >= revision.size
-                for revision in (revision, *other_revisions)
-            )
-        )
-
-    @classmethod
-    def from_evidence(cls, evidence: NativeEvidenceRead) -> NativeSessionIdentity:
-        """Derive selected identity from its recipient's already verified source."""
-        file = evidence.source.path
-        try:
-            session_id = evidence.header().require_reopen()
-        except (MalformedRecord, NativePiUnavailable) as error:
-            raise NativeReopenError("Saved native session identity cannot be read") from error
-        return cls(session_id, str(file))
-
-    @classmethod
-    def locate(cls, session_file: str) -> NativeSessionIdentity:
-        """One-shot callers own a bounded scope; selected callers borrow theirs."""
-        from .native_entries import NativeEvidenceScope
-
-        try:
-            with NativeEvidenceScope() as scope:
-                return cls.from_evidence(scope.for_source(Path(session_file).absolute()))
-        except NativePiUnavailable as error:
-            raise NativeReopenError("Saved native session source cannot be opened") from error

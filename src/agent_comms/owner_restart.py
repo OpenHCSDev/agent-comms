@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from .coordination.errors import CoordinationError
 from .errors import RelationViolationError
 from .launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
-from .native_arguments import (
+from .execution.native_arguments import (
     ConfiguredBinary,
     GivenArguments,
     InheritedArguments,

@@ -33,7 +33,7 @@ from ..annotation_disclosure import (
 from ..cli_result import CliResult
 from ..errors import RelationViolationError
 from ..message_reference import MessageReference
-from ..native_session_reopen import NativeSessionIdentity
+from .native_session_reopen import NativeSessionIdentity
 from ..nominal.declared_family import DeclaredFamily
 from ..nominal.field_codec import (
     FieldCodec,

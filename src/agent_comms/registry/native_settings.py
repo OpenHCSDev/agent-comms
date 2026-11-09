@@ -3,9 +3,9 @@
 from dataclasses import dataclass
 from typing import ClassVar
 
-from .cli_options import JsonFlagRecord
-from .pi_vocabulary import HighThinkingLevel, ThinkingLevelField
-from .registry.thread_model import DeclaredModel
+from .thread_model import DeclaredModel
+from ..cli_options import JsonFlagRecord
+from ..pi_vocabulary import HighThinkingLevel, ThinkingLevelField
 
 
 @dataclass(frozen=True)

@@ -20,7 +20,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.storage.private_path import FileRevision
 from agent_comms.cli import CliInvocation
 from agent_comms.cli_protocol import CoreError, WATCH_LINE
-from agent_comms.native_arguments import GivenBinary
+from agent_comms.execution.native_arguments import GivenBinary
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.owner_connection import socket_path
 from agent_comms.registry.thread_model import DeclaredModel
@@ -36,7 +36,11 @@ from agent_comms.coordination.errors import RecoveryBlocked
 from agent_comms.coordination.tables.attempts import ReplayFact
 from agent_comms.coordination.tables.executions import CurrentExecutions, WireOrigin
 from agent_comms.cursor_publication import CursorDelivery
-from agent_comms.native_input_record import FullNativeExecution, NumberNativeColumn, TextNativeColumn
+from agent_comms.execution.native_input_record import (
+    FullNativeExecution,
+    NumberNativeColumn,
+    TextNativeColumn,
+)
 from agent_comms.execution.selected.participant import SelectedParticipant
 from agent_comms.execution.selected.turn import SelectedAttempt
 from agent_comms.launch_runtime import ThreadLaunch
@@ -44,7 +48,7 @@ from contextlib import closing
 from test_coordinated_runtime import _root
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
-from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
+from agent_comms.execution.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.reason_codes import GivenReasonCode
 from test_native_failure_recovery import NativeSendHistory, UnknownHistory, release_native_input
 

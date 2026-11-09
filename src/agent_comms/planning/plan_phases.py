@@ -480,13 +480,13 @@ class DuplicatesPhase(MultipleInheritancePhase):
                     (
                         "cohort_schema.py",
                         "coordination/tables/attempts.py",
-                        "native_input_record.py",
+                        "execution/native_input_record.py",
                         "participant_store.py",
                     ),
                 ),
                 (
                     ("trigger_bodies",),
-                    ("coordination/response.py", "native_prompt_binding.py", "private_sidecar.py"),
+                    ("coordination/response.py", "execution/native_prompt_binding.py", "private_sidecar.py"),
                 ),
                 (
                     ("__init__",),
@@ -1225,7 +1225,7 @@ class ExecutionOwnersPhase(ModuleOwnershipPhase):
 
     after = (MessagingOwnersPhase,)
     evidence = AllEvidence((
-        PathsAbsent(("src/agent_comms/worker.py", "src/agent_comms/native_pi.py")),
+        PathsAbsent(("src/agent_comms/worker.py", "src/agent_comms/execution/native_pi.py")),
         PatternAbsent(r"from agent_comms[.](worker|native_pi)\b", ("src",)),
     ))
 

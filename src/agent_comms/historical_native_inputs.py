@@ -8,7 +8,7 @@ grants no response, recovery, model replay, edit, or current-owner authority.
 
 from __future__ import annotations
 
-from agent_comms.native_session_files import NativeSessionFiles
+from .execution.native_session_files import NativeSessionFiles
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,23 +21,26 @@ from .cohort_schema import CohortTable
 from .coordination.database import CoordinationStore
 from .coordination.session import ReadNativeCoordinationSession
 from .message_reference import MessageReference
-from .native_entries import NativeEvidenceScope
-from .native_transcript import NativeTranscript
+from .execution.native_entries import NativeEvidenceScope
+from .execution.native_transcript import NativeTranscript
 from .private_registry_guard import RegistryPrivacy
 from .registry.thread_identity import ThreadIncarnation
-from agent_comms.native_runtime_input import NativeRuntimeTable
+from .execution.native_runtime_input import NativeRuntimeTable
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import AssignmentId, InputId, MessageId, WireName, RootId, ThreadLookup
-from .native_input_record import (
+from .execution.native_input_record import (
     FullNativeExecution,
     NativeInputExecution,
     NativeInputRecord,
     NativeInputReference,
     TriageNativeExecution,
 )
-from .native_input_proof import NativeContextProof
-from .native_prompt_binding import expected_prompt_bindings, expected_prompt_matches_journal
-from .native_runtime_input import NativeRuntimeInput
+from .execution.native_input_proof import NativeContextProof
+from .execution.native_prompt_binding import (
+    expected_prompt_bindings,
+    expected_prompt_matches_journal,
+)
+from .execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.selected.triage import SelectedTriage
 from .storage.typed_table import TypedRow
 

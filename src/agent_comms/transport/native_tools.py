@@ -2,48 +2,29 @@
 
 from __future__ import annotations
 
-
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar, TYPE_CHECKING
 
-from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
-from .nominal.declared_family import UnknownFamilyMember
-from .registry.thread_identity import OfferedTools
-from .nominal.field_codec import (
-    FieldCodec,
-    NullMember,
-    ToolCallId,
-    WireContext,
-    WireOmitDefault,
-)
-from .native_tool_call import CodingCall
-from agent_comms.pi_wire import PiReported
-from .recorded_time import EventTime
-from .rule_deal import ReadSpan
-from .shell_effects import ShellOutput, WriteStorageEffect, physical_path, shell_storage_effects
-from .tool_declaration import (
-    ContextRows,
-    EditAction,
-    EditCall,
-    ExecuteAction,
-    GlobalCommsExtension,
-    PlainContextRows,
-    ReadAction,
-    ReplacementEdit,
-    SearchAction,
-    ToolDeclaration,
-    one_line,
-)
-from .tool_denial import SelectedToolDenied
-from .transport.request import ArgumentTool
+from .request import ArgumentTool
+from ..envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
+from .native_tool_call import CodingCall, RefusedCodingCall
+from ..nominal.declared_family import UnknownFamilyMember
+from ..nominal.field_codec import FieldCodec, MalformedRecord, NullMember, ToolCallId, WireContext, WireOmitDefault
+from ..pi_wire import PiReported
+from ..recorded_time import EventTime
+from ..registry.thread_identity import OfferedTools, UnobservedTools
+from ..rule_deal import ReadSpan
+from ..shell_effects import ShellOutput, WriteStorageEffect, physical_path, shell_storage_effects
+from ..tool_declaration import ContextRows, EditAction, EditCall, ExecuteAction, GlobalCommsExtension, PlainContextRows, ReadAction, ReplacementEdit, SearchAction, ToolDeclaration, one_line
+from ..tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
-    from .pi_payloads import PiToolResult
-    from .pi_rule_gate import PiRuleGate
-    from .execution.turn_goal_permission import TurnGoalPermission
+    from ..execution.turn_goal_permission import TurnGoalPermission
+    from ..pi_payloads import PiToolResult
+    from ..pi_rule_gate import PiRuleGate
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +63,24 @@ class NativeToolDeclaration(ToolDeclaration):
         return tuple(argument for extension in extensions for argument in ("-e", str(extension)))
 
     @classmethod
+    def decode(cls, call_id: object, name: object, arguments: object,
+               offered: OfferedTools = UnobservedTools()) -> CodingCall:
+        """``offered`` is the thread's catalogue for this turn; without one only declared
+        members decode."""
+        try:
+            call_id = FieldCodec.decode(ToolCallId, call_id)
+        except MalformedRecord as error:
+            raise SelectedToolDenied("Malformed native coding call identity") from error
+        if type(name) is not str:
+            raise SelectedToolDenied("Malformed native coding call identity")
+        try:
+            return cls.from_call(name, arguments, call_id=call_id, offered=offered)
+        # A name no member declares is refused data too: answering "no" here keeps the
+        # call from dying with the socket, which Pi can only report as outcome UNKNOWN.
+        except (MalformedRecord, UnknownFamilyMember) as error:
+            return RefusedCodingCall(call_id, name, arguments, str(error))
+
+    @classmethod
     def from_call(cls, name: str, arguments: object, *, call_id: ToolCallId,
                   offered: OfferedTools) -> CodingCall:
         """A declared member's call, or else a tool this turn was offered by name."""
@@ -107,8 +106,6 @@ class NativeExecutableTool(NativeToolDeclaration, CodingCall):
     @classmethod
     def create_call(cls, call_id: ToolCallId, arguments: dict[str, object]) -> NativeExecutableTool:
         return cls.parse_arguments(arguments, call_id=call_id)
-
-
 
 
 @dataclass(frozen=True, kw_only=True)

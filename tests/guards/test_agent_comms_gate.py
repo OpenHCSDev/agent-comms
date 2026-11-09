@@ -21,7 +21,7 @@ from agent_comms.execution.child_process import (
     ObservedProcess,
     SpawnedProcess,
 )
-from agent_comms.native_build_inputs import DetachedChildStdio
+from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms_project import AgentCommsProject, ClientTypeErrors
 from nominal_refactor_advisor import audit

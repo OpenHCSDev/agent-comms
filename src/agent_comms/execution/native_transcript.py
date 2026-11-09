@@ -10,23 +10,11 @@ from dataclasses import dataclass
 from itertools import takewhile
 from math import inf
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, Never
+from typing import BinaryIO, Never, TYPE_CHECKING
 
-from .errors import RelationViolationError
-from .native_failures import NativePiUnavailable
-from .native_input_proof import NativeContextJournal, NativeContextProof, NativeInputLocation
-
-if TYPE_CHECKING:
-    from .native_output import NativeRecordLocation
-    from .rule_deal import Speaking, Voice
-    from .messaging.read_ledger import ReadLedger
-    from .registry.thread_identity import RecordedThreadIncarnation
-
-from agent_comms.native_session_files import NativeSessionFiles
-
-from .coordination.errors import TranscriptChanged
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import MalformedRecord
+from .turn_item import FreshNativeId, NativeItemId
+from ..coordination.errors import TranscriptChanged
+from ..errors import RelationViolationError
 from .native_entries import (
     MessageEntry,
     NativeEntry,
@@ -36,15 +24,22 @@ from .native_entries import (
     SessionEntry,
     TranscriptProjection,
 )
+from .native_failures import NativePiUnavailable
+from .native_input_proof import NativeContextJournal, NativeContextProof, NativeInputLocation
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+from .native_session_files import NativeSessionFiles
 from .native_session_reopen import NativeSessionIdentity
-from .storage.private_path import FileIdentity, FileRevision, MissingFile
-from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from .transcript_sources import TranscriptRecord, TranscriptSource
-from .execution.turn_item import (
-    FreshNativeId,
-    NativeItemId,
-)
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import MalformedRecord
+from ..recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from ..storage.private_path import FileIdentity, FileRevision, MissingFile
+from ..transcript_sources import TranscriptRecord, TranscriptSource
+
+if TYPE_CHECKING:
+    from .native_output import NativeRecordLocation
+    from ..messaging.read_ledger import ReadLedger
+    from ..registry.thread_identity import RecordedThreadIncarnation
+    from ..rule_deal import Speaking, Voice
 
 
 def reverse_records(

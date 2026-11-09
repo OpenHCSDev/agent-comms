@@ -40,7 +40,7 @@ from .launch_runtime import LaunchRuntime, RecordedRuntime, RestartEnvironment
 from .lifecycle_capability import Active, LifecycleCapability, Pending
 from .storage.locked_store import RuntimeFile
 from .storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceHolder
-from .native_arguments import GivenBinary, NativeArguments
+from .execution.native_arguments import GivenBinary, NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
 from .transport.owner_requests import RetainedOwnerLaunch
 from .execution.owner_lifecycle import OwnerRestartSelection

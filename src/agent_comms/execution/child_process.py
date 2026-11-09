@@ -73,7 +73,7 @@ from ..launch_runtime import (
     LaunchRuntime,
     RestoredRuntime,
 )
-from ..native_build_inputs import (
+from ..installer.native_build_inputs import (
     AsyncStdioOptions,
     ChildStdio,
     ConfiguredChildStdio,

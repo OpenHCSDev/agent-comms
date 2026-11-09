@@ -6,7 +6,7 @@ from collections.abc import Iterator
 
 from agent_comms.cli_bridges.history import OfflineHistory, PiHistory
 from agent_comms.importing import ImportLimits, KeptPiSession
-from agent_comms.native_entries import (
+from ..execution.native_entries import (
     NativeEntry,
     NativeEvidenceRead,
     SessionEntry,

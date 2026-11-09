@@ -18,8 +18,8 @@ from agent_comms.planning.goal_attempt_phase import (
 )
 from agent_comms.planning.goal_generation import ReadyGeneration
 from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
-from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.native_arguments import GivenArguments
+from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.execution.native_arguments import GivenArguments
 from native_backend_fixture import native_backend_fixture, wait_for
 from source_programs import SourcePrograms
 from agent_comms.registry.thread_identity import NoObservedTurn

@@ -1,13 +1,14 @@
 """Native request failures, independent of launch and filesystem acquisitions."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from .coordination.errors import DrainDeferred
+from ..coordination.errors import DrainDeferred
 
 if TYPE_CHECKING:
-    from .send_result import SendResult
+    from ..send_result import SendResult
 
 
 class NativeRequestFailure(RuntimeError, DrainDeferred):  # noqa: N818 - nominal request outcome

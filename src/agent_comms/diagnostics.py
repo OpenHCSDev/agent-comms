@@ -27,7 +27,7 @@ from .execution.child_process import (
 )
 from .nominal.field_codec import FieldCodec, InputId, ScratchName, TurnId
 from .storage.locked_store import PatternFile, RuntimeFile
-from .native_failures import NativeRequestFailure
+from .execution.native_failures import NativeRequestFailure
 from .publication_measurements import PublicationMeasurements
 from .storage.store_files import AtomicFile
 from .execution.turn_failure import TurnFailure

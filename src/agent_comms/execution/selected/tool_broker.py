@@ -33,22 +33,22 @@ from agent_comms.envelope_claim_transitions import (
     WakeClaim,
 )
 from agent_comms.execution.turn_context import InstructionFile
-from agent_comms.native_input_record import (
+from agent_comms.execution.native_input_record import (
     FullNativeExecution,
     NativeInputIdentity,
 )
-from agent_comms.native_runtime_input import (
+from agent_comms.execution.native_runtime_input import (
     NativeRuntimeInput,
     NativeRuntimeTable,
     SelectedToolSlot,
 )
-from agent_comms.native_tool_call import (
+from agent_comms.transport.native_tool_call import (
     NativeToolCall,
-    NativeToolMode,
     SelectedToolBusy,
 )
-from agent_comms.native_tool_transport import (
+from agent_comms.transport.native_tool_transport import (
     GatedToolTransport,
+    NativeToolMode,
     NativeToolRound,
     ToolListener,
     UnboundToolTransport,

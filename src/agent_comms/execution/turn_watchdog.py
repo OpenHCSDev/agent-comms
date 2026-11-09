@@ -29,12 +29,12 @@ from .turn_phase import (
     TurnPhase,
 )
 from .. import agent_events as events
-from ..native_startup import SessionLoad
+from .native_startup import SessionLoad
 from ..nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
     from ..backend import TurnSession
-    from ..native_startup import NativeStartupPolicy
+    from .native_startup import NativeStartupPolicy
     from ..pi_events import PiEvent
 
 

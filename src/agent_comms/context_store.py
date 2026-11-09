@@ -18,7 +18,7 @@ from .storage.locked_store import InputCaptureFile
 from .nominal.field_codec import (
     ContextStoreId, FieldCodec, MalformedRecord, NullMember, TaggedRecordMember,
 )
-from .native_session_reopen import NativeSessionIdentity
+from .execution.native_session_reopen import NativeSessionIdentity
 from .registry.registration import Registration
 from .registry.thread_identity import ThreadIncarnation
 from .execution.turn_context import (
@@ -39,7 +39,7 @@ from .storage.typed_table import (
     RowidSequenced, SingletonRow, TableSchema, TypedTable,
 )
 from .execution.turn_item import NativeItemId
-from .native_session_reopen import PiSessionId
+from .execution.native_session_reopen import PiSessionId
 
 
 @dataclass(frozen=True)

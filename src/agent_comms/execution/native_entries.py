@@ -10,51 +10,39 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from itertools import repeat
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Never, Self, TextIO, cast
+from typing import Annotated, ClassVar, Literal, Never, Self, TYPE_CHECKING, TextIO, cast
 
-from .storage.locked_store import DurableFile
-from .native_failures import NativePiUnavailable
-from .native_evidence_read import NativeEvidencePrefixChanged, NativeInputUncommitted, PrivateEvidenceRead
-from .native_session_files import BusTranscriptFile, NativeSessionFiles
-from .storage.store_files import AtomicFile
-
-if TYPE_CHECKING:
-    from .importing import ImportedConversation
-
-from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
-from .nominal.field_codec import (
-    FieldCodec,
-    InputId,
-    MalformedRecord,
-    NullMember,
-    RecordedTimestamp,
-    Sha256Text,
-    TimestampText,
-    WireName,
-    WireOmitDefault,
+from .turn_item import FreshNativeId, NativeItemId
+from ..importing import ImportedSessionMetadata
+from .native_evidence_read import (
+    NativeEvidencePrefixChanged,
+    NativeInputUncommitted,
+    PrivateEvidenceRead,
 )
-from .importing import ImportedSessionMetadata
+from .native_failures import NativePiUnavailable
 from .native_input_proof import (
     NativeContextJournal,
     NativeContextProof,
     NativeContextRecord,
     NativeInputLocation,
 )
-from .native_session_reopen import PiSessionId
-from agent_comms.pi_wire import PiField, PiOmitted, PiPayload, PiReported, ReportedInputId, TaggedPayload
-from agent_comms.pi_wire import Opaque
-from .pi_payloads import PiMessage, ReportedText
-from .pi_vocabulary import PendingStopReason, ThinkingLevel
-from .recorded_time import GeneratedTimestamp
-from .routing import NoTurnRouting, Routing
-from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
-from .transcript_routes import InputPresentation, NoInputDisplay, _SessionRoutes
-from .registry.thread_model import DeclaredModel
-from .execution.turn_item import (
-    FreshNativeId,
-    NativeItemId,
-)
+from .native_session_files import BusTranscriptFile, NativeSessionFiles
+from .native_session_reopen import NativeReopenError, NativeSessionIdentity, PiSessionId
+from ..nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from ..nominal.field_codec import FieldCodec, InputId, MalformedRecord, NullMember, RecordedTimestamp, Sha256Text, TimestampText, WireName, WireOmitDefault
+from ..pi_payloads import PiMessage, ReportedText
+from ..pi_vocabulary import PendingStopReason, ThinkingLevel
+from ..pi_wire import Opaque, PiField, PiOmitted, PiPayload, PiReported, ReportedInputId, TaggedPayload
+from ..recorded_time import GeneratedTimestamp
+from ..registry.thread_model import DeclaredModel
+from ..routing import NoTurnRouting, Routing
+from ..storage.locked_store import DurableFile
+from ..storage.store_files import AtomicFile
+from ..transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
+from ..transcript_routes import InputPresentation, NoInputDisplay, _SessionRoutes
 
+if TYPE_CHECKING:
+    from ..importing import ImportedConversation
 
 
 @dataclass(frozen=True)
@@ -399,6 +387,14 @@ class NativeEvidenceRead:
             self.close()
             raise NativePiUnavailable(f'Native Pi session evidence is invalid: {error}') from error
 
+    def session_identity(self) -> NativeSessionIdentity:
+        """The saved-session identity this already verified source declares."""
+        try:
+            session_id = self.header().require_reopen()
+        except (MalformedRecord, NativePiUnavailable) as error:
+            raise NativeReopenError("Saved native session identity cannot be read") from error
+        return NativeSessionIdentity(session_id, str(self.source.path))
+
     def observe(self):
         """Read the full history."""
         return self._observe(reverified=False)
@@ -580,6 +576,15 @@ class NativeEvidenceScope(ExitStack):
             self.for_source(path).observe(*(
                 context for context in contexts if context.session_file == path
             ))
+
+    @classmethod
+    def locate_session(cls, session_file: str) -> NativeSessionIdentity:
+        """One-shot callers own a bounded scope; selected callers borrow theirs."""
+        try:
+            with cls() as scope:
+                return scope.for_source(Path(session_file).absolute()).session_identity()
+        except NativePiUnavailable as error:
+            raise NativeReopenError("Saved native session source cannot be opened") from error
 
     def for_source(self, path: Path) -> NativeInputEvidenceRead:
         path = Path(path).absolute()

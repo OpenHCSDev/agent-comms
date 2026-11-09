@@ -12,7 +12,11 @@ from agent_comms.nominal.field_codec import (
     StatusExclude,
 )
 from agent_comms.launch_runtime import ImportPath, NoImportPath, SpecifiedImportPath
-from agent_comms.native_claim_epoch import NativeClaimEpoch, RecordedNativeClaim, UnrecordedNativeClaim
+from agent_comms.execution.native_claim_epoch import (
+    NativeClaimEpoch,
+    RecordedNativeClaim,
+    UnrecordedNativeClaim,
+)
 from agent_comms.execution.selected.triage import (
     AbsentTriageDecisionRecord,
     DecidedTriageRecord,

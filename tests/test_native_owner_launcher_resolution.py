@@ -10,7 +10,7 @@ from pathlib import Path
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.native_session_files import ForkedSession
+from agent_comms.execution.native_session_files import ForkedSession
 from agent_comms.registry.threads import NativeThread
 
 

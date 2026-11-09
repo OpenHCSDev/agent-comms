@@ -17,7 +17,7 @@ from agent_comms.input_attempt import (
     HistoricalInput, OwnerQueueInputDeliveryScope, UnobservedInputDeliveryScope, UnresolvedInput,
 )
 from agent_comms.input_disposition import DeliveryOverview
-from agent_comms.native_package import NativeSourceDeclaration
+from agent_comms.installer.native_package import NativeSourceDeclaration
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.ui_model.delivery import DeliveryView
 

@@ -20,7 +20,7 @@ from .planning.goal_actions import (
 )
 from agent_comms.owner_requests import NewestOpenRequest
 
-from .native_settings import NativeThreadDefaults
+from .registry.native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask
 from .planning.orders import PendingProblemOrder
 from .recorded_time import RecordedEventTime

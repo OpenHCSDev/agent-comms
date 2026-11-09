@@ -26,7 +26,7 @@ from .planning.goal_attempts import GoalAttemptStore
 from .execution.goal_turn_permit import GoalTurnPermit
 from .input_attempt import InputAlreadyCleared
 from .execution.input_drain import InputDrain
-from .native_input_proof import NativeContextProof
+from .execution.native_input_proof import NativeContextProof
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .registry.threads import Thread
 from .tool_denial import SelectedToolDenied

@@ -40,7 +40,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.transcript_sources import AssignedTranscriptSource
 from conftest import accept_initial, publish_initial
-from agent_comms.native_runtime_input import NativeRuntimeTable
+from agent_comms.execution.native_runtime_input import NativeRuntimeTable
 from agent_comms.registry.registry_store import RegistryStore
 
 

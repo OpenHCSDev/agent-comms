@@ -6,7 +6,7 @@ import sys
 from contextlib import ExitStack
 from pathlib import Path
 
-from agent_comms.native_build_inputs import DetachedChildStdio
+from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.execution.child_process import (
     Platform,
     ProcessIdentity,

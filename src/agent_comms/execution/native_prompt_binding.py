@@ -13,35 +13,26 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated, TYPE_CHECKING
 
-from agent_comms.coordination.errors import IdentityConflict
-from agent_comms.coordination.tables.assignments import WakeAssignment
-from agent_comms.coordination.coordinator import Coordination
-
-from .cohort_schema import CohortTable
-from .nominal.field_codec import FieldCodec, InputId, MalformedRecord, RootId, Sha256Text, ThreadLookup
+from ..cohort_schema import CohortTable
+from ..coordination.coordinator import Coordination
+from ..coordination.errors import IdentityConflict
+from ..coordination.tables.assignments import WakeAssignment
 from .native_entries import NO_EVIDENCE_READ, NativeEvidenceRead, NoEvidenceRead
 from .native_input_owner import ParticipantOwner
 from .native_input_record import NativeColumn, NativeInputExecution, NativeInputRecord
 from .native_pi import read_tracked_input_commitment
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
-from .private_send_rules import NativeIdentityCheck
-from .private_sidecar import PrivateSnapshotFile, native_request_digest
-from .reservation_rules import ReservationViolationError
-from .registry.threads import Thread
-from .storage.typed_table import (
-    Column,
-    DurableTables,
-    ImmutableRows,
-    IntegerStorage,
-    TextStorage,
-    TypedRow,
-    WithoutRowid,
-)
+from ..nominal.field_codec import FieldCodec, InputId, MalformedRecord, RootId, Sha256Text, ThreadLookup
+from ..private_send_rules import NativeIdentityCheck
+from ..private_sidecar import PrivateSnapshotFile, native_request_digest
+from ..registry.threads import Thread
+from ..reservation_rules import ReservationViolationError
+from ..storage.typed_table import Column, DurableTables, ImmutableRows, IntegerStorage, TextStorage, TypedRow, WithoutRowid
 
 if TYPE_CHECKING:
-    from .private_send_stage import NativeSendStage
+    from ..private_send_stage import NativeSendStage
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +76,7 @@ class PromptBindings(PrivateSnapshotFile):
     @classmethod
     def path_for(cls, store: Coordination) -> Path:
         return cls.path_in(store.session.path.parent).absolute()
+
 
 @dataclass(frozen=True)
 class _BindingRoot(TypedRow):

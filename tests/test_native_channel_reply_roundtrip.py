@@ -26,7 +26,7 @@ from agent_comms.acp_extension import (
 from agent_comms.comms import wire
 from agent_comms.launch_runtime import RestoredRuntime
 from agent_comms.lifecycle_capability import Executing
-from agent_comms.native_input_record import TriageNativeExecution
+from agent_comms.execution.native_input_record import TriageNativeExecution
 from agent_comms.owner_cutover import PreserveOwnerRuntime
 from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.pi_vocabulary import OffThinkingLevel
@@ -66,8 +66,8 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 # exact ID to the saved input; prompt prose is not a stage codec.
                 from agent_comms.coordination.tables.assignments import WakeAssignment
                 from agent_comms.coordination.coordinator import Coordination
-                from agent_comms.native_runtime_input import NativeRuntimeInput
-                from agent_comms.native_transcript import NativeTranscript
+                from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+                from agent_comms.execution.native_transcript import NativeTranscript
 
                 # Pi commits each tracked input in a request's context (session
                 # entry, generation, context digest) right before sending it

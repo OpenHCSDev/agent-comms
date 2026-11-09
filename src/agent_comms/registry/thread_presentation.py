@@ -32,7 +32,7 @@ from ..errors import (
     UnregisteredThreadError,
 )
 from ..message_reference import MessageReference
-from ..native_arguments import GivenArguments
+from ..execution.native_arguments import GivenArguments
 from ..nominal.declared_family import DeclaredFamily
 from ..nominal.field_codec import FieldCodec
 from .thread_identity import OwnerIdentity

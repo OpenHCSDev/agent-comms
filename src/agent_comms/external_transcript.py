@@ -28,9 +28,9 @@ from .nominal.field_codec import (
 )
 from .storage.locked_store import RegistryFile
 from .message_reference import MessageReference
-from .native_runtime_input import NativeRuntimeInput
-from .native_tools import MutatingPathTool
-from .native_transcript import RecordsCut
+from .execution.native_runtime_input import NativeRuntimeInput
+from .transport.native_tools import MutatingPathTool
+from .execution.native_transcript import RecordsCut
 from .recorded_time import EventTime, GeneratedTimestamp
 from .registry.thread_identity import ThreadIncarnation
 from .tool_declaration import ToolDeclaration

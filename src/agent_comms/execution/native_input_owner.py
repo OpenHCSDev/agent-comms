@@ -8,32 +8,24 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar, TYPE_CHECKING
 
-from agent_comms.nominal.field_codec import GoalId, ThreadLookup
-from .execution.child_process import ProcessIdentity
-from .coordination.errors import StaleFence
-from .coordination.tables.participants import OwnerGenerations
-from .coordination.coordinator import Coordination
-from .errors import RelationViolationError, UnregisteredThreadError
-from .private_send_rules import (
-    GoalRegistryClaimCheck,
-    GoalRegistryIdentityCheck,
-    RegistryIdentityCheck,
-    RunningTurnRegistryCheck,
-)
-from .reservation_rules import ReservationViolationError
-from .execution.turn_goal_permission import (
-    GoalPermission,
-    OwnerGoalPermission,
-)
-from .registry.threads import NativeThread, Thread
+from .child_process import ProcessIdentity
+from .turn_goal_permission import GoalPermission, OwnerGoalPermission
+from ..coordination.coordinator import Coordination
+from ..coordination.errors import StaleFence
+from ..coordination.tables.participants import OwnerGenerations
+from ..errors import RelationViolationError, UnregisteredThreadError
+from ..nominal.field_codec import GoalId, ThreadLookup
+from ..private_send_rules import GoalRegistryClaimCheck, GoalRegistryIdentityCheck, RegistryIdentityCheck, RunningTurnRegistryCheck
+from ..registry.threads import NativeThread, Thread
+from ..reservation_rules import ReservationViolationError
 
 if TYPE_CHECKING:
-    from .planning.goals import Goal
-    from .registry.registration import Registration
-    from .registry.registry_document import RegistrySnapshot
-    from .execution.turn_lease import TurnLeaseFence
+    from .turn_lease import TurnLeaseFence
+    from ..planning.goals import Goal
+    from ..registry.registration import Registration
+    from ..registry.registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True, kw_only=True)

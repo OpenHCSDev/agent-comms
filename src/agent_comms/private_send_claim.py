@@ -15,7 +15,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.native_runtime_input import NativeRuntimeTable
+from .execution.native_runtime_input import NativeRuntimeTable
 from .nominal.field_codec import AcpSessionId, InputId
 from .coordination.errors import IdentityConflict, RetryScheduled
 from .coordination.coordinator import Coordination
@@ -27,16 +27,16 @@ from .following_inputs import FollowingInputs
 from .execution.goal_turn_permit import NoLaunchPermit
 from .storage.maintenance_barrier import MaintenanceBarrier
 from .messaging.message_bus import MessageBus
-from .native_arguments import SelectedModel
-from .native_input_owner import ParticipantOwner, RegistryOwner
-from .native_entries import NativeEvidenceScope
-from .native_input_proof import NativeContextProof
-from .native_pi import NativePiTerminalFailure, NativeTurnResult
-from .native_prompt_binding import bind_expected_prompt
-from .native_prompt_send import PromptBoundary
-from .native_session_reopen import NativeSessionIdentity
-from .native_startup import NativeStartup
-from .native_tool_call import NativeToolMode
+from .execution.native_arguments import SelectedModel
+from .execution.native_input_owner import ParticipantOwner, RegistryOwner
+from .execution.native_entries import NativeEvidenceScope
+from .execution.native_input_proof import NativeContextProof
+from .execution.native_pi import NativePiTerminalFailure, NativeTurnResult
+from .execution.native_prompt_binding import bind_expected_prompt
+from .execution.native_prompt_send import PromptBoundary
+from .execution.native_session_reopen import NativeSessionIdentity
+from .execution.native_startup import NativeStartup
+from .transport.native_tool_transport import NativeToolMode
 from .owned_send import OwnedSend
 from .publication_measurements import PublicationMeasurements
 from .registry.registry_document import RegistrySnapshot

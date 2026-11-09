@@ -24,11 +24,15 @@ from .envelope_claim_transitions import (
 )
 from .nominal.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord
 from .lifecycle_capability import Executing
-from .native_arguments import NativeArguments
-from .native_runtime_input import NativeRuntimeInput
-from .native_tool_call import CodingCall, NativeToolMode, ToolNotExecuting
-from .native_tool_transport import GatedToolTransport, ToolListener, UnboundToolTransport
-from .native_tools import NativeToolDeclaration
+from .execution.native_arguments import NativeArguments
+from .execution.native_runtime_input import NativeRuntimeInput
+from .transport.native_tool_transport import NativeToolMode
+from .transport.native_tool_call import (
+    CodingCall,
+    ToolNotExecuting,
+)
+from .transport.native_tool_transport import GatedToolTransport, ToolListener, UnboundToolTransport
+from .transport.native_tools import NativeToolDeclaration
 from .pi_payloads import StorageDenialToolDetails
 from .pi_rule_gate import PiRuleGate
 from agent_comms.execution.selected.claim import (
@@ -251,7 +255,7 @@ class CodingToolRequest:
     def authenticate(self, expected_token: str, offered: OfferedTools) -> CodingCall:
         if self.token != expected_token:
             raise SelectedToolDenied("Coding request is not authenticated")
-        return CodingCall.decode(self.call_id, self.name, self.arguments, offered)
+        return NativeToolDeclaration.decode(self.call_id, self.name, self.arguments, offered)
 
 
 class CodingToolSocket(GatedToolTransport[CodingCall]):
@@ -264,7 +268,7 @@ class CodingToolSocket(GatedToolTransport[CodingCall]):
         self.completions = set()
 
     def decode_call(self, call_id: object, name: object, arguments: object) -> CodingCall:
-        return CodingCall.decode(call_id, name, arguments, self.owner.offered)
+        return NativeToolDeclaration.decode(call_id, name, arguments, self.owner.offered)
 
     def decode_request(self, raw: bytes) -> CodingCall:
         if not raw.endswith(b"\n") or len(raw) > self.max_request:

@@ -18,7 +18,7 @@ def files():
             ROOT / name
             for name in (
                 "manual_compaction_bridge.py",
-                "native_session_reopen.py",
+                "execution/native_session_reopen.py",
                 "pi_helper.py",
                 "fresh_private_session.py",
             )

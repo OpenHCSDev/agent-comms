@@ -35,7 +35,7 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.publication_measurements import PublicationMeasurements
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.errors import RelationViolationError
-from agent_comms.native_prompt_send import (
+from agent_comms.execution.native_prompt_send import (
     PromptSendNotWritten,
     PromptSendUnknown,
     _write_fenced,

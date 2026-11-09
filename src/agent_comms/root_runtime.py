@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Annotated, TextIO
 
 from .bus import Bus
-from .native_build_inputs import DetachedChildStdio
+from .installer.native_build_inputs import DetachedChildStdio
 from .execution.child_process import (
     NoProcess,
     ObservedProcess,

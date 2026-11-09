@@ -6,11 +6,12 @@ import os
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from .errors import RelationViolationError
-from .nominal.field_codec import FieldCodec, MalformedRecord
+
+from ..errors import RelationViolationError
 from .native_failures import NativePiUnavailable
-from .pi_vocabulary import PendingStopReason
-from .storage.private_path import FileIdentity, FileRevision, PrivateFileRole, TrustedAncestorRole
+from ..nominal.field_codec import FieldCodec, MalformedRecord
+from ..pi_vocabulary import PendingStopReason
+from ..storage.private_path import FileIdentity, FileRevision, PrivateFileRole, TrustedAncestorRole
 
 
 class NativeInputUncommitted(NativePiUnavailable):

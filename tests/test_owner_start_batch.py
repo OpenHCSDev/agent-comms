@@ -10,7 +10,7 @@ from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.comms import Comms
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.native_package import VerifiedNativePackage
+from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.owner_connection import OwnerConnection
 from agent_comms.transport.owner_requests import (
     ReadOwnerLaunchRuntimeRequest,

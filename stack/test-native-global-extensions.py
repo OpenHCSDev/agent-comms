@@ -21,10 +21,13 @@ import tempfile
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.storage_rules import StorageRoots
-from agent_comms.native_package import NativeImportsManifest, VerifiedNativePackage
+from agent_comms.installer.native_package import (
+    NativeImportsManifest,
+    VerifiedNativePackage,
+)
 from agent_comms.launch_runtime import RestartEnvironment
-from agent_comms.native_arguments import NativeArguments
-from agent_comms.native_pi import CAPABILITY, NativePiRpcLaunch
+from agent_comms.execution.native_arguments import NativeArguments
+from agent_comms.execution.native_pi import CAPABILITY, NativePiRpcLaunch
 from agent_comms.pi_commands import GetState
 from agent_comms.pi_events import ExtensionError
 from agent_comms.pi_rpc import PiRpcChannel

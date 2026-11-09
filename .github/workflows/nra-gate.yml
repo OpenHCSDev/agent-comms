@@ -197,7 +197,7 @@ jobs:
       - name: Run every native script
         if: needs.base.outputs.reused != 'true'
         run: |
-          export PI_NATIVE_PACKAGE_DIR="$(python -c 'from agent_comms.native_package import pinned_native_package; print(pinned_native_package())')"
+          export PI_NATIVE_PACKAGE_DIR="$(python -c 'from agent_comms.installer.native_package import pinned_native_package; print(pinned_native_package())')"
           for script in stack/test-*; do
             printf '\nRunning %s\n' "$script"
             "$script" || { status=$?; printf 'FAILED: %s (exit %s)\n' "$script" "$status" >&2; exit "$status"; }

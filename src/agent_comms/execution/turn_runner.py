@@ -62,7 +62,7 @@ from ..input_origin import (
     UnattributedInputOrigin,
 )
 from ..messages import Message
-from ..native_input_owner import RegistryOwner
+from .native_input_owner import RegistryOwner
 from ..nominal.field_codec import (
     AcpSessionId,
     GoalId,

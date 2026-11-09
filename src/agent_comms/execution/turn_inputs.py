@@ -26,7 +26,7 @@ from .. import (
     pi_commands as commands,
 )
 from ..acp_failure import UnrecordedFailureSource
-from ..native_failures import NativePiUnavailable
+from .native_failures import NativePiUnavailable
 from ..nominal.field_codec import InputId
 from ..pending_requests import PendingRequest
 from ..prompt_state import (

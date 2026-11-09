@@ -11,35 +11,35 @@ import struct
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from contextlib import AsyncExitStack, ExitStack
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import Generic, TYPE_CHECKING, TypeVar
 
 from agent_comms_hooks import ToolRefusedError
 
-from .execution.child_process import join_retirement
-from .coordination.database import CoordinationStore
-from .errors import RelationViolationError
-from .nominal.field_codec import FieldCodec, InputId, MalformedRecord, Token256Text
-from .lifecycle_capability import Complete
+from ..coordination.database import CoordinationStore
+from ..errors import RelationViolationError
+from ..execution.child_process import join_retirement
+from ..lifecycle_capability import Complete
 from .native_tool_call import (
     DuplicateToolCallIdentity,
     NativeToolCall,
-    OwnerToolConnection,
     SelectedToolBusy,
     ToolOutcomeUnknown,
 )
-from .pi_payloads import AssistantMessage
-from .storage.private_path import PrivateDirectoryRole, PrivateSocketRole
-from .tool_denial import SelectedToolDenied
+from ..nominal.field_codec import FieldCodec, InputId, MalformedRecord, Token256Text
+from ..pi_payloads import AssistantMessage
+from ..storage.private_path import PrivateDirectoryRole, PrivateSocketRole
+from ..tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
-    from .backend import TurnSession
-    from .pi_events import ToolExecutionEnd, ToolExecutionStart
-    from .pi_rule_gate import PiRuleGate
+    from ..backend import TurnSession
+    from ..pi_events import ToolExecutionEnd, ToolExecutionStart
+    from ..pi_rule_gate import PiRuleGate
 
 _LOG = logging.getLogger(__name__)
+
 
 Call = TypeVar("Call", bound=NativeToolCall)
 
@@ -265,6 +265,29 @@ class UnboundToolTransport(Generic[Call]):
         transport = self.bind(pid)
         await transport.start()
         return transport
+
+
+@dataclass(frozen=True)
+class OwnerToolConnection:
+    """The private tool endpoint for one input, never a process setting."""
+
+    path: str
+    token: str = field(repr=False)
+
+
+class NativeToolMode(ABC):
+    """Owner-bound native tool policy shared by selected and normal coding turns."""
+
+    @abstractmethod
+    def launch_arguments(self, package: Path) -> tuple[str, ...]:
+        """Return the native tool selection and reviewed extension."""
+
+    @abstractmethod
+    async def open_transport(self, turn, ownership) -> UnboundToolTransport:
+        """Open the transport implementing this declared permission."""
+
+    def or_else(self, factory: Callable[[], NativeToolMode]) -> NativeToolMode:
+        return self
 
 
 class ToolTransport(Generic[Call]):

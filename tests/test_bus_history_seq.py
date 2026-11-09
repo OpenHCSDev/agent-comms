@@ -24,7 +24,7 @@ from agent_comms.messaging.message_page import (
     MessagePageRequest,
     PageBounds,
 )
-from agent_comms.native_transcript import NativeTranscript
+from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.page_traversal import LiveCursor, OlderTraversal
 from agent_comms.presentation import WireRevision
 from agent_comms.publisher import Publisher

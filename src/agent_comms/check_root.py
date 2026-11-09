@@ -22,8 +22,8 @@ from .fresh_private_session import create_fresh_private_session
 from .planning.goals import NoGoal
 from .launch_root import LaunchRoot
 from .launch_runtime import ThreadLaunch
-from .native_entries import ImportedSessionWriter, NativeEntry
-from .native_session_files import CheckSession
+from .execution.native_entries import ImportedSessionWriter, NativeEntry
+from .execution.native_session_files import CheckSession
 from .read_basis import MemberActivityDisplayScope
 from .registry.registry_document import RosterVisibility
 from .session_file import RegistrySessionLocation

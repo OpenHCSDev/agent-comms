@@ -30,7 +30,7 @@ from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.execution.selected.actions import NoSelectedTools
 from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
-from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from bus_record_fixture import prepare_native_comms
 from stored_inputs import stored_inputs
 from conftest import answer_rules

@@ -16,34 +16,16 @@ from typing import Annotated, ClassVar, Literal
 
 from pydantic import JsonValue
 
-from .coordination.errors import IdentityConflict
-from .errors import RelationViolationError
-from .nominal.field_codec import (
-    FieldCodec,
-    InputId,
-    MalformedRecord,
-    PathText,
-    Sha256Text,
-    WireName,
-)
-from .storage.locked_store import DurableFile, PatternFile, SQLiteFile
+from .turn_item import FreshNativeId
+from ..coordination.errors import IdentityConflict
+from ..errors import RelationViolationError
 from .native_failures import NativePiUnavailable
 from .native_integer import PositiveNativeIntegerBounds
-from .native_session_reopen import PiSessionId
-from .storage.private_path import FileIdentity, PrivateFileRole
-from .execution.turn_item import FreshNativeId
-from .storage.typed_table import (
-    Column,
-    DurableTables,
-    GuardedInserts,
-    ImmutableRows,
-    Index,
-    IntegerStorage,
-    ReconciledFile,
-    TableSchema,
-    TypedTable,
-    WithoutRowid,
-)
+from .native_session_reopen import NativeSessionIdentity, PiSessionId
+from ..nominal.field_codec import FieldCodec, InputId, MalformedRecord, PathText, Sha256Text, WireName
+from ..storage.locked_store import DurableFile, PatternFile, SQLiteFile
+from ..storage.private_path import FileIdentity, PrivateFileRole
+from ..storage.typed_table import Column, DurableTables, GuardedInserts, ImmutableRows, Index, IntegerStorage, ReconciledFile, TableSchema, TypedTable, WithoutRowid
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,6 +227,10 @@ class NativeInputProof(DurableFile, ReconciledFile, PatternFile, DurableTables):
 @dataclass(frozen=True, slots=True)
 class NativeContextProof(NativeContextRecord, NativeInputLocation):
     session_file: Annotated[Path, PathText]
+
+    def session_identity(self) -> NativeSessionIdentity:
+        """The saved session this proof's entry belongs to."""
+        return NativeSessionIdentity(self.session_id, str(self.session_file))
 
     def require_continuation(self, context: NativeContextProof) -> None:
         """Repeated requests may include this input; its first proof stays immutable.

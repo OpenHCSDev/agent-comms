@@ -12,7 +12,7 @@ from agent_comms.execution.child_process import (
 
 async def test_resource_release_failure_retains_exact_native_child(tmp_path, native_runtime_package):
     from native_backend_fixture import native_backend_fixture
-    from agent_comms.native_child import RetiringNative
+    from agent_comms.execution.native_child import RetiringNative
 
     failure = RuntimeError("native resource release failed")
     with pytest.raises(RuntimeError) as fixture_failure:
@@ -51,7 +51,7 @@ async def test_failed_owned_shutdown_preserves_original_outcome_without_retry(
     tmp_path, failure, already_done, gateway, native_runtime_package
 ):
     from native_backend_fixture import native_backend_fixture
-    from agent_comms.native_child import RetiringNative
+    from agent_comms.execution.native_child import RetiringNative
 
     original_error = failure("owned shutdown failed")
     with pytest.raises(failure) as fixture_failure:

@@ -8,38 +8,34 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Coro
 from contextlib import AbstractContextManager, AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, NoReturn
+from typing import ClassVar, NoReturn, TYPE_CHECKING
 
-from .execution.child_process import (
-    AttachedChild,
-    ChildOutcome,
-    join_retirement,
-)
-from .native_prompt_send import send_fenced_prompt
-from .nominal.declared_family import DeclaredFamily
-from .launch_runtime import INHERITED_ENVIRONMENT
+from .child_process import AttachedChild, ChildOutcome, join_retirement
+from .turn_context import Provenance
+from ..launch_runtime import INHERITED_ENVIRONMENT
 from .native_attestation import NativeAttestation, PendingAttestation
 from .native_failures import NativePiUnavailable, NativeRequestFailure
 from .native_pi import NativePiRpcLaunch
+from .native_prompt_send import send_fenced_prompt
 from .native_session_reopen import NativeSessionIdentity
-from .pending_requests import PendingRequest
-from .pi_events import PiEvent
-from .pi_rpc import PiRpcChannel
-from .storage.private_path import PrivateSocketRole
-from .publication_measurements import PublicationMeasurements
-from .session_revision import SessionRevision
-from .execution.turn_context import Provenance
+from ..nominal.declared_family import DeclaredFamily
+from ..pending_requests import PendingRequest
+from ..pi_events import PiEvent
+from ..pi_rpc import PiRpcChannel
+from ..publication_measurements import PublicationMeasurements
+from ..session_revision import SessionRevision
+from ..storage.private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
     from typing import Self
 
-    from .native_package import VerifiedNativePackage
-    from .participant_identity import ParticipantIdentity
-    from .pi_commands import ExtensionUiResponse, PiCommand
-    from .pi_native_backend import PiNativeBackend
-    from .pi_payloads import PiResponseData, StateData
-    from .registry.threads import Thread
-    from .execution.turn_context import TurnContext
+    from .turn_context import TurnContext
+    from ..installer.native_package import VerifiedNativePackage
+    from ..participant_identity import ParticipantIdentity
+    from ..pi_commands import ExtensionUiResponse, PiCommand
+    from ..pi_native_backend import PiNativeBackend
+    from ..pi_payloads import PiResponseData, StateData
+    from ..registry.threads import Thread
 
 
 class RetirementState(DeclaredFamily):
@@ -359,6 +355,7 @@ class NativeChildState(ABC):
     async def closed(self) -> None:
         """Finish closing this child's resources, if needed."""
 
+
 class EmptyNative(NativeChildState):
     available = False
 
@@ -416,6 +413,7 @@ class BorrowedNative(SuccessorNative):
         pending = await self.child.send_request(request)
         received = await pending.response()
         return received.require_data()
+
 
 @dataclass
 class RetainedNative(ChildNative):
@@ -475,4 +473,3 @@ class RetainedNative(ChildNative):
         if not self.current or self.identity.session_file != thread.runtime.read_key:
             return context
         return context.after_received(self.child.coordination_revision)
-

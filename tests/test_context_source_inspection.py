@@ -11,8 +11,8 @@ import pytest
 
 from agent_comms.session_file import NoSessionFile
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.native_turn_context import NativeContextManifestData
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+from agent_comms.execution.native_turn_context import NativeContextManifestData
 from agent_comms.pi_payloads import NativeContextData
 from agent_comms.transport.runtime_request import RuntimeRequest
 from agent_comms.transport.runtime_requests import (
@@ -47,7 +47,7 @@ from agent_comms.execution.turn_context import (
 )
 from bus_record_fixture import context_comms
 from agent_comms.execution.turn_item import PiRequestKey
-from agent_comms.native_session_reopen import PiSessionId
+from agent_comms.execution.native_session_reopen import PiSessionId
 
 
 def system(provenance, content="Original instruction π"):

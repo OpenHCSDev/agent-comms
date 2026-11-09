@@ -21,10 +21,10 @@ from .agent_backend import (
 from .agent_events import Error
 from .storage.locked_store import SQLiteFile
 from .external_transcript import ExternalCut
-from .native_child import PiChild
-from .native_entries import StoredEntry
-from .native_session_files import SessionFiles
-from .native_transcript import StoredRecord
+from .execution.native_child import PiChild
+from .execution.native_entries import StoredEntry
+from .execution.native_session_files import SessionFiles
+from .execution.native_transcript import StoredRecord
 from .pi_commands import (
     Compact,
     ExactResponse,
