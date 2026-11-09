@@ -26,6 +26,7 @@ from agent_comms.execution.native_runtime_input import CurrentNativeCursor
 from agent_comms.execution.owner_protocol import IncompatibleOwner
 from agent_comms.execution.pi_wire import McpLiveAcknowledgement
 from agent_comms.execution.reported_turn import ReportedTurn, ReportedTurnState
+from agent_comms.execution.transcript_sources import DraftRow
 from agent_comms.execution.turn_context import ContextManifest
 from agent_comms.execution.turn_inbox import SendNow, TurnInbox
 from agent_comms.execution.turn_lease import TurnState
@@ -51,7 +52,6 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.planning.goal_presentation import GoalExecution, GoalSnapshot
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ClaimedIdentity, ClaimScoped, ThreadIncarnation
-from agent_comms.transcript.external_transcript import DraftRow
 from agent_comms.transcript.transcript_drafts import NoDraft
 from agent_comms.transcript.transcripts import (
     LivePageSource,

@@ -1,5 +1,6 @@
 """Tool-call times belong to each execution's original history, never the watcher."""
 
+from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
@@ -7,7 +8,6 @@ from agent_comms.execution.turn_item import (
 from agent_comms.nominal.field_codec import ToolCallId
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.storage.recorded_time import RecordedEventTime, UnrecordedEventTime
-from agent_comms.transcript.external_transcript import ExternalTranscript
 from agent_comms.transcript.transcript_events import AssistantTranscript, ToolStartTranscript
 
 

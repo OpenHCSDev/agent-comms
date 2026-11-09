@@ -15,6 +15,7 @@ from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.coordination.errors import DMPaintedBoundChanged, StaleRevision
 from agent_comms.display_order import ChannelSort, NameChannelSort
 from agent_comms.execution.runtime_info import RuntimeInfo
+from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.messaging.activity_clocks import ChannelActivity
 from agent_comms.messaging.bus import DisplayUnread
 from agent_comms.messaging.channel_targets import CommandTarget
@@ -80,7 +81,6 @@ from agent_comms.storage.locked_store import GoalWakeFile
 from agent_comms.storage.private_path import FileRevision
 from agent_comms.storage.storage_room import RoomLedger
 from agent_comms.team.team_frame_file import TeamFrameFile
-from agent_comms.transcript.external_transcript import ExternalTranscript
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.ui_model.unread import (
     ExactUnread,
