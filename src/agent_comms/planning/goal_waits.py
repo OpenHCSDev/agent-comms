@@ -7,42 +7,33 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from sqlite3 import Connection
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
 from agent_comms.bus import BusReader
 from agent_comms.bus_publication import Delivered
-from agent_comms.errors import UnregisteredThreadError
-from agent_comms.execution.turn_lease import TurnCompletion, TurnLease
-from agent_comms.input_attempt import StoredInput, UnresolvedInput
-from agent_comms.input_key import InputKey, InputKeyText
 from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.errors import UnregisteredThreadError
 from agent_comms.nominal.field_codec import GoalId, GoalWaitId, NullMember, ThreadLookup, TurnId
 from agent_comms.planning.goal_presentation import GoalExecution, GoalWaitTarget, StandbyExecution
 from agent_comms.planning.goals import Goal, GoalDeclaration
-from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.input_key import InputKey, InputKeyText
+from agent_comms.input_attempt import StoredInput, UnresolvedInput
+from agent_comms.storage.locked_store import GoalWakeFile
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
-from agent_comms.storage.locked_store import GoalWakeFile
-from agent_comms.storage.typed_table import (
-    FULL_SCHEMA_REBUILD,
-    Column,
-    DurableStore,
-    ForeignKey,
-    Index,
-    SchemaRebuild,
-    StoreRows,
-    TypedTable,
-)
+from agent_comms.execution.turn_lease import TurnCompletion, TurnDeclaration, TurnLease
+from agent_comms.storage.typed_table import Column, DurableStore, ForeignKey, FULL_SCHEMA_REBUILD, Index, SchemaRebuild, StoreRows, TypedTable
 
-if TYPE_CHECKING:
-    from agent_comms.agent_activity import AgentActivity
-    from agent_comms.execution.native_input_owner import RegistryOwner
-    from agent_comms.message_reference import MessageReference
-    from agent_comms.messaging.message_bus import MessageBus
-    from agent_comms.planning.goal_management import GoalExecutionSource
-    from agent_comms.registry.registration import Registration
-    from agent_comms.registry.registry_store import RegistryEdit
+from agent_comms.agent_activity import AgentActivity
+from agent_comms.registry.registration import Registration
+from agent_comms.messaging.published_bus import PublishedBus
+from agent_comms.message_reference import MessageReference
+from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.registry.registry_store import RegistryEdit
+from agent_comms.planning.goal_attempts import Generation
+from agent_comms.planning.goal_failure_observation import GoalFailureEvidence
 
 
 class GoalWait(ABC):
@@ -87,12 +78,33 @@ class GoalWait(ABC):
         return False
 
     @abstractmethod
-    def execution(self, source: GoalExecutionSource) -> GoalExecution: ...
+    def execution(self, source: GoalExecutionInputs) -> GoalExecution: ...
+
+
+@dataclass(frozen=True)
+class GoalExecutionInputs(ABC):
+    """The original goal and runtime values used to determine execution."""
+
+    goal: Goal
+    wait: GoalWait
+    generation: Generation
+    evidence: GoalFailureEvidence
+    owner: Thread
+    snapshot: RegistrySnapshot
+    agents: AgentActivity
+
+    @property
+    @abstractmethod
+    def turn(self) -> TurnDeclaration: ...
+
+    @property
+    @abstractmethod
+    def owner_alive(self) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
 class NoGoalWait(GoalWait):
-    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+    def execution(self, source: GoalExecutionInputs) -> GoalExecution:
         return source.generation.lifecycle.execution(source)
 
     @property
@@ -165,7 +177,7 @@ class RecordedGoalWait(GoalWait):
     def clear(self, waits: GoalWaits) -> bool:
         return waits.consume(self.goal_id, self.wait_id)
 
-    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+    def execution(self, source: GoalExecutionInputs) -> GoalExecution:
         targets = tuple(
             GoalWaitTarget(target.incarnation.renamed(source.snapshot.canonical_name(target.incarnation.name)))
             for target in self.targets
@@ -385,7 +397,7 @@ class GoalWaitRecovery:
     """Release and consume dependency waits against their original goal and input state."""
 
     registry: Registration
-    bus: MessageBus
+    bus: PublishedBus
     agents: AgentActivity
     waits: GoalWaits
 

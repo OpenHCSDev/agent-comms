@@ -10,102 +10,47 @@ from dataclasses import (
 from functools import partial
 from typing import Annotated
 
+from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
+from agent_comms.transport.tools.reads import InputDeliveryRead, OwnerGoalRead, TeammateRead, TranscriptPageRead
+from agent_comms.transport.request import tool_field
 from agent_comms.acp_extension import GoalSnapshotReply, TurnChangedUpdate, UpdateMetadata
+from agent_comms.runtime_requests import OwnedRead, OwnerLiveRead
+from agent_comms.messaging.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
 from agent_comms.channel_targets import CommsTag
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.execution.turn_digests import (
-    ActivityTurnView,
-    LastTurns,
-    OrderEditsRead,
-    ThreadTurns,
-    TurnBound,
-    TurnsSince,
-    TurnView,
-    UnavailableOrderEdits,
-    UnjudgedEdits,
-)
+from agent_comms.planning.goal_actions import CompliedGoalAction, CreateProblemGoalAction, OrderGoalAction, OwnerInvocable
+from agent_comms.planning.goals import Goal, OrderCheck
 from agent_comms.head_review import HeadReviewOrder, PreparedHeadReview, PullRequestHead
 from agent_comms.held_orders import HeldOrders
 from agent_comms.input_attempt import UNOBSERVED_DELIVERY_SCOPE
 from agent_comms.input_disposition import DeliveryOverview
-from agent_comms.messaging.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
-from agent_comms.nominal.field_codec import (
-    FieldCodec,
-    MessageId,
-    OrderId,
-    RecordProblems,
-    ToolCallId,
-)
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, OrderId, RecordProblems, ToolCallId
 from agent_comms.order_story import OrderStory, TeamStory
 from agent_comms.order_work import OrderWork
-from agent_comms.planning.delivery_evidence import TodoProblems
-from agent_comms.planning.goal_actions import (
-    CompliedGoalAction,
-    CreateProblemGoalAction,
-    OrderGoalAction,
-    OwnerInvocable,
-)
-from agent_comms.planning.goals import Goal, OrderCheck
-from agent_comms.planning.order_words import DeliveryReport, PlainText, StrikeReason
-from agent_comms.planning.orders import (
-    AssignedClaimReviewer,
-    ClaimOrder,
-    ClaimReviewer,
-    CorrectCheckTodo,
-    CorrectRunTodo,
-    HeadReviewed,
-    HeadVerdict,
-    InstallTodo,
-    JudgedCall,
-    MeasuredReview,
-    NoHeadOrder,
-    OrderClaim,
-    OrderCompletion,
-    OrderProgress,
-    ProgressRead,
-    ProgressSource,
-    ResumeClaimOrder,
-    ServeTodo,
-    Todo,
-    TodoOperation,
-    ToolCallVerdict,
-    WaivedVerdict,
-)
 from agent_comms.planning.plan_phases import OrderPhase
+from agent_comms.planning.delivery_evidence import TodoProblems
+from agent_comms.planning.order_words import DeliveryReport, PlainText, StrikeReason
+from agent_comms.planning.orders import DeliverTodo, AssignedClaimReviewer, ClaimOrder, ClaimReviewer, CorrectCheckTodo, CorrectRunTodo, HeadReviewed, HeadVerdict, InstallTodo, JudgedCall, MeasuredReview, NoHeadOrder, OrderClaim, OrderCompletion, OrderProgress, ProgressRead, ProgressSource, ResumeClaimOrder, ServeTodo, Todo, TodoOperation, ToolCallVerdict, WaivedVerdict
 from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import ProgressClaim
 from agent_comms.read_basis import ReadAuthority
-from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.runtime_requests import OwnedRead, OwnerLiveRead
 from agent_comms.runtime_server import AttachedRuntimeRequestContext
 from agent_comms.send_result import MessagePublished
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.team_hud import TeamFrame, TeamHud, TeamLoad
-from agent_comms.team_hud_records import Teammate, TeammateDetail, TeamOrderDetail
+from agent_comms.team_hud_records import TeamOrderDetail, Teammate, TeammateDetail
+from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.tool_caller import ThreadCaller, ToolCaller
 from agent_comms.tool_declaration import EditCall
-from agent_comms.tool_request import (
-    NativeToolRequest,
-    PublishingToolRequest,
-    ReadTool,
-    ThreadReadTool,
-    ThreadToolRequest,
-)
+from agent_comms.tool_request import NativeToolRequest, PublishingToolRequest, ReadTool, ThreadReadTool, ThreadToolRequest
 from agent_comms.tool_result import ToolResult
 from agent_comms.transcripts import TranscriptRead
-from agent_comms.transport.request import tool_field
-from agent_comms.transport.tools.reads import (
-    InputDeliveryRead,
-    OwnerGoalRead,
-    TeammateRead,
-    TranscriptPageRead,
-)
+from agent_comms.execution.turn_digests import ActivityTurnView, LastTurns, OrderEditsRead, ThreadTurns, TurnBound, TurnView, TurnsSince, UnavailableOrderEdits, UnjudgedEdits
 from agent_comms.work_branches import WorkBranchError
-from agent_comms_hooks import ToolRefusedError
 
 
 @dataclass(frozen=True)
@@ -253,7 +198,7 @@ class CommsUnjudgedTool(ThreadReadTool):
         passes = ServicePassStore.at(comms.root).read()
         edits: list[EditCall] = []
         unavailable: list[UnavailableOrderEdits] = []
-        for read in OrderEditsRead.for_team(comms, owner.name):
+        for read in OrderEditsRead.for_team(comms.goals, owner.name):
             try:
                 edits.extend(read.read())
             except (WorkBranchError, OSError) as error:
@@ -491,7 +436,18 @@ class CommsOrderDoneTool(CommsTodoTool):
         return {"delivery": comms.goals.todos.get(problem).order.checked().scope.delivery_class}
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
-        return self.delivery.operation(todo, actor, comms, self.order_id, self.claims)
+        todo.require_maintainer(actor)
+        todo.state.require_open(todo)
+        order = todo.order.checked()
+        order.require_delivery(self.order_id)
+        problems = self.delivery.preparation_problems(todo)
+        if problems:
+            raise TodoProblems(problems)
+        delivery = self.delivery.resolved_delivery(todo)
+        required = order.scope.required_claims(
+            delivery, self.delivery.completion_claims(delivery, order, self.claims))
+        verified = ProgressClaim.require_all(required, comms, order.check.directory)
+        return DeliverTodo(todo.revision, actor, delivery, self.order_id, verified_claims=verified)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -765,7 +721,7 @@ class CommsEmergencyReleaseTool(ThreadToolRequest, declared_name="comms_emergenc
         waived: list[WaivedEdits] = []
         unreadable: list[UnavailableOrderEdits] = []
         verdicts: list[JudgedCall] = []
-        for read in OrderEditsRead.for_team(comms, caller.name):
+        for read in OrderEditsRead.for_team(comms.goals, caller.name):
             try:
                 edits = read.read()
             except (WorkBranchError, OSError) as error:
