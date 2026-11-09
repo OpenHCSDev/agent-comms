@@ -123,3 +123,22 @@ def test_the_deal_prints_the_shape_of_every_probe_it_demands():
     # admits, and how a probe cites a file in another registered repository.
     assert "base-method" in printed
     assert "owner/name:" in printed
+
+
+def test_every_failing_probe_is_named_in_one_refusal():
+    from types import SimpleNamespace
+
+    from agent_comms.rule_deal import AuditDue as Due
+
+    due = Due(owner_words=HIS)
+    audit = SimpleNamespace(probes=(
+        probe(probe="prior", words="use a flag", refuted_by="Corollary 4.12",
+              prior="a boolean felt lighter than one more base in the list"),
+        probe(probe="hunt", pattern="IMPL-12", fact="a boolean flag restates the base class",
+              at="no/such/file.py:1", derive="base-method", by="no/such/file.py:2"),
+        probe(probe="flinch", answer="Yes: the check changed the plan, see abc123def456"),
+    ))
+    refusal = due.probe_refusal(audit)
+    assert "Tristan's recorded prompts" in refusal
+    assert "no/such/file.py:1" in refusal
+    assert refusal.count("probe does not answer") == 2

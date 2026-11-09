@@ -516,12 +516,13 @@ class AuditDue:
             return "the audit answers no " + "; no ".join(
                 f"{probe.declared_name} probe: {probe.question}" for probe in missing)
         dealt = tuple(f"{rule.wakeup}\n{rule.body}" for rule in RuleFile.packaged())
+        faults = []
         for answer in audit.probes:
             others = tuple(other.text() for other in audit.probes if other is not answer)
             context = ProbeContext(self.owner_words, Path.cwd(), self.repos, (*dealt, *others))
             if fault := answer.fault(context):
-                return f"its {answer.declared_name} probe does not answer: {fault}"
-        return ""
+                faults.append(f"its {answer.declared_name} probe does not answer: {fault}")
+        return "; ".join(faults)
 
     @staticmethod
     def quoted(words: Iterable[str]) -> str:
