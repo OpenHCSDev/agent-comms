@@ -48,7 +48,14 @@ Readers do not read the file; they read revisions of it. `RegistryCut`, `Registr
    paired with the guard file as today. Each row carries `changed_at` (the revision that last wrote
    it); a reader holding revision r refreshes with `WHERE changed_at > r`, so a read costs the
    changes since it last read, not the whole registry (today's capture rereads all 5.6 MB).
-3. Move the 35 direct readers onto table queries, by NRA where the shape allows.
+3. (Mostly unnecessary, traced.) The 35 direct readers read the in-memory `RegistryDocument`
+   (`document.threads`, `document.statuses`), not the file, and the document stays the in-memory
+   model; only its storage and refresh change. Readers move only where one walks every thread to
+   find a few (children of a parent, threads in a project) and a table query answers it.
+   The guard's check is on the switch's path: `private_guard_unlocked` keys on
+   `_link_revision(self.path)` (`registry_store.py:633`) and `PrivateRegistryGuard.load` verifies
+   registry.json's digest against its slots, so the digest role leaves the guard's load and write
+   in the same commit as the switch.
 4. `save_unlocked` writes changed rows only; delete `ThreadRows`' raw/decoded cache and the JSON path.
    The seam (traced): each process caches its last `RegistryRevision` (`RegistryCache`); today a
    write anywhere makes every reader re-parse the whole file (`_cache_revision`:
