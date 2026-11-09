@@ -5,22 +5,15 @@ import re
 from abc import abstractmethod
 from collections.abc import Sequence
 from contextlib import ExitStack
-from dataclasses import (
-    dataclass,
-    field,
-    replace,
-)
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Self,
-)
+from typing import Self
 
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.agent_backend import RuntimeLocation
 from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.messaging.channel_targets import DeclaredTag
+from agent_comms.cli_bridges.history import History
 from agent_comms.cli_result import CliResult
 from agent_comms.collaboration_ledger import CollaborationLedger
 from agent_comms.config_options import RunningSelection
@@ -32,9 +25,12 @@ from agent_comms.execution.native_entries import ImportedSessionWriter
 from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
 from agent_comms.heartbeat_delivery import HeartbeatDelivery
-from agent_comms.importing import ImportedConversation, ImportLimits, ThreadImported
+from agent_comms.imported_conversation import ImportedConversation
+from agent_comms.importing import ImportLimits, ThreadImported
 from agent_comms.launch_runtime import LaunchRuntime, TagListText
+from agent_comms.messaging.channel_targets import DeclaredTag
 from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.read_basis import ReadAuthority
 from agent_comms.nominal.field_codec import (
     DeclaredWireType,
     FieldCodec,
@@ -48,6 +44,7 @@ from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.projects.checkouts import Checkout, LaunchCheckout
 from agent_comms.registry.native_settings import NativeThreadDefaults
 from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_store import RegistryEdit
 from agent_comms.registry.thread_catalog import ThreadCatalog
 from agent_comms.registry.thread_identity import AgentThreadRole, ThreadIncarnation, ThreadRole
 from agent_comms.registry.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
@@ -69,15 +66,7 @@ from agent_comms.storage.locked_store import PatternFile, RuntimeFile
 from agent_comms.tool_declaration import NativeRequestTools
 from agent_comms.tool_result import ToolResult
 from agent_comms.view_unread import transcript_read_state
-from agent_comms_hooks.process_claim import (
-    ClaimHeldError,
-    ProcessSingleton,
-)
-
-if TYPE_CHECKING:
-    from agent_comms.cli_bridges.history import History
-    from agent_comms.registry.registry_store import RegistryEdit
-    from agent_comms.tool_caller import ThreadCaller
+from agent_comms_hooks.process_claim import ClaimHeldError, ProcessSingleton
 
 
 @dataclass(frozen=True, slots=True)
@@ -357,7 +346,7 @@ class ThreadManagement:
             role=role)
         return self.registry._claim_unlocked(thread)
 
-    def rename_self(self, display_name: str, *, caller: ThreadCaller) -> RenameThreadResult:
+    def rename_self(self, display_name: str, *, caller: ReadAuthority) -> RenameThreadResult:
         """Rename the bound caller's own thread to the display name it was given.
 
         The identity is that text's slug, exactly as creation and the managed rename
@@ -365,10 +354,11 @@ class ThreadManagement:
         a human labelling a thread therefore mean the same thing by the same input.
         """
         with self.registry.store.editing() as edit:
-            if edit.document.require(caller.name).auto_title_pending:
+            name = caller.own_thread()
+            if edit.document.require(name).auto_title_pending:
                 self.require_concise_title(display_name)
             return self._rename_thread_in(
-                edit, caller.name, RegistryNames.thread_slug(display_name),
+                edit, name, RegistryNames.thread_slug(display_name),
                 title=GivenThreadText(display_name))
 
     def set_project(self, target_thread: ThreadIncarnation, path: str) -> ProjectChangeResult:
@@ -412,7 +402,7 @@ class ThreadManagement:
             new_name = edit.document.claim_name(display_name, owner=thread.name)
             return self._rename_thread_in(edit, thread.name, new_name, title=GivenThreadText(display_name))
 
-    def set_own_title(self, title: str, *, caller: ThreadCaller) -> ThreadTitleResult:
+    def set_own_title(self, title: str, *, caller: ReadAuthority) -> ThreadTitleResult:
         """Correct the bound caller's own display title, leaving its identity alone.
 
         A thread imported from another harness carries that session's title and no turn
@@ -422,8 +412,9 @@ class ThreadManagement:
         the process-owner proof the managed rename requires.
         """
         with self.registry.store.editing() as edit:
-            edit.document.status(caller.name).require_self_rename()
-            thread = edit.document.require(caller.name)
+            name = caller.own_thread()
+            edit.document.status(name).require_self_rename()
+            thread = edit.document.require(name)
             self.require_concise_title(title)
             self._write_title(edit, thread.name, GivenThreadText(title))
             edit.commit()

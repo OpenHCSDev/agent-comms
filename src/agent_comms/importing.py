@@ -5,29 +5,31 @@ from __future__ import annotations
 
 import asyncio
 import json
-from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from agent_comms.cli_bridges.codex_records import CodexRolloutProvenance
 from agent_comms.cli_result import CliResult
+from agent_comms.execution.native_entries import ImportedSessionWriter, NativeEntry, SessionEntry
+from agent_comms.execution.turn_context import HistoricalInstructionProvenance
 from agent_comms.execution.turn_item import NativeItemId
 from agent_comms.harness_install import Harness
+from agent_comms.import_history_source import ImportHistorySource
+from agent_comms.imported_conversation import ImportedConversation
 from agent_comms.imported_session_metadata import ImportedSessionMetadata
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
+from agent_comms.runtime_updates import SessionFacts
 from agent_comms.tool_result import ToolResult
-from agent_comms.transcript_events import ImportedInput, ImportedMessage, NoRetainedRequest
-
-if TYPE_CHECKING:
-    from agent_comms.cli_bridges.history import History
-    from agent_comms.runtime_updates import SessionFacts
-    from agent_comms.transcript_events import TranscriptEvent
+from agent_comms.transcript_events import (
+    ImportedInput,
+    ImportedMessage,
+    NoRetainedRequest,
+    TranscriptEvent,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,49 +44,13 @@ class ImportLimits:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class ImportedConversation(ABC):
-    """A session imported as a stopped thread: where it ran and the Pi session it becomes."""
-
-    harness: type[Harness]
-    source_id: str
-    project: str
-    messages_seen: int
-    title: ThreadText = NoThreadText()
-    truncated_messages: int = 0
-    notices: tuple[str, ...] = ()
-    historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
-
-    @property
-    @abstractmethod
-    def imported_messages(self) -> int: ...
-
-    @abstractmethod
-    def session_bytes(self, project: Path) -> bytes:
-        """The thread's Pi session file, for a thread working in ``project``."""
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class KeptPiSession(ImportedConversation):
-    """A native Pi session is already what a thread runs: its file is the session, unchanged."""
-
-    source: Path
-
-    @property
-    def imported_messages(self) -> int:
-        return self.messages_seen
-
-    def session_bytes(self, project: Path) -> bytes:
-        return self.source.read_bytes()
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
 class ImportSnapshot(ImportedConversation):
     messages: tuple[ImportedMessage, ...]
     summary: str
     latest_request: str = ""
 
     @classmethod
-    def read(cls, history: History, limits: ImportLimits) -> ImportSnapshot:
+    def read(cls, history: ImportHistorySource, limits: ImportLimits) -> ImportSnapshot:
         async def collect() -> ImportBuffer:
             buffer = ImportBuffer(limits)
             async for update in history.history():
@@ -102,12 +68,6 @@ class ImportSnapshot(ImportedConversation):
 
     def pi_session(self, project: Path) -> str:
         """A valid Pi v3 tree, using text-only portable historical context."""
-        from agent_comms.execution.native_entries import (
-            ImportedSessionWriter,
-            NativeEntry,
-            SessionEntry,
-        )
-
         timestamp = datetime.now(UTC)
         iso = timestamp.isoformat()
         records: list[object] = [SessionEntry.fresh(project, timestamp).to_wire()]
@@ -160,7 +120,7 @@ class ImportBuffer:
     source_id: str = ""
     project: str = ""
     title: ThreadText = NoThreadText()
-    instructions: set[CodexRolloutProvenance] = field(default_factory=set)
+    instructions: set[HistoricalInstructionProvenance] = field(default_factory=set)
 
     def add(self, events: Iterable[TranscriptEvent]) -> None:
         for event in events:
@@ -200,7 +160,7 @@ class ImportBuffer:
             truncated_messages=self.truncated, notices=tuple(sorted(self.notices)),
             latest_request=self.latest_request,
             historical_instructions=tuple(
-                sorted(self.instructions, key=lambda value: (value.offset, value.instruction))),
+                sorted(self.instructions, key=lambda value: value.instruction_position())),
         )
 
 
@@ -214,7 +174,7 @@ class ThreadImported(CliResult, ToolResult):
     omitted_messages: int
     truncated_messages: int
     notices: tuple[str, ...]
-    historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
+    historical_instructions: tuple[HistoricalInstructionProvenance, ...] = ()
 
     @classmethod
     def of(cls, thread: str, session_file: Path, snapshot: ImportedConversation) -> ThreadImported:

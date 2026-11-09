@@ -51,6 +51,9 @@ class CodexRolloutProvenance(HistoricalInstructionProvenance):
     sha256: str
     instruction: int
 
+    def instruction_position(self) -> tuple[int, int]:
+        return self.offset, self.instruction
+
     def public_description(self) -> str:
         return (f"Historical Codex instruction · {self.path} · record bytes "
                 f"{self.offset}:{self.offset + self.length} · item {self.instruction} "

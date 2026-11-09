@@ -2,7 +2,7 @@
 
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from inspect import isfunction
 from pathlib import Path
 from types import NoneType
@@ -14,6 +14,8 @@ from agent_comms import agent_events
 from agent_comms.acp import AcpSelectedWriteAuthority, CommsAgent, SdkSessionConnection
 from agent_comms.acp_extension import AgentCommsUpdate, LiveQueueScope, PromptRequest, QueueScope
 from agent_comms.agent_event_updates import AcpEventConsumer, AcpToolAction
+from agent_comms.agent_runtime import DeliversInput, PublishesTranscript, ReadsHistory
+from agent_comms.cli_bridges.history import History
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOption, ConfigOptions
 from agent_comms.context_assembly import ContextAssembly
@@ -24,6 +26,7 @@ from agent_comms.display_order import ChannelSort, ThreadSort
 from agent_comms.execution.goal_scheduler import GoalScheduler
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit
 from agent_comms.execution.input_drain import InputDrain
+from agent_comms.execution.native_entries import ImportedSessionWriter
 from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from agent_comms.execution.turn_context import (
     CoordinationSegment,
@@ -46,6 +49,9 @@ from agent_comms.goal_ledger import FailedTurnEvidence, FailedTurnObservation, G
 from agent_comms.goal_mutation import GoalTurnProjection
 from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.goal_work import GoalFailureOwner, GoalOwner, GoalWorkSource
+from agent_comms.harness_delivery_states import Outcome
+from agent_comms.harness_install import HarnessSession
+from agent_comms.importing import ImportBuffer, ImportSnapshot
 from agent_comms.input_attempt import StoredInput
 from agent_comms.input_key import InputKey
 from agent_comms.input_origin import InputProvenance
@@ -85,12 +91,14 @@ from agent_comms.response_message_source import ResponseMessageSource
 from agent_comms.response_policy import ResponsePolicy
 from agent_comms.route_client import ActivityClient
 from agent_comms.routing import NoTurnOrigin
+from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.session_config_options import SessionConfigOptions
 from agent_comms.task_owner import TaskOwner
 from agent_comms.task_registry import TaskRegistry
 from agent_comms.task_sources import ScopedTaskDeclaration
 from agent_comms.thread_identity_source import ThreadIdentitySource
 from agent_comms.tracked_turn import TrackedTurnSession
+from agent_comms.transcript_events import TranscriptEvent
 from agent_comms.transport.tools.goals import CommsGoalHistoryTool, CommsGoalTool, GoalChangeTool
 
 
@@ -423,6 +431,22 @@ def test_key_callbacks_read_the_original_identity_role() -> None:
     assert get_type_hints(ClaimNoticeKind.claimed)["owner"] is ThreadIdentitySource
     assert get_type_hints(MessageInput.bus_key)["return"] is InputKey
     assert get_type_hints(Message.bus_keys)["return"] == tuple[InputKey, ...]
+
+
+def test_original_import_factory_callbacks_use_actual_source_capabilities() -> None:
+    source = get_type_hints(ImportSnapshot.read)["history"]
+    assert issubclass(History, source)
+    assert issubclass(source, ReadsHistory)
+    assert issubclass(source, HarnessSession)
+    assert get_type_hints(source.history)["return"] == AsyncIterator[RuntimeUpdate]
+    original_value = get_type_hints(ImportedSessionWriter.preparing)["snapshot"]
+    assert issubclass(ImportSnapshot, original_value)
+    assert get_type_hints(ImportBuffer.describe)["facts"] is SessionFacts
+    assert get_args(get_type_hints(ImportBuffer.add)["events"]) == (TranscriptEvent,)
+    assert get_type_hints(PublishesTranscript.transcript)["return"] == AsyncIterator[RuntimeUpdate]
+    delivery = get_type_hints(DeliversInput.deliver)
+    assert delivery["message"] is Message
+    assert delivery["return"] == type[Outcome]
 
 
 def test_declared_policy_keys_keep_their_original_message_and_identity_sources() -> None:

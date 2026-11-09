@@ -13,7 +13,6 @@ from typing import Annotated, Self
 
 from pydantic import JsonValue
 
-from agent_comms import instructions
 from agent_comms.annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
 from agent_comms.cli_result import CliResult
 from agent_comms.context_owner import ContextOwner
@@ -98,6 +97,11 @@ class FileProvenance(Provenance):
 
 class HistoricalInstructionProvenance(Provenance, declared_name=None):
     """A retained instruction from a source session, never current execution authority."""
+
+    @abstractmethod
+    def instruction_position(self) -> tuple[int, int]:
+        """Its original record and instruction ordering coordinates."""
+        ...
 
 
 @dataclass(frozen=True)

@@ -6,19 +6,17 @@ acts through its hooks and tools. What a runtime can do is a capability mixin sh
 branches; a runtime without a capability does not inherit it, and Core asks the capability, never
 which runtime it is talking to.
 
-This module is light: runtimes import it, it imports no runtime.
+Runtimes implement these capabilities; callbacks name their shared value types directly.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from agent_comms.harness_delivery_states import Outcome
-    from agent_comms.messaging.messages import Message
-    from agent_comms.runtime_updates import RuntimeUpdate
+from agent_comms.harness_delivery_states import Outcome
+from agent_comms.messaging.messages import Message
+from agent_comms.runtime_updates import RuntimeUpdate
 
 
 class AgentRuntime:
