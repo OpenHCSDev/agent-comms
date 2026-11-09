@@ -25,13 +25,14 @@ from agent_comms.cli_bridges.codex_protocol import (
     RequestParams,
     RpcNotification,
     RpcReply,
+    RpcReplyTarget,
 )
 from agent_comms.cli_bridges.usage_reading import RateLimits
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.team.team_hud import CodexUsage, UnreadableUsage
 
 
-class CodexConnection:
+class CodexConnection(RpcReplyTarget):
     """One WebSocket owns JSON-RPC initialization and response matching."""
 
     CONTROL_SOCKET: ClassVar[Path] = Path.home() / '.codex/app-server-control/app-server-control.sock'
