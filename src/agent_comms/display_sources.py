@@ -1,55 +1,59 @@
 """The source operations display choices consume, independent of their services."""
 
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from contextlib import AbstractContextManager
-from typing import Protocol, Self
+from typing import Self
 
 
-class SentClocks(Protocol):
-    @property
-    def sent(self) -> Mapping[str, float]: ...
+class SentClocks(ABC):
+    __slots__ = ()
+    sent: Mapping[str, float]
 
 
-class ActivitySource(Protocol):
+class ActivitySource(ABC):
+    __slots__ = ()
+
+    @abstractmethod
     def opened_activity(self) -> AbstractContextManager[SentClocks]: ...
 
 
-class SentHistorySource[Registry](Protocol):
-    @property
-    def bus(self) -> ActivitySource: ...
+class SentHistorySource[Registry](ABC):
+    __slots__ = ()
+    bus: ActivitySource
 
+    @abstractmethod
     def last_sent_timestamps(
         self, rows: Iterable[tuple[str, float]], *, registry: Registry,
     ) -> dict[str, float]: ...
 
 
-class StoredThreadOrder[Order](Protocol):
-    @property
-    def order(self) -> Order: ...
+class StoredThreadOrder[Order](ABC):
+    __slots__ = ()
+    order: Order
 
 
-class ChannelOrderSource[ThreadOrder, ChannelOrder](Protocol):
+class ChannelOrderSource[ThreadOrder, ChannelOrder](ABC):
+    __slots__ = ()
+
+    @abstractmethod
     def set_channel_sort(self, name: str, order: ThreadOrder) -> StoredThreadOrder[ThreadOrder]: ...
 
+    @abstractmethod
     def set_channel_order(self, order: ChannelOrder) -> ChannelOrder: ...
 
 
-class SortedChannel[View, Order](Protocol):
-    @property
-    def name(self) -> str: ...
+class SortedChannel[View, Order](ABC):
+    __slots__ = ()
+    name: str
+    created_at: float
 
-    @property
-    def created_at(self) -> float: ...
-
+    @abstractmethod
     def sort_key(self, order: Order, view: View) -> tuple[int, int, float, float, str]: ...
 
 
-class ChannelSortView[Order](Protocol):
-    @property
-    def channel(self) -> SortedChannel[Self, Order]: ...
-
-    @property
-    def last_activity(self) -> float: ...
-
-    @property
-    def last_user_input(self) -> float: ...
+class ChannelSortView[Order](ABC):
+    __slots__ = ()
+    channel: SortedChannel[Self, Order]
+    last_activity: float
+    last_user_input: float

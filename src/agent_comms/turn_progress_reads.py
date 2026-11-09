@@ -1,6 +1,6 @@
 """The original turn and goal-account operations consumed while publishing progress."""
 
-from typing import Protocol
+from abc import ABC, abstractmethod
 
 from agent_comms.agent_events import ProviderUsage
 from agent_comms.agent_events import ToolEnd
@@ -12,34 +12,37 @@ from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.execution.turn_terminal import TurnTerminal
 
 
-class ProgressTurn(Protocol):
+class ProgressTurn(ABC):
+    __slots__ = ()
+
     terminal: TurnTerminal
+    routing: TurnRouting
+    original: OriginalTurnInput
+    checkpoint: TranscriptCursor
 
     @property
+    @abstractmethod
     def thread(self) -> Thread: ...
 
     @property
+    @abstractmethod
     def turn_lease(self) -> TurnLeaseFence: ...
 
     @property
-    def routing(self) -> TurnRouting: ...
-
-    @property
-    def original(self) -> OriginalTurnInput: ...
-
-    @property
-    def checkpoint(self) -> TranscriptCursor: ...
-
-    @property
+    @abstractmethod
     def reply_targets(self) -> tuple[str, ...]: ...
 
+    @abstractmethod
     async def attach_native_session(self, session_file: str) -> None: ...
 
 
-class ProgressGoalAccount(Protocol):
-    @property
-    def has_productive_tool(self) -> bool: ...
+class ProgressGoalAccount(ABC):
+    __slots__ = ()
 
+    has_productive_tool: bool
+
+    @abstractmethod
     def provider_usage(self, event: ProviderUsage) -> None: ...
 
+    @abstractmethod
     def tool_ended(self, event: ToolEnd) -> None: ...

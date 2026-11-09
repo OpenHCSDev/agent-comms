@@ -83,6 +83,7 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_presentation import NoThreadPresentation, ThreadPresentation
 from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
 from agent_comms.registry_names import DeletedThread
+from agent_comms.relationships import RelationshipSource
 from agent_comms.retained_task_facts import RetainedTaskFacts
 from agent_comms.sent_message import AssignedSourceIdentity
 from agent_comms.shared_ledger import LedgerDocument
@@ -192,7 +193,7 @@ class ThreadPresentations:
         return self.read(name).require(name)
 
 
-class HistoryViews:
+class HistoryViews(RelationshipSource):
     def __init__(
         self,
         root: Path,

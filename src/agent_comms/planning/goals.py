@@ -8,7 +8,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+from typing import Annotated, ClassVar, Literal
 
 from metaclass_registry.mro_dispatch import MroDispatch
 
@@ -32,7 +32,7 @@ from agent_comms.execution.turn_goal_permission import (
 )
 from agent_comms.goal_mutation import GoalMutation
 from agent_comms.goal_permit_source import GoalPermitSource
-from agent_comms.goal_work import GoalAssignment, GoalOwner, GoalWorkSource
+from agent_comms.goal_work import GoalAssignment, GoalObservation, GoalOwner, GoalWorkSource
 from agent_comms.lifecycle_capability import Active
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -553,7 +553,7 @@ class ProblemGoalOrder(GoalOrder):
         return goals.todos.for_goal(owner, goal_id)
 
     def instructions(self, todos: Sequence[GoalAssignment]) -> str:
-        return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
+        return "\n\n".join(text for todo in todos for text in todo.goal_instructions())
 
     def goal_text(self, goal: Goal) -> str:
         return self.text
@@ -579,7 +579,7 @@ class GoalPeerChange:
 
 class GoalDeclaration(
     GoalDisplay["GoalDeclaration", "Goal"], SubclassUnion,
-    RegistrationInheritance["GoalDeclaration"],
+    RegistrationInheritance["GoalDeclaration"], GoalObservation,
 ):
     """The recorded goal state, including a thread with no goal."""
 

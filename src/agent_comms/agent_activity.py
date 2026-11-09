@@ -48,6 +48,7 @@ from agent_comms.registry.thread_identity import OwnerIdentity, ThreadIncarnatio
 from agent_comms.registry.threads import Thread
 from agent_comms.routing import NoTurnRouting, Routing
 from agent_comms.runtime_info import RuntimeInfo, RuntimeInfoStore
+from agent_comms.runtime_info_source import RuntimeInfoWrites
 
 _LOG = logging.getLogger(__name__)
 
@@ -109,7 +110,7 @@ class LiveRecipientActivity(RecipientActivity):
         state = (WorkingTakenProgress if self.activity.state.busy else TakenProgress)(progress)
         return replace(notification, state=state)
 
-class AgentActivity:
+class AgentActivity(RuntimeInfoWrites["RuntimeInfoObservation"]):
     def __init__(self, root: Path, registry: Registration):
         self.registry = registry
         self.activity = ActivityStore(root)

@@ -17,6 +17,7 @@ from agent_comms.acp_failure import (
 from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.turn_failure import NoTurnFailure, TurnFailure
 from agent_comms.pi_payloads import NativeMessageFailureSource
+from agent_comms.turn_failure_reads import TerminalOutputRead
 
 if TYPE_CHECKING:
     from agent_comms.backend import NativeSession
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class TurnOutput:
+class TurnOutput(TerminalOutputRead):
     sensitive: bool = False
     failure: TurnFailure = field(default_factory=NoTurnFailure)
     error_message: str | None = None

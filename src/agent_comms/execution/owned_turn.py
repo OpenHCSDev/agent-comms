@@ -61,6 +61,7 @@ from agent_comms.send_outcome import SendBoundary
 from agent_comms.transcript_routes import DisplayText, NoDisplayText
 from agent_comms.transport.native_tool_transport import NativeToolMode
 from agent_comms.transport.tools.goals import CommsSetGoalTool
+from agent_comms.turn_progress_reads import ProgressGoalAccount, ProgressTurn
 
 if TYPE_CHECKING:
     from agent_comms.execution.turn_runner import TurnRunner
@@ -68,7 +69,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(kw_only=True)
-class TurnGoalAccount:
+class TurnGoalAccount(ProgressGoalAccount):
     comms: Comms
     owner: Thread
     turn: TurnId
@@ -191,7 +192,7 @@ class TurnDelivery:
     tool_mode: NativeToolMode
 
 
-class OwnedTurn:
+class OwnedTurn(ProgressTurn):
     """One authorized owner turn; stable source facts and native callbacks live here."""
 
     @property

@@ -1,74 +1,85 @@
 """The original turn and launch facts consumed by failure classification."""
 
+from abc import ABC, abstractmethod
 from collections.abc import Collection
 from sqlite3 import Connection
-from typing import Protocol
 
 from agent_comms.attempt_resolution import RecordedResolution
 
 
-class ModelFailureDiagnostic[Failure](Protocol):
+class ModelFailureDiagnostic[Failure](ABC):
+    __slots__ = ()
+
+    @abstractmethod
     def refine_model_request_failure(self, failure: Failure) -> Failure: ...
 
 
-class TerminalPromptRead(Protocol):
-    @property
-    def started(self) -> bool: ...
+class TerminalPromptRead(ABC):
+    __slots__ = ()
+
+    started: bool
 
 
-class TerminalInputsRead(Protocol):
-    @property
-    def uncertain(self) -> bool: ...
+class TerminalInputsRead(ABC):
+    __slots__ = ()
+
+    uncertain: bool
+    pending: Collection[object]
 
     @property
-    def pending(self) -> Collection[object]: ...
-
-    @property
+    @abstractmethod
     def unwritten_inputs(self) -> Collection[object]: ...
 
 
-class TerminalOutputRead(Protocol):
+class TerminalOutputRead(ABC):
+    __slots__ = ()
+
+    error_message: str | None
+    final_assistant_stop: bool
+
     @property
+    @abstractmethod
     def failure_text(self) -> str: ...
 
     @property
-    def error_message(self) -> str | None: ...
-
-    @property
-    def final_assistant_stop(self) -> bool: ...
-
-    @property
+    @abstractmethod
     def clean(self) -> bool: ...
 
 
-class TerminalSessionRead(Protocol):
-    @property
-    def prompt_state(self) -> TerminalPromptRead: ...
+class TerminalSessionRead(ABC):
+    __slots__ = ()
 
-    @property
-    def inputs(self) -> TerminalInputsRead: ...
-
-    @property
-    def output(self) -> TerminalOutputRead: ...
+    prompt_state: TerminalPromptRead
+    inputs: TerminalInputsRead
+    output: TerminalOutputRead
 
 
-class ReplayPreparation(Protocol):
-    @staticmethod
-    def revoke(db: Connection, execution_id: str) -> None: ...
+class ReplayPreparation(ABC):
+    __slots__ = ()
 
-    @staticmethod
-    def authorize_if_unobserved(db: Connection, execution_id: str) -> None: ...
+    @classmethod
+    @abstractmethod
+    def revoke(cls, db: Connection, execution_id: str) -> None: ...
+
+    @classmethod
+    @abstractmethod
+    def authorize_if_unobserved(cls, db: Connection, execution_id: str) -> None: ...
 
 
-class GoalFailureReservation[Store, Observation](Protocol):
+class GoalFailureReservation[Store, Observation](ABC):
+    __slots__ = ()
+
+    @abstractmethod
     def fail(
         self, store: Store, diagnostic: RecordedResolution, *,
         observation: Observation | None = ...,
     ) -> object: ...
 
 
-class GoalFailurePermit[Store, Observation](Protocol):
-    @property
-    def reservation(self) -> GoalFailureReservation[Store, Observation]: ...
+class GoalFailurePermit[Store, Observation](ABC):
+    __slots__ = ()
 
+    reservation: GoalFailureReservation[Store, Observation]
+
+    @abstractmethod
     def stop(self, store: Store) -> None: ...

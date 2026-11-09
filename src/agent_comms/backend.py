@@ -96,6 +96,7 @@ from agent_comms.transport.native_tool_transport import (
     ToolTransport,
     UnboundToolTransport,
 )
+from agent_comms.turn_failure_reads import TerminalSessionRead
 
 if TYPE_CHECKING:
     from agent_comms.acp_failure import ProviderRetryResult
@@ -240,7 +241,7 @@ class EventFinishSignal(FinishSignal):
 NO_FINISH_SIGNAL = NoFinishSignal()
 
 
-class NativeSession(MroDispatch, ABC):
+class NativeSession(MroDispatch, TerminalSessionRead):
     """Shared child acquisition, attestation, observation and retirement."""
 
     active: ClassVar[dict[asyncio.Task[Any], NativeSession]] = {}

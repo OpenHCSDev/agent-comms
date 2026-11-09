@@ -75,6 +75,7 @@ from agent_comms.registry.thread_identity import (
     TurnIdentity,
 )
 from agent_comms.registry.thread_presentation import ThreadOwnerBinding
+from agent_comms.registry.thread_reads import ThreadOwnerSource
 from agent_comms.registry.thread_status import (
     ActiveThreadPresence,
     ArchivedThreadStatus,
@@ -1192,7 +1193,13 @@ class RegistryEntry:
 
 @SnapshotValue.required
 @dataclass(frozen=True, slots=True)
-class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadStatus]], RegistryProvenance, ToolResult):
+class RegistrySnapshot(
+    SnapshotRestored,
+    RegistryPresence[Mapping[str, ThreadStatus]],
+    RegistryProvenance,
+    ToolResult,
+    ThreadOwnerSource[Thread],
+):
     purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)]
     threads: Annotated[ThreadRows, SlicePolicy(ThreadRowsSlice)]
     statuses: Annotated[Mapping[str, ThreadStatus], SlicePolicy(MappingRowsSlice)]

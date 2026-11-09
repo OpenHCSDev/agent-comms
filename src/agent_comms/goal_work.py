@@ -1,64 +1,66 @@
 """The assignment read surface consumed by a goal, without a dependency on its stores."""
 
 from abc import ABC, abstractmethod
-from typing import Protocol, Self
 
 from agent_comms.execution.child_process import ProcessState
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_identity import ObservedTurn
-from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_identity import ObservedTurn, ThreadIncarnation
 
 
-class GoalObservation(Protocol):
+class GoalObservation(ABC):
+    __slots__ = ()
+
     @property
+    @abstractmethod
     def captured(self) -> object: ...
 
+    @abstractmethod
     def accepts_observation(self, goal_id: GoalId, minimum_revision: int) -> bool: ...
 
 
-class GoalOwner(Protocol):
-    @property
-    def name(self) -> str: ...
+class GoalOwner(ABC):
+    __slots__ = ()
+    name: str
+    goal: GoalObservation
 
     @property
+    @abstractmethod
     def incarnation(self) -> ThreadIncarnation: ...
 
-    @property
-    def goal(self) -> GoalObservation: ...
-
+    @abstractmethod
     def require_goal_assignment(self, actor: ThreadIncarnation) -> None: ...
 
 
-class GoalFailureOwner(GoalOwner, Protocol):
-    @property
-    def worktree(self) -> Checkout: ...
+class GoalFailureOwner(GoalOwner):
+    __slots__ = ()
+    worktree: Checkout
+    process_identity: ProcessState
 
-    @property
-    def process_identity(self) -> ProcessState: ...
-
+    @abstractmethod
     def observed_turn(self, claim_scope: int) -> ObservedTurn: ...
 
 
-class GoalAssignmentOrder[Assignment](Protocol):
-    def instructions(self, assignment: Assignment) -> str: ...
+class GoalAssignment(ABC):
+    __slots__ = ()
 
+    @abstractmethod
+    def goal_instructions(self) -> tuple[str, ...]: ...
 
-class GoalAssignment(Protocol):
-    @property
-    def order(self) -> GoalAssignmentOrder[Self]: ...
-
-    @property
-    def pending(self) -> bool: ...
-
+    @abstractmethod
     def progress_line(self) -> str: ...
 
 
-class GoalAssignments(Protocol):
+class GoalAssignments(ABC):
+    __slots__ = ()
+
+    @abstractmethod
     def for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]: ...
 
+    @abstractmethod
     def closed_for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]: ...
 
+    @abstractmethod
     def holds_pending(self, owner: ThreadIncarnation) -> bool: ...
 
 

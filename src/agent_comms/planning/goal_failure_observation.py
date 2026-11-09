@@ -4,7 +4,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from sqlite3 import Connection
-from typing import Protocol
 
 from agent_comms.goal_mutation import GoalFailureProjection
 
@@ -20,5 +19,8 @@ class NoFailedTurnEvidence[Failure](GoalFailureEvidence[Failure]):
         return source.unresolved()
 
 
-class GenerationFailureSource[Failure](Protocol):
+class GenerationFailureSource[Failure](ABC):
+    __slots__ = ()
+
+    @abstractmethod
     def failure_evidence(self, conn: Connection) -> GoalFailureEvidence[Failure]: ...

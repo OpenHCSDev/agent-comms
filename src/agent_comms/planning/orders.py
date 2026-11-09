@@ -51,6 +51,7 @@ from agent_comms.command import Command
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.errors import MissingSourceLine, TodoError
 from agent_comms.execution.child_process import ChildResult, OrderCheckFailedError
+from agent_comms.goal_work import GoalAssignment, GoalAssignments
 from agent_comms.head_review import (
     HeadReview,
     HeadReviewOrder,
@@ -5016,7 +5017,7 @@ class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
 
 
 @dataclass(frozen=True, slots=True)
-class Todo(TodoStoreRows, TypedTable):
+class Todo(TodoStoreRows, TypedTable, GoalAssignment):
     unit_index: ClassVar[ExpressionIndex] = ExpressionIndex((
         Assignment.sql_field('owner_created'), '{state}',
     ))
@@ -5061,6 +5062,11 @@ class Todo(TodoStoreRows, TypedTable):
     @property
     def judged_calls(self) -> tuple[ToolCallId, ...]:
         return self.history.facts_for(self.id).judged_calls
+
+    def goal_instructions(self) -> tuple[str, ...]:
+        """The original pending order contributes one instruction, every other order none."""
+        return tuple(item.order.instructions(item)
+                     for item in self.order.items_with(Pending, self))
 
     def progress_line(self) -> str:
         return " · ".join((f"{self.id}: {self.order.line}",
@@ -5790,7 +5796,7 @@ class RecordMergedTodo(RecordsAssignmentHistory, TodoCommand, declared_name=None
 
 
 @dataclass(frozen=True, slots=True)
-class TodoStore(OwnerRequestStore, TodoHistory):
+class TodoStore(OwnerRequestStore, TodoHistory, GoalAssignments):
     """One SQLite row owns both todo state and its exclusive assignment.
 
     Assignment identity and revision deduplicate known operations. An uncertain

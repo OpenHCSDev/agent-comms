@@ -29,6 +29,7 @@ from agent_comms.cli_result import CliResult
 from agent_comms.coordination.errors import DMPaintedBoundChanged
 from agent_comms.display_order import ChannelSort, NameChannelSort
 from agent_comms.display_references import CurrentDisplayReferences
+from agent_comms.display_sources import ChannelSortView
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.goal_execution import GoalExecution
 from agent_comms.goal_execution_snapshot import GoalExecutionSnapshot
@@ -251,7 +252,7 @@ class BusPresentation:
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelView(ToolResult):
+class ChannelView(ToolResult, ChannelSortView[type[ChannelSort]]):
     """Wire form: the channel's own fields beside its roster; agent counts stay in process."""
 
     channel: Annotated[Channel, WireInline()]

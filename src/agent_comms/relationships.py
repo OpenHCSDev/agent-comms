@@ -16,14 +16,14 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Protocol
 
 from agent_comms import presentation
-from agent_comms.bus import BusReader
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.command import Command
 from agent_comms.display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
-from agent_comms.display_sources import ActivitySource, SentHistorySource
+from agent_comms.display_sources import SentHistorySource
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.messages import Message, MessageInput, MessageRole
+from agent_comms.messaging.published_bus import BusResources
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import GoalId
@@ -718,31 +718,22 @@ class RelationshipStore(SingleFileStore, ThreadOwnedState, CarriedDocument[Relat
         self.update(remove)
 
 
-class RelationshipBusSource(ActivitySource, Protocol):
-    @property
-    def bus(self) -> BusReader: ...
-
-
 class RelationshipCatalogSource(Protocol):
     @property
     def catalog(self) -> ChannelCatalog: ...
 
 
-class RelationshipSource(SentHistorySource[RegistrySnapshot], Protocol):
-    @property
-    def root(self) -> Path: ...
+class RelationshipSource(SentHistorySource[RegistrySnapshot]):
+    __slots__ = ()
+    root: Path
+    registry: Registration
+    bus: BusResources
+    channels: RelationshipCatalogSource
 
-    @property
-    def registry(self) -> Registration: ...
-
-    @property
-    def bus(self) -> RelationshipBusSource: ...
-
-    @property
-    def channels(self) -> RelationshipCatalogSource: ...
-
+    @abstractmethod
     def revision(self) -> presentation.WireRevision: ...
 
+    @abstractmethod
     def thread_views(
         self, visibility: RosterVisibility,
     ) -> tuple[presentation.ThreadView, ...]: ...

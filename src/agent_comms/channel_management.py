@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.bus_publication import AgentOrigin
+from agent_comms.display_sources import ChannelOrderSource
 from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget, Tag
 from agent_comms.messaging.channels import Channel, SavedView
 from agent_comms.cli_result import TargetEditResult
@@ -154,7 +155,7 @@ class DeleteTagEdit(NamedTagEdit):
         channels.delete_tag(self.name, disposition=self.disposition, confirmed=self.confirmed)
 
 
-class ChannelManagement:
+class ChannelManagement(ChannelOrderSource[type[ThreadSort], type[ChannelSort]]):
     def __init__(self, root: Path, registry: Registration, bus: MessageBus, threads: ThreadManagement):
         self.root = root
         self.registry = registry

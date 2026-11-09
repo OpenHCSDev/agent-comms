@@ -31,6 +31,7 @@ from agent_comms.registry.thread_presentation import (
     ThreadPresentation,
     UnavailableThreadOwnerBinding,
 )
+from agent_comms.registry.thread_reads import ThreadOwnerStatus
 
 if TYPE_CHECKING:
     from agent_comms.activity import ObservedActivity
@@ -92,7 +93,11 @@ class Visible(PublishingPresence):
 
 @dataclass(frozen=True)
 class ThreadStatus(
-    LifecycleCapability, DeclaredFamily, ProcessFence["ThreadStatus"], affix="ThreadStatus",
+    LifecycleCapability,
+    DeclaredFamily,
+    ProcessFence['ThreadStatus'],
+    ThreadOwnerStatus["RegistrySnapshot", "Thread"],
+    affix='ThreadStatus',
 ):
     may_be_active: ClassVar[bool] = False
     running: ClassVar[bool] = False

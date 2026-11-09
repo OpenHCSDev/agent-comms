@@ -58,6 +58,7 @@ from agent_comms.storage.typed_table import (
     RetainsChildren,
     TextStorage,
 )
+from agent_comms.turn_failure_reads import ReplayPreparation
 from agent_comms.wake_candidate_index import ProjectionUnavailableError
 
 if TYPE_CHECKING:
@@ -613,6 +614,7 @@ class ReplayAssessments(
     RetryPartition,
     NoDelete,
     CoordinatorRow,
+    ReplayPreparation,
 ):
     column_orders = (
         NonDecreasing(("side_effects_possible",)),

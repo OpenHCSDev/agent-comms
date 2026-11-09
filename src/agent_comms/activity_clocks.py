@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.class_fact import ClassFact
+from agent_comms.display_sources import SentClocks
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projection_source import ProducedRow, ProjectionSource
 from agent_comms.storage.typed_table import TypedRow
@@ -58,7 +59,7 @@ class ChannelActivity(TypedRow, ProjectionSource):
 
 
 @dataclass(frozen=True)
-class ActivityClocks:
+class ActivityClocks(SentClocks):
     channels: dict[str, ChannelActivity] = field(default_factory=dict)
     sent: dict[str, float] = field(default_factory=dict)
 

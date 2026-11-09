@@ -25,6 +25,7 @@ from agent_comms.execution.turn_lease import (
     TurnState,
 )
 from agent_comms.goal_mutation import GoalFork
+from agent_comms.goal_work import GoalFailureOwner
 from agent_comms.heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
 from agent_comms.launch_runtime import ThreadLaunch
 from agent_comms.lifecycle import LifecycleState
@@ -324,7 +325,7 @@ class ThreadCatalogFile(DurableFile, PatternFile):
 
 
 @dataclass(frozen=True, slots=True)
-class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, TaskOwner, affix="Thread"):
+class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, TaskOwner, GoalFailureOwner, affix="Thread"):
     """Declares one agent thread's identity and provenance; each member is how it executes.
 
     The registration owns transport intent; presence does not imply an RPC.

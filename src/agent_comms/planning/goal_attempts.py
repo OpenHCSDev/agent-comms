@@ -82,6 +82,7 @@ from agent_comms.storage.locked_store import FileStore, GoalWakeFile, SQLiteRead
 from agent_comms.storage.maintenance_barrier import DrainSettledFile
 from agent_comms.storage.store_files import AtomicFile
 from agent_comms.storage.typed_table import ReconciledFile, SQLiteJournalMode, StoreWriter
+from agent_comms.turn_failure_reads import GoalFailurePermit
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -103,7 +104,10 @@ class ReservationConflictError(errors.GoalAttemptRefused):
 
 
 @dataclass(frozen=True, slots=True)
-class LaunchPermit(GoalTurnPermit):
+class LaunchPermit(
+    GoalTurnPermit,
+    GoalFailurePermit[GoalLedgerWriter, FailedTurnObservation],
+):
     reservation: Reservation
 
     @property

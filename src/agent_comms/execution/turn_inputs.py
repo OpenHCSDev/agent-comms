@@ -30,6 +30,7 @@ from agent_comms.pending_requests import PendingRequest
 from agent_comms.prompt_state import PreparedSession, UnwrittenPrompt
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
+from agent_comms.turn_failure_reads import TerminalInputsRead
 
 if TYPE_CHECKING:
     from agent_comms.backend import NativeSession, TurnSession
@@ -44,7 +45,7 @@ class NoCurrentItem(TurnInboxItem):
 
 
 @dataclass
-class InputForwarding(MroDispatch):
+class InputForwarding(MroDispatch, TerminalInputsRead):
     queue: TurnInbox = field(default_factory=TurnInbox)
     pending: dict[InputId, PendingRequest[commands.FollowingPrompt]] = field(default_factory=dict)
     current: TurnInboxItem = field(default_factory=NoCurrentItem)

@@ -11,12 +11,13 @@ from agent_comms.activity_clocks import ActivityClocks
 from agent_comms.bus import Bus
 from agent_comms.catalog_document import CatalogAccess
 from agent_comms.catalog_store import ChannelCatalog
+from agent_comms.display_sources import ActivitySource
 from agent_comms.messaging.channel_targets import ChannelTarget
 from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.read_ledger import ReadLedger
 
 
-class BusResources:
+class BusResources(ActivitySource):
     """The original live bus, read ledger and shared activity read."""
     __slots__ = ()
 

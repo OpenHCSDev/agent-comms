@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from sqlite3 import Connection
-from typing import ClassVar, Protocol
+from typing import ClassVar
 
 from agent_comms.attempt_resolution import AttemptResolution
 from agent_comms.errors import UnresolvedAttemptError
@@ -12,7 +12,10 @@ from agent_comms.lifecycle_capability import Failed, Terminal
 from agent_comms.nominal.declared_family import DeclaredFamily
 
 
-class GoalAttemptTransition(Protocol):
+class GoalAttemptTransition(ABC):
+    __slots__ = ()
+
+    @abstractmethod
     def advance(
         self, conn: Connection, phase: GoalAttemptPhase, *,
         progress_witness: str | None = ..., resolution: AttemptResolution = ...,

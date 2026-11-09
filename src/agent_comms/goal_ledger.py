@@ -18,10 +18,13 @@ from agent_comms.attempt_resolution import NoResolution
 from agent_comms.attempt_resolution import WorkDecision
 from agent_comms.planning.goal_attempt_identity import FailureNotObserved
 from agent_comms.planning.goal_attempt_identity import GoalAttemptIdentity
-from agent_comms.planning.goal_attempt_phase import FailedAttempt
+from agent_comms.planning.goal_attempt_phase import FailedAttempt, GoalAttemptTransition
 from agent_comms.planning.goal_attempt_phase import GoalAttemptPhase
 from agent_comms.planning.goal_attempt_phase import ResolvedAttempt
-from agent_comms.planning.goal_failure_observation import GoalFailureEvidence
+from agent_comms.planning.goal_failure_observation import (
+    GenerationFailureSource,
+    GoalFailureEvidence,
+)
 from agent_comms.planning.goal_failure_observation import NoFailedTurnEvidence
 from agent_comms.planning.goal_generation import BlockedGeneration
 from agent_comms.planning.goal_generation import GenerationState
@@ -57,6 +60,7 @@ from agent_comms.registry.thread_identity import TurnFence
 from agent_comms.registry.thread_identity import TurnIdentity
 from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.execution.turn_item import UsageChargeId
+from agent_comms.turn_failure_reads import GoalFailureReservation
 
 
 class GoalLedgerTable(DurableTables):
@@ -137,7 +141,7 @@ class FailedTurnObservation:
 
 
 @dataclass(frozen=True)
-class Generation(GoalLedgerTable, TypedTable, GoalGenerationRead):
+class Generation(GoalLedgerTable, TypedTable, GoalGenerationRead, GenerationFailureSource["FailedTurnEvidence"]):
     goal_id: Annotated[GoalId, Column(primary_key=True)]
     number: Annotated[int, Column(check="number>0")]
     lifecycle: GenerationState
@@ -219,7 +223,7 @@ class Generation(GoalLedgerTable, TypedTable, GoalGenerationRead):
 
 
 @dataclass(frozen=True, slots=True)
-class Reservation:
+class Reservation(GoalFailureReservation["GoalLedgerWriter", FailedTurnObservation]):
     goal_id: GoalId
     generation: int
     attempt_id: AttemptId
@@ -295,7 +299,7 @@ class Reservation:
 
 
 @dataclass(frozen=True)
-class AttemptRecord(GoalLedgerTable, TypedTable):
+class AttemptRecord(GoalLedgerTable, TypedTable, GoalAttemptTransition):
     reservation: Annotated[Reservation, Column(primary_key=True)]
     phase: GoalAttemptPhase
     progress_witness: str | None

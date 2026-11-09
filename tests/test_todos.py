@@ -33,7 +33,7 @@ from agent_comms.order_phase import UnplannedPhase
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.planning.goal_actions import SetGoalAction
-from agent_comms.planning.goals import GoalChangedError, NoGoal, OrderCheck
+from agent_comms.planning.goals import GoalChangedError, NoGoal, OrderCheck, ProblemGoalOrder
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     Assignment,
@@ -145,6 +145,10 @@ def test_phase_checks_keep_folded_declarations_and_exact_creator_birth(
             declaration = FoldedProblemOrder(original=declaration, into='elsewhere', why='duplicate')
         with store.writing() as db:
             Todo.update(db, where='id=?', parameters=(todo.id,), order=declaration)
+    originals = tuple(store.get(f"P{index}") for index in range(1, len(declarations) + 1))
+    expected = tuple(row.order.instructions(row) for row in originals if row.pending)
+    assert tuple(text for row in originals for text in row.goal_instructions()) == expected
+    assert ProblemGoalOrder().instructions(originals) == "\n\n".join(expected)
     assert store.phases_checked(frozenset()) == {}
     assert store.phases_checked(frozenset({colleague.incarnation})) == {
         RetainedStorePhase: 20, UnplannedPhase: 30,

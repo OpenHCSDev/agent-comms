@@ -10,12 +10,13 @@ from agent_comms.execution.native_pi import NativePiInputNotSent
 from agent_comms.execution.turn_failure import TerminalFailure
 from agent_comms.execution.turn_inbox import TurnInboxItem
 from agent_comms.pi_events import AgentSettled, MessageStart, Response
+from agent_comms.turn_failure_reads import TerminalPromptRead
 
 if TYPE_CHECKING:
     from agent_comms.backend import NativeSession
 
 
-class PromptState:
+class PromptState(TerminalPromptRead):
     acknowledged = False
     awaiting_start = False
     started = False

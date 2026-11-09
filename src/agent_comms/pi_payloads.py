@@ -41,6 +41,7 @@ from agent_comms.execution.turn_context import (
 from agent_comms.execution.turn_failure import ModelRequestFailed, ProviderTransportFailed
 from agent_comms.execution.turn_item import CompactionChargeId, ProviderResponseId, UsageChargeId
 from agent_comms.lifecycle_capability import Successful
+from agent_comms.native_failure_reads import NativeResponseErrorRead
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     ExternalNull,
@@ -184,7 +185,7 @@ class ReportedTimestamp(PiReported[int]):
 
 
 @dataclass(frozen=True)
-class ReportedText(PiReported[str]):
+class ReportedText(PiReported[str], NativeResponseErrorRead):
     value: str
 
     @property

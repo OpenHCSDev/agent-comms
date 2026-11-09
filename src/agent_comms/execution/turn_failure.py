@@ -53,7 +53,7 @@ class TurnFailure(DeclaredFamily):
         return self
 
     def prepare_execution_retry(
-        self, db: Connection, execution_id: str, replay: ReplayPreparation,
+        self, db: Connection, execution_id: str, replay: type[ReplayPreparation],
     ) -> None:
         """Consume any earlier provider proof for this nonretryable failure."""
         replay.revoke(db, execution_id)
@@ -185,7 +185,7 @@ class RetryableProviderFailure:
     max_retries: ClassVar[int] = 3
 
     def prepare_execution_retry(
-        self, db: Connection, execution_id: str, replay: ReplayPreparation,
+        self, db: Connection, execution_id: str, replay: type[ReplayPreparation],
     ) -> None:
         """A provider refusal may retry only while durable output facts are absent."""
         replay.authorize_if_unobserved(db, execution_id)

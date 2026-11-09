@@ -9,9 +9,10 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Annotated, ClassVar, TYPE_CHECKING
 
+from agent_comms.display_sources import ChannelSortView, SortedChannel, StoredThreadOrder
 from agent_comms.messaging.channel_targets import ChannelTarget, Tag
 from agent_comms.cli_result import CliResult
-from agent_comms.display_order import CreatedThreadSort, ThreadSort
+from agent_comms.display_order import ChannelSort, CreatedThreadSort, ThreadSort
 from agent_comms.errors import RelationViolationError
 from agent_comms.history_result import (
     ChannelHistoryPageResult,
@@ -55,7 +56,7 @@ class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):
 
 
 @dataclass(frozen=True, slots=True)
-class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, affix="Channel"):
+class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, StoredThreadOrder[type[ThreadSort]], SortedChannel[ChannelSortView[type[ChannelSort]], type[ChannelSort]], affix="Channel"):
     """A captured channel presentation with behavior supplied by its declaration."""
 
     name: str

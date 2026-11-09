@@ -1,17 +1,22 @@
 """Decoded native response facts consumed by request failures."""
 
-from typing import Protocol
+from abc import ABC, abstractmethod
 
 
-class NativeResponseErrorRead(Protocol):
+class NativeResponseErrorRead(ABC):
+    __slots__ = ()
+
+    @abstractmethod
     def text_or(self, otherwise: str, /) -> str: ...
 
 
-class NativeResponseFailureRead(Protocol):
-    @property
-    def error(self) -> NativeResponseErrorRead: ...
+class NativeResponseFailureRead(ABC):
+    __slots__ = ()
+
+    error: NativeResponseErrorRead
 
 
-class NativeOperationFailureRead(Protocol):
-    @property
-    def error(self) -> object: ...
+class NativeOperationFailureRead(ABC):
+    __slots__ = ()
+
+    error: str
