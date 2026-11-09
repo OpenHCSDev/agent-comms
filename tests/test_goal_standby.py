@@ -103,7 +103,8 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
     assert carol_thread.executing
     record = carol_thread.require_turn_lease().record
     record.begin(record.registry_path, record.identity,
-                 replace(record.read().require_active(), owner=ProcessIdentity(999999999, 1)))
+                 replace(record.read().require_active(), owner=ProcessIdentity(999999999, 1)),
+                 registry_type=record.registry_type)
     comms.registry.register(
         replace(carol_thread, process_identity=ProcessIdentity(999999999, 1)),
         comms.registry.status("carol"),

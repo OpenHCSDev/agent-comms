@@ -12,7 +12,7 @@ from agent_comms.execution.turn_lease import TurnCompletion, TurnLease
 from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.input_attempt import StoredInput, UnresolvedInput
 from agent_comms.input_key import InputKey
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.published_bus import PublishedBus
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.planning.goal_waits import (

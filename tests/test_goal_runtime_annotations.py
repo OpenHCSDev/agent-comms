@@ -55,7 +55,7 @@ from agent_comms.importing import ImportBuffer, ImportSnapshot
 from agent_comms.input_attempt import InputAttempt, StoredInput
 from agent_comms.input_key import InputKey
 from agent_comms.input_origin import InputProvenance
-from agent_comms.messages import ClaimNoticeKind, Message, MessageInput
+from agent_comms.messaging.messages import ClaimNoticeKind, Message, MessageInput
 from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.field_codec import NullMember, PresentMember, ThreadLookup
 from agent_comms.peer_relation import PeerRelation
