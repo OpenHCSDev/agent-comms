@@ -6,7 +6,6 @@ from agent_comms.execution.runtime_info_projection import RuntimeInfoProjection
 from agent_comms.execution.runtime_info_source import RuntimeInfoWrites
 from agent_comms.messaging.assignment_notice import AssignmentNotice
 from agent_comms.messaging.delivery_recipients import DeliveryRecipients
-from agent_comms.messaging.notification_contracts import RecipientActivityRead
 
 import logging
 import time
@@ -30,13 +29,11 @@ from agent_comms.execution.turn_lease import (
 from agent_comms.execution.turn_phase import IdlePhase, PreparingPhase, TurnPhase
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.notification_progress import (
-    AssignmentProgress,
     DeliveryProgress,
     TakenProgress,
     WorkingTakenProgress,
 )
 from agent_comms.messaging.routing import NoTurnRouting, Routing
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import ThreadLookup, TurnId
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.activity import (
@@ -50,6 +47,7 @@ from agent_comms.registry.activity import (
     ObservedActivity,
 )
 from agent_comms.registry.activity_registry_reads import ActivityRegistryRead
+from agent_comms.registry.recipient_activity import RecipientActivity
 from agent_comms.registry.registration_reads import ActivityRegistration
 from agent_comms.registry.thread_identity import OwnerIdentity, ThreadIncarnation
 from agent_comms.registry.thread_status import ThreadStatus
@@ -57,53 +55,6 @@ from agent_comms.registry.threads import NativeThread, Thread
 
 
 _LOG = logging.getLogger(__name__)
-
-
-class RecipientActivity(
-    DeclaredFamily,
-    RecipientActivityRead[AssignmentNotice[DeliveryProgress], AssignmentProgress, DeliveryProgress],
-    affix='RecipientActivity',
-):
-    """Acquired recipient availability; no assignment, start or retry authority."""
-
-    def turn_started_by(self, updated_at_ms: int) -> bool:
-        return False
-
-    def displayed_recipient(self, notification, source, reads, document, snapshot):
-        return reads.displayed_recipient(
-            source, notification.recipient_identity, snapshot, document=document
-        )
-
-    def selected_response(
-        self,
-        notification: AssignmentNotice[DeliveryProgress],
-        updated_at_ms: int,
-        progress: AssignmentProgress,
-    ) -> AssignmentNotice[DeliveryProgress]:
-        return progress.selected_notification(
-            notification, busy=self.turn_started_by(updated_at_ms)
-        )
-
-    def taken_response(
-        self, notification: AssignmentNotice[DeliveryProgress], progress: DeliveryProgress,
-    ) -> AssignmentNotice[DeliveryProgress]:
-        """A message a running turn took, shown without a claim about current work."""
-        return notification.with_state(TakenProgress(progress))
-
-
-@dataclass(frozen=True)
-class RecordedRecipientActivity(RecipientActivity):
-    """Durable history supplies no current process, readiness or inbox check."""
-
-    def displayed_recipient(self, notification, source, reads, document, snapshot):
-        return reads.historical_displayed_recipient(
-            source.message, notification.recipient_identity, snapshot, document=document
-        )
-
-
-@dataclass(frozen=True)
-class UnavailableRecipientActivity(RecipientActivity):
-    pass
 
 
 @dataclass(frozen=True)

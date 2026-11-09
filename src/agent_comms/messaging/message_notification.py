@@ -45,8 +45,9 @@ from agent_comms.notification_assignment import (
     NotificationSelection,
 )
 from agent_comms.projects.storage_rules import StorageRule
-from agent_comms.registry.agent_activity import AgentActivity, RecordedRecipientActivity
+from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.namespace_reads import NamespaceRead
+from agent_comms.registry.recipient_activity import RecordedRecipientActivity
 from agent_comms.registry.registration_reads import ActivityRegistration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation

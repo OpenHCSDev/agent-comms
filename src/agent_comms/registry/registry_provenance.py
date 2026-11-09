@@ -12,8 +12,8 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.message_sender import PublicSender
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
-from agent_comms.registry.agent_activity import UnavailableRecipientActivity
 from agent_comms.registry.namespace_reads import NamespaceRead
+from agent_comms.registry.recipient_activity import UnavailableRecipientActivity
 from agent_comms.registry.recipient_selection import RecipientSelection
 from agent_comms.registry.registry_names import RegistryNames as RegistryNames
 from agent_comms.registry.threads import Thread, ThreadProvenance

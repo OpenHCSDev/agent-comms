@@ -50,8 +50,8 @@ if TYPE_CHECKING:
     from agent_comms.coordination.database import InvalidStore, MissingStore
     from agent_comms.messaging.message_notification import MessageNotification
     from agent_comms.messaging.notification_progress import DeliveryProgress
-    from agent_comms.registry.agent_activity import RecipientActivity
     from agent_comms.registry.private_registry_guard import RegistryPrivacy
+    from agent_comms.registry.recipient_activity import RecipientActivity
 
 
 @dataclass(frozen=True)
