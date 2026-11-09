@@ -1,0 +1,37 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-packaged-ingress-module-owners",
+          "reason": "Current-main replay 1c532ae3a retains two imports naming removed root modules. Restore the existing packaged module owners, keeping the same local aliases and all original class declarations, fields and method bodies. Bus remains the actual messaging.bus.Bus instantiated inside harness_attempts; retained facts remain the actual messaging.retained_task_facts declarations. These imports are already unconditional: this is namespace repair, not guarded/local import promotion, declaration movement, constructor timing change or new layer. Apply within friction's coherent component batch and retain its combined cycle/cold/MRO/consumer qualification. No runtime success is claimed here.",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_disposition.py",
+              "replacements": [
+                {
+                  "old_source": "import agent_comms.bus as bus",
+                  "new_source": "import agent_comms.messaging.bus as bus"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/execution/input_origin.py",
+              "replacements": [
+                {
+                  "old_source": "import agent_comms.retained_task_facts as task_facts",
+                  "new_source": "import agent_comms.messaging.retained_task_facts as task_facts"
+                }
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

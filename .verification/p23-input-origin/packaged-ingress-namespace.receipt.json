@@ -1,0 +1,19 @@
+{
+  "base": "1c532ae3a83094b4a59438e0500a2692e33ab128",
+  "checks": [
+    {
+      "file": "input_disposition.py",
+      "canonical_provider": "messaging/bus.py",
+      "source_sha256": "794187b8903f504d3aac3921dcd031bd6afac6317ffd73f8026af79dd7bb6737",
+      "classes_and_methods_unchanged": true
+    },
+    {
+      "file": "execution/input_origin.py",
+      "canonical_provider": "messaging/retained_task_facts.py",
+      "source_sha256": "2eb8c49a893f171a11d27da8afc50c8251733f2e95c8c43f9ead87fc68053b99",
+      "classes_and_methods_unchanged": true
+    }
+  ],
+  "plan_sha256": "c91678a74966c34a5ab52a3942ab955c87bf64fbfda09cfb9247df4b8880e0f1",
+  "scope": "Pinned-source ownership/AST checks only; no native apply or cold run"
+}

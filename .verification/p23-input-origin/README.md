@@ -26,7 +26,9 @@ The remaining bootstrap question is checked there: InputPublicationSource binds 
 
 ## Checkpoint and package rebase
 
-This branch saves unfinished artifacts, not product or installation success. The artifacts were authored against friction's pre-package-move snapshot and must not be replayed unchanged after its main rebase.
+This branch saves unfinished artifacts, not product or installation success. The earlier artifacts were authored against friction's pre-package-move snapshot and must not be replayed unchanged after its main rebase.
+
+For pushed replay `1c532ae3a83094b4a59438e0500a2692e33ab128`, use the supplementary `packaged-ingress-namespace.plan.json` (SHA256 `c91678a74966c34a5ab52a3942ab955c87bf64fbfda09cfb9247df4b8880e0f1`). The earlier input-store binding change is already present there; it must not be reapplied. Two module aliases still name removed root paths: `input_disposition.py:12` imports `agent_comms.bus`, and `execution/input_origin.py:207` imports `agent_comms.retained_task_facts`. This supplement restores their actual `messaging.*` owners without changing aliases, any class/method AST, or I/O/check ordering. The pinned-source check exits 0; no native apply or new cold run is claimed. Compose these repairs into friction's component batch, not a separate check lap.
 
 Freshly fetched main `33af0b93d` declares Bus/BusReader in `messaging/bus.py`, InputOrigin/InputProvenance/HumanInputOrigin in `execution/input_origin.py`, and RegistryPrivacy in `registry/private_registry_guard.py`. InputDispositions still lives in the existing root `input_disposition.py`; its Bus binding correction must name `agent_comms.messaging.bus` on that main.
 
