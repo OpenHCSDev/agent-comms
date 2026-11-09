@@ -47,7 +47,7 @@ from agent_comms.execution.child_process import (
 )
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.root_runtime import RootRuntime
-from agent_comms.execution.turn_digests import LastTurns
+from agent_comms.execution.turn_bound import LastTurns
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.nominal.field_codec import FieldCodec

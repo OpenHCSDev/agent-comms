@@ -6,7 +6,7 @@ import json
 from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 from urllib.parse import quote
 
 from pydantic import JsonValue
@@ -29,6 +29,7 @@ from agent_comms.execution.tool_results import (
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
+from agent_comms.messaging.published_messages import ReadsPublishedMessages
 from agent_comms.messaging.routing import MessageRoute, NoTurnRouting, Routing, TurnRouting
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -53,8 +54,6 @@ from agent_comms.ui_model.message_category import (
     UserCategory,
 )
 
-if TYPE_CHECKING:
-    from agent_comms.execution.transcript_sources import TranscriptSource
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -101,7 +100,7 @@ class TranscriptEvent(EventMerge, Dated, DeclaredFamily, affix="Transcript"):
     def with_publications(self, publications: tuple[MessageReference, ...]) -> TranscriptEvent:
         return self
 
-    def for_external_source(self, source: TranscriptSource) -> tuple[TranscriptEvent, ...]:
+    def for_external_source(self, source: ReadsPublishedMessages) -> tuple[TranscriptEvent, ...]:
         return (self,)
 
     def as_context(self) -> TranscriptEvent:
@@ -350,7 +349,7 @@ class AssistantTranscript(ModelOutput, AgentTextTranscript):
     def with_publications(self, publications: tuple[MessageReference, ...]) -> AssistantTranscript:
         return replace(self, routing=TurnRouting(publications=publications))
 
-    def for_external_source(self, source: TranscriptSource) -> tuple[TranscriptEvent, ...]:
+    def for_external_source(self, source: ReadsPublishedMessages) -> tuple[TranscriptEvent, ...]:
         references = self.routing.publications
         published = bool(references) and source.sent_messages(references).keys() >= set(references)
         return self.for_assigned_source(source, published)
