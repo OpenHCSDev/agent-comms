@@ -77,7 +77,7 @@ from agent_comms.transport.runtime_requests import (
 from agent_comms.transport.runtime_server import RuntimeServer
 
 if TYPE_CHECKING:
-    from agent_comms.acp import SdkSessionConnection
+    from agent_comms.execution.acp import SdkSessionConnection
     from agent_comms.execution.input_drain import OwnerSession
 
 

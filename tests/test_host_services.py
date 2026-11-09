@@ -16,7 +16,7 @@ import pytest
 from aiohttp import ClientSession, web
 
 from agent_comms.comms import client_wire
-from agent_comms.connector import ConnectorVerb, SystemdSite
+from agent_comms.transport.connector import ConnectorVerb, SystemdSite
 from agent_comms.execution.child_process import (
     NoResidentManager,
     ResidentManager,

@@ -7,7 +7,7 @@ from aiohttp.test_utils import TestServer
 from yarl import URL
 
 from agent_comms.comms import Comms
-from agent_comms.connector import Connector
+from agent_comms.transport.connector import Connector
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.transport.connector_profile import EndpointRoute, ResolvedRoute
 from agent_comms.transport.connector_store import ConnectorStore, UiReadAccess

@@ -11,7 +11,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from agent_comms.comms import Comms
-from agent_comms.connector import Connector, ServeVerb
+from agent_comms.transport.connector import Connector, ServeVerb
 from agent_comms.execution.child_process import ReadWork
 from agent_comms.execution.launch_root import LaunchRoot, started
 from agent_comms.execution.watch_passes import (

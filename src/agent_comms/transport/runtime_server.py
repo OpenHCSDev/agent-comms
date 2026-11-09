@@ -58,7 +58,7 @@ from agent_comms.transport.runtime_request import (
 from agent_comms.transport.tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from agent_comms.acp import AcpSelectedWriteAuthority, CommsAgent
+    from agent_comms.execution.acp import AcpSelectedWriteAuthority, CommsAgent
     from agent_comms.execution.turn_runner import TurnRunner
 
 _LOG = logging.getLogger(__name__)

@@ -27,7 +27,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from yarl import URL
 
 from agent_comms.comms import Comms, wire
-from agent_comms.connector import (
+from agent_comms.transport.connector import (
     ApprovalLink,
     AuthorizationCodeGrant,
     BoundedRoute,
@@ -178,7 +178,7 @@ def test_connector_round_trip_reads_without_a_director_thread(comms, tmp_path, r
     environment = readiness.environment({**os.environ, "HOME": str(tmp_path / "home"), "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": os.pathsep.join((str(Path(__file__).resolve().parents[1] / "src"),
                                        *site.getsitepackages()))})
-    command = "from agent_comms.connector import main; raise SystemExit(main())"
+    command = "from agent_comms.transport.connector import main; raise SystemExit(main())"
     before = comms.bus.bus.revision()
     server = subprocess.Popen(
         [sys.executable, "-c", command, "serve", "--root", comms.root, "--port", str(port)],

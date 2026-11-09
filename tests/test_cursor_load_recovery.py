@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.owner_protocol import OwnerLine, OwnerUpdate

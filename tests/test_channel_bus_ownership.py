@@ -71,7 +71,7 @@ def test_channel_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
 async def test_natural_owned_turn_prepares_observer_pointer_without_native_start(
     tmp_path, native_runtime_package,
 ):  # noqa: F811
-    from agent_comms.acp import CommsAgent
+    from agent_comms.execution.acp import CommsAgent
     from agent_comms.execution.owned_turn import OwnedTurn
     from agent_comms.nominal.field_codec import AcpSessionId
     

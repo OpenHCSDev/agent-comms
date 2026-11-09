@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import agent_comms.agent_events as events
 import agent_comms.execution.backend as backend
-from agent_comms.acp import SdkSessionConnection
+from agent_comms.execution.acp import SdkSessionConnection
 from agent_comms.agent_backend import NoInputStartListener
 from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination

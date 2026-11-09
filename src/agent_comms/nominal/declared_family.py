@@ -337,22 +337,6 @@ class ModuleMembers(FamilyMember):
             raise TypeError(f"{cls.__qualname__} declares {cls.declared_name!r}; "
                             f"its module stem must be {expected!r}, not {actual!r}")
 
-    @classmethod
-    def _named_member(cls, name: object) -> type[DeclaredFamily]:
-        from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
-
-        try:
-            selected = FieldCodec.decode(str, name)
-        except MalformedRecord as error:
-            raise UnknownFamilyMember(f"A declared module name must be text: {name!r}") from error
-        package = cls.family_root.__registry_config__.discovery_package
-        package_module: ModuleType = import_module_preserving_root_logging(package)
-        stem = cls.module_stem(selected)
-        if stem not in {info.name for info in pkgutil.iter_modules(package_module.__path__)}:
-            raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}")
-        import_module_preserving_root_logging(f"{package}.{stem}")
-        return dict.__getitem__(cls.family_root.__registry__, selected)
-
 
 class RegisteredFamily(DeclaredFamily):
     """Instances are members of their family's declared registry, never unnamed helpers."""

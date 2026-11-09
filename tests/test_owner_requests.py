@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import Comms
-from agent_comms.connector import ConnectorSendTool
+from agent_comms.transport.connector import ConnectorSendTool
 from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.nominal.field_codec import GoalId

@@ -15,6 +15,7 @@ from typing import Annotated, ClassVar
 
 from _pytest.config import get_config
 
+import agent_comms
 from agent_comms.cli_verbs.declared_verb import DeclaredOptions
 from agent_comms.execution.child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
 from agent_comms.execution.launch_runtime import CheckoutSource, RestoredRuntime
@@ -176,7 +177,7 @@ class IntegrationCheckout(SourceCheckout):
     def require_editable(self) -> None:
         if not (self.path / ".git").is_file():
             raise IntegrationFailed("Integration requires an isolated Git worktree, not main")
-        if self.path == Path(__file__).resolve().parents[2]:
+        if self.path == Path(agent_comms.__file__).resolve().parents[2]:
             raise IntegrationFailed("The integration tree cannot replace its running source")
         actual = Path(Repo.git(self.path, "rev-parse", "--show-toplevel").strip()).resolve()
         if actual != self.path:

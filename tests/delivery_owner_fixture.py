@@ -5,7 +5,7 @@ from functools import partial
 
 import pytest
 
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.launch_root import LaunchRoot

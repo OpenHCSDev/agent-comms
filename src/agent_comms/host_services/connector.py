@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Self
 
-from agent_comms.connector import LOOPBACK, PORT, ConnectorOptions, ConnectorVerb, ServeVerb
+from agent_comms.transport.connector import LOOPBACK, PORT, ConnectorOptions, ConnectorVerb, ServeVerb
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ResidentManager
 from agent_comms.execution.launch_root import LaunchRoot

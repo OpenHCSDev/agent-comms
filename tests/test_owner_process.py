@@ -113,7 +113,7 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
 async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_count):
     from acp.schema import TextContentBlock
 
-    from agent_comms.acp import CommsClient
+    from agent_comms.execution.acp import CommsClient
     from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
     from agent_comms.transport.owner_requests import RetainedOwnerLaunch
     from agent_comms.transport.tool_caller import NoThreadCaller

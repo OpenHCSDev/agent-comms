@@ -17,7 +17,7 @@ import pytest
 
 import agent_comms.agent_events as ae
 import agent_comms.execution.backend as backend
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import CompactionChangedUpdate, decode_updates
 from agent_comms.comms import wire
 from agent_comms.execution.controller import SessionUpdateSink

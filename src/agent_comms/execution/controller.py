@@ -22,7 +22,7 @@ from agent_comms.nominal.field_codec import (
 if TYPE_CHECKING:
     from acp.schema import PermissionOption, ToolCallUpdate
 
-    from agent_comms.acp import AcpSelectedWriteAuthority
+    from agent_comms.execution.acp import AcpSelectedWriteAuthority
     from agent_comms.execution.turn_runner import TurnRunner
     from agent_comms.transport.runtime_server import RuntimeServer
 

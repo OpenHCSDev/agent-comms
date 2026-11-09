@@ -28,7 +28,7 @@ from agent_comms.installer.runtime_resolution import (
     VersionedPackage,
 )
 from agent_comms.installer.upgrade import Stack
-from agent_comms.integration import CiRunner
+from agent_comms.projects.integration import CiRunner
 from agent_comms.projects.head_review import BaseSide, HeadSide, IntegrationInput, Side
 from agent_comms.projects.repo import Repo
 

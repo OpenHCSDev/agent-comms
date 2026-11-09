@@ -14,7 +14,7 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.comms import wire
-from agent_comms.connector import ConnectorSendTool
+from agent_comms.transport.connector import ConnectorSendTool
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.errors import (

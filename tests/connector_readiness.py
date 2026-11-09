@@ -9,7 +9,7 @@ import subprocess
 import time
 from collections.abc import Mapping
 
-from agent_comms.connector import SystemdSite
+from agent_comms.transport.connector import SystemdSite
 from agent_comms.host_services import ServiceNotServingError
 
 

@@ -5,7 +5,7 @@ from contextlib import AsyncExitStack
 
 import pytest
 
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.agent_events import AgentInfo
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import StaleFence

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Annotated
 
 from agent_comms.comms import Comms
-from agent_comms.connector import ServeVerb
+from agent_comms.transport.connector import ServeVerb
 from agent_comms.execution.launch_root import LaunchRoot, started
 from agent_comms.nominal.field_codec import PathText
 from agent_comms.transport.connector_store import ConnectorStore

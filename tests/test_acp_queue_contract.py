@@ -9,7 +9,7 @@ import pytest
 from acp import RequestError
 from acp.schema import TextContentBlock
 
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import (
     IdentifiedInputStarted,
     InputDeliveryChangedUpdate,

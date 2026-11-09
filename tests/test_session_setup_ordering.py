@@ -56,7 +56,7 @@ async def test_new_response_precedes_updates_and_load_replays_before_response(tm
                        AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config))
     try:
         async with spawn_agent_process(
-            packets, sys.executable, "-m", "agent_comms.acp",
+            packets, sys.executable, "-m", "agent_comms.execution.acp",
             *LaunchRoot.from_path(comms.root).arguments(),
             env=environment, cwd=project, observers=[packets.record], use_unstable_protocol=True,
         ) as (client, _process):

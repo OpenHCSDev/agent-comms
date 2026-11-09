@@ -64,7 +64,7 @@ def test_prepared_native_fixture_is_qualified(native_runtime_package):
 
 @pytest.mark.asyncio
 async def test_private_bus_agent_construction_does_not_acquire_native_package(private_comms):
-    from agent_comms.acp import CommsAgent
+    from agent_comms.execution.acp import CommsAgent
 
     trace = PackageTrace(native_package.package_tree_digest.__code__)
     with trace.active():

@@ -88,7 +88,7 @@ if [[ ! -d "$project" ]]; then
     exit 1
 fi
 
-surface=(acp "$python -m agent_comms.acp" "$project" --title 'Agent Comms' "${session[@]}")
+surface=(acp "$python -m agent_comms.execution.acp" "$project" --title 'Agent Comms' "${session[@]}")
 if (( ${#remote[@]} )); then
     # Toad's own connection answers through the connector; no local agent is launched.
     surface=("${remote[@]}" run "$project")

@@ -6,7 +6,7 @@ from aiohttp import WSMsgType
 from aiohttp.test_utils import TestClient, TestServer
 
 from agent_comms.comms import Comms
-from agent_comms.connector import Connector
+from agent_comms.transport.connector import Connector
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
@@ -97,7 +97,7 @@ def test_a_relay_kills_a_service_that_does_not_exit() -> None:
     import multiprocessing
     import time
 
-    from agent_comms.connector import ObservationRelay
+    from agent_comms.transport.connector import ObservationRelay
 
     relay = ObservationRelay.__new__(ObservationRelay)
     relay.process = multiprocessing.get_context("spawn").Process(target=time.sleep, args=(60,))

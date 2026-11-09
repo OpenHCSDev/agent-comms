@@ -47,7 +47,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(
     # The real private boundary disallows volatile or symlinked roots.
     import tempfile
 
-    from agent_comms.acp import CommsClient
+    from agent_comms.execution.acp import CommsClient
     from agent_comms.comms import wire
 
     with tempfile.TemporaryDirectory(prefix="l0b-headless-", dir="/var/tmp") as owned:
