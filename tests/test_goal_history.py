@@ -10,7 +10,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.child_process import Platform
+from agent_comms.execution.child_process import Platform
 from agent_comms.comms import Comms, wire
 from agent_comms.nominal.field_codec import FieldCodec
 from conftest import installed_comms

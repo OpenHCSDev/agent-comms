@@ -84,7 +84,7 @@ from ...channels import (
     ViewMatch,
     ViewPredicate,
 )
-from ...child_process import ProcessIdentity
+from ...execution.child_process import ProcessIdentity
 from ...cli_bridges.history import OfflineHistory
 from ...cli_command import (
     PreparedTargetAction,

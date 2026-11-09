@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
-from ..child_process import ResidentManager
+from ..execution.child_process import ResidentManager
 from ..launch_runtime import LaunchRuntime
 from . import ServiceNotServingError, SystemdUserService
 

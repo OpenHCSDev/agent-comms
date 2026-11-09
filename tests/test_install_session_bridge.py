@@ -23,7 +23,10 @@ from pathlib import Path
 import pytest
 
 from agent_comms.native_build_inputs import DetachedChildStdio
-from agent_comms.child_process import ProcessIdentity, SpawnedProcess
+from agent_comms.execution.child_process import (
+    ProcessIdentity,
+    SpawnedProcess,
+)
 from agent_comms.activity import ActivityStore
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.execution.turn_digests import LastTurns

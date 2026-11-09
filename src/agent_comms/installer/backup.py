@@ -25,7 +25,7 @@ from agent_comms.active_route import (
     RouteFileSelection,
     active_route_path,
 )
-from agent_comms.child_process import Platform
+from ..execution.child_process import Platform
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.storage.locked_store import (

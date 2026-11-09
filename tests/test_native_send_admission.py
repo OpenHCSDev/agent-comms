@@ -24,7 +24,10 @@ if sys.platform == "linux":
     import termios
 
 from agent_comms.bus import Bus
-from agent_comms.child_process import AttachedChild, ProcessIdentity
+from agent_comms.execution.child_process import (
+    AttachedChild,
+    ProcessIdentity,
+)
 from agent_comms.comms import Comms
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.coordinator import Coordination

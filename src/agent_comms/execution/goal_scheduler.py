@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from .input_drain import WakeScheduleCheck
 from ..agent_event_updates import AcpEventConsumer
-from ..child_process import ProcessIdentity
+from .child_process import ProcessIdentity
 from ..coordination.coordinator import Coordination
 from ..errors import (
     GoalAttemptError,

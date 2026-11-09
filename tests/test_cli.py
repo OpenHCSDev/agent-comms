@@ -30,7 +30,10 @@ from agent_comms.lifecycle_capability import Successful
 from conftest import installed_comms
 from agent_comms.activity import ActivityState
 from agent_comms.channel_management import ArchiveThreadsTagDisposition, TagDisposition
-from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
 from agent_comms.cli_bridges.shared import Send
 from agent_comms.cli_commands import ThreadCreatedResult, ThreadStoppedResult
 from agent_comms.cli_verbs.archive import ArchiveCliCommand

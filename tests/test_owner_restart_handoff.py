@@ -16,7 +16,10 @@ import pytest
 
 from agent_comms.registry.registry_document import ThreadRows
 
-from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch

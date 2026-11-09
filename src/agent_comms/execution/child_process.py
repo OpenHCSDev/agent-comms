@@ -16,17 +16,30 @@ import os
 import pwd
 import re
 import select
-import signal
 import shutil
+import signal
 import stat
 import subprocess
 import sys
 import termios
 import threading
 import time
-from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
-from concurrent.futures import Future, ProcessPoolExecutor, wait
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from collections.abc import (
+    Callable,
+    Generator,
+    Iterable,
+    Iterator,
+    Mapping,
+)
+from concurrent.futures import (
+    Future,
+    ProcessPoolExecutor,
+    wait,
+)
 from contextlib import (
     AbstractContextManager,
     ExitStack,
@@ -37,26 +50,30 @@ from contextlib import (
 )
 from contextvars import copy_context
 from dataclasses import dataclass
-from functools import cache, cached_property, partial
+from functools import (
+    cache,
+    cached_property,
+    partial,
+)
 from io import BufferedReader
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import IO, TYPE_CHECKING, Annotated, Any, BinaryIO, ClassVar, NoReturn, Self
-
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import (
-    DisclosedRecord,
-    FieldCodec,
-    FieldDirective,
-    Id128,
-    NullMember,
-    RecordMember,
-    SubclassUnion,
-    WireRequired,
+from typing import (
+    Annotated,
+    Any,
+    ClassVar,
+    IO,
+    NoReturn,
+    Self,
 )
-from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
-from .native_build_inputs import (
+
+from ..errors import RelationViolationError
+from ..launch_runtime import (
+    INHERITED_ENVIRONMENT,
+    LaunchRuntime,
+    RestoredRuntime,
+)
+from ..native_build_inputs import (
     AsyncStdioOptions,
     ChildStdio,
     ConfiguredChildStdio,
@@ -66,22 +83,26 @@ from .native_build_inputs import (
     GitOpening,
     StdioOptions,
 )
-from .nominal.sealed import Sealed
-from .systemd_unit import AgentsSlice, SystemdUnit
-
-if TYPE_CHECKING:
-    from .registration_change import RegistrationChange, UpdatedRegistration
-    from .registry.thread_identity import (
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
+    DisclosedRecord,
+    FieldCodec,
+    FieldDirective,
+    Id128,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireRequired,
+)
+from ..nominal.sealed import Sealed
+from ..registry.thread_identity import (
     ThreadIncarnation,
     ThreadRole,
 )
-    from .registry.thread_presentation import ThreadOwnerBinding
-    from .registry.thread_presentation import ThreadPresentation
-    from .registry.thread_status import (
-    ActiveThreadPresence,
-    ThreadStatus,
+from ..systemd_unit import (
+    AgentsSlice,
+    SystemdUnit,
 )
-    from .execution.turn_lease import ActiveTurn
 
 STOP_GRACE_SECONDS = 2.0
 
@@ -155,6 +176,7 @@ class ResidentMemory(ProcfsRecord):
             except (FileNotFoundError, ProcessLookupError):
                 continue
 
+
 class IdentityMismatchError(ProcessLookupError):
     """A recorded process incarnation is absent or has been replaced."""
 
@@ -171,6 +193,61 @@ class ChildRetirementCancelled(asyncio.CancelledError, ChildRetirementError):
     """Preserve cancellation and an independently failed retirement acknowledgement."""
 
 
+class ProcessSighting[Status](ABC):
+    """A thread's live presence, answering for the process state its owner has."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def heartbeat_seen(self, last_seen: float) -> Status:
+        """The presence when no process is recorded: the heartbeat is the evidence."""
+
+    @abstractmethod
+    def process_seen(self, process: ProcessState) -> Status:
+        """The presence when a process is recorded for it."""
+
+
+class ProcessFence[Status](ABC):
+    """A stored stop, answering for whether a process still binds it."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def unbound(self) -> Status:
+        """The stop when no process binds it."""
+
+    @abstractmethod
+    def fenced(self) -> Status:
+        """The stop while its process still binds it."""
+
+
+class NativeBinding[Presentation](ABC):
+    """A registry lease that presents its thread natively once a process holds it."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def native_presentation(self, ordinary: Presentation) -> Presentation: ...
+
+
+class ProcessRestart[Change](ABC):
+    """A registration change over a prior incarnation, kept or restarted by its processes."""
+
+    __slots__ = ()
+
+    @property
+    @abstractmethod
+    def previous_incarnation(self) -> ThreadIncarnation: ...
+
+    @abstractmethod
+    def kept(self) -> Change:
+        """The change as requested: no process restarts it."""
+
+    @abstractmethod
+    def restarted(self) -> Change:
+        """The change once a process replaces the prior incarnation's."""
+
+
 class ProcessState(SubclassUnion, affix=""):
     """An exact recorded process or a worker which has never started."""
 
@@ -185,19 +262,19 @@ class ProcessState(SubclassUnion, affix=""):
     def conflicts_with(self, previous: ProcessState) -> bool: ...
 
     @abstractmethod
-    def registration_change(
-        self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
-    ) -> RegistrationChange: ...
+    def registration_change[Change](
+        self, previous: ProcessState, change: ProcessRestart[Change], incarnation: ThreadIncarnation,
+    ) -> Change: ...
 
     @abstractmethod
-    def restarted_registration(
-        self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
-    ) -> RegistrationChange: ...
+    def restarted_registration[Change](
+        self, change: ProcessRestart[Change], incarnation: ThreadIncarnation,
+    ) -> Change: ...
 
     @abstractmethod
-    def native_presentation(
-        self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
-    ) -> ThreadPresentation: ...
+    def native_presentation[Presentation](
+        self, ordinary: Presentation, binding: NativeBinding[Presentation],
+    ) -> Presentation: ...
 
     @abstractmethod
     def applied(self, previous: ProcessState) -> ProcessState: ...
@@ -212,16 +289,14 @@ class ProcessState(SubclassUnion, affix=""):
     def alive(self) -> bool: ...
 
     @abstractmethod
-    def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus: ...
+    def thread_status[Status](self, presence: ProcessSighting[Status], last_seen: float) -> Status: ...
 
     @abstractmethod
-    def stopped_seen(self, stopped: ThreadStatus) -> ThreadStatus:
+    def stopped_seen[Status](self, stopped: ProcessFence[Status]) -> Status:
         """A stored stop with no process is stopped; one still bound is a fence."""
 
     @abstractmethod
     def runs_here(self) -> bool: ...
-    @abstractmethod
-    def owns_turn(self, turn: ActiveTurn) -> bool: ...
 
     @abstractmethod
     def signal(self, signum: int) -> None: ...
@@ -248,19 +323,19 @@ class NoProcess(NullMember, ProcessState):
     def conflicts_with(self, previous: ProcessState) -> bool:
         return False
 
-    def registration_change(
-        self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
-    ) -> RegistrationChange:
-        return change
+    def registration_change[Change](
+        self, previous: ProcessState, change: ProcessRestart[Change], incarnation: ThreadIncarnation,
+    ) -> Change:
+        return change.kept()
 
-    def restarted_registration(
-        self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
-    ) -> RegistrationChange:
-        return change
+    def restarted_registration[Change](
+        self, change: ProcessRestart[Change], incarnation: ThreadIncarnation,
+    ) -> Change:
+        return change.kept()
 
-    def native_presentation(
-        self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
-    ) -> ThreadPresentation:
+    def native_presentation[Presentation](
+        self, ordinary: Presentation, binding: NativeBinding[Presentation],
+    ) -> Presentation:
         return ordinary
 
     def applied(self, previous: ProcessState) -> ProcessState:
@@ -275,16 +350,13 @@ class NoProcess(NullMember, ProcessState):
     def alive(self) -> bool:
         return False
 
-    def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus:
+    def thread_status[Status](self, presence: ProcessSighting[Status], last_seen: float) -> Status:
         return presence.heartbeat_seen(last_seen)
 
-    def stopped_seen(self, stopped: ThreadStatus) -> ThreadStatus:
-        return stopped
+    def stopped_seen[Status](self, stopped: ProcessFence[Status]) -> Status:
+        return stopped.unbound()
 
     def runs_here(self) -> bool:
-        return False
-
-    def owns_turn(self, turn: ActiveTurn) -> bool:
         return False
 
     def signal(self, signum: int) -> None:
@@ -350,9 +422,9 @@ class ProcessIdentity(RecordMember, ProcessState):
     def offline(self) -> bool:
         return not self.alive()
 
-    def native_presentation(
-        self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
-    ) -> ThreadPresentation:
+    def native_presentation[Presentation](
+        self, ordinary: Presentation, binding: NativeBinding[Presentation],
+    ) -> Presentation:
         return binding.native_presentation(ordinary)
 
     def applied(self, previous: ProcessState) -> ProcessState:
@@ -385,9 +457,6 @@ class ProcessIdentity(RecordMember, ProcessState):
 
     def runs_here(self) -> bool:
         return os.getpid() == self.pid
-
-    def owns_turn(self, turn: ActiveTurn) -> bool:
-        return turn.owner == self
 
     def signal(self, signum: int) -> None:
         Platform.current().send(self, signum)
@@ -426,21 +495,21 @@ class ProcessIdentity(RecordMember, ProcessState):
         release()
         return ()
 
-    def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus:
+    def thread_status[Status](self, presence: ProcessSighting[Status], last_seen: float) -> Status:
         return presence.process_seen(self)
 
-    def stopped_seen(self, stopped: ThreadStatus) -> ThreadStatus:
+    def stopped_seen[Status](self, stopped: ProcessFence[Status]) -> Status:
         return stopped.fenced()
 
-    def registration_change(
-        self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
-    ) -> RegistrationChange:
+    def registration_change[Change](
+        self, previous: ProcessState, change: ProcessRestart[Change], incarnation: ThreadIncarnation,
+    ) -> Change:
         return previous.restarted_registration(change, incarnation)
 
-    def restarted_registration(
-        self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
-    ) -> RegistrationChange:
-        return change.restarted() if incarnation != change.previous.incarnation else change
+    def restarted_registration[Change](
+        self, change: ProcessRestart[Change], incarnation: ThreadIncarnation,
+    ) -> Change:
+        return change.restarted() if incarnation != change.previous_incarnation else change.kept()
 
     def members(self, platform: Platform) -> tuple[ProcessIdentity, ...]:
         return ()  # A stored, exited identity cannot grant group ownership.
@@ -532,6 +601,7 @@ class PidfdHandles:
         if function(pidfd, sig, None, 0) < 0:
             code = ctypes.get_errno()
             raise OSError(code, os.strerror(code))
+
 
 class Platform(DeclaredFamily, affix="Platform"):
     store_lock_interval = 0.025
@@ -2068,12 +2138,6 @@ class AttachedChild(ChildProcess):
         self.send(data)
         await self.drain()
 
-    async def send_fenced(self, data: bytes, boundary, *, measurements) -> None:
-        """Keep the independent raw writer on this child's original input."""
-        from .native_prompt_send import send_fenced_prompt
-
-        await send_fenced_prompt(self.stdin, data, boundary, measurements=measurements)
-
     @property
     def returncode(self) -> int | None:
         return self.process.returncode
@@ -2691,7 +2755,7 @@ class ChildCommand(DeclaredFamily, affix="Command"):
         return (
             str(LaunchRuntime.running().interpreter),
             "-c",
-            "from agent_comms.child_process import ChildCommand; ChildCommand.main()",
+            "from agent_comms.execution.child_process import ChildCommand; ChildCommand.main()",
             json.dumps(FieldCodec.encode(self)),
         )
 

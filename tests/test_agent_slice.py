@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import SystemdUserManager
+from agent_comms.execution.child_process import SystemdUserManager
 from agent_comms.systemd_unit import AgentsSlice
 
 

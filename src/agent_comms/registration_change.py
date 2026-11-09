@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
+from .execution.child_process import ProcessRestart
 from .errors import RelationViolationError
 from .coordination.session import CoordinationSession
 from .planning.goals import (
@@ -19,6 +20,7 @@ from .planning.goals import (
     NoGoal,
 )
 from .participant_store import ParticipantStore
+from .registry.thread_identity import ThreadIncarnation
 from .registry.thread_status import ThreadStatus
 from .registry.threads import Thread
 
@@ -79,9 +81,16 @@ class InitialRegistration(RegistrationChange):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class UpdatedRegistration(RegistrationChange):
+class UpdatedRegistration(RegistrationChange, ProcessRestart[RegistrationChange]):
     previous: Thread
     previous_status: ThreadStatus
+
+    @property
+    def previous_incarnation(self) -> ThreadIncarnation:
+        return self.previous.incarnation
+
+    def kept(self) -> RegistrationChange:
+        return self
 
     def declared(self, requested: Thread) -> RegistrationChange:
         """Decide whether to keep or claim execution against the locked prior owner."""

@@ -29,7 +29,7 @@ from .registry.threads import NativeThread, Thread
 
 if TYPE_CHECKING:
     from .transport.runtime_request import RuntimeRequest
-    from .child_process import ProcessIdentity
+    from .execution.child_process import ProcessIdentity
     from .comms import Comms
     from .registry.registry_document import RegistryEntry
 

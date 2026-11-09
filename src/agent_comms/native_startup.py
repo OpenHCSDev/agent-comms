@@ -7,7 +7,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .child_process import NoProcess, ProcessState
+from .execution.child_process import (
+    NoProcess,
+    ProcessState,
+)
 from .publication_measurements import PublicationMeasurements
 from .nominal.field_codec import boundary_decoder
 

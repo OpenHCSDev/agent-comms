@@ -15,7 +15,7 @@ import pytest
 
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.context_store import UNREAD_CONTEXT
 from conftest import accept_initial

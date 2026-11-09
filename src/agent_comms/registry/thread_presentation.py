@@ -20,7 +20,10 @@ from typing import (
 
 import agent_comms.registry.thread_presentation as thread_presentation
 
-from ..child_process import ProcessIdentity
+from ..execution.child_process import (
+    NativeBinding,
+    ProcessIdentity,
+)
 from ..coordination.errors import StaleRevision
 from ..coordination.work import CoordinationWork
 from ..errors import (
@@ -250,7 +253,9 @@ class OtherRouteThread(ThreadPresentationStatus):
         return ThreadPresentation(title, "↗", RouteChangedError.reader_sentence, status=self)
 
 
-class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
+class ThreadOwnerBinding(
+    DeclaredFamily, NativeBinding["ThreadPresentation"], affix="ThreadOwnerBinding",
+):
     """A projection of the registry lease, never an alternative owner store."""
 
     def select_read[Result](

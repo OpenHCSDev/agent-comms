@@ -12,7 +12,10 @@ from acp.schema import TextContentBlock
 from agent_comms.acp_extension import (
     GoalSnapshotReply, QueuePromptRequest, TurnChangedUpdate, UpdateMetadata, encode_request,
 )
-from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
 from agent_comms.messaging.bus_read import (
     BusRead,
     OwnerScopedRead,

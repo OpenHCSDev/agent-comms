@@ -15,7 +15,10 @@ from agent_comms.nominal.field_codec import TurnId
 from agent_comms.registry.threads import ParkedThreadWorkState, NativeThread
 
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
-from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
 from agent_comms.bus import Bus
 from agent_comms.recorded_bus import RecordedBusIdentity
 from bus_record_fixture import prepare_native_comms

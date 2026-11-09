@@ -22,7 +22,7 @@ from typing import ClassVar, cast
 
 from typing_extensions import TypeForm
 
-from agent_comms.child_process import Platform
+from ..execution.child_process import Platform
 from agent_comms.native_build_inputs import GitLaunch
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.installer.runtime_wire import CrossesRuntimes

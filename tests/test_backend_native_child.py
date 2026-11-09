@@ -4,7 +4,10 @@ import asyncio
 
 import pytest
 
-from agent_comms.child_process import ChildRetirementCancelled, ChildRetirementError
+from agent_comms.execution.child_process import (
+    ChildRetirementCancelled,
+    ChildRetirementError,
+)
 
 
 async def test_resource_release_failure_retains_exact_native_child(tmp_path, native_runtime_package):

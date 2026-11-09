@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.child_process import ResidentManager
+from ..execution.child_process import ResidentManager
 from agent_comms.nominal.field_codec import FieldCodec, Id128
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.refusals import UpgradeRefused

@@ -25,7 +25,7 @@ from aiohttp import WSCloseCode, WSMsgType, web
 from yarl import URL
 
 from .agent_inbox import NoWait, TakenInputPosition, TakenInputStart
-from .child_process import ProcessIdentity
+from .execution.child_process import ProcessIdentity
 from .cli_bridges.claude_transcript import (
     WATCH_DEFERRED, WATCH_REPORT, WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines, ReceivesWatchReports,
     ReconnectUrl, ReportedLedger, WatchReport,

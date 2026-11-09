@@ -15,7 +15,7 @@ from typing import ClassVar, TextIO
 
 from agent_comms_hooks.process_claim import ClaimHeldError, ProcessSingleton
 
-from .child_process import ProcessIdentity
+from .execution.child_process import ProcessIdentity
 from .launch_runtime import LaunchRuntime
 from .storage.store_files import SourceTier
 

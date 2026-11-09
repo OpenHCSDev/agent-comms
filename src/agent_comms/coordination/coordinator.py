@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, ClassVar, Final, Self, TypeVar
 
 from ..assignment_store import AssignmentStore
 from ..attempt_store import AttemptStore
-from ..child_process import join_retirement
+from ..execution.child_process import join_retirement
 from .work import CoordinationWork
 from .session import (
     CoordinationSession,

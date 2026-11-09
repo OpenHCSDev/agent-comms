@@ -13,7 +13,10 @@ import pytest
 from agent_comms.bus import Bus, ClaimRecord, KeyedPrivateRecord, PublicRecord, RecordBuilder
 from agent_comms.bus_publication import HumanOrigin
 from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,

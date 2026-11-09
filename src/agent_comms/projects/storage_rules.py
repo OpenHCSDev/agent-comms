@@ -30,7 +30,7 @@ from .checkouts import (
 )
 from .git_errors import GitCommandError
 from .repo import Repo
-from ..child_process import ResidentMemory
+from ..execution.child_process import ResidentMemory
 from ..errors import TodoError
 from ..nominal.declared_family import DeclaredFamily
 from ..nominal.field_codec import (

@@ -14,7 +14,7 @@ from acp.schema import (ConfigOptionUpdate, SessionConfigOptionSelect,
 
 from .execution.turn_inbox import UseSettings
 from .bus import Bus
-from .child_process import join_retirement
+from .execution.child_process import join_retirement
 from .config_options import (CatalogConfigOption,
                              ConfigOptions, InvalidConfigChoice)
 from .coordination.coordinator import Coordination

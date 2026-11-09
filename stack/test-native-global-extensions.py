@@ -63,7 +63,7 @@ def main(fixture: Path):
         "PI_OFFLINE": "1", "NODE_DISABLE_COMPILE_CACHE": "1",
     }
     environment.update(RestartEnvironment(native_config=agent, agent_directory=agent).encode_native())
-    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.execution.child_process import ProcessIdentity
     from agent_comms.registry.threads import Thread
 
     comms = wire(root / "wire")

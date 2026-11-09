@@ -14,7 +14,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
-from ..child_process import ProcessIdentity, ResidentManager
+from ..execution.child_process import (
+    ProcessIdentity,
+    ResidentManager,
+)
 from ..systemd_unit import SystemdUnit
 from ..nominal.declared_family import DeclaredFamily
 from ..nominal.field_codec import PathText

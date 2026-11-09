@@ -14,7 +14,7 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar, Self
 
-from ..child_process import NoProcess
+from ..execution.child_process import NoProcess
 from ..coordination.database import CoordinationStore, ReadableStore
 from ..coordination.errors import StaleFence
 from ..errors import RelationViolationError

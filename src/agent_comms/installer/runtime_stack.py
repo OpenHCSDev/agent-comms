@@ -12,7 +12,7 @@ import tempfile
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
-from agent_comms.child_process import ResidentManager
+from ..execution.child_process import ResidentManager
 from agent_comms.build_artifact import BuildArtifact
 from agent_comms.installer.building_runtime import BuildingRuntime
 from agent_comms.installer.carry import STEPS

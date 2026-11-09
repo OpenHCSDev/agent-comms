@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.coordination.response import LiveResponseOwner
 

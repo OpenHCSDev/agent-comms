@@ -18,7 +18,7 @@ from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, Self, get_args, get_origin
 
 from agent_comms_hooks.watch import SessionFailure
-from agent_comms.child_process import ProcessIdentity
+from ..execution.child_process import ProcessIdentity
 from agent_comms.fd_readiness import ready
 from agent_comms.coordination.errors import CoordinationError
 from agent_comms.nominal.declared_family import DeclaredFamily

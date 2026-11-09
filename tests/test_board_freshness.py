@@ -23,7 +23,10 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.task_attachments.team_pings import TeamUpdateStore
 from pathlib import Path
 
-from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
 from agent_comms.team_frame_file import TeamPlanFile
 from agent_comms.team_heartbeat import TeamBoardRead, TeamHeartbeat, TeamObservation
 from agent_comms.team_hud import CodexUsage, TeamFrame, TeamPlan, UnreadableUsage

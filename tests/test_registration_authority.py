@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from test_locked_store import RegistryWithConcurrentDecoder, _hold_lock, event, process
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError

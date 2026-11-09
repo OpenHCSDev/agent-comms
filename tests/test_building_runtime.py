@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.installer.building_runtime import BuildingRuntime
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.installer.runtime_retention import RuntimeRetention

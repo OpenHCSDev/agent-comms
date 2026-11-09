@@ -25,7 +25,7 @@ from typing import (
 from agent_comms_hooks.shell_commands import ShellCommand
 
 from ..change_report import CitationProject
-from ..child_process import (
+from ..execution.child_process import (
     BoundedRun,
     CheckPrinted,
     ChildOutcome,

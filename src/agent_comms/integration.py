@@ -17,7 +17,11 @@ from _pytest.config import get_config
 
 from .active_route import resolve_comms_route
 from .build_identity import RepositoryCommit
-from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
+from .execution.child_process import (
+    STOP_GRACE_SECONDS,
+    ResidentManager,
+    SpawnedProcess,
+)
 from .planning.order_words import VerdictReason
 from .planning.orders import (
     CarriedHeadVerdict,

@@ -8,7 +8,7 @@ import os
 import pytest
 from conftest import publish_initial
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord, TurnId

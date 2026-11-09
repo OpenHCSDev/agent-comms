@@ -17,7 +17,10 @@ from sqlite3 import Connection
 from typing import Annotated, ClassVar
 
 from .activity import ActivityState
-from .child_process import ProcessIdentity, ResidentMemory
+from .execution.child_process import (
+    ProcessIdentity,
+    ResidentMemory,
+)
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import RoomTicket
 from .storage.locked_store import PublishedProperty

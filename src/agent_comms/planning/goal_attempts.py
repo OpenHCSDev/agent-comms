@@ -42,7 +42,7 @@ from ..attempt_resolution import (
     UnverifiedLaunchRetired,
     WorkDecision,
 )
-from ..child_process import Platform
+from ..execution.child_process import Platform
 from .goal_attempt_identity import (
     FailureNotObserved,
     GoalAttemptIdentity,

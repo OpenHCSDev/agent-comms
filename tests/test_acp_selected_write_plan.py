@@ -24,7 +24,7 @@ from agent_comms.acp_extension import (
     decode_updates,
     encode_request,
 )
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import wire
 from agent_comms.launch_root import LaunchRoot

@@ -27,7 +27,10 @@ from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.session_file import RegistrySessionLocation
 from functools import partial
 from native_backend_fixture import native_backend_fixture
-from agent_comms.child_process import ProcessIdentity, SpawnedProcess
+from agent_comms.execution.child_process import (
+    ProcessIdentity,
+    SpawnedProcess,
+)
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import RecoveryBlocked
 from agent_comms.coordination.tables.attempts import ReplayFact

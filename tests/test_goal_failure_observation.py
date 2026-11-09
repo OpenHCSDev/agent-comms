@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.errors import StaleAttemptError, UnresolvedAttemptError
 from agent_comms.planning.goal_attempts import (
     AttemptRecord,

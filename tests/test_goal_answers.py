@@ -11,7 +11,7 @@ from functools import partial
 import pytest
 
 from agent_comms import agent_events as events
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.coordination.errors import Refused
 from agent_comms.owner_protocol import OwnerFailure

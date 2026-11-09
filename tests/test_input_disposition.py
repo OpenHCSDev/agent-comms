@@ -109,7 +109,7 @@ def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:
 def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path: Path) -> None:
     import os
 
-    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.execution.child_process import ProcessIdentity
     from agent_comms.comms import wire
 
     comms = wire(tmp_path)

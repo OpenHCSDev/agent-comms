@@ -18,9 +18,17 @@ from queue import Queue
 
 import pytest
 
-from agent_comms.child_process import (
-    AsyncWork, ChildRetirementFailed, GitChildPermission, GitChildren, ObservedProcess,
-    OwnedGitOpening, ReadWork, SpawnedProcess, SynchronousProcess, join_retirement,
+from agent_comms.execution.child_process import (
+    AsyncWork,
+    ChildRetirementFailed,
+    GitChildPermission,
+    GitChildren,
+    ObservedProcess,
+    OwnedGitOpening,
+    ReadWork,
+    SpawnedProcess,
+    SynchronousProcess,
+    join_retirement,
 )
 from agent_comms.native_build_inputs import (
     ConfiguredChildStdio, DetachedChildStdio, GitAcquisitionCancelled, GitLaunch,

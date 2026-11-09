@@ -56,7 +56,7 @@ from ..response_policy import (
 
 if TYPE_CHECKING:
     from .threads import Thread
-    from ..child_process import ProcessIdentity
+    from ..execution.child_process import ProcessIdentity
     from ..messages import Message
     from ..messaging.read_ledger import (
         ReadDocument,

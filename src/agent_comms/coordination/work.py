@@ -4,7 +4,7 @@ from collections.abc import Callable
 from contextvars import Context
 from functools import partial
 
-from ..child_process import AsyncWork
+from ..execution.child_process import AsyncWork
 from ..storage.maintenance_barrier import MaintenanceHolder
 from ..native_build_inputs import GitLaunch
 from ..storage.store_files import StoreLock

@@ -255,7 +255,7 @@ def manager_socket(tmp_path: Path):
 def user_manager(manager_socket: Path, monkeypatch: pytest.MonkeyPatch):
     """Admit a private manager socket through the real selection boundary. Only the OS
     account record is substituted; no Core manager method is replaced."""
-    from agent_comms.child_process import SystemdUserManager
+    from agent_comms.execution.child_process import SystemdUserManager
 
     account = pwd.getpwuid(os.getuid())
     monkeypatch.setattr(pwd, "getpwuid", lambda uid: pwd.struct_passwd(

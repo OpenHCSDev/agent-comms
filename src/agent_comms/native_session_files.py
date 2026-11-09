@@ -14,7 +14,10 @@ from functools import partial
 from pathlib import Path
 from typing import Self
 
-from agent_comms.child_process import Platform, ProcessIdentity
+from .execution.child_process import (
+    Platform,
+    ProcessIdentity,
+)
 from agent_comms.storage.locked_store import DurableFile, PatternFile
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.participant_identity import ParticipantIdentity

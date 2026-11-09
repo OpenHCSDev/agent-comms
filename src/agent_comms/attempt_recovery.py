@@ -6,7 +6,7 @@ from agent_comms.coordination.response import PublicationAppendDispatches
 
 
 from agent_comms.native_session_files import NativeSessionFiles
-from agent_comms.child_process import ProcessIdentity
+from .execution.child_process import ProcessIdentity
 
 from .native_entries import NativeEntry
 from .native_failures import NativePiUnavailable
