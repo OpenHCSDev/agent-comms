@@ -41,7 +41,6 @@ from agent_comms.execution.native_session_files import (
     NativeSessionLocks,
 )
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
-from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.pi_commands import Compact, NativeQuery
 from agent_comms.execution.pi_events import NativePiEvent
 from agent_comms.execution.pi_wire import PiOmitted
@@ -51,6 +50,7 @@ from agent_comms.execution.session_revision import (
     SessionRevision,
     SessionRevisionUnavailable,
 )
+from agent_comms.execution.transcript_sources import NativeTranscript
 from agent_comms.execution.turn_inbox import InputContent
 from agent_comms.installer.native_package import SYSTEM_PROMPT
 from agent_comms.nominal.field_codec import AcpSessionId

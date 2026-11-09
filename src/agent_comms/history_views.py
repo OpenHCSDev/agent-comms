@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.context_segments.retained import RetainedSegment
+from agent_comms.execution.transcript_sources import TranscriptCursor
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.activity_clocks import ChannelActivity
 from agent_comms.messaging.channel_management import ChannelManagement
@@ -55,7 +56,7 @@ from agent_comms.registry.shared_ledger import LedgerDocument
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
 from agent_comms.registry.view_unread import transcript_read_state
-from agent_comms.transcript.transcripts import TranscriptCursor, Transcripts
+from agent_comms.transcript.transcripts import Transcripts
 from agent_comms.transport.tool_result import ToolResult
 
 if TYPE_CHECKING:

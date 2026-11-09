@@ -18,7 +18,7 @@ from agent_comms.coordination.errors import (
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_runtime_input import NativeRuntimeTable
-from agent_comms.execution.transcript_sources import AssignedTranscriptSource
+from agent_comms.execution.transcript_sources import AssignedTranscriptSource, EarlierThan
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.channels import AnyChannel
 from agent_comms.messaging.messages import Message
@@ -41,7 +41,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.activity import StoppedDrainDiagnostic
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.threads import NativeThread
-from agent_comms.transcript.transcripts import EarlierThan, TranscriptRead, TranscriptSourceWindow
+from agent_comms.transcript.transcripts import TranscriptRead, TranscriptSourceWindow
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
 from conftest import accept_initial, publish_initial

@@ -19,6 +19,7 @@ from agent_comms.agent_backend import RuntimeLocation
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.execution.native_entries import NativeEntry
 from agent_comms.execution.native_record_file import SessionCut, record_end, reverse_records
+from agent_comms.execution.transcript_cursor_reads import MarksSourceRead
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.messaging.watched import FileSource
@@ -456,7 +457,12 @@ class TranscriptReadKeys:
         })
 
 
-class TranscriptReadState(RuntimeFile, PublishedSQLiteFile, ThreadOwnedState):
+class TranscriptReadState(
+    RuntimeFile,
+    PublishedSQLiteFile,
+    ThreadOwnedState,
+    MarksSourceRead[SessionCut],
+):
     """Index only replies after read marks, capped from the newest records.
 
     One disposable suffix index owns reply offsets and scan coverage. No worker

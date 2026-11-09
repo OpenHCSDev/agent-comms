@@ -26,9 +26,9 @@ from agent_comms.agent_event_updates import TurnEventConsumer
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import Refused
 from agent_comms.execution.pi_vocabulary import ManualCompactionReason
+from agent_comms.execution.transcript_sources import UnreadTranscriptCursor
 from agent_comms.execution.turn_phase import CompactionPhase, PublishingPhase
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
-from agent_comms.transcript.transcripts import UnreadTranscriptCursor
 
 if TYPE_CHECKING:
     from agent_comms.execution.turn_runner import TurnRunner
