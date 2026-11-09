@@ -568,6 +568,10 @@ class ToolGateState(State):
     def permits_read(self, path: Path) -> bool:
         """Whether this dealt file may open now."""
 
+    def permits_source_read(self) -> bool:
+        """Whether a file outside the deal may be read now."""
+        return False
+
     def started(self, deal: Redeals) -> None:
         """A restart keeps the context it had, and the deal it still answers."""
         return
@@ -584,6 +588,9 @@ class Open(ToolGateState):
         return
 
     def permits_read(self, path: Path) -> bool:
+        return True
+
+    def permits_source_read(self) -> bool:
         return True
 
 
@@ -609,6 +616,9 @@ class Blocked(ToolGateState):
 
     def permits_read(self, path: Path) -> bool:
         return self.cause.permits_read(path)
+
+    def permits_source_read(self) -> bool:
+        return self.cause.permits_source_read()
 
     def context_observed(self, deal: Redeals, usage: ContextUsage) -> None:
         """A refresh passed while the deal is being answered is answered by it: the context
@@ -873,6 +883,10 @@ class Owed(State):
     def state(self) -> ToolGateState:
         return Blocked(self)
 
+    def permits_source_read(self) -> bool:
+        """Code stays closed while something other than the audit is owed."""
+        return False
+
     def nudge(self, number: int) -> str:
         return self.nudges[min(number, len(self.nudges)) - 1].format(number=number)
 
@@ -1021,6 +1035,12 @@ class Unaudited(Owed):
     @property
     def reason(self) -> str:
         return f"Reading is passive; {self.refusal}."
+
+    def permits_source_read(self) -> bool:
+        """Every dealt file is read, and the probes ask for lines of code: reading the code
+        is how they get answered. On 2026-11-09 two sub-agents spent 547k tokens refused,
+        because a fresh session must cite a line it was not allowed to read."""
+        return True
 
 
 @dataclass(frozen=True)
@@ -1244,7 +1264,9 @@ class ToolGate(RuleDeal):
             return
         record = self.current()
         if path not in record.paths:
-            self.state().enforce(self, tool)
+            state = self.state()
+            if not state.permits_source_read():
+                state.enforce(self, tool)
             return
 
         def judged(opened: OpenedReads) -> DocumentChange[OpenedReads, ToolGateState]:
