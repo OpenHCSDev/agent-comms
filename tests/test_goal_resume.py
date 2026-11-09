@@ -11,7 +11,7 @@ import pytest
 
 from agent_comms.transport.tools.served import invoke_tool
 from agent_comms.execution.turn_failure import FailedTurnResolution
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.planning.goal_actions import (

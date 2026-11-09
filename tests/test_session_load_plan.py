@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.thread_presentation import (
     EnsuringSessionLoadPlan,

@@ -25,7 +25,7 @@ from agent_comms.registry.threads import NativeThread
 def chat(comms):
     """ci/docs join the declared tags; PR111 is owned by this actual process."""
     import os
-    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.execution.child_process import ProcessIdentity
     from conftest import declare_test_bus
 
     return declare_test_bus(comms, channels=("ci", "docs"), threads=(

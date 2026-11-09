@@ -23,7 +23,7 @@ from agent_comms.storage.typed_table import (
     TableSchema,
 )
 
-from ..child_process import Platform
+from ..execution.child_process import Platform
 from ..nominal.declared_family import DeclaredFamily
 from ..storage.store_files import DEFAULT_STORE_CONTENTION, StoreContention
 

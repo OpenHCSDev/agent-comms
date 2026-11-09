@@ -23,7 +23,7 @@ from agent_comms.active_route import (
     route_new_bus,
 )
 from agent_comms.bus import Bus
-from agent_comms.child_process import (
+from agent_comms.execution.child_process import (
     NoResidentManager,
     ResidentManager,
     SystemdUserManager,

@@ -38,7 +38,7 @@ from agent_comms.team.standing_rules import (
 )
 from order_scope_fixture import FIX_SCOPE
 from agent_comms.change_report import FileLine
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.team.standing import UnownedWheelSpin
 from agent_comms.team_heartbeat import (
     TeamHeartbeat,

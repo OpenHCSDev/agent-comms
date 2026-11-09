@@ -20,7 +20,7 @@ from typing import Annotated, ClassVar, Literal, Self
 
 from agent_comms_hooks import ToolRefusedError
 
-from ..child_process import ProcessIdentity
+from ..execution.child_process import ProcessIdentity
 from ..coordination.errors import DrainUnavailable
 from .private_path import FileObservation, FileRevision, PrivateFileRole
 from ..nominal.declared_family import DeclaredFamily

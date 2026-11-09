@@ -12,7 +12,7 @@ import pytest
 from agent_comms.owner_connection import NoControllerToken
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.acp import CommsAgent
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import CoordinationReadUnavailable

@@ -29,7 +29,7 @@ from agent_comms.acp_extension import (
 from agent_comms.activity import ActivityState
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyChannel
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.errors import UnregisteredThreadError

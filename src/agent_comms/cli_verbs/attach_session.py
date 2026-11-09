@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from agent_comms.child_process import NoProcess
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.child_process import ProcessState
+from ..execution.child_process import NoProcess
+from ..execution.child_process import ProcessIdentity
+from ..execution.child_process import ProcessState
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import NameArgument
 from agent_comms.cli_commands import SessionAttachedResult

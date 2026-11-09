@@ -20,7 +20,10 @@ from typing import (
 
 import agent_comms.registry.thread_presentation as thread_presentation
 
-from ..child_process import NativeBinding, ProcessIdentity
+from ..execution.child_process import (
+    NativeBinding,
+    ProcessIdentity,
+)
 from ..coordination.errors import StaleRevision
 from ..coordination.work import CoordinationWork
 from ..errors import (

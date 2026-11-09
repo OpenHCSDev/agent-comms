@@ -18,7 +18,10 @@ from typing import (
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
-from .child_process import AsyncWork, ReadWork
+from .execution.child_process import (
+    AsyncWork,
+    ReadWork,
+)
 from .comms import Comms
 from .nominal.served_declaration import ServesDeclaration
 from .transport.progress import WireExportObserver

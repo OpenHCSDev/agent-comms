@@ -14,7 +14,7 @@ import pytest
 
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.registry.thread_identity import UnobservedTools
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.envelope_claim_transitions import (

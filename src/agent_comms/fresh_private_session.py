@@ -6,7 +6,7 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-from agent_comms.child_process import Platform
+from .execution.child_process import Platform
 from .nominal.field_codec import FieldCodec
 from .native_entries import SessionEntry
 from .native_failures import NativePiUnavailable

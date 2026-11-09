@@ -36,7 +36,10 @@ from ..acp_extension import (
     GoalChangedUpdate,
     encode_updates,
 )
-from ..child_process import ProcessIdentity, join_retirement
+from .child_process import (
+    ProcessIdentity,
+    join_retirement,
+)
 from ..comms import Comms
 from ..config_options import ConfigOptions
 from ..input_key import InputKey, InputKeyText

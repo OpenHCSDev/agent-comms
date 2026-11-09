@@ -15,7 +15,10 @@ from typing import ClassVar
 
 from agent_comms.team.standing import PlanIdle, PlanStalled
 
-from .child_process import CountPrinted, NoIntegerPrinted
+from .execution.child_process import (
+    CountPrinted,
+    NoIntegerPrinted,
+)
 from .planning.order_words import PlainText
 from .planning.orders import (
     Todo,

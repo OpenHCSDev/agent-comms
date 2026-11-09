@@ -19,7 +19,7 @@ from .execution.turn_inbox import (
     InputRequest,
     StreamingInputPolicy,
 )
-from .child_process import BoundedRun
+from .execution.child_process import BoundedRun
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .nominal.field_codec import (
     FieldCodec,

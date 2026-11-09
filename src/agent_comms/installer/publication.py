@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Annotated
 
 import agent_comms
-from agent_comms.child_process import ResidentManager
+from ..execution.child_process import ResidentManager
 from agent_comms.connector import LOOPBACK, PORT
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.nominal.field_codec import PathText

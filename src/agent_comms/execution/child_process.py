@@ -16,17 +16,30 @@ import os
 import pwd
 import re
 import select
-import signal
 import shutil
+import signal
 import stat
 import subprocess
 import sys
 import termios
 import threading
 import time
-from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
-from concurrent.futures import Future, ProcessPoolExecutor, wait
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from collections.abc import (
+    Callable,
+    Generator,
+    Iterable,
+    Iterator,
+    Mapping,
+)
+from concurrent.futures import (
+    Future,
+    ProcessPoolExecutor,
+    wait,
+)
 from contextlib import (
     AbstractContextManager,
     ExitStack,
@@ -37,34 +50,30 @@ from contextlib import (
 )
 from contextvars import copy_context
 from dataclasses import dataclass
-from functools import cache, cached_property, partial
+from functools import (
+    cache,
+    cached_property,
+    partial,
+)
 from io import BufferedReader
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import (
-    IO,
     Annotated,
     Any,
-    BinaryIO,
     ClassVar,
+    IO,
     NoReturn,
     Self,
 )
 
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import (
-    DisclosedRecord,
-    FieldCodec,
-    FieldDirective,
-    Id128,
-    NullMember,
-    RecordMember,
-    SubclassUnion,
-    WireRequired,
+from ..errors import RelationViolationError
+from ..launch_runtime import (
+    INHERITED_ENVIRONMENT,
+    LaunchRuntime,
+    RestoredRuntime,
 )
-from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
-from .native_build_inputs import (
+from ..native_build_inputs import (
     AsyncStdioOptions,
     ChildStdio,
     ConfiguredChildStdio,
@@ -74,13 +83,26 @@ from .native_build_inputs import (
     GitOpening,
     StdioOptions,
 )
-from .nominal.sealed import Sealed
-from .registry.thread_identity import (
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import (
+    DisclosedRecord,
+    FieldCodec,
+    FieldDirective,
+    Id128,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireRequired,
+)
+from ..nominal.sealed import Sealed
+from ..registry.thread_identity import (
     ThreadIncarnation,
     ThreadRole,
 )
-from .systemd_unit import AgentsSlice, SystemdUnit
-
+from ..systemd_unit import (
+    AgentsSlice,
+    SystemdUnit,
+)
 
 STOP_GRACE_SECONDS = 2.0
 
@@ -153,6 +175,7 @@ class ResidentMemory(ProcfsRecord):
                 yield from map(int, listing.read_text().split())
             except (FileNotFoundError, ProcessLookupError):
                 continue
+
 
 class IdentityMismatchError(ProcessLookupError):
     """A recorded process incarnation is absent or has been replaced."""
@@ -578,6 +601,7 @@ class PidfdHandles:
         if function(pidfd, sig, None, 0) < 0:
             code = ctypes.get_errno()
             raise OSError(code, os.strerror(code))
+
 
 class Platform(DeclaredFamily, affix="Platform"):
     store_lock_interval = 0.025
@@ -2731,7 +2755,7 @@ class ChildCommand(DeclaredFamily, affix="Command"):
         return (
             str(LaunchRuntime.running().interpreter),
             "-c",
-            "from agent_comms.child_process import ChildCommand; ChildCommand.main()",
+            "from agent_comms.execution.child_process import ChildCommand; ChildCommand.main()",
             json.dumps(FieldCodec.encode(self)),
         )
 

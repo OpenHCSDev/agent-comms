@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
-from ..child_process import Platform
+from ..execution.child_process import Platform
 from ..nominal.declared_family import DeclaredFamily
 from ..errors import RelationViolationError
 from ..nominal.field_codec import NullMember, RecordMember, SubclassUnion

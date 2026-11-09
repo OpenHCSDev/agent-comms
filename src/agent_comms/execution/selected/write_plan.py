@@ -22,7 +22,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from agent_comms.child_process import Platform
+from agent_comms.execution.child_process import Platform
 from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore

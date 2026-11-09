@@ -14,7 +14,7 @@ from packaging.utils import canonicalize_name
 import pytest
 
 from agent_comms.build_artifact import BuildArtifact
-from agent_comms.child_process import Platform
+from agent_comms.execution.child_process import Platform
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands

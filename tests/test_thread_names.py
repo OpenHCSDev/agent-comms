@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.registry.threads import NativeThread

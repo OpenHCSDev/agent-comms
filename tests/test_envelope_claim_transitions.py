@@ -42,7 +42,7 @@ def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence
     from test_todos import thread
 
     _, resource, _ = resources(tmp_path)
-    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.execution.child_process import ProcessIdentity
     from agent_comms.registry.thread_status import RunningThreadStatus
 
     comms.registry.declare(replace(thread("owner", comms.root, 2.0),

@@ -8,7 +8,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from functools import partial
 
-from ..child_process import AsyncWork
+from .child_process import AsyncWork
 from ..comms import Comms
 from ..nominal.declared_family import DeclaredFamily
 from ..watch_phase import WatchPhase

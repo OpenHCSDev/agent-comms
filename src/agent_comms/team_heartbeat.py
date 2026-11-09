@@ -12,7 +12,7 @@ from agent_comms.comms import Comms
 from agent_comms.team_hud import TeamFrame, TeamHud, TeamPlan
 
 from agent_comms.team_hud_records import HudUnavailableGroup
-from agent_comms.child_process import ReadWork
+from .execution.child_process import ReadWork
 from agent_comms.task_attachments.team_pings import (
     AlarmGroup, TeamUpdate, TeamUpdateStore, PublishedFacts, RulePing, TeammatePing,
 )

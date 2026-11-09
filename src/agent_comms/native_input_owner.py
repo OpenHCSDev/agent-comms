@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.nominal.field_codec import GoalId, ThreadLookup
-from .child_process import ProcessIdentity
+from .execution.child_process import ProcessIdentity
 from .coordination.errors import StaleFence
 from .coordination.tables.participants import OwnerGenerations
 from .coordination.coordinator import Coordination

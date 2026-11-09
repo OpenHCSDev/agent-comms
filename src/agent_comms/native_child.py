@@ -10,7 +10,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, NoReturn
 
-from .child_process import AttachedChild, ChildOutcome, join_retirement
+from .execution.child_process import (
+    AttachedChild,
+    ChildOutcome,
+    join_retirement,
+)
 from .native_prompt_send import send_fenced_prompt
 from .nominal.declared_family import DeclaredFamily
 from .launch_runtime import INHERITED_ENVIRONMENT

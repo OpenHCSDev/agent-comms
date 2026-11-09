@@ -8,7 +8,7 @@ import sys
 import pytest
 
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.child_process import BoundedRun
+from agent_comms.execution.child_process import BoundedRun
 from agent_comms.cli import main
 from agent_comms.comms import wire
 from agent_comms.projects.checkouts import Checkout

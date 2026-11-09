@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
-from agent_comms.child_process import ReadWork
+from agent_comms.execution.child_process import ReadWork
 from agent_comms.comms import Comms
 from agent_comms.connector import Connector, ServeVerb
 from agent_comms.connector_store import ConnectorStore

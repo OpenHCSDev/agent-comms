@@ -5,7 +5,7 @@ from conftest import publish_initial
 import json
 from dataclasses import replace
 
-from agent_comms.child_process import NoProcess
+from agent_comms.execution.child_process import NoProcess
 
 import pytest
 

@@ -18,7 +18,10 @@ from agent_comms.execution.turn_inbox import (
     SteerInputPolicy,
     TurnInbox,
 )
-from agent_comms.child_process import BoundedRun, join_retirement
+from agent_comms.execution.child_process import (
+    BoundedRun,
+    join_retirement,
+)
 from agent_comms.acp import SdkSessionConnection
 from agent_comms.comms import wire
 from agent_comms.controller import NO_CONTROLLER, NoController

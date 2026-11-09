@@ -26,7 +26,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
-from .child_process import Platform
+from .execution.child_process import Platform
 from .storage import store_files
 from .coordination.database import CoordinationStore
 from .cohort_schema import AcceptanceFrontier, PrivateCoordinatorSchema

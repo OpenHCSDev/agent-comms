@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 from ..active_route import resolve_comms_route
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
-from ..child_process import (
+from .child_process import (
     Platform,
     ProcessIdentity,
 )

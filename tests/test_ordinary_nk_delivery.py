@@ -9,7 +9,7 @@ import os
 
 
 from agent_comms.channel_targets import ThreadTarget
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from conftest import installed_comms
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.registry.threads import NativeThread

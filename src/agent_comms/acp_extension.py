@@ -27,7 +27,7 @@ from .execution.turn_inbox import (
     TurnInbox,
 )
 from .agent_events import CompactionEvent
-from .child_process import ProcessIdentity
+from .execution.child_process import ProcessIdentity
 from .context_reading import ContextReading
 from .nominal.declared_family import DeclaredFamily
 from .external_transcript import DraftRow

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent_comms.child_process import ObservedProcess, Platform, ProcessIdentity
+from agent_comms.execution.child_process import (
+    ObservedProcess,
+    Platform,
+    ProcessIdentity,
+)
 
 
 class TestWorkerHosts:

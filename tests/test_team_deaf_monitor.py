@@ -9,7 +9,10 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.channel_targets import CommsTag
-from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.task_attachments.team_pings import TeamUpdate

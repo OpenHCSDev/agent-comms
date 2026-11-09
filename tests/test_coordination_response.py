@@ -12,7 +12,7 @@ import pytest
 
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from conftest import accept_initial, publish_initial, responder
 from agent_comms.coordination.database import CoordinationStore

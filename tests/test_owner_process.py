@@ -21,7 +21,10 @@ import pytest
 import agent_comms_hooks
 from agent_comms import native_package
 from agent_comms.execution.turn_failure import FailedTurnResolution
-from agent_comms.child_process import NoProcess, SpawnedProcess
+from agent_comms.execution.child_process import (
+    NoProcess,
+    SpawnedProcess,
+)
 from agent_comms.comms import wire
 from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.coordination.coordinator import Coordination

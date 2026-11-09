@@ -4,7 +4,7 @@ import os
 import time
 from pathlib import Path
 
-from agent_comms.child_process import Platform
+from agent_comms.execution.child_process import Platform
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import (
     GitPhase,

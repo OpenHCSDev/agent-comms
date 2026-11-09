@@ -4,7 +4,7 @@ import os
 import stat
 import sys
 
-from agent_comms.child_process import Platform
+from agent_comms.execution.child_process import Platform
 
 
 def test_android_selects_its_file_and_process_operations(monkeypatch, tmp_path):

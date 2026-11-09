@@ -11,7 +11,7 @@ from typing import Annotated, ClassVar
 
 from agent_comms.nominal import field_codec
 
-from .child_process import ChildResult
+from .execution.child_process import ChildResult
 from .launch_runtime import LaunchRuntime
 from .native_session_reopen import NativeSessionIdentity
 from .pi_helper import PiHelper, PiHelperFailed, SessionHelperRequest

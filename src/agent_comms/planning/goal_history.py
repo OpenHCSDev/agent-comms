@@ -19,7 +19,7 @@ from typing import (
     Self,
 )
 
-from ..child_process import Platform
+from ..execution.child_process import Platform
 from .goal_failure_observation import FailedTurnEvidence
 from .goal_scope import GoalScope
 from .goals import (

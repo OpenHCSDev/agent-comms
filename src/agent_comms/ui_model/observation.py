@@ -51,7 +51,11 @@ from ..messaging.bus_read import (
     OwnerScopedRead,
     UiRead,
 )
-from agent_comms.child_process import HelperStart, SpawnedHelper, join_retirement
+from ..execution.child_process import (
+    HelperStart,
+    SpawnedHelper,
+    join_retirement,
+)
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (

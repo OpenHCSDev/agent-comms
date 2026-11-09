@@ -7,7 +7,10 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from agent_comms.child_process import ProcessIdentity, SpawnedProcess
+from agent_comms.execution.child_process import (
+    ProcessIdentity,
+    SpawnedProcess,
+)
 from agent_comms.installer.runtime_retention import (
     RefusedRetirement,
     RuntimeRetention,

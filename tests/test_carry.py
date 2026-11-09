@@ -57,7 +57,7 @@ from agent_comms.registry.thread_status import RunningThreadStatus
 from conftest import ledger_one_failure_short
 import fixture_git
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.launch_root import LaunchRoot

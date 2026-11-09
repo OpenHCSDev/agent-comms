@@ -17,7 +17,7 @@ from agent_comms.coordination.errors import ContendedRead, CoordinationReadUnava
 from agent_comms.pi_counts import PiCount
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeInfoStore
-from agent_comms.child_process import Platform
+from agent_comms.execution.child_process import Platform
 from agent_comms.storage.store_files import (
     ExclusiveLock,
     StoreLockBusyError,

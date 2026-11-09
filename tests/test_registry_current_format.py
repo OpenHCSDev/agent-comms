@@ -17,7 +17,7 @@ from agent_comms.planning.goal_states import (
 )
 from agent_comms.planning.goals import Goal
 from agent_comms.registry.registration import Registration
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.registry.threads import NativeThread
 
 

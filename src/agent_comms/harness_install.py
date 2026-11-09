@@ -23,7 +23,10 @@ from typing import ClassVar, Self
 import agent_comms_hooks
 from agent_comms_hooks import ClaudeHookProgram
 
-from .child_process import Platform, ResidentManager
+from .execution.child_process import (
+    Platform,
+    ResidentManager,
+)
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import ScratchName

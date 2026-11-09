@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,

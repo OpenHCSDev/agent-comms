@@ -7,7 +7,7 @@ import os
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.owner_connection import OwnerConnection
 from agent_comms.projects.storage_rules import StorageRule
 

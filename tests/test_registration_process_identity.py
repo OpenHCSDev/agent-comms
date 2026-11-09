@@ -7,7 +7,11 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.native_build_inputs import DetachedChildStdio
-from agent_comms.child_process import NoProcess, ProcessIdentity, SpawnedProcess
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+    SpawnedProcess,
+)
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import TurnId

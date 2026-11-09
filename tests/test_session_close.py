@@ -9,7 +9,7 @@ from acp.agent.router import build_agent_router
 from acp.schema import SessionInfoUpdate
 
 from agent_comms.acp import CommsAgent, CommsClient
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.controller import CancelledOutcome, SessionUpdateSink
 from agent_comms.nominal.field_codec import AcpSessionId

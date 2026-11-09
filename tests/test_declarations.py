@@ -13,7 +13,10 @@ import pytest
 
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
-from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
 from agent_comms.comms import wire
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError

@@ -35,7 +35,10 @@ from agent_comms_hooks.process_claim import (
     SharedFlock,
 )
 
-from ..child_process import LockHolder, Platform
+from ..execution.child_process import (
+    LockHolder,
+    Platform,
+)
 from ..coordination.errors import ContendedRead, CoordinationReadUnavailable, StaleRevision
 from ..nominal.declared_family import DeclaredFamily
 from ..errors import RelationViolationError

@@ -18,7 +18,10 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import IdentityMismatchError, ProcessIdentity
+from agent_comms.execution.child_process import (
+    IdentityMismatchError,
+    ProcessIdentity,
+)
 from agent_comms.cli_bridges import claude
 from agent_comms.cli_bridges.monitor import InspectSession, VerifySession
 from agent_comms.cli_bridges.shared import Binding, Serve

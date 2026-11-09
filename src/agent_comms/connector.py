@@ -51,7 +51,13 @@ from .declared_verb import DeclaredVerb
 from .messaging.bus_identity import BusIdentityStore
 from .command import Command
 from .launch_root import started
-from .child_process import GitChildren, HelperStart, OwnedGitOpening, SpawnedHelper, join_retirement
+from .execution.child_process import (
+    GitChildren,
+    HelperStart,
+    OwnedGitOpening,
+    SpawnedHelper,
+    join_retirement,
+)
 from .active_route import CommsRoute, resolve_comms_route
 from .comms import Comms, client_wire, wire
 from .transport.tools.orders import (

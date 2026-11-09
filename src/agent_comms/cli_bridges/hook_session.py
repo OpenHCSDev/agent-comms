@@ -13,7 +13,7 @@ from agent_comms_hooks.watch import SkillText
 from agent_comms_hooks.watch import SessionEndpoint
 from .session_watch import WatchClaim
 from .shared import Serve
-from ..child_process import ProcessIdentity
+from ..execution.child_process import ProcessIdentity
 
 
 @dataclass(frozen=True)

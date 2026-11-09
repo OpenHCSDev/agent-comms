@@ -16,7 +16,7 @@ from functools import partial
 from typing import ClassVar
 
 from .agent_runtime import PublishesTranscript
-from .child_process import Platform
+from .execution.child_process import Platform
 from .comms import Comms
 from .coordination.errors import CoordinationReadUnavailable
 from .runtime_updates import RuntimeUpdate, ThreadOutput

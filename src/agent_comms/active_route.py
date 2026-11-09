@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .bus import Bus
-from .child_process import Platform
+from .execution.child_process import Platform
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, MalformedRecord, PathText, ScratchName

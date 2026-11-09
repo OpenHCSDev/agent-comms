@@ -13,7 +13,7 @@ from collections.abc import Iterator
 import pytest
 
 from agent_comms.activity import ActivityState, ReadyDrainReadiness, StalledDeliveryReadiness
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import InboxActivity, wire
 from agent_comms.cli_bridges.claude_transcript import ReconnectUrl
 from agent_comms.inbox_watch import InboxWatch

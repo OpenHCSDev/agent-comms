@@ -23,7 +23,7 @@ from typing import (
 )
 
 from ..activity import ObservedActivity
-from ..child_process import (
+from .child_process import (
     ProcessIdentity,
     ProcessState,
 )

@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.bus_publication import Delivered
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.cohort_schema import AwarenessClaimGenerations, ClaimBatchAcknowledgements
 from agent_comms.comms import Comms, wire
 from agent_comms.tool_caller import ThreadCaller

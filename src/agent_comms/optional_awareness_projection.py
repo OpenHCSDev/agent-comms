@@ -26,7 +26,7 @@ from agent_comms.coordination.tables.participants import OwnerGenerations
 from agent_comms.coordination.tables.responses import ResponseObligation
 
 from .bus_publication import Delivered
-from .child_process import ProcessIdentity
+from .execution.child_process import ProcessIdentity
 from .cohort_schema import (
     AwarenessClaimGenerations,
     ClaimBatchAcknowledgements,

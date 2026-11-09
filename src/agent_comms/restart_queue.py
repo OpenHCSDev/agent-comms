@@ -24,7 +24,12 @@ from agent_comms_hooks.process_claim import (
 
 
 from .cli_result import ResultShower, TargetEditResult
-from .child_process import OutlivesLauncherLifetime, Platform, ProcessIdentity, SpawnedProcess
+from .execution.child_process import (
+    OutlivesLauncherLifetime,
+    Platform,
+    ProcessIdentity,
+    SpawnedProcess,
+)
 from .comms import Comms, wire
 from .coordination.errors import CoordinationError
 from .coordination.coordinator import Coordination

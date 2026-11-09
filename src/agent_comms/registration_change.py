@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from .child_process import ProcessRestart
+from .execution.child_process import ProcessRestart
 from .errors import RelationViolationError
 from .coordination.session import CoordinationSession
 from .planning.goals import (

@@ -33,7 +33,7 @@ from .turn_inbox import (
     TurnInboxItem,
 )
 from ..bus import Bus
-from ..child_process import join_retirement
+from .child_process import join_retirement
 from ..cohort_schema import AcceptanceFrontier
 from ..comms import Comms
 from ..config_options import ConfigOptions

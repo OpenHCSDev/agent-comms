@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from agent_comms.nominal import field_codec
 
-from .child_process import ProcessIdentity
+from .execution.child_process import ProcessIdentity
 from .pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_wire import PiPayload
 from .pi_payloads import PiModel, UnreportedModel

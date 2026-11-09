@@ -34,7 +34,10 @@ from agent_comms_hooks import process_claim
 from agent_comms.coordination import schema as coordination_schema
 from agent_comms.storage import locked_store, store_files, typed_table
 from agent_comms.nominal import field_codec
-from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
+from agent_comms.execution.child_process import (
+    ForkedProcessPool,
+    SpawnedProcess,
+)
 from agent_comms.launch_runtime import RestoredRuntime
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.nominal.declared_family import DeclaredFamily

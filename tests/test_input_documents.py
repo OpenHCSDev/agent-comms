@@ -193,7 +193,7 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
 def test_original_native_user_receipts_include_group_and_corrected_final_only(tmp_path):
     import os
 
-    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.execution.child_process import ProcessIdentity
     from agent_comms.registry.registration import Registration
 
     registry = Registration(tmp_path / "registry.json")

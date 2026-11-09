@@ -23,7 +23,7 @@ from .execution.turn_inbox import (
     InputRequest,
 )
 from .assignment_states import DeferredAssignment, DeliveredAssignment
-from .child_process import ProcessIdentity
+from .execution.child_process import ProcessIdentity
 from .context_segments.wake import MessageDelivery
 from .controller import NO_CONTROLLER, Controller
 from .coordination.cohort import pending_sealed_assignments
