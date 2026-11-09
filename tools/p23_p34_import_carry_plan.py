@@ -22,6 +22,9 @@ def main() -> None:
     args = parser.parse_args()
     repository = Path.cwd()
     providers = {
+        "agent_comms.acp_extension": ("transport/attachment_scope",),
+        "agent_comms.execution.backend": ("execution/finish_signal",),
+        "agent_comms.pi_native_backend": ("execution/persistent_pi_session",),
         "agent_comms.execution.native_transcript": (
             "execution/native_record_file", "execution/native_records", "execution/transcript_sources"),
         "agent_comms.transcript.external_transcript": (

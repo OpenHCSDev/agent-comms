@@ -29,7 +29,9 @@ from agent_comms.agent_backend import (
     RuntimeLocation,
 )
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.fresh_private_session import create_fresh_private_session
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_failures import NativePiUnavailable
@@ -60,8 +62,6 @@ if TYPE_CHECKING:
     from agent_comms.agent_events import AgentInfo
     from agent_comms.comms import Comms
     from agent_comms.config_options import ConfigOptions
-    from agent_comms.execution.agent_event import AgentEvent
-    from agent_comms.execution.launch_runtime import LaunchRuntime
     from agent_comms.execution.owned_turn import TurnDelivery
     from agent_comms.execution.turn_runner import TurnRunner
     from agent_comms.pi_payloads import StateData

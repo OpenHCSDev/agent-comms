@@ -7,7 +7,9 @@ import pytest
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import InputStartListener, NoInputStartListener
 from agent_comms.errors import TodoError
-from agent_comms.execution.backend import EventFinishSignal, FinishSignal, NoFinishSignal
+from agent_comms.execution.finish_signal import EventFinishSignal
+from agent_comms.execution.finish_signal import FinishSignal
+from agent_comms.execution.finish_signal import NoFinishSignal
 from agent_comms.execution.input_drain import DrainedSession
 from agent_comms.execution.native_child import NoInputForwarder
 from agent_comms.execution.native_session_reopen import NoSessionRetention
