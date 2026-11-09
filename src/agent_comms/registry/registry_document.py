@@ -7,7 +7,7 @@ from agent_comms.registry.presence_reads import PresenceEntry, PresenceSnapshot
 
 
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections import ChainMap
 from collections.abc import (
     Callable,
@@ -185,7 +185,7 @@ class SeveralProjectThreads(TaggedRecordMember, ProjectThreadSelection):
 
 
 class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](
-    TaskRegistry[Thread], NativeOwnerRegistry,
+    TaskRegistry[Thread], NativeOwnerRegistry, ABC,
 ):
     """Presence reads shared by the acquired document and its detached cut."""
 
