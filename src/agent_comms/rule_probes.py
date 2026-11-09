@@ -20,7 +20,7 @@ from typing import ClassVar
 from agent_comms.change_report import CitationProject, FileLine
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.projects.repo import Repo
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.slop import Slop
 from agent_comms.team.package import TeamPackage
 

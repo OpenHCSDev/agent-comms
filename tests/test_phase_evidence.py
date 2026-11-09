@@ -45,7 +45,7 @@ from agent_comms.planning.plan_phases import (
     RostersPhase,
 )
 from agent_comms.projects.repo import Repo
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.work_branches import WorkBranches
 
 git = fixture_git.run

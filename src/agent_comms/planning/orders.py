@@ -103,7 +103,7 @@ from agent_comms.registry.threads import Thread
 from agent_comms.projects.git_errors import FailedGitCommand, SourceReadFailure
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.checkouts import Checkout, CommitFilter, CommitsNaming, EveryCommit, RepositoryReads
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
 from agent_comms.storage.typed_table import CapturedRows, Column, DurableStore, DurableTables, ExpressionIndex, ForeignKey, Generated, Index, NoDelete, NoUpdate, SharedFileTables, StoreRows, TableReference, TextStorage, TypedRow, TypedTable
 from agent_comms.projects.storage_rules import CheckoutAllocation, StorageRule

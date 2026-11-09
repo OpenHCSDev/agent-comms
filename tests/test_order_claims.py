@@ -137,7 +137,7 @@ def test_delivery_report_refuses_a_flat_status_memo():
 
 def test_a_delivery_records_the_repository_its_pull_request_lives_in(held_team):
     """An order in one repo can be delivered by a pull request in another (Core order, Textual PR)."""
-    from agent_comms.repository_name import RepositoryName
+    from agent_comms.projects.repository_name import RepositoryName
 
     ctx = held_team
     comms = ctx.comms

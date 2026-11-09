@@ -40,7 +40,7 @@ from agent_comms.registry.thread_status import (
 )
 from agent_comms.registry.thread_text import ForkedParent, SubagentRole
 from agent_comms.registry.threads import ExternalThread, NativeThread, SubagentThread, Thread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.routing import NoTurnRouting, Routing
 
 if TYPE_CHECKING:

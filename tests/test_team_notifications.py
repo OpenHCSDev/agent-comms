@@ -998,7 +998,7 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
 def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_evidence(notification_bus):
     comms = notification_bus
     from agent_comms.head_review import PullRequestHead
-    from agent_comms.repository_name import RepositoryName
+    from agent_comms.projects.repository_name import RepositoryName
     from agent_comms.team.standing_rules import OrderlessUnreviewedHead
 
     rules = tuple(OrderlessUnreviewedHead(

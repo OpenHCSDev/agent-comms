@@ -25,7 +25,7 @@ from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.thread_creation import RecordedCreationTime
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.shell_effects import AcquireRepositoryStorageEffect
 from agent_comms.tool_denial import StorageDenied
 from cli_command import core_process

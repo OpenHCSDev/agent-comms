@@ -45,7 +45,7 @@ from agent_comms.projects.checkouts import (
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.task_attachments.team_pings import RulePing, TeamUpdate
