@@ -23,3 +23,13 @@ require_ingress still checks attached controller, current root, exact claim, reg
 `geometry-v3.log`/`.exit` record proposal-only geometry and body preservation. They are not native simulation or runtime proof. MRO, original concrete bindings, complete import closure and consumer journeys belong in the existing combined qualification run.
 
 The remaining bootstrap question is checked there: InputPublicationSource binds original concrete generic arguments on the BusReader implementation side. That implementation must never become a dependency of the task bootstrap API. No source-hidden or cold-import success is claimed here.
+
+## Checkpoint and package rebase
+
+This branch saves unfinished artifacts, not product or installation success. The artifacts were authored against friction's pre-package-move snapshot and must not be replayed unchanged after its main rebase.
+
+Freshly fetched main `33af0b93d` declares Bus/BusReader in `messaging/bus.py`, InputOrigin/InputProvenance/HumanInputOrigin in `execution/input_origin.py`, and RegistryPrivacy in `registry/private_registry_guard.py`. InputDispositions still lives in the existing root `input_disposition.py`; its Bus binding correction must name `agent_comms.messaging.bus` on that main.
+
+New declarations from this contribution belong in packages: `input_ingress.py` under `execution/`, and the low `input_publication_read.py` API plus `input_publication_source.py` implementation under `messaging/`. The original user-selection relocation is already under `registry/`. Friction owns the integration rebase and composition; regenerate the file/module identities against that source instead of editing its tree from this checkpoint.
+
+`capture_import_graph.py` runs claude-a's supplied map once and rejects input changing during capture. The retained fixed-source result is 145 + 8 modules. Its full members/edges stay in scratch `import-graph-current.json`; the smaller committed component manifest identifies the input and script. These are module-import leads, not proof of premature name reads or startup success. Use the existing native `promote_guarded_import` for eligible guarded imports and honor its cycle refusal; move the original declaration first rather than reproduce an unsafe hoist with patch_target.

@@ -1,0 +1,12 @@
+2 import cycles (strongly connected components) among 153 modules
+
+145 modules; shortest cycle 2:
+  agent_comms.bus -> agent_comms.messaging.read_selection   (src/agent_comms/bus.py:713)
+  agent_comms.messaging.read_selection -> agent_comms.bus   (src/agent_comms/messaging/read_selection.py:7)
+
+8 modules; shortest cycle 2:
+  agent_comms.input_attempt -> agent_comms.input_origin   (src/agent_comms/input_attempt.py:14)
+  agent_comms.input_origin -> agent_comms.input_attempt   (src/agent_comms/input_origin.py:208)
+Fixed-source component sizes: [145, 8]
+Full member/edge map: /home/ts/wt/comms-toad-selector--P14--agent-comms/.verification/p23-input-origin/import-graph-current.json
+Raw module SCCs are diagnostic leads, not runtime startup verdicts.
