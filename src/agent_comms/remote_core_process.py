@@ -1,10 +1,11 @@
 """Remote reads execute in child interpreters, not under the UI's GIL."""
 
 from concurrent.futures import ProcessPoolExecutor
+from collections.abc import Callable
 from dataclasses import replace
 from functools import cached_property
 import os
-from threading import Lock
+from threading import BoundedSemaphore, Lock
 from typing import ClassVar, cast
 
 from metaclass_registry.mro_dispatch import MroDispatch, handles
@@ -14,6 +15,7 @@ from .launch_runtime import ThreadLaunch
 from .remote_core import RemoteCoreAccess
 from .tool_result import ToolResult
 from .transport.request import ReadRequest, ToolRequest
+from .ui_model.observation import ViewerEnd
 
 
 _remote: RemoteCoreAccess
@@ -40,15 +42,36 @@ class RemoteReadProcess(ProcessPoolExecutor):
     Closing joins accepted reads before releasing their workers.
     """
 
-    def __init__(self, access: RemoteCoreAccess, start: HelperStart) -> None:
-        super().__init__(max_workers=4, mp_context=start.context(),
+    def __init__(self, access: RemoteCoreAccess, start: HelperStart,
+                 max_workers: int = 4) -> None:
+        if max_workers < 2:
+            raise ValueError("Remote reads need a separate observation decoding slot")
+        super().__init__(max_workers=max_workers, mp_context=start.context(),
                          initializer=_initialize_remote, initargs=(access,))
+        # A slow network cannot occupy every interpreter and strand an
+        # already-arrived observation packet behind its own remote reads.
+        self._read_slots = BoundedSemaphore(max_workers - 1)
 
     def read[R: ToolResult](self, request: ReadRequest[R]) -> R:
-        return self.submit(_read_remote, request).result()
+        with self._read_slots:
+            return self.submit(_read_remote, request).result()
+
+    def decode[R](self, decode: Callable[[bytes], R], packet: bytes) -> R:
+        return self.submit(decode, packet).result()
 
     def close(self) -> None:
         self.shutdown(wait=True)
+
+
+class ProcessViewerEnd(ViewerEnd):
+    """Read bytes on the receiving worker; decode their records in a child."""
+
+    def __init__(self, handle: int, process: RemoteReadProcess) -> None:
+        super().__init__(handle)
+        self.process = process
+
+    def recv(self) -> object:
+        return self.process.decode(type(self).decode, self.recv_bytes())
 
 
 class ProcessRemoteCoreAccess(RemoteCoreAccess, MroDispatch):
@@ -84,6 +107,9 @@ class ProcessRemoteCoreAccess(RemoteCoreAccess, MroDispatch):
     @handles(ToolRequest)
     def call_in_place[R: ToolResult](self, request: ToolRequest[R]) -> R:
         return RemoteCoreAccess.call(self, request)
+
+    def viewer_end(self, handle: int) -> ProcessViewerEnd:
+        return ProcessViewerEnd(handle, self.read_process)
 
     def close(self) -> None:
         # An unused executor starts no process, including when closed here.

@@ -1845,7 +1845,12 @@ class EncodedConnection(Connection):
         self.send_bytes(FieldCodec.compact(FieldCodec.encode_document(obj, self.sends)).encode())
 
     def recv(self) -> object:
-        return FieldCodec.decode_document(self.receives, FieldCodec.parse(self.recv_bytes().decode()))
+        return self.decode(self.recv_bytes())
+
+    @classmethod
+    def decode(cls, packet: bytes) -> object:
+        """Decode through the receiving end's own record declaration."""
+        return FieldCodec.decode_document(cls.receives, FieldCodec.parse(packet.decode()))
 
 
 class ServiceEnd(EncodedConnection):
