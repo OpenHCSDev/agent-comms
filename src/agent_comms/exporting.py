@@ -14,14 +14,14 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar
 
 from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.messaging.channels import Channel
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.errors import ExportDestinationExists
+from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message, StoredWireHistory
+from agent_comms.messaging.read_basis import DMDisplayScope
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
-from agent_comms.messaging.read_basis import DMDisplayScope
 from agent_comms.registry.registration import Registration
 from agent_comms.storage.store_files import AtomicFile, ExclusiveAtomicFile
 from agent_comms.tool_result import ToolResult

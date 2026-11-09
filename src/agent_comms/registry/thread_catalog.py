@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from agent_comms.cli_result import ThreadToolCatalogResult
+from agent_comms.cli_verbs.cli_result import ThreadToolCatalogResult
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.registry_store import RegistryStore

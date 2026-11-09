@@ -15,13 +15,15 @@ from pydantic import JsonValue
 
 from agent_comms.acp_extension import CoordinationChangedUpdate
 from agent_comms.channel_management import ListTagEdit, TagEdit
-from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget
-from agent_comms.messaging.channels import Channel, SavedView, ViewMatch, ViewPredicate
 from agent_comms.cli_bridges.history import OfflineHistory
-from agent_comms.cli_command import PreparedTargetAction, TargetActionCommand
-from agent_comms.cli_commands import ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult
-from agent_comms.cli_result import CliResult, TargetEditResult
 from agent_comms.cli_verbs.archive import ArchiveCliCommand
+from agent_comms.cli_verbs.cli_command import PreparedTargetAction, TargetActionCommand
+from agent_comms.cli_verbs.cli_commands import (
+    ThreadArchivedResult,
+    ThreadCreatedResult,
+    ThreadStoppedResult,
+)
+from agent_comms.cli_verbs.cli_result import CliResult, TargetEditResult
 from agent_comms.cli_verbs.delete_view import DeleteViewCliCommand
 from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.cli_verbs.history import HistoryCliCommand
@@ -46,10 +48,12 @@ from agent_comms.host_logs import HostLog, HostLogRead
 from agent_comms.importing import ImportedSessionMetadata, ThreadImported
 from agent_comms.input_origin import HumanInputOrigin
 from agent_comms.message_notification import MessageNotification
+from agent_comms.messaging.bus_identity import BusIdentityStore
+from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget
+from agent_comms.messaging.channels import Channel, SavedView, ViewMatch, ViewPredicate
+from agent_comms.messaging.message_page import MessagePage
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message, NoticeRole
-from agent_comms.messaging.bus_identity import BusIdentityStore
-from agent_comms.messaging.message_page import MessagePage
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     ContextSource,

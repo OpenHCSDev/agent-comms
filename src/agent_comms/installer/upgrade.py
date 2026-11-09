@@ -39,9 +39,9 @@ from agent_comms.active_route import (
 )
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
-from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import BusReadBack, StoreDifference
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_commands import BusReadBack, StoreDifference
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.cli_verbs.planned_reconcile import PlannedReconcileCliCommand
 from agent_comms.cli_verbs.read_back import ReadBackCliCommand
 from agent_comms.cli_verbs.reconcile_stores import ReconcileStoresCliCommand

@@ -11,7 +11,7 @@ from urllib.request import (
     urlopen,
 )
 
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.execution.turn_context import ContextSpan
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec

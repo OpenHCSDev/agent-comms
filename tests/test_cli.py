@@ -11,16 +11,10 @@ from agent_comms.activity import ActivityState
 from agent_comms.bus import Bus
 from agent_comms.catalog_document import NoCatalog
 from agent_comms.channel_management import ArchiveThreadsTagDisposition, TagDisposition
-from agent_comms.messaging.channel_targets import (
-    ChannelTarget,
-    CommandTarget,
-    NoChannel,
-    PerTargetChannels,
-    ProjectTarget,
-)
 from agent_comms.cli import CliInvocation, build_parser
 from agent_comms.cli_bridges.shared import Send
-from agent_comms.cli_command import (
+from agent_comms.cli_verbs.archive import ArchiveCliCommand
+from agent_comms.cli_verbs.cli_command import (
     CliCommand,
     CommandSelectionChanged,
     TargetBatchResult,
@@ -28,8 +22,7 @@ from agent_comms.cli_command import (
     TargetEdit,
     TargetFailed,
 )
-from agent_comms.cli_commands import ThreadCreatedResult, ThreadStoppedResult
-from agent_comms.cli_verbs.archive import ArchiveCliCommand
+from agent_comms.cli_verbs.cli_commands import ThreadCreatedResult, ThreadStoppedResult
 from agent_comms.cli_verbs.delete_tag import DeleteTagCliCommand
 from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.cli_verbs.new import NewThreadCliCommand
@@ -53,6 +46,13 @@ from agent_comms.execution.turn_lease import (
     StoredTurnRecord,
 )
 from agent_comms.lifecycle_capability import Successful
+from agent_comms.messaging.channel_targets import (
+    ChannelTarget,
+    CommandTarget,
+    NoChannel,
+    PerTargetChannels,
+    ProjectTarget,
+)
 from agent_comms.messaging.messages import NoticeRole, SendableRole
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId, compile_decoder
 from agent_comms.pi_vocabulary import ServiceTier

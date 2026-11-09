@@ -5,10 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.messaging.channel_targets import CommsTag
 from agent_comms.cli import build_parser
 from agent_comms.cli_bridges.shared import UnobservedBridge
-from agent_comms.cli_commands import BusReadBack
+from agent_comms.cli_verbs.cli_commands import BusReadBack
 from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.errors import RelationViolationError, ThreadNotStoppedError
 from agent_comms.host_services import RestartedService
@@ -47,6 +46,7 @@ from agent_comms.installer.upgrade import (
     upgrade,
 )
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
+from agent_comms.messaging.channel_targets import CommsTag
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.git_errors import GitCommandError
@@ -335,7 +335,7 @@ def test_terminal_report_follows_real_tree_cleanup_and_keeps_original_error(
 def test_a_reported_reconcile_keeps_the_schema_objects_it_rebuilt():
     """A report holds its steps as StepRun and crosses the worker as that declared type, so
     what reconcile-stores rebuilt each store for must live on StepRun itself."""
-    from agent_comms.cli_commands import StoreDifference
+    from agent_comms.cli_verbs.cli_commands import StoreDifference
     from agent_comms.installer.upgrade import CarriedPass
     from agent_comms.storage.typed_table import SQLiteSchemaDifference
     difference = StoreDifference(Path("bus.sqlite3"), SQLiteSchemaDifference("messages", "old", "new"))

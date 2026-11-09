@@ -9,12 +9,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.bus_publication import AgentOrigin
+from agent_comms.cli_verbs.cli_result import TargetEditResult
+from agent_comms.display_order import ChannelSort, ThreadSort
 from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget, Tag
 from agent_comms.messaging.channels import Channel, SavedView
-from agent_comms.cli_result import TargetEditResult
-from agent_comms.display_order import ChannelSort, ThreadSort
-from agent_comms.messaging.messages import InfoKind, MembershipConversationRole, Message
 from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.messages import InfoKind, MembershipConversationRole, Message
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import RecordMember
 from agent_comms.registry.registration import Registration

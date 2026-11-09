@@ -17,7 +17,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Self, TextIO
 
-from agent_comms.cli_result import ResultShower, TargetEditResult
+from agent_comms.cli_verbs.cli_result import ResultShower, TargetEditResult
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import CoordinationError

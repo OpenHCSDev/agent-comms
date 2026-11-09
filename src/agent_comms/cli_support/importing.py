@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from agent_comms.cli_bridges.history import History
-from agent_comms.cli_commands import _tags
 from agent_comms.cli_support.conversation_limits import ConversationLimitsCliCommand
+from agent_comms.cli_verbs.cli_commands import _tags
 from agent_comms.comms import Comms
 from agent_comms.importing import ThreadImported
 from agent_comms.nominal.field_codec import Argument, Normalize

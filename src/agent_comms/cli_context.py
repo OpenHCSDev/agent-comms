@@ -8,14 +8,14 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import (
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_commands import (
     CoreContextInspection,
     CoreSegmentText,
     NativeContextInspection,
     NativeSourceSpans,
 )
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.context_store import LATEST_CONTEXT, ContextManifestCursor
 from agent_comms.coordination.errors import Refused

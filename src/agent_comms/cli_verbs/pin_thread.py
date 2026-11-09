@@ -4,11 +4,11 @@ from dataclasses import dataclass
 from typing import Annotated, Self
 
 from agent_comms.catalog_document import CatalogAccess
-from agent_comms.messaging.channel_targets import SurroundingChannel
-from agent_comms.cli_command import ChannelBound, MultipleTargets, TargetActionCommand
-from agent_comms.cli_commands import ThreadPinnedResult
 from agent_comms.cli_support.named import NamedCliCommand
+from agent_comms.cli_verbs.cli_command import ChannelBound, MultipleTargets, TargetActionCommand
+from agent_comms.cli_verbs.cli_commands import ThreadPinnedResult
 from agent_comms.comms import Comms
+from agent_comms.messaging.channel_targets import SurroundingChannel
 from agent_comms.nominal.field_codec import Argument, TargetBound
 from agent_comms.registry.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread

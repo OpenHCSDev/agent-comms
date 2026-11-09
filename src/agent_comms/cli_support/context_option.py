@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from itertools import dropwhile
 from typing import ClassVar, Self
 
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.cli_verbs.context import ContextCliCommand
 from agent_comms.comms import Comms
 from agent_comms.execution.turn_context import ContextManifest

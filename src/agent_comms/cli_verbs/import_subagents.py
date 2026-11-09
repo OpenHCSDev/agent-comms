@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Annotated
 
 from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
-from agent_comms.cli_commands import SubagentsImportedResult
 from agent_comms.cli_support.importing import ImportingCliCommand
+from agent_comms.cli_verbs.cli_commands import SubagentsImportedResult
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, PathText
 from agent_comms_hooks import SubagentId

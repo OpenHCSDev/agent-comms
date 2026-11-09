@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from agent_comms.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.comms import Comms
 from agent_comms.shared_ledger import LedgerDocument
 

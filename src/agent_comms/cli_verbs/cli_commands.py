@@ -16,9 +16,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms import cli_command
 from agent_comms.activity import ActivityState
-from agent_comms.cli_result import CliResult, TargetEditResult
+from agent_comms.cli_verbs import cli_command
+from agent_comms.cli_verbs.cli_result import CliResult, TargetEditResult
 from agent_comms.comms import Comms
 from agent_comms.execution.child_process import NoProcess, ProcessState
 from agent_comms.execution.owner_lifecycle import OwnerRestartResult
@@ -51,7 +51,6 @@ from agent_comms.planning.orders import Todo
 from agent_comms.presentation import ThreadRecord, ThreadView
 from agent_comms.projects.checkouts import Checkout, CheckoutStart
 from agent_comms.projects.repo import Repo
-from agent_comms.projects.repository_sources import LocalRepositorySource, RepositorySource
 from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.registry.thread_model import ThreadModel
 from agent_comms.registry.threads import Thread
@@ -588,5 +587,3 @@ class RemoveCheckoutOperation(CheckoutOperation):
 class RouteReplacedResult(CliResult):
     root: str
     route: str
-
-

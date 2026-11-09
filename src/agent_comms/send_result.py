@@ -47,7 +47,7 @@ class SendResult:
     def notices(self) -> tuple[str, ...]:
         return self.correction.notices(self.message.message_id)
 
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.nominal.field_codec import FieldCodec
 
 

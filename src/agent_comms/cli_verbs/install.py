@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Annotated, Literal, TextIO
 
 from agent_comms.active_route import CommsRoute, RouteFile, active_route_path
-from agent_comms.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.installer.interpreter_operation import ProcessLauncherPhase
 from agent_comms.installer.launch import InstallRun
 from agent_comms.installer.logs import InstallLogs

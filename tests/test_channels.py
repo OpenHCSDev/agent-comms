@@ -10,17 +10,6 @@ from agent_comms.channel_management import (
     DeleteExclusiveInactiveThreadsTagDisposition,
     DeleteThreadsTagDisposition,
 )
-from agent_comms.messaging.channel_targets import CommandTarget, CommsTag, DeclaredTag
-from agent_comms.messaging.channels import (
-    AllOfMatch,
-    AnyOfMatch,
-    BuiltinChannelView,
-    ChannelMemberIndex,
-    ParticipantsView,
-    RetiredTagChannel,
-    TagChannel,
-    ViewPredicate,
-)
 from agent_comms.comms import wire
 from agent_comms.display_order import (
     ChannelSort,
@@ -33,6 +22,17 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
+)
+from agent_comms.messaging.channel_targets import CommandTarget, CommsTag, DeclaredTag
+from agent_comms.messaging.channels import (
+    AllOfMatch,
+    AnyOfMatch,
+    BuiltinChannelView,
+    ChannelMemberIndex,
+    ParticipantsView,
+    RetiredTagChannel,
+    TagChannel,
+    ViewPredicate,
 )
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.pi_vocabulary import HighThinkingLevel
@@ -235,7 +235,7 @@ def test_tag_removal_preserves_current_records(tmp_path):
 @pytest.mark.asyncio
 async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catalog(tmp_path):
     from agent_comms.channel_management import TagDisposition
-    from agent_comms.cli_command import CliCommand
+    from agent_comms.cli_verbs.cli_command import CliCommand
     from agent_comms.nominal.field_codec import FieldCodec, compile_decoder
     from agent_comms.tool_declaration import NativeRequestTools
     from agent_comms.transport.tools.served import CommsTagsTool

@@ -15,7 +15,7 @@ from nominal_refactor_advisor import audit
 
 import fixture_git
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
-from agent_comms.cli_command import TargetBatchResult
+from agent_comms.cli_verbs.cli_command import TargetBatchResult
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination

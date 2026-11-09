@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.cli_command import TargetActionCommand
-from agent_comms.cli_commands import OwnersRestartedResult, _shell_words
+from agent_comms.cli_verbs.cli_command import TargetActionCommand
+from agent_comms.cli_verbs.cli_commands import OwnersRestartedResult, _shell_words
+from agent_comms.cli_verbs.target_fields import TargetField
 from agent_comms.comms import Comms
 from agent_comms.execution.native_arguments import (
     ConfiguredBinary,
@@ -20,7 +21,6 @@ from agent_comms.nominal.field_codec import (
     WireName,
 )
 from agent_comms.restart_scope import AllOwners, RestartTarget
-from agent_comms.target_fields import TargetField
 
 
 @dataclass(frozen=True, kw_only=True)

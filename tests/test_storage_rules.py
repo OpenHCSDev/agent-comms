@@ -10,7 +10,7 @@ from typing import Annotated
 
 import pytest
 
-from agent_comms.cli_commands import AddCheckoutOperation
+from agent_comms.cli_verbs.cli_commands import AddCheckoutOperation
 from agent_comms.cli_verbs.goal_checkout import GoalCheckoutCliCommand
 from agent_comms.cli_verbs.select_checkout import SelectCheckoutCliCommand
 from agent_comms.comms import Comms, wire
@@ -32,6 +32,7 @@ from agent_comms.projects.checkouts import (
 )
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.repository_sources import LocalRepositorySource
 from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.projects.storage_rules import (
@@ -53,7 +54,6 @@ from agent_comms.registry.thread_storage import (
     UnassignedThreadStorage,
 )
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.shell_effects import (
     CreateCheckoutStorageEffect,
     RemoveCheckoutStorageEffect,
@@ -818,7 +818,7 @@ def test_a_thread_writes_its_own_linked_worktree_without_a_goal_or_order(
 def test_the_read_path_is_a_declared_verb_not_a_clone():
     """`git clone` was refused under every path, so a reader concluded another repository could
     not be read at all; the team project already holds those checkouts and nothing named it."""
-    from agent_comms.cli_command import CliCommand
+    from agent_comms.cli_verbs.cli_command import CliCommand
 
     command = CliCommand.member_named('repositories')
     assert command.declared_name == 'repositories'

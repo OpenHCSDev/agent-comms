@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from typing import Self
 
 from agent_comms.catalog_document import CatalogAccess
-from agent_comms.messaging.channel_targets import SurroundingChannel
-from agent_comms.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.comms import Comms
+from agent_comms.messaging.channel_targets import SurroundingChannel
 from agent_comms.registry.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread, ThreadCommandAvailability
 

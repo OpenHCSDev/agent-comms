@@ -44,7 +44,7 @@ def test_cancel_settles_dead_pending_owner_without_a_watcher(
 async def test_restore_owner_keeps_blocked_goal_unchanged(
     private_comms, tmp_path, source_programs, native_runtime_package,
 ):
-    from agent_comms.cli_command import TargetBatchResult
+    from agent_comms.cli_verbs.cli_command import TargetBatchResult
     from agent_comms.cli_verbs.restore_owner import RestoreOwnerCliCommand
     from agent_comms.cli_verbs.target_action import TargetActionCliCommand
     from agent_comms.owner_connection import socket_path

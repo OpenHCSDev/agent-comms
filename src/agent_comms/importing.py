@@ -14,7 +14,7 @@ from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.execution.turn_context import CodexRolloutProvenance
 from agent_comms.execution.turn_item import NativeItemId
 from agent_comms.harness_install import Harness

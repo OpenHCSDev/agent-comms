@@ -6,7 +6,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Annotated, TextIO
 
-from agent_comms.cli_command import TargetBatchResult
+from agent_comms.cli_verbs.cli_command import TargetBatchResult
 from agent_comms.comms import wire
 from agent_comms.installer.interpreter_operation import RuntimeProbe
 from agent_comms.installer.owner_starts import OwnerStart

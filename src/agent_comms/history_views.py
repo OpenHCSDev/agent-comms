@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Annotated
 from agent_comms.activity import ActivityCapture, ObservedActivity
 from agent_comms.activity_clocks import ChannelActivity
 from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -37,8 +37,6 @@ if TYPE_CHECKING:
     from agent_comms.registry_provenance import DeletedThread
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.channel_management import ChannelManagement
-from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
-from agent_comms.messaging.channels import ChannelMemberIndex
 from agent_comms.collaboration_ledger import CollaborationLedger
 from agent_comms.errors import UnknownChannelError
 from agent_comms.exporting import (
@@ -57,10 +55,18 @@ from agent_comms.historical_views import (
     HistorySource,
 )
 from agent_comms.message_notification import MessageNotification, NotificationWindow
-from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.messaging.messages import Message
+from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
+from agent_comms.messaging.channels import ChannelMemberIndex
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
+from agent_comms.messaging.read_basis import (
+    AnonymousViewer,
+    DisplayViewer,
+    DMDisplayBasis,
+    NamedViewer,
+)
 from agent_comms.messaging.sending import Messaging
 from agent_comms.notification_evidence import (
     FirstRecipient,
@@ -81,12 +87,6 @@ from agent_comms.presentation import (
     ThreadRecord,
     ThreadView,
     WireRevision,
-)
-from agent_comms.messaging.read_basis import (
-    AnonymousViewer,
-    DisplayViewer,
-    DMDisplayBasis,
-    NamedViewer,
 )
 from agent_comms.registry.thread_presentation import NoThreadPresentation, ThreadPresentation
 from agent_comms.transcripts import TranscriptCursor, Transcripts

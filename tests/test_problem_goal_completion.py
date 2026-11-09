@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.cli_commands import ReconciledStoresResult
+from agent_comms.cli_verbs.cli_commands import ReconciledStoresResult
 from agent_comms.comms import Comms
 from agent_comms.errors import GoalRefused
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId

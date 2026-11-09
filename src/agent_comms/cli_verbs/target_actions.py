@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from agent_comms.messaging.channel_targets import CommandTarget
-from agent_comms.cli_command import CliCommand, TargetActionCommand
-from agent_comms.cli_commands import TargetCatalogResult
 from agent_comms.cli_support.target_arguments import TargetArguments
+from agent_comms.cli_verbs.cli_command import CliCommand, TargetActionCommand
+from agent_comms.cli_verbs.cli_commands import TargetCatalogResult
 from agent_comms.comms import Comms
+from agent_comms.messaging.channel_targets import CommandTarget
 
 
 @dataclass(frozen=True, kw_only=True)

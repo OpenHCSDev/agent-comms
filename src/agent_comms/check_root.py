@@ -13,7 +13,7 @@ from typing import ClassVar
 
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.bus import Bus
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.cohort_schema import AcceptanceFrontier
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.coordinator import Coordination
@@ -24,9 +24,9 @@ from agent_comms.execution.turn_lease import NoTurnRecord
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import ThreadLaunch
+from agent_comms.messaging.read_basis import MemberActivityDisplayScope
 from agent_comms.planning.goals import NoGoal
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.read_basis import MemberActivityDisplayScope
 from agent_comms.registry.registry_document import RosterVisibility
 from agent_comms.registry.thread_text import NoThreadText
 from agent_comms.registry.threads import Thread

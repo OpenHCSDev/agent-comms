@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.change_report import NoChangeReport, ReportEvidence
+from agent_comms.cli_verbs.target_fields import ChoiceTargetField
 from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.messaging.messages import (
     ConversationRole,
@@ -16,7 +17,6 @@ from agent_comms.messaging.messages import (
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.send_result import SendResult
-from agent_comms.target_fields import ChoiceTargetField
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms

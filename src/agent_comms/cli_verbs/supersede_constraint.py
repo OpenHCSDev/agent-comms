@@ -3,15 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.messaging.channel_targets import CommandTarget
-from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import (
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_commands import (
     ConstraintSupersededResult,
     WorktreeArgument,
     _message_reference,
 )
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.comms import Comms
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import Argument, Normalize
 from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession

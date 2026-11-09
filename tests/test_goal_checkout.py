@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.cli_commands import GoalCheckoutGrant
+from agent_comms.cli_verbs.cli_commands import GoalCheckoutGrant
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.goal_actions import SetGoalAction
@@ -17,6 +17,7 @@ from agent_comms.projects.checkouts import (
     RepositoryReads,
 )
 from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.repository_sources import (
     GitHubRepositorySource,
     RepositorySource,
@@ -25,7 +26,6 @@ from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.thread_creation import RecordedCreationTime
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
-from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.shell_effects import AcquireRepositoryStorageEffect
 from agent_comms.tool_denial import StorageDenied
 from cli_command import core_process

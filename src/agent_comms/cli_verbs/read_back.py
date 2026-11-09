@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import TextIO
 
 from agent_comms.active_route import CommsRoute
-from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import BusReadBack
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_commands import BusReadBack
 from agent_comms.comms import Comms
 from agent_comms.registry.registry_store import RegistryStore
 

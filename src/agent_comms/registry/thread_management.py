@@ -20,8 +20,7 @@ from typing import (
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.agent_backend import RuntimeLocation
 from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.messaging.channel_targets import DeclaredTag
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.collaboration_ledger import CollaborationLedger
 from agent_comms.config_options import RunningSelection
 from agent_comms.coordination.errors import CoordinationError
@@ -34,6 +33,7 @@ from agent_comms.execution.owner_lifecycle import LaunchInput, OwnerLifecycle, T
 from agent_comms.heartbeat_delivery import HeartbeatDelivery
 from agent_comms.importing import ImportedConversation, ImportLimits, ThreadImported
 from agent_comms.launch_runtime import LaunchRuntime, TagListText
+from agent_comms.messaging.channel_targets import DeclaredTag
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import (
     DeclaredWireType,

@@ -21,8 +21,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.active_route import resolve_comms_route
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
-from agent_comms.messaging.channel_targets import ThreadTarget
-from agent_comms.cli_result import TargetEditResult
+from agent_comms.cli_verbs.cli_result import TargetEditResult
 from agent_comms.diagnostics import OwnerProcessOutput
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import Platform, ProcessIdentity
@@ -43,6 +42,7 @@ from agent_comms.launch_runtime import (
     SetVariable,
     ThreadLaunch,
 )
+from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import InputId, RecordMember
 from agent_comms.owner_connection import OwnerConnection

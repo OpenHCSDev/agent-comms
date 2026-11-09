@@ -74,6 +74,7 @@ class TargetField:
         return {**self.value_schema(), 'multiline': self.multiline,
                 'description': self.description, 'editor_default': self.editor_default}
 
+
 @dataclass(frozen=True)
 class ChoiceTargetField(TargetField):
     """A prepared finite declaration, from its annotation or configuration catalog."""
@@ -103,6 +104,7 @@ class ChoiceTargetField(TargetField):
 
     def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
         return (choices(self),)
+
 
 class CatalogTargetField(ChoiceTargetField):
     @property

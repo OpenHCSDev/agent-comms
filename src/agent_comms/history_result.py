@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.tool_result import ToolResult
