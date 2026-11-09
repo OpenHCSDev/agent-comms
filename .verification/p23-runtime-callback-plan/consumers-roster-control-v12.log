@@ -1,0 +1,109 @@
+/home/ts/code/projects/agent-comms/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:300: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the "fixture" caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to "function" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+============================= test session starts ==============================
+platform linux -- Python 3.14.8, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-callback-plan/roster-only-control-v12/projected/tests
+configfile: ../../../../../../../../../dev/null
+plugins: xdist-3.8.0, timeout-2.4.0, platformdirs-4.14.0, cov-7.1.0, asyncio-1.4.1
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 53 items
+
+tests/test_turn_registry_annotations.py ....                             [  7%]
+tests/test_owned_turn_goal_replacement.py EEEE                           [ 15%]
+tests/test_thread_status.py ............................................ [ 98%]
+.                                                                        [100%]
+
+==================================== ERRORS ====================================
+________ ERROR at setup of test_turn_after_order_replacement_is_allowed ________
+
+self = <Coroutine test_turn_after_order_replacement_is_allowed>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+/home/ts/code/projects/agent-comms/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/ts/code/projects/agent-comms/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture(scope="session")
+    def pinned_native() -> Path:
+        """The pinned Pi build, prepared the first time a test asks for it.
+    
+        prepare-pi-native keys its build by the pin and reuses a verified one, so an unchanged
+        pin costs nothing and a changed pin rebuilds. A run whose tests never ask never builds;
+        workers asking together wait on the stack directory's lock and the first one builds.
+        """
+        stack = Path(__file__).resolve().parents[1] / "stack"
+>       held = os.open(stack, os.O_RDONLY)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-callback-plan/roster-only-control-v12/projected/stack'
+
+tests/conftest.py:307: FileNotFoundError
+_ ERROR at setup of test_goal_published_during_preparation_is_current_at_reservation _
+'test_goal_published_during_preparation_is_current_at_reservation' requested an async fixture 'prepared_owner', with no plugin or hook that handled it. This is an error, as pytest does not natively support it.
+See: https://docs.pytest.org/en/stable/deprecations.html#sync-test-depending-on-async-fixture
+_ ERROR at setup of test_order_reactivating_a_blocked_goal_keeps_the_running_turn _
+
+self = <Coroutine test_order_reactivating_a_blocked_goal_keeps_the_running_turn>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+E       AssertionError
+
+/home/ts/code/projects/agent-comms/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:559: AssertionError
+_ ERROR at setup of test_an_owner_pause_holds_off_a_correction_of_the_goals_own_order _
+
+self = <Coroutine test_an_owner_pause_holds_off_a_correction_of_the_goals_own_order>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+E       AssertionError
+
+/home/ts/code/projects/agent-comms/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:559: AssertionError
+=============================== warnings summary ===============================
+../../../../../../code/projects/agent-comms/.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:915
+  /home/ts/code/projects/agent-comms/.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:915: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; goal_owner_fixture
+    self.import_plugin(import_spec, consider_entry_points=True)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/test_owned_turn_goal_replacement.py::test_turn_after_order_replacement_is_allowed
+ERROR tests/test_owned_turn_goal_replacement.py::test_goal_published_during_preparation_is_current_at_reservation
+ERROR tests/test_owned_turn_goal_replacement.py::test_order_reactivating_a_blocked_goal_keeps_the_running_turn
+ERROR tests/test_owned_turn_goal_replacement.py::test_an_owner_pause_holds_off_a_correction_of_the_goals_own_order
+=================== 49 passed, 1 warning, 4 errors in 5.69s ====================

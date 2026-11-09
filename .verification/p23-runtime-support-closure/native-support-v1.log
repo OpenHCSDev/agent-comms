@@ -1,0 +1,32 @@
+stage 1 clean
+stage 2 clean
+stage 3 clean
+stage 4 clean
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/author_support.py", line 196, in <module>
+    main()
+    ~~~~^^
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/author_support.py", line 141, in main
+    run(doc('declare-vocabulary-providers', (patch(current, 'runtime_event_vocabulary', lambda parsed:
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        parsed.source + '\n\nclass RuntimeEventVocabulary:\n    """The runtime declaration checks its complete external event vocabulary."""\n\n\nclass PiNativeEventVocabulary(RuntimeEventVocabulary):\n    """Pi owns the pinned native event vocabulary."""\n'),)))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/author_support.py", line 124, in run
+    result=plan.as_sequence().simulate(current)
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 1560, in simulate
+    stage = document.simulate(
+        before_snapshot,
+        backend=backend,
+    )
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 1294, in simulate
+    return self.preflight(snapshot).simulate(backend=backend)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 1351, in simulate
+    edit_batch = self.required_edit_batch
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 1315, in required_edit_batch
+    self.report.require_clean()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_preflight.py", line 53, in require_clean
+    raise CodemodOperationPreflightError(report)
+nominal_refactor_advisor.codemod_preflight.CodemodOperationPreflightError: Source rewrite target did not resolve to exactly one eligible source-index target

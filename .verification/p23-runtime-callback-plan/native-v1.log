@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-callback-plan/author_callbacks.py", line 19, in <module>
+    from nominal_refactor_advisor.source_geometry import SourceTextGeometry
+ImportError: cannot import name 'SourceTextGeometry' from 'nominal_refactor_advisor.source_geometry' (/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/source_geometry.py). Did you mean: 'source_geometry'?

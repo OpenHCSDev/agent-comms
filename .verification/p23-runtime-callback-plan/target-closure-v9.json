@@ -1,0 +1,42 @@
+[
+  {
+    "module": "backend",
+    "guards": [],
+    "local_imports": []
+  },
+  {
+    "module": "execution/owned_turn",
+    "guards": [],
+    "local_imports": []
+  },
+  {
+    "module": "execution/turn_inputs",
+    "guards": [],
+    "local_imports": []
+  },
+  {
+    "module": "execution/turn_output",
+    "guards": [],
+    "local_imports": []
+  },
+  {
+    "module": "prompt_state",
+    "guards": [],
+    "local_imports": []
+  },
+  {
+    "module": "agent_activity",
+    "guards": [],
+    "local_imports": []
+  },
+  {
+    "module": "registry/thread_status",
+    "guards": [],
+    "local_imports": []
+  },
+  {
+    "module": "registry/registry_document",
+    "guards": [],
+    "local_imports": []
+  }
+]

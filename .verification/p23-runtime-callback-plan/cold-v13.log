@@ -1,0 +1,8 @@
+agent_comms.backend 0
+agent_comms.prompt_state 0
+agent_comms.execution.turn_inputs 0
+agent_comms.execution.turn_output 0
+agent_comms.execution.owned_turn 0
+agent_comms.agent_activity 0
+agent_comms.registry.thread_status 0
+agent_comms.registry.registry_document 0

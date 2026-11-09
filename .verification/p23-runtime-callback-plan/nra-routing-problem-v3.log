@@ -1,0 +1,2 @@
+Refused order, nothing recorded:
+order.scope.shape: Invalid FixShape: scope.shape.parents must name at least one parent class declaration; fix: supply <class 'agent_comms.planning.problem_findings.FixShape'>

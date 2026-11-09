@@ -1,0 +1,12 @@
+ResolvedThread.bindings Context None
+ResolvedThread.bindings C agent_comms.target_command_bindings.TargetCommandBindings[Context, agent_comms.registry.threads.Thread, agent_comms.registry.thread_status.ThreadStatus, agent_comms.messaging.channel_targets.SurroundingChannel, agent_comms.projects.checkouts.Checkout, agent_comms.registry.registry_document.RegistrySnapshot, agent_comms.catalog_document.CatalogAccess, agent_comms.registry.registry_document.ResolvedChannel]
+ResolvedChannel.bindings Context None
+ResolvedChannel.bindings C agent_comms.target_command_bindings.TargetCommandBindings[Context, agent_comms.registry.threads.Thread, agent_comms.registry.thread_status.ThreadStatus, agent_comms.messaging.channel_targets.SurroundingChannel, agent_comms.projects.checkouts.Checkout, agent_comms.registry.registry_document.RegistrySnapshot, agent_comms.catalog_document.CatalogAccess, agent_comms.registry.registry_document.ResolvedChannel]
+Concrete: RegistrySnapshot
+Concrete: RegistryEntry
+Concrete: Thread
+Concrete: MessageNotification
+Concrete: Delivered
+Concrete: SendResult
+Concrete: PersistentPiSession
+Retained initial state: EmptyNative

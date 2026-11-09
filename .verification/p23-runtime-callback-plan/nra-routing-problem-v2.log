@@ -1,0 +1,84 @@
+Traceback (most recent call last):
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/bin/agent-comms-team", line 10, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/team/cli.py", line 45, in main
+    tools[argv[0]].main(argv[1:], context)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/team/order.py", line 1625, in main
+    OrderVerb.parse(a).apply(ctx)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/team/order.py", line 978, in apply
+    self.act(ctx)
+    ~~~~~~~~^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/team/order.py", line 981, in act
+    self.run(ctx)
+    ~~~~~~~~^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/team/order.py", line 1049, in run
+    self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/team/order.py", line 1499, in respond
+    ctx.send(self.to, document, clean=self.clean,
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+             target=NewProblem(pid, document.defect), disk=self.disk,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+             finding=LocatedProblemFinding(location), answers=references,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+             request=self.request)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/team/order.py", line 809, in send
+    document.send(self, unit, clean, reassign, target, traced, answers, request)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/team/order.py", line 393, in send
+    replace(self, order=target.carried(self.order, group, listed)).issue(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        context, unit, clean, reassign, target, traced, answers, request,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        group, listed)
+        ^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/team/order.py", line 408, in issue
+    self.require_send(context, unit, group, listed, target,
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      reassign, holders, clean, traced)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/team/order.py", line 362, in require_send
+    problems.extend(self.source_refusals(context, traced))
+                    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/team/order.py", line 303, in source_refusals
+    with MalformedRecord.refusing(label):
+         ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/nominal/field_codec.py", line 207, in __exit__
+    raise error
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/team/order.py", line 304, in source_refusals
+    validate()
+    ~~~~~~~~^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/team/order.py", line 300, in <lambda>
+    for label, validate in (('order.source', lambda: self.order.require_references(context.project)),
+                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/planning/orders.py", line 1996, in require_references
+    self.scope.require_references(roots, revision)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/planning/orders.py", line 1877, in require_references
+    self.shape.require_references(roots, revision)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/planning/problem_findings.py", line 141, in require_references
+    location.require_class(roots, revision)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/change_report.py", line 429, in require_class
+    revision.require_any(lambda candidate: self.require_class_at(repository, candidate))
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/change_report.py", line 58, in require_any
+    check(last)
+    ~~~~~^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/change_report.py", line 429, in <lambda>
+    revision.require_any(lambda candidate: self.require_class_at(repository, candidate))
+                                           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/core-311cc7bb4-lock-4ddb47206168334e/lib/python3.14/site-packages/agent_comms/change_report.py", line 432, in require_class_at
+    tree = ast.parse('\n'.join(revision.prepare(repository, self.file)), filename=self.file)
+  File "/usr/lib/python3.14/ast.py", line 46, in parse
+    return compile(source, filename, mode, flags,
+                   _feature_version=feature_version, optimize=optimize)
+  File "src/agent_comms/team/rules/team.md", line 8
+    > Tristan writes two plans at 18:30. they're in plans/. section 2 deletes the checkpoint code
+                                             ^
+SyntaxError: unterminated string literal (detected at line 8)

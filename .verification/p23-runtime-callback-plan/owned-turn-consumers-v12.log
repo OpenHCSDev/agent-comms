@@ -1,0 +1,352 @@
+/home/ts/code/projects/agent-comms/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:300: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the "fixture" caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to "function" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+============================= test session starts ==============================
+platform linux -- Python 3.14.8, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-callback-plan/roster-only-control-v12/projected
+configfile: pyproject.toml
+plugins: xdist-3.8.0, timeout-2.4.0, platformdirs-4.14.0, cov-7.1.0, asyncio-1.4.1
+timeout: 60.0s
+timeout method: thread
+timeout func_only: False
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 4 items
+
+tests/test_owned_turn_goal_replacement.py EEEE                           [100%]
+
+==================================== ERRORS ====================================
+________ ERROR at setup of test_turn_after_order_replacement_is_allowed ________
+
+self = <Coroutine test_turn_after_order_replacement_is_allowed>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+/home/ts/code/projects/agent-comms/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/ts/code/projects/agent-comms/.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:927: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests/conftest.py:361: in native_runtime_package
+    DealPrompt.prepare()
+src/agent_comms/deal_prompt.py:64: in prepare
+    prompt = cls.render()
+             ^^^^^^^^^^^^
+src/agent_comms/deal_prompt.py:51: in render
+    for path in DeckReader.sources():
+                ^^^^^^^^^^^^^^^^^^^^
+/home/ts/code/projects/agent-comms/src/agent_comms_hooks/skill.py:132: in sources
+    *(rule.path for rule in cls.rules()),
+                            ^^^^^^^^^^^
+/home/ts/code/projects/agent-comms/src/agent_comms_hooks/skill.py:81: in rules
+    return RuleFile.packaged()
+           ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/team/rule_file.py:70: in packaged
+    return tuple(cls.read(path) for path in TeamPackage.rules_files())
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/team/package.py:35: in rules_files
+    (path for path in cls.rules().iterdir() if path.is_file()),
+                      ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-callback-plan/roster-only-control-v12/projected/src/agent_comms/team/rules')
+
+    def iterdir(self):
+        """Yield path objects of the directory contents.
+    
+        The children are yielded in arbitrary order, and the
+        special entries '.' and '..' are not included.
+        """
+        root_dir = str(self)
+>       with os.scandir(root_dir) as scandir_it:
+             ^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-callback-plan/roster-only-control-v12/projected/src/agent_comms/team/rules'
+
+/usr/lib/python3.14/pathlib/__init__.py:836: FileNotFoundError
+_ ERROR at setup of test_goal_published_during_preparation_is_current_at_reservation _
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/pytest-vxdjfb7q/files/test_goal_published_during_pre0')
+
+    @pytest.fixture
+    async def prepared_owner(tmp_path):
+        comms = installed_comms(tmp_path)
+        for name in ('colleague', 'worker'):
+            comms.registry.declare(NativeThread(
+                name, frozenset(), Checkout(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid())))
+        agent = CommsAgent(comms, auto_wake=False)
+        try:
+>           await agent.sessions.bind_owned(comms.registry.require('worker'), WORKER_SESSION)
+
+tests/test_owned_turn_goal_replacement.py:133: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/execution/session_lifecycle.py:242: in bind_owned
+    await self.bind_owner(thread, session_id, self.effects.inputs.configuration, owner)
+src/agent_comms/execution/session_lifecycle.py:250: in bind_owner
+    await Coordination.run_worker(PiRedeal.of(self.comms, thread).start)
+src/agent_comms/coordination/work.py:28: in run_worker
+    return await AsyncWork.run_async(partial(CoordinationWork.worker_context().run, operation))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/execution/child_process.py:1889: in run_async
+    return await join_retirement(asyncio.create_task(asyncio.to_thread(operation)))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/execution/child_process.py:1948: in join_retirement
+    result = task.result()
+             ^^^^^^^^^^^^^
+/usr/lib/python3.14/asyncio/threads.py:26: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/rule_deal.py:1361: in start
+    self.state().started(self)
+src/agent_comms/rule_deal.py:602: in started
+    deal.redeal(StartedDeal())
+src/agent_comms/rule_deal.py:1357: in redeal
+    self.renew(trigger)
+src/agent_comms/pi_rule_gate.py:114: in renew
+    self.deal_from(DeckReader, trigger)
+src/agent_comms/pi_rule_gate.py:123: in deal_from
+    self.deal(reader, AuditDue(self.owner_words(snapshot),
+src/agent_comms/rule_deal.py:1196: in deal
+    trigger.deliver(self.current().mode, lambda: self.replace_deal(dealt, due, trigger), None)
+src/agent_comms/rule_deal.py:684: in deliver
+    return action()
+           ^^^^^^^^
+src/agent_comms/rule_deal.py:1196: in <lambda>
+    trigger.deliver(self.current().mode, lambda: self.replace_deal(dealt, due, trigger), None)
+                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/rule_deal.py:1207: in replace_deal
+    paths = tuple(source.resolve() for source in dealt.sources())
+                                                 ^^^^^^^^^^^^^^^
+/home/ts/code/projects/agent-comms/src/agent_comms_hooks/skill.py:132: in sources
+    *(rule.path for rule in cls.rules()),
+                            ^^^^^^^^^^^
+/home/ts/code/projects/agent-comms/src/agent_comms_hooks/skill.py:81: in rules
+    return RuleFile.packaged()
+           ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/team/rule_file.py:70: in packaged
+    return tuple(cls.read(path) for path in TeamPackage.rules_files())
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/team/package.py:35: in rules_files
+    (path for path in cls.rules().iterdir() if path.is_file()),
+                      ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-callback-plan/roster-only-control-v12/projected/src/agent_comms/team/rules')
+
+    def iterdir(self):
+        """Yield path objects of the directory contents.
+    
+        The children are yielded in arbitrary order, and the
+        special entries '.' and '..' are not included.
+        """
+        root_dir = str(self)
+>       with os.scandir(root_dir) as scandir_it:
+             ^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-callback-plan/roster-only-control-v12/projected/src/agent_comms/team/rules'
+
+/usr/lib/python3.14/pathlib/__init__.py:836: FileNotFoundError
+_ ERROR at setup of test_order_reactivating_a_blocked_goal_keeps_the_running_turn _
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/pytest-vxdjfb7q/files/test_order_reactivating_a_bloc0')
+
+    @pytest.fixture
+    async def prepared_owner(tmp_path):
+        comms = installed_comms(tmp_path)
+        for name in ('colleague', 'worker'):
+            comms.registry.declare(NativeThread(
+                name, frozenset(), Checkout(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid())))
+        agent = CommsAgent(comms, auto_wake=False)
+        try:
+>           await agent.sessions.bind_owned(comms.registry.require('worker'), WORKER_SESSION)
+
+tests/test_owned_turn_goal_replacement.py:133: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/execution/session_lifecycle.py:242: in bind_owned
+    await self.bind_owner(thread, session_id, self.effects.inputs.configuration, owner)
+src/agent_comms/execution/session_lifecycle.py:250: in bind_owner
+    await Coordination.run_worker(PiRedeal.of(self.comms, thread).start)
+src/agent_comms/coordination/work.py:28: in run_worker
+    return await AsyncWork.run_async(partial(CoordinationWork.worker_context().run, operation))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/execution/child_process.py:1889: in run_async
+    return await join_retirement(asyncio.create_task(asyncio.to_thread(operation)))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/execution/child_process.py:1948: in join_retirement
+    result = task.result()
+             ^^^^^^^^^^^^^
+/usr/lib/python3.14/asyncio/threads.py:26: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/rule_deal.py:1361: in start
+    self.state().started(self)
+src/agent_comms/rule_deal.py:602: in started
+    deal.redeal(StartedDeal())
+src/agent_comms/rule_deal.py:1357: in redeal
+    self.renew(trigger)
+src/agent_comms/pi_rule_gate.py:114: in renew
+    self.deal_from(DeckReader, trigger)
+src/agent_comms/pi_rule_gate.py:123: in deal_from
+    self.deal(reader, AuditDue(self.owner_words(snapshot),
+src/agent_comms/rule_deal.py:1196: in deal
+    trigger.deliver(self.current().mode, lambda: self.replace_deal(dealt, due, trigger), None)
+src/agent_comms/rule_deal.py:684: in deliver
+    return action()
+           ^^^^^^^^
+src/agent_comms/rule_deal.py:1196: in <lambda>
+    trigger.deliver(self.current().mode, lambda: self.replace_deal(dealt, due, trigger), None)
+                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/rule_deal.py:1207: in replace_deal
+    paths = tuple(source.resolve() for source in dealt.sources())
+                                                 ^^^^^^^^^^^^^^^
+/home/ts/code/projects/agent-comms/src/agent_comms_hooks/skill.py:132: in sources
+    *(rule.path for rule in cls.rules()),
+                            ^^^^^^^^^^^
+/home/ts/code/projects/agent-comms/src/agent_comms_hooks/skill.py:81: in rules
+    return RuleFile.packaged()
+           ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/team/rule_file.py:70: in packaged
+    return tuple(cls.read(path) for path in TeamPackage.rules_files())
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/team/package.py:35: in rules_files
+    (path for path in cls.rules().iterdir() if path.is_file()),
+                      ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-callback-plan/roster-only-control-v12/projected/src/agent_comms/team/rules')
+
+    def iterdir(self):
+        """Yield path objects of the directory contents.
+    
+        The children are yielded in arbitrary order, and the
+        special entries '.' and '..' are not included.
+        """
+        root_dir = str(self)
+>       with os.scandir(root_dir) as scandir_it:
+             ^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-callback-plan/roster-only-control-v12/projected/src/agent_comms/team/rules'
+
+/usr/lib/python3.14/pathlib/__init__.py:836: FileNotFoundError
+_ ERROR at setup of test_an_owner_pause_holds_off_a_correction_of_the_goals_own_order _
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/pytest-vxdjfb7q/files/test_an_owner_pause_holds_off_0')
+
+    @pytest.fixture
+    async def prepared_owner(tmp_path):
+        comms = installed_comms(tmp_path)
+        for name in ('colleague', 'worker'):
+            comms.registry.declare(NativeThread(
+                name, frozenset(), Checkout(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid())))
+        agent = CommsAgent(comms, auto_wake=False)
+        try:
+>           await agent.sessions.bind_owned(comms.registry.require('worker'), WORKER_SESSION)
+
+tests/test_owned_turn_goal_replacement.py:133: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/execution/session_lifecycle.py:242: in bind_owned
+    await self.bind_owner(thread, session_id, self.effects.inputs.configuration, owner)
+src/agent_comms/execution/session_lifecycle.py:250: in bind_owner
+    await Coordination.run_worker(PiRedeal.of(self.comms, thread).start)
+src/agent_comms/coordination/work.py:28: in run_worker
+    return await AsyncWork.run_async(partial(CoordinationWork.worker_context().run, operation))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/execution/child_process.py:1889: in run_async
+    return await join_retirement(asyncio.create_task(asyncio.to_thread(operation)))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/execution/child_process.py:1948: in join_retirement
+    result = task.result()
+             ^^^^^^^^^^^^^
+/usr/lib/python3.14/asyncio/threads.py:26: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/rule_deal.py:1361: in start
+    self.state().started(self)
+src/agent_comms/rule_deal.py:602: in started
+    deal.redeal(StartedDeal())
+src/agent_comms/rule_deal.py:1357: in redeal
+    self.renew(trigger)
+src/agent_comms/pi_rule_gate.py:114: in renew
+    self.deal_from(DeckReader, trigger)
+src/agent_comms/pi_rule_gate.py:123: in deal_from
+    self.deal(reader, AuditDue(self.owner_words(snapshot),
+src/agent_comms/rule_deal.py:1196: in deal
+    trigger.deliver(self.current().mode, lambda: self.replace_deal(dealt, due, trigger), None)
+src/agent_comms/rule_deal.py:684: in deliver
+    return action()
+           ^^^^^^^^
+src/agent_comms/rule_deal.py:1196: in <lambda>
+    trigger.deliver(self.current().mode, lambda: self.replace_deal(dealt, due, trigger), None)
+                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/rule_deal.py:1207: in replace_deal
+    paths = tuple(source.resolve() for source in dealt.sources())
+                                                 ^^^^^^^^^^^^^^^
+/home/ts/code/projects/agent-comms/src/agent_comms_hooks/skill.py:132: in sources
+    *(rule.path for rule in cls.rules()),
+                            ^^^^^^^^^^^
+/home/ts/code/projects/agent-comms/src/agent_comms_hooks/skill.py:81: in rules
+    return RuleFile.packaged()
+           ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/team/rule_file.py:70: in packaged
+    return tuple(cls.read(path) for path in TeamPackage.rules_files())
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/team/package.py:35: in rules_files
+    (path for path in cls.rules().iterdir() if path.is_file()),
+                      ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-callback-plan/roster-only-control-v12/projected/src/agent_comms/team/rules')
+
+    def iterdir(self):
+        """Yield path objects of the directory contents.
+    
+        The children are yielded in arbitrary order, and the
+        special entries '.' and '..' are not included.
+        """
+        root_dir = str(self)
+>       with os.scandir(root_dir) as scandir_it:
+             ^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-callback-plan/roster-only-control-v12/projected/src/agent_comms/team/rules'
+
+/usr/lib/python3.14/pathlib/__init__.py:836: FileNotFoundError
+=============================== warnings summary ===============================
+../../../../../../code/projects/agent-comms/.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:915
+  /home/ts/code/projects/agent-comms/.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:915: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; goal_owner_fixture
+    self.import_plugin(import_spec, consider_entry_points=True)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/test_owned_turn_goal_replacement.py::test_turn_after_order_replacement_is_allowed
+ERROR tests/test_owned_turn_goal_replacement.py::test_goal_published_during_preparation_is_current_at_reservation
+ERROR tests/test_owned_turn_goal_replacement.py::test_order_reactivating_a_blocked_goal_keeps_the_running_turn
+ERROR tests/test_owned_turn_goal_replacement.py::test_an_owner_pause_holds_off_a_correction_of_the_goals_own_order
+========================= 1 warning, 4 errors in 2.83s =========================

@@ -1,0 +1,12 @@
+Pinned 1382 source modules; original class census retained
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-callback-plan/author_callbacks.py", line 324, in <module>
+    main()
+    ~~~~^^
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-callback-plan/author_callbacks.py", line 80, in main
+    document = CodemodPlanSequence.compose((preceding, native_document(preceding_result.final_snapshot)))
+                                                       ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-callback-plan/author_callbacks.py", line 315, in native_document
+    assert not missing_pairs, missing_pairs
+           ^^^^^^^^^^^^^^^^^
+AssertionError: [('agent_activity', 'replace(notification, state=ConsumedUnansweredProgress())')]

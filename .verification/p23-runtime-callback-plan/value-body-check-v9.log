@@ -1,0 +1,403 @@
+{
+  "dataclass_fields": [
+    {
+      "file": "src/agent_comms/backend.py",
+      "class": "EventFinishSignal",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/backend.py",
+      "class": "ObservedNativeCommit",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/execution/owned_turn.py",
+      "class": "TurnGoalAccount",
+      "fields_identical": true,
+      "field_count": 10
+    },
+    {
+      "file": "src/agent_comms/execution/owned_turn.py",
+      "class": "TurnDelivery",
+      "fields_identical": true,
+      "field_count": 10
+    },
+    {
+      "file": "src/agent_comms/prompt_state.py",
+      "class": "AcknowledgedPrompt",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/prompt_state.py",
+      "class": "StartedPrompt",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/prompt_state.py",
+      "class": "SettledPrompt",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/agent_activity.py",
+      "class": "RecordedRecipientActivity",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/agent_activity.py",
+      "class": "UnavailableRecipientActivity",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/agent_activity.py",
+      "class": "LiveRecipientActivity",
+      "fields_identical": true,
+      "field_count": 2
+    },
+    {
+      "file": "src/agent_comms/registry/thread_status.py",
+      "class": "ThreadStatus",
+      "fields_identical": true,
+      "field_count": 7
+    },
+    {
+      "file": "src/agent_comms/registry/registry_document.py",
+      "class": "ResolvedThread",
+      "fields_identical": true,
+      "field_count": 2
+    },
+    {
+      "file": "src/agent_comms/registry/registry_document.py",
+      "class": "ResolvedChannel",
+      "fields_identical": true,
+      "field_count": 2
+    },
+    {
+      "file": "src/agent_comms/registry/registry_document.py",
+      "class": "NoProjectThread",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/registry/registry_document.py",
+      "class": "FoundProjectThread",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/registry/registry_document.py",
+      "class": "SeveralProjectThreads",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/registry/registry_document.py",
+      "class": "FoundUserThread",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/registry/registry_document.py",
+      "class": "NoUserThread",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/registry/registry_document.py",
+      "class": "ThreadSection",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/registry/registry_document.py",
+      "class": "WorkingRootPurpose",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/registry/registry_document.py",
+      "class": "HistoricalRootPurpose",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/registry/registry_document.py",
+      "class": "TeamProject",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/registry/registry_document.py",
+      "class": "RegisteredTeamProject",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/registry/registry_document.py",
+      "class": "RegistryEntry",
+      "fields_identical": true,
+      "field_count": 6
+    },
+    {
+      "file": "src/agent_comms/registry/registry_document.py",
+      "class": "RegistrySnapshot",
+      "fields_identical": true,
+      "field_count": 8
+    },
+    {
+      "file": "src/agent_comms/registry/registry_document.py",
+      "class": "RegistrySlice",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "BusRow",
+      "fields_identical": true,
+      "field_count": 3
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "TeamUpdatePosition",
+      "fields_identical": true,
+      "field_count": 2
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "EscalationPosition",
+      "fields_identical": true,
+      "field_count": 3
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "ClaimOperations",
+      "fields_identical": true,
+      "field_count": 2
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "HeldResources",
+      "fields_identical": true,
+      "field_count": 2
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "CapabilityRow",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "BusCapability",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "Addressed",
+      "fields_identical": true,
+      "field_count": 3
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "NoMembershipChange",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "MessageRoleWire",
+      "fields_identical": true,
+      "field_count": 2
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "ConversationRole",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "NoticeRole",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "Membership",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "MembershipConversationRole",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "MembershipNoticeRole",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "MessageInput",
+      "fields_identical": true,
+      "field_count": 7
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "Message",
+      "fields_identical": true,
+      "field_count": 4
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "StoredWireMessage",
+      "fields_identical": true,
+      "field_count": 3
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "StoredWireHistory",
+      "fields_identical": true,
+      "field_count": 3
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "Claimed",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/messaging/messages.py",
+      "class": "ClaimMessage",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/bus_publication.py",
+      "class": "AutomatedOrigin",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/bus_publication.py",
+      "class": "AgentOrigin",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/bus_publication.py",
+      "class": "ServiceOrigin",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/bus_publication.py",
+      "class": "DirectorOrigin",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/bus_publication.py",
+      "class": "HumanOrigin",
+      "fields_identical": true,
+      "field_count": 3
+    },
+    {
+      "file": "src/agent_comms/message_notification.py",
+      "class": "NotificationWindow",
+      "fields_identical": true,
+      "field_count": 3
+    },
+    {
+      "file": "src/agent_comms/message_notification.py",
+      "class": "NoNotificationWindow",
+      "fields_identical": true,
+      "field_count": 2
+    },
+    {
+      "file": "src/agent_comms/message_notification.py",
+      "class": "CapturedNotificationWindow",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/message_notification.py",
+      "class": "CapturedNotificationEvidence",
+      "fields_identical": true,
+      "field_count": 4
+    },
+    {
+      "file": "src/agent_comms/message_notification.py",
+      "class": "MessageNotification",
+      "fields_identical": true,
+      "field_count": 6
+    },
+    {
+      "file": "src/agent_comms/message_notification.py",
+      "class": "SentMessageOutcome",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/send_result.py",
+      "class": "CorrectionComplete",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/send_result.py",
+      "class": "CorrectionFailed",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/send_result.py",
+      "class": "CorrectionUnreported",
+      "fields_identical": true,
+      "field_count": 0
+    },
+    {
+      "file": "src/agent_comms/send_result.py",
+      "class": "SendResult",
+      "fields_identical": true,
+      "field_count": 2
+    },
+    {
+      "file": "src/agent_comms/send_result.py",
+      "class": "MessageSentResult",
+      "fields_identical": true,
+      "field_count": 1
+    },
+    {
+      "file": "src/agent_comms/send_result.py",
+      "class": "MessagePublished",
+      "fields_identical": true,
+      "field_count": 4
+    }
+  ],
+  "methods_checked": 679,
+  "changed_method_bodies": [
+    {
+      "file": "src/agent_comms/agent_activity.py",
+      "class": "RecipientActivity",
+      "method": "taken_response",
+      "body_identical_without_imports": false
+    },
+    {
+      "file": "src/agent_comms/agent_activity.py",
+      "class": "LiveRecipientActivity",
+      "method": "taken_response",
+      "body_identical_without_imports": false
+    }
+  ]
+}

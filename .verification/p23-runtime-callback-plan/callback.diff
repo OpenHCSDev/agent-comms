@@ -1,0 +1,2504 @@
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py
+@@ -1,9 +1,9 @@
+ """Message-derived activity clocks, independent of bus storage and routing."""
+ from __future__ import annotations
+ 
+-from collections.abc import Iterable, Mapping
++from collections.abc import Iterable
+ from dataclasses import dataclass, field, fields
+-from typing import TYPE_CHECKING, Self
++from typing import Self
+ 
+ from agent_comms.class_fact import ClassFact
+ from agent_comms.display_sources import SentClocks
+@@ -11,9 +11,7 @@
+ from agent_comms.projection_source import ProducedRow, ProjectionSource
+ from agent_comms.storage.typed_table import TypedRow
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.messaging.channels import Channel
+-    from agent_comms.messaging.messages import Message
++from agent_comms.message_clock_source import MessageClockSource
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+@@ -28,14 +26,14 @@
+     last_message: float = 0
+     last_user_input: float = 0
+ 
+-    def observe(self, message: Message) -> ChannelActivity:
++    def observe(self, message: MessageClockSource) -> ChannelActivity:
+         return ChannelActivity(
+             max(self.last_message, message.timestamp),
+             message.sender_role.last_user_input(self.last_user_input, message.timestamp),
+         )
+ 
+     @classmethod
+-    def from_message(cls, message: Message, **key: str) -> Self:
++    def from_message(cls, message: MessageClockSource, **key: str) -> Self:
+         clocks = ChannelActivity(
+             message.timestamp,
+             message.sender_role.last_user_input(0.0, message.timestamp),
+@@ -51,11 +49,6 @@
+         return cls(max((item.last_message for item in clocks), default=0),
+                    max((item.last_user_input for item in clocks), default=0))
+ 
+-    @classmethod
+-    def for_views(cls, channels: Mapping[str, Channel],
+-                  by_target: Mapping[str, ChannelActivity]) -> Mapping[str, ChannelActivity]:
+-        return {name: cls.combine(channel.history_scope().target_values(by_target))
+-                for name, channel in channels.items()}
+ 
+ 
+ @dataclass(frozen=True)
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/activity_registry_reads.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/activity_registry_reads.py
+@@ -0,0 +1,64 @@
++"""Activity borrows current registry reads and the existing lease operations."""
++from __future__ import annotations
++from abc import ABC, abstractmethod
++from collections.abc import Iterable, Mapping
++from pathlib import Path
++
++from agent_comms.delivery_recipients import DeliveryRecipients
++from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
++from agent_comms.frozen_recipient import FrozenRecipient
++from agent_comms.nominal.field_codec import TurnId
++from agent_comms.projects.storage_rules import StorageRule
++from agent_comms.recipient_selection import RecipientSelection
++from agent_comms.registry.thread_identity import OwnerIdentity
++from agent_comms.registry.thread_status import ThreadStatus
++from agent_comms.registry.threads import NativeThread, Thread
++from agent_comms.routing import NoTurnRouting, Routing
++
++
++class RegistryPathRead(ABC):
++    __slots__ = ()
++    path: Path
++
++
++class ActivityRegistryRead(ABC):
++    __slots__ = ()
++    threads: Mapping[str, Thread]
++
++    @abstractmethod
++    def canonical_name(self, name: str) -> str: ...
++
++    @abstractmethod
++    def require(self, name: str) -> Thread: ...
++
++    @abstractmethod
++    def owner_identity(self, name: str) -> OwnerIdentity: ...
++
++    @abstractmethod
++    def status(self, name: str) -> ThreadStatus: ...
++
++    @abstractmethod
++    def claimed_readers(self, names: Iterable[str]) -> tuple[str, ...]: ...
++
++    @abstractmethod
++    def recipient(self, recipient: FrozenRecipient, original: DeliveryRecipients) -> RecipientSelection: ...
++
++
++class ActivityRegistration(ABC):
++    __slots__ = ()
++    store: RegistryPathRead
++    storage_rule: StorageRule
++
++    @abstractmethod
++    def snapshot(self) -> ActivityRegistryRead: ...
++
++    @abstractmethod
++    def require(self, name: str) -> Thread: ...
++
++    @abstractmethod
++    def lease_local_turn(
++        self, name: str, turn_id: TurnId, *, routing: Routing = NoTurnRouting(),
++    ) -> tuple[NativeThread, int]: ...
++
++    @abstractmethod
++    def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, TurnCompletion]: ...
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/agent_activity.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/agent_activity.py
+@@ -1,6 +1,13 @@
+ """Activity, runtime metadata and local turn lease ownership."""
+ 
+ from __future__ import annotations
++
++from agent_comms.activity_registry_reads import ActivityRegistryRead, ActivityRegistration
++from agent_comms.delivery_recipients import DeliveryRecipients
++from agent_comms.runtime_info_projection import RuntimeInfoProjection
++from agent_comms.runtime_info import AgentRuntimeInfo
++from agent_comms.assignment_notice import AssignmentNotice
++from agent_comms.diagnostics import record_drain_failure
+ 
+ import logging
+ import time
+@@ -13,15 +20,14 @@
+ from agent_comms.execution.native_input_owner import RegistryOwner
+ from agent_comms.notification_progress import TakenProgress, WorkingTakenProgress
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.agent_backend import AgentBackend
+-    from agent_comms.agent_events import RuntimeInfoObservation
+-    from agent_comms.bus_publication import Delivered
+-    from agent_comms.message_notification import MessageNotification
+-    from agent_comms.notification_progress import AssignmentProgress, DeliveryProgress
+-    from agent_comms.registry.registration import Registration
+-    from agent_comms.registry.registry_document import RegistrySnapshot
+-    from agent_comms.registry.thread_status import ThreadStatus
++from agent_comms.agent_backend import AgentBackend
++
++
++
++from agent_comms.notification_progress import AssignmentProgress, DeliveryProgress
++
++
++from agent_comms.registry.thread_status import ThreadStatus
+ from agent_comms.activity import (
+     Activity,
+     ActivityCapture,
+@@ -66,19 +72,19 @@
+ 
+     def selected_response(
+         self,
+-        notification: MessageNotification,
++        notification: AssignmentNotice[DeliveryProgress],
+         updated_at_ms: int,
+         progress: AssignmentProgress,
+-    ) -> MessageNotification:
++    ) -> AssignmentNotice[DeliveryProgress]:
+         return progress.selected_notification(
+             notification, busy=self.turn_started_by(updated_at_ms)
+         )
+ 
+     def taken_response(
+-        self, notification: MessageNotification, progress: DeliveryProgress,
+-    ) -> MessageNotification:
++        self, notification: AssignmentNotice[DeliveryProgress], progress: DeliveryProgress,
++    ) -> AssignmentNotice[DeliveryProgress]:
+         """A message a running turn took, shown without a claim about current work."""
+-        return replace(notification, state=TakenProgress(progress))
++        return notification.with_state(TakenProgress(progress))
+ 
+ 
+ @dataclass(frozen=True)
+@@ -105,13 +111,13 @@
+         return self.thread.turn_started_by(updated_at_ms)
+ 
+     def taken_response(
+-        self, notification: MessageNotification, progress: DeliveryProgress,
+-    ) -> MessageNotification:
++        self, notification: AssignmentNotice[DeliveryProgress], progress: DeliveryProgress,
++    ) -> AssignmentNotice[DeliveryProgress]:
+         state = (WorkingTakenProgress if self.activity.state.busy else TakenProgress)(progress)
+-        return replace(notification, state=state)
+-
+-class AgentActivity(RuntimeInfoWrites["RuntimeInfoObservation"]):
+-    def __init__(self, root: Path, registry: Registration):
++        return notification.with_state(state)
++
++class AgentActivity(RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):
++    def __init__(self, root: Path, registry: ActivityRegistration):
+         self.registry = registry
+         self.activity = ActivityStore(root)
+         self.runtime_info = RuntimeInfoStore.at(root)
+@@ -126,24 +132,24 @@
+         """Native turns, bridges and seated subagents publish the phase's own activity."""
+         self.set_activity(thread, phase.activity_state, " ".join(phase.activity_detail.split()))
+ 
+-    def activity_of(self, thread: str, *, snapshot: RegistrySnapshot) -> ObservedActivity:
++    def activity_of(self, thread: str, *, snapshot: ActivityRegistryRead) -> ObservedActivity:
+         participant = snapshot.require(thread)
+         return self.all_activity((participant,), snapshot=snapshot)[participant.name]
+ 
+-    def is_live(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
++    def is_live(self, incarnation: ThreadIncarnation, snapshot: ActivityRegistryRead) -> bool:
+         """The registered presence owns liveness for this exact incarnation."""
+         return incarnation.current(snapshot) and self.presence(incarnation, snapshot).running
+ 
+-    def answers_later(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
++    def answers_later(self, incarnation: ThreadIncarnation, snapshot: ActivityRegistryRead) -> bool:
+         """Whether a wait on this exact incarnation is answered once it reads its inbox."""
+         return (incarnation.current(snapshot)
+                 and self.presence(incarnation, snapshot).answers_later)
+ 
+     @staticmethod
+-    def presence(incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> ThreadStatus:
++    def presence(incarnation: ThreadIncarnation, snapshot: ActivityRegistryRead) -> ThreadStatus:
+         return snapshot.status(snapshot.canonical_name(incarnation.name))
+ 
+-    def is_working(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
++    def is_working(self, incarnation: ThreadIncarnation, snapshot: ActivityRegistryRead) -> bool:
+         return self.is_live(incarnation, snapshot) and self.activity_of(
+             snapshot.canonical_name(incarnation.name), snapshot=snapshot,
+         ).state.busy
+@@ -153,11 +159,11 @@
+         activity = ObservedActivity.acquire(event, owner)
+         return participant.project_activity(activity)
+ 
+-    def all_activity(self, threads: Iterable[Thread], *, snapshot: RegistrySnapshot) -> Mapping[str, ObservedActivity]:
++    def all_activity(self, threads: Iterable[Thread], *, snapshot: ActivityRegistryRead) -> Mapping[str, ObservedActivity]:
+         return self.captured(threads, snapshot=snapshot).activity
+ 
+     def captured(self, threads: Iterable[Thread], *,
+-                 snapshot: RegistrySnapshot) -> ActivityCapture[ObservedActivity]:
++                 snapshot: ActivityRegistryRead) -> ActivityCapture[ObservedActivity]:
+         requested = {thread.name: thread for thread in threads}
+         if not requested:
+             return ActivityCapture.empty()
+@@ -177,16 +183,16 @@
+                 observed[name], readiness=observed[name].readiness.stalled(oldest))
+         return ActivityCapture(observed, events.expires_at)
+ 
+-    def stalled(self, readers: tuple[str, ...], snapshot: RegistrySnapshot) -> Mapping[str, float]:
++    def stalled(self, readers: tuple[str, ...], snapshot: ActivityRegistryRead) -> Mapping[str, float]:
+         """Each claimed reader that stopped taking its inbox, by when. A store without the bus
+         reads no inbox, so it sees no stall; Comms's store reads the taken-input inbox."""
+         return {}
+ 
+     def observe_recipients(
+         self,
+-        recipients: Iterable[tuple[Delivered, FrozenRecipient]],
++        recipients: Iterable[tuple[DeliveryRecipients, FrozenRecipient]],
+         *,
+-        snapshot: RegistrySnapshot,
++        snapshot: ActivityRegistryRead,
+     ) -> Mapping[ThreadLookup, RecipientActivity]:
+         """Acquire one bounded window's recipients from the original sends."""
+         selected = {}
+@@ -220,7 +226,7 @@
+         if diagnostic.owner != owner:
+             raise RelationViolationError("Drain diagnostic belongs to another owner.")
+         if source_error is not None:
+-            from agent_comms.diagnostics import record_drain_failure
++
+ 
+             path = record_drain_failure(
+                 self.registry.store.path.parent,
+@@ -320,7 +326,7 @@
+         self._emit_activity(IdlePhase().activity_event(lease.identity.incarnation.name))
+         return fence
+ 
+-    def observe_runtime_info(self, thread: str, observation: RuntimeInfoObservation) -> None:
++    def observe_runtime_info(self, thread: str, observation: RuntimeInfoProjection[AgentRuntimeInfo]) -> None:
+         """Serialize the original observation with thread rename/retirement."""
+         canonical = self.registry.require(thread).name
+         self.runtime_info.observe(canonical, time.time(), observation)
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/agent_events.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/agent_events.py
+@@ -1,3 +1,4 @@
++from agent_comms.runtime_info_projection import RuntimeInfoProjection
+ """Nominal, in-process backend events and the reactions shared by consumers.
+ 
+ These values are never decoded from a transport. Pi JSON is parsed by backend;
+@@ -343,7 +344,7 @@
+     source: FailureSource = UnrecordedFailureSource()
+ 
+ 
+-class RuntimeInfoObservation(AgentEvent):
++class RuntimeInfoObservation(AgentEvent, RuntimeInfoProjection[AgentRuntimeInfo]):
+     """Record one producer observation through the existing runtime-info owner."""
+ 
+     def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/assignment_notice.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/assignment_notice.py
+@@ -0,0 +1,22 @@
++"""The actual notification lends only the facts used by progress/activity callbacks."""
++from __future__ import annotations
++from abc import ABC, abstractmethod
++from typing import Self
++from agent_comms.frozen_recipient import FrozenRecipient
++
++
++class AssignmentNotice[State](ABC):
++    __slots__ = ()
++    recipient_identity: FrozenRecipient
++    state: State
++
++    @property
++    @abstractmethod
++    def label(self) -> str: ...
++
++    @staticmethod
++    @abstractmethod
++    def timed_state(label: str, timestamp_ms: int | None) -> str: ...
++
++    @abstractmethod
++    def with_state(self, state: State) -> Self: ...
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/backend.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/backend.py
+@@ -14,6 +14,8 @@
+ """
+ 
+ from __future__ import annotations
++
++from agent_comms.execution.native_session_callbacks import NativeSessionCallbacks, PromptSessionCallbacks
+ 
+ import asyncio
+ import json
+@@ -46,13 +48,13 @@
+ from agent_comms.coordination.coordinator import Coordination
+ from agent_comms.cursor_publication import CursorDelivery
+ from agent_comms.execution.native_attestation import AttestationError
+-from agent_comms.execution.native_child import PiSessionChild
++from agent_comms.execution.native_child import NativeChildState, PiSessionChild
+ from agent_comms.execution.native_entries import NativeEvidenceScope
+ from agent_comms.execution.native_failures import NativePiUnavailable
+ from agent_comms.execution.native_input_proof import NativeContextProof, NativeInputCommit
+ from agent_comms.execution.native_pi import NativePiRpcLaunch, read_tracked_input_commitment
+ from agent_comms.execution.native_session_files import NativeSessionFiles
+-from agent_comms.execution.native_session_reopen import PiSessionId
++from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
+ from agent_comms.execution.native_startup import NATIVE_STARTUP_POLICY, NativeStartup
+ from agent_comms.execution.turn_context import InputContributionCoordinates
+ from agent_comms.execution.turn_failure import (
+@@ -98,10 +100,9 @@
+ )
+ from agent_comms.turn_failure_reads import TerminalSessionRead
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.acp_failure import ProviderRetryResult
+-    from agent_comms.pi_native_backend import PersistentPiSession
+-    from agent_comms.pi_payloads import AssistantMessage, UserMessage
++from agent_comms.acp_failure import ProviderRetryResult
++from agent_comms.execution.session_retention import NativeSessionRetention
++from agent_comms.pi_payloads import AssistantMessage, UserMessage
+ 
+ 
+ # Pi 0.85.1 owns provider-idle detection and defaults it to 300 seconds. This
+@@ -139,7 +140,7 @@
+     *,
+     cursor_delivery: CursorDelivery,
+     input_start: InputStartListener,
+-    persistent_session: PersistentPiSession,
++    persistent_session: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity],
+     package: VerifiedNativePackage,
+     root: Path,
+     owner: ParticipantIdentity,
+@@ -241,7 +242,7 @@
+ NO_FINISH_SIGNAL = NoFinishSignal()
+ 
+ 
+-class NativeSession(MroDispatch, TerminalSessionRead):
++class NativeSession(MroDispatch, NativeSessionCallbacks):
+     """Shared child acquisition, attestation, observation and retirement."""
+ 
+     active: ClassVar[dict[asyncio.Task[Any], NativeSession]] = {}
+@@ -262,7 +263,7 @@
+         input_start: InputStartListener = NO_INPUT_START_LISTENER,
+         ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
+         request_observer: RequestObserver = NO_REQUEST_OBSERVER,
+-        *, startup: NativeStartup, native_session: PersistentPiSession,
++        *, startup: NativeStartup, native_session: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity],
+     ):
+         self.launch = launch
+         self.tool_socket: ToolTransport
+@@ -711,7 +712,7 @@
+             await self.command.context_committed(turn, proof, source_reads)
+ 
+ 
+-class TurnSession(NativeSession):
++class TurnSession(NativeSession, PromptSessionCallbacks):
+     """A native input adds its declared tools and constructs its connected command."""
+ 
+     prompt_type = UnwrittenPrompt
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/bus_publication.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/bus_publication.py
+@@ -1,6 +1,9 @@
+ """Declared delivery and publication capabilities for SQLite bus records."""
+ 
+ from __future__ import annotations
++
++from agent_comms.delivery_recipients import DeliveryRecipients
++from agent_comms.message_send_reads import PublishedMessageRead
+ 
+ import json
+ import sqlite3
+@@ -39,7 +42,13 @@
+     from agent_comms.registry.threads import Thread
+ 
+ 
+-class Delivered(BusRecord, AudiencedMessage, declared_name=None):
++class Delivered(
++    BusRecord,
++    AudiencedMessage,
++    DeliveryRecipients,
++    PublishedMessageRead,
++    declared_name=None,
++):
+ 
+     @ClassFact
+     def writes(cls) -> tuple[type[ProducedRow], ...]:
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py
+@@ -6,7 +6,7 @@
+ from collections.abc import Sequence
+ from dataclasses import dataclass, replace
+ from pathlib import Path
+-from typing import TYPE_CHECKING, ClassVar
++from typing import ClassVar
+ 
+ from agent_comms.bus_publication import AgentOrigin
+ from agent_comms.display_sources import ChannelOrderSource
+@@ -20,12 +20,10 @@
+ from agent_comms.nominal.field_codec import RecordMember
+ from agent_comms.registry.registration import Registration
+ from agent_comms.registry.thread_identity import ThreadIncarnation
+-from agent_comms.registry.thread_management import ChangedTags, GivenTags
++from agent_comms.registry.thread_management import ChangedTags, GivenTags, TagChoice, ThreadManagement
+ from agent_comms.registry.threads import Thread
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.catalog_document import CatalogDocument
+-    from agent_comms.registry.thread_management import TagChoice, ThreadManagement
++from agent_comms.catalog_document import CatalogDocument
+ 
+ 
+ @dataclass(frozen=True)
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/channel_sources.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/channel_sources.py
+@@ -0,0 +1,20 @@
++"""Original channel membership and history reads, without live thread assembly."""
++
++from abc import ABC, abstractmethod
++from agent_comms.tagged_thread_source import TaggedThreadSource
++from agent_comms.thread_role_source import ThreadRoleSource
++
++
++class ChannelMemberSource(TaggedThreadSource, ThreadRoleSource):
++    __slots__ = ()
++
++
++class ChannelHistorySource(ABC):
++    __slots__ = ()
++
++    name: str
++    tags: frozenset[str]
++
++    @property
++    @abstractmethod
++    def history_targets(self) -> frozenset[str]: ...
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/check_root.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/check_root.py
+@@ -27,7 +27,7 @@
+ from agent_comms.planning.goals import NoGoal
+ from agent_comms.projects.checkouts import Checkout
+ from agent_comms.messaging.read_basis import MemberActivityDisplayScope
+-from agent_comms.registry.registry_document import RosterVisibility
++from agent_comms.registry.roster_visibility import RosterVisibility
+ from agent_comms.registry.thread_text import NoThreadText
+ from agent_comms.registry.threads import Thread
+ from agent_comms.session_file import RegistrySessionLocation
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/cli_command.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/cli_command.py
+@@ -1,4 +1,6 @@
+ from __future__ import annotations
++
++from agent_comms.target_command_bindings import TargetCommandBindings
+ 
+ from abc import ABC, abstractmethod
+ from collections.abc import Mapping
+@@ -55,10 +57,9 @@
+ from agent_comms.tool_result import ToolResult
+ from agent_comms_hooks import ToolRefusedError
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.active_route import CommsRoute
+-    from agent_comms.registry.thread_status import ThreadStatus
+-    from agent_comms.registry.threads import Thread
++from agent_comms.active_route import CommsRoute
++from agent_comms.registry.thread_status import ThreadStatus
++from agent_comms.registry.threads import Thread
+ 
+ 
+ class ChannelBound(TargetBound):
+@@ -93,9 +94,10 @@
+     ModuleMembers,
+     DeclaredCommand,
+     CliExecution[Answer],
++    TargetCommandBindings[Comms, Thread, ThreadStatus, SurroundingChannel, Checkout, RegistrySnapshot, CatalogAccess, ResolvedChannel],
+     Generic[Answer],
+-    affix="CliCommand",
+-    discovery_package="agent_comms.cli_verbs",
++    affix='CliCommand',
++    discovery_package='agent_comms.cli_verbs',
+ ):
+     def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
+         result = TargetCompleted(batch.target, self, self.apply(comms))
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/delivery_recipients.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/delivery_recipients.py
+@@ -0,0 +1,8 @@
++"""The original publication's frozen recipients justify retained recipient reads."""
++from abc import ABC
++from agent_comms.frozen_recipient import FrozenRecipient
++
++
++class DeliveryRecipients(ABC):
++    __slots__ = ()
++    recipients: tuple[FrozenRecipient, ...]
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/execution/native_session_callbacks.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/execution/native_session_callbacks.py
+@@ -0,0 +1,94 @@
++"""Native callbacks borrow the actual session's input, output and child facts."""
++from __future__ import annotations
++from abc import ABC, abstractmethod
++from asyncio import Event
++from pathlib import Path
++
++from agent_comms import agent_events as events
++from agent_comms import pi_commands as commands
++from agent_comms.acp_failure import FailureSource
++from agent_comms.agent_backend import InputStartListener
++from agent_comms.execution.native_child import NativeChildState, PiSessionChild
++from agent_comms.execution.native_pi import NativePiRpcLaunch
++from agent_comms.execution.native_session_reopen import NativeSessionIdentity
++from agent_comms.execution.native_startup import NativeStartup
++from agent_comms.execution.session_retention import NativeSessionRetention
++from agent_comms.execution.turn_failure import TurnFailure
++from agent_comms.pi_wire import PiDiagnostic
++from agent_comms.send_outcome import SendBoundary
++from agent_comms.transport.native_tool_transport import ToolTransport
++from agent_comms.turn_failure_reads import (
++    TerminalInputsRead, TerminalOutputRead, TerminalPromptRead, TerminalSessionRead,
++)
++
++
++class SessionInputsCallbacks(TerminalInputsRead):
++    __slots__ = ()
++
++    @property
++    @abstractmethod
++    def settled(self) -> bool: ...
++
++
++class SessionOutputCallbacks(TerminalOutputRead):
++    __slots__ = ()
++    sensitive: bool
++
++    @abstractmethod
++    def record_failure(self, failure: TurnFailure) -> None: ...
++
++    @abstractmethod
++    def error(
++        self, text: str, diagnostics: tuple[PiDiagnostic, ...] = (),
++        *, source: FailureSource,
++    ) -> events.Error: ...
++
++    @abstractmethod
++    def permits_retention(self, session: NativeSessionCallbacks) -> bool: ...
++
++
++class SessionPromptCallbacks(TerminalPromptRead):
++    __slots__ = ()
++
++    @abstractmethod
++    def validate_terminal(self, session: NativeSessionCallbacks, transport_ok: bool) -> None: ...
++
++    @abstractmethod
++    def permits_extension_ui(self, session: NativeSessionCallbacks) -> bool: ...
++
++
++class SessionStatsCallbacks(ABC):
++    __slots__ = ()
++    complete: bool
++
++    @abstractmethod
++    async def request(self, session: NativeSessionCallbacks) -> None: ...
++
++
++class NativeSessionCallbacks(TerminalSessionRead):
++    __slots__ = ()
++    inputs: SessionInputsCallbacks
++    output: SessionOutputCallbacks
++    prompt_state: SessionPromptCallbacks
++    stats: SessionStatsCallbacks
++    native: PiSessionChild
++    native_session: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity]
++    startup: NativeStartup
++    launch: NativePiRpcLaunch
++    tool_socket: ToolTransport
++    send_boundary: SendBoundary
++    rejected_commands: list[events.InputRefused]
++    rejected_signal: Event
++    active_session_file: Path
++
++    @abstractmethod
++    def grant_prompt(self) -> None: ...
++
++
++class PromptSessionCallbacks(NativeSessionCallbacks):
++    __slots__ = ()
++    command: commands.Prompt
++    input_start: InputStartListener
++
++    @abstractmethod
++    def following_started(self, command: commands.FollowingPrompt) -> None: ...
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/execution/owned_turn.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/execution/owned_turn.py
+@@ -1,6 +1,15 @@
+ """One owner turn: check permission, run the native stream and record its result."""
+ 
+ from __future__ import annotations
++
++from agent_comms.execution.owned_turn_runner import OwnedTurnRunner
++from agent_comms.execution.turn_context import (
++    AutomaticTitleSegment,
++    RecordedContextTurn,
++    ReplyRouteSegment,
++    TurnContext,
++    TurnProvenance,
++)
+ 
+ import asyncio
+ from collections.abc import (
+@@ -63,9 +72,8 @@
+ from agent_comms.transport.tools.goals import CommsSetGoalTool
+ from agent_comms.turn_progress_reads import ProgressGoalAccount, ProgressTurn
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.execution.turn_runner import TurnRunner
+-    from agent_comms.planning.goal_attempts import LaunchPermit
++from agent_comms.execution.owned_turn_runner import OwnedTurnRunner
++from agent_comms.planning.goal_attempts import LaunchPermit
+ 
+ 
+ @dataclass(kw_only=True)
+@@ -221,7 +229,7 @@
+ 
+     def __init__(
+         self,
+-        runner: TurnRunner,
++        runner: OwnedTurnRunner,
+         session_id: AcpSessionId,
+         thread_name: str,
+         task: str,
+@@ -353,13 +361,7 @@
+         self.env_extra = self.runner.inputs.state(self.session_id).owned().configuration.native_environment(
+             self.thread, self.runner.comms.registry.snapshot()
+         )
+-        from agent_comms.execution.turn_context import (
+-            AutomaticTitleSegment,
+-            RecordedContextTurn,
+-            ReplyRouteSegment,
+-            TurnContext,
+-            TurnProvenance,
+-        )
++
+ 
+         self.relations = self.runner.comms.relationships.context_relations(self.thread.name)
+         self.context = TurnContext.for_owner(
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/execution/owned_turn_runner.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/execution/owned_turn_runner.py
+@@ -0,0 +1,55 @@
++"""The existing turn runner supplies the resources used by one owned turn."""
++from __future__ import annotations
++from abc import ABC, abstractmethod
++from contextlib import AsyncExitStack
++
++from agent_comms.agent_backend import AgentBackend
++from agent_comms.comms import Comms
++from agent_comms.controller import Controller
++from agent_comms.execution.goal_scheduler import GoalScheduler
++from agent_comms.execution.input_drain import InputDrain
++from agent_comms.execution.native_input_owner import RegistryOwner
++from agent_comms.execution.session_lifecycle import SessionLifecycle
++from agent_comms.execution.turn_effects import TurnEffects
++from agent_comms.execution.turn_lease import TurnLeaseFence
++from agent_comms.execution.turn_phase import TurnPhase
++from agent_comms.nominal.field_codec import AcpSessionId, TurnId
++from agent_comms.pi_events import DialogUiRequest, ExtensionUiChoice
++from agent_comms.registry.threads import Thread
++from agent_comms.routing import NoTurnRouting, Routing
++from agent_comms.runtime_server import RuntimeServer
++from agent_comms.transcript_updates import TurnTranscriptUpdate
++
++
++class OwnedTurnRunner(ABC):
++    __slots__ = ()
++    comms: Comms
++    goals: GoalScheduler
++    inputs: InputDrain
++    sessions: SessionLifecycle
++    effects: TurnEffects
++    runtime: RuntimeServer
++    persistent_backends: dict[AcpSessionId, AgentBackend]
++
++    @abstractmethod
++    def backend_for(self, session_id: AcpSessionId, thread: Thread) -> AgentBackend: ...
++
++    @abstractmethod
++    def acquire_turn(
++        self, resources: AsyncExitStack, session_id: AcpSessionId, thread_name: str,
++        turn_id: TurnId, detail: str, routing: Routing = NoTurnRouting(),
++    ) -> RegistryOwner: ...
++
++    @abstractmethod
++    async def transition_turn(
++        self, session_id: AcpSessionId, lease: TurnLeaseFence, phase: TurnPhase,
++    ) -> None: ...
++
++    @abstractmethod
++    def current_turn_update(self, session_id: AcpSessionId) -> TurnTranscriptUpdate: ...
++
++    @abstractmethod
++    async def extension_ui_permission(
++        self, session_id: AcpSessionId, turn_id: TurnId,
++        controller: Controller, request: DialogUiRequest,
++    ) -> ExtensionUiChoice: ...
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/execution/session_retention.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/execution/session_retention.py
+@@ -0,0 +1,24 @@
++"""The actual retained session owns its child, borrowing lock and retirement."""
++from abc import ABC, abstractmethod
++from asyncio import Lock
++
++
++class NativeSessionRetention[Child, State, Identity](ABC):
++    __slots__ = ()
++    lock: Lock
++    child_state: State
++
++    @abstractmethod
++    async def open(self, launch, *, reuse, startup, watchdog) -> Child: ...
++
++    @abstractmethod
++    async def context_for_input(self, thread, context): ...
++
++    @abstractmethod
++    def retain(self, child: Child, identity: Identity) -> bool: ...
++
++    @abstractmethod
++    async def close(self) -> None: ...
++
++    @abstractmethod
++    async def close_idle(self) -> None: ...
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/execution/turn_inputs.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/execution/turn_inputs.py
+@@ -1,4 +1,6 @@
+ from __future__ import annotations
++
++from agent_comms.execution.native_session_callbacks import SessionInputsCallbacks
+ 
+ import asyncio
+ from dataclasses import (
+@@ -32,9 +34,8 @@
+ from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
+ from agent_comms.turn_failure_reads import TerminalInputsRead
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.backend import NativeSession, TurnSession
+-    from agent_comms.pi_events import MessageStart, Response
++from agent_comms.execution.native_session_callbacks import NativeSessionCallbacks, PromptSessionCallbacks
++from agent_comms.pi_events import MessageStart, Response
+ 
+ 
+ class NoCurrentItem(TurnInboxItem):
+@@ -45,7 +46,7 @@
+ 
+ 
+ @dataclass
+-class InputForwarding(MroDispatch, TerminalInputsRead):
++class InputForwarding(MroDispatch, SessionInputsCallbacks):
+     queue: TurnInbox = field(default_factory=TurnInbox)
+     pending: dict[InputId, PendingRequest[commands.FollowingPrompt]] = field(default_factory=dict)
+     current: TurnInboxItem = field(default_factory=NoCurrentItem)
+@@ -75,7 +76,7 @@
+         return self.pending.pop(native_id).request.input
+ 
+     def rejected(
+-        self, native_id: InputId, response: Response, session: TurnSession,
++        self, native_id: InputId, response: Response, session: PromptSessionCallbacks,
+     ) -> tuple[events.AgentEvent, ...]:
+         """Retire the live write, preserve its durable UNKNOWN, and report the actual refusal."""
+         item = self.retire(native_id)
+@@ -87,7 +88,7 @@
+         session.rejected_signal.set()
+         return (session.output.error(failure.text, source=UnrecordedFailureSource()),)
+ 
+-    async def forward(self, session: NativeSession) -> None:
++    async def forward(self, session: NativeSessionCallbacks) -> None:
+         # Inputs that wait through one tool batch reach the model together,
+         # not one model call apiece.
+         await self.write(session, commands.SetSteeringMode(mode="all"))
+@@ -109,11 +110,11 @@
+         self.current = NoCurrentItem()
+ 
+     @handles(TurnInboxItem)
+-    async def unhandled(self, item: TurnInboxItem, session: NativeSession) -> bool:
++    async def unhandled(self, item: TurnInboxItem, session: NativeSessionCallbacks) -> bool:
+         raise TypeError(f"No input handler declared for {type(item).__name__}")
+ 
+     @handles(UnwrittenPrompt)
+-    async def original_prompt(self, item: UnwrittenPrompt, session: TurnSession) -> bool:
++    async def original_prompt(self, item: UnwrittenPrompt, session: PromptSessionCallbacks) -> bool:
+         def write():
+             session.grant_prompt()
+             session.native.send(session.command)
+@@ -127,7 +128,7 @@
+         return await completion
+ 
+     @handles(PreparedSession)
+-    async def prepare_session(self, item: PreparedSession, session: NativeSession) -> bool:
++    async def prepare_session(self, item: PreparedSession, session: NativeSessionCallbacks) -> bool:
+         session.native.forget_context()
+         state = session.native.attestation.require_state()
+         identity = session.native.attestation.require_identity()
+@@ -140,7 +141,7 @@
+         await session.stats.request(session)
+         return True
+ 
+-    async def write(self, session: NativeSession, *written: commands.PiCommand) -> None:
++    async def write(self, session: NativeSessionCallbacks, *written: commands.PiCommand) -> None:
+         for command in written:
+             session.native.send(command)
+         self.release_current()
+@@ -157,7 +158,7 @@
+         return tuple(key for key in candidates if key in self.pending)
+ 
+     @handles(ClearQueue)
+-    async def clear_queue(self, item: ClearQueue, session: TurnSession) -> bool:
++    async def clear_queue(self, item: ClearQueue, session: PromptSessionCallbacks) -> bool:
+         command = commands.ClearQueue(input_ids=await self.queued(item.input_ids))
+         if not command.input_ids:
+             return True
+@@ -165,7 +166,7 @@
+         return True
+ 
+     def cleared(
+-        self, requested: tuple[InputId, ...], response: Response, session: TurnSession,
++        self, requested: tuple[InputId, ...], response: Response, session: PromptSessionCallbacks,
+     ) -> None:
+         """The native reply owns removal, even after the forwarding task retires."""
+         for native_id in response.data.require_payload().cleared_inputs(requested):
+@@ -176,7 +177,7 @@
+         session.rejected_signal.set()
+ 
+     @handles(UseSettings)
+-    async def use_settings(self, item: UseSettings, session: TurnSession) -> bool:
++    async def use_settings(self, item: UseSettings, session: PromptSessionCallbacks) -> bool:
+         # Pi resets thinking to the new model's default, so the level follows the model.
+         await self.write(
+             session,
+@@ -188,7 +189,7 @@
+         return True
+ 
+     @handles(SendNow)
+-    async def send_now(self, item: SendNow, session: TurnSession) -> bool:
++    async def send_now(self, item: SendNow, session: PromptSessionCallbacks) -> bool:
+         candidates = await self.queued(item.input_ids)
+         if not candidates:
+             return True
+@@ -204,7 +205,7 @@
+         return await completion
+ 
+     @handles(InputRequest)
+-    async def place(self, item: InputRequest, session: TurnSession) -> bool:
++    async def place(self, item: InputRequest, session: PromptSessionCallbacks) -> bool:
+         public_id = item.input_id
+         native_id = InputId.mint()
+         text = item.content.text
+@@ -230,7 +231,7 @@
+         return await completion
+ 
+     def mark_started(
+-        self, session: TurnSession, payload: MessageStart,
++        self, session: PromptSessionCallbacks, payload: MessageStart,
+     ) -> tuple[InputId] | tuple[()]:
+         message = payload.message
+         for native_id in message.input_id.present():
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/execution/turn_output.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/execution/turn_output.py
+@@ -1,4 +1,6 @@
+ from __future__ import annotations
++
++from agent_comms.execution.native_session_callbacks import SessionOutputCallbacks
+ 
+ from collections.abc import Iterator
+ from dataclasses import (
+@@ -19,14 +21,13 @@
+ from agent_comms.pi_payloads import NativeMessageFailureSource
+ from agent_comms.turn_failure_reads import TerminalOutputRead
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.backend import NativeSession
+-    from agent_comms.pi_payloads import AssistantMessage
+-    from agent_comms.pi_wire import PiDiagnostic
++from agent_comms.execution.native_session_callbacks import NativeSessionCallbacks
++from agent_comms.pi_payloads import AssistantMessage
++from agent_comms.pi_wire import PiDiagnostic
+ 
+ 
+ @dataclass
+-class TurnOutput(TerminalOutputRead):
++class TurnOutput(SessionOutputCallbacks):
+     sensitive: bool = False
+     failure: TurnFailure = field(default_factory=NoTurnFailure)
+     error_message: str | None = None
+@@ -119,7 +120,7 @@
+         if stderr.strip() and not self.sensitive:
+             self.failure = self.failure.with_startup_diagnostics(stderr.strip())
+ 
+-    def done(self, session: NativeSession, stderr: str) -> Iterator[events.AgentEvent]:
++    def done(self, session: NativeSessionCallbacks, stderr: str) -> Iterator[events.AgentEvent]:
+         # Output checks turn permission and child ownership; it grants neither.
+         transport_ok = not self.failure_text and (
+             session.native_session.child_state.retained or session.native.proc.returncode == 0
+@@ -147,7 +148,7 @@
+             yield self.error(terminal.text, source=self._failed_message_source)
+         yield terminal
+ 
+-    def permits_retention(self, session: NativeSession) -> bool:
++    def permits_retention(self, session: NativeSessionCallbacks) -> bool:
+         # Called only after the native lifecycle has proved the child idle. Apply
+         # declaration-owned terminal evidence before handing the child back.
+         session.prompt_state.validate_terminal(session, transport_ok=True)
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/execution/turn_runner.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/execution/turn_runner.py
+@@ -1,4 +1,6 @@
+ from __future__ import annotations
++
++from agent_comms.execution.owned_turn_runner import OwnedTurnRunner
+ 
+ import asyncio
+ from collections.abc import Awaitable, Callable
+@@ -144,7 +146,7 @@
+         await self.publish(self.phase.compaction_ended())
+ 
+ 
+-class TurnRunner:
++class TurnRunner(OwnedTurnRunner):
+     """Own session turn locks/tasks and each session's agent backend."""
+ 
+     def __init__(
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/execution/turn_stats.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/execution/turn_stats.py
+@@ -1,4 +1,6 @@
+ from __future__ import annotations
++
++from agent_comms.execution.native_session_callbacks import SessionStatsCallbacks
+ 
+ import asyncio
+ from collections.abc import (
+@@ -19,7 +21,7 @@
+     from agent_comms.execution.turn_watchdog import ProgressWatchdog, TurnWait
+ 
+ 
+-class StatsRequest:
++class StatsRequest(SessionStatsCallbacks):
+     """No native settlement observation is waiting for its snapshot."""
+ 
+     def wait_for(self, watchdog: ProgressWatchdog, active: TurnWait) -> TurnWait:
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py
+@@ -74,9 +74,9 @@
+ from agent_comms.projects.checkouts import Checkout
+ from agent_comms.recorded_bus import RecordedBusIdentity
+ from agent_comms.registry.registration import Registration
+-from agent_comms.registry.registry_document import (
++from agent_comms.registry.registry_document import RegistrySnapshot
++from agent_comms.registry.roster_visibility import (
+     DEFAULT_ROSTER,
+-    RegistrySnapshot,
+     RosterVisibility,
+ )
+ from agent_comms.registry.thread_identity import ThreadIncarnation
+@@ -373,7 +373,7 @@
+                     snapshot.visible_threads(visibility), snapshot=snapshot,
+                 ),
+                 self.last_sent_timestamps(clocks.sent.items(), registry=snapshot),
+-                ChannelActivity.for_views(channels, clocks.channels),
++                channels.history_activity(clocks.channels),
+                 visibility,
+             )
+ 
+@@ -387,8 +387,7 @@
+             rows = ((alias, clocks.sent[alias]) for thread in registered
+                     for alias in snapshot.names_for(thread.name) if alias in clocks.sent)
+             sent = self.last_sent_timestamps(rows, registry=snapshot)
+-            history = ChannelActivity.for_views(
+-                {channel.name: channel}, clocks.channels)[channel.name]
++            history = channel.history_activity(clocks.channels)
+             return ChannelView.capture(
+                 channel, registered, snapshot, catalog.pinned_threads(channel.name),
+                 self.agents.all_activity(registered, snapshot=snapshot), sent, history, visibility,
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/message_clock_source.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/message_clock_source.py
+@@ -0,0 +1,19 @@
++"""Original recorded message clocks, below destination and persistence initialization."""
++
++from abc import ABC, abstractmethod
++
++from agent_comms.recorded_time import Timestamped
++
++
++class SenderClockSource(ABC):
++    __slots__ = ()
++
++    @classmethod
++    @abstractmethod
++    def last_user_input(cls, previous: float, timestamp: float) -> float: ...
++
++
++class MessageClockSource(Timestamped):
++    __slots__ = ()
++
++    sender_role: type[SenderClockSource]
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/message_notification.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/message_notification.py
+@@ -1,6 +1,8 @@
+ """One recipient's durable assignment display and the windows that hold them."""
+ 
+ from __future__ import annotations
++
++from agent_comms.assignment_notice import AssignmentNotice
+ 
+ from abc import abstractmethod
+ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+@@ -145,7 +147,7 @@
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+-class MessageNotification:
++class MessageNotification(AssignmentNotice[DeliveryProgress]):
+     """Read-only display of one recipient's durable assignment decision."""
+ 
+     recipient_identity: FrozenRecipient
+@@ -154,6 +156,9 @@
+     message: Message | None = None
+     displayed_to: tuple[ThreadIncarnation, ...] = ()
+     changed: bool = False
++
++    def with_state(self, state: DeliveryProgress) -> MessageNotification:
++        return replace(self, state=state)
+ 
+     @property
+     def answer(self) -> AssignmentResponse:
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/message_send_reads.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/message_send_reads.py
+@@ -0,0 +1,35 @@
++"""Presence replies use the original sender and committed reference, not a second send."""
++from __future__ import annotations
++from abc import ABC, abstractmethod
++from collections.abc import Sequence
++
++from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
++from agent_comms.messaging.message_reference import MessageReference
++
++
++class MessageReferenceRead(ABC):
++    __slots__ = ()
++
++    @property
++    @abstractmethod
++    def reference(self) -> MessageReference: ...
++
++
++class PublishedMessageRead(MessageReferenceRead):
++    __slots__ = ()
++    at_ms: int
++
++
++class CommittedMessageRead(ABC):
++    __slots__ = ()
++    message: MessageReferenceRead
++
++
++class PresenceMessageSender(ABC):
++    __slots__ = ()
++
++    @abstractmethod
++    def send(
++        self, sender: str, target: str, body: str, *,
++        answers: Sequence[MessageReference] = (), source_turn: SourceTurn = NoSourceTurn(),
++    ) -> CommittedMessageRead: ...
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py
+@@ -5,10 +5,11 @@
+ import time
+ from abc import abstractmethod
+ from collections import defaultdict
+-from collections.abc import Iterable, Iterator
++from collections.abc import Iterable, Iterator, Mapping
+ from dataclasses import dataclass, field
+-from typing import Annotated, ClassVar, TYPE_CHECKING
+-
++from typing import Annotated, ClassVar
++
++from agent_comms.channel_sources import ChannelHistorySource, ChannelMemberSource
+ from agent_comms.display_sources import ChannelSortView, SortedChannel, StoredThreadOrder
+ from agent_comms.messaging.channel_targets import ChannelTarget, Tag
+ from agent_comms.cli_result import CliResult
+@@ -28,21 +29,21 @@
+     ChannelDisplayScope,
+     MemberActivityDisplayScope,
+ )
++from agent_comms.registry_names import RegistryNames
++from agent_comms.tagged_thread_source import TaggedThreadSource
+ from agent_comms.tool_result import ToolResult
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.registry.registry_document import RosterVisibility
+-    from agent_comms.registry.threads import Thread
+-    from agent_comms.registry_provenance import RegistryProvenance
+-
+-
+-class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):
++from agent_comms.registry.roster_visibility import RosterVisibility
++from agent_comms.activity_clocks import ChannelActivity
++
++
++class ChannelMemberIndex[Member: ChannelMemberSource](dict[str, tuple[Member, ...]]):
+     """Executable threads indexed once for one roster, including empty tags."""
+ 
+     __slots__ = ("threads",)
+ 
+-    def __init__(self, threads: Iterable[Thread]):
+-        by_tag: dict[str, list[Thread]] = defaultdict(list)
++    def __init__(self, threads: Iterable[Member]):
++        by_tag: dict[str, list[Member]] = defaultdict(list)
+         executable = []
+         for executor in (member for thread in threads for member in thread.role.executor(thread)):
+             executable.append(executor)
+@@ -51,7 +52,7 @@
+         self.threads = tuple(executable)
+         super().__init__((tag, tuple(members)) for tag, members in by_tag.items())
+ 
+-    def __missing__(self, tag: str) -> tuple[Thread, ...]:
++    def __missing__(self, tag: str) -> tuple[Member, ...]:
+         return ()
+ 
+ 
+@@ -93,7 +94,7 @@
+     def matches(self, tags: frozenset[str]) -> bool: ...
+ 
+     @abstractmethod
+-    def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]: ...
++    def members[Member: ChannelMemberSource](self, index: ChannelMemberIndex[Member]) -> tuple[Member, ...]: ...
+ 
+     @property
+     @abstractmethod
+@@ -117,7 +118,7 @@
+     @abstractmethod
+     def history_scope(self) -> ChannelDisplayScope: ...
+ 
+-    def display_scope(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
++    def display_scope(self, snapshot: RegistryNames[TaggedThreadSource]) -> ChannelDisplayScope:
+         return self.history_scope()
+ 
+     @abstractmethod
+@@ -138,6 +139,9 @@
+     @abstractmethod
+     def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[type[MembershipTransition], ...]: ...
+ 
++    def history_activity(self, by_target: Mapping[str, ChannelActivity]) -> ChannelActivity:
++        return ChannelActivity.combine(self.history_scope().target_values(by_target))
++
+     def pending_count(self, counts: dict[str, int]) -> int:
+         return sum(self.history_scope().target_values(counts))
+ 
+@@ -148,6 +152,9 @@
+ class Channels(dict[str, Channel]):
+     """The captured declarations select the channels shown by a roster."""
+ 
++    def history_activity(self, by_target: Mapping[str, ChannelActivity]) -> Mapping[str, ChannelActivity]:
++        return {name: channel.history_activity(by_target) for name, channel in self.items()}
++
+     def visible(self, visibility: RosterVisibility) -> Iterator[Channel]:
+         return (channel for channel in self.values() if visibility.archived or not channel.archived)
+ 
+@@ -157,18 +164,14 @@
+ 
+     __slots__ = ()
+ 
+-    def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]:
++    def members[Member: ChannelMemberSource](self, index: ChannelMemberIndex[Member]) -> tuple[Member, ...]:
+         return tuple(thread for thread in index.threads if self.matches(thread.tags))
+ 
+ 
+-class GroupedChannel:
++class GroupedChannel(ChannelHistorySource):
+     """Tag and saved-view declarations share finite history and presentation metadata."""
+ 
+     __slots__ = ()
+-
+-    @property
+-    @abstractmethod
+-    def history_targets(self) -> frozenset[str]: ...
+ 
+     def history_scope(self) -> ChannelDisplayScope:
+         return ChannelDisplayScope(self.name, self.history_targets)
+@@ -339,12 +342,12 @@
+ 
+ @dataclass(frozen=True, slots=True)
+ class TagChannel(MembershipChannel, TagChannelIdentity):
+-    def display_scope(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
++    def display_scope(self, snapshot: RegistryNames[TaggedThreadSource]) -> ChannelDisplayScope:
+         if self.any_mode:
+             return MemberActivityDisplayScope.capture(self, snapshot)
+         return self.history_scope()
+ 
+-    def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]:
++    def members[Member: ChannelMemberSource](self, index: ChannelMemberIndex[Member]) -> tuple[Member, ...]:
+         return index[ChannelTarget.bare_name(self.name)]
+ 
+     def matches(self, tags: frozenset[str]) -> bool:
+@@ -358,7 +361,7 @@
+         if self.any_mode:
+             raise ValueError("Retired channels cannot include member activity.")
+ 
+-    def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]:
++    def members[Member: ChannelMemberSource](self, index: ChannelMemberIndex[Member]) -> tuple[Member, ...]:
+         return ()
+ 
+     def matches(self, tags: frozenset[str]) -> bool:
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/messages.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/messages.py
+@@ -1,6 +1,8 @@
+ """Messages: declaration and persistence owners."""
+ 
+ from __future__ import annotations
++
++from agent_comms.message_send_reads import MessageReferenceRead
+ 
+ import builtins
+ import re
+@@ -40,6 +42,7 @@
+ from agent_comms.execution.turn_origin import TurnOrigin
+ from agent_comms.input_key import InputKey
+ from agent_comms.mentions import ThreadMention
++from agent_comms.message_clock_source import MessageClockSource
+ from agent_comms.message_sender import PublicSender
+ from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
+ from agent_comms.messaging.message_reference import MessageReference
+@@ -61,7 +64,6 @@
+ )
+ from agent_comms.page_traversal import LiveCursor, PageCursor
+ from agent_comms.projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
+-from agent_comms.recorded_time import Timestamped
+ from agent_comms.registry.thread_creation import ThreadCreationSource
+ from agent_comms.registry.thread_identity import AgentThreadRole, ThreadRole
+ from agent_comms.response_message_source import ResponseMessageSource
+@@ -926,7 +928,7 @@
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+-class MessageInput(Timestamped, Addressed, BusCapability, ResponseMessageSource):
++class MessageInput(MessageClockSource, Addressed, BusCapability, ResponseMessageSource):
+     """The facts an input is keyed and written from: who, where, what text, which role.
+ 
+     Attachments, reports and answers belong to Message; this is never a whole message
+@@ -964,7 +966,7 @@
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+-class Message(MessageInput, TurnOrigin["Message"]):
++class Message(MessageInput, TurnOrigin['Message'], MessageReferenceRead):
+     """Declares one inter-thread message.
+ 
+     The bus assigns ``seq`` (a monotonically increasing log position) at send
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/read_basis.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/read_basis.py
+@@ -18,6 +18,7 @@
+ from typing import Annotated, ClassVar, NoReturn, Self, TYPE_CHECKING, TextIO
+ 
+ from agent_comms.activity_clocks import ChannelActivity
++from agent_comms.channel_sources import ChannelHistorySource
+ from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
+ from agent_comms.coordination.errors import DMPaintedBoundChanged, DMScopeChanged
+ from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+@@ -41,8 +42,10 @@
+ from agent_comms.projects.checkouts import Checkout
+ from agent_comms.recorded_bus import RecordedBus, RecordedBusIdentity
+ from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
++from agent_comms.registry_names import RegistryNames
+ from agent_comms.storage.bound_set import BoundSet
+ from agent_comms.storage.private_path import FileObservation, MissingFile
++from agent_comms.tagged_thread_source import TaggedThreadSource
+ 
+ if TYPE_CHECKING:
+     import sqlite3
+@@ -51,7 +54,6 @@
+     from agent_comms.historical_views import DMHistory, HistoricalSelection, HistorySource
+     from agent_comms.history_views import HistoryViews
+     from agent_comms.messaging.messages import Message, MessageKind
+-    from agent_comms.messaging.channels import TagChannel
+     from agent_comms.messaging.message_bus import MessageBus
+     from agent_comms.messaging.message_page import MessagePage, PageBounds
+     from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
+@@ -1178,7 +1180,7 @@
+         return reads.capture(viewer, rows, snapshot, source, document=document)
+ 
+     @classmethod
+-    def capture(cls, channel: TagChannel, snapshot: RegistryProvenance) -> MemberActivityDisplayScope:
++    def capture(cls, channel: ChannelHistorySource, snapshot: RegistryNames[TaggedThreadSource]) -> MemberActivityDisplayScope:
+         members = frozenset(name for name, thread in snapshot.threads.items()
+                             if channel.tags <= thread.tags)
+         names = members | frozenset(alias for alias, owner in snapshot.aliases.items()
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/sending.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/sending.py
+@@ -1,4 +1,6 @@
+ from __future__ import annotations
++
++from agent_comms.message_send_reads import PresenceMessageSender
+ 
+ from abc import ABC, abstractmethod
+ from collections.abc import Sequence
+@@ -85,7 +87,7 @@
+         return self.actor.answerable(self.teammates)
+ 
+ 
+-class Messaging:
++class Messaging(PresenceMessageSender):
+     def __init__(self, root: Path, registry: Registration, bus: MessageBus, goals: Goals):
+         self.root = root
+         self.registry = registry
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/notification_progress.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/notification_progress.py
+@@ -1,5 +1,7 @@
+ """One typed notification state owns its label, activity and proved progress."""
+ from __future__ import annotations
++
++from agent_comms.assignment_notice import AssignmentNotice
+ 
+ from abc import abstractmethod
+ from dataclasses import dataclass, replace
+@@ -13,14 +15,13 @@
+     WorkingThreadPresentationStatus,
+ )
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.bus_publication import Delivered
+-    from agent_comms.message_notification import MessageNotification
++from agent_comms.message_send_reads import PublishedMessageRead
++
+ 
+ 
+ @dataclass(frozen=True)
+ class AssignmentResponse(DeclaredFamily, affix="Response"):
+-    def recorded(self, message: Delivered) -> AssignmentResponse:
++    def recorded(self, message: PublishedMessageRead) -> AssignmentResponse:
+         return self
+ 
+     @classmethod
+@@ -44,24 +45,24 @@
+ 
+     @abstractmethod
+     def completed_notification(
+-        self, progress: AssignmentProgress, notification: MessageNotification
+-    ) -> MessageNotification: ...
+-
+-    @abstractmethod
+-    def answered(self, notification: MessageNotification) -> MessageNotification:
++        self, progress: AssignmentProgress, notification: AssignmentNotice[DeliveryProgress]
++    ) -> AssignmentNotice[DeliveryProgress]: ...
++
++    @abstractmethod
++    def answered(self, notification: AssignmentNotice[DeliveryProgress]) -> AssignmentNotice[DeliveryProgress]:
+         """The notification with this recorded reply attached; consumption stays its proof's."""
+ 
+ 
+ class UnansweredResponse(AssignmentResponse):
+-    def recorded(self, message: Delivered) -> AssignmentResponse:
++    def recorded(self, message: PublishedMessageRead) -> AssignmentResponse:
+         return AnsweredResponse(message.reference, message.at_ms)
+ 
+     def completed_notification(
+-        self, progress: AssignmentProgress, notification: MessageNotification
+-    ) -> MessageNotification:
++        self, progress: AssignmentProgress, notification: AssignmentNotice[DeliveryProgress]
++    ) -> AssignmentNotice[DeliveryProgress]:
+         return progress.consumed_notification(notification)
+ 
+-    def answered(self, notification: MessageNotification) -> MessageNotification:
++    def answered(self, notification: AssignmentNotice[DeliveryProgress]) -> AssignmentNotice[DeliveryProgress]:
+         return notification
+ 
+ 
+@@ -71,11 +72,11 @@
+     received_at_ms: int
+ 
+     def completed_notification(
+-        self, progress: AssignmentProgress, notification: MessageNotification
+-    ) -> MessageNotification:
++        self, progress: AssignmentProgress, notification: AssignmentNotice[DeliveryProgress]
++    ) -> AssignmentNotice[DeliveryProgress]:
+         return progress.answered_notification(notification, self)
+ 
+-    def answered(self, notification: MessageNotification) -> MessageNotification:
++    def answered(self, notification: AssignmentNotice[DeliveryProgress]) -> AssignmentNotice[DeliveryProgress]:
+         return notification.state.answered_notification(notification, self)
+ 
+     def detail_texts(self) -> tuple[str, ...]:
+@@ -114,7 +115,7 @@
+     def rank(self) -> int:
+         return DeliveryRank.position_of(type(self))
+ 
+-    def notification_label(self, notification: MessageNotification) -> str:
++    def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
+         return self.label
+ 
+     @property
+@@ -129,24 +130,24 @@
+     def seen_working(self) -> bool:
+         return False
+ 
+-    def ignored_notification_label(self, notification: MessageNotification) -> str:
++    def ignored_notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
+         """How a recipient that chose not to answer reads, given this proof."""
+         return self.ignored_label
+ 
+-    def working_notification_label(self, notification: MessageNotification) -> str:
++    def working_notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
+         """How a busy recipient that took this message reads; without context proof, unchanged."""
+         return self.notification_label(notification)
+ 
+-    def summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
++    def summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
+         """What a summary led by this state prints before its counts."""
+         return (notification.label,)
+ 
+-    def counted_summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
++    def counted_summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
+         """The lead a counted wrapper prints; a consumed proof is already named by its count."""
+         return (notification.label,)
+ 
+-    def answered_notification(self, notification: MessageNotification,
+-                              response: AnsweredResponse) -> MessageNotification:
++    def answered_notification(self, notification: AssignmentNotice[DeliveryProgress],
++                              response: AnsweredResponse) -> AssignmentNotice[DeliveryProgress]:
+         """An independent answer preserves this state's actual context proof."""
+         return replace(notification, state=AnsweredProgress(self, response), changed=True)
+ 
+@@ -169,10 +170,10 @@
+         """An earlier proof already timed the entry; a later one adds nothing."""
+         return self
+ 
+-    def working_notification_label(self, notification: MessageNotification) -> str:
++    def working_notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
+         return WorkingTakenProgress.label
+ 
+-    def counted_summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
++    def counted_summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
+         return ()
+ 
+ 
+@@ -225,17 +226,17 @@
+     def seen_not_answering(self) -> bool:
+         return self.proof.consumed
+ 
+-    def notification_label(self, notification: MessageNotification) -> str:
++    def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
+         return self.proof.ignored_notification_label(notification)
+ 
+-    def summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
++    def summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
+         return self.proof.counted_summary_prefix(notification)
+ 
+ 
+ class TakenProgress(SettledDelivery, ContextualProgress):
+     """A running turn took this message as one of its inputs; its proof says how far."""
+ 
+-    def notification_label(self, notification: MessageNotification) -> str:
++    def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
+         return self.proof.notification_label(notification)
+ 
+ 
+@@ -248,10 +249,10 @@
+     def seen_working(self) -> bool:
+         return self.proof.consumed
+ 
+-    def notification_label(self, notification: MessageNotification) -> str:
++    def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
+         return self.proof.working_notification_label(notification)
+ 
+-    def summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
++    def summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
+         return self.proof.counted_summary_prefix(notification)
+ 
+ 
+@@ -272,12 +273,12 @@
+     def answer(self) -> AnsweredResponse:
+         return self.response
+ 
+-    def answered_notification(self, notification: MessageNotification,
+-                              response: AnsweredResponse) -> MessageNotification:
++    def answered_notification(self, notification: AssignmentNotice[DeliveryProgress],
++                              response: AnsweredResponse) -> AssignmentNotice[DeliveryProgress]:
+         """A later independent response cannot replace an already recorded answer."""
+         return notification
+ 
+-    def notification_label(self, notification: MessageNotification) -> str:
++    def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
+         return notification.timed_state(self.label, self.response.received_at_ms)
+ 
+ 
+@@ -292,14 +293,14 @@
+     @abstractmethod
+     def at_ms(self) -> int: ...
+ 
+-    def notification_label(self, notification: MessageNotification) -> str:
++    def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
+         return notification.timed_state(self.label, self.at_ms)
+ 
+     @abstractmethod
+-    def selected_notification(self, notification: MessageNotification, *, busy: bool) -> MessageNotification: ...
+-
+-    @abstractmethod
+-    def consumed_notification(self, notification: MessageNotification) -> MessageNotification: ...
++    def selected_notification(self, notification: AssignmentNotice[DeliveryProgress], *, busy: bool) -> AssignmentNotice[DeliveryProgress]: ...
++
++    @abstractmethod
++    def consumed_notification(self, notification: AssignmentNotice[DeliveryProgress]) -> AssignmentNotice[DeliveryProgress]: ...
+ 
+ 
+ @dataclass(frozen=True)
+@@ -310,10 +311,10 @@
+     def at_ms(self) -> int:
+         return self.sent_at_ms
+ 
+-    def selected_notification(self, notification: MessageNotification, *, busy: bool) -> MessageNotification:
++    def selected_notification(self, notification: AssignmentNotice[DeliveryProgress], *, busy: bool) -> AssignmentNotice[DeliveryProgress]:
+         return replace(notification, state=SendingProgress(self.sent_at_ms) if busy else self)
+ 
+-    def consumed_notification(self, notification: MessageNotification) -> MessageNotification:
++    def consumed_notification(self, notification: AssignmentNotice[DeliveryProgress]) -> AssignmentNotice[DeliveryProgress]:
+         raise ValueError("Consumed notification has no model-context proof")
+ 
+ 
+@@ -334,18 +335,18 @@
+     def at_ms(self) -> int:
+         return self.consumed_at_ms
+ 
+-    def ignored_notification_label(self, notification: MessageNotification) -> str:
++    def ignored_notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
+         return notification.timed_state(self.ignored_label, self.at_ms)
+ 
+-    def working_notification_label(self, notification: MessageNotification) -> str:
++    def working_notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
+         return notification.timed_state(WorkingTakenProgress.label, self.at_ms)
+ 
+-    def selected_notification(self, notification: MessageNotification, *, busy: bool) -> MessageNotification:
++    def selected_notification(self, notification: AssignmentNotice[DeliveryProgress], *, busy: bool) -> AssignmentNotice[DeliveryProgress]:
+         state: ShownToModelProgress = (ConsumingProgress(self.consumed_at_ms) if busy
+                  else SelectedConsumedProgress(self.consumed_at_ms))
+         return replace(notification, state=state)
+ 
+-    def consumed_notification(self, notification: MessageNotification) -> MessageNotification:
++    def consumed_notification(self, notification: AssignmentNotice[DeliveryProgress]) -> AssignmentNotice[DeliveryProgress]:
+         return replace(notification, state=self)
+ 
+ 
+@@ -366,6 +367,6 @@
+     def answering(self) -> bool:
+         return True
+ 
+-    def summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
++    def summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
+         """Its Answering count already names it."""
+         return ()
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/pi_native_backend.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/pi_native_backend.py
+@@ -10,6 +10,8 @@
+ """
+ 
+ from __future__ import annotations
++
++from agent_comms.execution.session_retention import NativeSessionRetention
+ 
+ import asyncio
+ from collections.abc import AsyncIterator, Awaitable, Callable
+@@ -134,7 +136,9 @@
+                      for model in entry.saved_models), UndeclaredModel())
+ 
+ 
+-class PersistentPiSession:
++class PersistentPiSession(
++    NativeSessionRetention["PiSessionChild", "NativeChildState", NativeSessionIdentity],
++):
+     """Serialize borrowing and retirement of one native session's actual child."""
+ 
+     def __init__(self) -> None:
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py
+@@ -69,9 +69,9 @@
+ from agent_comms.planning.orders import TodoStore
+ from agent_comms.recorded_bus import NoRecordedBus, RecordedBusIdentity
+ from agent_comms.registry.registration import Registration
+-from agent_comms.registry.registry_document import (
++from agent_comms.registry.registry_document import RegistrySnapshot
++from agent_comms.registry.roster_visibility import (
+     DEFAULT_ROSTER,
+-    RegistrySnapshot,
+     RosterVisibility,
+ )
+ from agent_comms.registry.thread_presentation import (
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/prompt_state.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/prompt_state.py
+@@ -1,6 +1,8 @@
+ """Update native prompt-send state only from events that match the prompt."""
+ 
+ from __future__ import annotations
++
++from agent_comms.execution.native_session_callbacks import SessionPromptCallbacks
+ 
+ from dataclasses import dataclass
+ from typing import TYPE_CHECKING, Never
+@@ -12,11 +14,10 @@
+ from agent_comms.pi_events import AgentSettled, MessageStart, Response
+ from agent_comms.turn_failure_reads import TerminalPromptRead
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.backend import NativeSession
++from agent_comms.execution.native_session_callbacks import NativeSessionCallbacks
+ 
+ 
+-class PromptState(TerminalPromptRead):
++class PromptState(SessionPromptCallbacks):
+     acknowledged = False
+     awaiting_start = False
+     started = False
+@@ -36,16 +37,16 @@
+     def settle(self, event: AgentSettled) -> PromptState:
+         return self
+ 
+-    def validate_terminal(self, session: NativeSession, transport_ok: bool) -> None:
++    def validate_terminal(self, session: NativeSessionCallbacks, transport_ok: bool) -> None:
+         """A user prompt owes its declared input, answer and queue evidence."""
+         for cause in TerminalFailure.members_with(TerminalFailure):
+             if cause.detected(session, transport_ok):
+                 session.output.record_failure(cause(cause.explanation(session.output)))
+ 
+-    def permits_extension_ui(self, session: NativeSession) -> bool:
++    def permits_extension_ui(self, session: NativeSessionCallbacks) -> bool:
+         return False
+ 
+-    def permits_retention(self, session: NativeSession) -> bool:
++    def permits_retention(self, session: NativeSessionCallbacks) -> bool:
+         return False
+ 
+ 
+@@ -71,10 +72,10 @@
+ class PreparedSession(QueuedOperation):
+     """An idle-session preparation owns metadata, not an unwritten user prompt."""
+ 
+-    def validate_terminal(self, session: NativeSession, transport_ok: bool) -> None:
++    def validate_terminal(self, session: NativeSessionCallbacks, transport_ok: bool) -> None:
+         """Preparation owes metadata replies, not a user input or assistant answer."""
+ 
+-    def permits_retention(self, session: NativeSession) -> bool:
++    def permits_retention(self, session: NativeSessionCallbacks) -> bool:
+         return session.stats.complete and session.output.clean
+ 
+ 
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/publisher.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/publisher.py
+@@ -41,7 +41,8 @@
+ from agent_comms.messaging.messages import BusRecord, ClaimNoticeKind, Message
+ from agent_comms.nominal.field_codec import ClaimId
+ from agent_comms.registry.registration import Registration
+-from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
++from agent_comms.registry.registry_document import RegistrySnapshot
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
+ from agent_comms.response_acknowledgement import canonical_publication_key
+ from agent_comms.storage.private_path import FileRevision
+ from agent_comms.wake import OrdinaryControl, resolve_wake_cohort
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/recipient_selection.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/recipient_selection.py
+@@ -0,0 +1,22 @@
++from __future__ import annotations
++
++from abc import ABC, abstractmethod
++
++from agent_comms.registry.threads import Thread
++
++
++class RecipientSelection(ABC):
++    """One registry selection owns live, archived and retired recipient behavior."""
++
++    def activity_threads(self) -> tuple[Thread, ...]:
++        return ()
++
++    @abstractmethod
++    def activity(self, observations, snapshot): ...
++
++    @abstractmethod
++    def read_effect(self, reads, message, snapshot, *, document=None): ...
++
++    def input_owners(self) -> tuple[Thread, ...]:
++        """The live thread whose stored inputs this recipient's deliveries are keyed by."""
++        return ()
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/registry/presence_reads.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/registry/presence_reads.py
+@@ -0,0 +1,40 @@
++"""Original participant/process facts borrowed by the presence family."""
++from __future__ import annotations
++from abc import ABC, abstractmethod
++
++from agent_comms.execution.child_process import ProcessIdentity, ProcessState
++from agent_comms.registry.thread_identity import OwnerIdentity, ThreadIncarnation, ThreadRole
++
++
++class PresenceThread(ABC):
++    __slots__ = ()
++    name: str
++    process_identity: ProcessState
++    role: type[ThreadRole]
++
++    @property
++    @abstractmethod
++    def incarnation(self) -> ThreadIncarnation: ...
++
++    @property
++    @abstractmethod
++    def process_alive(self) -> bool: ...
++
++    @abstractmethod
++    def require_process(self) -> ProcessIdentity: ...
++
++
++class PresenceEntry(ABC):
++    __slots__ = ()
++    thread: PresenceThread
++    owner_generation: int
++
++    @abstractmethod
++    def matches_name(self, name: str) -> bool: ...
++
++
++class PresenceSnapshot(ABC):
++    __slots__ = ()
++
++    @abstractmethod
++    def owner_identity(self, name: str) -> OwnerIdentity: ...
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registration.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registration.py
+@@ -1,6 +1,8 @@
+ """Thread registration and authority transactions over their determining document."""
+ 
+ from __future__ import annotations
++
++from agent_comms.activity_registry_reads import ActivityRegistration
+ 
+ from collections.abc import Callable, Mapping, Sequence
+ from contextlib import contextmanager
+@@ -53,7 +55,7 @@
+ _DEFAULT_PRESENCE = ProcessThreadStatus()
+ 
+ 
+-class Registration:
++class Registration(ActivityRegistration):
+     """Own registration transactions; never borrow a Comms or facade's state."""
+ 
+     def __init__(self, store_path: Path):
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_document.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_document.py
+@@ -1,3 +1,6 @@
++from agent_comms.registry.presence_reads import PresenceEntry, PresenceSnapshot
++from agent_comms.activity_registry_reads import ActivityRegistryRead
++from agent_comms.target_command_bindings import TargetCommandBindings
+ """One registry document: thread facts, identity domains and lifecycle behavior."""
+ 
+ 
+@@ -62,6 +65,7 @@
+     RegistrationChange,
+     UpdatedRegistration,
+ )
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
+ from agent_comms.registry.thread_creation import CreationTime
+ from agent_comms.registry.thread_identity import (
+     ClaimedIdentity,
+@@ -109,21 +113,9 @@
+ from agent_comms.tool_result import ToolResult
+ from agent_comms_hooks import ToolRefusedError
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.bus_publication import Delivered
+-    from agent_comms.cli_command import CliCommand
+-    from agent_comms.comms import Comms
+-
+-
+-@dataclass(frozen=True, slots=True)
+-class RosterVisibility:
+-    """Which threads a roster shows: the one declaration of its defaults."""
+-
+-    stopped: bool = True
+-    archived: bool = False
+-
+-
+-DEFAULT_ROSTER = RosterVisibility()
++from agent_comms.delivery_recipients import DeliveryRecipients
++
++
+ 
+ 
+ @dataclass(frozen=True)
+@@ -131,8 +123,8 @@
+     thread: Thread
+     status: ThreadStatus
+ 
+-    def bindings[C: CliCommand](
+-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel,
++    def bindings[Context, C: TargetCommandBindings[Context, Thread, ThreadStatus, SurroundingChannel, Checkout, RegistrySnapshot, CatalogAccess, ResolvedChannel]](
++        self, declaration: type[C], comms: Context, channel: SurroundingChannel,
+         *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+     ) -> tuple[C, ...]:
+         return declaration.thread_bindings(
+@@ -145,8 +137,8 @@
+     channel: Channel
+     members: tuple[ResolvedThread, ...]
+ 
+-    def bindings[C: CliCommand](
+-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel,
++    def bindings[Context, C: TargetCommandBindings[Context, Thread, ThreadStatus, SurroundingChannel, Checkout, RegistrySnapshot, CatalogAccess, ResolvedChannel]](
++        self, declaration: type[C], comms: Context, channel: SurroundingChannel,
+         *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+     ) -> tuple[C, ...]:
+         return declaration.channel_bindings(
+@@ -1158,7 +1150,7 @@
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+-class RegistryEntry:
++class RegistryEntry(PresenceEntry):
+     """Everything the registry records about one thread, and nothing about the others.
+ 
+     The document-wide generation counters are allocation state, not this
+@@ -1199,6 +1191,8 @@
+     RegistryProvenance,
+     ToolResult,
+     ThreadOwnerSource[Thread],
++    PresenceSnapshot,
++    ActivityRegistryRead,
+ ):
+     purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)]
+     threads: Annotated[ThreadRows, SlicePolicy(ThreadRowsSlice)]
+@@ -1367,7 +1361,7 @@
+         return thread.role.displayed_recipient_effect(reads, message, thread, self, document)
+ 
+     def recipient(
+-        self, recipient: FrozenRecipient, original: Delivered
++        self, recipient: FrozenRecipient, original: DeliveryRecipients
+     ) -> RegisteredRecipient | RetiredRecipient:
+         """A missing live thread was retired only if the original send names it."""
+         lookup = recipient.recipient_lookup
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_store.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_store.py
+@@ -1,6 +1,8 @@
+ """A8 registry persistence: cached documents and the existing private durability guard."""
+ 
+ from __future__ import annotations
++
++from agent_comms.activity_registry_reads import RegistryPathRead
+ 
+ import json
+ import os
+@@ -325,8 +327,13 @@
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+-class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocument],
+-                    TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]):
++class RegistryStore(
++    RegistryLocking,
++    RegistryFile,
++    CarriedDocument[RegistryDocument],
++    TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn],
++    RegistryPathRead,
++):
+     json_indent = 2
+     cache: RegistryCache = field(init=False, compare=False, repr=False)
+     presence: PresenceStore = field(init=False, compare=False, repr=False)
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/registry/roster_visibility.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/registry/roster_visibility.py
+@@ -0,0 +1,12 @@
++from dataclasses import dataclass
++
++
++@dataclass(frozen=True, slots=True)
++class RosterVisibility:
++    """Which threads a roster shows: the one declaration of its defaults."""
++
++    stopped: bool = True
++    archived: bool = False
++
++
++DEFAULT_ROSTER = RosterVisibility()
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_identity.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_identity.py
+@@ -28,6 +28,7 @@
+ from agent_comms.class_fact import ClassFact
+ from agent_comms.cli_options import JsonFlagRecord
+ from agent_comms.errors import RelationViolationError
++from agent_comms.message_clock_source import SenderClockSource
+ from agent_comms.nominal.declared_family import (
+     DeclaredFamily,
+     UniqueExternalSelector,
+@@ -631,7 +632,12 @@
+         self.generations[new] = self.generations.pop(old)
+ 
+ 
+-class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
++class ThreadRole(
++    DeclaredFamily,
++    ProjectionSource,
++    SenderClockSource,
++    affix='ThreadRole',
++):
+     """Whether a thread executes turns is the member's type; its wire name is its spelling."""
+ 
+     @ClassFact
+@@ -726,10 +732,6 @@
+ 
+     @classmethod
+     @abstractmethod
+-    def last_user_input(cls, previous: float, timestamp: float) -> float: ...
+-
+-    @classmethod
+-    @abstractmethod
+     def user_task_facts(cls, message: Message) -> Iterable[object]: ...
+ 
+ 
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_status.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_status.py
+@@ -1,4 +1,7 @@
+ from __future__ import annotations
++
++from agent_comms.registry.presence_reads import PresenceThread, PresenceEntry, PresenceSnapshot
++from agent_comms.message_send_reads import PresenceMessageSender
+ 
+ import time
+ from abc import abstractmethod
+@@ -32,20 +35,16 @@
+     UnavailableThreadOwnerBinding,
+ )
+ from agent_comms.registry.thread_reads import ThreadOwnerStatus
+-
+-if TYPE_CHECKING:
+-    from agent_comms.activity import ObservedActivity
+-    from agent_comms.execution.turn_item import SourceTurn
+-    from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
+-    from agent_comms.messaging.message_reference import MessageReference
+-    from agent_comms.messaging.sending import Messaging
+-    from agent_comms.registry.registry_document import (
+-        RegistryEntry,
+-        RegistrySnapshot,
+-        RosterVisibility,
+-    )
+-    from agent_comms.registry.thread_identity import GenerationCounter, OwnerIdentity
+-    from agent_comms.registry.threads import Thread
++from agent_comms.registry.roster_visibility import RosterVisibility
++
++from agent_comms.activity import ObservedActivity
++from agent_comms.execution.turn_item import SourceTurn
++from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
++from agent_comms.messaging.message_reference import MessageReference
++
++
++from agent_comms.registry.thread_identity import GenerationCounter, OwnerIdentity
++
+ 
+ 
+ class AlwaysListed:
+@@ -73,7 +72,7 @@
+     """A presence that can be addressed, started and pinned in channels."""
+ 
+     def reply(
+-        self, messaging: Messaging, sender: str, target: str, body: str, *,
++        self, messaging: PresenceMessageSender, sender: str, target: str, body: str, *,
+         answers: tuple[MessageReference, ...], source_turn: SourceTurn,
+     ) -> tuple[MessageReference, ...]:
+         return (messaging.send(
+@@ -96,7 +95,7 @@
+     LifecycleCapability,
+     DeclaredFamily,
+     ProcessFence['ThreadStatus'],
+-    ThreadOwnerStatus["RegistrySnapshot", "Thread"],
++    ThreadOwnerStatus[PresenceSnapshot, PresenceThread],
+     affix='ThreadStatus',
+ ):
+     may_be_active: ClassVar[bool] = False
+@@ -120,13 +119,13 @@
+         """Whether this lifecycle belongs in the requested executable roster."""
+ 
+     def reply(
+-        self, messaging: Messaging, sender: str, target: str, body: str, *,
++        self, messaging: PresenceMessageSender, sender: str, target: str, body: str, *,
+         answers: tuple[MessageReference, ...], source_turn: SourceTurn,
+     ) -> tuple[MessageReference, ...]:
+         """Unavailable recipients retain their answer in the transcript, not a new DM."""
+         return ()
+ 
+-    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
++    def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
+         return self
+ 
+     def declaration(self) -> ThreadStatus:
+@@ -139,7 +138,7 @@
+         """This stored status while its process still binds it; only a stop has a fence."""
+         return self
+ 
+-    def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
++    def external_registered(self, thread: PresenceThread, now: float) -> ThreadStatus:
+         return NoBridgeThreadStatus().registered(thread, now)
+ 
+     def paused_since(self, last_seen: float) -> tuple[float, ...]:
+@@ -195,16 +194,16 @@
+     def changes_owner(self, nxt: ThreadStatus) -> bool:
+         return self.starts_owner(nxt) or nxt.starts_owner(self)
+ 
+-    def native_owner_binding(self, snapshot: RegistrySnapshot, thread: Thread) -> ThreadOwnerBinding:
++    def native_owner_binding(self, snapshot: PresenceSnapshot, thread: PresenceThread) -> ThreadOwnerBinding:
+         return UnavailableThreadOwnerBinding()
+ 
+-    def restart_candidates(self, thread: Thread) -> tuple[Thread, ...]:
++    def restart_candidates(self, thread: PresenceThread) -> tuple[PresenceThread, ...]:
+         return ()
+ 
+-    def deletable_threads(self, thread: Thread) -> tuple[Thread, ...]:
++    def deletable_threads(self, thread: PresenceThread) -> tuple[PresenceThread, ...]:
+         return () if thread.process_alive else (thread,)
+ 
+-    def owns_entry(self, entry: RegistryEntry, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
++    def owns_entry(self, entry: PresenceEntry, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
+         return False
+ 
+     def completed_turn(self, lease: TurnLeaseFence) -> TurnCompletion:
+@@ -254,7 +253,7 @@
+ 
+     holds_process: ClassVar[bool] = True
+ 
+-    def restart_candidates(self, thread: Thread) -> tuple[Thread, ...]:
++    def restart_candidates(self, thread: PresenceThread) -> tuple[PresenceThread, ...]:
+         return thread.role.executor(thread) if thread.process_alive else ()
+ 
+ 
+@@ -267,7 +266,7 @@
+     receiving = True
+     may_be_active = True
+ 
+-    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
++    def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
+         return thread.process_identity.thread_status(self, last_seen)
+ 
+     def process_seen(self, process: ProcessState) -> ThreadStatus:
+@@ -285,15 +284,15 @@
+     def withdraw_owner(self, counter: GenerationCounter, name: str) -> None:
+         counter.advance(name)
+ 
+-    def native_owner_binding(self, snapshot: RegistrySnapshot, thread: Thread) -> ThreadOwnerBinding:
++    def native_owner_binding(self, snapshot: PresenceSnapshot, thread: PresenceThread) -> ThreadOwnerBinding:
+         if not thread.process_alive:
+             return super().native_owner_binding(snapshot, thread)
+         return LiveThreadOwnerBinding(snapshot.owner_identity(thread.name), thread.require_process())
+ 
+-    def deletable_threads(self, thread: Thread) -> tuple[Thread, ...]:
++    def deletable_threads(self, thread: PresenceThread) -> tuple[PresenceThread, ...]:
+         return ()
+ 
+-    def owns_entry(self, entry: RegistryEntry, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
++    def owns_entry(self, entry: PresenceEntry, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
+         return (entry.matches_name(owner.incarnation.name)
+                 and owner.owns(entry.thread, entry.owner_generation, process))
+ 
+@@ -374,7 +373,7 @@
+     stopped = True
+     vacant = True
+ 
+-    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
++    def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
+         """Stopped never keeps a process binding, so a stored stop still bound is a fence
+         whose host has not completed the session."""
+         return thread.process_identity.stopped_seen(self)
+@@ -410,7 +409,7 @@
+ 
+     may_be_active: ClassVar[bool] = True
+ 
+-    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
++    def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
+         return (ConnectedThreadStatus() if thread.process_identity.alive()
+                 else NoBridgeThreadStatus())
+ 
+@@ -430,7 +429,7 @@
+     def declaration(self) -> Self:
+         return self
+ 
+-    def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
++    def external_registered(self, thread: PresenceThread, now: float) -> ThreadStatus:
+         return self.registered(thread, now)
+ 
+ 
+@@ -445,7 +444,7 @@
+ class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, StoppedPresence):
+     """A live session bridge waiting for a Monitor to confirm its probe."""
+ 
+-    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
++    def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
+         return self if thread.process_identity.alive() else NoBridgeThreadStatus()
+ 
+     def paused_since(self, last_seen: float) -> tuple[float, ...]:
+@@ -480,7 +479,7 @@
+     def in_view(self, visibility: RosterVisibility) -> bool:
+         return False
+ 
+-    def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
++    def external_registered(self, thread: PresenceThread, now: float) -> ThreadStatus:
+         return self
+ 
+     def after_heartbeat(self, name: str) -> ThreadStatus:
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py
+@@ -1,6 +1,8 @@
+ """Threads: declaration and persistence owners."""
+ 
+ from __future__ import annotations
++
++from agent_comms.registry.presence_reads import PresenceThread
+ 
+ import os
+ import time
+@@ -13,6 +15,7 @@
+ 
+ from agent_comms.activity import ObservedActivity
+ from agent_comms.agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
++from agent_comms.channel_sources import ChannelMemberSource
+ from agent_comms.context_segments.wake_values import WakeWorkContext, WakeWorkSource
+ from agent_comms.errors import RelationViolationError
+ from agent_comms.execution.child_process import NoProcess, ProcessIdentity, ProcessState
+@@ -325,7 +328,16 @@
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+-class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, TaskOwner, GoalFailureOwner, affix="Thread"):
++class Thread(
++    ThreadProvenance,
++    CatalogSelection,
++    DeclaredFamily,
++    TaskOwner,
++    GoalFailureOwner,
++    ChannelMemberSource,
++    PresenceThread,
++    affix='Thread',
++):
+     """Declares one agent thread's identity and provenance; each member is how it executes.
+ 
+     The registration owns transport intent; presence does not imply an RPC.
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/registry_provenance.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/registry_provenance.py
+@@ -3,7 +3,6 @@
+ from __future__ import annotations
+ 
+ import json
+-from abc import ABC, abstractmethod
+ from collections.abc import (
+     Iterable,
+     Mapping,
+@@ -17,25 +16,9 @@
+ from agent_comms.frozen_recipient import FrozenRecipient
+ from agent_comms.message_sender import PublicSender
+ from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
++from agent_comms.recipient_selection import RecipientSelection
+ from agent_comms.registry.threads import Thread, ThreadProvenance
+ from agent_comms.registry_names import RegistryNames as RegistryNames
+-
+-
+-class RecipientSelection(ABC):
+-    """One registry selection owns live, archived and retired recipient behavior."""
+-
+-    def activity_threads(self) -> tuple[Thread, ...]:
+-        return ()
+-
+-    @abstractmethod
+-    def activity(self, observations, snapshot): ...
+-
+-    @abstractmethod
+-    def read_effect(self, reads, message, snapshot, *, document=None): ...
+-
+-    def input_owners(self) -> tuple[Thread, ...]:
+-        """The live thread whose stored inputs this recipient's deliveries are keyed by."""
+-        return ()
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py
+@@ -37,7 +37,8 @@
+ )
+ from agent_comms.planning.goals import Goal, GoalMentionBinding
+ from agent_comms.registry.registration import Registration
+-from agent_comms.registry.registry_document import RegistrySnapshot, RosterVisibility
++from agent_comms.registry.registry_document import RegistrySnapshot
++from agent_comms.registry.roster_visibility import RosterVisibility
+ from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+ from agent_comms.registry.thread_owned_state import ThreadOwnedState
+ from agent_comms.registry.threads import Thread
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/runtime_info.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/runtime_info.py
+@@ -1,6 +1,8 @@
+ """Runtime info: declaration and persistence owners."""
+ 
+ from __future__ import annotations
++
++from agent_comms.runtime_info_projection import RuntimeInfoProjection
+ 
+ from abc import abstractmethod
+ from collections.abc import Iterable, Sequence
+@@ -18,9 +20,8 @@
+ from agent_comms.storage.maintenance_barrier import CarriedDocument
+ from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.agent_events import RuntimeInfoObservation
+-    from agent_comms.registry.threads import Thread
++
++from agent_comms.thread_identity_source import ThreadIdentitySource
+ 
+ 
+ class RuntimeInfo(DeclaredFamily, affix="RuntimeInfo"):
+@@ -99,7 +100,7 @@
+                 resolved[name] = UnobservedRuntimeInfo()
+         return resolved
+ 
+-    def observe(self, thread: str, timestamp: float, observation: RuntimeInfoObservation) -> None:
++    def observe(self, thread: str, timestamp: float, observation: RuntimeInfoProjection[AgentRuntimeInfo]) -> None:
+         """Apply only this observation's fields in the original store transaction."""
+ 
+         def apply(
+@@ -114,7 +115,7 @@
+ 
+         self.update(apply)
+ 
+-    def remove_threads(self, threads: Sequence[Thread]) -> None:
++    def remove_threads(self, threads: Sequence[ThreadIdentitySource]) -> None:
+         names = {thread.name for thread in threads}
+         self.update(
+             lambda document: DocumentChange.to(
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/runtime_info_projection.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/runtime_info_projection.py
+@@ -0,0 +1,9 @@
++"""An original runtime observation projects only the fields it actually observed."""
++from abc import ABC, abstractmethod
++
++
++class RuntimeInfoProjection[Info](ABC):
++    __slots__ = ()
++
++    @abstractmethod
++    def project_runtime_info(self, current: Info) -> Info: ...
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/send_result.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/send_result.py
+@@ -1,5 +1,7 @@
+ """A committed send and its independent post-delivery wording correction."""
+ from __future__ import annotations
++
++from agent_comms.message_send_reads import CommittedMessageRead
+ 
+ from abc import abstractmethod
+ from dataclasses import dataclass
+@@ -39,7 +41,7 @@
+ 
+ 
+ @dataclass(frozen=True)
+-class SendResult:
++class SendResult(CommittedMessageRead):
+     message: Message
+     correction: CorrectionResult
+ 
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/target_command_bindings.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/target_command_bindings.py
+@@ -0,0 +1,21 @@
++"""Command declarations bind original thread/channel targets in their own context."""
++from abc import ABC, abstractmethod
++from typing import Self
++
++
++class TargetCommandBindings[Context, Owner, Presence, Around, Project, Snapshot, Catalog, Resolved](ABC):
++    __slots__ = ()
++
++    @classmethod
++    @abstractmethod
++    def thread_bindings(
++        cls, comms: Context, thread: Owner, status: Presence, channel: Around,
++        *, catalog: Catalog,
++    ) -> tuple[Self, ...]: ...
++
++    @classmethod
++    @abstractmethod
++    def channel_bindings(
++        cls, comms: Context, resolved: Resolved,
++        *, project: Project, snapshot: Snapshot, catalog: Catalog,
++    ) -> tuple[Self, ...]: ...
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/task_owner.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/task_owner.py
+@@ -5,13 +5,12 @@
+ 
+ from agent_comms.context_owner import ContextOwner
+ from agent_comms.nominal.field_codec import TurnId
+-from agent_comms.registry.thread_identity import ThreadRole, TurnFence, TurnIdentity
++from agent_comms.registry.thread_identity import TurnFence, TurnIdentity
++from agent_comms.thread_role_source import ThreadRoleSource
+ 
+ 
+-class TaskOwner(ContextOwner):
++class TaskOwner(ContextOwner, ThreadRoleSource):
+     __slots__ = ()
+-
+-    role: type[ThreadRole]
+ 
+     @abstractmethod
+     def require_publication_turn(self, claim_generation: Callable[[], int], turn_id: TurnId) -> None: ...
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/team/standing.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/team/standing.py
+@@ -55,7 +55,8 @@
+ from agent_comms.planning.plan_phases import PlanPhase
+ from agent_comms.projects.repo import Repo
+ from agent_comms.recorded_time import RecordedEventTime
+-from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
++from agent_comms.registry.registry_document import RegistrySnapshot
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
+ from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+ from agent_comms.registry.threads import Thread
+ from agent_comms.projects.repository_name import RepositoryName
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/thread_role_source.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/thread_role_source.py
+@@ -0,0 +1,10 @@
++"""Original authorship role, independent of thread runtime assembly."""
++
++from abc import ABC
++from agent_comms.registry.thread_identity import ThreadRole
++
++
++class ThreadRoleSource(ABC):
++    __slots__ = ()
++
++    role: type[ThreadRole]
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/ui_model/observation.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/ui_model/observation.py
+@@ -89,9 +89,9 @@
+ from agent_comms.projects.checkouts import Checkout
+ from agent_comms.registry.registry_document import (
+     RegistrySnapshot,
+-    RosterVisibility,
+     UnreadRegistry,
+ )
++from agent_comms.registry.roster_visibility import RosterVisibility
+ from agent_comms.registry.thread_identity import ThreadIncarnation
+ from agent_comms.registry.thread_presentation import ThreadPresentation
+ from agent_comms.registry_names import DeletedThread
+--- a/home/ts/wt/comms-friction--P17/src/agent_comms/view_unread.py
++++ b/home/ts/wt/comms-friction--P17/src/agent_comms/view_unread.py
+@@ -21,7 +21,7 @@
+ from agent_comms.execution.native_entries import NativeEntry
+ from agent_comms.execution.native_transcript import SessionCut, record_end, reverse_records
+ from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
+-from agent_comms.registry.registry_document import RosterVisibility
++from agent_comms.registry.roster_visibility import RosterVisibility
+ from agent_comms.registry.thread_identity import ThreadIncarnation
+ from agent_comms.registry.thread_owned_state import ThreadOwnedState
+ from agent_comms.storage.locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
+--- a/home/ts/wt/comms-friction--P17/tests/native_unread_fixture.py
++++ b/home/ts/wt/comms-friction--P17/tests/native_unread_fixture.py
+@@ -1,7 +1,7 @@
+ """Await actual native index preparation; tests declare their own registry threads."""
+ 
+ from agent_comms.comms import wire
+-from agent_comms.registry.registry_document import DEFAULT_ROSTER
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
+ from agent_comms.view_unread import TranscriptReadState
+ 
+ 
+--- a/home/ts/wt/comms-friction--P17/tests/test_channels.py
++++ b/home/ts/wt/comms-friction--P17/tests/test_channels.py
+@@ -40,7 +40,7 @@
+     Checkout,
+     LaunchCheckout,
+ )
+-from agent_comms.registry.registry_document import RosterVisibility
++from agent_comms.registry.roster_visibility import RosterVisibility
+ from agent_comms.registry.thread_management import (
+     ForkSpec,
+     GivenTags,
+--- a/home/ts/wt/comms-friction--P17/tests/test_deleted_thread_observation.py
++++ b/home/ts/wt/comms-friction--P17/tests/test_deleted_thread_observation.py
+@@ -9,7 +9,7 @@
+ from agent_comms.activity import ActivityState, ObservedActivity
+ from agent_comms.notification_reads import LiveNotificationRead
+ from agent_comms.projects.checkouts import Checkout
+-from agent_comms.registry.registry_document import DEFAULT_ROSTER
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
+ from agent_comms.registry.thread_presentation import NoThreadPresentation, ThreadRetired
+ from agent_comms.registry.thread_text import GivenThreadText
+ from agent_comms.registry.threads import ExternalThread, NativeThread
+--- a/home/ts/wt/comms-friction--P17/tests/test_relationships.py
++++ b/home/ts/wt/comms-friction--P17/tests/test_relationships.py
+@@ -8,7 +8,7 @@
+ from agent_comms.comms import wire
+ from agent_comms.display_order import LastActivityThreadSort
+ from agent_comms.projects.checkouts import Checkout
+-from agent_comms.registry.registry_document import RosterVisibility
++from agent_comms.registry.roster_visibility import RosterVisibility
+ from agent_comms.registry.thread_text import (
+     ForkedParent,
+     NoParent,
+--- a/home/ts/wt/comms-friction--P17/tests/test_thread_status.py
++++ b/home/ts/wt/comms-friction--P17/tests/test_thread_status.py
+@@ -17,7 +17,7 @@
+ from agent_comms.presentation import CountedRead, ThreadView
+ from agent_comms.projects.checkouts import Checkout
+ from agent_comms.registry.registration import Registration
+-from agent_comms.registry.registry_document import DEFAULT_ROSTER
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
+ from agent_comms.registry.thread_status import (
+     ArchivedThreadStatus,
+     ConnectedThreadStatus,
+@@ -98,7 +98,6 @@
+             assert individual.read_identity.thread.incarnation == thread.incarnation
+             assert individual.same_status(visible[0].presentation)
+         else:
+-            from agent_comms.registry.registry_document import RosterVisibility
+             if expected.in_view(RosterVisibility(archived=True)):
+                 assert individual.require("owner") is individual
+             else:
+@@ -191,8 +190,6 @@
+     (DeletingThreadStatus(), False, False),
+ ])
+ def test_presence_owns_roster_membership_and_self_rename(status, listed, rename):
+-    from agent_comms.registry.registry_document import RosterVisibility
+-
+     assert status.in_view(RosterVisibility(stopped=False)) == listed
+     if rename:
+         status.require_self_rename()
+--- a/home/ts/wt/comms-friction--P17/tests/test_thread_unread.py
++++ b/home/ts/wt/comms-friction--P17/tests/test_thread_unread.py
+@@ -8,7 +8,7 @@
+ 
+ from agent_comms.comms import wire
+ from agent_comms.projects.checkouts import Checkout
+-from agent_comms.registry.registry_document import DEFAULT_ROSTER
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
+ from agent_comms.registry.threads import NativeThread
+ from agent_comms.session_file import RegistrySessionLocation
+ from agent_comms.storage.private_path import FileRevision
+--- a/home/ts/wt/comms-friction--P17/tests/test_transcript_read_lifetime.py
++++ b/home/ts/wt/comms-friction--P17/tests/test_transcript_read_lifetime.py
+@@ -12,7 +12,7 @@
+ 
+ from agent_comms.comms import wire
+ from agent_comms.projects.checkouts import Checkout
+-from agent_comms.registry.registry_document import DEFAULT_ROSTER
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
+ from agent_comms.registry.threads import NativeThread
+ from agent_comms.session_file import RegistrySessionLocation
+ from agent_comms.ui_model.unread import IndexingUnread
+--- a/home/ts/wt/comms-friction--P17/tests/test_visibility_views.py
++++ b/home/ts/wt/comms-friction--P17/tests/test_visibility_views.py
+@@ -5,7 +5,7 @@
+ 
+ from agent_comms.comms import wire
+ from agent_comms.projects.checkouts import Checkout
+-from agent_comms.registry.registry_document import RosterVisibility
++from agent_comms.registry.roster_visibility import RosterVisibility
+ from agent_comms.registry.thread_identity import UserThreadRole
+ from agent_comms.registry.thread_status import (
+     ArchivedThreadStatus,
