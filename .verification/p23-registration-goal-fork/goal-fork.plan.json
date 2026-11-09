@@ -1,0 +1,93 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "import-existing-child-goal-capability",
+          "operations": [
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-selected-owner-7b/projected/src/agent_comms/registry/registration.py",
+              "rationale": "",
+              "import_source": "from agent_comms.planning.goal_mutation import GoalFork"
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "use-existing-goal-fork-contract-in-child-registration",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "goals: goal_management.Goals",
+                  "new_source": "goals: GoalFork[Thread, goals.GoalDeclaration]"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-selected-owner-7b/projected/src/agent_comms/registry/registration.py",
+              "target_qualname": "Registration.register_child",
+              "rationale": ""
+            },
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "goals: goal_management.Goals",
+                  "new_source": "goals: GoalFork[Thread, goals.GoalDeclaration]"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-selected-owner-7b/projected/src/agent_comms/registry/registration.py",
+              "target_qualname": "Registration.claim_slot",
+              "rationale": ""
+            },
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "goals: goal_management.Goals",
+                  "new_source": "goals: GoalFork[Thread, goals.GoalDeclaration]"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-selected-owner-7b/projected/src/agent_comms/registry/registration.py",
+              "target_qualname": "Registration._child_in",
+              "rationale": ""
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "delete-unread-concrete-goal-manager-import",
+          "operations": [
+            {
+              "operation": "remove_import_bindings",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-selected-owner-7b/projected/src/agent_comms/registry/registration.py",
+              "rationale": "",
+              "bound_names": [
+                "goal_management"
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

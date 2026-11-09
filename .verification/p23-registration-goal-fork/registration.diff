@@ -1,0 +1,44 @@
+diff --git a/.verification/p23-selected-owner-7b/projected/src/agent_comms/registry/registration.py b/.verification/p23-registration-goal-fork/registration.after.py.txt
+index f9905dc62..1dd8f60a7 100644
+--- a/.verification/p23-selected-owner-7b/projected/src/agent_comms/registry/registration.py
++++ b/.verification/p23-registration-goal-fork/registration.after.py.txt
+@@ -18,6 +18,7 @@ from agent_comms.messaging.channel_targets import DeclaredTag
+ from agent_comms.messaging.routing import NoTurnRouting, Routing
+ from agent_comms.nominal.field_codec import ThreadLookup, TurnId
+ from agent_comms.planning.goal_history import GoalHistoryEntry, GoalHistoryStore
++from agent_comms.planning.goal_mutation import GoalFork
+ from agent_comms.planning.goal_scope import AllGoals, GoalScope
+ from agent_comms.projects.checkouts import Checkout, CheckoutTransfer, RepositoryReads
+ from agent_comms.projects.repo import Repo
+@@ -180,13 +181,13 @@ class Registration(
+             return self._declare_in(edit, child, _DEFAULT_PRESENCE)
+ 
+     def register_child(
+-        self, name: str, parent_name: str, execution: type[SubagentThread], goals: goal_management.Goals,
++        self, name: str, parent_name: str, execution: type[SubagentThread], goals: GoalFork[Thread, goals.GoalDeclaration],
+     ) -> Thread:
+         """Declare or resume one named child of `parent_name` under the registry's lock."""
+         with self.store.editing() as edit:
+             return self._child_in(edit, name, edit.document.require(parent_name), execution, goals)
+ 
+-    def claim_slot(self, parent_name: str, role: SubagentRole, goals: goal_management.Goals) -> Thread:
++    def claim_slot(self, parent_name: str, role: SubagentRole, goals: GoalFork[Thread, goals.GoalDeclaration]) -> Thread:
+         """Seat a subagent in the first vacant slot of its role under `parent_name`; a slot it
+         takes over keeps its bus history, so the new occupant reads what the last one did."""
+         with self.store.editing() as edit:
+@@ -197,7 +198,7 @@ class Registration(
+ 
+     def _child_in(
+         self, edit: RegistryEdit, name: str, parent: Thread,
+-        execution: type[SubagentThread], goals: goal_management.Goals,
++        execution: type[SubagentThread], goals: GoalFork[Thread, goals.GoalDeclaration],
+     ) -> Thread:
+         if edit.document.canonical_name(name) != name:
+             raise RelationViolationError(f"Child thread {name!r} is an alias.")
+@@ -520,5 +521,5 @@ class Registration(
+         return name in self.store.read()
+ 
+ from agent_comms import agent_backend
+-from agent_comms.planning import goal_management, goals
++from agent_comms.planning import goals
+ from agent_comms.registry import catalog_document

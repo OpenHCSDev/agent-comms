@@ -1,0 +1,7 @@
+{
+  "head": "27e59c079710b9d5405725edb82d3f6fe1a9a047",
+  "input_projection": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-selected-owner-7b/projected",
+  "matched_python_files": 1620,
+  "configuration_blob": "54b088d6a8bcf1c9a0c9d21b35290f5ae04cf82a",
+  "reconstruction": "../p23-selected-owner-7b/before-source.tar.gz plus its already-applied selected-owner.plan.json"
+}
