@@ -11,12 +11,138 @@ from typing import (
     ClassVar,
 )
 
-from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
-from . import channels
-from .channels import ChannelListing
-from .sidebar import (
+from agent_comms.acp_extension import CoordinationChangedUpdate
+from agent_comms.channel_management import ListTagEdit, TagEdit
+from agent_comms.channel_targets import ChannelTarget, CommandTarget
+from agent_comms.channels import Channel, SavedView, ViewMatch, ViewPredicate
+from agent_comms.cli_bridges.history import OfflineHistory
+from agent_comms.cli_command import PreparedTargetAction, TargetActionCommand
+from agent_comms.cli_commands import ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult
+from agent_comms.cli_result import CliResult, TargetEditResult
+from agent_comms.cli_verbs.archive import ArchiveCliCommand
+from agent_comms.cli_verbs.delete_view import DeleteViewCliCommand
+from agent_comms.cli_verbs.fork import ForkCliCommand
+from agent_comms.cli_verbs.history import HistoryCliCommand
+from agent_comms.cli_verbs.pin_channel import PinChannelCliCommand
+from agent_comms.cli_verbs.pin_thread import PinThreadCliCommand
+from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
+from agent_comms.cli_verbs.start import StartCliCommand
+from agent_comms.cli_verbs.stop import StopCliCommand
+from agent_comms.cli_verbs.threads import ThreadsCliCommand
+from agent_comms.comms import Comms
+from agent_comms.config_options import ConfigOptions
+from agent_comms.coordination.tables.refusals import SendRefusal
+from agent_comms.display_references import ReferenceNames
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.owner_lifecycle import OwnerStartResult
+from agent_comms.execution.turn_context import ContextManifest, ContextSourceText, SegmentManifest
+from agent_comms.exporting import WireExportProvenance
+from agent_comms.historical_views import ConversationRevision
+from agent_comms.history_result import HistoryPageResult
+from agent_comms.history_views import RetiredViews
+from agent_comms.host_logs import HostLog, HostLogRead
+from agent_comms.importing import ImportedSessionMetadata, ThreadImported
+from agent_comms.input_origin import HumanInputOrigin
+from agent_comms.message_notification import MessageNotification
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message, NoticeRole
+from agent_comms.messaging.bus_identity import BusIdentityStore
+from agent_comms.messaging.message_page import MessagePage
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.field_codec import (
+    ContextSource,
+    FieldCodec,
+    NullMember,
+    SingleFieldValue,
+    SubclassUnion,
+    WireForm,
+    WireName,
+    WireOmitDefault,
+)
+from agent_comms.notification_evidence import (
+    AfterRecipient,
+    FirstRecipient,
+    RecipientCursor,
+    RecipientLimit,
+)
+from agent_comms.notification_reads import LiveNotificationRead
+from agent_comms.owner_connection import OwnerConnection
+from agent_comms.owner_launch import HostResources
+from agent_comms.page_traversal import LatestSequence, LiveCursor, NewestCursor, PageCursor
+from agent_comms.pi_vocabulary import ServiceTier, ThinkingLevelField
+from agent_comms.presentation import ChannelView, WireRevision
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_document import (
+    ProjectThreadSelection,
+    RegistrySlice,
+    RegistrySnapshot,
+)
+from agent_comms.registry.thread_identity import ThreadIncarnation, ToolName
+from agent_comms.registry.thread_management import (
+    InheritedTags,
+    ProjectChangeResult,
+    RenameThreadResult,
+    TagChoice,
+    ThreadTitleResult,
+)
+from agent_comms.registry.thread_model import ThreadModel
+from agent_comms.registry.thread_presentation import ThreadPresentation
+from agent_comms.registry.threads import (
+    ArchiveOwnerControl,
+    NativeOwnerCommand,
+    NextTurnConfiguration,
+    OwnerLifecycleControl,
+    StartOwnerControl,
+)
+from agent_comms.relationships import (
+    Collaboration,
+    GoalDerivedContact,
+    GoalMentionDiagnostic,
+    RelationshipEdit,
+    ThreadCommsSnapshot,
+)
+from agent_comms.restart_queue import QueuedRestart, RestartQueue, RestartQueued
+from agent_comms.send_result import (
+    CorrectionComplete,
+    CorrectionResult,
+    MessagePublished,
+    SendResult,
+)
+from agent_comms.task_sources import (
+    Constraint,
+    CurrentTaskScopeSelection,
+    Decision,
+    OriginalTaskChange,
+    Subtask,
+    TaskAttachment,
+    TaskChange,
+    TaskScopeSelection,
+)
+from agent_comms.team.standing import InstallDue
+from agent_comms.tool_caller import ThreadCaller, ThreadListing, ToolCaller
+from agent_comms.tool_declaration import NativeRequestTools
+from agent_comms.tool_request import (
+    CoreRead,
+    HumanToolRequest,
+    LiveOwnerTool,
+    NativeToolRequest,
+    ObservedToolRequest,
+    PublishingToolRequest,
+    ReadTool,
+    ServedRequest,
+    ThreadContextAction,
+    ThreadReadTool,
+    ThreadToolRequest,
+)
+from agent_comms.tool_result import ToolResult
+from agent_comms.transport.native_tools import CommunicationCall
+from agent_comms.transport.request import SubjectBinding, tool_field
+from agent_comms.transport.runtime_requests import QueueActionRuntimeRequest
+from agent_comms.transport.tools import channels
+from agent_comms.transport.tools.channels import ChannelListing
+from agent_comms.transport.tools.sidebar import (
     ChannelOrderSet,
     CommsCaptureHumanInputTool,
     CommsChannelTool,
@@ -25,8 +151,8 @@ from .sidebar import (
     CommsConversationRevisionTool,
     CommsExportWireTool,
     CommsHistoricalThreadsTool,
-    CommsImportThreadTool,
     CommsImportedSourceTool,
+    CommsImportThreadTool,
     CommsLatestSequenceTool,
     CommsMarkPageReadTool,
     CommsMarkThreadViewReadTool,
@@ -44,8 +170,8 @@ from .sidebar import (
     CommsServedRootTool,
     CommsSessionThreadTool,
     CommsSetRelationshipOrderTool,
-    CommsSortChannelTool,
     CommsSortChannelsTool,
+    CommsSortChannelTool,
     CommsTargetActionsTool,
     CommsTargetEditTool,
     CommsThreadConfigurationTool,
@@ -64,201 +190,10 @@ from .sidebar import (
     TargetActionsRead,
     ThreadViewMarked,
 )
-from ..request import (
-    SubjectBinding,
-    tool_field,
-)
-from ...acp_extension import CoordinationChangedUpdate
-from ...messaging.bus_identity import BusIdentityStore
-from ...channel_management import (
-    ListTagEdit,
-    TagEdit,
-)
-from ...channel_targets import (
-    ChannelTarget,
-    CommandTarget,
-)
-from ...channels import (
-    Channel,
-    SavedView,
-    ViewMatch,
-    ViewPredicate,
-)
-from ...execution.child_process import ProcessIdentity
-from ...cli_bridges.history import OfflineHistory
-from ...cli_command import (
-    PreparedTargetAction,
-    TargetActionCommand,
-)
-from ...cli_commands import (
-    ThreadArchivedResult,
-    ThreadCreatedResult,
-    ThreadStoppedResult,
-)
-from ...cli_result import (
-    CliResult,
-    TargetEditResult,
-)
-from ...cli_verbs.archive import ArchiveCliCommand
-from ...cli_verbs.delete_view import DeleteViewCliCommand
-from ...cli_verbs.fork import ForkCliCommand
-from ...cli_verbs.history import HistoryCliCommand
-from ...cli_verbs.pin_channel import PinChannelCliCommand
-from ...cli_verbs.pin_thread import PinThreadCliCommand
-from ...cli_verbs.queue_restart import QueueRestartCliCommand
-from ...cli_verbs.start import StartCliCommand
-from ...cli_verbs.stop import StopCliCommand
-from ...cli_verbs.threads import ThreadsCliCommand
-from ...comms import Comms
-from ...config_options import ConfigOptions
-from ...coordination.tables.refusals import SendRefusal
-from ...display_references import ReferenceNames
-from ...execution.owner_lifecycle import OwnerStartResult
-from ...exporting import WireExportProvenance
-from ...historical_views import ConversationRevision
-from ...history_result import HistoryPageResult
-from ...history_views import RetiredViews
-from ...host_logs import (
-    HostLog,
-    HostLogRead,
-)
-from ...importing import (
-    ImportedSessionMetadata,
-    ThreadImported,
-)
-from ...input_origin import HumanInputOrigin
-from ...message_notification import MessageNotification
-from ...messaging.message_page import MessagePage
-from ...message_reference import MessageReference
-from ...messages import (
-    Message,
-    NoticeRole,
-)
-from ..native_tools import CommunicationCall
-from ...nominal.declared_family import (
-    DeclaredFamily,
-    UnknownFamilyMember,
-)
-from ...nominal.field_codec import (
-    ContextSource,
-    FieldCodec,
-    NullMember,
-    SingleFieldValue,
-    SubclassUnion,
-    WireForm,
-    WireName,
-    WireOmitDefault,
-)
-from ...notification_evidence import (
-    AfterRecipient,
-    FirstRecipient,
-    RecipientCursor,
-    RecipientLimit,
-)
-from ...notification_reads import LiveNotificationRead
-from ...owner_connection import OwnerConnection
-from ...owner_launch import HostResources
-from ...page_traversal import (
-    LatestSequence,
-    LiveCursor,
-    NewestCursor,
-    PageCursor,
-)
-from ...pi_vocabulary import (
-    ServiceTier,
-    ThinkingLevelField,
-)
-from ...presentation import (
-    ChannelView,
-    WireRevision,
-)
-from ...registry.registry_document import (
-    ProjectThreadSelection,
-    RegistrySlice,
-    RegistrySnapshot,
-)
-from ...registry.threads import (
-    ArchiveOwnerControl,
-    NativeOwnerCommand,
-    NextTurnConfiguration,
-    OwnerLifecycleControl,
-    StartOwnerControl,
-)
-from ...relationships import (
-    Collaboration,
-    GoalDerivedContact,
-    GoalMentionDiagnostic,
-    RelationshipEdit,
-    ThreadCommsSnapshot,
-)
-from ...projects.checkouts import Checkout
-from ...restart_queue import (
-    QueuedRestart,
-    RestartQueue,
-    RestartQueued,
-)
-from ..runtime_requests import QueueActionRuntimeRequest
-from ...send_result import (
-    CorrectionComplete,
-    CorrectionResult,
-    MessagePublished,
-    SendResult,
-)
-from ...task_sources import (
-    Constraint,
-    CurrentTaskScopeSelection,
-    Decision,
-    OriginalTaskChange,
-    Subtask,
-    TaskAttachment,
-    TaskChange,
-    TaskScopeSelection,
-)
-from ...team.standing import InstallDue
-from ...registry.thread_identity import (
-    ThreadIncarnation,
-    ToolName,
-)
-from ...registry.thread_management import (
-    InheritedTags,
-    ProjectChangeResult,
-    RenameThreadResult,
-    TagChoice,
-    ThreadTitleResult,
-)
-from ...registry.thread_model import ThreadModel
-from ...registry.thread_presentation import ThreadPresentation
-from ...tool_caller import (
-    ThreadCaller,
-    ThreadListing,
-    ToolCaller,
-)
-from ...tool_declaration import NativeRequestTools
-from ...tool_request import (
-    CoreRead,
-    HumanToolRequest,
-    LiveOwnerTool,
-    NativeToolRequest,
-    ObservedToolRequest,
-    PublishingToolRequest,
-    ReadTool,
-    ServedRequest,
-    ThreadContextAction,
-    ThreadReadTool,
-    ThreadToolRequest,
-)
-from ...tool_result import ToolResult
-from ...execution.turn_context import (
-    ContextManifest,
-    ContextSourceText,
-    SegmentManifest,
-)
-from ...work_branches import (
-    WorkBranch,
-    WorkBranches,
-)
-from ...working_memory_annotations import WorkingMemoryAnnotations
-from ...working_memory_labels import JevClassifier
+from agent_comms.work_branches import WorkBranch, WorkBranches
+from agent_comms.working_memory_annotations import WorkingMemoryAnnotations
+from agent_comms.working_memory_labels import JevClassifier
+from agent_comms_hooks import ToolRefusedError
 
 
 @dataclass(frozen=True)

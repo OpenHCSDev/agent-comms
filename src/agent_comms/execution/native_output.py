@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from .turn_item import NativeItemId
-from ..coordination.errors import TranscriptChanged
-from .native_session_reopen import NativeSessionIdentity
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import ToolCallId, WireName
+from agent_comms.coordination.errors import TranscriptChanged
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+from agent_comms.execution.turn_item import NativeItemId
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import ToolCallId, WireName
 
 if TYPE_CHECKING:
-    from .native_entries import NativeEntry
+    from agent_comms.execution.native_entries import NativeEntry
 
 
 @dataclass(frozen=True)

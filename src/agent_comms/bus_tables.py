@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Annotated
 
 from agent_comms import messages
 from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 from agent_comms.storage.typed_table import (
     Column,
     ComposedSchemas,
@@ -25,9 +25,9 @@ from agent_comms.storage.typed_table import (
 )
 
 if TYPE_CHECKING:
-    from .channel_targets import NamedTarget
-    from .read_basis import RepliesDisplayScope
-    from .registry_provenance import RegistryProvenance
+    from agent_comms.channel_targets import NamedTarget
+    from agent_comms.read_basis import RepliesDisplayScope
+    from agent_comms.registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True)

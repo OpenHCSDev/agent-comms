@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from .nominal.declared_family import DeclaredFamily
-from .tool_result import ToolResult
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.tool_result import ToolResult
 
 
 class HostLog(DeclaredFamily, affix="HostLog"):

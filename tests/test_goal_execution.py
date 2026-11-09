@@ -1,8 +1,5 @@
 """Real turn acquisition and terminal handling share the execution owner."""
 
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.execution.native_arguments import GivenBinary
-from agent_comms.installer.native_package import VerifiedNativePackage
 import os
 import signal
 import sqlite3
@@ -18,11 +15,16 @@ import pytest
 from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_failure import NativeTurnError
+from agent_comms.comms import Comms, wire
 from agent_comms.execution.child_process import (
     ChildOutcome,
     ProcessIdentity,
 )
-from agent_comms.comms import Comms, wire
+from agent_comms.execution.native_arguments import GivenBinary
+from agent_comms.execution.owned_turn import OwnedTurn
+from agent_comms.execution.turn_failure import NativeChildSignaled
+from agent_comms.execution.turn_input_source import NoTurnAcceptance
+from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, GoalId
 from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
@@ -51,13 +53,11 @@ from agent_comms.planning.goal_states import (
     ActiveGoal,
     ModelPause,
 )
-from agent_comms.storage.maintenance_barrier import MaintenanceOperator
-from agent_comms.execution.owned_turn import OwnedTurn
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.maintenance_barrier import MaintenanceOperator
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.transport.tools.goals import CommsGoalHistoryTool
-from agent_comms.execution.turn_failure import NativeChildSignaled
-from agent_comms.execution.turn_input_source import NoTurnAcceptance
 
 
 @pytest.fixture

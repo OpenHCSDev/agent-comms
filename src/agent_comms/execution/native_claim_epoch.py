@@ -13,15 +13,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..coordination.errors import StaleFence
-from ..errors import RelationViolationError
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import JsonShapeFamily, JsonShapeMember
-from ..pi_vocabulary import PendingStopReason, PiStopReason
-from ..registry.thread_identity import ClaimedIdentity, GenerationCounter
+from agent_comms.coordination.errors import StaleFence
+from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import JsonShapeFamily, JsonShapeMember
+from agent_comms.pi_vocabulary import PendingStopReason, PiStopReason
+from agent_comms.registry.thread_identity import ClaimedIdentity, GenerationCounter
 
 if TYPE_CHECKING:
-    from .native_session_reopen import NativeSessionIdentity
+    from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 
 
 class NativeClaimEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeClaim"):

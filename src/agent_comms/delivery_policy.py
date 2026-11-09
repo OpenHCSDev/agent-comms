@@ -2,10 +2,10 @@
 
 from abc import abstractmethod
 
-from .audience_manifest import AudiencedMessage
-from .nominal.declared_family import DeclaredFamily
-from .wake import MessageControl, resolve_wake_cohort
-from .wake_policy import MessageAudience, RecipientDecision, WakeDecision
+from agent_comms.audience_manifest import AudiencedMessage
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.wake import MessageControl, resolve_wake_cohort
+from agent_comms.wake_policy import MessageAudience, RecipientDecision, WakeDecision
 
 
 class DeliveryPolicy(DeclaredFamily, affix="DeliveryPolicy"):

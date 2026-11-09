@@ -15,18 +15,21 @@ from typing import ClassVar
 
 from pydantic import AliasChoices, Field, JsonValue, ValidationError
 
-from .nominal.declared_family import UniqueExternalSelector
-from .nominal.field_codec import (
-    FieldCodec,
-    MalformedRecord,
-    ToolCallId,
+from agent_comms.execution.turn_item import NativeItemId
+from agent_comms.nominal.declared_family import UniqueExternalSelector
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, ToolCallId
+from agent_comms.tool_declaration import ContextRows, ReplacementEdit, ToolDeclaration
+from agent_comms.tool_results import ToolDiff
+from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
+from agent_comms.transport.native_tools import (
+    BashTool,
+    EditTool,
+    GlobTool,
+    GrepTool,
+    ReadTool,
+    WriteTool,
 )
-from .transport.native_tools import BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool
-from .tool_declaration import ContextRows, ReplacementEdit, ToolDeclaration
-from .tool_results import ToolDiff
-from .transcript_events import ToolEndTranscript, ToolStartTranscript
-from .execution.turn_item import NativeItemId
-from .wire_models import DeclaredWireFamily, WireModel
+from agent_comms.wire_models import DeclaredWireFamily, WireModel
 
 
 @dataclass(frozen=True)

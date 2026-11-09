@@ -4,8 +4,13 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.activity import (
-    Activity, ActivityState, DrainReadiness, NativeInputDrainDiagnostic,
-    ObservedActivity, StoppedDrainDiagnostic, UnavailableDrainDiagnostic,
+    Activity,
+    ActivityState,
+    DrainReadiness,
+    NativeInputDrainDiagnostic,
+    ObservedActivity,
+    StoppedDrainDiagnostic,
+    UnavailableDrainDiagnostic,
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec

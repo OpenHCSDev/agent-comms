@@ -1,6 +1,5 @@
 """A stale open view is a registry-owned deletion result, not observer failure."""
 
-from agent_comms.projects.checkouts import Checkout
 import asyncio
 import pickle
 from dataclasses import replace
@@ -8,19 +7,25 @@ from types import SimpleNamespace
 
 from agent_comms import activity
 from agent_comms.activity import ActivityState, ObservedActivity
-from agent_comms.registry.registry_document import DEFAULT_ROSTER
-from agent_comms.registry_provenance import DeletedThread
-from agent_comms.registry.thread_presentation import ThreadRetired
-from agent_comms.registry.thread_presentation import NoThreadPresentation
 from agent_comms.notification_reads import LiveNotificationRead
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_document import DEFAULT_ROSTER
+from agent_comms.registry.thread_presentation import NoThreadPresentation, ThreadRetired
+from agent_comms.registry.thread_text import GivenThreadText
+from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.registry_provenance import DeletedThread
 from agent_comms.ui_model.observation import (
-    LocalRouteObservation, ObservationProcess, ObserveThreads, ObserveViews, ReadNotifications,
-    ThreadPresented, ThreadsObserved, ViewsRetired,
+    LocalRouteObservation,
+    ObservationProcess,
+    ObserveThreads,
+    ObserveViews,
+    ReadNotifications,
+    ThreadPresented,
+    ThreadsObserved,
+    ViewsRetired,
 )
 from agent_comms.ui_model.status import OpenThreadStatus
 from observed_queue import ObservedQueue
-from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.registry.thread_text import GivenThreadText
 
 
 def declare(comms, *names):

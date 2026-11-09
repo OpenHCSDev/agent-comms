@@ -2,24 +2,28 @@
 
 from __future__ import annotations
 
-
-from .class_fact import ClassFact
-from .projection_source import ProducedRow, ProjectionSource
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId, NullMember, RecordMember, SingleFieldValue, SubclassUnion
-from .page_traversal import LiveCursor, NewestCursor, PageCursor, PageTraversal
-from .storage.typed_table import TypedRow
+from agent_comms.class_fact import ClassFact
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    MessageId,
+    NullMember,
+    RecordMember,
+    SingleFieldValue,
+    SubclassUnion,
+)
+from agent_comms.page_traversal import LiveCursor, NewestCursor, PageCursor, PageTraversal
+from agent_comms.projection_source import ProducedRow, ProjectionSource
+from agent_comms.storage.typed_table import TypedRow
 
 if TYPE_CHECKING:
-    from .read_basis import ReadCursor
-    from .messaging.read_ledger import (
-        ReadDocument,
-        ReadLedger,
-    )
-    from .registry.registry_document import RegistrySnapshot
+    from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
+    from agent_comms.read_basis import ReadCursor
+    from agent_comms.registry.registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,7 +31,7 @@ class MessageReference(TypedRow, ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_tables import MessageIdentitySource, AnsweredSource
+        from agent_comms.bus_tables import AnsweredSource, MessageIdentitySource
         return (MessageIdentitySource, AnsweredSource)
 
     seq: int

@@ -10,28 +10,20 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from .coordination.errors import (
+from agent_comms.coordination.errors import (
     IdentityConflict,
     IntegrityViolationError,
     RecoveryBlocked,
     ResponseClaimBlocked,
 )
-from .coordination.vocabulary import CoordinatorVocabulary
-from .execution_states import (
-    CompletedExecution,
-    DeferredExecution,
-    FailedExecution,
-)
-from .lifecycle import LifecycleState
-from .lifecycle_capability import Failed, Terminal
-from .obligation_states import (
-    DeferredResponse,
-    FailedResponse,
-    SilentResponse,
-)
+from agent_comms.coordination.vocabulary import CoordinatorVocabulary
+from agent_comms.execution_states import CompletedExecution, DeferredExecution, FailedExecution
+from agent_comms.lifecycle import LifecycleState
+from agent_comms.lifecycle_capability import Failed, Terminal
+from agent_comms.obligation_states import DeferredResponse, FailedResponse, SilentResponse
 
 if TYPE_CHECKING:
-    from .coordination.tables.attempts import ReplayFact
+    from agent_comms.coordination.tables.attempts import ReplayFact
 
 
 @dataclass(frozen=True)
@@ -119,7 +111,7 @@ class LiveAttempt(AttemptState):
 class TerminalAttempt(Terminal, AttemptState):
     @property
     def replay_contribution(self) -> ReplayFact:
-        from .coordination.tables.attempts import ReplayFact
+        from agent_comms.coordination.tables.attempts import ReplayFact
 
         return ReplayFact.NONE
 
@@ -334,6 +326,6 @@ class UnknownOutcomeAttempt(UnsuccessfulTerminal):
 
     @property
     def replay_contribution(self) -> ReplayFact:
-        from .coordination.tables.attempts import ReplayFact
+        from agent_comms.coordination.tables.attempts import ReplayFact
 
         return ReplayFact.UNKNOWN_EFFECTS

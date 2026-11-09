@@ -7,12 +7,12 @@ a later bus-owned boundary must attest its durable commit before live use.
 
 from __future__ import annotations
 
-from .audience_manifest import AudiencedMessage
-from .frozen_recipient import FrozenRecipient
-from .channel_targets import CommandTarget, NamedTarget
-from .nominal.declared_family import DeclaredFamily
-from .messages import Message
-from .wake_policy import NoWakeDecision, PassiveWake, RecipientDecision, WakePolicy
+from agent_comms.audience_manifest import AudiencedMessage
+from agent_comms.channel_targets import CommandTarget, NamedTarget
+from agent_comms.frozen_recipient import FrozenRecipient
+from agent_comms.messages import Message
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.wake_policy import NoWakeDecision, PassiveWake, RecipientDecision, WakePolicy
 
 
 class MessageControl(DeclaredFamily, affix="Control"):

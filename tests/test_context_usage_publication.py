@@ -1,9 +1,9 @@
 """Neutral readings stay outside ACP; the ACP consumer owns usage publication."""
 
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 
 def test_native_launcher_imports_no_acp():

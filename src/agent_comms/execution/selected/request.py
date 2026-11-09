@@ -8,12 +8,12 @@ from functools import partial
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.drain_failures import UNAVAILABLE_DRAIN_ERRORS
-from agent_comms.execution.turn_context import RenderedInput
 from agent_comms.execution.native_failures import NativeRequestFailure
 from agent_comms.execution.native_pi import NativePiTerminalFailure
-from agent_comms.private_send_claim import PrivateSendClaim
 from agent_comms.execution.selected.participant import SelectedParticipant
 from agent_comms.execution.selected.result import publish_native_failure
+from agent_comms.execution.turn_context import RenderedInput
+from agent_comms.private_send_claim import PrivateSendClaim
 
 
 @dataclass(frozen=True)

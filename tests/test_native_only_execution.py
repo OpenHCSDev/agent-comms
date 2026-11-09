@@ -1,7 +1,6 @@
 """Retained native execution, refusal, and canonical headless/runtime behavior."""
 
 
-from agent_comms.projects.checkouts import Checkout
 import asyncio
 import os
 import sys
@@ -13,10 +12,12 @@ from acp.schema import TextContentBlock
 import agent_comms.agent_events as events
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
 from agent_comms.launch_root import LaunchRoot
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
 from pi_session_turn import one_turn_events
+
 
 @pytest.mark.parametrize("arguments,code", [(('--help',), 0), (('tools',), 2), ((), 2)])
 def test_headless_discovery_cannot_admit_an_unnamed_owner(tmp_path, arguments, code):

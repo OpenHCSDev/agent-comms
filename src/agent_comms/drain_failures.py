@@ -8,16 +8,15 @@ from contextlib import asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING
 
-
-from .activity import (
+from agent_comms.activity import (
     DrainDiagnostic,
     NativeInputDrainDiagnostic,
     StoppedDrainDiagnostic,
     UnavailableDrainDiagnostic,
 )
-from .coordination.errors import DrainDeferred, DrainUnavailable
-from .coordination.coordinator import Coordination
-from .execution.native_failures import NativeRequestFailure
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import DrainDeferred, DrainUnavailable
+from agent_comms.execution.native_failures import NativeRequestFailure
 
 # Failures raised outside our hierarchy, which cannot inherit the drain capabilities.
 EXTERNAL_UNAVAILABLE_ERRORS = (OSError, sqlite3.Error)
@@ -25,8 +24,8 @@ UNAVAILABLE_DRAIN_ERRORS = (DrainUnavailable, *EXTERNAL_UNAVAILABLE_ERRORS)
 DEFERRED_DRAIN_ERRORS = (DrainDeferred, *EXTERNAL_UNAVAILABLE_ERRORS)
 
 if TYPE_CHECKING:
-    from .comms import Comms
-    from .registry.thread_identity import OwnerIdentity
+    from agent_comms.comms import Comms
+    from agent_comms.registry.thread_identity import OwnerIdentity
 
 
 async def record_drain_failure(

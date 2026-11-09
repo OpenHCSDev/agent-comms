@@ -10,6 +10,16 @@ from agent_comms.cli_bridges.claude_protocol import AssistantBlock, ResultPart, 
 from agent_comms.cli_bridges.codex_protocol import UserInput
 from agent_comms.cli_bridges.opencode_parts import Part
 from agent_comms.cli_protocol import TextWire
+from agent_comms.execution.native_startup import NativeStartupPolicy
+from agent_comms.execution.turn_output import TurnOutput
+from agent_comms.execution.turn_phase import (
+    ModelWaitPhase,
+    PromptAcceptancePhase,
+)
+from agent_comms.execution.turn_watchdog import (
+    ModelWait,
+    ProgressWatchdog,
+)
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     AcceptsNull,
@@ -21,21 +31,22 @@ from agent_comms.nominal.field_codec import (
     Id128Text,
     MalformedRecord,
 )
-from agent_comms.execution.native_startup import NativeStartupPolicy
 from agent_comms.pi_events import PiEvent
-from agent_comms.pi_wire import PiDiagnostic, PiPayload
-from agent_comms.pi_wire import UnknownPayload
-from agent_comms.pi_payloads import ContentDelta, NativeToolDetails, PiContent, PiDelta, PiMessage, PiResponseData, SessionSwitchData, StateData, TextContent, UnknownContent, UnknownData
+from agent_comms.pi_payloads import (
+    ContentDelta,
+    NativeToolDetails,
+    PiContent,
+    PiDelta,
+    PiMessage,
+    PiResponseData,
+    SessionSwitchData,
+    StateData,
+    TextContent,
+    UnknownContent,
+    UnknownData,
+)
 from agent_comms.pi_vocabulary import CompactionReason, PiStopReason
-from agent_comms.execution.turn_output import TurnOutput
-from agent_comms.execution.turn_phase import (
-    ModelWaitPhase,
-    PromptAcceptancePhase,
-)
-from agent_comms.execution.turn_watchdog import (
-    ModelWait,
-    ProgressWatchdog,
-)
+from agent_comms.pi_wire import PiDiagnostic, PiPayload, UnknownPayload
 
 
 class CapabilityRepresentation(DeclaredFamily, FieldRepresentation, affix="Representation"):
@@ -213,8 +224,8 @@ def test_external_name_families_derive_one_default_without_accepting_invalid_val
 
 @pytest.mark.parametrize("value", [None, False, "3", {}, 1.5, 0, -1, 2])
 def test_measured_totals_share_one_declared_integer_policy(value):
-    from agent_comms.pi_wire import PiUsage
     from agent_comms.pi_payloads import PiContextUsage
+    from agent_comms.pi_wire import PiUsage
 
     totals = (PiUsage.from_wire({"totalTokens": value}).total_tokens,
               PiContextUsage.from_wire({"tokens": value}).tokens)
@@ -223,8 +234,8 @@ def test_measured_totals_share_one_declared_integer_policy(value):
 
 @pytest.mark.parametrize("value", [False, "3", {}, 1.5])
 def test_retained_totals_reject_values_only_external_ingress_may_treat_as_unreported(value):
-    from agent_comms.pi_wire import PiUsage
     from agent_comms.pi_payloads import PiContextUsage
+    from agent_comms.pi_wire import PiUsage
 
     for family, key in ((PiUsage, "totalTokens"), (PiContextUsage, "tokens")):
         with pytest.raises(MalformedRecord):

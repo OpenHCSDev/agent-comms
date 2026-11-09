@@ -5,14 +5,14 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from .nominal.field_codec import AcpSessionId
-from .registry.threads import Thread
-from .runtime import RuntimeProxy
+from agent_comms.nominal.field_codec import AcpSessionId
+from agent_comms.registry.threads import Thread
+from agent_comms.runtime import RuntimeProxy
 
 if TYPE_CHECKING:
-    from .cursor_publication import CursorPublication
-    from .execution.input_drain import InputDrain
-    from .execution.turn_runner import TurnRunner
+    from agent_comms.cursor_publication import CursorPublication
+    from agent_comms.execution.input_drain import InputDrain
+    from agent_comms.execution.turn_runner import TurnRunner
 
 
 class SessionEffects(ABC):

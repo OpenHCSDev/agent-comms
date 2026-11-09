@@ -7,9 +7,9 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .head_review import PullRequestHead
-from .execution.watch_passes import JoinedWatch
-from .planning.orders import (
+from agent_comms.execution.watch_passes import JoinedWatch
+from agent_comms.head_review import PullRequestHead
+from agent_comms.planning.orders import (
     PullRequests,
     StoredClosedHead,
     StoredClosedRepository,
@@ -18,12 +18,17 @@ from .planning.orders import (
     StoredMainPatch,
     TodoStore,
 )
-from .projects.repo import Repo
-from .repository_name import RepositoryName
-from .work_branches import CommitBase, UnservableCommitBase, WorkBranchError, WorkBranches
+from agent_comms.projects.repo import Repo
+from agent_comms.repository_name import RepositoryName
+from agent_comms.work_branches import (
+    CommitBase,
+    UnservableCommitBase,
+    WorkBranchError,
+    WorkBranches,
+)
 
 if TYPE_CHECKING:
-    from .comms import Comms
+    from agent_comms.comms import Comms
 
 
 @dataclass(frozen=True)

@@ -10,16 +10,10 @@ from typing import (
     ClassVar,
 )
 
-from ..execution.child_process import (
-    CheckPrinted,
-    NoIntegerPrinted,
-)
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
-    DisclosedRecord,
-    DisclosureIdentity,
-)
-from ..recorded_time import RecordedEventTime
+from agent_comms.execution.child_process import CheckPrinted, NoIntegerPrinted
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import DisclosedRecord, DisclosureIdentity
+from agent_comms.recorded_time import RecordedEventTime
 
 
 @dataclass(frozen=True)

@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from .activity_clocks import ActivityClocks
-from abc import ABC, abstractmethod
 import time
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 
-from . import channels
-from .channel_targets import ChannelTarget, DeclaredTag, Tag
-from .channels import (
+from agent_comms import channels
+from agent_comms.activity_clocks import ActivityClocks
+from agent_comms.channel_targets import ChannelTarget, DeclaredTag, Tag
+from agent_comms.channels import (
     BuiltinChannelView,
     Channel,
     Channels,
@@ -18,8 +18,8 @@ from .channels import (
     TagChannel,
     ViewPredicate,
 )
-from .display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
-from .errors import RelationViolationError, UnknownChannelError
+from agent_comms.display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
+from agent_comms.errors import RelationViolationError, UnknownChannelError
 
 
 @dataclass(frozen=True, slots=True)

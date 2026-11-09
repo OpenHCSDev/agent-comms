@@ -7,16 +7,13 @@ from collections.abc import Awaitable, Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from typing import TYPE_CHECKING
 
-from .execution.turn_failure import AuthorityChanged
-from .nominal.field_codec import InputId
+from agent_comms.execution.turn_failure import AuthorityChanged
+from agent_comms.nominal.field_codec import InputId
 
 if TYPE_CHECKING:
-    from .execution.turn_inbox import (
-    TurnInbox,
-    TurnInboxItem,
-)
-    from .backend import NativeSession
-    from .execution.turn_inputs import InputForwarding
+    from agent_comms.backend import NativeSession
+    from agent_comms.execution.turn_inbox import TurnInbox, TurnInboxItem
+    from agent_comms.execution.turn_inputs import InputForwarding
 
 
 class SendOutcome(ABC):

@@ -1,25 +1,37 @@
 """Typed Pi boundaries exercised through the actual JSON-line codec and stream."""
 
 import json
-from agent_comms.transport.native_tools import NativeToolDeclaration
 from dataclasses import dataclass
 
 import pytest
 
 from agent_comms.agent_events import ProviderUsage
+from agent_comms.execution.turn_usage import UsageAccount
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord
-from agent_comms.tool_results import NoToolDiff
 from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
 from agent_comms.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
-from agent_comms.pi_wire import PiPayload
-from agent_comms.pi_payloads import AssistantMessage, MissingData, MissingToolResult, ProvidedToolResult, ReportedModel, StateData, TextContent, ToolCallContent, UnknownData, UnreportedModel, UnreportedUsage
+from agent_comms.pi_payloads import (
+    AssistantMessage,
+    MissingData,
+    MissingToolResult,
+    ProvidedToolResult,
+    ReportedModel,
+    StateData,
+    TextContent,
+    ToolCallContent,
+    UnknownData,
+    UnreportedModel,
+    UnreportedUsage,
+)
 from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.execution.turn_usage import UsageAccount
+from agent_comms.pi_wire import PiPayload
 from agent_comms.registry.thread_model import (
     DeclaredModel,
     UndeclaredModel,
 )
+from agent_comms.tool_results import NoToolDiff
+from agent_comms.transport.native_tools import NativeToolDeclaration
 
 
 def decode(record):
@@ -187,8 +199,8 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
 
 
 def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repetition():
-    from agent_comms.execution.native_failures import NativePiUnavailable
     from agent_comms.backend import ObservedNativeCommit, PendingNativeCommit
+    from agent_comms.execution.native_failures import NativePiUnavailable
 
     event = decode({"type": "input_committed", "inputId": "a" * 32, "sessionId": "session", "sessionEntryId": "entry", "sessionEntryStart": 128})
     pending = PendingNativeCommit()
@@ -327,8 +339,8 @@ def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
 
 
 def test_raw_tool_arguments_reach_the_declared_call_refusal():
-    from agent_comms.transport.native_tool_call import RefusedCodingCall
     from agent_comms.tool_denial import SelectedToolDenied
+    from agent_comms.transport.native_tool_call import RefusedCodingCall
 
     event = decode({"type": "message_end", "message": {
         "role": "assistant", "content": [

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
-from agent_comms.schema_report import StoreSchemaReport
-from agent_comms.schema_report import StoreSchemaReports
-from dataclasses import dataclass
+from agent_comms.schema_report import StoreSchemaReport, StoreSchemaReports
 
 
 @dataclass(frozen=True, kw_only=True)

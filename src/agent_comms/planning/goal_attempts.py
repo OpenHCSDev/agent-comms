@@ -24,15 +24,15 @@ from dataclasses import (
 from decimal import Decimal
 from pathlib import Path
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     ClassVar,
     Self,
-    TYPE_CHECKING,
     TypeVar,
 )
 
-from .. import errors
-from ..attempt_resolution import (
+from agent_comms import errors
+from agent_comms.attempt_resolution import (
     AttemptResolution,
     DecidedResolution,
     GoalCleared,
@@ -42,39 +42,13 @@ from ..attempt_resolution import (
     UnverifiedLaunchRetired,
     WorkDecision,
 )
-from ..execution.child_process import Platform
-from .goal_attempt_identity import (
-    FailureNotObserved,
-    GoalAttemptIdentity,
-)
-from .goal_attempt_phase import (
-    ClaimedAttempt,
-    FailedAttempt,
-    GoalAttemptPhase,
-    ReadyAttempt,
-    ReservedAttempt,
-    ResolvedAttempt,
-    SucceededAttempt,
-)
-from .goal_failure_observation import (
-    FailedTurnEvidence,
-    GoalFailureEvidence,
-    GoalLedgerTable,
-    NoFailedTurnEvidence,
-    record_observation,
-)
-from .goal_generation import (
-    BlockedGeneration,
-    CancelledGeneration,
-    CompletedGeneration,
-    GenerationState,
-    ReadyGeneration,
-    ReservedGeneration,
-)
-from ..execution.goal_turn_permit import GoalTurnPermit
-from ..lifecycle_capability import Failed
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
+from agent_comms.execution.child_process import Platform
+from agent_comms.execution.goal_turn_permit import GoalTurnPermit
+from agent_comms.execution.turn_failure import TurnFailure
+from agent_comms.execution.turn_item import UsageChargeId
+from agent_comms.lifecycle_capability import Failed
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     AttemptId,
     AttemptToken,
     FieldCodec,
@@ -83,26 +57,41 @@ from ..nominal.field_codec import (
     NoAttemptId,
     TurnId,
 )
-from ..pi_counts import (
-    PiCount,
-    UnreportedCount,
+from agent_comms.pi_counts import PiCount, UnreportedCount
+from agent_comms.pi_wire import PiUsage
+from agent_comms.planning.goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
+from agent_comms.planning.goal_attempt_phase import (
+    ClaimedAttempt,
+    FailedAttempt,
+    GoalAttemptPhase,
+    ReadyAttempt,
+    ReservedAttempt,
+    ResolvedAttempt,
+    SucceededAttempt,
 )
-from ..pi_wire import PiUsage
-from ..reservation_rules import (
-    ReservationRule,
-    RuleCheck,
+from agent_comms.planning.goal_failure_observation import (
+    FailedTurnEvidence,
+    GoalFailureEvidence,
+    GoalLedgerTable,
+    NoFailedTurnEvidence,
+    record_observation,
 )
-from ..storage.locked_store import (
-    FileStore,
-    GoalWakeFile,
-    SQLiteReader,
+from agent_comms.planning.goal_generation import (
+    BlockedGeneration,
+    CancelledGeneration,
+    CompletedGeneration,
+    GenerationState,
+    ReadyGeneration,
+    ReservedGeneration,
 )
-from ..storage.maintenance_barrier import DrainSettledFile
-from ..storage.store_files import AtomicFile
-from ..storage.typed_table import (
+from agent_comms.reservation_rules import ReservationRule, RuleCheck
+from agent_comms.storage.locked_store import FileStore, GoalWakeFile, SQLiteReader
+from agent_comms.storage.maintenance_barrier import DrainSettledFile
+from agent_comms.storage.store_files import AtomicFile
+from agent_comms.storage.typed_table import (
+    LOCAL_TABLE_SOURCE,
     Column,
     Generated,
-    LOCAL_TABLE_SOURCE,
     ReconciledFile,
     RowNotFoundError,
     SQLiteJournalMode,
@@ -111,16 +100,14 @@ from ..storage.typed_table import (
     TableSource,
     TypedTable,
 )
-from ..execution.turn_failure import TurnFailure
-from ..execution.turn_item import UsageChargeId
 
 if TYPE_CHECKING:
-    from .goal_management import Goals
-    from .goal_scope import GoalScope
-    from .goals import Goal
-    from ..registry.threads import Thread
-    from ..execution.turn_context import TurnContext
-    from ..execution.turn_lease import TurnLeaseFence
+    from agent_comms.execution.turn_context import TurnContext
+    from agent_comms.execution.turn_lease import TurnLeaseFence
+    from agent_comms.planning.goal_management import Goals
+    from agent_comms.planning.goal_scope import GoalScope
+    from agent_comms.planning.goals import Goal
+    from agent_comms.registry.threads import Thread
 
 
 @dataclass(frozen=True)

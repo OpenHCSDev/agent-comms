@@ -12,9 +12,7 @@ from typing import TYPE_CHECKING, cast
 
 from acp.schema import PromptResponse
 
-from ..input_key import InputKey
-
-from ..acp_extension import (
+from agent_comms.acp_extension import (
     InputDeliveryChangedUpdate,
     LiveQueueScope,
     NoQueueScope,
@@ -23,80 +21,71 @@ from ..acp_extension import (
     QueueScope,
     encode_updates,
 )
-from ..activity import FailedWakeDiagnostic, StoppedDrainDiagnostic
-from ..agent_backend import AgentBackend
-from .turn_inbox import (
+from agent_comms.activity import FailedWakeDiagnostic, StoppedDrainDiagnostic
+from agent_comms.agent_backend import AgentBackend
+from agent_comms.bus import Bus
+from agent_comms.cohort_schema import AcceptanceFrontier
+from agent_comms.comms import Comms
+from agent_comms.config_options import ConfigOptions
+from agent_comms.controller import SessionUpdateSink
+from agent_comms.coordination.cohort import next_sealed_assignment
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.cursor_owner import CursorOwner
+from agent_comms.drain_failures import (
+    DEFERRED_DRAIN_ERRORS,
+    UNAVAILABLE_DRAIN_ERRORS,
+    drain_failures,
+    record_drain_failure,
+)
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.execution.child_process import join_retirement
+from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.session_lifecycle import SessionLifecycle
+from agent_comms.execution.turn_context import TurnContext, UserFollowupSegment
+from agent_comms.execution.turn_inbox import (
     ClearQueue,
     InputContent,
     SendNow,
     TurnInbox,
     TurnInboxItem,
 )
-from ..bus import Bus
-from .child_process import join_retirement
-from ..cohort_schema import AcceptanceFrontier
-from ..comms import Comms
-from ..config_options import ConfigOptions
-from ..controller import SessionUpdateSink
-from ..coordination.cohort import next_sealed_assignment
-from ..coordination.database import CoordinationStore
-from ..coordination.coordinator import Coordination
-from ..cursor_owner import CursorOwner
-from ..drain_failures import (
-    DEFERRED_DRAIN_ERRORS,
-    UNAVAILABLE_DRAIN_ERRORS,
-    drain_failures,
-    record_drain_failure,
+from agent_comms.execution.turn_input_source import (
+    AcceptedFollowingInput,
+    NoTurnAcceptance,
+    OriginalTurnInput,
 )
-from ..errors import RelationViolationError, UnregisteredThreadError
-from ..nominal.field_codec import AcpSessionId, InputId, RootId, ThreadLookup
-from ..image_input import ImageInput
-from ..input_attempt import (
+from agent_comms.execution.turn_outcome import TurnOutcome
+from agent_comms.execution.turn_terminal import OwnerStop
+from agent_comms.image_input import ImageInput
+from agent_comms.input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     InputDeliveryScope,
     OwnerQueueInputDeliveryScope,
 )
-from ..input_disposition import InputDispositions, InputDocument
-from ..input_effects import InputEffects
-from ..lifecycle_capability import Executing
-from ..storage.maintenance_barrier import MaintenanceIngress
-from ..storage.locked_store import GoalWakeFile
-from .native_input_owner import RegistryOwner
-from ..proven_source_coverage import SourcePrefix
-from ..queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
-from ..registry.registry_document import RegistryDocument, RegistryEntry
-from ..registry.registry_store import RegistryEntryRevision
-from ..routing import ScheduledTurn
-from ..runtime_server import RuntimeServer
-from ..transport.owner_requests import (
-    OwnerRetiredReply,
-    StopOwnerRuntimeRequest,
-)
-from .session_lifecycle import SessionLifecycle
-from ..registry.thread_identity import (
-    ClaimedIdentity,
-    OwnerIdentity,
-)
-from ..registry.threads import NativeThread, Thread
-from .turn_context import (
-    TurnContext,
-    UserFollowupSegment,
-)
-from .turn_input_source import (
-    AcceptedFollowingInput,
-    OriginalTurnInput,
-)
-from .turn_terminal import OwnerStop
-from ..watched import ChangeSignal, FileLifetimeSource, FileSource
+from agent_comms.input_disposition import InputDispositions, InputDocument
+from agent_comms.input_effects import InputEffects
+from agent_comms.input_key import InputKey
+from agent_comms.lifecycle_capability import Executing
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId, ThreadLookup
+from agent_comms.proven_source_coverage import SourcePrefix
+from agent_comms.queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
+from agent_comms.registry.registry_document import RegistryDocument, RegistryEntry
+from agent_comms.registry.registry_store import RegistryEntryRevision
+from agent_comms.registry.thread_identity import ClaimedIdentity, OwnerIdentity
+from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.reservation_rules import ReservationRule, ReservationViolationError, RuleCheck
+from agent_comms.routing import ScheduledTurn
+from agent_comms.runtime_server import RuntimeServer
+from agent_comms.storage.locked_store import GoalWakeFile
+from agent_comms.storage.maintenance_barrier import MaintenanceIngress, MaintenanceStatus
+from agent_comms.transport.owner_requests import OwnerRetiredReply, StopOwnerRuntimeRequest
+from agent_comms.watched import ChangeSignal, FileLifetimeSource, FileSource
 
-from ..nominal.declared_family import DeclaredFamily
-from ..storage.maintenance_barrier import MaintenanceStatus
-from ..reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
-from .turn_outcome import TurnOutcome
-from .turn_input_source import NoTurnAcceptance
 if TYPE_CHECKING:
-    from ..planning.goals import GoalDeclaration
     from agent_comms.following_inputs import OwnerFollowingInputs
+    from agent_comms.planning.goals import GoalDeclaration
 
 
 AGENT_PREFIX = "!agent "

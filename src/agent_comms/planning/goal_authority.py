@@ -3,13 +3,8 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from .goal_states import GoalState
-from ..nominal.field_codec import (
-    GoalId,
-    NullMember,
-    RecordMember,
-    SubclassUnion,
-)
+from agent_comms.nominal.field_codec import GoalId, NullMember, RecordMember, SubclassUnion
+from agent_comms.planning.goal_states import GoalState
 
 
 class GoalTurnAuthority(SubclassUnion, affix=""):

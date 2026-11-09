@@ -8,8 +8,8 @@ from pathlib import Path
 
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.registry.registration import Registration
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_text import (
     ForkedParent,
     GivenThreadText,

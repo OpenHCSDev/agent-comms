@@ -12,23 +12,23 @@ it may not write the main agent's audit, and its actual SDK id owns its tool act
 from __future__ import annotations
 
 import sys
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms_hooks.shell_commands import ConnectCommand, EmergencyHookStop, ShellCommand
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.rule_deal import DealtRuleGate, Mute, Owed, ReadSpan, RuleDeal, Voice
+from agent_comms.cli_bridges.hook_forks import SubagentActivity
+from agent_comms.cli_bridges.shared import Binding, Watch
 from agent_comms.comms import Comms
 from agent_comms.compaction_notices import CompactionNotice
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.cli_bridges.shared import Binding, Watch
-import time
-from ..execution.turn_phase import ToolRunningPhase
-from agent_comms_hooks import Bash, ClaudeToolHook, ClaudeTranscriptHook, HookRecord
+from agent_comms.execution.turn_phase import ToolRunningPhase
 from agent_comms.meant_voice import BusVoice
-from .hook_forks import SubagentActivity
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.rule_deal import DealtRuleGate, Mute, Owed, ReadSpan, RuleDeal, Voice
+from agent_comms_hooks import Bash, ClaudeToolHook, ClaudeTranscriptHook, HookRecord
+from agent_comms_hooks.shell_commands import ConnectCommand, EmergencyHookStop, ShellCommand
 
 
 @dataclass(frozen=True)

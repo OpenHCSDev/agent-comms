@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import os
+from abc import abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
 
-from abc import abstractmethod
+from agent_comms.compaction_notices import (
+    CompactionNotice,
+    IgnoredCompactionDeal,
+    StartedRuleReading,
+)
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import boundary_decoder
+from agent_comms.storage.store_files import StoreGuard
 
-from .compaction_notices import CompactionNotice, IgnoredCompactionDeal, StartedRuleReading
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import boundary_decoder
-from .storage.store_files import StoreGuard
 
 class GateNotices(DeclaredFamily):
     """The existing call record's leading byte owns which first event remains to report."""

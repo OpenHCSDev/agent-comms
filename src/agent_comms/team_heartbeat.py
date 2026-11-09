@@ -9,34 +9,34 @@ from dataclasses import dataclass
 
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.comms import Comms
-from agent_comms.team_hud import TeamFrame, TeamHud, TeamPlan
-
-from agent_comms.team_hud_records import HudUnavailableGroup
-from .execution.child_process import ReadWork
-from agent_comms.task_attachments.team_pings import (
-    AlarmGroup, TeamUpdate, TeamUpdateStore, PublishedFacts, RulePing, TeammatePing,
-)
-from agent_comms.team_service import TeamService
-from .registry.thread_identity import ThreadIncarnation
+from agent_comms.execution.child_process import ReadWork
+from agent_comms.execution.watch_passes import PreparedWatchPass
 from agent_comms.heartbeat_subjects import TeamHistory
-from .execution.watch_passes import PreparedWatchPass
-from agent_comms.watch_phase import WatchPhase
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal_census import NominalPlanReadings
 from agent_comms.plan_reading import PlanReadings, RetainedPlanReadings
-from agent_comms.service_passes import TeamPass, ServicePassStore
-from agent_comms.ui_model.teammate_state import TeammateState
-
-from .planning.orders import (
-    ProgressRead,
-    Todo,
+from agent_comms.planning.orders import ProgressRead, Todo
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.service_passes import ServicePassStore, TeamPass
+from agent_comms.task_attachments.team_pings import (
+    AlarmGroup,
+    PublishedFacts,
+    RulePing,
+    TeammatePing,
+    TeamUpdate,
+    TeamUpdateStore,
 )
-from .team.standing_rules import (
+from agent_comms.team.standing_rules import (
     HeartbeatFrame,
     ServicePassFailing,
     StandingRule,
     TeamInputs,
 )
+from agent_comms.team_hud import TeamFrame, TeamHud, TeamPlan
+from agent_comms.team_hud_records import HudUnavailableGroup
+from agent_comms.team_service import TeamService
+from agent_comms.ui_model.teammate_state import TeammateState
+from agent_comms.watch_phase import WatchPhase
 
 
 @dataclass(frozen=True)

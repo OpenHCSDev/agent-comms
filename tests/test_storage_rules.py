@@ -3,44 +3,36 @@
 import runpy
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
-import time
 from typing import Annotated
 
 import pytest
 
-from agent_comms.comms import Comms, wire
-from agent_comms.cli_verbs.select_checkout import SelectCheckoutCliCommand
-from agent_comms.cli_verbs.goal_checkout import GoalCheckoutCliCommand
 from agent_comms.cli_commands import AddCheckoutOperation
+from agent_comms.cli_verbs.goal_checkout import GoalCheckoutCliCommand
+from agent_comms.cli_verbs.select_checkout import SelectCheckoutCliCommand
+from agent_comms.comms import Comms, wire
+from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, RecordProblems
+from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.goals import OrderCheck
 from agent_comms.planning.orders import (
     AssignedBoundaryRead,
     EditWorkplaces,
     PendingProblemOrder,
 )
 from agent_comms.planning.pull_requests import PullRequestLink
-from agent_comms.team.standing_rules import StorageHomeMissing
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import FieldCodec, GoalId, RecordProblems
-from agent_comms.registry.thread_creation import RecordedCreationTime
-from agent_comms.projects.git_errors import GitCommandError
-from agent_comms.projects.repo import Repo
 from agent_comms.projects.checkouts import (
     Checkout,
     DetachedStart,
     RepositoryReads,
 )
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_sources import LocalRepositorySource
-from agent_comms.planning.goal_actions import SetGoalAction
-from agent_comms.repository_name import RepositoryName
-from agent_comms.shell_effects import (
-    CreateCheckoutStorageEffect,
-    RemoveCheckoutStorageEffect,
-    StorageDenied,
-    shell_storage_effects,
-)
 from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.projects.storage_rules import (
     CheckoutAllocation,
@@ -50,19 +42,27 @@ from agent_comms.projects.storage_rules import (
     StorageRule,
     UnitStorage,
 )
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registry.registry_document import RegisteredTeamProject
+from agent_comms.registry.thread_creation import RecordedCreationTime
 from agent_comms.registry.thread_storage import (
-    StoragePath,
-    StorageRoots,
     NoRepositoryChoice,
     SelectedCheckout,
+    StoragePath,
+    StorageRoots,
     UnassignedThreadStorage,
 )
-from agent_comms.registry.threads import Thread, NativeThread
+from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.repository_name import RepositoryName
+from agent_comms.shell_effects import (
+    CreateCheckoutStorageEffect,
+    RemoveCheckoutStorageEffect,
+    StorageDenied,
+    shell_storage_effects,
+)
+from agent_comms.team.standing_rules import StorageHomeMissing
+from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_denial import SelectedToolDenied
-from agent_comms.planning.goals import OrderCheck
-from agent_comms.registry.registry_document import RegisteredTeamProject
-from agent_comms.order_runs import MechanicalOrderRun
-from agent_comms.recorded_time import RecordedEventTime
 from source_revision_fixture import SourceRepository
 
 

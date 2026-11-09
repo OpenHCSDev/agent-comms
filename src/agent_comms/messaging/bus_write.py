@@ -3,9 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 
-from ..comms import Comms
-
-
+from agent_comms.comms import Comms
 
 
 class HeldBusWrite:

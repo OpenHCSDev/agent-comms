@@ -18,100 +18,60 @@ from metaclass_registry.mro_dispatch import (
 )
 from pydantic import JsonValue
 
-from .goal_scheduler import GoalScheduler
-from .input_drain import (
+from agent_comms import agent_events as events
+from agent_comms import pi_events as pi
+from agent_comms.agent_backend import AgentBackend
+from agent_comms.agent_event_updates import AcpEventConsumer, TurnEventConsumer
+from agent_comms.channel_targets import NamedTarget
+from agent_comms.channels import AllChannel
+from agent_comms.controller import Controller
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.goal_scheduler import GoalScheduler
+from agent_comms.execution.input_drain import (
     BackgroundWake,
     SessionScheduleCheck,
     WakeScheduleCheck,
 )
-from .owned_turn import OwnedTurn
-from .turn_context import SegmentManifest
-from .turn_effects import TurnEffects
-from .turn_input_source import (
+from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.owned_turn import OwnedTurn
+from agent_comms.execution.turn_context import SegmentManifest
+from agent_comms.execution.turn_effects import TurnEffects
+from agent_comms.execution.turn_input_source import (
     InputDependency,
     NoInputDependency,
     TurnAcceptance,
 )
-from .turn_lease import (
-    TurnLeaseFence,
-    TurnState,
-)
-from .turn_phase import (
-    CancellingPhase,
-    TurnPhase,
-)
-from .. import (
-    agent_events as events,
-    pi_events as pi,
-)
-from ..agent_backend import AgentBackend
-from ..agent_event_updates import (
-    AcpEventConsumer,
-    TurnEventConsumer,
-)
-from ..channel_targets import NamedTarget
-from ..channels import AllChannel
-from ..controller import Controller
-from ..coordination.coordinator import Coordination
-from ..errors import RelationViolationError
-from ..following_inputs import OwnerFollowingInputs
-from ..image_input import ImageInput
-from ..input_key import InputKey
-from ..input_origin import (
-    InputOrigin,
-    UnattributedInputOrigin,
-)
-from ..messages import Message
-from .native_input_owner import RegistryOwner
-from ..nominal.field_codec import (
-    AcpSessionId,
-    GoalId,
-    InputId,
-    TurnId,
-)
-from ..pi_commands import (
+from agent_comms.execution.turn_lease import TurnLeaseFence, TurnState
+from agent_comms.execution.turn_phase import CancellingPhase, TurnPhase
+from agent_comms.following_inputs import OwnerFollowingInputs
+from agent_comms.image_input import ImageInput
+from agent_comms.input_key import InputKey
+from agent_comms.input_origin import InputOrigin, UnattributedInputOrigin
+from agent_comms.messages import Message
+from agent_comms.nominal.field_codec import AcpSessionId, GoalId, InputId, TurnId
+from agent_comms.pi_commands import (
     AgentCommsInspectContext,
     AgentCommsInspectContextSegment,
     NativeQuery,
 )
-from ..pi_payloads import (
-    NativeContextData,
-    StateData,
-)
-from ..pi_rule_gate import PiRedeal
-from ..planning.goal_actions import (
-    GoalPrecondition,
-    OwnerInvocable,
-    PausedGoalAction,
-)
-from ..planning.goal_scope import OneGoal
-from ..queued_input import InitialInput
-from ..registry.threads import Thread
-from ..reservation_rules import (
-    ReservationRule,
-    ReservationViolationError,
-)
-from ..routing import (
-    NoTurnRouting,
-    Routing,
-    ScheduledTurn,
-)
-from ..runtime_server import (
-    RuntimeServer,
-    SubscriberClosed,
-)
-from ..transcript_updates import TurnTranscriptUpdate
+from agent_comms.pi_payloads import NativeContextData, StateData
+from agent_comms.pi_rule_gate import PiRedeal
+from agent_comms.planning.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.queued_input import InitialInput
+from agent_comms.registry.threads import Thread
+from agent_comms.reservation_rules import ReservationRule, ReservationViolationError
+from agent_comms.routing import NoTurnRouting, Routing, ScheduledTurn
+from agent_comms.runtime_server import RuntimeServer, SubscriberClosed
+from agent_comms.transcript_updates import TurnTranscriptUpdate
 
 if TYPE_CHECKING:
-    from .input_drain import (
-        DrainTurn,
-        InputDrain,
-        OwnerSession,
-    )
-    from .session_lifecycle import SessionLifecycle
-    from ..comms import Comms
-    from ..context_reading import ContextUsage
-    from ..coordinated_runtime import SelectedExecution
+    from agent_comms.comms import Comms
+    from agent_comms.context_reading import ContextUsage
+    from agent_comms.coordinated_runtime import SelectedExecution
+    from agent_comms.execution.input_drain import DrainTurn, InputDrain, OwnerSession
+    from agent_comms.execution.session_lifecycle import SessionLifecycle
 
 AGENT_PREFIX = "!agent "
 

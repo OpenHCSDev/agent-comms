@@ -7,12 +7,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .pi_events import CancelledUiChoice, DialogUiRequest, ExtensionUiChoice
+from agent_comms.execution.turn_failure import ExtensionUiFailed
+from agent_comms.pi_events import CancelledUiChoice, DialogUiRequest, ExtensionUiChoice
 from agent_comms.pi_wire import McpLiveAcknowledgement
-from .execution.turn_failure import ExtensionUiFailed
 
 if TYPE_CHECKING:
-    from .backend import TurnSession
+    from agent_comms.backend import TurnSession
 
 
 @dataclass

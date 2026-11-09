@@ -13,19 +13,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
-from .channels import Channel
-from .errors import ExportDestinationExists
-from .cli_result import CliResult
-from .transport.progress import WireExportObserver, WireExportProgress
-from .tool_result import ToolResult
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
-from .message_reference import MessageReference
-from .messages import Message, StoredWireHistory
-from .bus_tables import MessageIdentitySource
-from .read_basis import DMDisplayScope
-from .registry.registration import Registration
-from .storage.store_files import AtomicFile, ExclusiveAtomicFile
+from agent_comms.bus_tables import MessageIdentitySource
+from agent_comms.channels import Channel
+from agent_comms.cli_result import CliResult
+from agent_comms.errors import ExportDestinationExists
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message, StoredWireHistory
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.read_basis import DMDisplayScope
+from agent_comms.registry.registration import Registration
+from agent_comms.storage.store_files import AtomicFile, ExclusiveAtomicFile
+from agent_comms.tool_result import ToolResult
+from agent_comms.transport.progress import WireExportObserver, WireExportProgress
 
 
 class WireExportFormat(DeclaredFamily, affix="Format"):

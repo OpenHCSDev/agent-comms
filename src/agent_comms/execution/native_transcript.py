@@ -10,12 +10,11 @@ from dataclasses import dataclass
 from itertools import takewhile
 from math import inf
 from pathlib import Path
-from typing import BinaryIO, Never, TYPE_CHECKING
+from typing import TYPE_CHECKING, BinaryIO, Never
 
-from .turn_item import FreshNativeId, NativeItemId
-from ..coordination.errors import TranscriptChanged
-from ..errors import RelationViolationError
-from .native_entries import (
+from agent_comms.coordination.errors import TranscriptChanged
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.native_entries import (
     MessageEntry,
     NativeEntry,
     NoEntryId,
@@ -24,22 +23,27 @@ from .native_entries import (
     SessionEntry,
     TranscriptProjection,
 )
-from .native_failures import NativePiUnavailable
-from .native_input_proof import NativeContextJournal, NativeContextProof, NativeInputLocation
-from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
-from .native_session_files import NativeSessionFiles
-from .native_session_reopen import NativeSessionIdentity
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import MalformedRecord
-from ..recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from ..storage.private_path import FileIdentity, FileRevision, MissingFile
-from ..transcript_sources import TranscriptRecord, TranscriptSource
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_input_proof import (
+    NativeContextJournal,
+    NativeContextProof,
+    NativeInputLocation,
+)
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+from agent_comms.execution.turn_item import FreshNativeId, NativeItemId
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import MalformedRecord
+from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from agent_comms.storage.private_path import FileIdentity, FileRevision, MissingFile
+from agent_comms.transcript_sources import TranscriptRecord, TranscriptSource
 
 if TYPE_CHECKING:
-    from .native_output import NativeRecordLocation
-    from ..messaging.read_ledger import ReadLedger
-    from ..registry.thread_identity import RecordedThreadIncarnation
-    from ..rule_deal import Speaking, Voice
+    from agent_comms.execution.native_output import NativeRecordLocation
+    from agent_comms.messaging.read_ledger import ReadLedger
+    from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+    from agent_comms.rule_deal import Speaking, Voice
 
 
 def reverse_records(

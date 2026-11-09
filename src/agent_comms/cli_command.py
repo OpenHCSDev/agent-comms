@@ -49,16 +49,16 @@ from agent_comms.nominal.field_codec import (
     TargetBound,
     WireValue,
 )
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import RegistrySnapshot, ResolvedChannel
-from .projects.checkouts import Checkout
 from agent_comms.target_fields import TargetField
 from agent_comms.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 
 if TYPE_CHECKING:
     from agent_comms.active_route import CommsRoute
+    from agent_comms.registry.thread_status import ThreadStatus
     from agent_comms.registry.threads import Thread
-    from .registry.thread_status import ThreadStatus
 
 
 class ChannelBound(TargetBound):

@@ -1,4 +1,3 @@
-from agent_comms.bus_tables import AuthoredAnswers
 import ast
 import json
 import os
@@ -11,10 +10,10 @@ from collections.abc import Callable
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from agent_comms.projects.checkouts import Checkout
 
 import pytest
 
+import fixture_git
 from agent_comms.bus import (
     Bus,
     BusRecord,
@@ -22,16 +21,20 @@ from agent_comms.bus import (
     PrivateRecord,
     PublicRecord,
 )
-from agent_comms.messaging.bus_route_counts import BusRouteCounts
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
-from agent_comms.bus_tables import AnsweredSource, BusSchema, MessageIdentitySource
-from agent_comms.task_attachments.team_pings import TeamUpdateNotice, TeamUpdate
-from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.bus_tables import AnsweredSource, AuthoredAnswers, BusSchema, MessageIdentitySource
+from agent_comms.coordination.tables.publications import PublicationIntents
+from agent_comms.errors import (
+    CommittedMessageError,
+    HumanSendRefusedError,
+    RelationViolationError,
+    UnclaimedError,
+)
+from agent_comms.message_reference import MessageReference
 from agent_comms.messages import (
     BusProjectionTables,
     BusRow,
     BusTables,
-    TeamUpdatePosition,
     Claimed,
     ClaimHistoryKind,
     ClaimNoticeKind,
@@ -43,17 +46,13 @@ from agent_comms.messages import (
     MessageRoleWire,
     MessageRoutes,
     NoticeRole,
+    TeamUpdatePosition,
 )
-from agent_comms.coordination.tables.publications import PublicationIntents
-from agent_comms.errors import (
-    CommittedMessageError,
-    HumanSendRefusedError,
-    RelationViolationError,
-    UnclaimedError,
-)
+from agent_comms.messaging.bus_route_counts import BusRouteCounts
 from agent_comms.nominal.field_codec import GitCommitText, MessageId, MessageIdText
-from agent_comms.message_reference import MessageReference
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.read_basis import RepliesDisplayScope
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.response_acknowledgement import (
     canonical_publication_key,
 )
@@ -65,8 +64,8 @@ from agent_comms.storage.typed_table import (
     TypedTable,
     WriterOwnedFile,
 )
+from agent_comms.task_attachments.team_pings import TeamUpdate, TeamUpdateNotice
 from bus_record_fixture import publication_processes, record_from
-import fixture_git
 
 
 @dataclass(frozen=True)

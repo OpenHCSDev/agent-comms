@@ -6,32 +6,41 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
-from .activity_clocks import ActivityClocks
-from .class_fact import ClassFact
-from .cli_result import CliResult
-from .nominal.declared_family import DeclaredFamily
-from .frozen_recipient import FrozenRecipient
-from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
-from .nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion
-from .projection_source import ProducedRow, ProjectionSource
-from .projects.checkouts import Checkout
-from .response_policy import DirectPolicy, MentionedPolicy
-from .registry.thread_identity import ThreadIncarnation
-from .storage.typed_table import sql_literal
-from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, WakePolicy
+from agent_comms.activity_clocks import ActivityClocks
+from agent_comms.class_fact import ClassFact
+from agent_comms.cli_result import CliResult
+from agent_comms.errors import (
+    HumanSendRefusedError,
+    RelationViolationError,
+    UnregisteredThreadError,
+)
+from agent_comms.frozen_recipient import FrozenRecipient
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.projection_source import ProducedRow, ProjectionSource
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.response_policy import DirectPolicy, MentionedPolicy
+from agent_comms.storage.typed_table import sql_literal
+from agent_comms.wake_policy import BoundedTriageWake, FullWake, MessageAudience, WakePolicy
 
 if TYPE_CHECKING:
-    from .history_result import HistoryPageResult
-    from .audience_manifest import AudiencedMessage
-    from .catalog_document import CatalogAccess, CatalogDocument
-    from .channels import Channel
-    from .cli_command import CliCommand
-    from .comms import Comms
-    from .planning.goal_management import Goals
-    from .historical_views import ChannelHistory, ConversationHistoryView, DMHistory, HistoryView
-    from .history_views import HistoryViews
-    from .messages import Message, MessageInput
-    from .read_basis import (
+    from agent_comms.audience_manifest import AudiencedMessage
+    from agent_comms.catalog_document import CatalogAccess, CatalogDocument
+    from agent_comms.channels import Channel
+    from agent_comms.cli_command import CliCommand
+    from agent_comms.comms import Comms
+    from agent_comms.historical_views import (
+        ChannelHistory,
+        ConversationHistoryView,
+        DMHistory,
+        HistoryView,
+    )
+    from agent_comms.history_result import HistoryPageResult
+    from agent_comms.history_views import HistoryViews
+    from agent_comms.messages import Message, MessageInput
+    from agent_comms.planning.goal_management import Goals
+    from agent_comms.read_basis import (
         ChannelConversation,
         Conversation,
         DisplayViewer,
@@ -39,10 +48,14 @@ if TYPE_CHECKING:
         DMDisplayScope,
         MessageDisplayScope,
     )
-    from .registry.registry_document import RegistrySnapshot, ResolvedChannel, ResolvedThread
-    from .registry_provenance import RegistryProvenance
-    from .response_policy import ResponsePolicy
-    from .registry.threads import Thread
+    from agent_comms.registry.registry_document import (
+        RegistrySnapshot,
+        ResolvedChannel,
+        ResolvedThread,
+    )
+    from agent_comms.registry.threads import Thread
+    from agent_comms.registry_provenance import RegistryProvenance
+    from agent_comms.response_policy import ResponsePolicy
 
 
 class ChannelSelection(SubclassUnion, affix="Channel"):
@@ -102,7 +115,7 @@ class PerTargetChannels(SingleFieldValue, ChannelSelection):
 
 
 def exact_stored_target(name: str) -> bool:
-    from .channels import BuiltinChannelView
+    from agent_comms.channels import BuiltinChannelView
 
     return (BuiltinChannelView.addressed(name).exact_stored_target()
             if name in BuiltinChannelView.addresses() else True)
@@ -134,8 +147,8 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .messaging.bus_display_index import BusDisplayIndex
-        from .bus_tables import AwaitingAnswerSource
+        from agent_comms.bus_tables import AwaitingAnswerSource
+        from agent_comms.messaging.bus_display_index import BusDisplayIndex
         return (BusDisplayIndex, AwaitingAnswerSource)
 
     needs_channel_state: ClassVar[bool] = False
@@ -567,7 +580,7 @@ class ChannelTarget(NamedTarget):
         return snapshot.resolve_channel(require_channel(self.name))
 
     def validate(self, sender: Message | None = None):
-        from .channels import BuiltinChannelView
+        from agent_comms.channels import BuiltinChannelView
 
         if self.name not in BuiltinChannelView.addresses():
             Tag.validate(self.name[1:], label=f"Channel {self.name!r}")
@@ -627,7 +640,7 @@ class ChannelTarget(NamedTarget):
                      and channel.matches(thread.tags))
 
     def mark_view_read(self, views: HistoryViews, worktree: Checkout) -> None:
-        from .presentation import ReadAll
+        from agent_comms.presentation import ReadAll
 
         views.presentation.mark_channel_read(
             self.name, viewer=views.messaging.user_identity(worktree).name, mark=ReadAll(),
@@ -665,7 +678,7 @@ class Tag(ProjectionSource):
 
     @staticmethod
     def validate(name: str, *, label: str = "Tags") -> None:
-        from .channels import BuiltinChannelView
+        from agent_comms.channels import BuiltinChannelView
 
         if (not name or not set(name) <= _TAG_CHARS
                 or ChannelTarget.normalize_name(name) in BuiltinChannelView.addresses()):

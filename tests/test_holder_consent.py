@@ -1,12 +1,13 @@
 """Shared maintenance, exact holder consent and genuine caller binding are different contracts."""
 
+import time
 from contextlib import nullcontext
 from dataclasses import replace
-import time
 
 import pytest
 
 from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.field_codec import GoalId, OrderId
 from agent_comms.planning.goal_actions import (
     CreateProblemGoalAction,
     OrderGoalAction,
@@ -27,7 +28,6 @@ from agent_comms.planning.goals import (
     GoalConsentRequired,
     NoGoal,
 )
-from agent_comms.nominal.field_codec import GoalId, OrderId
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     AssignTodo,
@@ -48,7 +48,6 @@ from agent_comms.registry.thread_status import (
 )
 from agent_comms.registry.threads import ParkedThreadWorkState
 from agent_comms.tool_caller import ForkCaller, PeerCaller, ThreadCaller
-
 from agent_comms.transport.tools.orders import (
     CommsChangeProblemTool,
     CommsOrderTool,

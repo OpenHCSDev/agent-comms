@@ -11,32 +11,32 @@ from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
-from .coordination.errors import CoordinationError
-from .errors import RelationViolationError
-from .launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
-from .execution.native_arguments import (
+from agent_comms.coordination.errors import CoordinationError
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.native_arguments import (
     ConfiguredBinary,
     GivenArguments,
     InheritedArguments,
     LaunchArguments,
     LaunchBinary,
 )
-from .transport.owner_requests import RetainedOwnerLaunch
-from .execution.owner_lifecycle import (
+from agent_comms.execution.owner_lifecycle import (
     OwnerLifecycle,
     OwnerRestartResult,
     OwnerRestartSelection,
 )
-from .owner_release import OwnerCompletion
-from .restart_refusals import OwnerSelectionChangedRefusal
-from .restart_scope import AllOwners, RestartScope
-from .registry.thread_identity import ThreadAuthority
-from .registry.threads import Thread
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
+from agent_comms.owner_release import OwnerCompletion
+from agent_comms.registry.thread_identity import ThreadAuthority
+from agent_comms.registry.threads import Thread
+from agent_comms.restart_refusals import OwnerSelectionChangedRefusal
+from agent_comms.restart_scope import AllOwners, RestartScope
+from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 
 if TYPE_CHECKING:
-    from .owner_cutover import OwnerCutover
-    from .registry.registry_document import RegistrySnapshot
-    from .registry.registry_store import RegistryEdit
+    from agent_comms.owner_cutover import OwnerCutover
+    from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.registry.registry_store import RegistryEdit
 
 
 @dataclass(frozen=True)
@@ -236,7 +236,7 @@ class FencedOwnerBatch:
                     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch, completion)
                     progress = replace(progress, retired=progress.retired + (owner,))
             # Each original's acquired witness excludes its input before any replacement.
-            from .attempt_recovery import RecoveryMonitorCapability
+            from agent_comms.attempt_recovery import RecoveryMonitorCapability
 
             RecoveryMonitorCapability.settle_stopped_owners(
                 self.lifecycle, tuple(thread for thread, _ in self.captured))

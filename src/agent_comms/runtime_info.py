@@ -7,23 +7,20 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .context_reading import ContextReading, UnmeasuredContext
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import FieldCodec, SingleFieldValue, WireName, WireRequired
-from .storage.locked_store import DocumentChange
-from .storage.maintenance_barrier import CarriedDocument
-from .pi_counts import PiCount, UnreportedCount
-from .storage.store_files import DependentStateTier, SingleFileStore
-from .registry.thread_model import (
-    ThreadModel,
-    UndeclaredModel,
-)
-from .registry.thread_owned_state import ThreadOwnedState
+from agent_comms.context_reading import ContextReading, UnmeasuredContext
+from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, SingleFieldValue, WireName, WireRequired
+from agent_comms.pi_counts import PiCount, UnreportedCount
+from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
+from agent_comms.registry.thread_owned_state import ThreadOwnedState
+from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.storage.maintenance_barrier import CarriedDocument
+from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 
 if TYPE_CHECKING:
-    from .agent_events import RuntimeInfoObservation
-    from .registry.threads import Thread
+    from agent_comms.agent_events import RuntimeInfoObservation
+    from agent_comms.registry.threads import Thread
 
 
 class RuntimeInfo(DeclaredFamily, affix="RuntimeInfo"):

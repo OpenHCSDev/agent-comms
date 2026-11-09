@@ -15,23 +15,30 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from .bus_tables import MessageIdentitySource
-from .coordination.database import CoordinationStore
-from .coordination.tables.assignments import WakeAssignment
-from .coordination.tables.harness_deliveries import HarnessDelivery
-from .messaging.message_page import DisplayedMessagePage
-from .nominal.field_codec import NullMember, RecordMember, SingleFieldValue, SubclassUnion
-from .watched import Watched
-from .message_reference import AfterMessageStart, InboxStart, MessageReference, StreamBeginning
-from .private_registry_guard import RegistryPrivacy
-from .read_basis import ReadCursor
+from agent_comms.bus_tables import MessageIdentitySource
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
+from agent_comms.message_reference import (
+    AfterMessageStart,
+    InboxStart,
+    MessageReference,
+    StreamBeginning,
+)
+from agent_comms.messaging.message_page import DisplayedMessagePage
+from agent_comms.nominal.field_codec import (
+    NullMember,
+    RecordMember,
+    SingleFieldValue,
+    SubclassUnion,
+)
+from agent_comms.private_registry_guard import RegistryPrivacy
+from agent_comms.read_basis import ReadCursor
+from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
-    from .messaging.read_ledger import (
-        ReadDocument,
-        ReadLedger,
-    )
-    from .registry.registry_document import RegistrySnapshot
+    from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
+    from agent_comms.registry.registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True, slots=True)

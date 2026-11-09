@@ -12,21 +12,18 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from .execution.child_process import ProcessRestart
-from .errors import RelationViolationError
-from .coordination.session import CoordinationSession
-from .planning.goals import (
-    GoalDeclaration,
-    NoGoal,
-)
-from .participant_store import ParticipantStore
-from .registry.thread_identity import ThreadIncarnation
-from .registry.thread_status import ThreadStatus
-from .registry.threads import Thread
+from agent_comms.coordination.session import CoordinationSession
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessRestart
+from agent_comms.participant_store import ParticipantStore
+from agent_comms.planning.goals import GoalDeclaration, NoGoal
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_status import ThreadStatus
+from agent_comms.registry.threads import Thread
 
 if TYPE_CHECKING:
-    from .registry.registry_document import RegistryDocument
-    from .registry.registry_store import RegistryStore
+    from agent_comms.registry.registry_document import RegistryDocument
+    from agent_comms.registry.registry_store import RegistryStore
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

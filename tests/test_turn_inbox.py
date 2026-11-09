@@ -4,6 +4,11 @@
 
 import pytest
 
+from agent_comms.execution.native_session_prepare import NativeSessionPreparation
+from agent_comms.execution.turn_failure import (
+    QueuedInputMissing,
+    QueuedInputNotSent,
+)
 from agent_comms.execution.turn_inbox import (
     ClearQueue,
     FollowUpInputPolicy,
@@ -14,16 +19,11 @@ from agent_comms.execution.turn_inbox import (
     TurnInboxItem,
     UseSettings,
 )
-from agent_comms.execution.native_session_prepare import NativeSessionPreparation
+from agent_comms.execution.turn_inputs import InputForwarding
+from agent_comms.nominal.field_codec import InputId
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.registry.thread_model import UndeclaredModel
-from agent_comms.execution.turn_failure import (
-    QueuedInputMissing,
-    QueuedInputNotSent,
-)
 from native_response_fixture import native_response_session
-from agent_comms.nominal.field_codec import InputId
-from agent_comms.execution.turn_inputs import InputForwarding
 
 
 def test_inbox_owns_ready_work_and_retains_parked_input():

@@ -27,17 +27,16 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.image_input import ImageInput
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.storage.locked_store import DurableFile, SQLiteFile
 
-from .nominal.field_codec import FieldCodec
-from .image_input import ImageInput
-
 if TYPE_CHECKING:
-    from .execution.turn_inbox import StreamingInputPolicy
+    from agent_comms.execution.turn_inbox import StreamingInputPolicy
 
-from .storage.private_path import ObservedPath, PrivateFileRole, TrustedAncestorRole
-from .storage.store_files import ExclusiveLock, StoreOwner
-from .storage.typed_table import (
+from agent_comms.storage.private_path import ObservedPath, PrivateFileRole, TrustedAncestorRole
+from agent_comms.storage.store_files import ExclusiveLock, StoreOwner
+from agent_comms.storage.typed_table import (
     AllObjectsTables,
     DurableTables,
     ImmutableRows,

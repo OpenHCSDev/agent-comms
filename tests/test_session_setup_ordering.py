@@ -3,8 +3,8 @@
 
 import asyncio
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from acp import spawn_agent_process
 from acp.connection import StreamDirection, StreamEvent

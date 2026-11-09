@@ -9,9 +9,15 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from pydantic import BaseModel
 
-from .coordination.errors import IdentityConflict
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import AcpSessionId, FieldCodec, NominalSpelling, NominalText, WireName
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    AcpSessionId,
+    FieldCodec,
+    NominalSpelling,
+    NominalText,
+    WireName,
+)
 
 
 class PermissionOptionId(NominalText):
@@ -68,9 +74,9 @@ class SelectedOutcome(PermissionOutcome):
 if TYPE_CHECKING:
     from acp.schema import PermissionOption, ToolCallUpdate
 
-    from .runtime_server import RuntimeServer
     from agent_comms.acp import AcpSelectedWriteAuthority
-    from .execution.turn_runner import TurnRunner
+    from agent_comms.execution.turn_runner import TurnRunner
+    from agent_comms.runtime_server import RuntimeServer
 
 ACP_PERMISSION_TIMEOUT_SECONDS = 14.0
 

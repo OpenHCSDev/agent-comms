@@ -4,8 +4,8 @@ import os
 import re
 import subprocess
 
-from .config_options import ConfigOptions
-from .launch_runtime import ThreadLaunch
+from agent_comms.config_options import ConfigOptions
+from agent_comms.launch_runtime import ThreadLaunch
 
 
 def run_login(provider: str = "") -> int:

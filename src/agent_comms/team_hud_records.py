@@ -21,24 +21,21 @@ from agent_comms.nominal.field_codec import (
     projected,
 )
 from agent_comms.order_story import OrderStory
-from .planning.plan_phases import (
-    Plan,
-    PlanPhase,
-)
+from agent_comms.planning.orders import OrderProgress, PullRequest
+from agent_comms.planning.plan_phases import Plan, PlanPhase
+from agent_comms.planning.progress_readings import ProgressPoint
 from agent_comms.recorded_time import RecordedEventTime
-from .registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.tool_result import ToolResult
 from agent_comms.ui_model.hud_groups import (
-    HudGroup, HudUnavailableGroup, PhasesDoneByPlanGroup, PlanPhasesGroup,
-    ProblemsGroup, UrgentGroup,
+    HudGroup,
+    HudUnavailableGroup,
+    PhasesDoneByPlanGroup,
+    PlanPhasesGroup,
+    ProblemsGroup,
+    UrgentGroup,
 )
 from agent_comms.ui_model.teammate_state import TeammateClock, TeammateState
-
-from .planning.orders import (
-    OrderProgress,
-    PullRequest,
-)
-from .planning.progress_readings import ProgressPoint
 
 
 @dataclass(frozen=True)

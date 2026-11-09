@@ -1,12 +1,12 @@
 """Build a turn's saved context from one checked read of its authored records."""
 
-from dataclasses import dataclass
 from collections.abc import Mapping
+from dataclasses import dataclass
 
-from .exporting import WireExportFormat
-from .nominal.field_codec import FieldCodec
-from .messages import Message
-from .context_segments.retained import RetainedSegment
+from agent_comms.context_segments.retained import RetainedSegment
+from agent_comms.exporting import WireExportFormat
+from agent_comms.messages import Message
+from agent_comms.nominal.field_codec import FieldCodec
 
 
 @dataclass(frozen=True)

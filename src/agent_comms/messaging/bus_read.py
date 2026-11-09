@@ -9,35 +9,29 @@ from dataclasses import dataclass
 from functools import partial
 from typing import cast
 
-from ..acp_extension import TranscriptSnapshotUpdate
-from ..comms import Comms
-from ..coordination.coordinator import Coordination
-from ..coordination.errors import StaleFence
-from ..errors import UnregisteredThreadError
-from ..nominal.field_codec import FieldCodec
-from ..owner_connection import (
+from agent_comms.acp_extension import TranscriptSnapshotUpdate
+from agent_comms.comms import Comms
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import StaleFence
+from agent_comms.errors import UnregisteredThreadError
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.owner_connection import (
     OwnerConnection,
     OwnerIdentityChangedError,
     OwnerReading,
     OwnerReplyConnection,
 )
-from ..read_basis import (
-    NoDisplaySelection,
-    ReadAuthority,
-)
-from ..registry.registry_document import RegistrySnapshot
-from ..registry.registry_store import RegistryCut
-from ..registry.threads import Thread
-from ..storage.private_path import (
-    FileRevision,
-    ObservedPath,
-)
-from ..registry.thread_identity import ThreadIncarnation
-from ..tool_declaration import ToolDeclaration
-from ..tool_request import ThreadReadTool
-from ..tool_result import ToolResult
-from ..transcripts import TranscriptRead
-from ..transport.runtime_request import AttachedResultRuntimeRequest
+from agent_comms.read_basis import NoDisplaySelection, ReadAuthority
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_store import RegistryCut
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.threads import Thread
+from agent_comms.storage.private_path import FileRevision, ObservedPath
+from agent_comms.tool_declaration import ToolDeclaration
+from agent_comms.tool_request import ThreadReadTool
+from agent_comms.tool_result import ToolResult
+from agent_comms.transcripts import TranscriptRead
+from agent_comms.transport.runtime_request import AttachedResultRuntimeRequest
 
 
 class BusRead[Result](ToolDeclaration, ABC):

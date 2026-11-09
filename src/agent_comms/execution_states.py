@@ -6,20 +6,24 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from .assignment_states import (
+from agent_comms.assignment_states import (
     AssignmentState,
     CompletedAssignment,
     DeferredAssignment,
     EngagedAssignment,
     FailedAssignment,
 )
-from .coordination.errors import IdentityConflict, IntegrityViolationError, ResponseClaimBlocked
-from .coordination.vocabulary import CoordinatorVocabulary
-from .lifecycle import LifecycleState
-from .lifecycle_capability import Active, Complete, Failed, Successful, Terminal
+from agent_comms.coordination.errors import (
+    IdentityConflict,
+    IntegrityViolationError,
+    ResponseClaimBlocked,
+)
+from agent_comms.coordination.vocabulary import CoordinatorVocabulary
+from agent_comms.lifecycle import LifecycleState
+from agent_comms.lifecycle_capability import Active, Complete, Failed, Successful, Terminal
 
 if TYPE_CHECKING:
-    from .coordination.snapshot import RecoverySnapshot
+    from agent_comms.coordination.snapshot import RecoverySnapshot
 
 
 class OrdinalRule:

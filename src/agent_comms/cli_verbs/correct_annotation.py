@@ -1,18 +1,18 @@
 from __future__ import annotations
 
+import json
+from dataclasses import dataclass
+from typing import Annotated
+
 from agent_comms.annotation_correction import CorrectsAnnotation
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import WorktreeArgument
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
-from agent_comms.nominal.field_codec import Argument
-from agent_comms.nominal.field_codec import Editor
+from agent_comms.nominal.field_codec import Argument, Editor
 from agent_comms.target_fields import ChoiceTargetField
 from agent_comms.working_memory_labels import ModelLabel
 from agent_comms.working_memory_questions import SpanAnswer
-from dataclasses import dataclass
-from typing import Annotated
-import json
 
 
 @dataclass(frozen=True, kw_only=True)

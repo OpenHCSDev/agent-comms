@@ -15,13 +15,8 @@ from itertools import dropwhile, takewhile
 from typing import ClassVar
 
 from agent_comms_hooks import Bash, BashRefusal
-
-from .shell_commands import (
-    ShellCommand,
-    TimeoutRunner,
-)
-from .watch import SessionHookProgram
-
+from agent_comms_hooks.shell_commands import ShellCommand, TimeoutRunner
+from agent_comms_hooks.watch import SessionHookProgram
 
 Words = tuple[str, ...]
 

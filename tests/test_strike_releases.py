@@ -2,6 +2,8 @@
 import json
 from contextlib import closing
 
+from cutover.carry_strike_releases import StrikeReleases
+
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
@@ -10,7 +12,6 @@ from agent_comms.planning.orders import (
     TodoStore,
 )
 from agent_comms.storage.locked_store import LiveFilesRequest
-from cutover.carry_strike_releases import StrikeReleases
 from conftest import maintenance_held
 
 pytest_plugins = ("test_todo_stories",)

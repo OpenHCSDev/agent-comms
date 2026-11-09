@@ -13,27 +13,25 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from agent_comms.lifecycle_capability import Complete
-
-from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink, WakeAssignment
-from agent_comms.coordination.tables.executions import ExecutionRecord
-from agent_comms.coordination.tables.responses import ResponseObligation
-
-from ..cohort_schema import (
+from agent_comms.cohort_schema import (
     AwarenessClaimGenerations,
     ClaimBatchAcknowledgements,
     ClaimBatchMembers,
     CohortDeliveries,
     SelectedClaim,
 )
-from ..nominal.field_codec import FieldCodec, ThreadLookup
-from ..execution.turn_context import (
+from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink, WakeAssignment
+from agent_comms.coordination.tables.executions import ExecutionRecord
+from agent_comms.coordination.tables.responses import ResponseObligation
+from agent_comms.execution.turn_context import (
     ContextSegment,
     InstructionFile,
     InstructionSegment,
     TurnContext,
 )
-from ..wake_candidate_index import ProjectionUnavailableError
+from agent_comms.lifecycle_capability import Complete
+from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
+from agent_comms.wake_candidate_index import ProjectionUnavailableError
 
 
 @dataclass(frozen=True)

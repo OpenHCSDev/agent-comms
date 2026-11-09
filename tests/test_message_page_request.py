@@ -1,6 +1,5 @@
 """Declared display scopes select membership before the sequence-page limit."""
 
-from agent_comms.projects.checkouts import Checkout
 from dataclasses import dataclass
 
 import pytest
@@ -12,9 +11,10 @@ from agent_comms.messaging.message_page import (
     PageBounds,
 )
 from agent_comms.page_traversal import LiveCursor, NewerTraversal
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.read_basis import MessageDisplayScope, NamedViewer
-from bus_record_fixture import prepare_native_comms
 from agent_comms.registry.threads import NativeThread
+from bus_record_fixture import prepare_native_comms
 
 
 @pytest.fixture

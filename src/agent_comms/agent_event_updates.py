@@ -11,20 +11,20 @@ from acp.schema import (
     AgentMessageChunk,
     AgentThoughtChunk,
     ContentToolCallContent,
+    SessionInfoUpdate,
     TextContentBlock,
     ToolCallProgress,
     ToolCallStart,
     ToolKind,
     UsageUpdate,
-    SessionInfoUpdate,
 )
 from metaclass_registry.mro_dispatch import (
     MroDispatch,
     handles,
 )
 
-from . import agent_events as events
-from .acp_extension import (
+from agent_comms import agent_events as events
+from agent_comms.acp_extension import (
     CompactionChangedUpdate,
     GoalChangedUpdate,
     McpClientAcknowledgementUpdate,
@@ -35,11 +35,13 @@ from .acp_extension import (
     TextRouteUpdate,
     encode_updates,
 )
-from .context_reading import ContextUsage, UnsizedContext
-from .controller import SessionUpdateSink
-from .coordination.coordinator import Coordination
-from .nominal.field_codec import AcpSessionId, TurnId
-from .tool_declaration import (
+from agent_comms.context_reading import ContextUsage, UnsizedContext
+from agent_comms.controller import SessionUpdateSink
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.turn_effects import TurnEffects
+from agent_comms.nominal.field_codec import AcpSessionId, TurnId
+from agent_comms.routing import MessageRoute, NoMessageRoute
+from agent_comms.tool_declaration import (
     EditAction,
     ExecuteAction,
     OtherAction,
@@ -47,15 +49,13 @@ from .tool_declaration import (
     SearchAction,
     ToolAction,
 )
-from .tool_results import tool_result_content
-from .transcript_updates import TranscriptUpdate
-from .routing import MessageRoute, NoMessageRoute
-from .execution.turn_effects import TurnEffects
+from agent_comms.tool_results import tool_result_content
+from agent_comms.transcript_updates import TranscriptUpdate
 
 if TYPE_CHECKING:
-    from .acp_extension import AgentCommsUpdate
-    from .execution.native_output import NativeRecordLocation
-    from .transcripts import NativeCommittedPrefix
+    from agent_comms.acp_extension import AgentCommsUpdate
+    from agent_comms.execution.native_output import NativeRecordLocation
+    from agent_comms.transcripts import NativeCommittedPrefix
 
 
 class AcpToolAction(MroDispatch):

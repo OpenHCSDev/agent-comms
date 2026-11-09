@@ -1,78 +1,98 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
-from pathlib import Path
-from agent_comms.projects.checkouts import Checkout
-from collections.abc import Callable
-from contextlib import asynccontextmanager, contextmanager, suppress
-from agent_comms.cli_bridges.shared import CoreWatchEnded, core_watch_failure
-from agent_comms.launch_runtime import InstalledSource, LaunchRuntime, RuntimeReplacedError
-from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator
 import asyncio
+import json
 import os
 import shutil
 import socket
 import sqlite3
 import stat
-from contextlib import closing
+from collections.abc import Callable
+from contextlib import asynccontextmanager, closing, contextmanager, suppress
 from dataclasses import replace
 from functools import partial
 from html import escape
-import json
-
+from pathlib import Path
 
 import pytest
 
-from transcript_record_fixture import transcript_record
-
-from bus_record_fixture import prepare_native_comms
-from conftest import accept_initial, declare_test_bus, publish_initial
-
-from agent_comms.installer.practice import PracticeCopy
-from agent_comms.storage.locked_store import RootFile
-
-from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
-from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.cli_bridges.shared import MonitorService
-from agent_comms.cli_bridges.monitor import MonitorPeer
-from agent_comms.cli_bridges.claude_protocol import (
-    ClaudeSession, ClaudeMonitorFrame, ForeignTaskNotification, ReadResultObserved,
-    ForeignAttachment, KnownTurn,
-)
-from agent_comms.cli_bridges.shared import (
-    Binding, MonitorPart, ForeignMonitorFrame, Options, Watch, StoredBinding,
-    MonitorObservation, MonitorReadFile,
-    GivenBinding, MONITOR_FRAME,
-)
-from agent_comms.harness_delivery_states import (
-    DeliveredOutcome, EmittedOutcome, MismatchedMonitor, ObservedMonitor, ReceivingMonitor,
-    UnconfirmedOutcome, UnrecordedMonitor,
-)
 from agent_comms.agent_inbox import TakenInputStart
-from agent_comms.errors import RelationViolationError
-from agent_comms.messaging.read_ledger import ReadLedger
+from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
+from agent_comms.channel_targets import ThreadTarget
+from agent_comms.cli_bridges.claude import ClaudeBridge
+from agent_comms.cli_bridges.claude_protocol import (
+    ClaudeMonitorFrame,
+    ClaudeSession,
+    ForeignAttachment,
+    ForeignTaskNotification,
+    KnownTurn,
+    ReadResultObserved,
+)
+from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
+from agent_comms.cli_bridges.monitor import MonitorPeer
+from agent_comms.cli_bridges.shared import (
+    MONITOR_FRAME,
+    Binding,
+    CoreWatchEnded,
+    ForeignMonitorFrame,
+    GivenBinding,
+    MonitorObservation,
+    MonitorPart,
+    MonitorReadFile,
+    MonitorService,
+    Options,
+    StoredBinding,
+    Watch,
+    core_watch_failure,
+)
+from agent_comms.comms import wire
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import CoordinationReadUnavailable
-from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
-from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.tables.assignments import WakeAssignment
-from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
-from agent_comms.comms import wire
-from agent_comms.nominal.field_codec import FieldCodec, InputId
-from agent_comms.message_reference import BridgeStart, MessageReference
-from agent_comms.runtime_updates import (
-    AllTurnsEnded, FinishedItem, FinishedTurn, HiddenItem, RuntimeUpdate,
-)
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
+from agent_comms.diagnostics import record_terminal_failure
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.turn_failure import BackendFailed
 from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
 from agent_comms.external_transcript import ExternalTurnInput
-from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.harness_delivery_states import (
+    DeliveredOutcome,
+    EmittedOutcome,
+    MismatchedMonitor,
+    ObservedMonitor,
+    ReceivingMonitor,
+    UnconfirmedOutcome,
+    UnrecordedMonitor,
+)
+from agent_comms.installer.practice import PracticeCopy
+from agent_comms.launch_runtime import InstalledSource, LaunchRuntime, RuntimeReplacedError
+from agent_comms.message_reference import BridgeStart, MessageReference
 from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole, QuestionKind
-from agent_comms.channel_targets import ThreadTarget
-from agent_comms.diagnostics import record_terminal_failure
+from agent_comms.messaging.read_ledger import ReadLedger
+from agent_comms.nominal.field_codec import FieldCodec, InputId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.runtime_updates import (
+    AllTurnsEnded,
+    FinishedItem,
+    FinishedTurn,
+    HiddenItem,
+    RuntimeUpdate,
+)
+from agent_comms.storage.locked_store import RootFile
+from agent_comms.storage.maintenance_barrier import (
+    MaintenanceBarrier,
+    MaintenanceHeldError,
+    MaintenanceOperator,
+)
 from agent_comms.transcript_events import AssistantTranscript
-from agent_comms.execution.turn_failure import BackendFailed
+from bus_record_fixture import prepare_native_comms
+from conftest import accept_initial, declare_test_bus, publish_initial
+from transcript_record_fixture import transcript_record
 
 
 async def stored_attempts(bridge) -> tuple[HarnessDelivery, ...]:

@@ -7,8 +7,6 @@ claim historical proof that a model consumed an old channel message.
 
 from __future__ import annotations
 
-from .tool_result import ToolResult
-
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
@@ -17,43 +15,37 @@ from functools import cmp_to_key
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
-from agent_comms.nominal.field_codec import GoalId
+from agent_comms import presentation
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.command import Command
+from agent_comms.display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.messages import Message, MessageInput, MessageRole
 from agent_comms.nominal import field_codec
-
-from . import presentation
-from .channel_targets import CommandTarget
-from .command import Command
-from .nominal.declared_family import DeclaredFamily
-from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
-from .errors import RelationViolationError, UnregisteredThreadError
-from .planning.goals import (
-    Goal,
-    GoalMentionBinding,
-)
-from .storage.locked_store import DocumentChange
-from .storage.maintenance_barrier import CarriedDocument
-from .messages import Message, MessageInput, MessageRole
-from .peer_relevance import (
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import GoalId
+from agent_comms.peer_relevance import (
     ChannelmateRelevance,
     CollaboratorRelevance,
     GoalContactRelevance,
     PeerRelevance,
     StrangerRelevance,
 )
-from .registry.registry_document import RegistrySnapshot, RosterVisibility
-from .routing import DeliveryScope
-from .storage.store_files import DependentStateTier, SingleFileStore
-from .registry.thread_identity import (
-    RecordedThreadIncarnation,
-    ThreadIncarnation,
-)
-from .registry.thread_owned_state import ThreadOwnedState
-from .registry.threads import Thread
+from agent_comms.planning.goals import Goal, GoalMentionBinding
+from agent_comms.registry.registry_document import RegistrySnapshot, RosterVisibility
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from agent_comms.registry.thread_owned_state import ThreadOwnedState
+from agent_comms.registry.threads import Thread
+from agent_comms.routing import DeliveryScope
+from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.storage.maintenance_barrier import CarriedDocument
+from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
+from agent_comms.tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from .history_views import HistoryViews
-    from .messaging.message_bus import MessageBus
-    from .registry.registration import Registration
+    from agent_comms.history_views import HistoryViews
+    from agent_comms.messaging.message_bus import MessageBus
+    from agent_comms.registry.registration import Registration
 
 
 @dataclass(frozen=True, slots=True)

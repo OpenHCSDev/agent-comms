@@ -13,31 +13,23 @@ from dataclasses import (
     fields,
 )
 from typing import (
+    TYPE_CHECKING,
     ClassVar,
     Self,
-    TYPE_CHECKING,
 )
 
-from .goal_failure_observation import FailedTurnEvidence
-from .goal_states import PauseSource
-from .goals import (
-    Goal,
-    GoalCheckpoint,
-    GoalDeclaration,
-)
-from ..lifecycle_capability import Active
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
-    GoalId,
-    NullMember,
-    WireValue,
-)
-from ..registry.thread_identity import RecordedThreadIncarnation
-from ..registry.thread_presentation import ThreadPresentation
+from agent_comms.lifecycle_capability import Active
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import GoalId, NullMember, WireValue
+from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
+from agent_comms.planning.goal_states import PauseSource
+from agent_comms.planning.goals import Goal, GoalCheckpoint, GoalDeclaration
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
-    from .goal_actions import GoalAction
-    from ..bus_publication import Delivered
+    from agent_comms.bus_publication import Delivered
+    from agent_comms.planning.goal_actions import GoalAction
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,7 +148,7 @@ class ControlledExecution(BoundGoalExecution, declared_name=None):
 class ActiveExecution(ControlledExecution, declared_name=None):
     @property
     def toggle(self) -> type[GoalAction]:
-        from .goal_actions import PausedGoalAction
+        from agent_comms.planning.goal_actions import PausedGoalAction
         return PausedGoalAction
 
 
@@ -165,7 +157,7 @@ class RetryableExecution(ControlledExecution, declared_name=None):
 
     @property
     def toggle(self) -> type[GoalAction]:
-        from .goal_actions import RetryGoalAction
+        from agent_comms.planning.goal_actions import RetryGoalAction
         return RetryGoalAction
 
 
@@ -195,7 +187,7 @@ class PausedExecution(WaitingExecution, ControlledExecution):
 
     @property
     def toggle(self) -> type[GoalAction]:
-        from .goal_actions import ActiveGoalAction
+        from agent_comms.planning.goal_actions import ActiveGoalAction
         return ActiveGoalAction
 
 

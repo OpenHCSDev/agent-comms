@@ -1,3 +1,30 @@
+import json
+import os
+import time
+from dataclasses import replace
+from datetime import UTC, datetime
+
+import pytest
+
+from agent_comms.acp_extension import TranscriptSnapshotUpdate
+from agent_comms.coordination.errors import TranscriptChanged
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
+from agent_comms.messaging.bus_read import UiRead
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_text import (
+    ForkedParent,
+    GivenThreadText,
+)
+from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.storage.private_path import FileIdentity, MissingFile
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.transcripts import (
     EarlierThan,
     LaterThan,
@@ -5,37 +32,10 @@ from agent_comms.transcripts import (
     Through,
     WireTranscriptCursor,
 )
-from agent_comms.messaging.bus_read import UiRead
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.transport.tools.served import invoke_tool
-from conftest import installed_comms, transcript_records
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.coordination.errors import TranscriptChanged
-from agent_comms.storage.private_path import FileIdentity, MissingFile
-import json
-import os
-import time
-from datetime import UTC, datetime
-from dataclasses import replace
-
-import pytest
-
-from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.transcript_events import AssistantTranscript
-from agent_comms.execution.turn_item import (
-    NativeItemId,
-    NativeTurnId,
-)
-from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-from agent_comms.registry.thread_text import (
-    ForkedParent,
-    GivenThreadText,
-)
-from agent_comms.acp_extension import TranscriptSnapshotUpdate
-from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.transport.tools.reads import TranscriptPageRead
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tools.served import invoke_tool
 from agent_comms.ui_model.observation import ReadTranscript
+from conftest import installed_comms, transcript_records
 
 
 def transcript(path, count):

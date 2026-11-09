@@ -8,15 +8,10 @@ import json
 
 import pytest
 
+import agent_comms.execution.turn_failure as failures
 import agent_comms.pi_commands as commands
 import agent_comms.pi_events as pi
-import agent_comms.execution.turn_failure as failures
-from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord
 from agent_comms.execution.native_session_prepare import NativeSessionPreparation
-from agent_comms.transport.native_tool_transport import OwnerToolConnection
-from agent_comms.pi_wire import AnonymousRequest, RequestId
-from agent_comms.pi_payloads import ReportedText
-from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.execution.turn_item import PiRequestKey
 from agent_comms.execution.turn_phase import (
     CompactionPhase,
@@ -27,8 +22,11 @@ from agent_comms.execution.turn_phase import (
     ToolRunningPhase,
     TurnPhase,
 )
-
-
+from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord
+from agent_comms.pi_payloads import ReportedText
+from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.pi_wire import AnonymousRequest, RequestId
+from agent_comms.transport.native_tool_transport import OwnerToolConnection
 from native_response_fixture import native_response_session
 
 
@@ -238,8 +236,8 @@ def test_strict_native_decoding_cannot_check_malformed_rows(row):
 
 
 def test_private_evidence_refuses_duplicate_keys():
-    from agent_comms.execution.native_failures import NativePiUnavailable
     from agent_comms.execution.native_evidence_read import PrivateEvidenceRead
+    from agent_comms.execution.native_failures import NativePiUnavailable
 
     with pytest.raises(NativePiUnavailable):
         PrivateEvidenceRead._decode_row(b'{"type":"session","type":"message"}\n')

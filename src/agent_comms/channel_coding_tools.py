@@ -13,28 +13,12 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
-
-from .comms import Comms
-from .coordination.database import CoordinationStore
-from .envelope_claim_transitions import (
-    ClaimOwner,
-    FileClaimPath,
-    WakeClaim,
-)
-from .nominal.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord
-from .lifecycle_capability import Executing
-from .execution.native_arguments import NativeArguments
-from .execution.native_runtime_input import NativeRuntimeInput
-from .transport.native_tool_transport import NativeToolMode
-from .transport.native_tool_call import (
-    CodingCall,
-    ToolNotExecuting,
-)
-from .transport.native_tool_transport import GatedToolTransport, ToolListener, UnboundToolTransport
-from .transport.native_tools import NativeToolDeclaration
-from .pi_payloads import StorageDenialToolDetails
-from .pi_rule_gate import PiRuleGate
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.envelope_claim_transitions import ClaimOwner, FileClaimPath, WakeClaim
+from agent_comms.execution.native_arguments import NativeArguments
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.selected.claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
@@ -43,23 +27,33 @@ from agent_comms.execution.selected.tool_broker import (
     consume_selected_slot,
     verify_sent_full_input,
 )
-from .tool_denial import StorageDenied
-from .projects.storage_projection import StorageProjection
-from .storage_room import NoRoomNeeded, RoomReservation
-from .registry.threads import Thread
-from .registry.thread_identity import OfferedTools
-from .tool_denial import SelectedToolDenied
-from .execution.turn_goal_permission import TurnGoalPermission
+from agent_comms.execution.turn_goal_permission import TurnGoalPermission
+from agent_comms.execution.turn_input_source import TurnInputSource
+from agent_comms.lifecycle_capability import Executing
+from agent_comms.nominal.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord
+from agent_comms.pi_payloads import StorageDenialToolDetails
+from agent_comms.pi_rule_gate import PiRuleGate
+from agent_comms.planning.goal_waits import GoalWait
+from agent_comms.planning.goals import GoalDeclaration
+from agent_comms.projects.storage_projection import StorageProjection
+from agent_comms.registry.thread_identity import OfferedTools
+from agent_comms.registry.threads import Thread
+from agent_comms.reservation_rules import ReservationRule, ReservationViolationError, RuleCheck
+from agent_comms.storage_room import NoRoomNeeded, RoomReservation
+from agent_comms.tool_denial import SelectedToolDenied, StorageDenied
+from agent_comms.transport.native_tool_call import CodingCall, ToolNotExecuting
+from agent_comms.transport.native_tool_transport import (
+    GatedToolTransport,
+    NativeToolMode,
+    ToolListener,
+    UnboundToolTransport,
+)
+from agent_comms.transport.native_tools import NativeToolDeclaration
 
-from .reservation_rules import ReservationRule, ReservationViolationError
-from .execution.turn_input_source import TurnInputSource
-from .reservation_rules import RuleCheck
-from .planning.goals import GoalDeclaration
-from .planning.goal_waits import GoalWait
 if TYPE_CHECKING:
-    from .backend import TurnSession
-    from .coordination.tables.assignments import WakeAssignment
-    from .pi_payloads import PiToolResult
+    from agent_comms.backend import TurnSession
+    from agent_comms.coordination.tables.assignments import WakeAssignment
+    from agent_comms.pi_payloads import PiToolResult
 
 
 @dataclass(frozen=True, kw_only=True)

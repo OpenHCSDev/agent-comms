@@ -8,23 +8,16 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from ..attempt_resolution import VerifiedTurnDecision
-from ..nominal.field_codec import TurnId
-from ..planning.goal_attempts import (
-    GoalAttemptStore,
-    LaunchPermit,
-)
-from ..planning.goal_states import (
-    ActiveGoal,
-    CompletedGoal,
-    PausedGoal,
-)
-from ..planning.goals import Goal
-from ..reported_turn import ReportedTurn
+from agent_comms.attempt_resolution import VerifiedTurnDecision
+from agent_comms.nominal.field_codec import TurnId
+from agent_comms.planning.goal_attempts import GoalAttemptStore, LaunchPermit
+from agent_comms.planning.goal_states import ActiveGoal, CompletedGoal, PausedGoal
+from agent_comms.planning.goals import Goal
+from agent_comms.reported_turn import ReportedTurn
 
 if TYPE_CHECKING:
-    from ..comms import Comms
-    from ..registry.threads import Thread
+    from agent_comms.comms import Comms
+    from agent_comms.registry.threads import Thread
 
 
 @dataclass

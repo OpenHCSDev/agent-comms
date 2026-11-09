@@ -21,7 +21,9 @@ from pydantic import (
     model_validator,
 )
 
+from agent_comms.cli_bridges.history import CodexHistory, JsonLinesFile, OfflineHistory
 from agent_comms.cli_protocol import Declared, OpenWire, TimestampedWire, WireHeader
+from agent_comms.execution.turn_context import CodexRolloutProvenance
 from agent_comms.nominal.field_codec import StoredSessionId, ToolCallId
 from agent_comms.runtime_updates import (
     HiddenItem,
@@ -37,10 +39,7 @@ from agent_comms.transcript_events import (
     ToolStartTranscript,
     UserTranscript,
 )
-from ..execution.turn_context import CodexRolloutProvenance
-
-from ..wire_models import WireModel
-from .history import CodexHistory, JsonLinesFile, OfflineHistory
+from agent_comms.wire_models import WireModel
 
 
 @dataclass

@@ -2,8 +2,8 @@
 
 from collections.abc import Mapping
 
-from . import ClaudeHook, PermissionHookProgram
-from .watch import SessionHookProgram
+from agent_comms_hooks import ClaudeHook, PermissionHookProgram
+from agent_comms_hooks.watch import SessionHookProgram
 
 
 class ReadGateProgram(SessionHookProgram, PermissionHookProgram):

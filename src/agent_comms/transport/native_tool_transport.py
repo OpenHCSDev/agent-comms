@@ -14,29 +14,28 @@ from contextlib import AsyncExitStack, ExitStack
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Generic, TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar
 
-from agent_comms_hooks import ToolRefusedError
-
-from ..coordination.database import CoordinationStore
-from ..errors import RelationViolationError
-from ..execution.child_process import join_retirement
-from ..lifecycle_capability import Complete
-from .native_tool_call import (
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import join_retirement
+from agent_comms.lifecycle_capability import Complete
+from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord, Token256Text
+from agent_comms.pi_payloads import AssistantMessage
+from agent_comms.storage.private_path import PrivateDirectoryRole, PrivateSocketRole
+from agent_comms.tool_denial import SelectedToolDenied
+from agent_comms.transport.native_tool_call import (
     DuplicateToolCallIdentity,
     NativeToolCall,
     SelectedToolBusy,
     ToolOutcomeUnknown,
 )
-from ..nominal.field_codec import FieldCodec, InputId, MalformedRecord, Token256Text
-from ..pi_payloads import AssistantMessage
-from ..storage.private_path import PrivateDirectoryRole, PrivateSocketRole
-from ..tool_denial import SelectedToolDenied
+from agent_comms_hooks import ToolRefusedError
 
 if TYPE_CHECKING:
-    from ..backend import TurnSession
-    from ..pi_events import ToolExecutionEnd, ToolExecutionStart
-    from ..pi_rule_gate import PiRuleGate
+    from agent_comms.backend import TurnSession
+    from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
+    from agent_comms.pi_rule_gate import PiRuleGate
 
 _LOG = logging.getLogger(__name__)
 

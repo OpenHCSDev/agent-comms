@@ -1,37 +1,41 @@
 """The declared bus watch uses real native commit and replacement notifications."""
 
 
-from agent_comms.projects.checkouts import Checkout
 import asyncio
 import errno
-from contextlib import aclosing
 from concurrent.futures import Future
+from contextlib import aclosing
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from agent_comms.nominal.field_codec import FieldCodec, GoalId, GoalWaitId, WatchPaths
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.comms import wire
+from agent_comms.errors import UnresolvedAttemptError
+from agent_comms.messages import InfoKind, Message
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, GoalWaitId, WatchPaths
 from agent_comms.planning.goal_attempts import (
     Generation,
     GoalAttemptStore,
     StorageUncertainError,
 )
-from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.planning.goal_presentation import GoalWaitTarget
 from agent_comms.planning.goal_waits import GoalWaits, RecordedGoalWait
-from agent_comms.storage.locked_store import SQLiteStorage
-from agent_comms.messages import InfoKind, Message
-from agent_comms.watched import ChangeSignal, FileLifetimeSource, FileSource
-from agent_comms.storage.private_path import FileRevision
 from agent_comms.presentation import WireRevision
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import SQLiteStorage
+from agent_comms.storage.private_path import FileRevision
 from agent_comms.view_unread import (
-    NativeReplyPreparation, ReplyIndex, ReplyIndexUpdate, ReplyRead, ReplyReading,
+    NativeReplyPreparation,
+    ReplyIndex,
+    ReplyIndexUpdate,
+    ReplyRead,
+    ReplyReading,
     TranscriptReadState,
 )
-from agent_comms.registry.threads import NativeThread
+from agent_comms.watched import ChangeSignal, FileLifetimeSource, FileSource
 
 
 @pytest.fixture

@@ -7,25 +7,35 @@ import re
 from contextlib import ExitStack, closing
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
-
-from .errors import RelationViolationError
-from .nominal.field_codec import InputId, NominalSpelling, NominalText, NullMember, SingleFieldValue
-from .pi_wire import PiOmitted, ReportedInputId
-from .storage.private_path import FileObservation, FileRevision
-from .routing import NoTurnRouting, Routing, TurnRouting
-from .text_digest import TextDigest
-from .execution.turn_item import FreshNativeId
-from .transcript_events import ContextTranscript, TranscriptEvent
-from .storage.typed_table import Column, DurableStore, StoreRows, TextStorage, WithoutRowid
-
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.turn_item import FreshNativeId
+from agent_comms.nominal.field_codec import (
+    InputId,
+    NominalSpelling,
+    NominalText,
+    NullMember,
+    SingleFieldValue,
+)
+from agent_comms.pi_wire import PiOmitted, ReportedInputId
+from agent_comms.routing import NoTurnRouting, Routing, TurnRouting
+from agent_comms.storage.private_path import FileObservation, FileRevision
+from agent_comms.storage.typed_table import (
+    Column,
+    DurableStore,
+    StoreRows,
+    TextStorage,
+    WithoutRowid,
+)
+from agent_comms.text_digest import TextDigest
+from agent_comms.transcript_events import ContextTranscript, TranscriptEvent
 
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
-    from .execution.native_entries import TranscriptProjection
-    from .pi_payloads import UserMessage
+    from agent_comms.execution.native_entries import TranscriptProjection
+    from agent_comms.pi_payloads import UserMessage
 
 
 class TranscriptRoutesRows(StoreRows):

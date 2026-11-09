@@ -8,58 +8,47 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Concatenate
 
-from ..catalog_store import ChannelCatalog
-from ..channel_targets import DeclaredTag
-from ..execution.child_process import (
-    NoProcess,
-    ProcessIdentity,
+from agent_comms.catalog_store import ChannelCatalog
+from agent_comms.channel_targets import DeclaredTag
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.nominal.field_codec import ThreadLookup, TurnId
+from agent_comms.planning.goal_history import GoalHistoryEntry, GoalHistoryStore
+from agent_comms.planning.goal_scope import AllGoals, GoalScope
+from agent_comms.projects.checkouts import Checkout, CheckoutTransfer, RepositoryReads
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.registration_change import RegistrationChange
+from agent_comms.registry.registry_document import (
+    FoundProjectThread,
+    ProjectThreadSelection,
+    RegistryDocument,
+    RegistrySnapshot,
 )
-from ..errors import RelationViolationError
-from ..nominal.field_codec import ThreadLookup, TurnId
-from ..repository_name import RepositoryName
-from .thread_identity import ThreadIncarnation
-from ..planning.goal_history import (
-    GoalHistoryEntry,
-    GoalHistoryStore,
-)
-from ..planning.goal_scope import (
-    AllGoals,
-    GoalScope,
-)
-from ..execution.native_input_owner import RegistryOwner
-from ..registration_change import RegistrationChange
-from .registry_document import FoundProjectThread, ProjectThreadSelection, RegistryDocument, RegistrySnapshot
-from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
-from ..routing import NoTurnRouting, Routing
-from ..projects.storage_rules import StorageRule
-from .threads import ExternalThread, SubagentThread, Thread, NativeThread
-from .thread_identity import (
+from agent_comms.registry.registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
+from agent_comms.registry.thread_identity import (
     GenerationCounter,
+    ThreadIncarnation,
     UserThreadRole,
 )
-from .thread_status import (
+from agent_comms.registry.thread_status import (
     ConnectedThreadStatus,
     NoBridgeThreadStatus,
     ProcessThreadStatus,
     ThreadStatus,
 )
-from .thread_text import (
-    ForkedParent,
-    SubagentRole,
-)
-from ..projects.repo import Repo
-from ..projects.checkouts import (
-    Checkout,
-    CheckoutTransfer,
-    RepositoryReads,
-)
+from agent_comms.registry.thread_text import ForkedParent, SubagentRole
+from agent_comms.registry.threads import ExternalThread, NativeThread, SubagentThread, Thread
+from agent_comms.repository_name import RepositoryName
+from agent_comms.routing import NoTurnRouting, Routing
 
 if TYPE_CHECKING:
-    from ..catalog_document import CatalogDocument
-    from ..planning.goals import GoalDeclaration
-    from ..agent_backend import RuntimeLocation
-    from ..planning.goal_management import Goals
+    from agent_comms.agent_backend import RuntimeLocation
+    from agent_comms.catalog_document import CatalogDocument
     from agent_comms.execution.selected.participant import SelectedParticipant
+    from agent_comms.planning.goal_management import Goals
+    from agent_comms.planning.goals import GoalDeclaration
 
 _DEFAULT_PRESENCE = ProcessThreadStatus()
 

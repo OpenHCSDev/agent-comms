@@ -1,33 +1,38 @@
 """Claude Code transcript files, read whether stored or still being written; no bridge."""
 from __future__ import annotations
 
-import json
-from collections.abc import Iterable, Iterator
-from pathlib import Path
 import asyncio
+import json
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import BinaryIO, ClassVar, Literal, Self
 
+from agent_comms.cli_bridges.claude_protocol import (
+    CLAUDE_RECORD,
+    ClaudeRecord,
+    ClaudeSession,
+    SubagentProgress,
+)
+from agent_comms.cli_bridges.history import (
+    ClaudeHistory,
+    HarnessAddress,
+    JsonLines,
+    JsonLinesFile,
+    OfflineHistory,
+    OnlineHistory,
+)
+from agent_comms.cli_bridges.shared import WireReference
+from agent_comms.cli_protocol import TaggedWire
+from agent_comms.harness_delivery_states import PrintLedgerId, TakingLedger
+from agent_comms.message_reference import MessageReference
 from agent_comms.nominal.field_codec import StoredSessionId
+from agent_comms.registry.thread_text import NamedSession, NoThreadText, ThreadText
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
-from ..registry.thread_text import (
-    NamedSession,
-    NoThreadText,
-    ThreadText,
-)
+from agent_comms.session_receipts import SessionReceipts
+from agent_comms.wire_models import WireModel
 
-from ..session_receipts import SessionReceipts
-from ..cli_protocol import TaggedWire
-from ..harness_delivery_states import PrintLedgerId, TakingLedger
-from ..message_reference import MessageReference
-from ..wire_models import WireModel
-from .shared import WireReference
-from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, SubagentProgress
-from .history import (
-    ClaudeHistory, HarnessAddress, JsonLines, JsonLinesFile,
-    OfflineHistory, OnlineHistory,
-)
 
 class SubagentMeta(WireModel):
     description: str

@@ -12,12 +12,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from .nominal.declared_family import DeclaredFamily
-from .projects.repo import Repo
-from .execution.turn_context import FileProvenance
+from agent_comms.execution.turn_context import FileProvenance
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.projects.repo import Repo
 
 if TYPE_CHECKING:
-    from .comms import Comms
+    from agent_comms.comms import Comms
 
 
 @dataclass(frozen=True)

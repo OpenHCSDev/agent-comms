@@ -26,7 +26,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from .nominal.field_codec import NullMember, TaggedRecordMember, TaggedUnion
+from agent_comms.nominal.field_codec import NullMember, TaggedRecordMember, TaggedUnion
 
 
 class ServedBus(TaggedUnion, affix="Bus"):

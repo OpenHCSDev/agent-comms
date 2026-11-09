@@ -2,39 +2,39 @@
 
 from __future__ import annotations
 
-from .errors import RelationViolationError
-
-from .execution.turn_origin import TurnOrigin
-from .input_key import InputKey
-
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, replace
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-
-from .channel_targets import CommandTarget
-from .projects.checkouts import Checkout
-from .nominal.field_codec import (
-    ThreadLookup, FieldCodec, NullMember, PresentMember, RecordMember, SubclassUnion, WireOmitDefault,
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.turn_origin import TurnOrigin
+from agent_comms.input_key import InputKey
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import PublicSender
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    NullMember,
+    PresentMember,
+    RecordMember,
+    SubclassUnion,
+    ThreadLookup,
+    WireOmitDefault,
 )
-from .planning.goal_scope import (
-    AllGoals,
-    GoalScope,
-)
-from .message_reference import MessageReference
-from .messages import PublicSender
-from .read_basis import DMDisplayScope, MessageDisplayScope
-from .response_policy import NO_ALIASES
+from agent_comms.planning.goal_scope import AllGoals, GoalScope
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.read_basis import DMDisplayScope, MessageDisplayScope
+from agent_comms.response_policy import NO_ALIASES
 
 if TYPE_CHECKING:
-    from .bus_publication import Delivered
-    from .catalog_document import CatalogDocument
-    from .registry_provenance import RegistryProvenance
-    from .registry.thread_identity import ThreadIncarnation
-    from .input_disposition import InputDispositions
-    from .messages import Message
-    from .registry.threads import Thread
-    from .transcript_routes import NoSentInputText, SentInputText
+    from agent_comms.bus_publication import Delivered
+    from agent_comms.catalog_document import CatalogDocument
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.messages import Message
+    from agent_comms.registry.thread_identity import ThreadIncarnation
+    from agent_comms.registry.threads import Thread
+    from agent_comms.registry_provenance import RegistryProvenance
+    from agent_comms.transcript_routes import NoSentInputText, SentInputText
 
 
 class NoTurnOrigin(NullMember, TurnOrigin):

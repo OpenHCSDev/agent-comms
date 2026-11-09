@@ -6,76 +6,69 @@ they never authorize a native send, restore a queue, or replay an UNKNOWN input.
 
 from __future__ import annotations
 
-from .projects.checkouts import Checkout
-
-from .execution.native_output import NativeOutputScope
-
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, Callable, ClassVar, Self
 
-
-from .acp_failure import (
+from agent_comms.acp_failure import (
     ACPFailure,
     BackendDeliveryFailure,
     DeliveryFailure,
     FailureSource,
     UnrecordedFailureSource,
 )
-from .execution.turn_inbox import (
-    SendNow,
-    TurnInbox,
-)
-from .agent_events import CompactionEvent
-from .execution.child_process import ProcessIdentity
-from .context_reading import ContextReading
-from .nominal.declared_family import DeclaredFamily
-from .external_transcript import DraftRow
-from .transcript_sources import NoDraft
-from .nominal.field_codec import (
+from agent_comms.agent_events import CompactionEvent
+from agent_comms.context_reading import ContextReading
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.native_output import NativeOutputScope
+from agent_comms.execution.native_runtime_input import CurrentNativeCursor
+from agent_comms.execution.turn_context import ContextManifest
+from agent_comms.execution.turn_inbox import SendNow, TurnInbox
+from agent_comms.execution.turn_lease import TurnState
+from agent_comms.external_transcript import DraftRow
+from agent_comms.input_attempt import InputAttempt
+from agent_comms.input_origin import InputOrigin, UnattributedInputOrigin
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    AcceptsNull,
     AcpSessionId,
     AssignmentId,
     ClaimId,
-    AcceptsNull,
     ExternalJsonShape,
     FieldCodec,
     InputId,
     MalformedRecord,
     MessageId,
+    RootId,
     TurnId,
-    WireValue,
     WireName,
     WireOmitDefault,
-    RootId,
+    WireValue,
 )
-from .planning.goal_presentation import (
-    GoalSnapshot,
-    GoalExecution,
-)
-from .input_attempt import InputAttempt
-from .input_origin import InputOrigin, UnattributedInputOrigin
-from .execution.native_runtime_input import CurrentNativeCursor
-from .owner_protocol import IncompatibleOwner
+from agent_comms.owner_protocol import IncompatibleOwner
 from agent_comms.pi_wire import McpLiveAcknowledgement
-from .reported_turn import ReportedTurn, ReportedTurnState
-from .routing import MessageRoute, NoMessageRoute
-from .registry.thread_identity import (
-    ClaimScoped,
-    ClaimedIdentity,
-    ThreadIncarnation,
+from agent_comms.planning.goal_presentation import GoalExecution, GoalSnapshot
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import ClaimedIdentity, ClaimScoped, ThreadIncarnation
+from agent_comms.reported_turn import ReportedTurn, ReportedTurnState
+from agent_comms.routing import MessageRoute, NoMessageRoute
+from agent_comms.tool_result import ToolResult
+from agent_comms.transcript_sources import NoDraft
+from agent_comms.transcripts import (
+    LivePageSource,
+    NativeCommittedPrefix,
+    PageSource,
+    TranscriptCursor,
+    TranscriptPage,
+    TranscriptRead,
+    TranscriptReadIdentity,
 )
-from .tool_result import ToolResult
-from .transcripts import (
-    LivePageSource, NativeCommittedPrefix, PageSource, TranscriptCursor, TranscriptPage, TranscriptRead, TranscriptReadIdentity,
-)
-from .execution.turn_context import ContextManifest
-from .execution.turn_lease import TurnState
-from .working_memory_labels import ModelLabel
+from agent_comms.working_memory_labels import ModelLabel
 
 if TYPE_CHECKING:
     from acp.schema import AgentMessageChunk
 
-    from .execution.input_drain import InputDrain
+    from agent_comms.execution.input_drain import InputDrain
 
 
 class AgentCommsUpdate(DeclaredFamily, affix="Update"):

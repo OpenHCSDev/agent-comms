@@ -4,8 +4,8 @@ current decoder: on 2026-11-04 the stored version 1 registry stopped every insta
 import json
 from pathlib import Path
 
-from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.storage.locked_store import RegistryFile
 
 ALIVE = {"pid": 2828048, "start_time": 657855705}
 

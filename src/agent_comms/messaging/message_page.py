@@ -12,24 +12,17 @@ from dataclasses import (
 )
 from typing import ClassVar
 
-from ..bus import BusReader
-from ..messages import (
-    Message,
-    MessageKind,
-)
-from ..page_traversal import (
-    OlderTraversal,
-    PageCursor,
-    PageTraversal,
-)
-from ..read_basis import (
+from agent_comms.bus import BusReader
+from agent_comms.messages import Message, MessageKind
+from agent_comms.page_traversal import OlderTraversal, PageCursor, PageTraversal
+from agent_comms.read_basis import (
     DisplayBasis,
     ListedDeliveries,
     MessageDisplayScope,
     NoDisplaySelection,
     SelectedDisplay,
 )
-from ..tool_result import ToolResult
+from agent_comms.tool_result import ToolResult
 
 
 @dataclass(frozen=True, slots=True)

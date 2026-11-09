@@ -6,19 +6,16 @@ from typing import (
     ClassVar,
 )
 
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import WireOmitDefault
-from ..owner_connection import (
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import WireOmitDefault
+from agent_comms.owner_connection import (
     AnyOwner,
     NoControllerToken,
     OwnerConnection,
     RequestedOwner,
 )
-from ..storage.maintenance_barrier import (
-    MaintenanceHolder,
-    NoMaintenanceHolder,
-)
-from ..registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.storage.maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 
 
 @dataclass(frozen=True, kw_only=True)

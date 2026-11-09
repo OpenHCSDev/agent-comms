@@ -1,15 +1,13 @@
 """Direct input state survives a process exit without replaying an attempt."""
 
-from agent_comms.projects.checkouts import Checkout
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
-from agent_comms.input_key import AcpInputKey, BusInputKey
+from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import InputId, MessageId, TurnId
 from agent_comms.input_attempt import (
     BoundUnknownInput,
     ClearedNativeInput,
@@ -24,13 +22,14 @@ from agent_comms.input_attempt import (
     UnresolvedInputReference,
 )
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_key import AcpInputKey, BusInputKey
 from agent_comms.input_origin import DeliveredInput, UndeliveredInput, WireInputOrigin
 from agent_comms.message_reference import MessageReference
-from agent_comms.text_digest import TextDigest
+from agent_comms.nominal.field_codec import InputId, MessageId, TurnId
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.text_digest import TextDigest
 from stored_inputs import stored_inputs
-from agent_comms.comms import wire
-
 
 ORIGINAL_KEY = AcpInputKey(InputId("1" * 32))
 LATER_KEY = AcpInputKey(InputId.mint())
@@ -109,8 +108,8 @@ def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:
 def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path: Path) -> None:
     import os
 
-    from agent_comms.execution.child_process import ProcessIdentity
     from agent_comms.comms import wire
+    from agent_comms.execution.child_process import ProcessIdentity
 
     comms = wire(tmp_path)
     comms.registry.declare(

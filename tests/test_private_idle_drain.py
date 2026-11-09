@@ -1,6 +1,5 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
 
-from agent_comms.projects.checkouts import Checkout
 import asyncio
 import os
 import sqlite3
@@ -11,14 +10,15 @@ from pathlib import Path
 import pytest
 
 import agent_comms.agent_events as events
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.owned_turn import OwnedTurn
-from agent_comms.transport.owner_requests import RetainedOwnerLaunch
-from agent_comms.storage.private_path import FileRevision
-from agent_comms.registry.threads import NativeThread
 from agent_comms.execution.turn_input_source import NoTurnAcceptance
+from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.private_path import FileRevision
+from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from bus_history import read_history
 from conftest import publish_initial
 from delivery_owner_fixture import qualified_owner_launch, start_headless_owner

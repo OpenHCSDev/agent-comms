@@ -3,26 +3,22 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from collections.abc import Iterable
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
+from agent_comms.installer.probes.interpreter import InterpreterBuild, RecordedInterpreterBuild
+from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import GitCommitText, WireOmitDefault
-from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
-from agent_comms.installer.probes.interpreter import InterpreterBuild, RecordedInterpreterBuild
-from agent_comms.launch_runtime import LaunchRuntime
-from .projects.repo import Repo
+from agent_comms.projects.repo import Repo
 from agent_comms.repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from agent_comms.order_runs import OrderRun
-
-    from .planning.orders import (
-        MergedProblemOrder,
-        Todo,
-    )
+    from agent_comms.planning.orders import MergedProblemOrder, Todo
 
 
 class ProofBuildMismatchError(ValueError):

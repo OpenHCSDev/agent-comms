@@ -11,16 +11,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
-from ..registry.thread_presentation import (
+from agent_comms.registry.thread_presentation import (
     IdleThreadPresentationStatus,
     OtherRouteThread,
     SessionDisconnected,
     StatusPending,
-    ThreadRetired,
-    ThreadPresentationStatus,
-)
-from ..registry.thread_presentation import (
     ThreadPresentation,
+    ThreadPresentationStatus,
+    ThreadRetired,
     ThreadStatusDisplay,
 )
 from agent_comms.ui_model.changes import KeyedModel

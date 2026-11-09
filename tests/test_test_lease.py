@@ -1,15 +1,14 @@
 """Process exclusion and declaration-selected CI admission, not mocked flock."""
 
 import os
-from pathlib import Path
 import pwd
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
 from agent_comms import test_lease as leases
-
 
 _HOLD = """
 from pathlib import Path

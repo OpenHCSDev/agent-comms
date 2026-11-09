@@ -1,6 +1,5 @@
 """Resource ownership, originals and derived rows share the actual Bus transaction."""
 
-from agent_comms.projects.checkouts import Checkout
 import os
 import signal
 import sqlite3
@@ -13,10 +12,6 @@ import pytest
 from agent_comms.bus import Bus, ClaimRecord, KeyedPrivateRecord, PublicRecord, RecordBuilder
 from agent_comms.bus_publication import HumanOrigin
 from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.execution.child_process import (
-    NoProcess,
-    ProcessIdentity,
-)
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
@@ -29,8 +24,10 @@ from agent_comms.envelope_claim_transitions import (
     WakeClaims,
 )
 from agent_comms.errors import CommittedMessageError
-from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
-from agent_comms.storage.locked_store import RegistryFile, StoreCommittedError
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
 from agent_comms.messages import (
     BusCapability,
     BusProjectionTables,
@@ -45,12 +42,15 @@ from agent_comms.messages import (
     ReplayedHolders,
     StoredHolders,
 )
+from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_status import (
     RunningThreadStatus,
     StoppedThreadStatus,
 )
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile, StoreCommittedError
 from agent_comms.storage.typed_table import ProjectionProducer, TypedTable
 from bus_record_fixture import publication_processes, record_from
 

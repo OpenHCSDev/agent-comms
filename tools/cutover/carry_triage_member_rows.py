@@ -7,8 +7,8 @@ from typing import ClassVar
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.storage.locked_store import RootFile
-from agent_comms.triage_native_sources import TriageNativeSource
 from agent_comms.storage.typed_table import SQLiteCatalogObject
+from agent_comms.triage_native_sources import TriageNativeSource
 
 
 class TriageMemberRows(Carry):

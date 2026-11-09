@@ -6,15 +6,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from ...acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate
-from ...input_disposition import DeliveryOverview
-from ...nominal.field_codec import OrderId
-from ...team_hud_records import TeammateDetail
-from ...registry.thread_identity import ThreadIncarnation
-from ...transcripts import (
-    AtFrontier, LatestPage, LivePageSource, PageLimit, PagePosition, PageSource,
+from agent_comms.acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate
+from agent_comms.input_disposition import DeliveryOverview
+from agent_comms.nominal.field_codec import OrderId
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.team_hud_records import TeammateDetail
+from agent_comms.transcripts import (
+    AtFrontier,
+    LatestPage,
+    LivePageSource,
+    PageLimit,
+    PagePosition,
+    PageSource,
 )
-from ..request import ReadRequest, ThreadReadRequest, tool_field
+from agent_comms.transport.request import ReadRequest, ThreadReadRequest, tool_field
 
 
 @dataclass(frozen=True, kw_only=True)

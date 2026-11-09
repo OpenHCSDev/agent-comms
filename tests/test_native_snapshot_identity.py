@@ -1,15 +1,13 @@
 """Partial external snapshots cannot claim a complete native session identity."""
 
-from agent_comms.pi_payloads import ReportedText
 import json
 
 import pytest
 
 from agent_comms.execution.native_attestation import ObservedAttestation
-from agent_comms.execution.native_session_reopen import NativeSessionIdentity
-from agent_comms.pi_payloads import StateData
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
+from agent_comms.pi_payloads import ReportedText, StateData
 from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.execution.native_session_reopen import PiSessionId
 
 
 def snapshot(command, data):

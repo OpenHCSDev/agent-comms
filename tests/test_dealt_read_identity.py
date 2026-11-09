@@ -9,11 +9,19 @@ import sys
 from pathlib import Path
 
 from agent_comms.context_reading import ContextUsage
-from agent_comms.rule_deal import (
-    AuditDue, DealRecord, DealtRead, DealtSource, Open, OpenedReads, ReadSpan, StartedDeal, Unread,
-)
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_rule_gate import PiRedeal
+from agent_comms.rule_deal import (
+    AuditDue,
+    DealRecord,
+    DealtRead,
+    DealtSource,
+    Open,
+    OpenedReads,
+    ReadSpan,
+    StartedDeal,
+    Unread,
+)
 from agent_comms_hooks.skill import DeckReader
 from conftest import answer_deal, fresh_confession
 

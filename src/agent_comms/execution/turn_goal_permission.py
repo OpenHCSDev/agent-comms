@@ -7,13 +7,13 @@ from abc import (
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ..nominal.field_codec import GoalId
-from ..planning.goal_authority import GoalTurnAuthority
+from agent_comms.nominal.field_codec import GoalId
+from agent_comms.planning.goal_authority import GoalTurnAuthority
 
 if TYPE_CHECKING:
-    from ..planning.goal_waits import GoalWait
-    from ..planning.goals import GoalDeclaration
-    from .turn_input_source import InputDependency
+    from agent_comms.execution.turn_input_source import InputDependency
+    from agent_comms.planning.goal_waits import GoalWait
+    from agent_comms.planning.goals import GoalDeclaration
 
 
 class GoalPermission(ABC):

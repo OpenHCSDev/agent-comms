@@ -1,14 +1,14 @@
 """Different observations of one turn share its three-field identity."""
+from agent_comms.execution.turn_lease import (
+    FinishedTurnFence,
+    StoredTurnRecord,
+    TurnLeaseFence,
+)
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.registry.thread_identity import (
     RecordedThreadIncarnation,
     TurnFence,
     TurnIdentity,
-)
-from agent_comms.execution.turn_lease import (
-    FinishedTurnFence,
-    StoredTurnRecord,
-    TurnLeaseFence,
 )
 
 

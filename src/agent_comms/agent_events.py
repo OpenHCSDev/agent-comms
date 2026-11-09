@@ -18,7 +18,7 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from .acp_failure import (
+from agent_comms.acp_failure import (
     FailedNativeTurnOutcome,
     FailureSource,
     NativeTurnOutcome,
@@ -28,57 +28,49 @@ from .acp_failure import (
     UnrecordedFailureSource,
     UnresolvedNativeTurnOutcome,
 )
-from .coordination.coordinator import Coordination
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import (
-    InputId,
-    NullMember,
-    ToolCallId,
-    TurnId,
-)
-from .input_attempt import InputAttempt
-from .execution.native_failures import NativePiUnavailable
-from .execution.native_output import NativeOutputLocation, NativeRecordLocation
-from .pi_counts import PiCount, UnreportedCount
-from agent_comms.pi_wire import McpLiveAcknowledgement, PiDiagnostic, PiOmitted, PiRequestId, PiUsage
-from .rule_deal import CompactedDeal
-from .pi_vocabulary import (
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_output import NativeOutputLocation, NativeRecordLocation
+from agent_comms.execution.turn_failure import NoTurnFailure, TurnFailure
+from agent_comms.execution.turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
+from agent_comms.execution.turn_item import UsageChargeId
+from agent_comms.execution.turn_terminal import FailedGoalTurn
+from agent_comms.input_attempt import InputAttempt
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import InputId, NullMember, ToolCallId, TurnId
+from agent_comms.pi_counts import PiCount, UnreportedCount
+from agent_comms.pi_vocabulary import (
     CompactionReason,
     NoThinkingOverride,
     ThinkingLevelField,
     UnknownCompactionReason,
 )
-from .registry.thread_model import (
-    ThreadModel,
-    UndeclaredModel,
+from agent_comms.pi_wire import (
+    McpLiveAcknowledgement,
+    PiDiagnostic,
+    PiOmitted,
+    PiRequestId,
+    PiUsage,
 )
-from .tool_declaration import OtherAction, ToolAction, ToolDeclaration
-from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
-from .execution.turn_failure import (
-    NoTurnFailure,
-    TurnFailure,
-)
-from .execution.turn_goal_account import (
-    OriginGoalSettlement,
-    VerifiedGoalSettlement,
-)
-from .execution.turn_item import UsageChargeId
-from .execution.turn_terminal import FailedGoalTurn
-from .planning.goal_presentation import GoalSnapshot
-from .transcript_events import SentTranscript
+from agent_comms.planning.goal_presentation import GoalSnapshot
+from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
+from agent_comms.rule_deal import CompactedDeal
+from agent_comms.tool_declaration import OtherAction, ToolAction, ToolDeclaration
+from agent_comms.tool_results import NoSentMessage, NoToolDiff, ToolDiff
+from agent_comms.transcript_events import SentTranscript
 
 if TYPE_CHECKING:
-    from .acp_extension import AgentCommsUpdate, TextNoticeUpdate
-    from .agent_event_updates import AcpEventConsumer
-    from .comms import Comms
-    from .planning.goal_presentation import GoalPublicationSnapshot
-    from .input_disposition import InputDocument
-    from .execution.input_drain import InputDrain
-    from .rule_deal import Redeals
-    from .runtime_info import AgentRuntimeInfo
-    from .started_input import StartedInput
-    from .execution.turn_input_source import OriginalTurnInput
-    from .execution.turn_progress import TurnProgress
+    from agent_comms.acp_extension import AgentCommsUpdate, TextNoticeUpdate
+    from agent_comms.agent_event_updates import AcpEventConsumer
+    from agent_comms.comms import Comms
+    from agent_comms.execution.input_drain import InputDrain
+    from agent_comms.execution.turn_input_source import OriginalTurnInput
+    from agent_comms.execution.turn_progress import TurnProgress
+    from agent_comms.input_disposition import InputDocument
+    from agent_comms.planning.goal_presentation import GoalPublicationSnapshot
+    from agent_comms.rule_deal import Redeals
+    from agent_comms.runtime_info import AgentRuntimeInfo
+    from agent_comms.started_input import StartedInput
 
 
 class AgentEvent:

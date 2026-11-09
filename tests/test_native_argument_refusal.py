@@ -1,20 +1,25 @@
 """Real native tool errors complete their call; they do not fail the input."""
 
-from agent_comms.pi_payloads import ReportedFlag, ReportedText
 import asyncio
 import json
 import os
 from types import SimpleNamespace
 
 import pytest
-from coding_owner_fixture import OwnerDouble
 
+from agent_comms.channel_coding_tools import CodingToolSocket
+from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
+from agent_comms.pi_payloads import (
+    AssistantMessage,
+    ReportedFlag,
+    ReportedParts,
+    ReportedText,
+    ToolCallContent,
+)
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.transport.native_tool_call import ArgumentRefusal
 from agent_comms.transport.native_tools import NativeToolDeclaration
-from agent_comms.tool_denial import SelectedToolDenied
-from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
-from agent_comms.channel_coding_tools import CodingToolSocket
-from agent_comms.pi_payloads import AssistantMessage, ReportedParts, ToolCallContent
+from coding_owner_fixture import OwnerDouble
 
 
 @pytest.mark.parametrize("name, arguments, encoded", [

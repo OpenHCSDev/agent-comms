@@ -23,7 +23,11 @@ from agent_comms.coordination.tables.participants import (
 )
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.storage.typed_table import (
-    LOCAL_TABLE_SOURCE, AttachedPracticeRebuild, RowNotFoundError, TableSchema, TableSource,
+    LOCAL_TABLE_SOURCE,
+    AttachedPracticeRebuild,
+    RowNotFoundError,
+    TableSchema,
+    TableSource,
 )
 
 

@@ -6,11 +6,16 @@ from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
-from .cli_result import CliResult
-from .storage.locked_store import SQLiteFile
-from .nominal.declared_family import UnknownFamilyMember
-from .nominal.field_codec import FieldCodec
-from .storage.typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, SQLiteTableName, TypedTable
+from agent_comms.cli_result import CliResult
+from agent_comms.nominal.declared_family import UnknownFamilyMember
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.storage.locked_store import SQLiteFile
+from agent_comms.storage.typed_table import (
+    SQLiteSchemaDifference,
+    SQLiteSchemaObject,
+    SQLiteTableName,
+    TypedTable,
+)
 
 
 @dataclass(frozen=True)

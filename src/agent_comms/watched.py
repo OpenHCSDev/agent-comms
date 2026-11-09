@@ -17,8 +17,8 @@ from functools import reduce
 from pathlib import Path
 from typing import ClassVar, Self
 
-from .storage.locked_store import WireWakeFile
-from .storage.private_path import FileIdentity, FileRevision
+from agent_comms.storage.locked_store import WireWakeFile
+from agent_comms.storage.private_path import FileIdentity, FileRevision
 
 # The Linux notification ABI is decoded here, once, not in store consumers.
 _MODIFY = 0x00000002

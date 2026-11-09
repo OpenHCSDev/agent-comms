@@ -17,10 +17,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import ClassVar
 
-from .nominal.field_codec import SingleFieldValue
-from .storage.locked_store import DocumentChange
-from .storage.maintenance_barrier import CarriedDocument
-from .storage.store_files import DependentStateTier, SingleFileStore
+from agent_comms.nominal.field_codec import SingleFieldValue
+from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.storage.maintenance_barrier import CarriedDocument
+from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 
 
 @dataclass(frozen=True)

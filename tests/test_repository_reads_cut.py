@@ -3,14 +3,13 @@ import subprocess
 from pathlib import Path
 
 import pytest
-import fixture_git
 
-from agent_comms.projects.git_errors import FailedGitCommand
+import fixture_git
 from agent_comms.projects.checkouts import (
     Checkout,
     RepositoryReads,
 )
-
+from agent_comms.projects.git_errors import FailedGitCommand
 
 git = fixture_git.run
 

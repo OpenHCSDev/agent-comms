@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from agent_comms.nominal import field_codec
+import builtins
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Annotated
+
 from agent_comms import messages
-from agent_comms.change_report import NoChangeReport
-from agent_comms.change_report import ReportEvidence
+from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.declared_verb import DeclaredOptions
+from agent_comms.nominal import field_codec
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.send_result import SendResult
 from agent_comms.target_fields import ChoiceTargetField
-from dataclasses import dataclass
-from typing import Annotated
-from typing import TYPE_CHECKING
-import builtins
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms

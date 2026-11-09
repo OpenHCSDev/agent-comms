@@ -22,52 +22,27 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from .turn_failure import (
-    ModelRequestFailed,
-    NoTurnFailure,
-)
-from .turn_lease import TurnState
-from .turn_phase import (
-    NativePhaseChanged,
-    PublishingPhase,
-)
-from .. import agent_events as events
-from ..acp_extension import (
-    LiveQueueScope,
-    TranscriptChangedUpdate,
-    encode_updates,
-)
-from ..acp_failure import NativeTurnOutcome
-from ..agent_event_updates import (
-    RoutedTurnEventConsumer,
-    TurnEventConsumer,
-)
-from ..context_store import (
-    ContextPrior,
-    UNREAD_CONTEXT,
-)
-from ..coordination.coordinator import Coordination
-from ..diagnostics import (
-    record_request_progress,
-    record_terminal_failure,
-)
-from ..messages import (
-    AlertKind,
-    NoticeRole,
-)
-from .native_turn_context import ContextObserved
-from ..nominal.field_codec import AcpSessionId
-from ..publication_measurements import PublicationMeasurements
-from ..send_result import SendResult
-from ..registry.thread_identity import ClaimedIdentity
-from ..transcript_updates import TurnTranscriptUpdate
+from agent_comms import agent_events as events
+from agent_comms.acp_extension import LiveQueueScope, TranscriptChangedUpdate, encode_updates
+from agent_comms.acp_failure import NativeTurnOutcome
+from agent_comms.agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
+from agent_comms.context_store import UNREAD_CONTEXT, ContextPrior
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.diagnostics import record_request_progress, record_terminal_failure
+from agent_comms.execution.native_turn_context import ContextObserved
+from agent_comms.execution.turn_failure import ModelRequestFailed, NoTurnFailure
+from agent_comms.execution.turn_lease import TurnState
+from agent_comms.execution.turn_phase import NativePhaseChanged, PublishingPhase
+from agent_comms.messages import AlertKind, NoticeRole
+from agent_comms.nominal.field_codec import AcpSessionId
+from agent_comms.publication_measurements import PublicationMeasurements
+from agent_comms.registry.thread_identity import ClaimedIdentity
+from agent_comms.send_result import SendResult
+from agent_comms.transcript_updates import TurnTranscriptUpdate
 
 if TYPE_CHECKING:
-    from .owned_turn import (
-        OwnedTurn,
-        TurnGoalAccount,
-    )
-    from .turn_failure import TurnFailure
+    from agent_comms.execution.owned_turn import OwnedTurn, TurnGoalAccount
+    from agent_comms.execution.turn_failure import TurnFailure
 
 
 @dataclass(kw_only=True)

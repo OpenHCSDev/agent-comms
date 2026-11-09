@@ -1,17 +1,16 @@
 """Native launcher identity, route and acquired package remain independent."""
 
 
-from agent_comms.projects.checkouts import Checkout
 import shlex
 import sys
 from pathlib import Path
 
-
-from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.execution.native_session_files import ForkedSession
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.execution.native_session_files import ForkedSession
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.session_file import RegistrySessionLocation
 
 
 async def test_fork_runs_selected_python_before_copying_saved_history(

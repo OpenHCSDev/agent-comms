@@ -1,19 +1,19 @@
 """The claude.ai connector: OAuth in front of an MCP transport over the ToolRequest family."""
 
 
-from agent_comms.messaging.bus_read import UiRead
-from agent_comms.team.standing_rules import ServicePassFailing
-from agent_comms.transcripts import EarlierThan
-from agent_comms.projects.checkouts import Checkout
 import asyncio
 import base64
 import errno
 import hashlib
-import os
-import secrets
 import json
 import logging
+import os
 import re
+import secrets
+import site
+import socket
+import subprocess
+import sys
 import threading
 import time
 from contextlib import contextmanager, suppress
@@ -22,80 +22,122 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from aiohttp import ClientSession, CookieJar, web
+from aiohttp.test_utils import TestClient, TestServer
+from yarl import URL
+
+from agent_comms.bus import Bus
+from agent_comms.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.comms import Comms, wire
+from agent_comms.connector import (
+    ApprovalLink,
+    AuthorizationCodeGrant,
+    BoundedRoute,
+    Connector,
+    ConnectorSendTool,
+    ConnectorVerb,
+    GrantUiVerb,
+    LongLivedRoute,
+    RevokeVerb,
+    RunningRequest,
+    ServeVerb,
+)
+from agent_comms.connector_caller import (
+    CALLER,
+    GrantRefusedError,
+    ReadOnlyConnectorCaller,
+    ScopedUiCaller,
+    UiCaller,
+    UiReadCaller,
+)
+from agent_comms.connector_profile import (
+    OBSERVE_PATH,
+    HttpsMcpEndpoint,
+    UiConnectionProfile,
+    UiGrantId,
+    UiGrantSummary,
+)
+from agent_comms.connector_store import (
+    CALLBACK,
+    CODE_SECONDS,
+    AuthorizationQuery,
+    ConnectorCredentialsFile,
+    ConnectorGrants,
+    ConnectorStore,
+    ExpiredProfile,
+    HeldUiProfiles,
+    IssuedCode,
+    OpenableProfile,
+    ReadServiceAccess,
+    TrustedBrowser,
+    UiAccess,
+    UiGrantAccess,
+    UiReadAccess,
+    UnreadableProfile,
+    digest,
+)
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import TranscriptChanged
+from agent_comms.execution.native_transcript import NativeTranscript
+from agent_comms.execution.watch_passes import WatchPass
+from agent_comms.host_services.connector import ConnectorService
+from agent_comms.installer.backup import StoreBackup
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.messaging.bus_identity import BusIdentityStore
+from agent_comms.messaging.bus_read import UiRead
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RecordProblems, RootId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_errors import FailedGitCommand
+from agent_comms.registry.thread_identity import UserThreadRole
+from agent_comms.registry.threads import NativeThread
+from agent_comms.send_result import MessagePublished
+from agent_comms.service_passes import ServicePassStore
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.storage.maintenance_barrier import (
+    InstallingPhase,
+    MaintenanceBarrier,
+    MaintenanceHeldError,
+    MaintenanceOperator,
+    PausedPhase,
+    ReadyPhase,
+)
+from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lock
+from agent_comms.team.standing_rules import ServicePassFailing
+from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
+from agent_comms.tool_request import ReadTool
+from agent_comms.transcripts import EarlierThan
+from agent_comms.transport.mcp import (
+    PROTOCOL_VERSION,
+    SESSION_HEADER,
+    CancelledMessage,
+    InitializeResult,
+    NoProgress,
+    ProgressToken,
+    StreamedLine,
+    ToolCallMeta,
+    ToolsCallMessage,
+    ToolsCallReply,
+    ToolsCallResult,
+)
+from agent_comms.transport.progress import WireExportObserver
+from agent_comms.transport.request import ToolCall, ToolRequest
+from agent_comms.transport.tools.channels import ChannelListing, CommsChannelsTool
+from agent_comms.transport.tools.reads import TranscriptPageRead
+from agent_comms.transport.tools.send import CommsSendTool
 from agent_comms.transport.tools.served import (
     CommsPinChannelTool,
     ServedCommsUserSendTool,
     invoke_tool,
 )
-from aiohttp import ClientSession, CookieJar, web
-from aiohttp.test_utils import TestClient, TestServer
-from yarl import URL
-from agent_comms_hooks import ToolRefusedError
-
-from bus_record_fixture import prepare_native_comms
-
-from connector_readiness import ConnectorReadiness
-from conftest import transcript_records
-
-from agent_comms.bus import Bus
-from agent_comms.comms import Comms, wire
-from agent_comms.transport.progress import WireExportObserver
-from agent_comms.connector import (
-    ApprovalLink, AuthorizationCodeGrant, Connector, ConnectorSendTool, ConnectorVerb, GrantUiVerb,
-    BoundedRoute, LongLivedRoute, RunningRequest, ServeVerb, RevokeVerb,
-)
-from agent_comms.transport.mcp import (
-    PROTOCOL_VERSION, SESSION_HEADER, CancelledMessage, InitializeResult, NoProgress,
-    ProgressToken, StreamedLine, ToolCallMeta, ToolsCallMessage, ToolsCallReply, ToolsCallResult,
-)
 from agent_comms.transport.tools.sidebar import (
     CommsUserSendTool,
     ServedRoot,
 )
-from agent_comms.messaging.bus_identity import BusIdentityStore
-from agent_comms.connector_caller import (
-    CALLER, GrantRefusedError, ReadOnlyConnectorCaller, ScopedUiCaller, UiCaller, UiReadCaller,
-)
-from agent_comms.connector_profile import (
-    OBSERVE_PATH, HttpsMcpEndpoint, UiConnectionProfile, UiGrantId, UiGrantSummary,
-)
-from agent_comms.connector_store import (
-    CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorCredentialsFile, ConnectorGrants,
-    ConnectorStore, ExpiredProfile, HeldUiProfiles, IssuedCode, OpenableProfile,
-    ReadServiceAccess, TrustedBrowser,
-    UiAccess, UiGrantAccess, UiReadAccess, UnreadableProfile, digest,
-)
-from agent_comms.coordination.errors import TranscriptChanged
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.storage.locked_store import DocumentChange
-from agent_comms.execution.watch_passes import WatchPass
-from agent_comms.service_passes import ServicePassStore
-from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RecordProblems, RootId
-from agent_comms.host_services.connector import ConnectorService
-from agent_comms.installer.backup import StoreBackup
-from agent_comms.launch_root import LaunchRoot
-from agent_comms.execution.native_transcript import NativeTranscript
-from agent_comms.send_result import MessagePublished
-from agent_comms.transport.tools.reads import TranscriptPageRead
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.storage.maintenance_barrier import (
-    InstallingPhase, MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
-    ReadyPhase,
-)
-from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lock
-from agent_comms.transport.tools.channels import ChannelListing, CommsChannelsTool
-from agent_comms.transport.tools.send import CommsSendTool
-from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
-from agent_comms.registry.thread_identity import UserThreadRole
-from agent_comms.tool_request import ReadTool
-from agent_comms.transport.request import ToolCall, ToolRequest
-from agent_comms.registry.threads import NativeThread
-import subprocess
-from agent_comms.projects.git_errors import FailedGitCommand
-import site
-import socket
-import sys
-from agent_comms.channel_targets import CommandTarget, ThreadTarget
+from agent_comms_hooks import ToolRefusedError
+from bus_record_fixture import prepare_native_comms
+from conftest import transcript_records
+from connector_readiness import ConnectorReadiness
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 

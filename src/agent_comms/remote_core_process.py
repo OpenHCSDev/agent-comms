@@ -1,22 +1,21 @@
 """Remote reads execute in child interpreters, not under the UI's GIL."""
 
-from concurrent.futures import ProcessPoolExecutor
+import os
 from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
 from functools import cached_property
-import os
 from threading import BoundedSemaphore, Lock
 from typing import ClassVar, cast
 
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
-from .execution.child_process import HelperStart, SpawnedHelper
-from .launch_runtime import ThreadLaunch
-from .remote_core import RemoteCoreAccess
-from .tool_result import ToolResult
-from .transport.request import ReadRequest, ToolRequest
-from .ui_model.observation import ViewerEnd
-
+from agent_comms.execution.child_process import HelperStart, SpawnedHelper
+from agent_comms.launch_runtime import ThreadLaunch
+from agent_comms.remote_core import RemoteCoreAccess
+from agent_comms.tool_result import ToolResult
+from agent_comms.transport.request import ReadRequest, ToolRequest
+from agent_comms.ui_model.observation import ViewerEnd
 
 _remote: RemoteCoreAccess
 

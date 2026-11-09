@@ -6,21 +6,21 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING
 
-from .nominal.field_codec import AcpSessionId, InputId
-from .acp_extension import LiveQueueScope
-from .execution.turn_inbox import TurnInbox
-from .coordination.coordinator import Coordination
-from .queued_input import DeliveredInput, InputHandoffRefused
-from .owned_send import OwnedSend
-from .registry.thread_identity import ClaimedIdentity
-from .execution.turn_input_source import AcceptedFollowingInput
-from .registry.threads import Thread
-from .execution.input_drain import InputDrain
+from agent_comms.acp_extension import LiveQueueScope
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.input_drain import InputDrain
+from agent_comms.execution.turn_inbox import TurnInbox
+from agent_comms.execution.turn_input_source import AcceptedFollowingInput
+from agent_comms.nominal.field_codec import AcpSessionId, InputId
+from agent_comms.owned_send import OwnedSend
+from agent_comms.queued_input import DeliveredInput, InputHandoffRefused
+from agent_comms.registry.thread_identity import ClaimedIdentity
+from agent_comms.registry.threads import Thread
 
 if TYPE_CHECKING:
-    from .agent_events import InputRefused
-    from .execution.turn_runner import TurnRunner
-    from .tracked_turn import TrackedTurnSession
+    from agent_comms.agent_events import InputRefused
+    from agent_comms.execution.turn_runner import TurnRunner
+    from agent_comms.tracked_turn import TrackedTurnSession
 
 
 class FollowingInputs:

@@ -5,13 +5,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Literal
 
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.turn_item import NativeTurnIdText
 from agent_comms.nominal import field_codec
-
-from .execution.child_process import ProcessIdentity
-from .pi_counts import PiCount, UnreportedCount
+from agent_comms.pi_counts import PiCount, UnreportedCount
+from agent_comms.pi_payloads import PiModel, UnreportedModel
 from agent_comms.pi_wire import PiPayload
-from .pi_payloads import PiModel, UnreportedModel
-from .execution.turn_item import NativeTurnIdText
 
 
 @dataclass(frozen=True, slots=True)

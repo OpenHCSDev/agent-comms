@@ -5,15 +5,21 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from .turn_item import FreshNativeId
-from ..nominal.field_codec import FieldCodec, MalformedRecord, NullMember, PresentMember, WireName
+from agent_comms.execution.turn_item import FreshNativeId
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    NullMember,
+    PresentMember,
+    WireName,
+)
 
 if TYPE_CHECKING:
-    from .native_child import PiSessionChild
-    from .native_runtime_input import NativeRuntimeInput
-    from ..pi_native_backend import PersistentPiSession
+    from agent_comms.execution.native_child import PiSessionChild
+    from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+    from agent_comms.pi_native_backend import PersistentPiSession
 
 
 class NativeReopenError(ValueError):

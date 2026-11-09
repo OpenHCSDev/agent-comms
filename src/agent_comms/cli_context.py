@@ -2,30 +2,27 @@
 
 from __future__ import annotations
 
-from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import CoreContextInspection
-from agent_comms.cli_commands import CoreSegmentText
-from agent_comms.cli_commands import NativeContextInspection
-from agent_comms.cli_commands import NativeSourceSpans
-from agent_comms.cli_result import CliResult
-from agent_comms.comms import Comms
-from agent_comms.context_store import ContextManifestCursor
-from agent_comms.context_store import LATEST_CONTEXT
-from agent_comms.coordination.errors import Refused
-from agent_comms.nominal.field_codec import Argument
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.pi_payloads import NativeContextData
-from agent_comms.owner_connection import OwnerConnection
-from agent_comms.owner_connection import socket_path
-from .execution.turn_context import ContextManifest
-from .execution.turn_context import NextContextTurn
-from .execution.turn_context import TurnContext
+import argparse
+import asyncio
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Annotated
-import argparse
-import asyncio
 
+from agent_comms.cli_command import CliCommand
+from agent_comms.cli_commands import (
+    CoreContextInspection,
+    CoreSegmentText,
+    NativeContextInspection,
+    NativeSourceSpans,
+)
+from agent_comms.cli_result import CliResult
+from agent_comms.comms import Comms
+from agent_comms.context_store import LATEST_CONTEXT, ContextManifestCursor
+from agent_comms.coordination.errors import Refused
+from agent_comms.execution.turn_context import ContextManifest, NextContextTurn, TurnContext
+from agent_comms.nominal.field_codec import Argument, FieldCodec
+from agent_comms.owner_connection import OwnerConnection, socket_path
+from agent_comms.pi_payloads import NativeContextData
 
 
 @dataclass(frozen=True, kw_only=True)

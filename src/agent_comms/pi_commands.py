@@ -12,16 +12,22 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from pydantic import JsonValue
 
-from . import agent_events as events
-from .acp_failure import UnrecordedFailureSource
-from .execution.turn_failure import BackendFailed
-from .execution.turn_inbox import (
-    InputRequest,
-    StreamingInputPolicy,
-)
-from .execution.child_process import BoundedRun
-from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
-from .nominal.field_codec import (
+from agent_comms import agent_events as events
+from agent_comms.acp_failure import UnrecordedFailureSource
+from agent_comms.execution.child_process import BoundedRun
+from agent_comms.execution.native_entries import NativeEvidenceScope
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_input_proof import NativeContextProof, NativeInputCommit
+from agent_comms.execution.native_pi import NativePiRpcLaunch
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+from agent_comms.execution.turn_context import InputContributionCoordinates, SegmentManifest
+from agent_comms.execution.turn_failure import BackendFailed
+from agent_comms.execution.turn_inbox import InputRequest, StreamingInputPolicy
+from agent_comms.execution.turn_item import PiRequestKey
+from agent_comms.image_input import ImageInput
+from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,
@@ -30,27 +36,28 @@ from .nominal.field_codec import (
     WireOmitDefault,
     WireTransient,
 )
-from .image_input import ImageInput
-from .execution.native_entries import NativeEvidenceScope
-from .execution.native_failures import NativePiUnavailable
-from .execution.native_input_proof import NativeContextProof, NativeInputCommit
-from .installer.native_package import VerifiedNativePackage
-from .execution.native_pi import NativePiRpcLaunch
-from .execution.native_session_reopen import NativeSessionIdentity
-from .transport.native_tool_transport import OwnerToolConnection
-from agent_comms.pi_wire import PiOmitted, PiRequestId, RequestId
-from .pi_payloads import CompactionData, EmptyData, ModelsData, NativeContextData, PiResponseData, QueueClearedData, ReportedText, SessionStatsData, SessionSwitchData, StateData, ThinkingLevelsData, UnknownData
-from .execution.turn_context import (
-    InputContributionCoordinates,
-    SegmentManifest,
+from agent_comms.pi_payloads import (
+    CompactionData,
+    EmptyData,
+    ModelsData,
+    NativeContextData,
+    PiResponseData,
+    QueueClearedData,
+    ReportedText,
+    SessionStatsData,
+    SessionSwitchData,
+    StateData,
+    ThinkingLevelsData,
+    UnknownData,
 )
-from .execution.turn_item import PiRequestKey
+from agent_comms.pi_wire import PiOmitted, PiRequestId, RequestId
+from agent_comms.transport.native_tool_transport import OwnerToolConnection
 
 if TYPE_CHECKING:
-    from .backend import TurnSession
-    from .launch_runtime import RestartEnvironment
-    from .pending_requests import PendingRequest
-    from .pi_events import Response, ResponseOutcome
+    from agent_comms.backend import TurnSession
+    from agent_comms.launch_runtime import RestartEnvironment
+    from agent_comms.pending_requests import PendingRequest
+    from agent_comms.pi_events import Response, ResponseOutcome
 
 
 class SessionSnapshot:
@@ -294,8 +301,8 @@ class CatalogQuery(NativeQuery):
         configuration: RestartEnvironment, worktree: Path, root: Path,
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
-        from .execution.native_child import PiChild
-        from .pi_rpc import PiRpcChannel
+        from agent_comms.execution.native_child import PiChild
+        from agent_comms.pi_rpc import PiRpcChannel
 
         try:
             launch = await asyncio.to_thread(

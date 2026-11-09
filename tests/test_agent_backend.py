@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.projects.checkouts import Checkout
 import os
 import runpy
 import sys
@@ -13,22 +12,22 @@ from types import SimpleNamespace
 import pytest
 
 import agent_comms.agent_backend as ab
+from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.turn_inbox import (
     InputContent,
     InputRequest,
     SendNow,
     SteerInputPolicy,
 )
-from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.execution.native_arguments import NativeArguments
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, InputId
 from agent_comms.pi_durable_backend import PiDurableBackend
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
-from agent_comms.registry.threads import Thread, NativeThread
-from agent_comms.unstarted_runtime import UnstartedRuntime
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.session_file import NoSessionFile, RegistrySessionLocation
+from agent_comms.unstarted_runtime import UnstartedRuntime
 
 # -- registry ---------------------------------------------------------------
 
@@ -252,8 +251,8 @@ def test_cli_registry_reads_do_not_load_the_pi_runtime(tmp_path):
 @pytest.mark.asyncio
 async def test_runner_obtains_one_backend_per_session_from_the_thread_declaration(comms):
     from agent_comms.acp import CommsAgent
-    from agent_comms.execution.child_process import ProcessIdentity
     from agent_comms.errors import RelationViolationError
+    from agent_comms.execution.child_process import ProcessIdentity
     from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
     from agent_comms.pi_native_backend import PersistentPiSession
 

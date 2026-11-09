@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import ClassVar, NoReturn, Self, get_type_hints
 
 
-
 class ToolRefusedError(ValueError):
     """An intentional refusal safe to return as a tool answer, not a transport failure."""
 

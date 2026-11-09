@@ -6,17 +6,25 @@ from agent_comms.assignment_states import AssignmentState
 from agent_comms.attempt_states import AttemptState
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.tables.responses import ResponseObligation
+from agent_comms.execution.turn_lease import TurnDeclaration
 from agent_comms.execution_states import ExecutionState
-from agent_comms.planning.goal_generation import GenerationState
-from agent_comms.planning.goal_states import GoalState
 from agent_comms.lifecycle_capability import (
-    Active, Complete, Deferred, Executing, Failed, LifecycleCapability, Pending,
-    Successful, Terminal, Unresolved,
+    Active,
+    Complete,
+    Deferred,
+    Executing,
+    Failed,
+    LifecycleCapability,
+    Pending,
+    Successful,
+    Terminal,
+    Unresolved,
 )
 from agent_comms.obligation_states import PendingResponse, ResponseState
 from agent_comms.pi_vocabulary import PiStopReason
+from agent_comms.planning.goal_generation import GenerationState
+from agent_comms.planning.goal_states import GoalState
 from agent_comms.recovery_states import RecoveryCondition
-from agent_comms.execution.turn_lease import TurnDeclaration
 from test_coordination_store import ready, started
 
 

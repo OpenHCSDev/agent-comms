@@ -13,73 +13,51 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
-
-from .coordination.errors import Refused
-
-from .acp_extension import QueueItem
-
-from .execution.turn_inbox import (
-    InputContent,
-    InputRequest,
-)
-from .assignment_states import DeferredAssignment, DeliveredAssignment
-from .execution.child_process import ProcessIdentity
-from .context_segments.wake import MessageDelivery
-from .controller import NO_CONTROLLER, Controller
-from .coordination.cohort import pending_sealed_assignments
-from .coordination.database import CoordinationStore
-from .coordination.errors import IdentityConflict, StaleRevision
-from .coordination.session import (
-    ReadNativeCoordinationSession,
-)
-from .coordination.coordinator import Coordination
-from .errors import RelationViolationError
-from .nominal.field_codec import AcpSessionId, InputId, GoalId, RootId
-from .planning.goals import (
-    GoalDeclaration,
-    NoGoal,
-)
-from .coordination.tables.assignments import WakeAssignment
-from .messages import Message
-from .image_input import ImageInput
-from .input_attempt import InputAttempt, ReservedInput
-from .input_key import AcpInputKey, InputKey
-from .input_disposition import InputDispositions
-from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
-from .routing import ScheduledTurn
-from .registry.thread_identity import (
-    ClaimedIdentity,
-    ClaimScoped,
-)
-from .registry.threads import Thread
-from .execution.turn_context import TurnContext
-from .execution.turn_goal_permission import (
-    AcceptedGoalPermission,
-    TurnGoalPermission,
-)
-from .execution.turn_input_source import (
+from agent_comms.acp_extension import InputStartedUpdate, QueueItem
+from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
+from agent_comms.context_segments.wake import MessageDelivery
+from agent_comms.controller import NO_CONTROLLER, Controller
+from agent_comms.coordination.cohort import pending_sealed_assignments
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import IdentityConflict, Refused, StaleRevision
+from agent_comms.coordination.session import ReadNativeCoordinationSession
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.turn_context import TurnContext
+from agent_comms.execution.turn_goal_permission import AcceptedGoalPermission, TurnGoalPermission
+from agent_comms.execution.turn_inbox import InputContent, InputRequest
+from agent_comms.execution.turn_input_source import (
     AcceptedFollowingInput,
     DeliveredFollowingInput,
+    TurnAcceptance,
 )
+from agent_comms.image_input import ImageInput
+from agent_comms.input_attempt import InputAttempt, ReservedInput
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_key import AcpInputKey, InputKey
+from agent_comms.input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
+from agent_comms.messages import Message
+from agent_comms.nominal.field_codec import AcpSessionId, GoalId, InputId, RootId
+from agent_comms.ordinary_turn_rules import MissingAcceptedInputCheck
+from agent_comms.planning.goals import GoalDeclaration, NoGoal
+from agent_comms.registry.thread_identity import ClaimedIdentity, ClaimScoped
+from agent_comms.registry.threads import Thread
+from agent_comms.reservation_rules import ReservationRule, RuleCheck
+from agent_comms.routing import ScheduledTurn
 
-from .acp_extension import InputStartedUpdate
-from .ordinary_turn_rules import MissingAcceptedInputCheck
-from .reservation_rules import ReservationRule, RuleCheck
-from .execution.turn_input_source import TurnAcceptance
 if TYPE_CHECKING:
-    from .acp_extension import QueueItem, QueueScope
-    from .execution.turn_inbox import (
-    InputContent,
-    TurnInbox,
-)
-    from .bus_publication import Delivered
-    from .comms import Comms
-    from .execution.input_drain import DrainedSession, InputDrain
-    from .messaging.message_bus import MessageBus
-    from .registry.registry_document import RegistryEntry, RegistrySnapshot
-    from .execution.turn_input_source import TurnInputSource
-    from .execution.turn_runner import TurnRunner
-    from .runtime_server import RuntimeServer
+    from agent_comms.acp_extension import QueueItem, QueueScope
+    from agent_comms.bus_publication import Delivered
+    from agent_comms.comms import Comms
+    from agent_comms.execution.input_drain import DrainedSession, InputDrain
+    from agent_comms.execution.turn_inbox import InputContent, TurnInbox
+    from agent_comms.execution.turn_input_source import TurnInputSource
+    from agent_comms.execution.turn_runner import TurnRunner
+    from agent_comms.messaging.message_bus import MessageBus
+    from agent_comms.registry.registry_document import RegistryEntry, RegistrySnapshot
+    from agent_comms.runtime_server import RuntimeServer
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -645,10 +623,7 @@ class InitialInput(QueuedInput):
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> None:
         """Own original reservation, dispatch and unbound retirement as one lifetime."""
-        from .execution.turn_context import (
-    TurnContext,
-    UserRequestSegment,
-)
+        from agent_comms.execution.turn_context import TurnContext, UserRequestSegment
 
         request = UserRequestSegment.capture(task)
         async with AsyncExitStack() as resources:

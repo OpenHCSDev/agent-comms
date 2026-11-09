@@ -17,29 +17,25 @@ from agent_comms.coordination.errors import (
     StaleRevision,
 )
 from agent_comms.coordination.schema import CoordinatorRow
-from agent_comms.coordination.tables.participants import Participants
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.coordination.tables.attempts import (
     APPROVED_REPLAY_FACT_MASK,
     AttemptRecord,
     ReplayFact,
 )
+from agent_comms.coordination.tables.participants import Participants
 from agent_comms.execution_states import ExecutionState
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     MalformedRecord,
     NullMember,
     SingleFieldValue,
     SnapshotExclude,
     SubclassUnion,
-    projected,
     ThreadLookup,
+    projected,
 )
 from agent_comms.reason_codes import ReasonCode
-from ...registry.thread_text import (
-    AbsentText,
-    GivenText,
-    TextChoice,
-)
+from agent_comms.registry.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.storage.typed_table import (
     AccumulatingBits,
     Column,
@@ -63,7 +59,6 @@ from agent_comms.storage.typed_table import (
     TextStorage,
 )
 from agent_comms.wake_candidate_index import ProjectionUnavailableError
-
 
 if TYPE_CHECKING:
     from agent_comms.coordination.tables.assignments import WakeAssignment

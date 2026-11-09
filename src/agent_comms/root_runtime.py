@@ -10,9 +10,9 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, TextIO
 
-from .bus import Bus
-from .installer.native_build_inputs import DetachedChildStdio
-from .execution.child_process import (
+from agent_comms.bus import Bus
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import (
     NoProcess,
     ObservedProcess,
     OutlivesLauncherLifetime,
@@ -20,17 +20,22 @@ from .execution.child_process import (
     ProcessState,
     SpawnedProcess,
 )
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import PathText, WireOmitDefault
-from .launch_runtime import LaunchRuntime
-from .storage.locked_store import DocumentChange, LockedStore, RegistryFile, RollbackRetained
-from .storage.maintenance_barrier import MaintenanceBarrier
-from .owner_connection import socket_path
-from .storage.private_path import FileIdentity, PrivateSocketRole
-from .recorded_bus import RecordedBus, RecordedBusIdentity
-from .registry.registry_store import RegistryStore
-from .storage.store_files import DependentStateTier, SingleFileStore
+from agent_comms.installer.native_build_inputs import DetachedChildStdio
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import PathText, WireOmitDefault
+from agent_comms.owner_connection import socket_path
+from agent_comms.recorded_bus import RecordedBus, RecordedBusIdentity
+from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.storage.locked_store import (
+    DocumentChange,
+    LockedStore,
+    RegistryFile,
+    RollbackRetained,
+)
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
+from agent_comms.storage.private_path import FileIdentity, PrivateSocketRole
+from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 
 
 class ForeignRuntimeError(RelationViolationError):

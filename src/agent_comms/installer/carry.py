@@ -10,9 +10,9 @@ from typing import ClassVar
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_resolution import RuntimeResolution
-from agent_comms.storage.locked_store import DocumentChange, DurableFile, LockedStore
-from ..projects.repo import Repo
+from agent_comms.projects.repo import Repo
 from agent_comms.root_runtime import RootRuntimeStore
+from agent_comms.storage.locked_store import DocumentChange, DurableFile, LockedStore
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 
 STEPS = Path("tools/cutover")

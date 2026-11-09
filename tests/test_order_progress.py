@@ -2,6 +2,21 @@
 The colleague's review timer comes back every window until delivery, and the holder never sees it."""
 
 
+import asyncio
+import json
+import os
+import subprocess
+import time
+from contextlib import nullcontext
+from dataclasses import replace
+
+import pytest
+
+import fixture_git
+from agent_comms.comms import wire
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.launch_runtime import LaunchRoot
+from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from agent_comms.planning.orders import (
     EditingProgress,
     NoCommitProgress,
@@ -10,37 +25,22 @@ from agent_comms.planning.orders import (
     ProgressRead,
     ProgressSource,
 )
-from agent_comms.projects.checkouts import Checkout
-import asyncio
-import json
-import os
-from contextlib import nullcontext
-import subprocess
-import time
-from dataclasses import replace
-
-import pytest
-
-from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.team_hud import TeamFrame
-from agent_comms.transport.tools.orders import CommsTodoCreateTool
-from team_heartbeat_fixture import ObservedHeartbeat, current_hud, observe_team
-from agent_comms.comms import wire
-from agent_comms.planning.goal_actions import CreateProblemGoalAction
-from agent_comms.launch_runtime import LaunchRoot
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.checkouts import (
+    Checkout,
     CommitsNaming,
     EveryCommit,
 )
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.threads import NativeThread
+from agent_comms.repository_name import RepositoryName
+from agent_comms.team_hud import TeamFrame
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tools.orders import CommsTodoCreateTool
 from agent_comms.ui_model.teammate_state import Unreadable
 from agent_comms.work_branches import WorkBranchError, WorkBranches
-import fixture_git
 from source_revision_fixture import SourceRepository
+from team_heartbeat_fixture import ObservedHeartbeat, current_hud, observe_team
 from test_todos import order
 
 pytest_plugins = ('test_holder_standing_rules',)

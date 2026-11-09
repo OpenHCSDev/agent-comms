@@ -13,23 +13,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import ClassVar
 
-from agent_comms.team.standing import PlanIdle, PlanStalled
-
-from .execution.child_process import (
-    CountPrinted,
-    NoIntegerPrinted,
-)
-from .planning.order_words import PlainText
-from .planning.orders import (
-    Todo,
-    TodoStore,
-    VoidStrikeTodo,
-)
-from .team.order import CheckRequest
-from .nominal.declared_family import DeclaredFamily
-from .pattern_sources import (
+from agent_comms.execution.child_process import CountPrinted, NoIntegerPrinted
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.pattern_sources import (
     CeremonyFailure,
-    TeamRule,
     HeldPlanFailure,
     IntentionsAsAccomplishmentsFailure,
     MeasuredWrongThingFailure,
@@ -37,11 +24,13 @@ from .pattern_sources import (
     PostmortemFailure,
     ProblemFix,
     SeedCatalog,
+    TeamRule,
 )
-from .team.standing_rules import (
-    BoardDisagrees,
-    StandingRule,
-)
+from agent_comms.planning.order_words import PlainText
+from agent_comms.planning.orders import Todo, TodoStore, VoidStrikeTodo
+from agent_comms.team.order import CheckRequest
+from agent_comms.team.standing import PlanIdle, PlanStalled
+from agent_comms.team.standing_rules import BoardDisagrees, StandingRule
 
 POSTMORTEM = "https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md"
 

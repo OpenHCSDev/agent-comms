@@ -3,11 +3,10 @@
 import json
 import os
 import sqlite3
-from contextlib import closing
 from collections.abc import Iterable
+from contextlib import closing
 from pathlib import Path
 
-from agent_comms.nominal.field_codec import FieldCodec, InputId
 from agent_comms.execution.native_entries import NativeInputEvidenceRead, NoEvidenceRead
 from agent_comms.execution.native_input_proof import (
     NativeContextJournal,
@@ -15,6 +14,7 @@ from agent_comms.execution.native_input_proof import (
     NativeContextRecord,
 )
 from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.nominal.field_codec import FieldCodec, InputId
 
 
 def read_context_proof(

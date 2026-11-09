@@ -11,9 +11,9 @@ from agent_comms.nominal.field_codec import (
     OrderId,
     ToolCallId,
 )
+from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.goals import ProblemGoalOrder
-from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     AcceptedVerdict,
@@ -21,8 +21,8 @@ from agent_comms.planning.orders import (
     SendBackVerdict,
     Todo,
 )
-from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.tools.orders import CommsVerdictTool
 from test_judge_dropped import recorded_edit, unjudged

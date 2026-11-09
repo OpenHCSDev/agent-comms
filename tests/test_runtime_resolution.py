@@ -9,26 +9,33 @@ from importlib.metadata import PathDistribution
 from pathlib import Path
 from zipfile import ZipFile
 
+import pytest
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
-import pytest
 
 from agent_comms.build_artifact import BuildArtifact
 from agent_comms.execution.child_process import Platform
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe
 from agent_comms.installer.probes.packages import (
-    ArchivePin, ArchiveRecord, GitPin, PackageRecord,
+    ArchivePin,
+    ArchiveRecord,
+    GitPin,
+    PackageRecord,
 )
 from agent_comms.installer.probes.resolution import InstalledPackagesProbe
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_resolution import (
-    CorePackage, PrivateUvProject, ResolvedLock, RuntimeResolution, StackSources,
+    CorePackage,
+    PrivateUvProject,
+    ResolvedLock,
+    RuntimeResolution,
+    StackSources,
     ToadPackage,
 )
 from agent_comms.installer.runtime_stack import RuntimeStack
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.nominal.field_codec import FieldCodec
 
 
 def test_package_probe_entry_uses_one_declaration_before_refusing_build_identity():

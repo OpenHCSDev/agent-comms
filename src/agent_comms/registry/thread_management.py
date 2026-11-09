@@ -13,62 +13,29 @@ from dataclasses import (
 from functools import partial
 from pathlib import Path
 from typing import (
-    Self,
     TYPE_CHECKING,
+    Self,
 )
 
-from agent_comms_hooks.process_claim import (
-    ClaimHeldError,
-    ProcessSingleton,
-)
-
-from .registration import Registration
-from .threads import (
-    ExternalThread,
-    KeptModel,
-    ModelChoice,
-    NativeThread,
-    NextTurnConfiguration,
-    Thread,
-)
-from ..agent_activity import AgentActivity
-from ..agent_backend import RuntimeLocation
-from ..catalog_store import ChannelCatalog
-from ..channel_targets import DeclaredTag
-from ..execution.child_process import (
-    NO_PROCESS,
-    ProcessIdentity,
-    ProcessState,
-)
-from ..cli_result import CliResult
-from ..collaboration_ledger import CollaborationLedger
-from ..config_options import RunningSelection
-from ..coordination.errors import CoordinationError
-from ..errors import RelationViolationError
-from ..execution.owner_lifecycle import (
-    LaunchInput,
-    OwnerLifecycle,
-    TaskLaunchInput,
-)
-from ..heartbeat_delivery import HeartbeatDelivery
-from ..importing import (
-    ImportLimits,
-    ImportedConversation,
-    ThreadImported,
-)
-from ..launch_runtime import (
-    LaunchRuntime,
-    TagListText,
-)
-from ..messaging.message_bus import MessageBus
-from ..execution.native_arguments import (
-    ConfiguredBinary,
-    NativeArguments,
-)
-from ..execution.native_entries import ImportedSessionWriter
-from ..execution.native_session_reopen import PiSessionId
-from .native_settings import NativeThreadDefaults
-from ..nominal.field_codec import (
+from agent_comms.agent_activity import AgentActivity
+from agent_comms.agent_backend import RuntimeLocation
+from agent_comms.catalog_store import ChannelCatalog
+from agent_comms.channel_targets import DeclaredTag
+from agent_comms.cli_result import CliResult
+from agent_comms.collaboration_ledger import CollaborationLedger
+from agent_comms.config_options import RunningSelection
+from agent_comms.coordination.errors import CoordinationError
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import NO_PROCESS, ProcessIdentity, ProcessState
+from agent_comms.execution.native_arguments import ConfiguredBinary, NativeArguments
+from agent_comms.execution.native_entries import ImportedSessionWriter
+from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.execution.owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
+from agent_comms.heartbeat_delivery import HeartbeatDelivery
+from agent_comms.importing import ImportedConversation, ImportLimits, ThreadImported
+from agent_comms.launch_runtime import LaunchRuntime, TagListText
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.nominal.field_codec import (
     DeclaredWireType,
     FieldCodec,
     NullMember,
@@ -76,49 +43,41 @@ from ..nominal.field_codec import (
     SingleFieldValue,
     SubclassUnion,
 )
-from ..pi_vocabulary import (
-    NoThinkingOverride,
-    ThinkingChoice,
-    ThinkingLevelField,
+from agent_comms.pi_vocabulary import NoThinkingOverride, ThinkingChoice, ThinkingLevelField
+from agent_comms.planning.goal_waits import GoalWaits
+from agent_comms.projects.checkouts import Checkout, LaunchCheckout
+from agent_comms.registry.native_settings import NativeThreadDefaults
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.thread_catalog import ThreadCatalog
+from agent_comms.registry.thread_identity import AgentThreadRole, ThreadIncarnation, ThreadRole
+from agent_comms.registry.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
+from agent_comms.registry.thread_owned_state import ThreadOwnedState
+from agent_comms.registry.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_text import ForkedParent, GivenThreadText, ThreadText
+from agent_comms.registry.threads import (
+    ExternalThread,
+    KeptModel,
+    ModelChoice,
+    NativeThread,
+    NextTurnConfiguration,
+    Thread,
 )
-from ..planning.goal_waits import GoalWaits
-from ..projects.checkouts import (
-    Checkout,
-    LaunchCheckout,
+from agent_comms.registry_provenance import RegistryNames
+from agent_comms.relationships import RelationshipStore
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.storage.locked_store import PatternFile, RuntimeFile
+from agent_comms.tool_declaration import NativeRequestTools
+from agent_comms.tool_result import ToolResult
+from agent_comms.view_unread import transcript_read_state
+from agent_comms_hooks.process_claim import (
+    ClaimHeldError,
+    ProcessSingleton,
 )
-from ..registry_provenance import RegistryNames
-from ..relationships import RelationshipStore
-from ..session_file import RegistrySessionLocation
-from ..storage.locked_store import (
-    PatternFile,
-    RuntimeFile,
-)
-from .thread_catalog import ThreadCatalog
-from .thread_identity import (
-    AgentThreadRole,
-    ThreadIncarnation,
-    ThreadRole,
-)
-from .thread_model import (
-    DeclaredModel,
-    ThreadModel,
-    UndeclaredModel,
-)
-from .thread_owned_state import ThreadOwnedState
-from .thread_status import StoppedThreadStatus
-from .thread_text import (
-    ForkedParent,
-    GivenThreadText,
-    ThreadText,
-)
-from ..tool_declaration import NativeRequestTools
-from ..tool_result import ToolResult
-from ..view_unread import transcript_read_state
 
 if TYPE_CHECKING:
-    from .registry_store import RegistryEdit
-    from ..cli_bridges.history import History
-    from ..tool_caller import ThreadCaller
+    from agent_comms.cli_bridges.history import History
+    from agent_comms.registry.registry_store import RegistryEdit
+    from agent_comms.tool_caller import ThreadCaller
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,11 +1,12 @@
 """Decode actual send exceptions once into the shared delivery failure family."""
 
-from agent_comms.acp_extension import BackendDeliveryFailure, ClaimBlockedFailure
-from agent_comms.errors import HumanClaimBlockedError
 from metaclass_registry.mro_dispatch import (
     MroDispatch,
     handles,
 )
+
+from agent_comms.acp_extension import BackendDeliveryFailure, ClaimBlockedFailure
+from agent_comms.errors import HumanClaimBlockedError
 
 
 class FailureDecoder(MroDispatch):

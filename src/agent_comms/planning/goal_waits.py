@@ -9,44 +9,40 @@ from pathlib import Path
 from sqlite3 import Connection
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from ..bus import BusReader
-from ..bus_publication import Delivered
-from ..nominal.declared_family import DeclaredFamily
-from ..errors import UnregisteredThreadError
-from ..nominal.field_codec import GoalId, GoalWaitId, NullMember, ThreadLookup, TurnId
-from .goal_presentation import (
-    GoalExecution,
-    GoalWaitTarget,
-    StandbyExecution,
-)
-from .goals import (
-    Goal,
-    GoalDeclaration,
-)
-from ..input_key import InputKey, InputKeyText
-from ..input_attempt import StoredInput, UnresolvedInput
-from ..storage.locked_store import GoalWakeFile
-from ..registry.thread_identity import RecordedThreadIncarnation
-from ..registry.thread_owned_state import ThreadOwnedState
-from ..registry.registry_document import RegistrySnapshot
-from ..registry.threads import Thread
-from ..execution.turn_lease import (
-    TurnCompletion,
-    TurnLease,
-)
-from ..storage.typed_table import (
-    Column, DurableStore, ForeignKey, FULL_SCHEMA_REBUILD, Index, SchemaRebuild,
-    StoreRows, TypedTable,
+from agent_comms.bus import BusReader
+from agent_comms.bus_publication import Delivered
+from agent_comms.errors import UnregisteredThreadError
+from agent_comms.execution.turn_lease import TurnCompletion, TurnLease
+from agent_comms.input_attempt import StoredInput, UnresolvedInput
+from agent_comms.input_key import InputKey, InputKeyText
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import GoalId, GoalWaitId, NullMember, ThreadLookup, TurnId
+from agent_comms.planning.goal_presentation import GoalExecution, GoalWaitTarget, StandbyExecution
+from agent_comms.planning.goals import Goal, GoalDeclaration
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_owned_state import ThreadOwnedState
+from agent_comms.registry.threads import Thread
+from agent_comms.storage.locked_store import GoalWakeFile
+from agent_comms.storage.typed_table import (
+    FULL_SCHEMA_REBUILD,
+    Column,
+    DurableStore,
+    ForeignKey,
+    Index,
+    SchemaRebuild,
+    StoreRows,
+    TypedTable,
 )
 
 if TYPE_CHECKING:
-    from .goal_management import GoalExecutionSource
-    from ..agent_activity import AgentActivity
-    from ..registry.registration import Registration
-    from ..messaging.message_bus import MessageBus
-    from ..message_reference import MessageReference
-    from ..execution.native_input_owner import RegistryOwner
-    from ..registry.registry_store import RegistryEdit
+    from agent_comms.agent_activity import AgentActivity
+    from agent_comms.execution.native_input_owner import RegistryOwner
+    from agent_comms.message_reference import MessageReference
+    from agent_comms.messaging.message_bus import MessageBus
+    from agent_comms.planning.goal_management import GoalExecutionSource
+    from agent_comms.registry.registration import Registration
+    from agent_comms.registry.registry_store import RegistryEdit
 
 
 class GoalWait(ABC):

@@ -1,17 +1,17 @@
 """Channel membership and notifications have one canonical bus authority."""
 
-from agent_comms.notification_evidence import AllOutcomes
-from agent_comms.projects.checkouts import Checkout
 from contextlib import AsyncExitStack
 from dataclasses import replace
 
 from agent_comms.channel_targets import CommandTarget
-from conftest import accept_initial
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.notification_progress import SentProgress
 from agent_comms.execution.turn_input_source import NoTurnAcceptance
+from agent_comms.notification_evidence import AllOutcomes
+from agent_comms.notification_progress import SentProgress
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.wake_policy import BoundedTriageWake
 from bus_history import read_history
+from conftest import accept_initial
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 
@@ -43,8 +43,8 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
 def test_channel_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa: F811
     import json
 
-    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.message_reference import MessageReference
+    from agent_comms.nominal.field_codec import FieldCodec
 
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
     observer = comms.registry.require("alpha")

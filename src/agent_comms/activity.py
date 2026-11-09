@@ -10,35 +10,34 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-
-from .nominal.declared_family import DeclaredFamily
-from .recorded_time import RecordedEventTime
-from .errors import RelationViolationError
-from .nominal.field_codec import (
+from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    ArtifactExclude,
     FieldCodec,
     NullMember,
-    projected,
-    ArtifactExclude,
     WireName,
     WireOmitDefault,
     WireRequired,
+    projected,
 )
-from agent_comms.storage.typed_table import StoreRows, Column, DerivedStore, TypedTable
-from .registry.thread_identity import OwnerIdentity
-from .registry.thread_owned_state import ThreadOwnedState
-from .registry.thread_presentation import (
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registry.thread_identity import OwnerIdentity
+from agent_comms.registry.thread_owned_state import ThreadOwnedState
+from agent_comms.registry.thread_presentation import (
     IdleThreadPresentationStatus,
+    ThreadPresentation,
     ThreadPresentationStatus,
     WorkingThreadPresentationStatus,
 )
-from .registry.thread_presentation import ThreadPresentation
+from agent_comms.storage.typed_table import Column, DerivedStore, StoreRows, TypedTable
 
 if TYPE_CHECKING:
-    from .agent_activity import AgentActivity
-    from .registry.threads import Thread
-    from .execution.turn_phase import TurnPhase
+    from agent_comms.agent_activity import AgentActivity
+    from agent_comms.execution.turn_phase import TurnPhase
+    from agent_comms.registry.threads import Thread
 
 
 class ThreadOutput(ABC):

@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 
-from .nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 
 class HeartbeatDelivery(DeclaredFamily, affix="HeartbeatDelivery"):

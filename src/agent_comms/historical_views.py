@@ -6,50 +6,56 @@ import shutil
 import tempfile
 from abc import ABC, abstractmethod
 from collections import deque
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Collection, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from functools import cache, partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
-from .projects.checkouts import Checkout
-
-from .bus import Bus
-from .catalog_store import ChannelCatalog
-from .channel_targets import NamedTarget, ThreadTarget
-from .channels import Channel
-from .execution.child_process import Platform
-from .coordination.errors import HistoricalSourceChanged
-from .errors import UnregisteredThreadError
-from .nominal.field_codec import (
-    FieldCodec, NullMember, RecordMember, ScratchName, SingleFieldValue, SubclassUnion, TaggedRecordMember,
-)
-from .storage.locked_store import DocumentChange, RegistryFile, RootFile
-from .storage.maintenance_barrier import CarriedDocument
-from .tool_result import ToolResult
-from .messaging.message_page import (
+from agent_comms.bus import Bus
+from agent_comms.catalog_store import ChannelCatalog
+from agent_comms.channel_targets import NamedTarget, ThreadTarget
+from agent_comms.channels import Channel
+from agent_comms.coordination.errors import DMScopeChanged, HistoricalSourceChanged
+from agent_comms.display_references import ReferenceContext
+from agent_comms.errors import UnregisteredThreadError
+from agent_comms.execution.child_process import Platform
+from agent_comms.message_notification import MessageNotification, NotificationWindow
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import CarriesEnvelope, Message, MessageHistory
+from agent_comms.messaging.message_page import (
     NEWEST_PAGE,
     ConversationMessagePageRequest,
     MessagePage,
     MessagePageRequest,
     PageBounds,
 )
-from .message_reference import MessageReference
-from .messages import CarriesEnvelope, Message, MessageHistory
-from agent_comms.message_notification import NotificationWindow
-from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
-from .page_traversal import HistoryCursor, HistorySourceKey, OlderTraversal
-from .message_notification import MessageNotification
-from .presentation import WireRevision
-from .storage.private_path import FileObservation, FileRevision, ObservedPath, PrivateDirectoryRole
-from .read_basis import (
+from agent_comms.messaging.read_ledger import ReadLedger
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    NullMember,
+    RecordMember,
+    ScratchName,
+    SingleFieldValue,
+    SubclassUnion,
+    TaggedRecordMember,
+)
+from agent_comms.notification_evidence import (
+    FirstRecipient,
+    OutcomeViewer,
+    RecipientCursor,
+    RecipientLimit,
+)
+from agent_comms.page_traversal import HistoryCursor, HistorySourceKey, OlderTraversal
+from agent_comms.presentation import WireRevision
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.read_basis import (
     AnonymousViewer,
     ChannelDisplayIdentity,
     ChannelDisplayScope,
     DisplayBasis,
     DisplayIdentity,
-    SourceDisplayIdentity,
     DisplayViewer,
     DMDisplayBasis,
     DMDisplayIdentity,
@@ -57,27 +63,32 @@ from .read_basis import (
     MessageDisplayScope,
     NamedViewer,
     NoDisplaySelection,
+    SelectedDisplay,
+    SourceDisplayIdentity,
 )
-from .messaging.read_ledger import ReadLedger
-from .recorded_bus import RecordedBusIdentity
-from .registry.registration import Registration
-from .registry.registry_document import RegistrySnapshot
-from .registry_provenance import RegistryProvenance
-from .revision_views import BusSourceView
-from .storage.store_files import SingleFileStore, SourceTier, StoreOwner
-from .registry.thread_identity import UnrecordedThreadIncarnation
-from .display_references import ReferenceContext
-from .registry.threads import Thread, ThreadProvenance
-from .transcript_routes import TranscriptRoutes
+from agent_comms.recorded_bus import RecordedBusIdentity
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.thread_identity import UnrecordedThreadIncarnation
+from agent_comms.registry.threads import Thread, ThreadProvenance
+from agent_comms.registry_provenance import RegistryProvenance
+from agent_comms.revision_views import BusSourceView
+from agent_comms.storage.locked_store import DocumentChange, RegistryFile, RootFile
+from agent_comms.storage.maintenance_barrier import CarriedDocument
+from agent_comms.storage.private_path import (
+    FileObservation,
+    FileRevision,
+    ObservedPath,
+    PrivateDirectoryRole,
+)
+from agent_comms.storage.store_files import SingleFileStore, SourceTier, StoreOwner
+from agent_comms.tool_result import ToolResult
+from agent_comms.transcript_routes import TranscriptRoutes
 
-from collections.abc import Collection
-from typing import Self
-from .coordination.errors import DMScopeChanged
-from agent_comms.read_basis import SelectedDisplay
 if TYPE_CHECKING:
-    from .catalog_document import CatalogDocument
-    from .history_views import HistoryViews
-    from .presentation import BusPresentation
+    from agent_comms.catalog_document import CatalogDocument
+    from agent_comms.history_views import HistoryViews
+    from agent_comms.presentation import BusPresentation
 
 
 @dataclass(frozen=True, slots=True)

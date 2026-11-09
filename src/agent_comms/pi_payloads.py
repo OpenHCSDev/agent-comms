@@ -19,9 +19,30 @@ from typing import (
 
 from pydantic import JsonValue
 
-from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
-from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
-from .nominal.field_codec import (
+from agent_comms import agent_events as events
+from agent_comms.acp_failure import ExhaustedRetry, FailureSource, RecoveredRetry
+from agent_comms.annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_file_artifact import NativeFileArtifact
+from agent_comms.execution.native_output import AssistantOutput, NativeOutputScope, ToolOutput
+from agent_comms.execution.native_session_reopen import (
+    NativeSessionIdentity,
+    NoSessionRetention,
+    PiSessionId,
+)
+from agent_comms.execution.turn_context import (
+    ContextTurn,
+    MeasuredNativeSegment,
+    PreviewProvenance,
+    Provenance,
+    SegmentManifest,
+    TurnContext,
+)
+from agent_comms.execution.turn_failure import ModelRequestFailed, ProviderTransportFailed
+from agent_comms.execution.turn_item import CompactionChargeId, ProviderResponseId, UsageChargeId
+from agent_comms.lifecycle_capability import Successful
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.field_codec import (
     ExternalNull,
     ExternalNullMember,
     FieldCodec,
@@ -38,42 +59,38 @@ from .nominal.field_codec import (
     WireRequired,
     WireValue,
 )
-from .planning.goals import GoalDeclaration
-from .lifecycle_capability import Successful
-from .execution.native_failures import NativePiUnavailable
-from .execution.native_file_artifact import NativeFileArtifact
-from .execution.native_output import AssistantOutput, NativeOutputScope, ToolOutput
-from .execution.native_session_reopen import NativeSessionIdentity, NoSessionRetention, PiSessionId
-from .pi_wire import McpCallPolicy, McpServerState, Opaque, OpenPayload, PiDiagnostic, PiField, PiOmitted, PiPayload, PiReported, PiUsage, ReportedInputId, TaggedPayload, UnknownPayload
-from . import agent_events as events
-from .acp_failure import ExhaustedRetry, FailureSource, RecoveredRetry
-from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
-from .pi_vocabulary import (
+from agent_comms.pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
+from agent_comms.pi_vocabulary import (
     NoThinkingOverride,
     PiStopReason,
     ThinkingLevel,
     ThinkingLevelField,
     UnreportedStopReason,
 )
-from .recorded_time import EventMilliseconds, EventTime, UnrecordedEventTime
-from .send_result import CorrectionResult, CorrectionUnreported
-from .registry.thread_identity import ThreadIncarnation
-from .registry.thread_model import (
-    ThreadModel,
-    UndeclaredModel,
+from agent_comms.pi_wire import (
+    McpCallPolicy,
+    McpServerState,
+    Opaque,
+    OpenPayload,
+    PiDiagnostic,
+    PiField,
+    PiOmitted,
+    PiPayload,
+    PiReported,
+    PiUsage,
+    ReportedInputId,
+    TaggedPayload,
+    UnknownPayload,
 )
-from .tool_declaration import ToolDeclaration
-from .tool_result import DeclaredReply
-from .execution.turn_context import (
-    ContextTurn,
-    MeasuredNativeSegment,
-    PreviewProvenance,
-    Provenance,
-    SegmentManifest,
-    TurnContext,
-)
-from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
-from .transcript_events import (
+from agent_comms.planning.goals import GoalDeclaration
+from agent_comms.recorded_time import EventMilliseconds, EventTime, UnrecordedEventTime
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
+from agent_comms.send_result import CorrectionResult, CorrectionUnreported
+from agent_comms.tool_declaration import ToolDeclaration
+from agent_comms.tool_result import DeclaredReply
+from agent_comms.tool_results import NoSentMessage, NoToolDiff, ToolDiff
+from agent_comms.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
     SentTranscript,
@@ -82,15 +99,6 @@ from .transcript_events import (
     ToolStartTranscript,
     TranscriptEvent,
     UserTranscript,
-)
-from .execution.turn_failure import (
-    ModelRequestFailed,
-    ProviderTransportFailed,
-)
-from .execution.turn_item import (
-    CompactionChargeId,
-    ProviderResponseId,
-    UsageChargeId,
 )
 
 
@@ -155,14 +163,14 @@ class StrictFields(PiPayload):
         return super().decode_fields(value, decoded)
 
 if TYPE_CHECKING:
-    from .agent_events import AgentEvent
-    from .backend import NativeSession, TurnSession
-    from .execution.native_entries import TranscriptProjection
-    from .pi_events import AutoRetryEnd
-    from .routing import Routing
-    from .transcript_routes import SentTextDigest
-    from .execution.turn_goal_permission import TurnGoalPermission
-    from .execution.turn_phase import TurnPhase
+    from agent_comms.agent_events import AgentEvent
+    from agent_comms.backend import NativeSession, TurnSession
+    from agent_comms.execution.native_entries import TranscriptProjection
+    from agent_comms.execution.turn_goal_permission import TurnGoalPermission
+    from agent_comms.execution.turn_phase import TurnPhase
+    from agent_comms.pi_events import AutoRetryEnd
+    from agent_comms.routing import Routing
+    from agent_comms.transcript_routes import SentTextDigest
 
 
 # A Pi payload field is omitted from the wire while it holds its default.
@@ -545,7 +553,7 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
     timestamp: PiField[ReportedTimestamp | PiOmitted] = PiOmitted()
 
     def turn_phase(self, phase: TurnPhase) -> TurnPhase:
-        from .execution.turn_phase import FailedPhase
+        from agent_comms.execution.turn_phase import FailedPhase
         return FailedPhase(error=self.error)
 
     def refine_model_request_failure(self, failure):

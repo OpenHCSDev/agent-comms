@@ -1,7 +1,5 @@
 """Typed saved boundaries and durable acceptance precede process-local scheduling."""
 
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.comms import wire
 import json
 import sqlite3
 from contextlib import ExitStack, closing
@@ -9,9 +7,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.input_key import AcpInputKey, BusInputKey, InputKey, InputKeyText
+from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, TurnId
 from agent_comms.input_attempt import (
     BoundUnknownInput,
     GoalInputDecision,
@@ -23,12 +20,14 @@ from agent_comms.input_attempt import (
     UnresolvedInput,
 )
 from agent_comms.input_disposition import InputDispositions, InputDocument
+from agent_comms.input_key import AcpInputKey, BusInputKey, InputKey, InputKeyText
 from agent_comms.lifecycle_capability import Unresolved
-from agent_comms.reported_turn import ReportedTurn
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, TurnId
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
+from agent_comms.reported_turn import ReportedTurn
 from stored_inputs import insert_inputs, stored_inputs
-
 
 PRIOR_KEY = AcpInputKey(InputId.mint())
 UNKNOWN_KEY = AcpInputKey(InputId.mint())

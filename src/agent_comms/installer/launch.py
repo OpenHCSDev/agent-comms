@@ -19,11 +19,13 @@ from pathlib import Path
 from traceback import extract_tb
 from typing import Annotated, TextIO
 
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
+
 import agent_comms.installer
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
-from agent_comms.installer.request import InstallRequest
-from agent_comms.nominal.field_codec import FieldCodec, PathText
-from agent_comms.installer.logs import InstallLogs, InstallUnit
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (
     FailureReportPublicationPhase,
@@ -35,6 +37,7 @@ from agent_comms.installer.interpreter_operation import (
     TargetCheckoutPreparePhase,
     TreeClosePhase,
 )
+from agent_comms.installer.logs import InstallLogs, InstallUnit
 from agent_comms.installer.probes.harnesses import HarnessesProbe, InstallResult
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.reporting import (
@@ -42,10 +45,11 @@ from agent_comms.installer.reporting import (
     InstallOutcome,
     ReportPublication,
     RootWriter,
-    UnfinishedInstall,
     UnattemptedPublication,
+    UnfinishedInstall,
     UnpostedWriter,
 )
+from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import (
     FinishedInstall,
@@ -57,13 +61,10 @@ from agent_comms.installer.upgrade import (
     TargetTree,
     upgrade,
 )
-from ..projects.repo import Repo
 from agent_comms.launch_runtime import LaunchRuntime
-from ..projects.storage_rules import StorageRule
-from metaclass_registry.mro_dispatch import (
-    MroDispatch,
-    handles,
-)
+from agent_comms.nominal.field_codec import FieldCodec, PathText
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.storage_rules import StorageRule
 
 
 @dataclass

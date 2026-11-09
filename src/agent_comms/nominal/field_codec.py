@@ -13,8 +13,8 @@ import re
 import sys
 import types
 from abc import ABC, abstractmethod
-from contextvars import ContextVar
 from collections.abc import Callable, Collection, Hashable, Iterable, Iterator, Mapping, Sequence
+from contextvars import ContextVar
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum, IntFlag
@@ -51,14 +51,14 @@ from pydantic_core import core_schema
 from python_introspect import declared_field_label
 from typing_extensions import TypeAliasType, TypeForm
 
-from .declared_family import DeclaredFamily, FamilyMeta
-from .json_schema import JsonScalar, JsonSchemaOwner
-from .sealed import Sealed
+from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMeta
+from agent_comms.nominal.json_schema import JsonScalar, JsonSchemaOwner
+from agent_comms.nominal.sealed import Sealed
 
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
-    from ..registration_inheritance import RegistrationInheritance
+    from agent_comms.registration_inheritance import RegistrationInheritance
 
 T = TypeVar("T")
 

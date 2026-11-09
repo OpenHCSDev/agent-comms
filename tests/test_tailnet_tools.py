@@ -3,22 +3,29 @@
 import subprocess
 
 import pytest
-from bus_record_fixture import prepare_native_comms
-from agent_comms_hooks import ToolRefusedError
 
 from agent_comms.connector_caller import UiCaller, UiReadCaller
 from agent_comms.core_access import LocalCoreAccess
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.tailnet_buses import (
-    PeerBus, PeerHoldsBus, PeerOffline, PeerUnreachable, PeerWithoutBus, ProbedPeer,
-    TailnetBuses, TailnetPeer,
+    PeerBus,
+    PeerHoldsBus,
+    PeerOffline,
+    PeerUnreachable,
+    PeerWithoutBus,
+    ProbedPeer,
+    TailnetBuses,
+    TailnetPeer,
 )
 from agent_comms.tailnet_profiles import AskedPeer, PeerRefusedProfile, TailnetProfiles
 from agent_comms.tool_request import ServedRequest
 from agent_comms.transport.tools.tailnet import (
-    CommsTailnetBusesTool, CommsTailnetProfileTool, TailnetBusesRead,
+    CommsTailnetBusesTool,
+    CommsTailnetProfileTool,
+    TailnetBusesRead,
 )
-
+from agent_comms_hooks import ToolRefusedError
+from bus_record_fixture import prepare_native_comms
 
 PEER = TailnetPeer("a-discovered-peer", "100.64.1.2", True)
 BUS = PeerHoldsBus(PEER, 7)

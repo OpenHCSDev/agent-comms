@@ -14,7 +14,10 @@ import pytest
 from agent_comms_hooks import ClaudeHookProgram
 from agent_comms_hooks.shell_commands import ConnectCommand
 from agent_comms_hooks.watch import (
-    NoSessionBridge, SessionEndpoint, SwappingSession, WatchRecord,
+    NoSessionBridge,
+    SessionEndpoint,
+    SwappingSession,
+    WatchRecord,
 )
 
 RECORD = WatchRecord("colleague", "/bus", ("agent-comms-claude-bridge", "watch"), Path("/bus"))

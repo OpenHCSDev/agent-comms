@@ -6,15 +6,14 @@ results, not another wire format or a change to native tool result producers.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Self
-from collections.abc import Mapping
 
-from .messages import Message
-
-from .message_reference import MessageReference
-from .registry.thread_identity import ThreadIncarnation
-from .transcript_events import SentTranscript
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.transcript_events import SentTranscript
 
 
 class PublicationSource(ABC):

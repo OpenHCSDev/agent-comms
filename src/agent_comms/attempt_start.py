@@ -2,24 +2,27 @@
 
 from dataclasses import dataclass
 
-from agent_comms.reason_codes import NoReasonCode
-from .coordination.errors import (
+from agent_comms.attempt_states import PromptStartingAttempt
+from agent_comms.coordination.errors import (
     IdentityConflict,
     PublicationUncertain,
     RecoveryBlocked,
     StaleFence,
     StaleRevision,
 )
-from .coordination.snapshot import RecoverySnapshot
-from .coordination.tables.attempts import AttemptRecord
-from .nominal.field_codec import ThreadLookup
-from .owner_fence import OwnerFence, _digest
-from .participant_store import ParticipantSnapshot
-
-
-from .attempt_states import PromptStartingAttempt
-from .coordination.tables.executions import CurrentExecutions, ExecutionRecord, PointedAttempt, PointedExecution
-from .execution_states import ActiveExecution
+from agent_comms.coordination.snapshot import RecoverySnapshot
+from agent_comms.coordination.tables.attempts import AttemptRecord
+from agent_comms.coordination.tables.executions import (
+    CurrentExecutions,
+    ExecutionRecord,
+    PointedAttempt,
+    PointedExecution,
+)
+from agent_comms.execution_states import ActiveExecution
+from agent_comms.nominal.field_codec import ThreadLookup
+from agent_comms.owner_fence import OwnerFence, _digest
+from agent_comms.participant_store import ParticipantSnapshot
+from agent_comms.reason_codes import NoReasonCode
 
 INITIAL_LEASE_DURATION_MS = 60_000
 

@@ -8,8 +8,6 @@ worktrees. Nothing here is stored.
 
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import WireExclude
-
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -21,15 +19,10 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
-from .code_lines import CodeLines
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import GitCommitText, PathText, projected
-from .projects.git_errors import (
-    GitCommandError,
-    SourceReadFailure,
-)
-from .projects.repo import Repo
-from .projects.checkouts import (
+from agent_comms.code_lines import CodeLines
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import GitCommitText, PathText, WireExclude, projected
+from agent_comms.projects.checkouts import (
     BranchUpstream,
     Checkout,
     CheckoutHistory,
@@ -38,12 +31,14 @@ from .projects.checkouts import (
     RepositoryReads,
     UnpushedHead,
 )
-from .repository_name import RepositoryName
-from .wire_models import WireModel
+from agent_comms.projects.git_errors import GitCommandError, SourceReadFailure
+from agent_comms.projects.repo import Repo
+from agent_comms.repository_name import RepositoryName
+from agent_comms.wire_models import WireModel
 
 if TYPE_CHECKING:
-    from .closed_pull_requests import ClosedHeadScan
-    from .registry.registry_document import RegistrySnapshot
+    from agent_comms.closed_pull_requests import ClosedHeadScan
+    from agent_comms.registry.registry_document import RegistrySnapshot
 
 
 class WorkBranchError(ValueError, SourceReadFailure):

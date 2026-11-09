@@ -1,32 +1,26 @@
 import sys
+
 """One query contract over the original native and external record owners."""
 
-from agent_comms.projects.checkouts import Checkout
 import asyncio
 import hashlib
-from contextlib import aclosing, redirect_stdout, suppress
-from datetime import datetime, timedelta
 import io
 import json
 import os
+from contextlib import aclosing, redirect_stdout, suppress
+from datetime import datetime, timedelta
 
 import pytest
-from agent_comms_hooks import ToolRefusedError
-from transcript_record_fixture import transcript_record
 
-from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.bus import Bus
 from agent_comms.cli import CliInvocation
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.shared import Binding, Options, Serve, StoredBinding, Watch
 from agent_comms.comms import wire
 from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.context_store import ContextEntry
-from agent_comms.external_transcript import NoEarlierPage
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.runtime_updates import FinishedItem
-from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.transcript_events import AssistantTranscript, TurnDigest
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.turn_context import (
     JournalProvenance,
     SegmentManifest,
@@ -37,17 +31,24 @@ from agent_comms.execution.turn_context import (
 from agent_comms.execution.turn_digests import (
     LastTurns,
     TurnBound,
-    TurnsOlderThan,
     TurnsBefore,
+    TurnsOlderThan,
     TurnsSince,
 )
-from agent_comms.bus import Bus
 from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
-from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.external_transcript import NoEarlierPage
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.runtime_updates import FinishedItem
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.transcript_events import AssistantTranscript, TurnDigest
 from agent_comms.watched import FileSource
+from agent_comms_hooks import ToolRefusedError
+from transcript_record_fixture import transcript_record
 
 
 def endpoint(comms, name, window, *, detail='activity'):

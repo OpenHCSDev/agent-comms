@@ -13,34 +13,39 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.bus import Bus
+from agent_comms.bus_publication import Delivered
+from agent_comms.cohort_schema import ClaimBatchAcknowledgements, CohortTable
+from agent_comms.coordination.cohort import AcceptedCohort, _claim_record
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.lifecycle_capability import Active
-from .execution.native_runtime_input import NativeRuntimeTable
-
-from .frozen_recipient import FrozenRecipient
-from .bus import Bus
-from .bus_publication import Delivered
-from .messaging.bus_source_page import CoveragePage
-from .cohort_schema import ClaimBatchAcknowledgements, CohortTable
-from .coordination.cohort import AcceptedCohort, _claim_record
-from .coordination.session import NativeCapture
-from .nominal.field_codec import FieldCodec, RootId, ThreadLookup
-from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
-from .messaging.message_bus import MessageBus
-from .execution.native_input_record import (
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.session import NativeCapture
+from agent_comms.execution.native_input_record import (
     NumberNativeColumn,
     TextNativeColumn,
     UnrecordedNativeColumn,
 )
-from .execution.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
-from .storage.private_path import FileIdentity, ObservedPath, PresentPath
-from .wake_policy import RecipientDecision
+from agent_comms.execution.native_runtime_input import (
+    CurrentNativeCursor,
+    NativeRuntimeInput,
+    NativeRuntimeTable,
+)
+from agent_comms.frozen_recipient import FrozenRecipient
+from agent_comms.historical_native_inputs import (
+    HistoricalNativeInput,
+    read_historical_native_inputs,
+)
+from agent_comms.lifecycle_capability import Active
+from agent_comms.messaging.bus_source_page import CoveragePage
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup
+from agent_comms.storage.private_path import FileIdentity, ObservedPath, PresentPath
+from agent_comms.wake_policy import RecipientDecision
 
 if TYPE_CHECKING:
-    from .cursor_owner import CursorOwner, CursorState
-    from .execution.native_entries import NativeEvidenceScope
-    from .private_registry_guard import RegistryPrivacy
+    from agent_comms.cursor_owner import CursorOwner, CursorState
+    from agent_comms.execution.native_entries import NativeEvidenceScope
+    from agent_comms.private_registry_guard import RegistryPrivacy
 
 @dataclass(frozen=True)
 class SourcePrefix(PresentPath):

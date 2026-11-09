@@ -7,9 +7,6 @@ orders those lifetimes and cannot represent a half-initialized native attempt.
 
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import RootId
-
-
 import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -17,25 +14,25 @@ from pathlib import Path
 from typing import ClassVar
 
 from metaclass_registry.mro_dispatch import MroDispatch
-from .comms import wire
-from .coordination.database import CoordinationStore
-from .coordination.errors import (
+
+from agent_comms.comms import wire
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import (
     IdentityConflict,
     PublicationActivationBlocked,
     RetryScheduled,
 )
-from .coordination.snapshot import RecoverySnapshot
-from .coordination.coordinator import Coordination
-from .cursor_publication import CursorDelivery
-from .following_inputs import FollowingInputs
-from .installer.native_package import VerifiedNativePackage
-from .execution.native_pi import NativePiRpcLaunch
-from .execution.native_failures import NativePiUnavailable
-from .execution.native_session_files import NativeSessionFiles
-from .pi_native_backend import PersistentPiSession
+from agent_comms.coordination.snapshot import RecoverySnapshot
+from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_pi import NativePiRpcLaunch
+from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.selected.actions import (
     CodingSelectedAction,
+    NoSelectedWritePlans,
     SelectedAction,
+    SelectedWriteAuthority,
 )
 from agent_comms.execution.selected.participant import (
     NoLivePublication,
@@ -47,11 +44,11 @@ from agent_comms.execution.selected.turn import (
     SelectedAttempt,
     SelectedConsideration,
 )
-from agent_comms.execution.selected.actions import (
-    NoSelectedWritePlans,
-    SelectedWriteAuthority,
-)
-from .execution.turn_failure import RetryableProviderFailure
+from agent_comms.execution.turn_failure import RetryableProviderFailure
+from agent_comms.following_inputs import FollowingInputs
+from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.nominal.field_codec import RootId
+from agent_comms.pi_native_backend import PersistentPiSession
 
 
 class SessionSetupFailed(ValueError):

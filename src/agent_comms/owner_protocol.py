@@ -10,19 +10,24 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, Self, cast
 
-from .coordination.errors import Refused
 from pydantic import BaseModel
 
-
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import (
-    FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion, Token256Text, WireName,
+from agent_comms import package_stamp
+from agent_comms.coordination.errors import Refused
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    Token256Text,
+    WireName,
 )
-from . import package_stamp
 
 if TYPE_CHECKING:
-    from .runtime_server import SocketClient
-    from .runtime import RuntimeProxy
+    from agent_comms.runtime import RuntimeProxy
+    from agent_comms.runtime_server import SocketClient
 
 @dataclass(frozen=True, kw_only=True)
 class SocketLine(DeclaredFamily, affix=""):

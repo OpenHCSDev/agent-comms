@@ -10,19 +10,20 @@ import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.execution.selected.triage import AbsentTriageDecisionRecord, RecordedTriageText, TriageDecisionRecord
-
-from .turn_item import FreshNativeId
-from ..class_fact import ClassFact
-from ..coordination.errors import IdentityConflict, PublicationActivationBlocked, StaleFence
-from ..coordination.tables.executions import ExecutionRecord
-from ..coordination.tables.participants import OwnerGenerations, Participants
-from ..coordination.tables.responses import ResponseObligation
-from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
-from .native_input_proof import NativeContextRecord, NativeInputLocation
-from .native_input_record import (
+from agent_comms.class_fact import ClassFact
+from agent_comms.coordination.errors import (
+    IdentityConflict,
+    PublicationActivationBlocked,
+    StaleFence,
+)
+from agent_comms.coordination.tables.executions import ExecutionRecord
+from agent_comms.coordination.tables.participants import OwnerGenerations, Participants
+from agent_comms.coordination.tables.responses import ResponseObligation
+from agent_comms.execution.native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
+from agent_comms.execution.native_input_proof import NativeContextRecord, NativeInputLocation
+from agent_comms.execution.native_input_record import (
     NativeColumn,
     NativeInputContext,
     NativeInputExecution,
@@ -34,20 +35,55 @@ from .native_input_record import (
     UnrecordedNativeColumn,
     UnrecordedNativePosition,
 )
-from .native_session_reopen import (
+from agent_comms.execution.native_session_reopen import (
     NativeSessionIdentity,
     NoPiSessionId,
     NoSessionRetention,
     PiSessionId,
 )
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import FieldCodec, InputId, MalformedRecord, NativeContext, RootId, SlotId, ThreadLookup, ToolCallId
-from ..private_runtime_schema import PrivateCoordinatorTable
-from ..storage.typed_table import AttachedPracticeRebuild, Column, FrozenColumn, IntegerStorage, LOCAL_TABLE_SOURCE, MonotoneColumns, NoDelete, NonDecreasing, RequiredUpdateColumns, RetainsChildren, StableReferenceColumns, TableReference, TableSchema, TableSource, TextStorage, TypedRow, WithoutRowid, WriteOnceColumns, sql_literal
-from ..tool_denial import SelectedToolDenied
+from agent_comms.execution.selected.triage import (
+    AbsentTriageDecisionRecord,
+    RecordedTriageText,
+    TriageDecisionRecord,
+)
+from agent_comms.execution.turn_item import FreshNativeId
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    InputId,
+    MalformedRecord,
+    NativeContext,
+    RootId,
+    SlotId,
+    ThreadLookup,
+    ToolCallId,
+)
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
+from agent_comms.storage.typed_table import (
+    LOCAL_TABLE_SOURCE,
+    AttachedPracticeRebuild,
+    Column,
+    FrozenColumn,
+    IntegerStorage,
+    MonotoneColumns,
+    NoDelete,
+    NonDecreasing,
+    RequiredUpdateColumns,
+    RetainsChildren,
+    StableReferenceColumns,
+    TableReference,
+    TableSchema,
+    TableSource,
+    TextStorage,
+    TypedRow,
+    WithoutRowid,
+    WriteOnceColumns,
+    sql_literal,
+)
+from agent_comms.tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
-    from .native_input_proof import NativeContextProof
+    from agent_comms.execution.native_input_proof import NativeContextProof
 
 
 class NativeRuntimeTable(PrivateCoordinatorTable):
@@ -257,8 +293,8 @@ class NativeRuntimeInput(
         unrelated owner activity cannot revoke a prepared page. No counter or
         projection is persisted, and the read closes before presentation work.
         """
-        from ..coordination.tables.executions import ExecutionRecord
-        from ..transcripts import TranscriptRead
+        from agent_comms.coordination.tables.executions import ExecutionRecord
+        from agent_comms.transcripts import TranscriptRead
 
         with TranscriptRead.publication_source(root) as db:
             if db is None:

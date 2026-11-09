@@ -1,44 +1,44 @@
 import ast
-import json
 import gc
+import json
 import weakref
 from pathlib import Path
 
 import pytest
+from nominal_refactor_advisor.audit.findings import GodFunction
 
-from agent_comms.plan_reading import PlanReading
-from agent_comms.planning.phase_artifacts import RecordedArtifact
+import fixture_git
+from agent_comms.nominal_census import NominalCensus
 from agent_comms.phase_evidence import (
     AllEvidence,
+    ClassChecks,
     ClassDeclared,
     ClassFlagsAbsent,
-    ClassChecks,
     ClassRostersAbsent,
     CommitMerged,
+    DocumentPatternPresent,
     FunctionDeclared,
     MainTree,
     ModuleBindings,
-    QualifiedName,
     NoAbsenceProbes,
     NoExactCopies,
     NoGodFunction,
     OwnClassChecksAbsent,
-    SourceFacts,
     ParentsShared,
     PathsAbsent,
-    DocumentPatternPresent,
     PatternAbsent,
     PatternPresent,
     PhaseEvidence,
+    QualifiedName,
     RestatedMembersAbsent,
+    SourceFacts,
     UnreadableEvidenceError,
 )
-from nominal_refactor_advisor.audit.findings import GodFunction
-
-from agent_comms.nominal_census import NominalCensus
+from agent_comms.plan_reading import PlanReading
+from agent_comms.planning.phase_artifacts import RecordedArtifact
 from agent_comms.planning.plan_phases import (
-    BusDeletionPhase,
     FLAG,
+    BusDeletionPhase,
     ExternalBoundariesPhase,
     ModuleMapPhase,
     PlanPhase,
@@ -47,8 +47,6 @@ from agent_comms.planning.plan_phases import (
 from agent_comms.projects.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.work_branches import WorkBranches
-import fixture_git
-
 
 git = fixture_git.run
 

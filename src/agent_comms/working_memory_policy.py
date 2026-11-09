@@ -6,12 +6,12 @@ import os
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import FieldCodec
-from .message_reference import MessageReference
-from .retained_task_facts import RetainedTaskFacts
-from .task_sources import AnnotationDisclosureGrant
+from agent_comms.errors import RelationViolationError
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.retained_task_facts import RetainedTaskFacts
+from agent_comms.task_sources import AnnotationDisclosureGrant
 
 
 @dataclass(frozen=True)

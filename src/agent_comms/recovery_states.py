@@ -2,8 +2,8 @@
 
 from dataclasses import dataclass
 
-from .coordination.vocabulary import CoordinatorVocabulary
-from .lifecycle_capability import LifecycleCapability, Unresolved
+from agent_comms.coordination.vocabulary import CoordinatorVocabulary
+from agent_comms.lifecycle_capability import LifecycleCapability, Unresolved
 
 
 @dataclass(frozen=True)

@@ -1,12 +1,11 @@
 """Session ownership, declaration extension and actual ACP boundary contracts."""
 from pathlib import Path
 
-
-from agent_comms.projects.checkouts import Checkout
 import pytest
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.registry.threads import Thread, NativeThread
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import NativeThread, Thread
 
 
 def test_thread_service_tier_defaults_standard_and_preserves_explicit_priority(*, thread_registration):

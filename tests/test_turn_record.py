@@ -1,17 +1,17 @@
 """Real registry/turn files and the public Comms phase entrypoint."""
 
-from agent_comms.projects.checkouts import Checkout
 import json
 import os
-
-import pytest
 from shutil import copytree
 
-from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import TurnId
-from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.execution.child_process import ProcessIdentity
+import pytest
+
 from agent_comms.comms import wire
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.nominal.field_codec import TurnId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.threads import NativeThread
 
 

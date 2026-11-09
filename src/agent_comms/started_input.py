@@ -4,16 +4,15 @@ from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING, ClassVar
 
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.lifecycle_capability import Unresolved
-
-from .coordination.coordinator import Coordination
-from .nominal.field_codec import AcpSessionId
+from agent_comms.nominal.field_codec import AcpSessionId
 
 if TYPE_CHECKING:
-    from .acp_extension import InputStartedUpdate, QueueScope
-    from .input_attempt import StartedInput as StartedRow
-    from .execution.input_drain import InputDrain
-    from .execution.turn_input_source import TurnInputSource
+    from agent_comms.acp_extension import InputStartedUpdate, QueueScope
+    from agent_comms.execution.input_drain import InputDrain
+    from agent_comms.execution.turn_input_source import TurnInputSource
+    from agent_comms.input_attempt import StartedInput as StartedRow
 
 
 class StartedInput:

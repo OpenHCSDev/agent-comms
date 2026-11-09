@@ -7,24 +7,21 @@ from dataclasses import (
 )
 from typing import TYPE_CHECKING
 
-from .turn_failure import (
-    NoTurnFailure,
-    TurnFailure,
-)
-from .. import agent_events as events
-from ..acp_failure import (
+from agent_comms import agent_events as events
+from agent_comms.acp_failure import (
     FailureSource,
     NoRetry,
     ProviderRetryResult,
     UnrecordedFailureSource,
 )
-from .native_arguments import SelectedModel
-from ..pi_payloads import NativeMessageFailureSource
+from agent_comms.execution.native_arguments import SelectedModel
+from agent_comms.execution.turn_failure import NoTurnFailure, TurnFailure
+from agent_comms.pi_payloads import NativeMessageFailureSource
 
 if TYPE_CHECKING:
-    from ..backend import NativeSession
-    from ..pi_payloads import AssistantMessage
-    from ..pi_wire import PiDiagnostic
+    from agent_comms.backend import NativeSession
+    from agent_comms.pi_payloads import AssistantMessage
+    from agent_comms.pi_wire import PiDiagnostic
 
 
 @dataclass

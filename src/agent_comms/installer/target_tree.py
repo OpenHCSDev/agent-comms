@@ -12,11 +12,8 @@ from typing import Self
 
 from agent_comms.installer.carry import STEPS
 from agent_comms.installer.refusals import UpgradeRefused
-from ..projects.repo import Repo
-from ..projects.checkouts import (
-    DetachedStart,
-    ScratchCheckout,
-)
+from agent_comms.projects.checkouts import DetachedStart, ScratchCheckout
+from agent_comms.projects.repo import Repo
 
 
 @dataclass(frozen=True)

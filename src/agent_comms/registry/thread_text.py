@@ -13,12 +13,8 @@ from collections.abc import (
 from dataclasses import dataclass
 from typing import ClassVar
 
-from ..history_view import (
-    ForkOwnHistory,
-    HistoryView,
-    OwnHistory,
-)
-from ..nominal.field_codec import (
+from agent_comms.history_view import ForkOwnHistory, HistoryView, OwnHistory
+from agent_comms.nominal.field_codec import (
     NullMember,
     SingleFieldValue,
     StoredSessionId,

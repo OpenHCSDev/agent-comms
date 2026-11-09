@@ -1,7 +1,6 @@
 """Normal coding policies use existing claims; no provider or user work is touched."""
 
 
-from agent_comms.projects.checkouts import Checkout
 import json
 import os
 import secrets
@@ -11,10 +10,8 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
 import pytest
-from coding_owner_fixture import OwnerDouble
 
 from agent_comms.channel_coding_tools import CodingToolSocket
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.envelope_claim_transitions import (
@@ -24,12 +21,21 @@ from agent_comms.envelope_claim_transitions import (
     NativeClaim,
     WritableFileClaim,
 )
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
-from agent_comms.transport.native_tools import CodingTool, NativeToolDeclaration
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
-from agent_comms.pi_payloads import AssistantMessage, ReportedFlag, ReportedParts, ReportedText, ToolCallContent
-from agent_comms.storage_room import NoRoomNeeded
+from agent_comms.pi_payloads import (
+    AssistantMessage,
+    ReportedFlag,
+    ReportedParts,
+    ReportedText,
+    ToolCallContent,
+)
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage_room import NoRoomNeeded
+from agent_comms.transport.native_tools import CodingTool, NativeToolDeclaration
+from coding_owner_fixture import OwnerDouble
 
 
 def acquire(comms, name, turn_id, resource, work):
@@ -158,7 +164,6 @@ def test_coding_names_and_argument_types_come_from_declarations():
 ])
 def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments):
     from agent_comms.tool_denial import SelectedToolDenied
-
     from agent_comms.transport.native_tool_call import RefusedCodingCall
 
     call = NativeToolDeclaration.decode("bad-argument-shape", name, arguments)
@@ -168,12 +173,12 @@ def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments)
 
 
 def test_an_offered_mcp_tool_decodes_as_its_call_and_an_unoffered_one_is_refused():
+    from agent_comms.registry.thread_identity import (
+        ReportedTools,
+        ToolName,
+    )
     from agent_comms.transport.native_tool_call import RefusedCodingCall
     from agent_comms.transport.native_tools import McpToolCall
-    from agent_comms.registry.thread_identity import (
-    ReportedTools,
-    ToolName,
-)
 
     name, arguments = "mcp_fixture_echo_092c79e8f8", {"message": "ACCEPTANCE_ECHO"}
     offered = ReportedTools("pi-test", frozenset({ToolName("read"), ToolName(name)}))
@@ -186,8 +191,8 @@ def test_an_offered_mcp_tool_decodes_as_its_call_and_an_unoffered_one_is_refused
 
 
 def test_family_selector_is_denied_but_record_presentation_stays_readable():
-    from agent_comms.tool_denial import SelectedToolDenied
     from agent_comms.tool_declaration import NoToolRecord, ToolDeclaration
+    from agent_comms.tool_denial import SelectedToolDenied
 
     arguments = {"path": "x", "tool": "write"}
     with pytest.raises(SelectedToolDenied):

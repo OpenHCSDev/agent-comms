@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from ..nominal.field_codec import NullMember, RecordMember, SubclassUnion, WireName
-from ..planning.goal_presentation import GoalExecution
-from ..registry.thread_text import ThreadText
+from agent_comms.nominal.field_codec import NullMember, RecordMember, SubclassUnion, WireName
+from agent_comms.planning.goal_presentation import GoalExecution
+from agent_comms.registry.thread_text import ThreadText
 
 
 class WakeGoalValue(SubclassUnion):

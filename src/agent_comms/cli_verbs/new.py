@@ -1,39 +1,27 @@
 from __future__ import annotations
 
+import asyncio
+from dataclasses import dataclass, fields
+from pathlib import Path
+from typing import Annotated, ClassVar, Self
+
 from agent_comms.cli_command import CreatesThread, TargetActionCommand
-from agent_comms.cli_commands import NameArgument
-from agent_comms.cli_commands import ThreadCreatedResult
-from agent_comms.cli_commands import _tag_choice_text
+from agent_comms.cli_commands import NameArgument, ThreadCreatedResult, _tag_choice_text
 from agent_comms.comms import Comms
-from agent_comms.config_options import ConfigOptions
-from agent_comms.config_options import ModelConfigOption
-from agent_comms.config_options import ThinkingLevelConfigOption
-from agent_comms.nominal.field_codec import Argument
-from agent_comms.nominal.field_codec import Catalog
-from agent_comms.nominal.field_codec import EditorFormat
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.nominal.field_codec import Multiline
-from agent_comms.nominal.field_codec import Normalize
-from ..registry.native_settings import NativeThreadDefaults
-from ..projects.checkouts import (
-    Checkout,
-    LaunchCheckout,
+from agent_comms.config_options import ConfigOptions, ModelConfigOption, ThinkingLevelConfigOption
+from agent_comms.nominal.field_codec import (
+    Argument,
+    Catalog,
+    EditorFormat,
+    FieldCodec,
+    Multiline,
+    Normalize,
 )
 from agent_comms.pi_vocabulary import ThinkingLevelField
-from ..registry.thread_management import InheritedTags
-from ..registry.thread_management import NewThreadSpec
-from ..registry.thread_management import TagChoice
-from ..registry.thread_model import (
-    CatalogSelection,
-    ThreadModel,
-)
-from pathlib import Path
-from dataclasses import dataclass
-from dataclasses import fields
-from typing import Annotated
-from typing import ClassVar
-from typing import Self
-import asyncio
+from agent_comms.projects.checkouts import Checkout, LaunchCheckout
+from agent_comms.registry.native_settings import NativeThreadDefaults
+from agent_comms.registry.thread_management import InheritedTags, NewThreadSpec, TagChoice
+from agent_comms.registry.thread_model import CatalogSelection, ThreadModel
 
 
 @dataclass(frozen=True, kw_only=True)

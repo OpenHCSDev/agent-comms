@@ -10,24 +10,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from agent_comms.bus_publication import Delivered
+from agent_comms.context_segments.wake_values import WakeWorkContext
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.responses import ResponseObligation
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.message_notification import SentMessageOutcome
-
-from ..bus_publication import Delivered
-from ..registry.threads import Thread
-from ..execution.turn_context import (
+from agent_comms.execution.turn_context import (
+    ContextSegment,
     InstructionFile,
     InstructionSegment,
     NextContextTurn,
-    ContextSegment,
     UserInputSegment,
     WireProvenance,
     WireSources,
 )
-from ..wake_policy import WakePolicy
-from .wake_values import WakeWorkContext
+from agent_comms.message_notification import SentMessageOutcome
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.registry.threads import Thread
+from agent_comms.wake_policy import WakePolicy
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -79,7 +78,7 @@ class SelectedWakeSegment(WireSources, InstructionSegment):
                 if obligation.exact_target == assignment.lifecycle.exact_target
             )
             if len(matching) > 1:
-                from ..coordination.errors import IdentityConflict
+                from agent_comms.coordination.errors import IdentityConflict
 
                 raise IdentityConflict("Selected source has ambiguous response obligations")
             expectation, obligation_line = assignment.lifecycle.wake_frame(

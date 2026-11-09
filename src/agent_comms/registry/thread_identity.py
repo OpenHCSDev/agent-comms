@@ -18,23 +18,23 @@ from dataclasses import (
 )
 from functools import cached_property
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     ClassVar,
     Self,
-    TYPE_CHECKING,
     TypeVar,
 )
 
-from ..class_fact import ClassFact
-from ..cli_options import JsonFlagRecord
-from ..errors import RelationViolationError
-from ..nominal.declared_family import (
+from agent_comms.class_fact import ClassFact
+from agent_comms.cli_options import JsonFlagRecord
+from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.declared_family import (
     DeclaredFamily,
     UniqueExternalSelector,
     UnknownFamilyMember,
     declared_words,
 )
-from ..nominal.field_codec import (
+from agent_comms.nominal.field_codec import (
     DisclosureIdentity,
     FieldCodec,
     SingleFieldValue,
@@ -43,26 +43,16 @@ from ..nominal.field_codec import (
     WireName,
     WireValue,
 )
-from ..participant_identity import ParticipantIdentity
-from ..projection_source import (
-    ProducedRow,
-    ProjectionSource,
-)
-from ..response_policy import (
-    CollectivePolicy,
-    InformationalPolicy,
-    ResponsePolicy,
-)
+from agent_comms.participant_identity import ParticipantIdentity
+from agent_comms.projection_source import ProducedRow, ProjectionSource
+from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
 
 if TYPE_CHECKING:
-    from .threads import Thread
-    from ..execution.child_process import ProcessIdentity
-    from ..messages import Message
-    from ..messaging.read_ledger import (
-        ReadDocument,
-        ReadLedger,
-    )
-    from ..registry_provenance import RegistryProvenance
+    from agent_comms.execution.child_process import ProcessIdentity
+    from agent_comms.messages import Message
+    from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
+    from agent_comms.registry.threads import Thread
+    from agent_comms.registry_provenance import RegistryProvenance
 
 T = TypeVar("T")
 
@@ -646,8 +636,8 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from ..bus_activity_index import BusActivityIndex
-        from ..messaging.bus_display_index import BusDisplayIndex
+        from agent_comms.bus_activity_index import BusActivityIndex
+        from agent_comms.messaging.bus_display_index import BusDisplayIndex
         return (BusActivityIndex, BusDisplayIndex)
 
 

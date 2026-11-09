@@ -14,37 +14,31 @@ from dataclasses import (
 )
 from pathlib import Path
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     ClassVar,
     Self,
-    TYPE_CHECKING,
 )
 
-from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
-from ..bus import Bus
-from ..context_store import ContextStore
-from ..external_transcript import (
-    ExternalTranscript,
-    StoreRead,
-)
-from ..held_orders import (
-    HeldOrders,
-    LiveHold,
-)
-from ..historical_native_inputs import HistoricalNativeAnswers
-from ..message_reference import MessageReference
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
+from agent_comms.bus import Bus
+from agent_comms.context_store import ContextStore
+from agent_comms.execution.turn_item import NativeTurnId
+from agent_comms.external_transcript import ExternalTranscript, StoreRead
+from agent_comms.held_orders import HeldOrders, LiveHold
+from agent_comms.historical_native_inputs import HistoricalNativeAnswers
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     ActivityExclude,
     FieldCodec,
     WireExclude,
     WireTransient,
     projected,
 )
-from ..order_work import OrderWork
-from ..planning.orders import (
+from agent_comms.order_work import OrderWork
+from agent_comms.planning.orders import (
     EditWorkplaces,
     NoCommitProgress,
     OrderProgress,
@@ -52,26 +46,20 @@ from ..planning.orders import (
     Todo,
     TodoStore,
 )
-from ..private_registry_guard import RegistryPrivacy
-from ..problem_number import ProblemNumber
-from ..registry.threads import (
-    ConversationPreparation,
-    Thread,
-)
-from ..service_passes import ServiceReading
-from ..registry.thread_identity import ThreadIncarnation
-from ..tool_declaration import EditCall
-from ..tool_result import ToolResult
-from ..transcript_events import (
-    IncomingTranscript,
-    TurnDigest,
-)
-from .turn_item import NativeTurnId
-from ..work_branches import WorkBranchError
+from agent_comms.private_registry_guard import RegistryPrivacy
+from agent_comms.problem_number import ProblemNumber
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.threads import ConversationPreparation, Thread
+from agent_comms.service_passes import ServiceReading
+from agent_comms.tool_declaration import EditCall
+from agent_comms.tool_result import ToolResult
+from agent_comms.transcript_events import IncomingTranscript, TurnDigest
+from agent_comms.work_branches import WorkBranchError
+from agent_comms_hooks import ToolRefusedError
 
 if TYPE_CHECKING:
-    from ..comms import Comms
-    from ..transcript_sources import TranscriptSource
+    from agent_comms.comms import Comms
+    from agent_comms.transcript_sources import TranscriptSource
 
 
 class TurnView(DeclaredFamily, affix="TurnView"):

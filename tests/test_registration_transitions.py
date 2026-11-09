@@ -1,15 +1,18 @@
 """Transition-family consequences on the actual canonical registry and locks."""
 
-from agent_comms.projects.checkouts import Checkout
 import os
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.nominal.field_codec import TurnId
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.turn_lease import (
+    ActiveTurn,
+    NoFinishedTurn,
+)
+from agent_comms.nominal.field_codec import TurnId
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import (
     ReportedTools,
@@ -17,12 +20,9 @@ from agent_comms.registry.thread_identity import (
     UnreportedTools,
 )
 from agent_comms.registry.thread_status import StoppedThreadStatus
-from agent_comms.execution.turn_lease import (
-    ActiveTurn,
-    NoFinishedTurn,
-)
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
+from agent_comms.session_file import RegistrySessionLocation
 
 
 def _metadata(registry, leased, lease, tmp_path):

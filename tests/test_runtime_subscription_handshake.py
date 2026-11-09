@@ -1,26 +1,25 @@
 """Current subscription contract exercised across an actual owner Unix socket."""
 
-from agent_comms.projects.checkouts import Checkout
 import asyncio
 import json
-import os
 import logging
+import os
 import sqlite3
 
 import pytest
 
-from agent_comms.owner_connection import NoControllerToken
-from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.acp import CommsAgent
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import CoordinationReadUnavailable
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import AcpSessionId, MalformedRecord
+from agent_comms.owner_connection import NoControllerToken, socket_path
 from agent_comms.owner_protocol import OwnerAnnouncement
-from agent_comms.storage.private_path import PrivateSocketRole
-from agent_comms.owner_connection import socket_path
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.storage.private_path import PrivateSocketRole
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 

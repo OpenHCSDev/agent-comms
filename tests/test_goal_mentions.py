@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
-
-from agent_comms.projects.checkouts import Checkout
 import json
 from dataclasses import asdict
 from pathlib import Path
 
 import pytest
 
-from agent_comms.relationships import CollaboratingRelationshipGroup, RelationshipEdit
 from agent_comms.comms import Comms, wire
-from agent_comms.transport.tools.served import invoke_tool
-from conftest import installed_comms
 from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
     CompletedGoalAction,
@@ -23,6 +18,7 @@ from agent_comms.planning.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
+from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.planning.goals import (
     AliasMentionBinding,
     LimitExceededMentionBinding,
@@ -32,10 +28,13 @@ from agent_comms.planning.goals import (
     SelfMentionBinding,
     UnknownMentionBinding,
 )
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import UserThreadRole
-from agent_comms.tool_caller import ThreadCaller
 from agent_comms.registry.threads import NativeThread
-from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.relationships import CollaboratingRelationshipGroup, RelationshipEdit
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tools.served import invoke_tool
+from conftest import installed_comms
 
 
 def _wire(tmp_path: Path) -> Comms:

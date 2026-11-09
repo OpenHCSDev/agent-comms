@@ -3,11 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Self
 
-from ..coordination.errors import IdentityConflict
-from ..nominal.field_codec import (
-    FieldCodec,
-    ThreadLookup,
-)
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 
 
 @dataclass(frozen=True, kw_only=True)

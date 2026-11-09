@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-
-from .reservation_rules import ReservationRule, RuleCheck
+from agent_comms.reservation_rules import ReservationRule, RuleCheck
 
 if TYPE_CHECKING:
     pass

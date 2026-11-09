@@ -9,18 +9,18 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
-from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
-from .nominal.field_codec import (
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     MalformedRecord,
     NullMember,
     ToolCallId,
     WireName,
 )
-from .recorded_time import EventTime
-from .tool_denial import SelectedToolDenied
-from .tool_results import NoToolDiff
-from .transport import tools as tool_declarations
+from agent_comms.recorded_time import EventTime
+from agent_comms.tool_denial import SelectedToolDenied
+from agent_comms.tool_results import NoToolDiff
+from agent_comms.transport import tools as tool_declarations
 
 
 class GlobalCommsExtension:

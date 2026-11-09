@@ -1,21 +1,19 @@
 """Native refusal recovery: Core reports one outcome, never blocks on a retry."""
-from agent_comms.execution.native_arguments import SelectedModel
-
 import pytest
 
 import agent_comms.execution.native_pi as native_pi
 import agent_comms.pi_events as pi_events
+from agent_comms.execution.native_arguments import SelectedModel
 
 
 @pytest.mark.asyncio
 async def test_exhausted_provider_retries_become_typed_provider_failure():
     reason = "503 overloaded after native provider retries"
-    from agent_comms.execution.turn_output import TurnOutput
-
     from agent_comms.execution.turn_failure import (
-    ModelRequestFailed,
-    ProviderRetryExhausted,
-)
+        ModelRequestFailed,
+        ProviderRetryExhausted,
+    )
+    from agent_comms.execution.turn_output import TurnOutput
 
     output = TurnOutput()
     event = pi_events.NativeRetryEnd.from_wire({

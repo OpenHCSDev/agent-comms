@@ -8,23 +8,15 @@ from collections.abc import (
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .turn_failure import BackendFailed
-from .turn_phase import ModelWaitPhase
-from .. import (
-    agent_events as events,
-    pi_commands as commands,
-)
-from ..pending_requests import PendingRequest
+from agent_comms import agent_events as events
+from agent_comms import pi_commands as commands
+from agent_comms.execution.turn_failure import BackendFailed
+from agent_comms.execution.turn_phase import ModelWaitPhase
+from agent_comms.pending_requests import PendingRequest
 
 if TYPE_CHECKING:
-    from ..backend import (
-        FinishSignal,
-        NativeSession,
-    )
-    from .turn_watchdog import (
-    ProgressWatchdog,
-    TurnWait,
-)
+    from agent_comms.backend import FinishSignal, NativeSession
+    from agent_comms.execution.turn_watchdog import ProgressWatchdog, TurnWait
 
 
 class StatsRequest:

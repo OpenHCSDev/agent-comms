@@ -8,24 +8,29 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
-from .child_process import ProcessIdentity
-from .turn_goal_permission import GoalPermission, OwnerGoalPermission
-from ..coordination.coordinator import Coordination
-from ..coordination.errors import StaleFence
-from ..coordination.tables.participants import OwnerGenerations
-from ..errors import RelationViolationError, UnregisteredThreadError
-from ..nominal.field_codec import GoalId, ThreadLookup
-from ..private_send_rules import GoalRegistryClaimCheck, GoalRegistryIdentityCheck, RegistryIdentityCheck, RunningTurnRegistryCheck
-from ..registry.threads import NativeThread, Thread
-from ..reservation_rules import ReservationViolationError
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import StaleFence
+from agent_comms.coordination.tables.participants import OwnerGenerations
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.turn_goal_permission import GoalPermission, OwnerGoalPermission
+from agent_comms.nominal.field_codec import GoalId, ThreadLookup
+from agent_comms.private_send_rules import (
+    GoalRegistryClaimCheck,
+    GoalRegistryIdentityCheck,
+    RegistryIdentityCheck,
+    RunningTurnRegistryCheck,
+)
+from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.reservation_rules import ReservationViolationError
 
 if TYPE_CHECKING:
-    from .turn_lease import TurnLeaseFence
-    from ..planning.goals import Goal
-    from ..registry.registration import Registration
-    from ..registry.registry_document import RegistrySnapshot
+    from agent_comms.execution.turn_lease import TurnLeaseFence
+    from agent_comms.planning.goals import Goal
+    from agent_comms.registry.registration import Registration
+    from agent_comms.registry.registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True, kw_only=True)

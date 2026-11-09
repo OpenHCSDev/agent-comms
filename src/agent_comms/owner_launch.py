@@ -2,31 +2,22 @@
 
 from __future__ import annotations
 
-import os
 import asyncio
+import os
 import sys
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .execution.child_process import (
-    ProcessIdentity,
-    ProportionalMemory,
-    ResidentMemory,
-)
-from .coordination.coordinator import Coordination
-from .errors import RelationViolationError
-from .registry.registry_document import RegistryEntry
-from .nominal.field_codec import AcpSessionId, FieldCodec
-from .transport.owner_requests import (
-    OwnerRetiredReply,
-    ReadHostResourcesRuntimeRequest,
-    ReadOwnerLaunchRuntimeRequest,
-    RetainedOwnerLaunch,
-    StartOwnerRuntimeRequest,
-    StopOwnerRuntimeRequest,
-)
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity, ProportionalMemory, ResidentMemory
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
+from agent_comms.owner_connection import OwnerConnection
+from agent_comms.registry.registry_document import RegistryEntry
+from agent_comms.registry.registry_store import RegistryReadCounts
+from agent_comms.registry.thread_identity import OwnerIdentity
 from agent_comms.runtime_server import (
     AttachedRuntimeRequestContext,
     RuntimeRequestContext,
@@ -35,14 +26,18 @@ from agent_comms.runtime_server import (
     ServedResultRuntimeRequest,
     SocketClient,
 )
-from .owner_connection import OwnerConnection
-from .registry.thread_identity import OwnerIdentity
-from .tool_result import DeclaredReply
-from .tool_result import ToolResult
-from .registry.registry_store import RegistryReadCounts
+from agent_comms.tool_result import DeclaredReply, ToolResult
+from agent_comms.transport.owner_requests import (
+    OwnerRetiredReply,
+    ReadHostResourcesRuntimeRequest,
+    ReadOwnerLaunchRuntimeRequest,
+    RetainedOwnerLaunch,
+    StartOwnerRuntimeRequest,
+    StopOwnerRuntimeRequest,
+)
 
 if TYPE_CHECKING:
-    from .registry.threads import Thread
+    from agent_comms.registry.threads import Thread
 
 
 @dataclass(frozen=True)

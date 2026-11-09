@@ -6,10 +6,10 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    from .comms import Comms
-    from .plan_reading import PlanReading
-    from .planning.plan_phases import PlanPhase
-    from .registry.threads import Thread
+    from agent_comms.comms import Comms
+    from agent_comms.plan_reading import PlanReading
+    from agent_comms.planning.plan_phases import PlanPhase
+    from agent_comms.registry.threads import Thread
 
 
 class PhaseTask(ABC):

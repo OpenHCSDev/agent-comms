@@ -5,6 +5,7 @@ from agent_comms.assignment_store import AssignmentStore
 from agent_comms.bus_publication import Delivered
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.turn_context import (
     ReplyRouteSegment,
     WireProvenance,
@@ -13,7 +14,6 @@ from agent_comms.messages import (
     InfoKind,
     Message,
 )
-from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.nominal.field_codec import (
     AssignmentId,
     FieldCodec,

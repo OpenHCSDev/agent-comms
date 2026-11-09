@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+import asyncio
+from dataclasses import dataclass
+
 from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import NameArgument
-from agent_comms.cli_commands import ThreadConfiguredResult
+from agent_comms.cli_commands import NameArgument, ThreadConfiguredResult
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
 from agent_comms.registry.threads import NextTurnConfiguration
-from dataclasses import dataclass
-import asyncio
 
 
 @dataclass(frozen=True, kw_only=True)

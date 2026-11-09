@@ -14,28 +14,33 @@ answer to that exact question, through the same owner and policy as every other 
 from __future__ import annotations
 
 from collections.abc import Iterator
-from functools import partial
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
+from agent_comms.bus_publication import Delivered
+from agent_comms.comms import Comms
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.meant_voice import BusVoice
+from agent_comms.nominal.field_codec import ThreadLookup
+from agent_comms.registry.threads import Thread
+from agent_comms.rule_deal import (
+    AuditDue,
+    DealDelivery,
+    DealTrigger,
+    DealtRuleGate,
+    Redeals,
+    RuleDeal,
+    Voice,
+)
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms_hooks.skill import DeckReader, RulesOnly
 
-from .coordination.coordinator import Coordination
-from .bus_publication import Delivered
-from .comms import Comms
-from .nominal.field_codec import ThreadLookup
-from .rule_deal import (
-    AuditDue, DealDelivery, DealTrigger, DealtRuleGate, Redeals, RuleDeal, Voice,
-)
-from .meant_voice import BusVoice
-from .tool_denial import SelectedToolDenied
-from .registry.threads import Thread
-
 if TYPE_CHECKING:
-    from .transport.native_tool_call import NativeToolCall
-    from .registry.registry_document import RegistrySnapshot
-    from .transcript_sources import TranscriptSource
+    from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.transcript_sources import TranscriptSource
+    from agent_comms.transport.native_tool_call import NativeToolCall
 
 
 class RulesUnread(SelectedToolDenied):

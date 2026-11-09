@@ -3,8 +3,8 @@
 from abc import abstractmethod
 from typing import ClassVar
 
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
+from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 
 class RestartRefusal(RelationViolationError, DeclaredFamily, affix="Refusal"):
@@ -19,14 +19,14 @@ class RestartRefusal(RelationViolationError, DeclaredFamily, affix="Refusal"):
 
 class WaitForIdle:
     def queue_state(self):
-        from .restart_queue import PendingRestart
+        from agent_comms.restart_queue import PendingRestart
 
         return PendingRestart()
 
 
 class ChangedSelection:
     def queue_state(self):
-        from .restart_queue import StaleRestart
+        from agent_comms.restart_queue import StaleRestart
 
         return StaleRestart(reason=str(self))
 

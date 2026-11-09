@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from abc import abstractmethod
 
-from .channel_targets import ThreadTarget
-from .comms import Comms
-from .rule_deal import Asked, RuleDeal, Speaking
-from .task_attachments.owner_notices import MeantNotice
+from agent_comms.channel_targets import ThreadTarget
+from agent_comms.comms import Comms
+from agent_comms.rule_deal import Asked, RuleDeal, Speaking
+from agent_comms.task_attachments.owner_notices import MeantNotice
 
 
 class BusVoice(Speaking):

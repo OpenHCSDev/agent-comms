@@ -13,10 +13,9 @@ from pathlib import Path
 from typing import Annotated
 
 import agent_comms
-from ..execution.child_process import ResidentManager
 from agent_comms.connector import LOOPBACK, PORT
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.nominal.field_codec import PathText
+from agent_comms.execution.child_process import ResidentManager
 from agent_comms.harness_install import ConnectorClientHarness, Harness, replace_link
 from agent_comms.installer.runtime_resolution import (
     ConsoleScriptPackage,
@@ -24,6 +23,7 @@ from agent_comms.installer.runtime_resolution import (
     RuntimeResolution,
 )
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.nominal.field_codec import PathText
 
 
 @dataclass(frozen=True)

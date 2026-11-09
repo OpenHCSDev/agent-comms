@@ -10,15 +10,15 @@ from dataclasses import (
 )
 from pathlib import Path
 from typing import (
-    Annotated,
     TYPE_CHECKING,
+    Annotated,
     cast,
 )
 
 from pydantic import JsonValue
 
-from ..errors import RelationViolationError
-from ..nominal.field_codec import (
+from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     FieldRepresentation,
     NullMember,
@@ -27,10 +27,10 @@ from ..nominal.field_codec import (
     SubclassUnion,
     WireOmitDefault,
 )
-from ..repository_name import RepositoryName
+from agent_comms.repository_name import RepositoryName
 
 if TYPE_CHECKING:
-    from ..projects.storage_rules import StorageRule
+    from agent_comms.projects.storage_rules import StorageRule
 
 StoragePath = Annotated[Path, PathText]
 

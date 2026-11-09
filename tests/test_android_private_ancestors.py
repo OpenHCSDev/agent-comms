@@ -1,8 +1,8 @@
 """Android's actual app-data ancestry through the registry and path owners."""
 import os
-from pathlib import Path
 import stat
 import sys
+from pathlib import Path
 
 import pytest
 

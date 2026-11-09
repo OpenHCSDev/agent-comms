@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from ..execution.child_process import ChildOutcome
 from agent_comms.coordination.errors import CoordinationError
+from agent_comms.execution.child_process import ChildOutcome
 from agent_comms.launch_runtime import LaunchRuntime
 
 

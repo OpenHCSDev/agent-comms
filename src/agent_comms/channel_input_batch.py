@@ -6,17 +6,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .input_disposition import InputDispositions
-
-from .input_key import InputKey
-
-from .channel_targets import CommandTarget
-from .input_attempt import StoredInput
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.input_attempt import StoredInput
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_key import InputKey
 
 if TYPE_CHECKING:
-    from .input_disposition import InputDocument
-    from .messages import Message
-    from .registry.threads import Thread
+    from agent_comms.input_disposition import InputDocument
+    from agent_comms.messages import Message
+    from agent_comms.registry.threads import Thread
 
 
 @dataclass(frozen=True)

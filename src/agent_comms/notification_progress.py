@@ -5,18 +5,17 @@ from abc import abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .nominal.declared_family import DeclaredOrder
-from .registry.thread_presentation import (
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.declared_family import DeclaredFamily, DeclaredOrder
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, MessageId, boundary_decoder
+from agent_comms.registry.thread_presentation import (
     ThreadPresentationStatus,
     WorkingThreadPresentationStatus,
 )
 
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId, boundary_decoder
-from .message_reference import MessageReference
 if TYPE_CHECKING:
-    from .message_notification import MessageNotification
-    from .bus_publication import Delivered
+    from agent_comms.bus_publication import Delivered
+    from agent_comms.message_notification import MessageNotification
 
 
 @dataclass(frozen=True)

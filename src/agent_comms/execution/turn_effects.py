@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING
 from acp.schema import PromptRequest
 
 if TYPE_CHECKING:
-    from .session_lifecycle import SessionLifecycle
-    from ..runtime_server import RuntimeServer
-    from .turn_runner import TurnRunner
+    from agent_comms.execution.session_lifecycle import SessionLifecycle
+    from agent_comms.execution.turn_runner import TurnRunner
+    from agent_comms.runtime_server import RuntimeServer
 
 
 class TurnEffects(ABC):

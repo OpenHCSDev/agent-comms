@@ -21,17 +21,13 @@ from pathlib import Path
 from typing import ClassVar, Self
 
 import agent_comms_hooks
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import Platform, ResidentManager
+from agent_comms.host_services import SystemdUserService
+from agent_comms.host_services.codex_inbox import CodexInboxService
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import ScratchName
 from agent_comms_hooks import ClaudeHookProgram
-
-from .execution.child_process import (
-    Platform,
-    ResidentManager,
-)
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import ScratchName
-from .host_services import SystemdUserService
-from .host_services.codex_inbox import CodexInboxService
 
 
 def replace_link(link: Path, target: Path) -> None:

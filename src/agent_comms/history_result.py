@@ -4,13 +4,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .cli_result import CliResult
-from .nominal.field_codec import FieldCodec
-from .messages import Message
-from .tool_result import ToolResult
+from agent_comms.cli_result import CliResult
+from agent_comms.messages import Message
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from .page_traversal import PageCursor
+    from agent_comms.page_traversal import PageCursor
 
 
 @dataclass(frozen=True)

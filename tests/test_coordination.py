@@ -1,7 +1,5 @@
 """Slice-1 store_files, direct-SQL authority and crash/reopen shape tests."""
 
-from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, SnapshotExclude
-
 import os
 import sqlite3
 import subprocess
@@ -12,21 +10,14 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
-from agent_comms.installer.native_build_inputs import ConfiguredChildStdio
-from agent_comms.execution.child_process import SpawnedProcess
-from bus_record_fixture import (
-    OWNER_LOOKUP, RECIPIENT_LOOKUP, RENAMED_OWNER_LOOKUP, UNRELATED_LOOKUP,
-)
-from conftest import maintenance_held
-
-from agent_comms.coordination.tables.executions import NoPointedAttempt, NoPointedExecution, PointedAttempt, PointedExecution
-from agent_comms.reason_codes import NoReasonCode
 from agent_comms.assignment_states import (
     CompletedAssignment,
     EngagedAssignment,
 )
 from agent_comms.attempt_states import (
     AttemptFailedAttempt,
+    AttemptState,
+    LiveAttempt,
     ModelRunningAttempt,
     PromptAcceptedAttempt,
     PromptStartingAttempt,
@@ -34,7 +25,6 @@ from agent_comms.attempt_states import (
     SucceededAttempt,
 )
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.storage.store_files import StoreBusy
 from agent_comms.coordination.errors import IntegrityViolationError, SchemaVersionError
 from agent_comms.coordination.schema import CoordinatorTable
 from agent_comms.coordination.snapshot import RecoverySnapshot
@@ -44,20 +34,25 @@ from agent_comms.coordination.tables.assignments import (
     WakeAssignment,
 )
 from agent_comms.coordination.tables.attempts import AttemptRecord, ReplayFact
-from agent_comms.coordination.tables.executions import NoReplayAssessment, ReplayAssessments
 from agent_comms.coordination.tables.executions import (
+    AcpOrigin,
     CurrentExecutions,
     ExecutionProvenance,
-    WireOrigin,
-    AcpOrigin,
     ExecutionRecord,
+    NoPointedAttempt,
+    NoPointedExecution,
+    NoReplayAssessment,
+    PointedAttempt,
+    PointedExecution,
+    ReplayAssessments,
+    WireOrigin,
 )
 from agent_comms.coordination.tables.participants import OwnerGenerations, Participants
 from agent_comms.coordination.tables.publications import (
     PublicationIntents,
 )
 from agent_comms.coordination.tables.responses import ResponseObligation
-from agent_comms.response_acknowledgement import canonical_publication_key
+from agent_comms.execution.child_process import SpawnedProcess
 from agent_comms.execution_states import (
     ActiveExecution,
     CompletedExecution,
@@ -66,15 +61,26 @@ from agent_comms.execution_states import (
     FailedExecution,
     PendingExecution,
 )
-from agent_comms.attempt_states import AttemptState, LiveAttempt
-from agent_comms.storage.typed_table import HeldBusFile, JsonStorage
+from agent_comms.installer.native_build_inputs import ConfiguredChildStdio
 from agent_comms.messages import InfoKind, Message
+from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, SnapshotExclude
 from agent_comms.obligation_states import (
     PendingResponse,
     ResponseState,
     SilentResponse,
 )
+from agent_comms.reason_codes import NoReasonCode
+from agent_comms.response_acknowledgement import canonical_publication_key
+from agent_comms.storage.store_files import StoreBusy
+from agent_comms.storage.typed_table import HeldBusFile, JsonStorage
 from agent_comms.wake_policy import FullWake
+from bus_record_fixture import (
+    OWNER_LOOKUP,
+    RECIPIENT_LOOKUP,
+    RENAMED_OWNER_LOOKUP,
+    UNRELATED_LOOKUP,
+)
+from conftest import maintenance_held
 
 
 def execution(*, status=PendingExecution, ordinal=None, origin=AcpOrigin):

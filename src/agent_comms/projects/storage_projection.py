@@ -5,22 +5,15 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
-from .checkouts import (
-    Checkout,
-    RepositoryReads,
-)
-from .repository_sources import RepositorySource
-from .storage_rules import (
-    CheckoutAllocation,
-    StorageRule,
-    UnitStorage,
-)
-from ..comms import Comms
-from ..transport.native_tool_call import CodingCall
-from ..registry.registry_document import RegistrySnapshot
-from ..registry.threads import Thread
-from ..shell_effects import StorageEffect
-from ..storage_admission import StorageAdmission
+from agent_comms.comms import Comms
+from agent_comms.projects.checkouts import Checkout, RepositoryReads
+from agent_comms.projects.repository_sources import RepositorySource
+from agent_comms.projects.storage_rules import CheckoutAllocation, StorageRule, UnitStorage
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.threads import Thread
+from agent_comms.shell_effects import StorageEffect
+from agent_comms.storage_admission import StorageAdmission
+from agent_comms.transport.native_tool_call import CodingCall
 
 
 @dataclass

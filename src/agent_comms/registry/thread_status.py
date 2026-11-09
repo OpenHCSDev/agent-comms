@@ -8,33 +8,23 @@ from dataclasses import (
     replace,
 )
 from typing import (
+    TYPE_CHECKING,
     ClassVar,
     Self,
-    TYPE_CHECKING,
 )
 
-from ..execution.child_process import (
+from agent_comms.errors import RelationViolationError, ThreadNotStoppedError, ThreadNotVisibleError
+from agent_comms.execution.child_process import (
     ProcessFence,
     ProcessIdentity,
     ProcessSighting,
     ProcessState,
 )
-from ..errors import (
-    RelationViolationError,
-    ThreadNotStoppedError,
-    ThreadNotVisibleError,
-)
-from ..execution.turn_lease import (
-    FinishedTurnFence,
-    NoFinishedTurn,
-)
-from ..lifecycle_capability import LifecycleCapability
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
-    FieldCodec,
-    TextRepresentation,
-)
-from .thread_presentation import (
+from agent_comms.execution.turn_lease import FinishedTurnFence, NoFinishedTurn
+from agent_comms.lifecycle_capability import LifecycleCapability
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, TextRepresentation
+from agent_comms.registry.thread_presentation import (
     InactiveThreadPresentationStatus,
     LiveThreadOwnerBinding,
     ThreadOwnerBinding,
@@ -43,24 +33,18 @@ from .thread_presentation import (
 )
 
 if TYPE_CHECKING:
-    from .registry_document import (
+    from agent_comms.activity import ObservedActivity
+    from agent_comms.execution.turn_item import SourceTurn
+    from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
+    from agent_comms.message_reference import MessageReference
+    from agent_comms.messaging.sending import Messaging
+    from agent_comms.registry.registry_document import (
         RegistryEntry,
         RegistrySnapshot,
         RosterVisibility,
     )
-    from .threads import Thread
-    from ..activity import ObservedActivity
-    from ..execution.turn_item import SourceTurn
-    from ..execution.turn_lease import (
-        TurnCompletion,
-        TurnLeaseFence,
-    )
-    from ..message_reference import MessageReference
-    from ..messaging.sending import Messaging
-    from .thread_identity import (
-    GenerationCounter,
-    OwnerIdentity,
-)
+    from agent_comms.registry.thread_identity import GenerationCounter, OwnerIdentity
+    from agent_comms.registry.threads import Thread
 
 
 class AlwaysListed:

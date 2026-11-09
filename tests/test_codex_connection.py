@@ -1,7 +1,7 @@
 """Decoded replies deliver their own meaning without a second type switch."""
 import asyncio
-from contextlib import nullcontext
 import json
+from contextlib import nullcontext
 from types import SimpleNamespace
 
 import aiohttp
@@ -9,7 +9,13 @@ import pytest
 
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.cli_bridges.codex_protocol import (
-    Capabilities, ClientInfo, CodexDraining, CodexRefused, Initialize, MessageInput, TextInput,
+    Capabilities,
+    ClientInfo,
+    CodexDraining,
+    CodexRefused,
+    Initialize,
+    MessageInput,
+    TextInput,
 )
 
 

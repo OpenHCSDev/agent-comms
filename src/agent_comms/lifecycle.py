@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import ClassVar, Self
 
-from .lifecycle_capability import LifecycleCapability
+from agent_comms.lifecycle_capability import LifecycleCapability
 
 
 class LifecycleState(LifecycleCapability, ABC):

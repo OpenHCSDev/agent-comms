@@ -7,11 +7,20 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import (
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.input_key import InputKey, InputKeyText, PublicInputKeyText
+from agent_comms.input_origin import (
+    InputDelivery,
+    InputOrigin,
+    InputProvenance,
+    UnattributedInputOrigin,
+    UndeliveredInput,
+)
+from agent_comms.lifecycle_capability import LifecycleCapability, Unresolved
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     FieldCodec,
-    boundary_decoder,
     GoalId,
     InputId,
     NullMember,
@@ -21,29 +30,17 @@ from .nominal.field_codec import (
     WireName,
     WireOmitDefault,
     WireRequired,
+    boundary_decoder,
 )
-from .input_key import InputKey, InputKeyText, PublicInputKeyText
-from .input_origin import (
-    InputDelivery,
-    InputOrigin,
-    InputProvenance,
-    UnattributedInputOrigin,
-    UndeliveredInput,
-)
-from .lifecycle_capability import LifecycleCapability, Unresolved
-from .execution.native_input_proof import NativeContextProof
-from .notification_evidence import ConsumptionEvidence
-from .notification_progress import DeliveryProgress, ShownToModelProgress
-from .reported_turn import ReportedTurnState
-from .text_digest import TextDigest
-from .registry.thread_identity import (
-    GenerationCounter,
-    ThreadIncarnation,
-)
+from agent_comms.notification_evidence import ConsumptionEvidence
+from agent_comms.notification_progress import DeliveryProgress, ShownToModelProgress
+from agent_comms.registry.thread_identity import GenerationCounter, ThreadIncarnation
+from agent_comms.reported_turn import ReportedTurnState
+from agent_comms.text_digest import TextDigest
 
 if TYPE_CHECKING:
-    from .registry.registry_document import RegistrySnapshot
-    from .execution.turn_lease import TurnLeaseFence
+    from agent_comms.execution.turn_lease import TurnLeaseFence
+    from agent_comms.registry.registry_document import RegistrySnapshot
 
 
 class InputAlreadyCleared(RelationViolationError):

@@ -24,14 +24,11 @@ from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
-from .projects.repo import Repo
-from .projects.checkouts import (
-    Checkout,
-    CheckoutHistory,
-)
+from agent_comms.projects.checkouts import Checkout, CheckoutHistory
+from agent_comms.projects.repo import Repo
 
 if TYPE_CHECKING:
-    from .plan_reading import PlanReading
+    from agent_comms.plan_reading import PlanReading
 
 
 @dataclass(frozen=True)
@@ -362,7 +359,7 @@ class PatternEvidence(MainEvidence):
 
     def searched(self, main: MainTree) -> tuple[str, ...]:
         """``paths`` without the phase declarations, which spell every pattern they ban."""
-        from .planning.plan_phases import PlanPhase
+        from agent_comms.planning.plan_phases import PlanPhase
 
         declaration = main.repo.module_file(PlanPhase.__module__)
         return (*self.paths, f":!{declaration.as_posix()}")

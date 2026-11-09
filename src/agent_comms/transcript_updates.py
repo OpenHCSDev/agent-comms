@@ -9,21 +9,18 @@ from typing import TYPE_CHECKING
 
 from acp.schema import AgentMessageChunk, TextContentBlock
 
-from .acp_extension import (
-    TurnChangedUpdate,
-    encode_updates,
-)
-from .coordination.coordinator import Coordination
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import AcpSessionId
-from .transport.tools.reads import TranscriptPageRead
-from .execution.turn_lease import TurnState
-from .ui_model.observation import ReadTranscript
+from agent_comms.acp_extension import TurnChangedUpdate, encode_updates
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.turn_lease import TurnState
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import AcpSessionId
+from agent_comms.transport.tools.reads import TranscriptPageRead
+from agent_comms.ui_model.observation import ReadTranscript
 
 if TYPE_CHECKING:
-    from .acp_extension import TranscriptSnapshotUpdate
-    from .comms import Comms
-    from .controller import SessionUpdateSink
+    from agent_comms.acp_extension import TranscriptSnapshotUpdate
+    from agent_comms.comms import Comms
+    from agent_comms.controller import SessionUpdateSink
 
 
 @dataclass(frozen=True, kw_only=True)

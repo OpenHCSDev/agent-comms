@@ -1,12 +1,13 @@
 """Read real persisted notification assignments without scheduling a model."""
+from dataclasses import replace
+
+from agent_comms.nominal.field_codec import TurnId
 from agent_comms.notification_assignment import NotificationSelection
 from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.projects.checkouts import Checkout
-from dataclasses import replace
-from test_coordinated_runtime import _root, tmp_path  # noqa: F401
-from conftest import installed_comms
-from agent_comms.nominal.field_codec import TurnId
 from agent_comms.registry.threads import NativeThread
+from conftest import installed_comms
+from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 
 def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F811

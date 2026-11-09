@@ -11,16 +11,13 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .input_drain import WakeScheduleCheck
-from ..agent_event_updates import AcpEventConsumer
-from .child_process import ProcessIdentity
-from ..coordination.coordinator import Coordination
-from ..errors import (
-    GoalAttemptError,
-    GoalRefused,
-    RelationViolationError,
-)
-from ..planning.goal_actions import (
+from agent_comms.agent_event_updates import AcpEventConsumer
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.errors import GoalAttemptError, GoalRefused, RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_drain import WakeScheduleCheck
+from agent_comms.nominal.field_codec import AcpSessionId, GoalId
+from agent_comms.planning.goal_actions import (
     EditGoalAction,
     GoalAction,
     GoalPrecondition,
@@ -29,37 +26,20 @@ from ..planning.goal_actions import (
     RetryGoalAction,
     SetGoalAction,
 )
-from ..planning.goal_presentation import (
-    GoalPublicationSnapshot,
-    UnpublishedGoalSnapshot,
-)
-from ..planning.goal_scope import OneGoal
-from ..planning.goals import (
-    Goal,
-    GoalDeclaration,
-    GoalRevision,
-)
-from ..nominal.field_codec import (
-    AcpSessionId,
-    GoalId,
-)
-from ..registry.registry_document import (
-    RegistryDocument,
-    RegistrySnapshot,
-)
-from ..registry.threads import NativeThread
-from ..reservation_rules import ReservationViolationError
-from ..routing import ScheduledTurn
-from ..storage.locked_store import GoalWakeFile
+from agent_comms.planning.goal_presentation import GoalPublicationSnapshot, UnpublishedGoalSnapshot
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goals import Goal, GoalDeclaration, GoalRevision
+from agent_comms.registry.registry_document import RegistryDocument, RegistrySnapshot
+from agent_comms.registry.threads import NativeThread
+from agent_comms.reservation_rules import ReservationViolationError
+from agent_comms.routing import ScheduledTurn
+from agent_comms.storage.locked_store import GoalWakeFile
 
 if TYPE_CHECKING:
-    from .input_drain import (
-        InputDrain,
-        OwnerSession,
-    )
-    from .session_lifecycle import SessionLifecycle
-    from ..comms import Comms
-    from .turn_effects import TurnEffects
+    from agent_comms.comms import Comms
+    from agent_comms.execution.input_drain import InputDrain, OwnerSession
+    from agent_comms.execution.session_lifecycle import SessionLifecycle
+    from agent_comms.execution.turn_effects import TurnEffects
 
 GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
 

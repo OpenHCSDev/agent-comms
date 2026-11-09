@@ -7,12 +7,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-from .errors import RelationViolationError
-from .nominal.field_codec import NullMember, PathText, RecordMember, SubclassUnion, WireTransient
-from .unstarted_runtime import UnstartedRuntime
+from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.field_codec import (
+    NullMember,
+    PathText,
+    RecordMember,
+    SubclassUnion,
+    WireTransient,
+)
+from agent_comms.unstarted_runtime import UnstartedRuntime
 
 if TYPE_CHECKING:
-    from .agent_backend import AgentBackend, RuntimeLocation
+    from agent_comms.agent_backend import AgentBackend, RuntimeLocation
 
 
 class SessionFile(SubclassUnion, affix="SessionFile"):

@@ -18,15 +18,18 @@ from typing import (
     TextIO,
 )
 
+import agent_comms.cli_bridges
+from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.storage.store_files import AtomicFile
 from agent_comms_hooks.process_claim import ProcessSingleton
 from agent_comms_hooks.watch import (
-    HeldSocketWatch, SessionCommandError, SessionEndpoint, SessionFailure, SocketWatch, WatchRecord,
+    HeldSocketWatch,
+    SessionCommandError,
+    SessionEndpoint,
+    SessionFailure,
+    SocketWatch,
+    WatchRecord,
 )
-
-from ..registry.registry_store import RegistryStore
-from ..storage.store_files import AtomicFile
-
-import agent_comms.cli_bridges
 
 
 class SessionRefusedError(ValueError, SessionFailure):

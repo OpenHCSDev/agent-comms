@@ -10,17 +10,17 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
 from pathlib import Path
-from typing import ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
-from ..coordination.errors import IdentityConflict
-from ..launch_runtime import LaunchRuntime
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
-from ..pi_vocabulary import NoThinkingOverride, ThinkingChoice, ThinkingLevel
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.pi_vocabulary import NoThinkingOverride, ThinkingChoice, ThinkingLevel
 
 if TYPE_CHECKING:
-    from .owner_lifecycle import OwnerLifecycle
-    from ..registry.thread_model import ThreadModel
+    from agent_comms.execution.owner_lifecycle import OwnerLifecycle
+    from agent_comms.registry.thread_model import ThreadModel
 
 
 @dataclass(frozen=True)
@@ -382,7 +382,7 @@ class NativeArguments:
 
     def managed_rpc(self, package: Path) -> tuple[str, ...]:
         """Managed sessions load only the packaged extensions, never discovered copies of them."""
-        from ..transport.native_tools import NativeToolDeclaration
+        from agent_comms.transport.native_tools import NativeToolDeclaration
 
         return ("--no-extensions", *NativeToolDeclaration.extension_arguments(package), *self.rpc())
 

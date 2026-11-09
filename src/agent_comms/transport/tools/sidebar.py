@@ -9,25 +9,35 @@ from typing import Annotated
 
 from pydantic import JsonValue
 
+from agent_comms.acp_extension import CoordinationChangedUpdate
 from agent_comms.channel_targets import ChannelSelection, CommandTarget, NamedTarget, NoChannel
-
-from ...acp_extension import CoordinationChangedUpdate
-from ...channels import Channel
-from ...execution.child_process import ProcessIdentity
-from ...cli_command import PreparedTargetAction, TargetAction, TargetEdit
-from ...cli_result import TargetEditResult
-from ...context_store import (
+from agent_comms.channels import Channel
+from agent_comms.cli_command import PreparedTargetAction, TargetAction, TargetEdit
+from agent_comms.cli_result import TargetEditResult
+from agent_comms.context_store import (
     LATEST_CONTEXT,
     CapturedContext,
     ContextManifestCursor,
     ContextManifestPage,
     ContextManifestReference,
 )
-from ...display_order import ChannelSort, ThreadSort
-from ...display_references import ReferenceNames
-from ...exporting import WireExportFormat, WireExportLimit, WireExportProvenance, WireExportScope
-from ...harness_install import Harness
-from ...historical_views import (
+from agent_comms.display_order import ChannelSort, ThreadSort
+from agent_comms.display_references import ReferenceNames
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.turn_context import (
+    CodexRolloutProvenance,
+    ContextSourceText,
+    Provenance,
+    SegmentManifest,
+)
+from agent_comms.exporting import (
+    WireExportFormat,
+    WireExportLimit,
+    WireExportProvenance,
+    WireExportScope,
+)
+from agent_comms.harness_install import Harness
+from agent_comms.historical_views import (
     AllHistoricalSenders,
     ConversationObservation,
     ConversationRevision,
@@ -35,52 +45,39 @@ from ...historical_views import (
     HistoricalThread,
     UnobservedConversation,
 )
-from ...history_views import RetiredViews
-from ...importing import ThreadImported
-from ...input_origin import HumanInputOrigin
-from ...messaging.message_page import (
-    NEWEST_PAGE,
-    MessagePage,
-    PageBounds,
-)
-from ...nominal.declared_family import DeclaredFamily
-from ...nominal.field_codec import ThreadLookup, WireName
-from ...page_traversal import LatestSequence
-from ...presentation import WireRevision
-from ...registry.registry_document import (
+from agent_comms.history_views import RetiredViews
+from agent_comms.importing import ThreadImported
+from agent_comms.input_origin import HumanInputOrigin
+from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import ThreadLookup, WireName
+from agent_comms.page_traversal import LatestSequence
+from agent_comms.presentation import WireRevision
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_document import (
     ProjectThreadSelection,
     RegistryEntry,
     RegistrySlice,
     RegistrySnapshot,
 )
-from ...registry.threads import Thread
-from ...relationships import SortableRelationshipGroup, ThreadCommsSnapshot
-from ...projects.checkouts import Checkout
-from ..runtime_request import RuntimeRequest
-from ...send_result import MessagePublished
-from ...served_bus import ServedBus, UnidentifiedBus
-from ...session_revision import SessionObservation
-from ...registry.thread_identity import (
-    ClaimedIdentity,
-    ThreadIncarnation,
-)
-from ...registry.thread_management import (
+from agent_comms.registry.thread_identity import ClaimedIdentity, ThreadIncarnation
+from agent_comms.registry.thread_management import (
     ImportDirectory,
     ProjectChangeResult,
     RenameThreadResult,
 )
-from ...registry.thread_presentation import ThreadPresentation
-from ...registry.thread_text import ExpectedSession
-from ...tool_result import ToolResult
-from ...transcripts import TranscriptCursor
-from ...execution.turn_context import (
-    CodexRolloutProvenance,
-    ContextSourceText,
-    Provenance,
-    SegmentManifest,
-)
-from ...working_memory_labels import ModelLabel
-from ..request import ObservedRequest, ReadRequest, ToolRequest, tool_field
+from agent_comms.registry.thread_presentation import ThreadPresentation
+from agent_comms.registry.thread_text import ExpectedSession
+from agent_comms.registry.threads import Thread
+from agent_comms.relationships import SortableRelationshipGroup, ThreadCommsSnapshot
+from agent_comms.send_result import MessagePublished
+from agent_comms.served_bus import ServedBus, UnidentifiedBus
+from agent_comms.session_revision import SessionObservation
+from agent_comms.tool_result import ToolResult
+from agent_comms.transcripts import TranscriptCursor
+from agent_comms.transport.request import ObservedRequest, ReadRequest, ToolRequest, tool_field
+from agent_comms.transport.runtime_request import RuntimeRequest
+from agent_comms.working_memory_labels import ModelLabel
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -1,8 +1,8 @@
 """Retire the delivery discriminator only when it agrees with the retained claim."""
 
+import sqlite3
 from contextlib import closing
 from pathlib import Path
-import sqlite3
 from typing import ClassVar
 
 from agent_comms.cohort_schema import ClaimBatchAcknowledgements, CohortDeliveries

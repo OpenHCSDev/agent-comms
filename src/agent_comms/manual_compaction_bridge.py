@@ -6,35 +6,35 @@ from contextlib import AsyncExitStack
 from functools import partial
 from typing import TYPE_CHECKING
 
+from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 from metaclass_registry.mro_dispatch import (
     MroDispatch,
     handles,
 )
 
-from .coordination.errors import Refused
-from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
-
-from . import agent_events as events
-from .nominal.field_codec import AcpSessionId, TurnId
-from .acp_extension import CompactionCommittedUpdate, TranscriptChangedUpdate, encode_updates
-from .transcripts import UnreadTranscriptCursor
-from .agent_backend import (
+from agent_comms import agent_events as events
+from agent_comms.acp_extension import (
+    CompactionCommittedUpdate,
+    TranscriptChangedUpdate,
+    encode_updates,
+)
+from agent_comms.agent_backend import (
     CompactionOutcome,
     FailedCompaction,
     NothingToCompaction,
     PlacedCompaction,
     StaleCompaction,
 )
-from .agent_event_updates import TurnEventConsumer
-from .coordination.coordinator import Coordination
-from .pi_vocabulary import ManualCompactionReason
-from .execution.turn_phase import (
-    CompactionPhase,
-    PublishingPhase,
-)
+from agent_comms.agent_event_updates import TurnEventConsumer
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import Refused
+from agent_comms.execution.turn_phase import CompactionPhase, PublishingPhase
+from agent_comms.nominal.field_codec import AcpSessionId, TurnId
+from agent_comms.pi_vocabulary import ManualCompactionReason
+from agent_comms.transcripts import UnreadTranscriptCursor
 
 if TYPE_CHECKING:
-    from .execution.turn_runner import TurnRunner
+    from agent_comms.execution.turn_runner import TurnRunner
 
 
 class CompactionReply(MroDispatch):

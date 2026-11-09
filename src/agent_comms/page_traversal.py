@@ -3,28 +3,29 @@
 from __future__ import annotations
 
 import re
-
 from abc import abstractmethod
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .tool_result import ToolResult
-from .nominal.field_codec import (
-    TaggedUnion,
-    NominalSpelling, NominalText, NullMember, RecordMember, SingleFieldValue, SubclassUnion,
+from agent_comms.nominal.field_codec import (
+    NominalSpelling,
+    NominalText,
+    NullMember,
+    RecordMember,
+    SingleFieldValue,
+    SubclassUnion,
     TaggedRecordMember,
+    TaggedUnion,
 )
+from agent_comms.tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from .bus import BusReader
-    from .messaging.message_page import (
-        MessagePage,
-        PageWindow,
-    )
-    from .messages import Message, MessageKind
-    from .read_basis import MessageDisplayScope
+    from agent_comms.bus import BusReader
+    from agent_comms.messages import Message, MessageKind
+    from agent_comms.messaging.message_page import MessagePage, PageWindow
+    from agent_comms.read_basis import MessageDisplayScope
 
 
 class HistorySourceKey(NominalText):

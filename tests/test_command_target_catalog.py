@@ -1,15 +1,19 @@
 """Target families never disguise a broken binding as an unavailable command."""
 
-from pathlib import Path
-from agent_comms.projects.checkouts import Checkout
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import pytest
 
 from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, ProjectTarget
 from agent_comms.cli_command import (
+    CliCommand,
+    OneTarget,
     TargetActionCommand,
-    CliCommand, OneTarget, TargetBatch, TargetBatchResult, TargetCompleted, TargetFailed,
+    TargetBatch,
+    TargetBatchResult,
+    TargetCompleted,
+    TargetFailed,
 )
 from agent_comms.cli_commands import ThreadStoppedResult
 from agent_comms.cli_result import ResultShower
@@ -19,6 +23,7 @@ from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
 from agent_comms.cli_verbs.restart import RestartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.thread_status import (
     ArchivedThreadStatus,

@@ -18,33 +18,32 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self
 
-from agent_comms_hooks import ToolRefusedError
-
-from ..execution.child_process import ProcessIdentity
-from ..coordination.errors import DrainUnavailable
-from .private_path import FileObservation, FileRevision, PrivateFileRole
-from ..nominal.declared_family import DeclaredFamily
-from ..errors import RelationViolationError
-from ..nominal.field_codec import (
-    FieldCodec,
+from agent_comms.coordination.errors import DrainUnavailable
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.lifecycle import LifecycleState
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     ClaimId,
+    FieldCodec,
     MalformedRecord,
     NullMember,
     RecordMember,
     SubclassUnion,
     WireOmitDefault,
 )
-from ..launch_runtime import LaunchRuntime
-from ..lifecycle import LifecycleState
-from .locked_store import DurableFile, LockedStore, RegistryFile, WrittenFile
-from ..send_outcome import GrantedSend, HeldSend
-from .store_files import (
+from agent_comms.send_outcome import GrantedSend, HeldSend
+from agent_comms.storage.locked_store import DurableFile, LockedStore, RegistryFile, WrittenFile
+from agent_comms.storage.private_path import FileObservation, FileRevision, PrivateFileRole
+from agent_comms.storage.store_files import (
+    UNBOUNDED_STORE_READ,
     AtomicFile,
     RegistryLocking,
     StoreLock,
     StoreReadBudget,
-    UNBOUNDED_STORE_READ,
 )
+from agent_comms_hooks import ToolRefusedError
 
 
 class MaintenanceHeldError(RelationViolationError, ToolRefusedError, DrainUnavailable):

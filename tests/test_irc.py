@@ -1,30 +1,31 @@
 """IRC model: channels, DMs, presence, history views."""
 from pathlib import Path
 
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.channel_targets import CommandTarget, DeclaredTag
 import pytest
 
-from agent_comms.registry.registration import Registration
-from agent_comms.registry.registry_store import UncachedRegistry
+from agent_comms.channel_targets import CommandTarget, DeclaredTag
 from agent_comms.channels import AllChannel, BuiltinChannelView
 from agent_comms.comms import wire
-from conftest import installed_comms
 from agent_comms.errors import UnknownChannelError, UnregisteredThreadError
-from agent_comms.messages import Message, InfoKind
+from agent_comms.messages import InfoKind, Message
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.read_basis import NamedViewer
-from bus_history import read_history
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_store import UncachedRegistry
 from agent_comms.registry.thread_text import (
     ForkedParent,
     GivenThreadText,
 )
 from agent_comms.registry.threads import NativeThread
+from bus_history import read_history
+from conftest import installed_comms
 
 
 @pytest.fixture
 def chat(comms):
     """ci/docs join the declared tags; PR111 is owned by this actual process."""
     import os
+
     from agent_comms.execution.child_process import ProcessIdentity
     from conftest import declare_test_bus
 

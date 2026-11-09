@@ -39,19 +39,16 @@ from agent_comms.active_route import (
 )
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
-from agent_comms.cli_commands import BusReadBack, StoreDifference
 from agent_comms.cli_command import CliCommand
+from agent_comms.cli_commands import BusReadBack, StoreDifference
+from agent_comms.cli_result import CliResult
 from agent_comms.cli_verbs.planned_reconcile import PlannedReconcileCliCommand
 from agent_comms.cli_verbs.read_back import ReadBackCliCommand
 from agent_comms.cli_verbs.reconcile_stores import ReconcileStoresCliCommand
 from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.cli_verbs.target_action import TargetActionCliCommand
-from agent_comms.cli_result import CliResult
 from agent_comms.coordination.errors import CoordinationReadUnavailable
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import PathText
-from agent_comms.storage.typed_table import ExternalStore
 from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice
 from agent_comms.installer.backup import (
@@ -86,7 +83,6 @@ from agent_comms.installer.interpreter_operation import (
     PracticePhase,
     PreparePhase,
     ProcessScanPhase,
-    RuntimeRetirementPhase,
     ReadBackVerifyPhase,
     ReleaseBridgePhase,
     RestoredCheckoutPreparePhase,
@@ -94,6 +90,7 @@ from agent_comms.installer.interpreter_operation import (
     RetargetMaintenancePhase,
     RouteAndRuntimePublicationPhase,
     RuntimePublicationPhase,
+    RuntimeRetirementPhase,
     StartingReportPublicationPhase,
     StartServicesPhase,
     StopServicesPhase,
@@ -102,7 +99,6 @@ from agent_comms.installer.interpreter_operation import (
     TargetProgram,
 )
 from agent_comms.installer.owner_starts import OwnerStart
-from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.practice import (
     PracticeCopy,
     PracticeMeasurement,
@@ -127,38 +123,55 @@ from agent_comms.installer.probes.commands import (
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.installer.probes.owners import OwnerActionsProbe, RunningOwnersProbe
 from agent_comms.installer.probes.publication import PublicationProbe, SelectedRouteProbe
+from agent_comms.installer.probes.report import InstallReportProbe
 from agent_comms.installer.probes.services import ServingProbe
 from agent_comms.installer.refusals import (
-    InstallRolledBack, OwnersNotRestarted, UpgradeRefused,
+    InstallRolledBack,
+    OwnersNotRestarted,
+    RuntimeWireChanged,
+    UpgradeRefused,
 )
-from agent_comms.installer.reporting import RootWriter, UnpostedWriter
+from agent_comms.installer.reporting import (
+    InstallOutcome,
+    RootWriter,
+    UnfinishedInstall,
+    UnpostedWriter,
+)
+from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.runtime_resolution import RuntimeResolution
+from agent_comms.installer.runtime_retention import (
+    RetirementOutcome,
+    RuntimeRetention,
+    SweptRetirement,
+)
 from agent_comms.installer.runtime_stack import Extendable, RuntimeStack, TargetRuntime
 from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.installer.target_tree import TargetTree
-from agent_comms.installer.refusals import RuntimeWireChanged
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import PathText
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.recorded_bus import RecordedBusIdentity
+from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
+from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.storage.locked_store import (
-    BusFile, DeclaredFile, FilesRequest, InstallationFiles, LiveFilesRequest, UndeclaredFile,
+    BusFile,
+    DeclaredFile,
+    FilesRequest,
+    InstallationFiles,
+    LiveFilesRequest,
+    UndeclaredFile,
 )
 from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
     MaintenanceState,
 )
-from agent_comms.recorded_bus import RecordedBusIdentity
-from agent_comms.registry.registry_store import RegistryStore
-from ..projects.repo import Repo
-from ..projects.checkouts import Checkout
-from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
-from agent_comms.installer.runtime_retention import (
-    RetirementOutcome, RuntimeRetention, SweptRetirement,
-)
-from agent_comms.runtime_processes import RuntimeProcesses
-from ..projects.storage_rules import StorageRule
+from agent_comms.storage.typed_table import ExternalStore
 
-from agent_comms.installer.probes.report import InstallReportProbe
-from agent_comms.installer.reporting import InstallOutcome, UnfinishedInstall
 if TYPE_CHECKING:
     from agent_comms.installer.launch import InstallReport
 

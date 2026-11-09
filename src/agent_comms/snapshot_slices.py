@@ -10,7 +10,7 @@ from collections.abc import Mapping, MutableMapping
 from types import MappingProxyType
 from typing import Self
 
-from .nominal.field_codec import FieldCodec, FieldPlan, SlicePolicy
+from agent_comms.nominal.field_codec import FieldCodec, FieldPlan, SlicePolicy
 
 
 class ThreadSlice[Value](ABC):

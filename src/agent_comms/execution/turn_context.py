@@ -17,25 +17,23 @@ from importlib.resources import files
 from pathlib import Path
 from types import MappingProxyType
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     ClassVar,
     Self,
-    TYPE_CHECKING,
 )
 
 from pydantic import JsonValue
 
-from .. import instructions
-from ..annotation_disclosure import (
-    PublicInstructionAnnotations,
-    WithheldAnnotations,
-)
-from ..cli_result import CliResult
-from ..errors import RelationViolationError
-from ..message_reference import MessageReference
-from .native_session_reopen import NativeSessionIdentity
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
+from agent_comms import instructions
+from agent_comms.annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
+from agent_comms.cli_result import CliResult
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+from agent_comms.execution.turn_item import NativeItemId, PiRequestKey
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     IdentityExclude,
     NullMember,
@@ -45,36 +43,19 @@ from ..nominal.field_codec import (
     TurnId,
     WireOmitDefault,
 )
-from ..peer_relevance import (
-    AlwaysListed,
-    GoalShown,
-    PeerRelevance,
-)
-from ..planning.goals import (
-    Goal,
-    NoGoal,
-)
-from ..projects.checkouts import Checkout
-from ..registry.thread_identity import (
-    ThreadIncarnation,
-    TurnIdentity,
-)
-from ..tool_result import (
-    DeclaredReply,
-    ToolResult,
-)
-from .turn_item import (
-    NativeItemId,
-    PiRequestKey,
-)
-from ..wake_policy import WakePolicy
+from agent_comms.peer_relevance import AlwaysListed, GoalShown, PeerRelevance
+from agent_comms.planning.goals import Goal, NoGoal
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import ThreadIncarnation, TurnIdentity
+from agent_comms.tool_result import DeclaredReply, ToolResult
+from agent_comms.wake_policy import WakePolicy
 
 if TYPE_CHECKING:
-    from ..context_store import RecordedContextState
-    from ..input_attempt import StoredInput
-    from ..presentation import ThreadView
-    from ..registry.threads import Thread
-    from ..relationships import PeerRelation
+    from agent_comms.context_store import RecordedContextState
+    from agent_comms.input_attempt import StoredInput
+    from agent_comms.presentation import ThreadView
+    from agent_comms.registry.threads import Thread
+    from agent_comms.relationships import PeerRelation
 
 
 @dataclass(frozen=True)
@@ -146,7 +127,7 @@ class CodexRolloutProvenance(Provenance):
                 "· not current instructions")
 
     def public_text(self, comms) -> str:
-        from ..cli_bridges.codex_rollout import ROLLOUT_RECORD
+        from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD
 
         if min(self.offset, self.length, self.instruction) < 0:
             raise ValueError("Historical Codex source coordinates must be nonnegative")
@@ -1015,12 +996,12 @@ class NativeMessages:
         return list(self.messages)
 
     def public_text(self) -> str:
-        from ..pi_payloads import PiMessage
+        from agent_comms.pi_payloads import PiMessage
 
         return "\n".join(PiMessage.from_wire(message).text for message in self.messages)
 
     def source_ranges(self) -> tuple[ContributionCoordinates, ...]:
-        from ..pi_payloads import PiMessage
+        from agent_comms.pi_payloads import PiMessage
 
         offset = 0
         ranges = []
@@ -1040,7 +1021,7 @@ class NativeAnnotations(NativeMessages):
     """A transcript span keeps the disclosure policy of its original native message."""
 
     def disclosure_for(self, span: ContextSpan):
-        from ..pi_payloads import PiMessage
+        from agent_comms.pi_payloads import PiMessage
 
         for source, message in zip(self.source_ranges(), self.messages, strict=True):
             if source.contains(span.coordinates):
@@ -1466,8 +1447,8 @@ class TurnContext(DeclaredReply):
 
         Its relationships, the messages addressed to it and its partners' goal changes.
         """
-        from ..context_segments.partner_activity import PartnerActivitySegment
-        from ..context_segments.relationships import RelationshipsSegment
+        from agent_comms.context_segments.partner_activity import PartnerActivitySegment
+        from agent_comms.context_segments.relationships import RelationshipsSegment
 
         context = self
         for segment in (

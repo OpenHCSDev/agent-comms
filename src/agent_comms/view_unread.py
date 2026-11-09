@@ -12,25 +12,22 @@ from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
 from threading import Event, RLock
-from typing import TYPE_CHECKING, ClassVar, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar
 from weakref import WeakValueDictionary, finalize
 
-from .agent_backend import RuntimeLocation
-from .coordination.errors import CoordinationReadUnavailable
-from .storage.locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
-from .storage.store_files import StoreBusy
-from .bus import Bus
-from .execution.native_entries import NativeEntry
-from .execution.native_transcript import SessionCut, record_end, reverse_records
-from .storage.private_path import FileObservation, FileRevision, MissingFile
-from .messaging.read_ledger import (
-    ReadDocument,
-    ReadLedger,
-)
-from .registry.registry_document import RosterVisibility
-from .registry.thread_identity import ThreadIncarnation
-from .registry.thread_owned_state import ThreadOwnedState
-from .storage.typed_table import (
+from agent_comms.agent_backend import RuntimeLocation
+from agent_comms.bus import Bus
+from agent_comms.coordination.errors import CoordinationReadUnavailable
+from agent_comms.execution.native_entries import NativeEntry
+from agent_comms.execution.native_transcript import SessionCut, record_end, reverse_records
+from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
+from agent_comms.registry.registry_document import RosterVisibility
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_owned_state import ThreadOwnedState
+from agent_comms.storage.locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
+from agent_comms.storage.private_path import FileObservation, FileRevision, MissingFile
+from agent_comms.storage.store_files import StoreBusy
+from agent_comms.storage.typed_table import (
     Column,
     JsonStorage,
     SQLiteTableName,
@@ -39,12 +36,17 @@ from .storage.typed_table import (
     TypedTable,
     WithoutRowid,
 )
-from .ui_model.unread import CappedReplyUnread, IndexingUnread, ReplyUnread, UnreadPresentation
-from .watched import FileSource
+from agent_comms.ui_model.unread import (
+    CappedReplyUnread,
+    IndexingUnread,
+    ReplyUnread,
+    UnreadPresentation,
+)
+from agent_comms.watched import FileSource
 
 if TYPE_CHECKING:
-    from .registry.registry_document import RegistrySnapshot
-    from .registry.threads import Thread
+    from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.registry.threads import Thread
 
 _INDEX_VERSION = 8
 

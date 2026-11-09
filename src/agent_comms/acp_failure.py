@@ -10,28 +10,33 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, Annotated
-
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, NoReturn
 
 if TYPE_CHECKING:
-    from agent_comms.pi_payloads import NativeMessageFailureSource
     from acp import RequestError
 
-    from .controller import SessionUpdateSink
-    from .agent_events import Done, Error
-    from .input_disposition import InputDocument
-    from .execution.turn_failure import TurnFailure
-    from .execution.turn_input_source import OriginalTurnInput
+    from agent_comms.agent_events import Done, Error
+    from agent_comms.controller import SessionUpdateSink
+    from agent_comms.execution.turn_failure import TurnFailure
+    from agent_comms.execution.turn_input_source import OriginalTurnInput
+    from agent_comms.input_disposition import InputDocument
+    from agent_comms.pi_payloads import NativeMessageFailureSource
 
-from .coordination.errors import Refused
-from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
-from .delivery_presentation import DeliveryPresentation
-from .nominal.field_codec import (
-    FieldCodec, JsonShapeFamily, JsonShapeMember, NullMember, RecordMember, SubclassUnion,
-    WireName, WireOmitDefault,
+from agent_comms.coordination.errors import Refused
+from agent_comms.delivery_presentation import DeliveryPresentation
+from agent_comms.input_attempt import InputAttempt
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    JsonShapeFamily,
+    JsonShapeMember,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireName,
+    WireOmitDefault,
 )
-from .input_attempt import InputAttempt
-from .pi_wire import PiDiagnostic
+from agent_comms.pi_wire import PiDiagnostic
 
 
 class FailureSource(DeclaredFamily, affix="FailureSource"):
@@ -290,8 +295,12 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
 
     async def publish(self, client: SessionUpdateSink, session_id: str) -> NativeTurnOutcome:
         from acp.schema import AgentMessageChunk, TextContentBlock
-        from .acp_extension import (
-            InputFailedUpdate, RequestFailedUpdate, TextRouteUpdate, encode_updates,
+
+        from agent_comms.acp_extension import (
+            InputFailedUpdate,
+            RequestFailedUpdate,
+            TextRouteUpdate,
+            encode_updates,
         )
 
         failure = self.request.failure

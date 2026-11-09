@@ -9,19 +9,19 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.storage.locked_store import DocumentChange
-from agent_comms.registry.registration import Registration
-from agent_comms.routing import NoTurnRouting
-from agent_comms.registry.registry_document import ThreadRows
-from agent_comms.snapshot_slices import ThreadSlice
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import ThreadRows
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.storage.store_files import AtomicFile
-from agent_comms.registry.threads import ExternalThread, Thread, NativeThread
 from agent_comms.registry.thread_text import GivenThreadText
+from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
+from agent_comms.routing import NoTurnRouting
+from agent_comms.snapshot_slices import ThreadSlice
+from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.storage.store_files import AtomicFile
 
 
 def owner(path):

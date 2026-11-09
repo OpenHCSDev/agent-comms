@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
-from .bus_publication import ServiceOrigin
-from .registry.threads import ServiceThread
-from .projects.checkouts import Checkout
-from .registry.thread_identity import ServiceThreadRole
+from agent_comms.bus_publication import ServiceOrigin
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import ServiceThreadRole
+from agent_comms.registry.threads import ServiceThread
 
 if TYPE_CHECKING:
-    from .registry.registration import Registration
+    from agent_comms.registry.registration import Registration
 
 
 class ServiceSender:

@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.installer.native_package import MANIFEST
-from agent_comms.owner_release import NoRelease
-from agent_comms.projects.checkouts import Checkout
 import asyncio
 import os
 import shlex
@@ -21,29 +18,31 @@ import pytest
 
 import agent_comms
 import agent_comms_hooks
-from agent_comms.execution.turn_failure import FailedTurnResolution
-from agent_comms.execution.child_process import (
-    NoProcess,
-    SpawnedProcess,
-)
+import fixture_git
 from agent_comms.comms import wire
 from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import AcpSessionId, GoalId, TurnId, compile_decoder
+from agent_comms.execution.child_process import (
+    NoProcess,
+    SpawnedProcess,
+)
+from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
+from agent_comms.execution.turn_failure import BackendFailed, FailedTurnResolution
+from agent_comms.installer.native_package import MANIFEST
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.nominal.field_codec import AcpSessionId, GoalId, TurnId, compile_decoder
 from agent_comms.owner_connection import socket_path
-from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
+from agent_comms.owner_release import NoRelease
 from agent_comms.pi_vocabulary import ThinkingLevelField
-from agent_comms.restart_scope import OwnersNamed
-from agent_comms.session_file import NoSessionFile
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
-from agent_comms.execution.turn_failure import BackendFailed
+from agent_comms.restart_scope import OwnersNamed
+from agent_comms.session_file import NoSessionFile
 from delivery_owner_fixture import canonical_agent
-import fixture_git
 from native_backend_fixture import native_backend_fixture
 
 
@@ -113,13 +112,14 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
 @pytest.mark.parametrize("owner_count", (3, 29))
 async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_count):
     from acp.schema import TextContentBlock
+
     from agent_comms.acp import CommsClient
-    from agent_comms.transport.owner_requests import RetainedOwnerLaunch
     from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
-    from native_backend_fixture import NativeBackendFixture
-    from delivery_owner_fixture import FakeClient
-    from agent_comms.transport.tools.served import CommsResourcesTool
     from agent_comms.tool_caller import NoThreadCaller
+    from agent_comms.transport.owner_requests import RetainedOwnerLaunch
+    from agent_comms.transport.tools.served import CommsResourcesTool
+    from delivery_owner_fixture import FakeClient
+    from native_backend_fixture import NativeBackendFixture
 
     comms = wire(native_workers.root)
     names = tuple(f"shared-{index}" for index in range(owner_count))
@@ -288,9 +288,9 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
 @pytest.mark.skipif(sys.platform != "linux", reason="Exact retained launch uses Linux /proc")
 async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, monkeypatch, native_workers):
     """One provider-free installed worker batch, with original distinct settings."""
+    from agent_comms.owner_cutover import PreserveOwnerRuntime
     from agent_comms.planning.goal_states import BlockedGoal
     from agent_comms.planning.goals import Goal
-    from agent_comms.owner_cutover import PreserveOwnerRuntime
     from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 
     model = 'response-local/fixture'

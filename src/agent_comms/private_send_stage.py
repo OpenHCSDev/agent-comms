@@ -2,50 +2,54 @@
 
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Active
-
-from .execution.native_session_files import NativeSessionFiles
-
 import asyncio
 import sqlite3
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from contextlib import contextmanager
 from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 
-from .assignment_states import DeferredAssignment, FailedAssignment, TriagePendingAssignment
-from .execution.native_runtime_input import NativeRuntimeTable
-from .coordination.errors import IdentityConflict, RetryScheduled, StaleFence
-from .coordination.tables.assignments import WakeAssignment
-from .coordination.coordinator import Coordination
-from .durable_turn import DurableTurn
-from .nominal.field_codec import ThreadLookup, InputId, RootId
-from .private_send_rules import NativeClaimCheck, NativeIdentityCheck, NativeReservationCheck
-from .execution.native_input_owner import ParticipantOwner
-from .execution.native_input_record import (
-    NativeInputIdentity,
-    NativeInputExecution,
-    TriageNativeExecution,
+from agent_comms.assignment_states import (
+    DeferredAssignment,
+    FailedAssignment,
+    TriagePendingAssignment,
+)
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict, RetryScheduled, StaleFence
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.durable_turn import DurableTurn
+from agent_comms.execution.native_entries import NativeEvidenceScope
+from agent_comms.execution.native_input_owner import ParticipantOwner
+from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.execution.native_input_record import (
     FullNativeExecution,
+    NativeInputExecution,
+    NativeInputIdentity,
+    TriageNativeExecution,
 )
-from .execution.native_input_proof import NativeContextProof
-from .execution.native_entries import NativeEvidenceScope
-from .execution.native_prompt_binding import (
+from agent_comms.execution.native_prompt_binding import (
     PromptBinding,
-    expected_prompt_matches_journal,
     expected_prompt_bindings,
+    expected_prompt_matches_journal,
 )
-from .execution.native_runtime_input import NativeRuntimeInput
-from .private_sidecar import native_request_digest
-from .reservation_rules import ReservationViolationError
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.selected.triage import (
     DecidedTriageRecord,
     SelectedTriage,
 )
-from .text_digest import TextDigest
-from .execution.turn_failure import TurnFailure
-from .storage.typed_table import SqlValue
-from .reservation_rules import ReservationRule
+from agent_comms.execution.turn_failure import TurnFailure
+from agent_comms.lifecycle_capability import Active
+from agent_comms.nominal.field_codec import InputId, RootId, ThreadLookup
+from agent_comms.private_send_rules import (
+    NativeClaimCheck,
+    NativeIdentityCheck,
+    NativeReservationCheck,
+)
+from agent_comms.private_sidecar import native_request_digest
+from agent_comms.reservation_rules import ReservationRule, ReservationViolationError
+from agent_comms.storage.typed_table import SqlValue
+from agent_comms.text_digest import TextDigest
 
 
 @dataclass(frozen=True, kw_only=True)

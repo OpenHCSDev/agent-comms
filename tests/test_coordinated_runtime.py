@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-
-from agent_comms.projects.checkouts import Checkout
 import json
 import os
 from dataclasses import replace
@@ -11,30 +9,30 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.context_segments.wake import MessageDelivery, SelectedWakeSegment
 from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed
-from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
-from conftest import accept_initial
 from agent_comms.coordination.cohort import sealed_cohort_assignments
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
     IdentityConflict,
     PublicationActivationBlocked,
 )
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.coordination.database import CoordinationStore
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from agent_comms.execution.turn_context import TurnContext
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.pi_vocabulary import HighThinkingLevel
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.thread_text import GivenThreadText
-from agent_comms.execution.turn_context import TurnContext
+from agent_comms.registry.threads import NativeThread
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
-from conftest import publish_initial
-from agent_comms.registry.threads import NativeThread
+from conftest import accept_initial, publish_initial
 
 
 @pytest.fixture
@@ -158,8 +156,8 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
 
 def test_selected_and_following_use_the_original_question_contract(tmp_path: Path) -> None:
     from agent_comms.channel_targets import CommandTarget
-    from agent_comms.task_attachments.owner_notices import MeantNotice
     from agent_comms.registry.thread_identity import UserThreadRole
+    from agent_comms.task_attachments.owner_notices import MeantNotice
 
     root, root_id, comms, peer, people = _root(tmp_path)
     comms.registry.declare(NativeThread("owner", frozenset(), Checkout(tmp_path), role=UserThreadRole))

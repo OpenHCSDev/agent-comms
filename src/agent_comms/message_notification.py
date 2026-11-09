@@ -2,45 +2,53 @@
 
 from __future__ import annotations
 
-from agent_comms.notification_assignment import NotificationSelection
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from abc import abstractmethod
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property
-from pathlib import Path
-from .agent_activity import AgentActivity, RecordedRecipientActivity
-from .messaging.read_ledger import (
-    ReadDocument,
-    ReadLedger,
-)
-from .registry.registry_document import RegistrySnapshot
-from .frozen_recipient import FrozenRecipient
-from .channel_targets import CommandTarget
-from .nominal.field_codec import MessageId, TaggedUnion, TaggedRecordMember, ThreadLookup
-from .message_reference import MessageReference
-from .notification_assignment import AssignmentSource, NotificationAssignment
-from agent_comms.notification_progress import AssignmentResponse
-from agent_comms.notification_assignment import NotificationAssignmentRead, NotificationReadMark
-from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
-from .notification_progress import DeliveryProgress, HumanReadProgress
-from .registry.thread_identity import ThreadIncarnation
-from .transcript_sources import AssignedTranscriptSource
-from typing import TYPE_CHECKING
-
-from abc import abstractmethod
-from collections.abc import Iterator
 from itertools import batched
-from typing import ClassVar
-from .revision_views import NotificationEvidenceView
-from .messages import Message
+from pathlib import Path
+from typing import TYPE_CHECKING, ClassVar
+
+from agent_comms.agent_activity import AgentActivity, RecordedRecipientActivity
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.frozen_recipient import FrozenRecipient
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
+from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
+from agent_comms.nominal.field_codec import MessageId, TaggedRecordMember, TaggedUnion, ThreadLookup
+from agent_comms.notification_assignment import (
+    AssignmentSource,
+    NotificationAssignment,
+    NotificationAssignmentRead,
+    NotificationReadMark,
+    NotificationSelection,
+)
+from agent_comms.notification_evidence import (
+    FirstRecipient,
+    OutcomeViewer,
+    RecipientCursor,
+    RecipientLimit,
+)
+from agent_comms.notification_progress import (
+    AssignmentResponse,
+    DeliveryProgress,
+    HumanReadProgress,
+)
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.revision_views import NotificationEvidenceView
+from agent_comms.transcript_sources import AssignedTranscriptSource
+
 if TYPE_CHECKING:
-    from .agent_activity import RecipientActivity
-    from .bus import Bus
-    from .bus_publication import Delivered
-    from .registry.registration import Registration
-    from .registry_provenance import RegistryProvenance
-    from .comms import Comms
-    from .presentation import WireRevision
+    from agent_comms.agent_activity import RecipientActivity
+    from agent_comms.bus import Bus
+    from agent_comms.bus_publication import Delivered
+    from agent_comms.comms import Comms
+    from agent_comms.presentation import WireRevision
+    from agent_comms.registry.registration import Registration
+    from agent_comms.registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True)

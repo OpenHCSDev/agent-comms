@@ -6,19 +6,23 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .turn_failure import IdentityUncertain, InputIdUnavailable, TurnFailure
-from .turn_item import PiRequestKey
-from .. import pi_commands as commands
-from .native_failures import NativePiUnavailable
-from .native_pi import CAPABILITY
-from .native_session_reopen import NativeSessionIdentity, NoSessionRetention, SessionRetention
-from ..nominal.field_codec import FieldCodec
-from ..pi_events import PiEvent
-from ..pi_payloads import NativeSessionSnapshot, SnapshotAttestation, StateData
-from ..pi_wire import RequestId
+from agent_comms import pi_commands as commands
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_pi import CAPABILITY
+from agent_comms.execution.native_session_reopen import (
+    NativeSessionIdentity,
+    NoSessionRetention,
+    SessionRetention,
+)
+from agent_comms.execution.turn_failure import IdentityUncertain, InputIdUnavailable, TurnFailure
+from agent_comms.execution.turn_item import PiRequestKey
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.pi_events import PiEvent
+from agent_comms.pi_payloads import NativeSessionSnapshot, SnapshotAttestation, StateData
+from agent_comms.pi_wire import RequestId
 
 if TYPE_CHECKING:
-    from ..backend import TurnSession
+    from agent_comms.backend import TurnSession
 
 
 class AttestationError(ValueError):

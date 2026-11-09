@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.errors import GoalRefused, StaleAttemptError
 import multiprocessing
 import os
 import sqlite3
@@ -16,21 +14,24 @@ from queue import Empty
 
 import pytest
 
-from agent_comms.execution.turn_failure import BackendFailed
-
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
-from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.attempt_resolution import OperatorStopped, RetryDecision
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import RecoveryBlocked
+from agent_comms.errors import GoalRefused, StaleAttemptError, UnresolvedAttemptError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.turn_failure import BackendFailed, FailedTurnResolution
 from agent_comms.nominal.field_codec import AttemptId, GoalId, MalformedRecord, RetryDecisionId
+from agent_comms.pi_counts import PiCount, UnreportedCount
+from agent_comms.pi_wire import PiUsage
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.goal_attempt_phase import (
     ClaimedAttempt,
     FailedAttempt,
     SucceededAttempt,
 )
-from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
 from agent_comms.planning.goal_attempts import (
     AttemptRecord,
     Generation,
@@ -40,7 +41,7 @@ from agent_comms.planning.goal_attempts import (
     ReservationConflictError,
     StorageUncertainError,
 )
-from agent_comms.errors import UnresolvedAttemptError
+from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
 from agent_comms.planning.goal_generation import (
     BlockedGeneration,
     CancelledGeneration,
@@ -48,13 +49,9 @@ from agent_comms.planning.goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
-from agent_comms.execution.native_runtime_input import NativeRuntimeInput
-from agent_comms.pi_counts import PiCount, UnreportedCount
-from agent_comms.pi_wire import PiUsage
-from agent_comms.registry.threads import NativeThread
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_creation import RecordedCreationTime
-from agent_comms.attempt_resolution import OperatorStopped, RetryDecision
-from agent_comms.execution.turn_failure import FailedTurnResolution
+from agent_comms.registry.threads import NativeThread
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="POSIX fork and directory fsync crash instrumentation."

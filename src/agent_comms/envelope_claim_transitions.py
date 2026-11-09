@@ -10,11 +10,10 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
-from agent_comms_hooks import ToolRefusedError
-
-from .class_fact import ClassFact
-from .coordination.errors import IdentityConflict
-from .nominal.field_codec import (
+from agent_comms.class_fact import ClassFact
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.field_codec import (
     AssignmentId,
     BoundedText,
     ClaimId,
@@ -34,16 +33,13 @@ from .nominal.field_codec import (
     WireOmitDefault,
     WireRequired,
 )
-from .message_reference import MessageReference
-from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
-from .registry.thread_identity import (
-    GenerationCounter,
-    RecordedThreadIncarnation,
-)
+from agent_comms.projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
+from agent_comms.registry.thread_identity import GenerationCounter, RecordedThreadIncarnation
+from agent_comms_hooks import ToolRefusedError
 
 if TYPE_CHECKING:
-    from .coordination.tables.attempts import AttemptRecord
-    from .registry.registry_document import RegistrySnapshot
+    from agent_comms.coordination.tables.attempts import AttemptRecord
+    from agent_comms.registry.registry_document import RegistrySnapshot
 
 if TYPE_CHECKING:
     pass
@@ -154,7 +150,7 @@ class ClaimScope(SubclassUnion, ABC, ProjectionSource, affix=""):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .messages import ClaimOperations
+        from agent_comms.messages import ClaimOperations
         return (ClaimOperations,)
 
 
@@ -294,7 +290,7 @@ class ClaimProducer(ProjectionOutputs):
     @ClassFact
     @staticmethod
     def writes(cls: type[ClaimProducer]) -> tuple[type[ProducedRow], ...]:
-        from .messages import HeldResources, ClaimOperations
+        from agent_comms.messages import ClaimOperations, HeldResources
         return (HeldResources, ClaimOperations)
 
 
@@ -486,7 +482,7 @@ class ClaimProjection(Mapping[str, ClaimOwner], ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .messages import HeldResources
+        from agent_comms.messages import HeldResources
         return (HeldResources,)
 
 

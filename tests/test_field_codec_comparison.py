@@ -8,13 +8,13 @@ from typing import Annotated
 import pytest
 
 from agent_comms.nominal.field_codec import FieldCodec, WireRequired
-from agent_comms.team.standing_rules import StandingRule
 from agent_comms.registry.thread_creation import (
     CreationSeconds,
     CreationTime,
     RecordedCreationTime,
 )
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.team.standing_rules import StandingRule
 
 
 @dataclass(frozen=True)

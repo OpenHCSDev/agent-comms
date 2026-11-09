@@ -2,17 +2,24 @@
 
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from .turn_context import ContextManifest, DispatchRequest, MeasuredNativeSegment, RecordedContextTurn, SegmentManifest, UnobservedDispatchRequest
-from ..agent_events import AgentEvent
-from ..coordination.coordinator import Coordination
-from ..nominal import field_codec
-from ..pi_payloads import PiResponseData, StrictFields
-from ..registry.thread_identity import OfferedTools
+from agent_comms.agent_events import AgentEvent
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.turn_context import (
+    ContextManifest,
+    DispatchRequest,
+    MeasuredNativeSegment,
+    RecordedContextTurn,
+    SegmentManifest,
+    UnobservedDispatchRequest,
+)
+from agent_comms.nominal import field_codec
+from agent_comms.pi_payloads import PiResponseData, StrictFields
+from agent_comms.registry.thread_identity import OfferedTools
 
 if TYPE_CHECKING:
-    from ..context_store import CapturedContext
+    from agent_comms.context_store import CapturedContext
 
 
 @dataclass(frozen=True)

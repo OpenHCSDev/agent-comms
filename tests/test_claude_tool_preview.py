@@ -1,13 +1,20 @@
 """Claude's decoder publishes the shared native tool preview, not a UI special case."""
 import pytest
 
-from transcript_record_fixture import transcript_record
-from agent_comms.cli_bridges.claude_protocol import ClaudeSession, KnownTurn, Live, TimedRecord, ToolResult, ToolUse
-from agent_comms.tool_calls import ToolCall
+from agent_comms.cli_bridges.claude_protocol import (
+    ClaudeSession,
+    KnownTurn,
+    Live,
+    TimedRecord,
+    ToolResult,
+    ToolUse,
+)
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.transport.native_tools import BashTool
 from agent_comms.runtime_updates import FinishedItem
+from agent_comms.tool_calls import ToolCall
 from agent_comms.tool_results import NoToolDiff
+from agent_comms.transport.native_tools import BashTool
+from transcript_record_fixture import transcript_record
 
 
 @pytest.mark.parametrize('name,arguments,native,expected,title,patch', [

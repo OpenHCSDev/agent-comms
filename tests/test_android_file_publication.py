@@ -4,11 +4,11 @@ import stat
 
 import pytest
 
+from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.execution.child_process import (
     AndroidPlatform,
     Platform,
 )
-from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.runtime_info import RuntimeInfoStore
 from agent_comms.storage.store_files import ExclusiveAtomicFile, ExclusiveDirectoryAtomicFile
 

@@ -9,10 +9,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.nominal import field_codec
 from agent_comms.command import Command
+from agent_comms.deal_prompt import DealPrompt
 from agent_comms.declared_verb import DeclaredVerb
-from .installer.native_package import (
+from agent_comms.installer.native_package import (
     MANIFEST,
     NativePackageStore,
     VerifiedNativePackage,
@@ -22,8 +22,8 @@ from .installer.native_package import (
     share_native_resources,
     write_native_manifest,
 )
-from .registry.thread_storage import StoragePath
-from agent_comms.deal_prompt import DealPrompt
+from agent_comms.nominal import field_codec
+from agent_comms.registry.thread_storage import StoragePath
 
 
 @dataclass(frozen=True, kw_only=True)

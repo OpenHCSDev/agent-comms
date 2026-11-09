@@ -4,12 +4,12 @@ import re
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import (
-    Self,
     TYPE_CHECKING,
+    Self,
 )
 
-from ..errors import RelationViolationError
-from ..nominal.field_codec import (
+from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.field_codec import (
     Id128,
     NominalSpelling,
     NominalText,
@@ -19,12 +19,12 @@ from ..nominal.field_codec import (
 )
 
 if TYPE_CHECKING:
-    from ..channel_targets import NamedTarget
-    from ..coordination.session import NativeCapture
-    from ..external_transcript import ExternalTranscript
-    from ..message_reference import MessageReference
-    from ..routing import Routing
-    from ..transcript_routes import _SessionRoutes
+    from agent_comms.channel_targets import NamedTarget
+    from agent_comms.coordination.session import NativeCapture
+    from agent_comms.external_transcript import ExternalTranscript
+    from agent_comms.message_reference import MessageReference
+    from agent_comms.routing import Routing
+    from agent_comms.transcript_routes import _SessionRoutes
 
 
 class NativeTurnId(NominalText):

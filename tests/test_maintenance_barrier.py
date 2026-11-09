@@ -1,8 +1,8 @@
 import sys
+
 """Provider-free disposable checks of the default-off maintenance claim seam."""
 
 
-from agent_comms.projects.checkouts import Checkout
 import asyncio
 import json
 import multiprocessing as mp
@@ -10,13 +10,20 @@ import os
 from pathlib import Path
 
 import pytest
-from agent_comms.lifecycle_capability import Executing
 
-from agent_comms.send_outcome import GrantedSend, HeldSend
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
+from agent_comms.lifecycle_capability import Executing
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.threads import NativeThread
+from agent_comms.send_outcome import GrantedSend, HeldSend
 from agent_comms.storage.maintenance_barrier import (
     HOLDER_NONCE,
     DrainingPhase,
@@ -30,17 +37,11 @@ from agent_comms.storage.maintenance_barrier import (
     PausedPhase,
     ReadyPhase,
 )
-from agent_comms.registry.registration import Registration
 from agent_comms.storage.store_files import (
     ExclusiveLock,
     StoreGuard,
     _async_store_lock,
     _store_lock,
-)
-from agent_comms.registry.threads import NativeThread
-from agent_comms.execution.turn_item import (
-    NativeItemId,
-    NativeTurnId,
 )
 
 
@@ -379,9 +380,10 @@ def test_activity_updates_runtime_state_without_publication_while_draining(tmp_p
 async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> None:
     turn_turn_id = NativeTurnId('turn')
     from functools import partial
-    from agent_comms.runtime_updates import AppendDraftItem, StartedItem, TextDraft, ThreadOutput
+
     from agent_comms.execution.turn_phase import ModelWaitPhase
     from agent_comms.recorded_time import RecordedEventTime
+    from agent_comms.runtime_updates import AppendDraftItem, StartedItem, TextDraft, ThreadOutput
     from agent_comms.transcript_events import AssistantTranscript
 
     comms = wire(tmp_path)
@@ -427,8 +429,8 @@ def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path:
     registry itself refuses their writes during a hold, and the holder's own writes still land."""
     from agent_comms.coordination.errors import ParticipantNotRegistered
     from agent_comms.coordination.session import CoordinationSession
-    from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
     from agent_comms.participant_store import ParticipantStore
+    from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
 
     comms = wire(tmp_path)
     comms.registry.declare(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
@@ -480,8 +482,8 @@ def test_the_goal_ledger_refuses_other_writers_once_the_drained_hold_is_retarget
     """Install 11 rolled back on "Carries changed files no step names: goal_attempts.sqlite3":
     the ledger committed for a non-holder after the install captured the bus. Draining owners
     still settle their turns in it; once retargeted, only the holder commits."""
-    from agent_comms.nominal.field_codec import GoalId
     from agent_comms.launch_runtime import LaunchRuntime
+    from agent_comms.nominal.field_codec import GoalId
     from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
 
     comms = wire(tmp_path)
@@ -503,8 +505,8 @@ def test_a_ledger_created_after_the_drain_is_refused_and_leaves_no_file(
         tmp_path: Path, monkeypatch) -> None:
     """Creation publishes the ledger by link before any store transaction exists, so it asks
     the same drain-settled policy its writes inherit, and the carry check meets no new file."""
-    from agent_comms.planning.goal_attempts import GoalAttemptStore
     from agent_comms.launch_runtime import LaunchRuntime
+    from agent_comms.planning.goal_attempts import GoalAttemptStore
     from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
 
     comms = wire(tmp_path)

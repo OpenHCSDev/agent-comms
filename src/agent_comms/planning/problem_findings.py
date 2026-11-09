@@ -8,21 +8,11 @@ from typing import (
     ClassVar,
 )
 
-from ..change_report import (
-    Declaration,
-    FileLine,
-    SourceRevision,
-    SourceRoots,
-)
-from ..errors import TodoError
-from .goals import OrderCheck
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
-    Description,
-    NullMember,
-    SingleFieldValue,
-    SubclassUnion,
-)
+from agent_comms.change_report import Declaration, FileLine, SourceRevision, SourceRoots
+from agent_comms.errors import TodoError
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import Description, NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.planning.goals import OrderCheck
 
 
 class OrderDeletion(DeclaredFamily, affix="Deletion"):

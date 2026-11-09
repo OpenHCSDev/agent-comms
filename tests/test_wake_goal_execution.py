@@ -5,8 +5,13 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import Comms
+from agent_comms.context_segments.wake_values import (
+    NoWakeGoalContext,
+    WakeGoalContext,
+    WakeWorkContext,
+)
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeWorkContext
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.goal_actions import (
     BlockedGoalAction,
     ClearGoalAction,
@@ -25,9 +30,8 @@ from agent_comms.planning.goal_presentation import (
     StandbyExecution,
 )
 from agent_comms.planning.goals import Goal
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.registry.threads import NativeThread
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import NativeThread
 from goal_owner_fixture import canonical_goal_wire
 
 

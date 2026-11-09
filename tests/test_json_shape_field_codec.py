@@ -1,17 +1,11 @@
 """External JSON shape selection belongs to the existing codec boundary."""
 
+import json
 from abc import abstractmethod
 from dataclasses import dataclass
-import json
 
 import pytest
 
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import (
-    Argument, FieldCodec, JsonShapeFamily, JsonShapeMember, MalformedRecord, SingleFieldValue,
-    StatusExclude,
-)
-from agent_comms.launch_runtime import ImportPath, NoImportPath, SpecifiedImportPath
 from agent_comms.execution.native_claim_epoch import (
     NativeClaimEpoch,
     RecordedNativeClaim,
@@ -22,6 +16,17 @@ from agent_comms.execution.selected.triage import (
     DecidedTriageRecord,
     IgnoreSelectedTriage,
     TriageDecisionRecord,
+)
+from agent_comms.launch_runtime import ImportPath, NoImportPath, SpecifiedImportPath
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    Argument,
+    FieldCodec,
+    JsonShapeFamily,
+    JsonShapeMember,
+    MalformedRecord,
+    SingleFieldValue,
+    StatusExclude,
 )
 
 

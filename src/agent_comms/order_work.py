@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .nominal.field_codec import ToolCallId
-from .registry.thread_identity import ThreadIncarnation
-from .tool_result import ToolResult
-from .transcript_events import OrderCall, TurnDigest
+from agent_comms.nominal.field_codec import ToolCallId
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.tool_result import ToolResult
+from agent_comms.transcript_events import OrderCall, TurnDigest
 
 
 @dataclass(frozen=True)

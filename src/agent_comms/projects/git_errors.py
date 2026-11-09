@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from ..coordination.errors import CommandFailure
+from agent_comms.coordination.errors import CommandFailure
 
 
 class SourceReadFailure(Exception):  # noqa: N818 - capability, not an outcome

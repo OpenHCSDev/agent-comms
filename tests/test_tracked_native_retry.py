@@ -3,31 +3,20 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.acp_failure import NoRetry
-from agent_comms.execution.turn_failure import NoTurnFailure
-from agent_comms.execution.turn_inbox import SteerInputPolicy
-from agent_comms.nominal.field_codec import InputId, TurnId
-from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_key import TurnInputKey
 from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_pi import NativeEmptyAnswer, NativePiTerminalFailure
 from agent_comms.execution.native_startup import NativeStartupPolicy
-from agent_comms.pi_events import NativeRetryEnd
-from agent_comms.pi_payloads import FailedProviderRetry, PiMessage, SucceededProviderRetry
-from agent_comms.tracked_turn import (
-    CompletedTrackedTerminal,
-    PendingTrackedTerminal,
-    TrackedTurnSession,
-)
 from agent_comms.execution.turn_failure import (
     ModelRequestFailed,
+    NoTurnFailure,
     RetryableProviderFailure,
 )
 from agent_comms.execution.turn_goal_permission import (
     InactiveGoalPermission,
     TurnGoalPermission,
 )
-from agent_comms.queued_input import AcceptedTurn
+from agent_comms.execution.turn_inbox import SteerInputPolicy
 from agent_comms.execution.turn_input_source import (
     AcceptedFollowingInput,
     DeliveredFollowingInput,
@@ -37,6 +26,17 @@ from agent_comms.execution.turn_usage import UsageAccount
 from agent_comms.execution.turn_watchdog import (
     DEFAULT_MODEL_WAIT,
     ProgressWatchdog,
+)
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_key import TurnInputKey
+from agent_comms.nominal.field_codec import InputId, TurnId
+from agent_comms.pi_events import NativeRetryEnd
+from agent_comms.pi_payloads import FailedProviderRetry, PiMessage, SucceededProviderRetry
+from agent_comms.queued_input import AcceptedTurn
+from agent_comms.tracked_turn import (
+    CompletedTrackedTerminal,
+    PendingTrackedTerminal,
+    TrackedTurnSession,
 )
 
 

@@ -1,6 +1,5 @@
 """Retained Bus snapshots preserve current-incarnation routing and displayed reads."""
 
-from agent_comms.projects.checkouts import Checkout
 from collections import Counter
 
 import pytest
@@ -9,11 +8,12 @@ from agent_comms.bus_publication import AgentOrigin
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.comms import wire
 from agent_comms.messages import InfoKind, Message
-from agent_comms.page_traversal import LiveCursor
-from agent_comms.read_basis import ConversationCursor, NamedViewer, ReadCursor
 from agent_comms.messaging.read_ledger import ReadLedger
-from agent_comms.routing import DeliveryScope
+from agent_comms.page_traversal import LiveCursor
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.read_basis import ConversationCursor, NamedViewer, ReadCursor
 from agent_comms.registry.threads import NativeThread
+from agent_comms.routing import DeliveryScope
 
 
 @pytest.fixture

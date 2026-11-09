@@ -12,7 +12,11 @@ from agent_comms.coordination.contracts import (
     validate_execution_id,
 )
 from agent_comms.coordination.schema import CoordinatorRow
-from agent_comms.coordination.tables.executions import ExecutionReference, RetryPartition, WireOrigin
+from agent_comms.coordination.tables.executions import (
+    ExecutionReference,
+    RetryPartition,
+    WireOrigin,
+)
 from agent_comms.nominal.field_codec import MessageId, SnapshotExclude, WireName, projected
 from agent_comms.obligation_states import ResponseState
 from agent_comms.reason_codes import ReasonCode

@@ -7,11 +7,11 @@ from collections.abc import (
 )
 from typing import TYPE_CHECKING
 
-from ..errors import RelationViolationError
-from ..storage.store_files import StoreOwner
+from agent_comms.errors import RelationViolationError
+from agent_comms.storage.store_files import StoreOwner
 
 if TYPE_CHECKING:
-    from .threads import Thread
+    from agent_comms.registry.threads import Thread
 
 
 class ThreadOwnedState(StoreOwner):

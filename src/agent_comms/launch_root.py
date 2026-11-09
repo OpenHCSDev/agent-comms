@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
-from .errors import RelationViolationError
-from .nominal.field_codec import FieldCodec, PathText
+from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.field_codec import FieldCodec, PathText
 
 
 def started() -> None:

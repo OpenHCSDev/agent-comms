@@ -1,7 +1,7 @@
 """Whole-bus marks must also cover conversations that already have read evidence."""
-from agent_comms.projects.checkouts import Checkout
 from dataclasses import replace
 
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.read_basis import NamedViewer
 from test_read_ledger import prepared
 

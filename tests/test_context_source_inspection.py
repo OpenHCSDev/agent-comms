@@ -1,34 +1,14 @@
 """Source membership, public-only capture, and selected recorded values."""
 
-from agent_comms.context_store import UNREAD_CONTEXT
-from bus_history import read_history
-from delivery_owner_fixture import qualified_owner_launch  # noqa: F401
-from dataclasses import replace
 import hashlib
 import json
+from dataclasses import replace
 
 import pytest
 
-from agent_comms.session_file import NoSessionFile
-from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+from agent_comms.context_store import UNREAD_CONTEXT
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
 from agent_comms.execution.native_turn_context import NativeContextManifestData
-from agent_comms.pi_payloads import NativeContextData
-from agent_comms.transport.runtime_request import RuntimeRequest
-from agent_comms.transport.runtime_requests import (
-    ContextRecordedSegmentRuntimeRequest,
-    ContextCoreRuntimeRequest,
-    ContextCoreSourceRuntimeRequest,
-)
-from agent_comms.registry.thread_identity import TurnIdentity
-from agent_comms.registry.thread_identity import (
-    RecordedThreadIncarnation,
-    ReportedTools,
-)
-from agent_comms.execution.turn_context import (
-    ObservedDispatchRequest,
-    UnobservedDispatchRequest,
-)
 from agent_comms.execution.turn_context import (
     ContextManifest,
     ContextSourceText,
@@ -36,18 +16,35 @@ from agent_comms.execution.turn_context import (
     FileProvenance,
     JournalProvenance,
     NativeProvenance,
+    ObservedDispatchRequest,
     PreviewProvenance,
     RecordedContextTurn,
     SystemLayerSegment,
     TranscriptSegment,
     TurnContext,
     UnattributedProvenance,
+    UnobservedDispatchRequest,
     UnretainedSourceText,
     UserInputSegment,
 )
-from bus_record_fixture import context_comms
 from agent_comms.execution.turn_item import PiRequestKey
-from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.nominal.field_codec import FieldCodec, TurnId
+from agent_comms.pi_payloads import NativeContextData
+from agent_comms.registry.thread_identity import (
+    RecordedThreadIncarnation,
+    ReportedTools,
+    TurnIdentity,
+)
+from agent_comms.session_file import NoSessionFile
+from agent_comms.transport.runtime_request import RuntimeRequest
+from agent_comms.transport.runtime_requests import (
+    ContextCoreRuntimeRequest,
+    ContextCoreSourceRuntimeRequest,
+    ContextRecordedSegmentRuntimeRequest,
+)
+from bus_history import read_history
+from bus_record_fixture import context_comms
+from delivery_owner_fixture import qualified_owner_launch  # noqa: F401
 
 
 def system(provenance, content="Original instruction π"):
@@ -128,9 +125,9 @@ def test_current_core_context_is_independent_and_source_selection_is_current(tmp
 @pytest.mark.asyncio
 async def test_core_context_socket_reads_without_native_session_or_preview(
         tmp_path, qualified_owner_launch):
-    from delivery_owner_fixture import canonical_delivery_owner, start_headless_owner
     from agent_comms.owner_connection import socket_path
     from agent_comms.runtime import RuntimeConnection
+    from delivery_owner_fixture import canonical_delivery_owner, start_headless_owner
 
     async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):
         owner = comms.registry.require("alpha")
@@ -349,6 +346,7 @@ def test_cold_client_acquires_current_and_recorded_contributor_declarations():
     """Prevent producer-import order from changing RPC and manifest decoding."""
     import subprocess
     import sys
+
     from agent_comms.context_segments.awareness import AwarenessSegment
     from agent_comms.execution.turn_context import InstructionFile
 

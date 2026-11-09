@@ -1,16 +1,12 @@
 """Segment-owned disclosure selects literal addressed text, never a corpus."""
 from __future__ import annotations
 
-from typing import Annotated
 from dataclasses import dataclass
+from typing import Annotated
 
+from agent_comms.execution.turn_context import ContextSegment, ContextSpan
 from agent_comms.nominal import field_codec
-
-from .execution.turn_context import (
-    ContextSegment,
-    ContextSpan,
-)
-from .working_memory_questions import SpanQuestion
+from agent_comms.working_memory_questions import SpanQuestion
 
 
 @dataclass(frozen=True)

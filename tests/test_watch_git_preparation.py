@@ -8,8 +8,8 @@ import os
 import subprocess
 import sys
 import threading
-from concurrent.futures import Future
 from collections.abc import Callable
+from concurrent.futures import Future
 from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass
 from functools import partial
@@ -18,6 +18,9 @@ from queue import Queue
 
 import pytest
 
+from agent_comms.change_report import BranchHeadRevision, CommitRevision, FileLine, OrderRoots
+from agent_comms.comms import Comms
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.child_process import (
     AsyncWork,
     ChildRetirementFailed,
@@ -30,33 +33,38 @@ from agent_comms.execution.child_process import (
     SynchronousProcess,
     join_retirement,
 )
+from agent_comms.execution.watch_passes import Watch
+from agent_comms.head_review import OpenPullRequestHead
 from agent_comms.installer.native_build_inputs import (
     ConfiguredChildStdio,
     DetachedChildStdio,
     GitAcquisitionCancelled,
     GitLaunch,
 )
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.comms import Comms
-from agent_comms.execution.watch_passes import Watch
-from agent_comms.head_review import OpenPullRequestHead
+from agent_comms.nominal_census import NominalCensus
+from agent_comms.phase_evidence import (
+    BusStorageAbsent,
+    CommitMerged,
+    EvidenceFound,
+    EvidenceUnread,
+    MainTree,
+    PathsAbsent,
+    PhaseEvidence,
+)
 from agent_comms.planning.orders import (
     CitedEvidence,
     DraftPullRequest,
     UnmergedPullRequest,
 )
-from agent_comms.service_passes import ServicePassStore
-from git_shutdown_fixture import HeldGitHTTP, held_commit
-from agent_comms.nominal_census import NominalCensus
-from agent_comms.phase_evidence import BusStorageAbsent, CommitMerged, EvidenceFound, EvidenceUnread, MainTree, PathsAbsent, PhaseEvidence
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.git_errors import (
     GitCommandError,
     UnavailableCommitError,
 )
 from agent_comms.projects.repo import Repo
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.change_report import BranchHeadRevision, CommitRevision, FileLine, OrderRoots
+from agent_comms.service_passes import ServicePassStore
 from agent_comms.work_branches import SourceGrowth, WorkBranchError, WorkBranches
+from git_shutdown_fixture import HeldGitHTTP, held_commit
 from source_revision_fixture import SourceRepository
 from team_heartbeat_fixture import RetainedNominalPlanReadings
 

@@ -8,8 +8,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     NullMember,
     OwnerRequestKey,
@@ -19,17 +19,12 @@ from agent_comms.nominal.field_codec import (
 )
 
 if TYPE_CHECKING:
+    from agent_comms.bus import BusReader
     from agent_comms.channel_targets import NamedTarget
     from agent_comms.messages import Message
+    from agent_comms.planning.orders import OwnerRequest, Todo, TodoStore
     from agent_comms.registry.registration import Registration
-    from .registry.thread_identity import ThreadIncarnation
-    from agent_comms.bus import BusReader
-
-    from .planning.orders import (
-        OwnerRequest,
-        Todo,
-        TodoStore,
-    )
+    from agent_comms.registry.thread_identity import ThreadIncarnation
 
 
 class RequestValue(SubclassUnion, affix=""):

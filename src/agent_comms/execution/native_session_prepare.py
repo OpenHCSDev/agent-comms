@@ -8,16 +8,17 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .. import agent_events as events, backend, prompt_state
-from ..coordination.coordinator import Coordination
-from .native_failures import NativePiUnavailable
-from ..installer.native_package import VerifiedNativePackage
-from .native_startup import NativeStartup
-from ..participant_identity import ParticipantIdentity
-from ..pi_payloads import StateData
+from agent_comms import agent_events as events
+from agent_comms import backend, prompt_state
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_startup import NativeStartup
+from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.participant_identity import ParticipantIdentity
+from agent_comms.pi_payloads import StateData
 
 if TYPE_CHECKING:
-    from ..pi_native_backend import PersistentPiSession
+    from agent_comms.pi_native_backend import PersistentPiSession
 
 
 class NativeSessionPreparation(backend.NativeSession):

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 import asyncio
 import http.client
 import io
@@ -13,24 +12,45 @@ import threading
 import urllib.error
 from dataclasses import dataclass, replace
 from functools import cached_property
+from multiprocessing.connection import Connection
 
 import aiohttp
 from pydantic import JsonValue
-from multiprocessing.connection import Connection
-
 from yarl import URL
 
-from .transport.mcp import CancelledMessage, JsonRpcId, StreamedLine, ToolsCallMessage, ToolsCallReply
-from .coordination.errors import CoordinationReadUnavailable
-from .connector_profile import (
-    OBSERVE_PATH, EndpointRoute, HttpsMcpEndpoint, UiConnectionProfile, UiCredential,
+from agent_comms.connector_profile import (
+    OBSERVE_PATH,
+    EndpointRoute,
+    HttpsMcpEndpoint,
+    UiConnectionProfile,
+    UiCredential,
 )
-from .transport.progress import WireExportCancelled
-from .nominal.field_codec import FieldCodec, RpcCallId
-from .transport.request import ConnectionDropped, CoreAccess, ObservedRequest, RequestPoster, ToolRequest
-from .tool_result import ToolResult
-from .ui_model.observation import (
-    ObservationPeer, ObservationSource, ObserverDied, RelayConnection, RelayEnding, ViewerEnd, relay_frames,
+from agent_comms.coordination.errors import CoordinationReadUnavailable
+from agent_comms.nominal.field_codec import FieldCodec, RpcCallId
+from agent_comms.tool_result import ToolResult
+from agent_comms.transport.mcp import (
+    CancelledMessage,
+    JsonRpcId,
+    StreamedLine,
+    ToolsCallMessage,
+    ToolsCallReply,
+)
+from agent_comms.transport.progress import WireExportCancelled
+from agent_comms.transport.request import (
+    ConnectionDropped,
+    CoreAccess,
+    ObservedRequest,
+    RequestPoster,
+    ToolRequest,
+)
+from agent_comms.ui_model.observation import (
+    ObservationPeer,
+    ObservationSource,
+    ObserverDied,
+    RelayConnection,
+    RelayEnding,
+    ViewerEnd,
+    relay_frames,
 )
 
 

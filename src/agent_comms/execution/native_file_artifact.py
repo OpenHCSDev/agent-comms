@@ -3,9 +3,9 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from .native_integer import NativeIntegerBounds
-from ..nominal.declared_family import DeclaredFamily
-from ..text_digest import TextDigest
+from agent_comms.execution.native_integer import NativeIntegerBounds
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.text_digest import TextDigest
 
 
 class NativeFileArtifact(DeclaredFamily, affix="FileArtifact"):

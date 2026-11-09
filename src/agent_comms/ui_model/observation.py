@@ -46,16 +46,6 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
-from ..messaging.bus_read import (
-    CapturesTranscriptPage,
-    OwnerScopedRead,
-    UiRead,
-)
-from ..execution.child_process import (
-    HelperStart,
-    SpawnedHelper,
-    join_retirement,
-)
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (
@@ -68,6 +58,7 @@ from agent_comms.coordination.errors import (
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import HelperStart, SpawnedHelper, join_retirement
 from agent_comms.history_views import RetiredViews
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.launch_root import started
@@ -77,6 +68,7 @@ from agent_comms.message_notification import (
     NotificationWindow,
 )
 from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
 from agent_comms.nominal.field_codec import (
     DeclaredError,
     FieldCodec,
@@ -92,14 +84,16 @@ from agent_comms.notification_read import (
 )
 from agent_comms.notification_reads import NotificationRead
 from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState, WireRevision
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.read_basis import DisplayCut, NoDisplaySelection
 from agent_comms.registry.registry_document import (
     RegistrySnapshot,
     RosterVisibility,
     UnreadRegistry,
 )
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_presentation import ThreadPresentation
 from agent_comms.registry_provenance import DeletedThread
-from ..projects.checkouts import Checkout
 from agent_comms.revision_views import (
     NotificationsView,
     RegistrationsView,
@@ -107,16 +101,18 @@ from agent_comms.revision_views import (
     SidebarView,
     StatusView,
     StoresView,
-    TeamFramesView,
     TeamBoardView,
+    TeamFramesView,
 )
 from agent_comms.team_heartbeat import TeamBoardRead
 from agent_comms.team_hud import TeamFrame, TeamHud, TeamPlan
 from agent_comms.team_hud_records import TeammateDetail
-from ..registry.thread_identity import ThreadIncarnation
-from ..registry.thread_presentation import ThreadPresentation
-from agent_comms.transcripts import AcquiredThreadPresentation, TranscriptReadIdentity, TranscriptRead
 from agent_comms.tool_result import ToolResult
+from agent_comms.transcripts import (
+    AcquiredThreadPresentation,
+    TranscriptRead,
+    TranscriptReadIdentity,
+)
 from agent_comms.transport.request import ToolRequest
 from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.ui_model.sidebar import (

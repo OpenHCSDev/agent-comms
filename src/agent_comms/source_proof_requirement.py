@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .historical_native_inputs import HistoricalNativeInput
+    from agent_comms.historical_native_inputs import HistoricalNativeInput
 
 
 class SourceProofRequirement(ABC):

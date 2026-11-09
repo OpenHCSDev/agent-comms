@@ -9,16 +9,16 @@ from agent_comms.cli_verbs.restore_owner import RestoreOwnerCliCommand
 from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.comms import Comms
 from agent_comms.errors import UnregisteredThreadError
-from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.owner_connection import OwnerConnection
+from agent_comms.pi_rule_gate import PiRedeal
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.owner_requests import (
     ReadOwnerLaunchRuntimeRequest,
     RetainedOwnerLaunch,
 )
-from agent_comms.pi_rule_gate import PiRedeal
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.threads import NativeThread
 from bus_record_fixture import prepare_native_comms
 
 

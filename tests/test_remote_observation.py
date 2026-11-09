@@ -4,21 +4,21 @@ import asyncio
 from dataclasses import dataclass
 
 from aiohttp.test_utils import TestServer
-from bus_record_fixture import prepare_native_comms
 from yarl import URL
 
 from agent_comms.comms import Comms
 from agent_comms.connector import Connector
 from agent_comms.connector_profile import EndpointRoute, ResolvedRoute
 from agent_comms.connector_store import ConnectorStore, UiReadAccess
-from agent_comms.remote_core import ConnectorClient, ObservationRetired
-from agent_comms.ui_model.observation import ConnectionClosed
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.remote_core import ConnectorClient, ObservationRetired
 from agent_comms.ui_model.observation import (
+    ConnectionClosed,
     ObservationProcess,
     ObserveSidebar,
     SidebarResult,
 )
+from bus_record_fixture import prepare_native_comms
 
 
 @dataclass(frozen=True)

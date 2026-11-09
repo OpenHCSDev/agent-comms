@@ -1,14 +1,19 @@
 """Follow live native sessions and print turn digests for teammate judgment."""
-import argparse, os, time, glob, collections
+import argparse
+import collections
+import glob
+import os
+import time
 
-from ..transport.native_tools import NativeToolDeclaration
-from ..lifecycle_capability import Successful
-from ..execution.native_entries import NativeEntry
-from ..pi_payloads import PiMessage, StorageDenialToolDetails
-from ..tool_declaration import one_line
-from ..registry.registration import Registration
+from agent_comms.execution.native_entries import NativeEntry
 from agent_comms.execution.selected.triage import SelectedTriage
-from .order import Team
+from agent_comms.lifecycle_capability import Successful
+from agent_comms.pi_payloads import PiMessage, StorageDenialToolDetails
+from agent_comms.registry.registration import Registration
+from agent_comms.team.order import Team
+from agent_comms.tool_declaration import one_line
+from agent_comms.transport.native_tools import NativeToolDeclaration
+
 
 def thread_names(registry: Registration) -> dict[str, str]:
     """Session file -> thread name, from the registry snapshot's threads."""

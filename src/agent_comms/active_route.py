@@ -16,25 +16,34 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .bus import Bus
-from .execution.child_process import Platform
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import FieldCodec, MalformedRecord, PathText, ScratchName
-from .launch_root import LaunchRoot
-from .storage.locked_store import DocumentBytes
-from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
-from .storage.private_path import (
-    FileRevision, MissingFile, ObservedPath, OwnedDirectoryRole, PrivateDirectoryRole, PrivateFileRole,
+from agent_comms.bus import Bus
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import Platform
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText, ScratchName
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch, RootLaunch
+from agent_comms.recorded_bus import RecordedBusIdentity
+from agent_comms.storage.locked_store import DocumentBytes
+from agent_comms.storage.private_path import (
+    FileRevision,
+    MissingFile,
+    ObservedPath,
+    OwnedDirectoryRole,
+    PrivateDirectoryRole,
+    PrivateFileRole,
 )
-from .recorded_bus import RecordedBusIdentity
-from .storage.store_files import (
-    DependentStateTier, DirectoryAtomicFile, ExclusiveDirectoryAtomicFile,
-    FileTransactions, SingleFileStore, StoreLockContention,
+from agent_comms.storage.store_files import (
+    DependentStateTier,
+    DirectoryAtomicFile,
+    ExclusiveDirectoryAtomicFile,
+    FileTransactions,
+    SingleFileStore,
+    StoreLockContention,
 )
 
 if TYPE_CHECKING:
-    from .installer.reporting import RootWriter
+    from agent_comms.installer.reporting import RootWriter
 
 @dataclass(frozen=True, slots=True)
 class ActiveRouteFile(FileTransactions, SingleFileStore, DependentStateTier):

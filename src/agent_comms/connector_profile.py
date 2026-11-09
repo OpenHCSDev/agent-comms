@@ -4,25 +4,34 @@ from __future__ import annotations
 
 import http.client
 import os
-import socket
-
-import aiohttp
-from aiohttp.abc import AbstractResolver, ResolveResult
 import re
+import socket
 import ssl
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Self
 
+import aiohttp
+from aiohttp.abc import AbstractResolver, ResolveResult
 from yarl import URL
 
-from .nominal.field_codec import (
-    FieldCodec, Id128, MalformedRecord, NominalSpelling, NominalText, NullMember, PathText,
-    RootId, SingleFieldValue, TaggedRecordMember, TaggedUnion, TextRepresentation,
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    Id128,
+    MalformedRecord,
+    NominalSpelling,
+    NominalText,
+    NullMember,
+    PathText,
+    RootId,
+    SingleFieldValue,
+    TaggedRecordMember,
+    TaggedUnion,
+    TextRepresentation,
 )
-from .storage.private_path import PrivateDirectoryRole, PrivateFileRole
-from .storage.store_files import ExclusiveDirectoryAtomicFile
+from agent_comms.storage.private_path import PrivateDirectoryRole, PrivateFileRole
+from agent_comms.storage.store_files import ExclusiveDirectoryAtomicFile
 
 
 class UiGrantId(Id128):

@@ -5,14 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Never
 
-from .execution.turn_failure import TerminalFailure
-from .execution.native_input_proof import NativeInputCommit
-from .execution.turn_inbox import TurnInboxItem
-from .execution.native_pi import NativePiInputNotSent
-from .pi_events import AgentSettled, MessageStart, Response
+from agent_comms.execution.native_input_proof import NativeInputCommit
+from agent_comms.execution.native_pi import NativePiInputNotSent
+from agent_comms.execution.turn_failure import TerminalFailure
+from agent_comms.execution.turn_inbox import TurnInboxItem
+from agent_comms.pi_events import AgentSettled, MessageStart, Response
 
 if TYPE_CHECKING:
-    from .backend import NativeSession
+    from agent_comms.backend import NativeSession
 
 
 class PromptState:

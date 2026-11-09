@@ -53,11 +53,16 @@ def test_a_prepared_action_offers_the_choices_it_was_prepared_with():
 def test_every_action_result_crosses_by_shape_and_keeps_its_cli_form():
     from agent_comms.channel_management import TagChangeResult
     from agent_comms.channels import Channel
-    from agent_comms.cli_commands import (
-        TagRenamedResult, TargetReadResult, ThreadArchivedResult, ThreadPinnedResult,
-        ThreadStoppedResult, ThreadTagsResult, ViewDeletedResult,
-    )
     from agent_comms.cli_command import TargetBatchResult
+    from agent_comms.cli_commands import (
+        TagRenamedResult,
+        TargetReadResult,
+        ThreadArchivedResult,
+        ThreadPinnedResult,
+        ThreadStoppedResult,
+        ThreadTagsResult,
+        ViewDeletedResult,
+    )
     from agent_comms.cli_result import TargetEditResult
     from agent_comms.execution.owner_lifecycle import OwnerStartResult
 

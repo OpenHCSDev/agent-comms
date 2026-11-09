@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .lifecycle import LifecycleState
+    from agent_comms.lifecycle import LifecycleState
 
 
 class LifecycleCapability:

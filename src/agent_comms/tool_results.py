@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from difflib import unified_diff
-from typing import Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import quote
 
 from pydantic import JsonValue
 
-from .nominal.field_codec import NullMember
+from agent_comms.nominal.field_codec import NullMember
 
 if TYPE_CHECKING:
-    from .transcript_events import SentTranscript
+    from agent_comms.transcript_events import SentTranscript
 
 SENT_MESSAGE_MIME = "application/vnd.agent-comms.sent-message+json"
 
@@ -96,7 +96,7 @@ def tool_result_content(
     reports a patch instead, so inventing those versions would misrepresent
     omitted context. text/x-diff preserves the actual tool result for any client.
     """
-    from .transcript_events import ToolEndTranscript
+    from agent_comms.transcript_events import ToolEndTranscript
 
     return [
         part.tool_content(tool_call_id)

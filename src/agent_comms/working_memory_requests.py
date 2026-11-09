@@ -5,13 +5,13 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Literal
 
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec
-from .execution.turn_context import ContextSpan
-from .message_reference import MessageReference
-from .working_memory_disclosure import DisclosureState
-from .working_memory_labels import ClassifierVersion, JevUsage, QuestionVersion
-from .working_memory_questions import SpanQuestion
+from agent_comms.execution.turn_context import ContextSpan
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.working_memory_disclosure import DisclosureState
+from agent_comms.working_memory_labels import ClassifierVersion, JevUsage, QuestionVersion
+from agent_comms.working_memory_questions import SpanQuestion
 
 
 @dataclass(frozen=True)

@@ -7,18 +7,15 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from typing import Annotated, ClassVar, Self
 
-from .coordination.coordinator import Coordination
-from .storage.locked_store import DocumentChange, DurableFile, LockedStore
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.nominal.field_codec import WireExclude, WireTransient, projected
+from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from agent_comms.storage.locked_store import DocumentChange, DurableFile, LockedStore
+from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
+from agent_comms.tool_result import ToolResult
+from agent_comms.watched import Watched
 from agent_comms_hooks import ToolRefusedError
-from .nominal.field_codec import WireExclude, WireTransient, projected
-from .tool_result import ToolResult
-from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from .storage.store_files import DependentStateTier, SingleFileStore
-from .registry.thread_identity import (
-    RecordedThreadIncarnation,
-    ThreadIncarnation,
-)
-from .watched import Watched
 
 
 class CompletedWatch:

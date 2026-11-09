@@ -6,23 +6,14 @@ or changes the registry PID. The socket is scoped to the wire and owner PID.
 
 from __future__ import annotations
 
-from functools import partial
-
-from .acp_extension import (
-    decode_updates,
-    encode_updates,
-)
-from .coordination.coordinator import Coordination
-
 import asyncio
 import json
 import logging
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-
-from .coordination.errors import Refused
 from acp.schema import (
     PermissionOption,
     RequestPermissionResponse,
@@ -30,11 +21,18 @@ from acp.schema import (
     ToolCallUpdate,
 )
 
-from .controller import (
-    ACP_PERMISSION_TIMEOUT_SECONDS, PermissionOutcome,
+from agent_comms.acp_extension import decode_updates, encode_updates
+from agent_comms.controller import ACP_PERMISSION_TIMEOUT_SECONDS, PermissionOutcome
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import Refused
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, MalformedRecord
+from agent_comms.owner_connection import (
+    CapturedOwner,
+    NoControllerToken,
+    OwnerConnection,
+    OwnerIdentityChangedError,
 )
-from .nominal.field_codec import AcpSessionId, FieldCodec, MalformedRecord
-from .owner_protocol import (
+from agent_comms.owner_protocol import (
     IncompatibleOwnerError,
     OwnerLine,
     OwnerPermissionRequest,
@@ -42,15 +40,13 @@ from .owner_protocol import (
     OwnerUpdate,
     UnannouncedOwner,
 )
-from .owner_connection import CapturedOwner, NoControllerToken, OwnerConnection, OwnerIdentityChangedError
-from .transport.runtime_requests import SubscribeRuntimeRequest
-from .registry.thread_identity import ThreadIncarnation
-
-from .transport.runtime_request import RuntimeRequest
-from .runtime_server import ClientPermissionResponse
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.runtime_server import ClientPermissionResponse
+from agent_comms.transport.runtime_request import RuntimeRequest
+from agent_comms.transport.runtime_requests import SubscribeRuntimeRequest
 
 if TYPE_CHECKING:
-    from .acp import CommsAgent
+    from agent_comms.acp import CommsAgent
 
 
 _LOG = logging.getLogger(__name__)

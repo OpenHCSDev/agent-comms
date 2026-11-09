@@ -1,13 +1,12 @@
 """Shared Core inbox delivery and process lifetime for external CLI adapters."""
 from __future__ import annotations
 
-from agent_comms.send_request import SendRequest
-
 import argparse
 import asyncio
 import io
 import json
 import os
+import secrets
 import signal
 import socket
 import sqlite3
@@ -17,7 +16,14 @@ import traceback
 from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
-from contextlib import AbstractContextManager, ExitStack, aclosing, closing, contextmanager, suppress
+from contextlib import (
+    AbstractContextManager,
+    ExitStack,
+    aclosing,
+    closing,
+    contextmanager,
+    suppress,
+)
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
@@ -26,80 +32,28 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, T
 
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
-from agent_comms.nominal import field_codec
 from agent_comms import messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from ..installer.native_build_inputs import DetachedChildStdio
-from ..execution.child_process import (
-    OutlivesLauncherLifetime,
-    Platform,
-    ProcessIdentity,
-    SpawnedProcess,
-)
 from agent_comms.cli_arguments import CliArguments
-from agent_comms.cli_protocol import CoreError, EarlierItems, TaggedWire
-from agent_comms.harness_delivery_states import (
-    DeliveredOutcome, EmittedOutcome, FilteredOutcome, MismatchedMonitor, MonitorEvidence,
-    ObservedMonitor, Outcome, TakingLedger, UnconfirmedOutcome,
+from agent_comms.cli_bridges.monitor import (
+    BRIDGE_FAILURES,
+    BridgeExit,
+    InspectSession,
+    MonitorPeer,
+    PauseSession,
+    PeerGone,
+    RequestFailure,
+    SessionInformation,
+    SessionReady,
+    SessionRefused,
+    SessionReply,
+    SessionRequest,
+    VerifySession,
+    read_monitor,
 )
-from agent_comms.comms import Comms, wire
-from agent_comms.coordination.errors import (
-    CoordinationBeginUnavailable, CoordinationReadUnavailable, DeferredRead,
-)
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.declared_verb import DeclaredOptions
-from agent_comms_hooks.watch import SessionCommandError
-from agent_comms.coordination.database import CoordinationStore
-from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.nominal.field_codec import FieldCodec, MessageId, PathText, SubclassUnion, ThreadLookup
-from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.launch_runtime import LaunchRuntime, RunningSource
-from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
-from agent_comms.storage.private_path import PrivateDirectoryRole, PrivateFileRole, TrustedAncestorRole
-from agent_comms.storage.store_files import ExclusiveDirectoryAtomicFile
-from agent_comms.message_reference import (
-    BridgeBeginning,
-    BridgePosition,
-    BridgeStart,
-    InboxStart,
-    MessageReference,
-)
-from agent_comms.registry.registration import Registration
-from agent_comms.runtime_updates import HiddenItem, ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
-from agent_comms.transcript_publication import PublishesToBus, WaitsOnBusyStore
-from ..execution.turn_item import (
-    NoSourceTurn,
-    SourceTurn,
-)
-from agent_comms.send_result import SendResult
-from agent_comms.registry.threads import ExternalThread
-from ..registry.thread_identity import ThreadIncarnation
-from agent_comms.task_attachments.team_pings import TeamUpdate
-from ..registry.thread_status import ThreadStatus
-from ..registry.thread_text import (
-    AbsentText,
-    GivenText,
-    TextChoice,
-)
-from ..projects.checkouts import Checkout
-from agent_comms.storage.typed_table import (
-    DurableTables,
-    TableSchema,
-    DerivedColumn,
-    StoredRowDerivation,
-    TypedTable,
-    ExternalStore,
-    WriterOwnedFile,
-    WriterOwnedResource,
-    WriterOwnedStore,
-)
-from agent_comms.wire_models import WireModel
-
-from .session_watch import (
+from agent_comms.cli_bridges.session_watch import (
     HeldClaim,
     SessionConnectionClosed,
     SessionFailure,
@@ -107,31 +61,103 @@ from .session_watch import (
     WatchClaim,
     WatchRecord,
 )
-from ..storage.locked_store import FilesRequest, RegistryFile, SQLiteFile
-from agent_comms.harness_install import HarnessSession
-from .monitor import (
-    BRIDGE_FAILURES,
-    BridgeExit,
-    InspectSession,
-    MonitorPeer,
-    PauseSession,
-    SessionInformation,
-    SessionRequest,
-    VerifySession,
-    read_monitor,
+from agent_comms.cli_protocol import CoreError, EarlierItems, TaggedWire
+from agent_comms.comms import Comms, wire
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import (
+    CoordinationBeginUnavailable,
+    CoordinationReadUnavailable,
+    DeferredRead,
 )
-
-import secrets
-from agent_comms.nominal.field_codec import MalformedRecord
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
+from agent_comms.declared_verb import DeclaredOptions
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.execution.child_process import (
+    OutlivesLauncherLifetime,
+    Platform,
+    ProcessIdentity,
+    SpawnedProcess,
+)
+from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
+from agent_comms.harness_delivery_states import (
+    DeliveredOutcome,
+    EmittedOutcome,
+    FilteredOutcome,
+    MismatchedMonitor,
+    MonitorEvidence,
+    ObservedMonitor,
+    Outcome,
+    TakingLedger,
+    UnconfirmedOutcome,
+)
+from agent_comms.harness_install import HarnessSession
+from agent_comms.installer.native_build_inputs import DetachedChildStdio
+from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.launch_runtime import LaunchRuntime, RunningSource
+from agent_comms.message_reference import (
+    BridgeBeginning,
+    BridgePosition,
+    BridgeStart,
+    InboxStart,
+    MessageReference,
+)
 from agent_comms.messages import Message
-from ..registry.thread_status import (
+from agent_comms.nominal import field_codec
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    MessageId,
+    PathText,
+    SubclassUnion,
+    ThreadLookup,
+)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_status import (
     ConnectedThreadStatus,
     PausedBridgeThreadStatus,
+    ThreadStatus,
 )
-from .monitor import PeerGone, RequestFailure, SessionReady, SessionRefused, SessionReply
+from agent_comms.registry.thread_text import AbsentText, GivenText, TextChoice
+from agent_comms.registry.threads import ExternalThread
+from agent_comms.runtime_updates import (
+    HiddenItem,
+    ReplyingThreadOutput,
+    RuntimeUpdate,
+    ThreadOutput,
+)
+from agent_comms.send_request import SendRequest
+from agent_comms.send_result import SendResult
+from agent_comms.storage.locked_store import FilesRequest, RegistryFile, SQLiteFile
+from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
+from agent_comms.storage.private_path import (
+    PrivateDirectoryRole,
+    PrivateFileRole,
+    TrustedAncestorRole,
+)
+from agent_comms.storage.store_files import ExclusiveDirectoryAtomicFile
+from agent_comms.storage.typed_table import (
+    DerivedColumn,
+    DurableTables,
+    ExternalStore,
+    StoredRowDerivation,
+    TableSchema,
+    TypedTable,
+    WriterOwnedFile,
+    WriterOwnedResource,
+    WriterOwnedStore,
+)
+from agent_comms.task_attachments.team_pings import TeamUpdate
+from agent_comms.transcript_publication import PublishesToBus, WaitsOnBusyStore
+from agent_comms.wire_models import WireModel
+from agent_comms_hooks.watch import SessionCommandError
+
 if TYPE_CHECKING:
     from agent_comms.assignment_store import AssignmentStore
-    from .claude_protocol import ReadResultObserved
+    from agent_comms.cli_bridges.claude_protocol import ReadResultObserved
 
 
 class ReaderState:

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from nominal_refactor_advisor.ast_tools import ParsedModule
+
 from agent_comms.storage.store_files import RankedStoreLock, StoreGuard, StoreLockOwner
 
 

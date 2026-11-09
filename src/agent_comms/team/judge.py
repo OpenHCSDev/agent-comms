@@ -37,12 +37,10 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 
 from agent_comms.change_report import FileLine
-from agent_comms.team import order
-from agent_comms.team.order import TeamVerb
-from agent_comms.team.publication_rules import ClosedUnmergedPullRequest
 from agent_comms.comms import Comms
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import TodoError
+from agent_comms.head_review import HeadReviewOrder, PromotedHeadReview, PullRequestHead
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     Argument,
     BoundedText,
@@ -51,24 +49,14 @@ from agent_comms.nominal.field_codec import (
     MessageId,
     RecordProblems,
 )
-from agent_comms.head_review import HeadReviewOrder, PromotedHeadReview, PullRequestHead
-from agent_comms.recorded_time import EventTime
-from agent_comms.slop import Derivation, Slop
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tool_declaration import EditCall, ReplacementEdit
-
-from .standing_rules import (
-    HeadReviewRule,
-    StandingRule,
-)
-from ..planning.order_words import (
+from agent_comms.planning.order_words import (
     BluntText,
     DirectiveText,
     GrowthReason,
     StrikeReason,
     VerdictReason,
 )
-from ..planning.orders import (
+from agent_comms.planning.orders import (
     AbandonedHeadVerdict,
     AcceptedVerdict,
     DroppedVerdict,
@@ -93,12 +81,19 @@ from ..planning.orders import (
     UnderReviewHeadVerdict,
     UnquotedHeadReview,
 )
-from ..transport.tools.orders import (
+from agent_comms.recorded_time import EventTime
+from agent_comms.slop import Derivation, Slop
+from agent_comms.team import order
+from agent_comms.team.order import TeamVerb
+from agent_comms.team.publication_rules import ClosedUnmergedPullRequest
+from agent_comms.team.standing_rules import HeadReviewRule, StandingRule
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tool_declaration import EditCall, ReplacementEdit
+from agent_comms.transport.tools.orders import (
     CommsHeadVerdictTool,
     CommsUnjudgedTool,
     CommsVerdictsTool,
 )
-
 
 EDIT_LINE = "required with edit IDs: an exact diff line each edit contains; repeat for each"
 BRANCH = re.compile(r"\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b")

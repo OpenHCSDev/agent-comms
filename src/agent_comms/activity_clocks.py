@@ -1,18 +1,18 @@
 """Message-derived activity clocks, independent of bus storage and routing."""
 from __future__ import annotations
 
-from .class_fact import ClassFact
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Self
 
-from .nominal.field_codec import FieldCodec
-from .projection_source import ProducedRow, ProjectionSource
-from .storage.typed_table import TypedRow
+from agent_comms.class_fact import ClassFact
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.projection_source import ProducedRow, ProjectionSource
+from agent_comms.storage.typed_table import TypedRow
 
 if TYPE_CHECKING:
-    from .channels import Channel
-    from .messages import Message
+    from agent_comms.channels import Channel
+    from agent_comms.messages import Message
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,8 +20,8 @@ class ChannelActivity(TypedRow, ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_activity_index import BusActivityIndex
-        from .messaging.bus_display_index import BusDisplayIndex
+        from agent_comms.bus_activity_index import BusActivityIndex
+        from agent_comms.messaging.bus_display_index import BusDisplayIndex
         return (BusActivityIndex, BusDisplayIndex)
 
     last_message: float = 0

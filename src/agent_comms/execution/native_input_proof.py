@@ -16,16 +16,34 @@ from typing import Annotated, ClassVar, Literal
 
 from pydantic import JsonValue
 
-from .turn_item import FreshNativeId
-from ..coordination.errors import IdentityConflict
-from ..errors import RelationViolationError
-from .native_failures import NativePiUnavailable
-from .native_integer import PositiveNativeIntegerBounds
-from .native_session_reopen import NativeSessionIdentity, PiSessionId
-from ..nominal.field_codec import FieldCodec, InputId, MalformedRecord, PathText, Sha256Text, WireName
-from ..storage.locked_store import DurableFile, PatternFile, SQLiteFile
-from ..storage.private_path import FileIdentity, PrivateFileRole
-from ..storage.typed_table import Column, DurableTables, GuardedInserts, ImmutableRows, Index, IntegerStorage, ReconciledFile, TableSchema, TypedTable, WithoutRowid
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_integer import PositiveNativeIntegerBounds
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
+from agent_comms.execution.turn_item import FreshNativeId
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    InputId,
+    MalformedRecord,
+    PathText,
+    Sha256Text,
+    WireName,
+)
+from agent_comms.storage.locked_store import DurableFile, PatternFile, SQLiteFile
+from agent_comms.storage.private_path import FileIdentity, PrivateFileRole
+from agent_comms.storage.typed_table import (
+    Column,
+    DurableTables,
+    GuardedInserts,
+    ImmutableRows,
+    Index,
+    IntegerStorage,
+    ReconciledFile,
+    TableSchema,
+    TypedTable,
+    WithoutRowid,
+)
 
 
 @dataclass(frozen=True, slots=True)

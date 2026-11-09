@@ -337,7 +337,7 @@ class ModuleMembers(FamilyMember):
 
     @classmethod
     def _named_member(cls, name: object) -> type[DeclaredFamily]:
-        from .field_codec import FieldCodec, MalformedRecord
+        from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 
         try:
             selected = FieldCodec.decode(str, name)

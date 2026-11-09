@@ -13,20 +13,31 @@ from pathlib import Path
 from typing import ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
 
-from .connector_caller import (
-    CALLER, ConnectorCaller, ForkingCaller, GrantRefusedError, ReadOnlyConnectorCaller,
-    ScopedUiCaller, UiCaller, UiReadCaller,
+from agent_comms.connector_caller import (
+    CALLER,
+    ConnectorCaller,
+    ForkingCaller,
+    GrantRefusedError,
+    ReadOnlyConnectorCaller,
+    ScopedUiCaller,
+    UiCaller,
+    UiReadCaller,
 )
-from .connector_profile import (
-    MCP_PATH, BearerSecret, HttpsMcpEndpoint, UiConnectionProfile, UiCredential, UiGrantId,
+from agent_comms.connector_profile import (
+    MCP_PATH,
+    BearerSecret,
+    HttpsMcpEndpoint,
+    UiConnectionProfile,
+    UiCredential,
+    UiGrantId,
     UiGrantSummary,
 )
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec, NominalSpelling, NominalText, RootId
-from .storage.locked_store import DocumentChange, ExternalFile, FilesRequest
-from .storage.maintenance_barrier import CarriedDocument
-from .storage.store_files import DependentStateTier, DrainedWriters, SingleFileStore
-from .storage.typed_table import GuardedExternalStore
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, NominalSpelling, NominalText, RootId
+from agent_comms.storage.locked_store import DocumentChange, ExternalFile, FilesRequest
+from agent_comms.storage.maintenance_barrier import CarriedDocument
+from agent_comms.storage.store_files import DependentStateTier, DrainedWriters, SingleFileStore
+from agent_comms.storage.typed_table import GuardedExternalStore
 
 ACCESS_SECONDS = 3600
 UI_GRANT_SECONDS = 7 * 24 * 3600

@@ -24,33 +24,45 @@ from typing import ClassVar
 from aiohttp import WSCloseCode, WSMsgType, web
 from yarl import URL
 
-from .agent_inbox import NoWait, TakenInputPosition, TakenInputStart
-from .execution.child_process import ProcessIdentity
-from .cli_bridges.claude_transcript import (
-    WATCH_DEFERRED, WATCH_REPORT, WATCH_STOPPED, WINDOW_ENDED, ClaudeJsonLines, ReceivesWatchReports,
-    ReconnectUrl, ReportedLedger, WatchReport,
+from agent_comms.agent_inbox import NoWait, TakenInputPosition, TakenInputStart
+from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
+from agent_comms.cli_bridges.claude_transcript import (
+    WATCH_DEFERRED,
+    WATCH_REPORT,
+    WATCH_STOPPED,
+    WINDOW_ENDED,
+    ClaudeJsonLines,
+    ReceivesWatchReports,
+    ReconnectUrl,
+    ReportedLedger,
+    WatchReport,
 )
-from .cli_bridges.claude_protocol import ClaudeMonitorFrame
-from .cli_bridges.history import RemoteWatchHistory
-from .cli_bridges.shared import MonitorReadFile, TranscriptConfirmsDelivery
-from .comms import Comms, client_wire
-from .connector_store import BearerSecret, ConnectorStore, digest
-from .coordination.database import CoordinationStore
-from .coordination.tables.harness_deliveries import HarnessDelivery
-from .coordination.coordinator import Coordination
-from .errors import RelationViolationError
-from .storage.maintenance_barrier import MaintenanceHeldError
-from .harness_delivery_states import EmittedOutcome, PrintLedgerId, TakingLedger, UnconfirmedOutcome
-from .message_reference import MessageReference
-from .messages import Message
-from .package_stamp import STAMP
-from .nominal.field_codec import FieldCodec, ThreadLookup
-from .open_viewer import OpenViewer
-from .runtime_updates import RuntimeUpdate
-from .tool_result import ToolResult
-from .transport.tools.inbox import CommsInboxTool
-from .storage.locked_store import RegistryFile
-from .watched import ChangeSignal, FileSource
+from agent_comms.cli_bridges.history import RemoteWatchHistory
+from agent_comms.cli_bridges.shared import MonitorReadFile, TranscriptConfirmsDelivery
+from agent_comms.comms import Comms, client_wire
+from agent_comms.connector_store import BearerSecret, ConnectorStore, digest
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.harness_delivery_states import (
+    EmittedOutcome,
+    PrintLedgerId,
+    TakingLedger,
+    UnconfirmedOutcome,
+)
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
+from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
+from agent_comms.open_viewer import OpenViewer
+from agent_comms.package_stamp import STAMP
+from agent_comms.runtime_updates import RuntimeUpdate
+from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
+from agent_comms.tool_result import ToolResult
+from agent_comms.transport.tools.inbox import CommsInboxTool
+from agent_comms.watched import ChangeSignal, FileSource
 
 
 @dataclass(frozen=True)

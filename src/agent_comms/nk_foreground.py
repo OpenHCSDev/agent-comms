@@ -11,7 +11,6 @@ provider until a separate reviewed enforced cap exists; tests use a fake model.
 
 from __future__ import annotations
 
-
 import argparse
 import asyncio
 import os
@@ -23,21 +22,20 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from agent_comms.comms import wire
+from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination.errors import PublicationActivationBlocked
-
-from .execution.child_process import ProcessIdentity
-from .comms import wire
-from .coordinated_runtime import SelectedExecution
-from .cursor_publication import CursorDelivery
-from .errors import RelationViolationError
-from .fd_readiness import ready
-from .nominal.field_codec import FieldCodec, MalformedRecord, RootId
-from .execution.native_session_files import NativeSessionFiles
-from .installer.native_package import VerifiedNativePackage
+from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.selected.result import CoordinatedTurn
-from .registry.thread_text import GivenThreadText
-from .projects.checkouts import Checkout
-from .registry.threads import NativeThread
+from agent_comms.fd_readiness import ready
+from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RootId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_text import GivenThreadText
+from agent_comms.registry.threads import NativeThread
 
 _MAX_GO_WAIT_SECONDS = 120
 _GO = re.compile(r"GO (0|[1-9][0-9]{0,17})\Z")

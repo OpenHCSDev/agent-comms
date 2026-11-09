@@ -9,12 +9,12 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .turn_context import InputContributionCoordinates
-from ..image_input import ImageInput
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import InputId
-from ..pi_vocabulary import ThinkingLevelField
-from ..registry.thread_model import ThreadModel
+from agent_comms.execution.turn_context import InputContributionCoordinates
+from agent_comms.image_input import ImageInput
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import InputId
+from agent_comms.pi_vocabulary import ThinkingLevelField
+from agent_comms.registry.thread_model import ThreadModel
 
 
 class BusyInputPolicy(DeclaredFamily, affix="InputPolicy"):
