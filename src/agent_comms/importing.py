@@ -137,8 +137,8 @@ class ImportSnapshot(ImportedConversation):
         records.append({"type": "custom", "id": parent, "parentId": None, "timestamp": iso,
             "customType": "agent-comms-import",
             "data": FieldCodec.encode(ImportedSessionMetadata(
-                self.harness, self.source_id, self.messages_seen, len(self.messages),
-                self.truncated_messages, self.notices, self.historical_instructions)),
+                harness=self.harness, source_id=self.source_id, messages_seen=self.messages_seen, messages_imported=len(self.messages),
+                truncated_messages=self.truncated_messages, notices=self.notices, historical_instructions=self.historical_instructions)),
         })
         context = (
             f"Conversation imported from {self.harness.declared_name} session {self.source_id}.\n"
@@ -241,9 +241,9 @@ class ThreadImported(CliResult, ToolResult):
     @classmethod
     def of(cls, thread: str, session_file: Path, snapshot: ImportedConversation) -> ThreadImported:
         return cls(
-            thread, str(session_file), snapshot.harness, snapshot.source_id,
-            snapshot.imported_messages, snapshot.messages_seen - snapshot.imported_messages,
-            snapshot.truncated_messages, snapshot.notices, snapshot.historical_instructions,
+            thread=thread, session_file=str(session_file), harness=snapshot.harness, source_id=snapshot.source_id,
+            imported_messages=snapshot.imported_messages, omitted_messages=snapshot.messages_seen - snapshot.imported_messages,
+            truncated_messages=snapshot.truncated_messages, notices=snapshot.notices, historical_instructions=snapshot.historical_instructions,
         )
 
     def to_wire(self) -> dict[str, object]:

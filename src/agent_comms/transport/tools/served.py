@@ -629,7 +629,7 @@ class CommsModelTool(NextTurnConfiguration, NativeOwnerCommand, NativeToolReques
         thread_name = self.thread.name(caller)
         original = comms.registry.require(thread_name)
         thread = comms.threads.set_thread_configuration(original, self)
-        return ModelChanged(thread.name, thread.model, thread.thinking_level, thread.service_tier)
+        return ModelChanged(thread=thread.name, model=thread.model, thinking_level=thread.thinking_level, service_tier=thread.service_tier)
 
 
 class ServedCommsSortChannelsTool(NativeToolRequest, CommsSortChannelsTool):

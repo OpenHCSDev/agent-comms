@@ -777,7 +777,7 @@ class ContextSegment(
     def manifest(self, tokens: int) -> SegmentManifest:
         raw = self.text().encode()
         return SegmentManifest(
-            type(self), self.provenance, hashlib.sha256(raw).hexdigest(), len(raw), tokens
+            kind=type(self), provenance=self.provenance, sha256=hashlib.sha256(raw).hexdigest(), utf8_bytes=len(raw), tokens=tokens
         )
 
     def source_membership(self):
@@ -811,7 +811,7 @@ class ContributionCoordinates:
     @classmethod
     def capture(cls, kind, provenance, offset, text):
         raw = text.encode("utf-8")
-        return cls(kind, provenance, offset, len(raw), hashlib.sha256(raw).hexdigest())
+        return cls(kind=kind, provenance=provenance, offset=offset, length=len(raw), sha256=hashlib.sha256(raw).hexdigest())
 
     def public_text(self, original: str) -> str:
         raw = original.encode("utf-8")
@@ -904,8 +904,8 @@ class MeasuredNativeSegment(ContextSegment):
 
     def measured_manifest(self):
         # The SDK measures/hashes its exact original JSON representation.
-        return SegmentManifest(type(self), self.provenance,
-                               self.sha256, self.utf8_bytes, self.tokens, self.contributors,
+        return SegmentManifest(kind=type(self), provenance=self.provenance,
+                               sha256=self.sha256, utf8_bytes=self.utf8_bytes, tokens=self.tokens, contributors=self.contributors,
                                source_spans=self.assembly_ranges())
 
     def assembly_ranges(self) -> tuple[ContributionCoordinates, ...]:
@@ -1408,12 +1408,12 @@ class RecordedContextManifest(RecordedContextIdentity):
                 ) -> ContextManifest:
         previous = {} if previous is None else previous
         return ContextManifest(
-            self.thread,
-            self.turn,
-            tuple(segment.restore(entries, previous, position)
+            thread=self.thread,
+            turn=self.turn,
+            segments=tuple(segment.restore(entries, previous, position)
                   for position, segment in enumerate(self.segments)),
-            self.counter,
-            self.request_id,
+            counter=self.counter,
+            request_id=self.request_id,
         )
 
 

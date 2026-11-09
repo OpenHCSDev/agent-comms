@@ -448,7 +448,7 @@ class KnownTurn(ClaudeTurn):
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...],
                  phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
-        return (FinishedItem(self.id, NativeItemId(item), events),)
+        return (FinishedItem(turn_id=self.id, item_id=NativeItemId(item), events=events),)
 
     def active(self, tool_id: str, phase: ClaudeReaderPhase,
                turn_phase: TurnPhase) -> tuple[RuntimeUpdate, ...]:

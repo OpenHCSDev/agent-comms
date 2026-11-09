@@ -131,9 +131,9 @@ def annotation_source(tmp_path: Path) -> Iterator[AnnotationSource]:
     segment = local_system(''.join(texts), tuple(positions))
     spans = segment.public_spans()
     manifest = ContextManifest(
-        owner, RecordedContextTurn(TurnId('1' * 32), TurnIdentity(owner, 1)),
-        (segment.measured_manifest(),), 'fixture-counter',
-        ObservedDispatchRequest(PiRequestKey('fixture-annotation-context')),
+        thread=owner, turn=RecordedContextTurn(TurnId('1' * 32), TurnIdentity(owner, 1)),
+        segments=(segment.measured_manifest(),), counter='fixture-counter',
+        request_id=ObservedDispatchRequest(PiRequestKey('fixture-annotation-context')),
     )
     captured = ContextStore(root).record_after(UNREAD_CONTEXT, manifest)
     with StandaloneCoordination(str(CoordinationStore.path_in(root)), clock_ms=lambda: 1000) as store:

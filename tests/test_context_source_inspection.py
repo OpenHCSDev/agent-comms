@@ -62,8 +62,8 @@ def recorded(segments):
     turn = RecordedContextTurn(
         TurnId('ab87f599dc0a50a56b7c65de71c39426'), TurnIdentity(owner, 2)
     )
-    return ContextManifest(owner, turn, tuple(segments), "pi.estimateTokens",
-                           ObservedDispatchRequest(PiRequestKey("request-one")))
+    return ContextManifest(thread=owner, turn=turn, segments=tuple(segments), counter="pi.estimateTokens",
+                           request_id=ObservedDispatchRequest(PiRequestKey("request-one")))
 
 
 def test_current_native89_shape_and_authenticated_file_read(tmp_path):

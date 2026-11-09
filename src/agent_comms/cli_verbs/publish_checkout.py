@@ -39,6 +39,6 @@ class PublishCheckoutCliCommand(HomeCheckoutCliCommand, declared_name="publish-c
         for relative in (self.destination, self.link):
             rule.require_destination(thread, checkout.path / relative)
         rule.require_floor()
-        publication = CheckoutPublication(checkout, source, self.destination, self.link, self.previous, self.head)
+        publication = CheckoutPublication(checkout=checkout, source=source, destination=self.destination, link=self.link, previous=self.previous, head=self.head)
         destination, files = publication.publish()
         return PublishedCheckoutResult(destination, files, self.head)

@@ -71,10 +71,10 @@ def bind_goal_mentions(
                 )
             )
     return GoalMentionSource(
-        goal_id,
-        revision,
-        hashlib.sha256(text.encode("utf-8")).hexdigest(),
-        owner.name,
-        owner.incarnation.wire_birth,
-        tuple(bindings),
+        goal_id=goal_id,
+        text_revision=revision,
+        text_digest=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        owner_name=owner.name,
+        owner_created_at=owner.incarnation.wire_birth,
+        bindings=tuple(bindings),
     )

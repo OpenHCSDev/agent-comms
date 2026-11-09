@@ -57,22 +57,22 @@ pytestmark = pytest.mark.skipif(
 def record_context(comms: Comms, name: str, generation: int) -> None:
     owner = comms.registry.require(name)
     segment = SegmentManifest(
-        TranscriptSegment,
-        (OwnerProvenance(owner.incarnation, "input-source"),),
-        hashlib.sha256(b"context").hexdigest(),
-        7,
-        2,
+        kind=TranscriptSegment,
+        provenance=(OwnerProvenance(owner.incarnation, "input-source"),),
+        sha256=hashlib.sha256(b"context").hexdigest(),
+        utf8_bytes=7,
+        tokens=2,
     )
     comms.contexts.record_after(
         UNREAD_CONTEXT,
         ContextManifest(
-            owner.incarnation,
-            RecordedContextTurn(
+            thread=owner.incarnation,
+            turn=RecordedContextTurn(
                 TurnId(f"{generation:032x}"),
                 TurnIdentity(owner.incarnation, generation),
             ),
-            (segment,),
-            "pi.estimateTokens",
+            segments=(segment,),
+            counter="pi.estimateTokens",
         ),
     )
 
@@ -115,7 +115,7 @@ def selected_turn(private_comms, private_directory):
             "execution", expected_revision=snapshot.execution.revision
         ).value
         store.start(AttemptStart(
-            "execution", 1, lookup, person.owner_identity.generation, prepare_fence_token(),
+            execution_id="execution", attempt_ordinal=1, owner_lookup=lookup, owner_generation=person.owner_identity.generation, token=prepare_fence_token(),
             expected_execution_revision=snapshot.execution.revision,
             expected_pointer_revision=snapshot.pointer_revision,
         ))

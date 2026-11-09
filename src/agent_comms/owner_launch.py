@@ -77,12 +77,12 @@ class ServedReadHostResourcesRuntimeRequest(
             comms = ctx.server.agent._comms
             process = ProcessIdentity.capture(os.getpid())
             return HostResources(
-                process, owners, len(sys.modules),
-                process.memory(), ProportionalMemory.read(Path("/proc") / str(process.pid)).bytes,
-                comms.registry.store.cache.read_counts(),
-                comms.registry.storage_rule.host_memory_bytes,
-                sum(row.resident for row in ResidentMemory.tree(process, Path("/proc")).values()),
-                comms.registry.storage_rule.team_memory_budget(owners),
+                process=process, owners=owners, modules=len(sys.modules),
+                memory=process.memory(), proportional_bytes=ProportionalMemory.read(Path("/proc") / str(process.pid)).bytes,
+                registry=comms.registry.store.cache.read_counts(),
+                budget_bytes=comms.registry.storage_rule.host_memory_bytes,
+                fleet_resident_bytes=sum(row.resident for row in ResidentMemory.tree(process, Path("/proc")).values()),
+                fleet_budget_bytes=comms.registry.storage_rule.team_memory_budget(owners),
             )
         return await Coordination.run_worker(capture)
 

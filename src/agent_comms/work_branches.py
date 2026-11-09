@@ -568,9 +568,9 @@ query($owner: String!, $name: String!, $after: String) {
         behind = self.history.count(main, base)
         files = self.changed(base, head)
         return BranchDifference(
-            RepositoryName(*self.repository), branch, head, moved_at, main, behind, files,
-            SourceGrowth.capture(self.checkout, base, head, files, timeout=self.timeout),
-            self.unpushed(branch, head),
+            repository=RepositoryName(*self.repository), branch=branch, head=head, moved_at=moved_at, main=main, behind=behind, files=files,
+            growth=SourceGrowth.capture(self.checkout, base, head, files, timeout=self.timeout),
+            unpublished=self.unpushed(branch, head),
         )
 
     def arrived_at(self, head: str) -> float:

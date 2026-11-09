@@ -260,7 +260,7 @@ def test_selected_participant_keeps_its_generation_and_current_pointer(
     source.store.create('selected-current', AcpOrigin, RECIPIENT_LOOKUP, 1)
     source.store.mark_pending('selected-current', expected_revision=1)
     source.store.start(AttemptStart(
-        'selected-current', 1, RECIPIENT_LOOKUP, 2, prepare_fence_token(),
+        execution_id='selected-current', attempt_ordinal=1, owner_lookup=RECIPIENT_LOOKUP, owner_generation=2, token=prepare_fence_token(),
         expected_execution_revision=2, expected_pointer_revision=0,
     ))
     expected = source.store.participants.get(RECIPIENT_LOOKUP)
@@ -344,7 +344,7 @@ def test_selected_store_keeps_sqlite_high_water_without_rowid_mixin(
         source.store.create(execution, AcpOrigin, owner, 1)
         source.store.mark_pending(execution, expected_revision=1)
         source.store.start(AttemptStart(
-            execution, 1, owner, 1, prepare_fence_token(),
+            execution_id=execution, attempt_ordinal=1, owner_lookup=owner, owner_generation=1, token=prepare_fence_token(),
             expected_execution_revision=2, expected_pointer_revision=0,
         ))
         # Actual stored audit rows exercise allocation, not model-stall or native proof.
@@ -370,7 +370,7 @@ def test_selected_store_keeps_sqlite_high_water_without_rowid_mixin(
         retained.create('sequence-new', AcpOrigin, fresh_owner, 1)
         retained.mark_pending('sequence-new', expected_revision=1)
         retained.start(AttemptStart(
-            'sequence-new', 1, fresh_owner, 1, prepare_fence_token(),
+            execution_id='sequence-new', attempt_ordinal=1, owner_lookup=fresh_owner, owner_generation=1, token=prepare_fence_token(),
             expected_execution_revision=2, expected_pointer_revision=0,
         ))
         with retained.session.writing() as db:
