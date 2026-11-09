@@ -182,11 +182,11 @@ async def test_a_live_external_bridge_reads_retained_delivery_without_a_native_s
 
 
 def test_owner_cursor_scope_rebases_only_attachment_session_alias():
+    from agent_comms.transport.attachment_scope import LiveCursorScope
     from agent_comms.acp_extension import (
         CursorAdvancedUpdate,
         CursorEnvelope,
         EmptyCursorObservation,
-        LiveCursorScope,
         decode_updates,
         encode_updates,
     )

@@ -50,9 +50,9 @@ from agent_comms.registry.thread_identity import ClaimedIdentity
 from agent_comms.storage.locked_store import RollbackRetained, WireWakeFile
 from agent_comms.storage.private_path import FileObservation, PrivateFileRole
 from agent_comms.storage.typed_table import TableSchema
+from agent_comms.transport.attachment_scope import CursorScope, LiveCursorScope, NoCursorScope
 
 if TYPE_CHECKING:
-    from agent_comms.acp_extension import CursorScope
     from agent_comms.notification_assignment import (
         NotificationAssignmentRead,
         NotificationSelection,
@@ -242,7 +242,6 @@ class PublicRegistry(RegistryPrivacy):
     def cursor_scope(
         self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
     ) -> CursorScope:
-        from agent_comms.acp_extension import NoCursorScope
 
         return NoCursorScope()
 
@@ -374,7 +373,6 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
     def cursor_scope(
         self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
     ) -> CursorScope:
-        from agent_comms.acp_extension import LiveCursorScope, NoCursorScope
 
         try:
             owner = RegistryOwner.capture_local(snapshot, thread_name)
