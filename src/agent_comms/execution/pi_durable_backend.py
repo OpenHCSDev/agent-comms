@@ -15,8 +15,8 @@ from agent_comms.agent_backend import AgentBackend, CompactionOutcome, Compacts,
 from agent_comms.agent_events import Error
 from agent_comms.execution.native_child import PiChild
 from agent_comms.execution.native_entries import StoredEntry
+from agent_comms.execution.native_records import StoredRecord
 from agent_comms.execution.native_session_files import SessionFiles
-from agent_comms.execution.native_transcript import StoredRecord
 from agent_comms.execution.pi_commands import Compact, ExactResponse, PiCommand, SetModel
 from agent_comms.execution.pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
 from agent_comms.execution.pi_vocabulary import ThinkingLevelField

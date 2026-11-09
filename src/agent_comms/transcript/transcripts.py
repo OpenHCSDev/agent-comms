@@ -40,12 +40,8 @@ from agent_comms.execution.transcript_sources import (
     TranscriptTraversal,
     WireFrontier,
 )
-from agent_comms.execution.turn_digests import (
-    InputAnswerRead,
-    ThreadTurns,
-    TurnBound,
-    TurnDigestRead,
-)
+from agent_comms.execution.turn_bound import TurnBound
+from agent_comms.execution.turn_digests import InputAnswerRead, ThreadTurns, TurnDigestRead
 from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.bus import Bus

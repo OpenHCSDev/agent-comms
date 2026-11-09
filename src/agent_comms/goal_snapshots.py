@@ -1,0 +1,20 @@
+"""The owning goal snapshot and original wait rows presentation reads."""
+
+from abc import ABC, abstractmethod
+from collections.abc import Callable
+
+from agent_comms.goal_execution_snapshot import GoalExecutionSnapshot
+from agent_comms.planning.goal_waits import GoalWait, GoalWaits
+from agent_comms.planning.goals import GoalDeclaration
+from agent_comms.registry.registry_document import RegistrySnapshot
+
+
+class GoalSnapshots[Owner, Snapshot: GoalExecutionSnapshot](ABC):
+    __slots__ = ()
+
+    waits: GoalWaits
+
+    @abstractmethod
+    def snapshot_for(self, owner: Owner, snapshot: RegistrySnapshot,
+                     wait: Callable[[GoalDeclaration], GoalWait]) -> Snapshot:
+        ...

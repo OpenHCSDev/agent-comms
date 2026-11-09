@@ -1,0 +1,533 @@
+--- src/agent_comms/activity_clocks.py
++++ src/agent_comms/activity_clocks.py
+@@ -6,6 +6,7 @@
+ from typing import TYPE_CHECKING, Self
+ 
+ from agent_comms.class_fact import ClassFact
++from agent_comms.display_sources import SentClocks
+ from agent_comms.nominal.field_codec import FieldCodec
+ from agent_comms.projection_source import ProducedRow, ProjectionSource
+ from agent_comms.storage.typed_table import TypedRow
+@@ -58,7 +59,7 @@
+ 
+ 
+ @dataclass(frozen=True)
+-class ActivityClocks:
++class ActivityClocks(SentClocks):
+     channels: dict[str, ChannelActivity] = field(default_factory=dict)
+     sent: dict[str, float] = field(default_factory=dict)
+ 
+--- src/agent_comms/channel_management.py
++++ src/agent_comms/channel_management.py
+@@ -9,6 +9,7 @@
+ from typing import TYPE_CHECKING, ClassVar
+ 
+ from agent_comms.bus_publication import AgentOrigin
++from agent_comms.display_sources import ChannelOrderSource
+ from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget, Tag
+ from agent_comms.messaging.channels import Channel, SavedView
+ from agent_comms.cli_result import TargetEditResult
+@@ -154,7 +155,7 @@
+         channels.delete_tag(self.name, disposition=self.disposition, confirmed=self.confirmed)
+ 
+ 
+-class ChannelManagement:
++class ChannelManagement(ChannelOrderSource[type[ThreadSort], type[ChannelSort]]):
+     def __init__(self, root: Path, registry: Registration, bus: MessageBus, threads: ThreadManagement):
+         self.root = root
+         self.registry = registry
+--- src/agent_comms/display_sources.py
++++ src/agent_comms/display_sources.py
+@@ -1,55 +1,59 @@
+ """The source operations display choices consume, independent of their services."""
+ 
++from abc import ABC, abstractmethod
+ from collections.abc import Iterable, Mapping
+ from contextlib import AbstractContextManager
+-from typing import Protocol, Self
++from typing import Self
+ 
+ 
+-class SentClocks(Protocol):
+-    @property
+-    def sent(self) -> Mapping[str, float]: ...
++class SentClocks(ABC):
++    __slots__ = ()
++    sent: Mapping[str, float]
+ 
+ 
+-class ActivitySource(Protocol):
++class ActivitySource(ABC):
++    __slots__ = ()
++
++    @abstractmethod
+     def opened_activity(self) -> AbstractContextManager[SentClocks]: ...
+ 
+ 
+-class SentHistorySource[Registry](Protocol):
+-    @property
+-    def bus(self) -> ActivitySource: ...
++class SentHistorySource[Registry](ABC):
++    __slots__ = ()
++    bus: ActivitySource
+ 
++    @abstractmethod
+     def last_sent_timestamps(
+         self, rows: Iterable[tuple[str, float]], *, registry: Registry,
+     ) -> dict[str, float]: ...
+ 
+ 
+-class StoredThreadOrder[Order](Protocol):
+-    @property
+-    def order(self) -> Order: ...
++class StoredThreadOrder[Order](ABC):
++    __slots__ = ()
++    order: Order
+ 
+ 
+-class ChannelOrderSource[ThreadOrder, ChannelOrder](Protocol):
++class ChannelOrderSource[ThreadOrder, ChannelOrder](ABC):
++    __slots__ = ()
++
++    @abstractmethod
+     def set_channel_sort(self, name: str, order: ThreadOrder) -> StoredThreadOrder[ThreadOrder]: ...
+ 
++    @abstractmethod
+     def set_channel_order(self, order: ChannelOrder) -> ChannelOrder: ...
+ 
+ 
+-class SortedChannel[View, Order](Protocol):
+-    @property
+-    def name(self) -> str: ...
++class SortedChannel[View, Order](ABC):
++    __slots__ = ()
++    name: str
++    created_at: float
+ 
+-    @property
+-    def created_at(self) -> float: ...
+-
++    @abstractmethod
+     def sort_key(self, order: Order, view: View) -> tuple[int, int, float, float, str]: ...
+ 
+ 
+-class ChannelSortView[Order](Protocol):
+-    @property
+-    def channel(self) -> SortedChannel[Self, Order]: ...
+-
+-    @property
+-    def last_activity(self) -> float: ...
+-
+-    @property
+-    def last_user_input(self) -> float: ...
++class ChannelSortView[Order](ABC):
++    __slots__ = ()
++    channel: SortedChannel[Self, Order]
++    last_activity: float
++    last_user_input: float
+--- src/agent_comms/goal_ledger.py
++++ src/agent_comms/goal_ledger.py
+@@ -18,10 +18,10 @@
+ from agent_comms.attempt_resolution import WorkDecision
+ from agent_comms.planning.goal_attempt_identity import FailureNotObserved
+ from agent_comms.planning.goal_attempt_identity import GoalAttemptIdentity
+-from agent_comms.planning.goal_attempt_phase import FailedAttempt
++from agent_comms.planning.goal_attempt_phase import FailedAttempt, GoalAttemptTransition
+ from agent_comms.planning.goal_attempt_phase import GoalAttemptPhase
+ from agent_comms.planning.goal_attempt_phase import ResolvedAttempt
+-from agent_comms.planning.goal_failure_observation import GoalFailureEvidence
++from agent_comms.planning.goal_failure_observation import GenerationFailureSource, GoalFailureEvidence
+ from agent_comms.planning.goal_failure_observation import NoFailedTurnEvidence
+ from agent_comms.planning.goal_generation import BlockedGeneration
+ from agent_comms.planning.goal_generation import GenerationState
+@@ -137,7 +137,7 @@
+ 
+ 
+ @dataclass(frozen=True)
+-class Generation(GoalLedgerTable, TypedTable, GoalGenerationRead):
++class Generation(GoalLedgerTable, TypedTable, GoalGenerationRead, GenerationFailureSource["FailedTurnEvidence"]):
+     goal_id: Annotated[GoalId, Column(primary_key=True)]
+     number: Annotated[int, Column(check="number>0")]
+     lifecycle: GenerationState
+@@ -295,7 +295,7 @@
+ 
+ 
+ @dataclass(frozen=True)
+-class AttemptRecord(GoalLedgerTable, TypedTable):
++class AttemptRecord(GoalLedgerTable, TypedTable, GoalAttemptTransition):
+     reservation: Annotated[Reservation, Column(primary_key=True)]
+     phase: GoalAttemptPhase
+     progress_witness: str | None
+--- src/agent_comms/goal_work.py
++++ src/agent_comms/goal_work.py
+@@ -1,64 +1,66 @@
+ """The assignment read surface consumed by a goal, without a dependency on its stores."""
+ 
+ from abc import ABC, abstractmethod
+-from typing import Protocol, Self
+ 
+ from agent_comms.execution.child_process import ProcessState
+ from agent_comms.nominal.field_codec import GoalId
+ from agent_comms.projects.checkouts import Checkout
+-from agent_comms.registry.thread_identity import ObservedTurn
+-from agent_comms.registry.thread_identity import ThreadIncarnation
++from agent_comms.registry.thread_identity import ObservedTurn, ThreadIncarnation
+ 
+ 
+-class GoalObservation(Protocol):
++class GoalObservation(ABC):
++    __slots__ = ()
++
+     @property
++    @abstractmethod
+     def captured(self) -> object: ...
+ 
++    @abstractmethod
+     def accepts_observation(self, goal_id: GoalId, minimum_revision: int) -> bool: ...
+ 
+ 
+-class GoalOwner(Protocol):
+-    @property
+-    def name(self) -> str: ...
++class GoalOwner(ABC):
++    __slots__ = ()
++    name: str
++    goal: GoalObservation
+ 
+     @property
++    @abstractmethod
+     def incarnation(self) -> ThreadIncarnation: ...
+ 
+-    @property
+-    def goal(self) -> GoalObservation: ...
+-
++    @abstractmethod
+     def require_goal_assignment(self, actor: ThreadIncarnation) -> None: ...
+ 
+ 
+-class GoalFailureOwner(GoalOwner, Protocol):
+-    @property
+-    def worktree(self) -> Checkout: ...
++class GoalFailureOwner(GoalOwner):
++    __slots__ = ()
++    worktree: Checkout
++    process_identity: ProcessState
+ 
+-    @property
+-    def process_identity(self) -> ProcessState: ...
+-
++    @abstractmethod
+     def observed_turn(self, claim_scope: int) -> ObservedTurn: ...
+ 
+ 
+-class GoalAssignmentOrder[Assignment](Protocol):
+-    def instructions(self, assignment: Assignment) -> str: ...
++class GoalAssignment(ABC):
++    __slots__ = ()
+ 
++    @abstractmethod
++    def goal_instructions(self) -> tuple[str, ...]: ...
+ 
+-class GoalAssignment(Protocol):
+-    @property
+-    def order(self) -> GoalAssignmentOrder[Self]: ...
+-
+-    @property
+-    def pending(self) -> bool: ...
+-
++    @abstractmethod
+     def progress_line(self) -> str: ...
+ 
+ 
+-class GoalAssignments(Protocol):
++class GoalAssignments(ABC):
++    __slots__ = ()
++
++    @abstractmethod
+     def for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]: ...
+ 
++    @abstractmethod
+     def closed_for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]: ...
+ 
++    @abstractmethod
+     def holds_pending(self, owner: ThreadIncarnation) -> bool: ...
+ 
+ 
+--- src/agent_comms/history_views.py
++++ src/agent_comms/history_views.py
+@@ -83,6 +83,7 @@
+ from agent_comms.registry.thread_presentation import NoThreadPresentation, ThreadPresentation
+ from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
+ from agent_comms.registry_names import DeletedThread
++from agent_comms.relationships import RelationshipSource
+ from agent_comms.retained_task_facts import RetainedTaskFacts
+ from agent_comms.sent_message import AssignedSourceIdentity
+ from agent_comms.shared_ledger import LedgerDocument
+@@ -192,7 +193,7 @@
+         return self.read(name).require(name)
+ 
+ 
+-class HistoryViews:
++class HistoryViews(RelationshipSource):
+     def __init__(
+         self,
+         root: Path,
+--- src/agent_comms/messaging/channels.py
++++ src/agent_comms/messaging/channels.py
+@@ -9,9 +9,10 @@
+ from dataclasses import dataclass, field
+ from typing import Annotated, ClassVar, TYPE_CHECKING
+ 
++from agent_comms.display_sources import ChannelSortView, SortedChannel, StoredThreadOrder
+ from agent_comms.messaging.channel_targets import ChannelTarget, Tag
+ from agent_comms.cli_result import CliResult
+-from agent_comms.display_order import CreatedThreadSort, ThreadSort
++from agent_comms.display_order import ChannelSort, CreatedThreadSort, ThreadSort
+ from agent_comms.errors import RelationViolationError
+ from agent_comms.history_result import (
+     ChannelHistoryPageResult,
+@@ -55,7 +56,7 @@
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+-class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, affix="Channel"):
++class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, StoredThreadOrder[type[ThreadSort]], SortedChannel[ChannelSortView[type[ChannelSort]], type[ChannelSort]], affix="Channel"):
+     """A captured channel presentation with behavior supplied by its declaration."""
+ 
+     name: str
+--- src/agent_comms/messaging/published_bus.py
++++ src/agent_comms/messaging/published_bus.py
+@@ -11,12 +11,13 @@
+ from agent_comms.bus import Bus
+ from agent_comms.catalog_document import CatalogAccess
+ from agent_comms.catalog_store import ChannelCatalog
++from agent_comms.display_sources import ActivitySource
+ from agent_comms.messaging.channel_targets import ChannelTarget
+ from agent_comms.messaging.channels import Channel
+ from agent_comms.messaging.read_ledger import ReadLedger
+ 
+ 
+-class BusResources:
++class BusResources(ActivitySource):
+     """The original live bus, read ledger and shared activity read."""
+     __slots__ = ()
+ 
+--- src/agent_comms/planning/goal_attempt_phase.py
++++ src/agent_comms/planning/goal_attempt_phase.py
+@@ -3,7 +3,7 @@
+ from abc import ABC, abstractmethod
+ from dataclasses import dataclass
+ from sqlite3 import Connection
+-from typing import ClassVar, Protocol
++from typing import ClassVar
+ 
+ from agent_comms.attempt_resolution import AttemptResolution
+ from agent_comms.errors import UnresolvedAttemptError
+@@ -12,7 +12,10 @@
+ from agent_comms.nominal.declared_family import DeclaredFamily
+ 
+ 
+-class GoalAttemptTransition(Protocol):
++class GoalAttemptTransition(ABC):
++    __slots__ = ()
++
++    @abstractmethod
+     def advance(
+         self, conn: Connection, phase: GoalAttemptPhase, *,
+         progress_witness: str | None = ..., resolution: AttemptResolution = ...,
+--- src/agent_comms/planning/goal_failure_observation.py
++++ src/agent_comms/planning/goal_failure_observation.py
+@@ -4,7 +4,6 @@
+ from abc import ABC, abstractmethod
+ from dataclasses import dataclass
+ from sqlite3 import Connection
+-from typing import Protocol
+ 
+ from agent_comms.goal_mutation import GoalFailureProjection
+ 
+@@ -20,5 +19,8 @@
+         return source.unresolved()
+ 
+ 
+-class GenerationFailureSource[Failure](Protocol):
++class GenerationFailureSource[Failure](ABC):
++    __slots__ = ()
++
++    @abstractmethod
+     def failure_evidence(self, conn: Connection) -> GoalFailureEvidence[Failure]: ...
+--- src/agent_comms/planning/goals.py
++++ src/agent_comms/planning/goals.py
+@@ -8,7 +8,7 @@
+ from collections.abc import Callable, Iterator, Sequence
+ from dataclasses import dataclass, field, replace
+ from pathlib import Path
+-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
++from typing import Annotated, ClassVar, Literal
+ 
+ from metaclass_registry.mro_dispatch import MroDispatch
+ 
+@@ -32,7 +32,7 @@
+ )
+ from agent_comms.goal_mutation import GoalMutation
+ from agent_comms.goal_permit_source import GoalPermitSource
+-from agent_comms.goal_work import GoalAssignment, GoalOwner, GoalWorkSource
++from agent_comms.goal_work import GoalAssignment, GoalObservation, GoalOwner, GoalWorkSource
+ from agent_comms.lifecycle_capability import Active
+ from agent_comms.nominal.declared_family import DeclaredFamily
+ from agent_comms.nominal.field_codec import (
+@@ -553,7 +553,7 @@
+         return goals.todos.for_goal(owner, goal_id)
+ 
+     def instructions(self, todos: Sequence[GoalAssignment]) -> str:
+-        return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
++        return "\n\n".join(text for todo in todos for text in todo.goal_instructions())
+ 
+     def goal_text(self, goal: Goal) -> str:
+         return self.text
+@@ -579,7 +579,7 @@
+ 
+ class GoalDeclaration(
+     GoalDisplay["GoalDeclaration", "Goal"], SubclassUnion,
+-    RegistrationInheritance["GoalDeclaration"],
++    RegistrationInheritance["GoalDeclaration"], GoalObservation,
+ ):
+     """The recorded goal state, including a thread with no goal."""
+ 
+--- src/agent_comms/planning/orders.py
++++ src/agent_comms/planning/orders.py
+@@ -51,6 +51,7 @@
+ from agent_comms.coordination.session import NativeCapture
+ from agent_comms.errors import MissingSourceLine, TodoError
+ from agent_comms.execution.child_process import ChildResult, OrderCheckFailedError
++from agent_comms.goal_work import GoalAssignment, GoalAssignments
+ from agent_comms.head_review import (
+     HeadReview,
+     HeadReviewOrder,
+@@ -5016,7 +5017,7 @@
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+-class Todo(TodoStoreRows, TypedTable):
++class Todo(TodoStoreRows, TypedTable, GoalAssignment):
+     unit_index: ClassVar[ExpressionIndex] = ExpressionIndex((
+         Assignment.sql_field('owner_created'), '{state}',
+     ))
+@@ -5061,6 +5062,11 @@
+     @property
+     def judged_calls(self) -> tuple[ToolCallId, ...]:
+         return self.history.facts_for(self.id).judged_calls
++
++    def goal_instructions(self) -> tuple[str, ...]:
++        """The original pending order contributes one instruction, every other order none."""
++        return tuple(item.order.instructions(item)
++                     for item in self.order.items_with(Pending, self))
+ 
+     def progress_line(self) -> str:
+         return " · ".join((f"{self.id}: {self.order.line}",
+@@ -5790,7 +5796,7 @@
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+-class TodoStore(OwnerRequestStore, TodoHistory):
++class TodoStore(OwnerRequestStore, TodoHistory, GoalAssignments):
+     """One SQLite row owns both todo state and its exclusive assignment.
+ 
+     Assignment identity and revision deduplicate known operations. An uncertain
+--- src/agent_comms/presentation.py
++++ src/agent_comms/presentation.py
+@@ -29,6 +29,7 @@
+ from agent_comms.coordination.errors import DMPaintedBoundChanged
+ from agent_comms.display_order import ChannelSort, NameChannelSort
+ from agent_comms.display_references import CurrentDisplayReferences
++from agent_comms.display_sources import ChannelSortView
+ from agent_comms.external_transcript import ExternalTranscript
+ from agent_comms.goal_execution import GoalExecution
+ from agent_comms.goal_execution_snapshot import GoalExecutionSnapshot
+@@ -251,7 +252,7 @@
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+-class ChannelView(ToolResult):
++class ChannelView(ToolResult, ChannelSortView[type[ChannelSort]]):
+     """Wire form: the channel's own fields beside its roster; agent counts stay in process."""
+ 
+     channel: Annotated[Channel, WireInline()]
+--- src/agent_comms/registry/threads.py
++++ src/agent_comms/registry/threads.py
+@@ -25,6 +25,7 @@
+     TurnState,
+ )
+ from agent_comms.goal_mutation import GoalFork
++from agent_comms.goal_work import GoalFailureOwner
+ from agent_comms.heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
+ from agent_comms.launch_runtime import ThreadLaunch
+ from agent_comms.lifecycle import LifecycleState
+@@ -324,7 +325,7 @@
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+-class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, TaskOwner, affix="Thread"):
++class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, TaskOwner, GoalFailureOwner, affix="Thread"):
+     """Declares one agent thread's identity and provenance; each member is how it executes.
+ 
+     The registration owns transport intent; presence does not imply an RPC.
+--- src/agent_comms/relationships.py
++++ src/agent_comms/relationships.py
+@@ -16,14 +16,14 @@
+ from typing import Annotated, ClassVar, Literal, Protocol
+ 
+ from agent_comms import presentation
+-from agent_comms.bus import BusReader
+ from agent_comms.catalog_store import ChannelCatalog
+ from agent_comms.command import Command
+ from agent_comms.display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
+-from agent_comms.display_sources import ActivitySource, SentHistorySource
++from agent_comms.display_sources import SentHistorySource
+ from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+ from agent_comms.messaging.channel_targets import CommandTarget
+ from agent_comms.messaging.messages import Message, MessageInput, MessageRole
++from agent_comms.messaging.published_bus import BusResources
+ from agent_comms.nominal import field_codec
+ from agent_comms.nominal.declared_family import DeclaredFamily
+ from agent_comms.nominal.field_codec import GoalId
+@@ -718,31 +718,22 @@
+         self.update(remove)
+ 
+ 
+-class RelationshipBusSource(ActivitySource, Protocol):
+-    @property
+-    def bus(self) -> BusReader: ...
+-
+-
+ class RelationshipCatalogSource(Protocol):
+     @property
+     def catalog(self) -> ChannelCatalog: ...
+ 
+ 
+-class RelationshipSource(SentHistorySource[RegistrySnapshot], Protocol):
+-    @property
+-    def root(self) -> Path: ...
+-
+-    @property
+-    def registry(self) -> Registration: ...
+-
+-    @property
+-    def bus(self) -> RelationshipBusSource: ...
+-
+-    @property
+-    def channels(self) -> RelationshipCatalogSource: ...
+-
++class RelationshipSource(SentHistorySource[RegistrySnapshot]):
++    __slots__ = ()
++    root: Path
++    registry: Registration
++    bus: BusResources
++    channels: RelationshipCatalogSource
++
++    @abstractmethod
+     def revision(self) -> presentation.WireRevision: ...
+ 
++    @abstractmethod
+     def thread_views(
+         self, visibility: RosterVisibility,
+     ) -> tuple[presentation.ThreadView, ...]: ...

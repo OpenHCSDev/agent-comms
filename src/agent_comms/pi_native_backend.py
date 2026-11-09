@@ -11,6 +11,8 @@ implementation modules (``backend``, ``pi_commands``, ``pi_events``,
 
 from __future__ import annotations
 
+from agent_comms.execution.session_retention import NativeSessionRetention
+
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
@@ -59,7 +61,8 @@ from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.team.rule_deal import SystemPromptDelivery
 
 if TYPE_CHECKING:
-    from agent_comms.agent_events import AgentEvent, AgentInfo
+    from agent_comms.agent_event import AgentEvent
+    from agent_comms.agent_events import AgentInfo
     from agent_comms.comms import Comms
     from agent_comms.config_options import ConfigOptions
     from agent_comms.execution.launch_runtime import LaunchRuntime
@@ -134,7 +137,9 @@ class PiSessionFile(RuntimeLocation):
                      for model in entry.saved_models), UndeclaredModel())
 
 
-class PersistentPiSession:
+class PersistentPiSession(
+    NativeSessionRetention["PiSessionChild", "NativeChildState", NativeSessionIdentity],
+):
     """Serialize borrowing and retirement of one native session's actual child."""
 
     def __init__(self) -> None:

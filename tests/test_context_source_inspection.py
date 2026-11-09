@@ -1,27 +1,34 @@
 """Source membership, public-only capture, and selected recorded values."""
-
 import hashlib
 import json
+import subprocess
+import sys
 from dataclasses import replace
 
 import pytest
 
+from agent_comms.cli_verbs.turn_context import TurnContextCliCommand
+from agent_comms.context_segments.awareness import AwarenessSegment
+from agent_comms.context_segments.native_messages import TranscriptSegment
 from agent_comms.context_store import UNREAD_CONTEXT
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
 from agent_comms.execution.native_turn_context import NativeContextManifestData
+from agent_comms.execution.pi_commands import AgentCommsInspectContextSegment
+from agent_comms.execution.runtime import RuntimeConnection
 from agent_comms.execution.session_file import NoSessionFile
 from agent_comms.execution.turn_context import (
     ContextManifest,
     ContextSourceText,
     ContributionCoordinates,
     FileProvenance,
+    InstructionFile,
     JournalProvenance,
     NativeProvenance,
+    NextContextTurn,
     ObservedDispatchRequest,
     PreviewProvenance,
     RecordedContextTurn,
     SystemLayerSegment,
-    TranscriptSegment,
     TurnContext,
     UnattributedProvenance,
     UnobservedDispatchRequest,
@@ -36,6 +43,7 @@ from agent_comms.registry.thread_identity import (
     ReportedTools,
     TurnIdentity,
 )
+from agent_comms.transport.owner_connection import socket_path
 from agent_comms.transport.runtime_request import RuntimeRequest
 from agent_comms.transport.runtime_requests import (
     ContextCoreRuntimeRequest,
@@ -44,7 +52,13 @@ from agent_comms.transport.runtime_requests import (
 )
 from bus_history import read_history
 from bus_record_fixture import context_comms
-from delivery_owner_fixture import qualified_owner_launch  # noqa: F401
+
+# noqa: F401
+from delivery_owner_fixture import (
+    canonical_delivery_owner,
+    qualified_owner_launch,
+    start_headless_owner,
+)
 
 
 def system(provenance, content="Original instruction π"):
@@ -98,7 +112,7 @@ def test_current_native89_shape_and_authenticated_file_read(tmp_path):
 def test_current_core_context_is_independent_and_source_selection_is_current(tmp_path):
     comms = context_comms(tmp_path)
     owner = comms.registry.require("Alice")
-    context = TurnContext.for_inspection(comms, owner)
+    context = comms.context_for(owner)
     assert FieldCodec.decode(TurnContext, FieldCodec.encode(context)) == context
     request = ContextCoreRuntimeRequest(thread=owner.name)
     assert FieldCodec.decode(RuntimeRequest, FieldCodec.encode(request)) == request
@@ -125,9 +139,6 @@ def test_current_core_context_is_independent_and_source_selection_is_current(tmp
 @pytest.mark.asyncio
 async def test_core_context_socket_reads_without_native_session_or_preview(
         tmp_path, qualified_owner_launch):
-    from agent_comms.execution.runtime import RuntimeConnection
-    from agent_comms.transport.owner_connection import socket_path
-    from delivery_owner_fixture import canonical_delivery_owner, start_headless_owner
 
     async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):
         owner = comms.registry.require("alpha")
@@ -141,7 +152,7 @@ async def test_core_context_socket_reads_without_native_session_or_preview(
         try:
             context = FieldCodec.decode(TurnContext, await connection.request("context_core"))
             assert context.thread == owner.incarnation
-            assert context.segments == TurnContext.for_inspection(comms, owner).segments
+            assert context.segments == comms.context_for(owner).segments
             position, segment = next((i, s) for i, s in enumerate(context.segments)
                                      if any(isinstance(p, FileProvenance) for p in s.provenance))
             source = next(p for p in segment.provenance if isinstance(p, FileProvenance))
@@ -298,7 +309,6 @@ async def test_mixed_recorded_root_merges_capture_and_verified_parts_once(tmp_pa
     assert await root.public_text(read_reference) == (
         "Original transformed message\nOriginal journal message")
     assert reads == [root]
-    from agent_comms.execution.pi_commands import AgentCommsInspectContextSegment
 
     request = AgentCommsInspectContextSegment.for_manifest(root)
     assert request.parts == (value.measured_manifest(),)
@@ -324,7 +334,6 @@ def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path
     assert captured.public_text_recorded
     assert not replace(captured, segments=(replace(captured.segments[0], captured_text=()),))\
         .public_text_recorded
-    from agent_comms.cli_verbs.turn_context import TurnContextCliCommand
 
     command = TurnContextCliCommand(thread=owner.name, turn=2)
     assert command.apply(comms).to_wire()["text_recorded"] is True
@@ -344,17 +353,11 @@ def test_authored_sdk_observation_retains_read_identity_without_minting_native_p
 
 def test_cold_client_acquires_current_and_recorded_contributor_declarations():
     """Prevent producer-import order from changing RPC and manifest decoding."""
-    import subprocess
-    import sys
-
-    from agent_comms.context_segments.awareness import AwarenessSegment
-    from agent_comms.execution.turn_context import InstructionFile
 
     source = FileProvenance("/original/instructions/awareness.md", "a" * 64)
     original = "Original awareness instruction"
     contributor = AwarenessSegment(
         provenance=(source,), instruction=InstructionFile(original, source), bus="bus", sources=())
-    from agent_comms.execution.turn_context import NextContextTurn
     payload = FieldCodec.encode(TurnContext(RecordedThreadIncarnation("original-owner", 17002.0),
                                          NextContextTurn(), (contributor,)))
     result = subprocess.run([sys.executable, "-c", '''

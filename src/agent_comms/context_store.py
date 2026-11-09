@@ -17,6 +17,7 @@ from agent_comms.execution.turn_context import (
     ContextEntryManifest,
     ContextEntryReference,
     ContextManifest,
+    ContextRecording,
     PreviouslyRecordedSegment,
     RecordedContextIdentity,
     RecordedContextManifest,
@@ -311,7 +312,7 @@ class UnreadContextPrior(ContextPrior):
 UNREAD_CONTEXT = UnreadContextPrior()
 
 
-class RecordedContextState(ContextPrior):
+class RecordedContextState(ContextPrior, ContextRecording):
     """The previous request, including the first request's lack of a predecessor."""
 
     def read(self, store: ContextStore, owner: ThreadIncarnation) -> RecordedContextState:
@@ -322,12 +323,6 @@ class RecordedContextState(ContextPrior):
         self, db: sqlite3.Connection, source: ContextStoreIdentity, owner: ThreadIncarnation
     ) -> None:
         """Refuse when another writer recorded this thread after this prior."""
-
-    @abstractmethod
-    def next_recording_turn(self) -> int: ...
-
-    @abstractmethod
-    def segment(self, position: int, original: SegmentManifest) -> SegmentRecording: ...
 
     def capture(
         self, manifest: ContextManifest

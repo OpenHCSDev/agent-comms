@@ -2,31 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import math
-from abc import (
-    ABC,
-    abstractmethod,
-)
-from collections.abc import (
-    Callable,
-    Iterable,
-    Sequence,
-)
-from dataclasses import (
-    dataclass,
-    field,
-    replace,
-)
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, field, replace
 from functools import cached_property
-from typing import (
-    TYPE_CHECKING,
-    Annotated,
-    ClassVar,
-    Self,
-    TypeVar,
-)
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.participant_identity import ParticipantIdentity
+from agent_comms.message_clock_source import SenderClockSource
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
 from agent_comms.messaging.response_policy import (
     CollectivePolicy,
@@ -635,7 +619,12 @@ class GenerationCounter(ProjectionSource):
         self.generations[new] = self.generations.pop(old)
 
 
-class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
+class ThreadRole(
+    DeclaredFamily,
+    ProjectionSource,
+    SenderClockSource,
+    affix='ThreadRole',
+):
     """Whether a thread executes turns is the member's type; its wire name is its spelling."""
 
     @ClassFact
@@ -727,10 +716,6 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
     @abstractmethod
     def reply_target(cls, message: Message) -> str | None:
         """An external sender may receive an automatic live reply."""
-
-    @classmethod
-    @abstractmethod
-    def last_user_input(cls, previous: float, timestamp: float) -> float: ...
 
     @classmethod
     @abstractmethod

@@ -22,7 +22,7 @@ from agent_comms.execution.native_transcript import SessionCut, record_end, reve
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.messaging.watched import FileSource
-from agent_comms.registry.registry_document import RosterVisibility
+from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
 from agent_comms.storage.locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile

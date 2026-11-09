@@ -7,9 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from agent_comms.coordination.contracts import (
-    validate_execution_id,
-)
+from agent_comms.coordination.contracts import validate_execution_id
 from agent_comms.coordination.errors import (
     IdentityConflict,
     IntegrityViolationError,
@@ -58,6 +56,7 @@ from agent_comms.storage.typed_table import (
     RetainsChildren,
     TextStorage,
 )
+from agent_comms.turn_failure_reads import ReplayPreparation
 from agent_comms.waking.wake_candidate_index import ProjectionUnavailableError
 
 if TYPE_CHECKING:
@@ -613,6 +612,7 @@ class ReplayAssessments(
     RetryPartition,
     NoDelete,
     CoordinatorRow,
+    ReplayPreparation,
 ):
     column_orders = (
         NonDecreasing(("side_effects_possible",)),

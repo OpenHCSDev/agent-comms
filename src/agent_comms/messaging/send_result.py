@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.message_send_reads import CommittedMessageRead
+
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Annotated, Literal
@@ -41,7 +43,7 @@ class CorrectionUnreported(CorrectionResult, declared_name="unreported"):
 
 
 @dataclass(frozen=True)
-class SendResult:
+class SendResult(CommittedMessageRead):
     message: Message
     correction: CorrectionResult
 

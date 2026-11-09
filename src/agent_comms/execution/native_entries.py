@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from itertools import repeat
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Never, Self, TextIO, cast
+from typing import Annotated, ClassVar, Literal, Never, Self, TextIO, cast
 
 from agent_comms.execution.native_evidence_read import (
     NativeEvidencePrefixChanged,
@@ -46,7 +46,9 @@ from agent_comms.execution.transcript_routes import (
     _SessionRoutes,
 )
 from agent_comms.execution.turn_item import FreshNativeId, NativeItemId
-from agent_comms.importing import ImportedSessionMetadata
+from agent_comms.imported_conversation import ImportedConversation
+from agent_comms.imported_messages import ImportedMessage
+from agent_comms.imported_session_metadata import ImportedSessionMetadata
 from agent_comms.messaging.routing import NoTurnRouting, Routing
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
@@ -65,14 +67,7 @@ from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.storage.locked_store import DurableFile
 from agent_comms.storage.recorded_time import GeneratedTimestamp
 from agent_comms.storage.store_files import AtomicFile
-from agent_comms.transcript.transcript_events import (
-    ImportedMessage,
-    NoticeTranscript,
-    TranscriptEvent,
-)
-
-if TYPE_CHECKING:
-    from agent_comms.importing import ImportedConversation
+from agent_comms.transcript.transcript_events import NoticeTranscript, TranscriptEvent
 
 
 @dataclass(frozen=True)

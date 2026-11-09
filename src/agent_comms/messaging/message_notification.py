@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.assignment_notice import AssignmentNotice
+
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -145,7 +147,7 @@ class CapturedNotificationEvidence:
 
 
 @dataclass(frozen=True, slots=True)
-class MessageNotification:
+class MessageNotification(AssignmentNotice[DeliveryProgress]):
     """Read-only display of one recipient's durable assignment decision."""
 
     recipient_identity: FrozenRecipient
@@ -154,6 +156,9 @@ class MessageNotification:
     message: Message | None = None
     displayed_to: tuple[ThreadIncarnation, ...] = ()
     changed: bool = False
+
+    def with_state(self, state: DeliveryProgress) -> MessageNotification:
+        return replace(self, state=state)
 
     @property
     def answer(self) -> AssignmentResponse:

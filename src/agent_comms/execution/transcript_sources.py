@@ -17,6 +17,26 @@ from typing import TYPE_CHECKING, Self
 from agent_comms.coordination.errors import StaleRevision, TranscriptChanged
 from agent_comms.execution.history_view import HistoryView
 from agent_comms.execution.native_entries import TranscriptProjection
+from agent_comms.execution.native_records import TranscriptRecord
+from agent_comms.messaging.messages import Message
+from agent_comms.published_messages import ReadsPublishedMessages
+
+if TYPE_CHECKING:
+    from agent_comms.context_store import ContextStore
+    from agent_comms.execution.native_entries import TranscriptProjection
+    from agent_comms.execution.native_output import NativeRecordLocation
+    from agent_comms.execution.native_records import NativeRecord
+    from agent_comms.execution.native_transcript import NativeTranscript, SessionCut
+    from agent_comms.execution.transcript_routes import TranscriptRoutes, _SessionRoutes
+    from agent_comms.execution.turn_bound import TurnBound
+    from agent_comms.execution.turn_context import SegmentManifest
+    from agent_comms.messaging.message_reference import MessageReference
+    from agent_comms.registry.threads import Thread, ThreadProvenance
+    from agent_comms.transcript.external_transcript import ExternalPageRow
+    from agent_comms.transcript.transcript_events import TextTranscript, TranscriptEvent
+    from agent_comms.transcript.transcripts import NativeTranscriptCursor, TranscriptCursor
+
+from agent_comms.coordination.errors import StaleRevision, TranscriptChanged
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from agent_comms.execution.turn_item import NativeTurnId
 from agent_comms.messaging.bus import Bus
@@ -347,15 +367,7 @@ class NoDraft(NullMember, TranscriptDraft):
     """No external draft: the ACP draft field is absent on the wire."""
 
 
-class TranscriptRecord:
-    """A source position; only native records can project a decoded native entry."""
-
-    def project[Result](self, projection: Callable[[NativeRecord], Result]) -> Result | tuple[()]:
-        """External records have events already, but no native entry for this callback."""
-        return ()
-
-
-class TranscriptSource(ResolvesSentReports):
+class TranscriptSource(ReadsPublishedMessages, ResolvesSentReports):
     """Recorded items alone carry no assigned-wire or publication authority.
 
     Native and external stores supply their original records. An assigned
@@ -443,7 +455,7 @@ class TranscriptSource(ResolvesSentReports):
                     for record in records)
         yield project
 
-    def sent_messages(self, references: Iterable[MessageReference]) -> dict[MessageReference, Delivered]:
+    def sent_messages(self, references: Iterable[MessageReference]) -> dict[MessageReference, Message]:
         return {}
 
     def resolve_sent(self, messages: tuple[SentTranscript, ...]):
@@ -521,7 +533,7 @@ class AssignedTranscriptSource(TranscriptSource):
             sequences=tuple(reference.seq for reference in references), limit=len(references),
         )}
 
-    def sent_messages(self, references: Iterable[MessageReference]) -> dict[MessageReference, Delivered]:
+    def sent_messages(self, references: Iterable[MessageReference]) -> dict[MessageReference, Message]:
         return {reference: original.message
                 for reference, original in self.assignments(references).items()
                 if original.sender_lookup == self.recipient.lookup}

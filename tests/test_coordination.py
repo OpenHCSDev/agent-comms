@@ -10,10 +10,7 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
-from agent_comms.coordination.assignment_states import (
-    CompletedAssignment,
-    EngagedAssignment,
-)
+from agent_comms.coordination.assignment_states import CompletedAssignment, EngagedAssignment
 from agent_comms.coordination.attempt_states import (
     AttemptFailedAttempt,
     AttemptState,
@@ -63,11 +60,9 @@ from agent_comms.coordination.tables.executions import (
     WireOrigin,
 )
 from agent_comms.coordination.tables.participants import OwnerGenerations, Participants
-from agent_comms.coordination.tables.publications import (
-    PublicationIntents,
-)
+from agent_comms.coordination.tables.publications import PublicationIntents
 from agent_comms.coordination.tables.responses import ResponseObligation
-from agent_comms.execution.child_process import SpawnedProcess
+from agent_comms.execution.child_process import Platform, SpawnedProcess
 from agent_comms.installer.native_build_inputs import ConfiguredChildStdio
 from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, SnapshotExclude
@@ -516,18 +511,20 @@ print("ready")
 
 def test_first_create_never_closes_a_published_target_fd(tmp_path, monkeypatch):
     path = tmp_path / "atomic-create.sqlite3"
-    before_link = threading.Event()
+    before_publish = threading.Event()
     publish = threading.Event()
-    original_link = os.link
+    platform_type = type(Platform.current())
+    original_publish = platform_type.publish_new_file
     errors = []
 
-    def paused_link(source, destination, *, follow_symlinks=True):
+    def paused_publish(platform, source, destination, *, src_dir_fd=None, dst_dir_fd=None):
         if destination == path:
-            before_link.set()
+            before_publish.set()
             assert publish.wait(15)
-        return original_link(source, destination, follow_symlinks=follow_symlinks)
+        return original_publish(platform, source, destination,
+                                src_dir_fd=src_dir_fd, dst_dir_fd=dst_dir_fd)
 
-    monkeypatch.setattr(os, "link", paused_link)
+    monkeypatch.setattr(platform_type, "publish_new_file", paused_publish)
 
     def creator():
         try:
@@ -539,7 +536,7 @@ def test_first_create_never_closes_a_published_target_fd(tmp_path, monkeypatch):
     thread = threading.Thread(target=creator)
     thread.start()
     try:
-        assert before_link.wait(15)
+        assert before_publish.wait(15)
         assert not path.exists()
         with pytest.raises(sqlite3.OperationalError):
             sqlite3.connect(f"file:{path}?mode=rw", uri=True).execute("BEGIN IMMEDIATE")

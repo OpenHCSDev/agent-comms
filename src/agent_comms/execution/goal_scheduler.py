@@ -3,20 +3,19 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import Iterable
-from dataclasses import (
-    dataclass,
-    field,
-)
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms.agent_event_updates import AcpEventConsumer
+from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import GoalAttemptError, GoalRefused, RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.execution.input_drain import WakeScheduleCheck
+from agent_comms.execution.input_drain import InputDrain, OwnerSession, WakeScheduleCheck
 from agent_comms.execution.reservation_rules import ReservationViolationError
+from agent_comms.execution.session_lifecycle import SessionLifecycle
+from agent_comms.execution.turn_effects import TurnEffects
 from agent_comms.messaging.routing import ScheduledTurn
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId
 from agent_comms.planning.goal_actions import (
@@ -34,12 +33,6 @@ from agent_comms.planning.goals import Goal, GoalDeclaration, GoalRevision
 from agent_comms.registry.registry_document import RegistryDocument, RegistrySnapshot
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.locked_store import GoalWakeFile
-
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-    from agent_comms.execution.input_drain import InputDrain, OwnerSession
-    from agent_comms.execution.session_lifecycle import SessionLifecycle
-    from agent_comms.execution.turn_effects import TurnEffects
 
 GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
 
@@ -253,7 +246,7 @@ class GoalScheduler:
             ))
             # Failed delivery leaves the published snapshot unchanged.
             record.snapshot = await event.publish(
-                AcpEventConsumer(self.effects, session_id, self.effects._runtime), record.snapshot
+                AcpEventConsumer(self.effects, session_id, self.effects._runtime).dispatch, record.snapshot
             )
 
     def observe_root(

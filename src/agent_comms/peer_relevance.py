@@ -5,10 +5,9 @@ The relations in ``relationships.py`` declare which member they grant, and
 ask a member what it ``grants``; they never name or compare members.
 """
 
-from __future__ import annotations
 
 from abc import ABC
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from agent_comms.nominal.declared_family import DeclaredFamily
 
@@ -25,8 +24,20 @@ class AlwaysListed(RelevanceCapability):
     """The peer is in the peer list whatever its name and however many threads exist."""
 
 
-class GoalShown(RelevanceCapability):
+class PeerGoalProjection:
+    """Hidden goals are the default; GoalShown supplies the one differing behavior."""
+
+    @classmethod
+    def context_goal[Goal](cls, active: Callable[[], Goal], hidden: Callable[[], Goal]) -> Goal:
+        return hidden()
+
+
+class GoalShown(RelevanceCapability, PeerGoalProjection):
     """The peer list says what the peer is working on now."""
+
+    @classmethod
+    def context_goal[Goal](cls, active: Callable[[], Goal], hidden: Callable[[], Goal]) -> Goal:
+        return active()
 
 
 class Prioritized(RelevanceCapability):
@@ -37,7 +48,7 @@ class Informed(RelevanceCapability):
     """The thread is told when the peer's goal changes."""
 
 
-class PeerRelevance(DeclaredFamily, affix="Relevance"):
+class PeerRelevance(DeclaredFamily, PeerGoalProjection, affix="Relevance"):
     """How much one thread matters to another.
 
     A member guarantees everything the members it derives from guarantee, so

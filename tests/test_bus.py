@@ -22,6 +22,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
+from agent_comms.initial_origin import HumanOrigin
 from agent_comms.messaging.bus import (
     Bus,
     BusRecord,
@@ -29,7 +30,7 @@ from agent_comms.messaging.bus import (
     PrivateRecord,
     PublicRecord,
 )
-from agent_comms.messaging.bus_publication import Delivered, HumanOrigin, KeyedPublication
+from agent_comms.messaging.bus_publication import Delivered, KeyedPublication
 from agent_comms.messaging.bus_route_counts import BusRouteCounts
 from agent_comms.messaging.bus_tables import (
     AnsweredSource,

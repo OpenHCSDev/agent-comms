@@ -62,6 +62,7 @@ from agent_comms.history_views import RetiredViews
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.installer.active_route import CommsRoute
 from agent_comms.messaging.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_notification import (
     MessageNotification,
     NotificationPass,
@@ -71,6 +72,7 @@ from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_reads import NotificationRead
 from agent_comms.messaging.read_basis import DisplayCut, NoDisplaySelection
 from agent_comms.messaging.revision_views import (
+    BusSourceView,
     NotificationsView,
     RegistrationsView,
     RevisionView,
@@ -98,15 +100,12 @@ from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.work_branches import WorkBranchError
 from agent_comms.registry.activity import ObservedActivity
-from agent_comms.registry.registry_document import (
-    RegistrySnapshot,
-    RosterVisibility,
-    UnreadRegistry,
-)
-from agent_comms.registry.registry_provenance import DeletedThread
+from agent_comms.registry.registry_document import RegistrySnapshot, UnreadRegistry
+from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_presentation import ThreadPresentation
 from agent_comms.registry.view_unread import ReplyIndexResult
+from agent_comms.registry_names import DeletedThread
 from agent_comms.team.team_heartbeat import TeamBoardRead
 from agent_comms.team.team_hud import TeamFrame, TeamHud, TeamPlan
 from agent_comms.team.team_hud_records import TeammateDetail
@@ -1104,7 +1103,7 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         self.located_threads = replace(self.located_threads, activity=activity)
         snapshot = comms.registry.snapshot()
         registry_changed = self.registry_read.changed_names_to(snapshot)
-        changed = revision.changed_threads(previous, comms, activity, snapshot, registry_changed)
+        changed = previous.changed_threads(revision, comms, activity, snapshot, registry_changed)
         self.registry_read = snapshot
         names = (changed | names - previous.results.keys()) & names
         self.located_threads = replace(self.located_threads, names=names)
@@ -1437,6 +1436,45 @@ class ThreadsObserved(Observed):
     results: Mapping[str, ThreadReadResult]
     changed: frozenset[str]
     activity: Mapping[str, ObservedActivity | DeletedThread]
+
+    def changed_threads(self, revision: WireRevision, comms: Comms,
+                        activity: Mapping[str, ObservedActivity | DeletedThread],
+                        snapshot: RegistrySnapshot, registry_changed: frozenset[str],
+                        ) -> frozenset[str]:
+        """Attribute changes using the retained observation and existing route rows. A
+        registry revision reaches only the threads whose own rows it changed (or their forks):
+        every turn start rewrites the registry, and it re-presented every open thread."""
+        earlier = self.revision
+        names = self.results.keys()
+        readable, changed = self.revision_inputs()
+        if revision.changed_since(BusSourceView(), earlier) or not readable:
+            return frozenset(names)
+        changed.update(name for name in names if snapshot.affected_by(name, registry_changed))
+        if revision.bus_seq != earlier.bus_seq:
+            source = comms.bus.bus
+            if source.revision() != revision.bus_seq:
+                raise StaleRevision("Bus changed before route attribution")
+            actors = source.changed_names(earlier.bus_seq)
+            catalog = comms.channels.catalog.read()
+            with comms.bus.opened_activity() as channel_activity:
+                for actor in actors:
+                    changed.update(CommandTarget.named(actor).changed_threads(
+                        names, snapshot, catalog, channel_activity))
+            changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
+        activity_changed = {name for name in activity
+                            if activity[name] != self.activity.get(name)}
+        status_names = names if (revision.goal_execution, revision.expiry_period, revision.work_room) != (
+            earlier.goal_execution, earlier.expiry_period, earlier.work_room) else names & activity_changed
+        if status_names:
+            status_batch = comms.views.thread_presentations(status_names)
+            changed.update(name for name in status_names
+                           if not self.results[name].same_status(status_batch.view(name)))
+        remaining = {name: view for name, view in readable.items() if name not in changed}
+        notifications = NotificationPass(comms, revision)
+        changed.update(name for name, view in remaining.items()
+                       if view.notification_window.activity_names() & activity_changed
+                       or notifications.changed(view.notification_window, earlier))
+        return frozenset(changed & names)
 
     def revision_inputs(self) -> tuple[dict[str, AcquiredThreadPresentation], set[str]]:
         readable: dict[str, AcquiredThreadPresentation] = {}

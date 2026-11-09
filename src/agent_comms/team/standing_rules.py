@@ -5,29 +5,13 @@ import math
 import time
 from abc import ABC, abstractmethod
 from collections import Counter
-from collections.abc import (
-    Iterable,
-    Iterator,
-    Mapping,
-    Sequence,
-)
-from dataclasses import (
-    dataclass,
-    field,
-    fields,
-)
-from functools import (
-    cache,
-    cached_property,
-)
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field, fields
+from functools import cache, cached_property
 from itertools import combinations
 from pathlib import Path
 from subprocess import TimeoutExpired
-from typing import (
-    ClassVar,
-    Self,
-    cast,
-)
+from typing import ClassVar, Self, cast
 
 from agent_comms.cli_verbs.declared_verb import DeclaredVerb
 from agent_comms.comms import Comms
@@ -35,12 +19,8 @@ from agent_comms.coordination.service_passes import FailingPass, ServicePasses, 
 from agent_comms.errors import RejectedEnforcementError, RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, ResidentMemory
 from agent_comms.execution.root_runtime import RootRuntimeStore
-from agent_comms.execution.turn_digests import (
-    LastTurns,
-    OrderEditCountRead,
-    RecentTurnsSince,
-    TurnDigestRead,
-)
+from agent_comms.execution.turn_bound import LastTurns, RecentTurnsSince
+from agent_comms.execution.turn_digests import OrderEditCountRead, TurnDigestRead
 from agent_comms.heartbeat_subjects import (
     AnswerSubject,
     HeadSubject,

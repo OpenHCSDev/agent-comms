@@ -10,6 +10,7 @@ from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.input_key import BusInputKey
 from agent_comms.execution.turn_failure import BackendFailed, FailedTurnResolution
+from agent_comms.goal_ledger import GoalWorkDecision
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, TurnId
 from agent_comms.planning.goal_actions import (
@@ -19,15 +20,10 @@ from agent_comms.planning.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.planning.goal_attempts import GoalWorkDecision
 from agent_comms.planning.goal_generation import ReadyGeneration
 from agent_comms.planning.goal_history import GoalHistoryEntry
 from agent_comms.planning.goal_scope import OneGoal
-from agent_comms.planning.goal_states import (
-    BlockedGoal,
-    GoalState,
-    UnrecordedBlockGoal,
-)
+from agent_comms.planning.goal_states import BlockedGoal, GoalState, UnrecordedBlockGoal
 from agent_comms.planning.goal_waits import GoalWait, GoalWaits
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout

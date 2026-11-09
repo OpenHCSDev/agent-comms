@@ -10,12 +10,7 @@ import typing
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields, replace
-from typing import (
-    TYPE_CHECKING,
-    Annotated,
-    ClassVar,
-    Self,
-)
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import JsonValue
 
@@ -67,6 +62,7 @@ from agent_comms.execution.turn_context import (
 from agent_comms.execution.turn_failure import ModelRequestFailed, ProviderTransportFailed
 from agent_comms.execution.turn_item import CompactionChargeId, ProviderResponseId, UsageChargeId
 from agent_comms.messaging.send_result import CorrectionResult, CorrectionUnreported
+from agent_comms.native_failure_reads import NativeResponseErrorRead
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     ExternalNull,
@@ -166,7 +162,7 @@ class StrictFields(PiPayload):
         return super().decode_fields(value, decoded)
 
 if TYPE_CHECKING:
-    from agent_comms.agent_events import AgentEvent
+    from agent_comms.agent_event import AgentEvent
     from agent_comms.execution.backend import NativeSession, TurnSession
     from agent_comms.execution.native_entries import TranscriptProjection
     from agent_comms.execution.pi_events import AutoRetryEnd
@@ -187,7 +183,7 @@ class ReportedTimestamp(PiReported[int]):
 
 
 @dataclass(frozen=True)
-class ReportedText(PiReported[str]):
+class ReportedText(PiReported[str], NativeResponseErrorRead):
     value: str
 
     @property

@@ -1,8 +1,10 @@
 import asyncio
+import hashlib
 import json
 import os
 import sqlite3
 import stat
+import subprocess
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import replace
@@ -23,8 +25,9 @@ from agent_comms.cli_bridges.codex_protocol import (
     ItemsList,
     RequestParams,
 )
-from agent_comms.cli_bridges.codex_rollout import (
+from agent_comms.cli_bridges.codex_records import (
     ROLLOUT_RECORD,
+    CodexRolloutProvenance,
     ForeignItem,
     ForeignRecord,
     ResponseItemRecord,
@@ -40,14 +43,15 @@ from agent_comms.execution.child_process import NO_PROCESS
 from agent_comms.execution.native_entries import ImportedMetadataEntry, NativeEntry
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.execution.turn_context import CodexRolloutProvenance
-from agent_comms.importing import (
-    ImportBuffer,
-    ImportedSessionMetadata,
+from agent_comms.execution.turn_context import FileProvenance
+from agent_comms.imported_messages import (
+    ImportedMessage,
+    ImportedReply,
+    ImportedRequest,
     ImportLimits,
-    ImportSnapshot,
-    ThreadImported,
 )
+from agent_comms.imported_session_metadata import ImportedSessionMetadata
+from agent_comms.importing import ImportBuffer, ImportSnapshot, ThreadImported
 from agent_comms.installer.harness_install import (
     ClaudeCodeHarness,
     CodexHarness,
@@ -69,12 +73,7 @@ from agent_comms.registry.thread_text import (
     ThreadText,
 )
 from agent_comms.registry.threads import ExternalThread, NativeThread, ThreadProvenance
-from agent_comms.transcript.transcript_events import (
-    ImportedMessage,
-    ImportedReply,
-    ImportedRequest,
-    TextTranscript,
-)
+from agent_comms.transcript.transcript_events import TextTranscript
 from agent_comms.transport.core_access import LocalCoreAccess
 from agent_comms.transport.tools.sidebar import CommsImportedSourceTool
 from agent_comms.ui_model.message_category import AgentCategory, ThinkingCategory, UserCategory
@@ -364,6 +363,26 @@ def test_codex_instructions_come_from_the_selected_history_and_the_request_from_
     assert snapshot.latest_request == "Prior question"
     assert tuple(ref.public_text(None) for ref in snapshot.historical_instructions) == (
         "Selected historical wording",)
+
+
+def test_imported_historical_source_decodes_cold_and_rejects_other_provenance(tmp_path: Path) -> None:
+    text = "Historical source from the original saved record"
+    path = codex_lines(tmp_path / "historical-source.jsonl", [codex_message("system", text)])
+    raw = path.read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    source = CodexRolloutProvenance(str(path), 0, len(raw), digest, 0)
+    metadata = ImportedSessionMetadata(CodexHarness, "original", 0, 0, 0, (), (source,))
+    wire = FieldCodec.encode(metadata)
+    completed = subprocess.run(
+        (sys.executable, str(Path(__file__).with_name("historical_source_probe.py")),
+         json.dumps(wire), text),
+        capture_output=True, text=True, timeout=30,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert isinstance(wire, dict)
+    wire["historical_instructions"] = [FieldCodec.encode(FileProvenance(str(path), digest))]
+    with pytest.raises(ValueError):
+        FieldCodec.decode(ImportedSessionMetadata, wire)
 
 
 def test_codex_items_codex_does_not_declare_are_foreign() -> None:

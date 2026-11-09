@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agent_comms.execution.native_session_callbacks import SessionStatsCallbacks
+
 import asyncio
 from collections.abc import (
     AsyncIterator,
@@ -19,7 +21,7 @@ if TYPE_CHECKING:
     from agent_comms.execution.turn_watchdog import ProgressWatchdog, TurnWait
 
 
-class StatsRequest:
+class StatsRequest(SessionStatsCallbacks):
     """No native settlement observation is waiting for its snapshot."""
 
     def wait_for(self, watchdog: ProgressWatchdog, active: TurnWait) -> TurnWait:

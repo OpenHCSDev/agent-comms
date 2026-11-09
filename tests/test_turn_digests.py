@@ -1,5 +1,8 @@
 import sys
 
+from agent_comms.cli_bridges.claude_transcript import RunningClaude
+from agent_comms.context_segments.native_messages import TranscriptSegment
+
 """One query contract over the original native and external record owners."""
 
 import asyncio
@@ -22,24 +25,20 @@ from agent_comms.context_store import ContextEntry
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.execution.turn_context import (
-    JournalProvenance,
-    SegmentManifest,
-    TranscriptSegment,
-    UserInputSegment,
-    WireProvenance,
-)
-from agent_comms.execution.turn_digests import (
+from agent_comms.execution.turn_bound import (
     LastTurns,
     TurnBound,
     TurnsBefore,
     TurnsOlderThan,
     TurnsSince,
 )
-from agent_comms.execution.turn_item import (
-    NativeItemId,
-    NativeTurnId,
+from agent_comms.execution.turn_context import (
+    JournalProvenance,
+    SegmentManifest,
+    UserInputSegment,
+    WireProvenance,
 )
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.watched import FileSource
 from agent_comms.nominal.field_codec import FieldCodec
@@ -340,7 +339,6 @@ def test_turn_windows_distinguish_first_and_last_event_time():
 def test_a_restarted_session_reads_the_transcript_claude_is_writing(tmp_path, monkeypatch):
     """A restart in another working directory leaves the session's transcript in two project
     directories; the running session is the newer one, and no match at all still refuses."""
-    from agent_comms.cli_bridges.claude_transcript import RunningClaude
 
     monkeypatch.setenv('HOME', str(tmp_path))
     projects = tmp_path / '.claude/projects'

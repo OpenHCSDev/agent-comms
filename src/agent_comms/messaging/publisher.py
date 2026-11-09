@@ -10,8 +10,10 @@ from dataclasses import dataclass, replace
 from functools import partial
 from itertools import groupby
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+from agent_comms.bus_record_builder import RecordBuilder
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.tables.publications import PublicationIntents
 from agent_comms.errors import (
@@ -19,17 +21,10 @@ from agent_comms.errors import (
     RelationViolationError,
     UnregisteredThreadError,
 )
+from agent_comms.initial_origin import InitialOrigin
 from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.messaging.audience_manifest import freeze_audience
-from agent_comms.messaging.bus import (
-    Bus,
-    BusReader,
-    BusSnapshot,
-    ClaimRecord,
-    PrivateRecord,
-    RecordBuilder,
-)
-from agent_comms.messaging.bus_publication import InitialOrigin
+from agent_comms.messaging.bus import Bus, BusReader, BusSnapshot, ClaimRecord, PrivateRecord
 from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
 from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.envelope_claim_transitions import (
@@ -49,12 +44,9 @@ from agent_comms.projects.change_report import OrderRoots
 from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
-from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
 from agent_comms.storage.private_path import FileRevision
-
-if TYPE_CHECKING:
-    from agent_comms.coordination.session import NativeCapture
-    from agent_comms.registry.threads import Thread
 
 
 @dataclass(eq=False, repr=False)
@@ -114,7 +106,7 @@ class ClaimWrites(Publisher):
     """Publishes claim envelopes."""
 
     def release_resources(
-        self, boundary: NativeCapture, claims: Sequence[ClaimOwner], wording: str,
+        self, boundary: coordination_session.NativeCapture, claims: Sequence[ClaimOwner], wording: str,
     ) -> None:
         """Release only still-current acquisitions, in bounded whole-set envelopes.
 
@@ -169,7 +161,7 @@ class ClaimWrites(Publisher):
             ) from error
 
     def _publish_acquisition_unlocked(
-        self, snapshot: RegistrySnapshot, owner: Thread,
+        self, snapshot: RegistrySnapshot, owner: threads.Thread,
         resource: str, claim: RecordedScope, *, activity: ActivityClocks,
     ) -> ClaimOwner:
         build = self._claim_builder(
@@ -288,3 +280,6 @@ class OwnerPublisher(InitialWrites, ClaimWrites):
 
 class ParticipantPublisher(ResponseWrites, ClaimWrites):
     """A selected participant's bus: its keyed responses and its claims."""
+
+from agent_comms.coordination import session as coordination_session
+from agent_comms.registry import threads

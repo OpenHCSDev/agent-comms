@@ -41,6 +41,7 @@ from agent_comms.execution.turn_phase import (
     ToolRunningPhase,
     TurnPhase,
 )
+from agent_comms.native_failure_reads import NativeOperationFailureRead, NativeResponseFailureRead
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     DeclaredWireType,
@@ -263,7 +264,7 @@ class AgentEnd(AcceptsPrompt, NativePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativeOperationError(NativePiEvent):
+class NativeOperationError(NativePiEvent, NativeOperationFailureRead):
     """The native run refused an operation after the prompt was acknowledged."""
 
     error: str
@@ -803,7 +804,7 @@ class ResponseOutcome(DeclaredFamily, DeclaredWireType, affix="ResponseOutcome")
 
 
 @dataclass(frozen=True, kw_only=True)
-class Response(NativePiEvent, DurablePiEvent):
+class Response(NativePiEvent, DurablePiEvent, NativeResponseFailureRead):
     command: type[PiCommand] = UnknownCommand
     data: PiResponseData = field(default_factory=MissingData)
     error: ReportedText | PiOmitted = PiOmitted()

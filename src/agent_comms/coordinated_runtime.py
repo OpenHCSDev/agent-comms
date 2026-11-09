@@ -8,7 +8,6 @@ orders those lifetimes and cannot represent a half-initialized native attempt.
 from __future__ import annotations
 
 import threading
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
@@ -24,7 +23,6 @@ from agent_comms.coordination.errors import (
     RetryScheduled,
 )
 from agent_comms.coordination.snapshot import RecoverySnapshot
-from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_pi import NativePiRpcLaunch
 from agent_comms.execution.native_session_files import NativeSessionFiles
@@ -34,19 +32,14 @@ from agent_comms.execution.selected.actions import (
     SelectedAction,
     SelectedWriteAuthority,
 )
-from agent_comms.execution.selected.participant import (
-    NoLivePublication,
-    SelectedParticipant,
-)
+from agent_comms.execution.selected.participant import NoLivePublication, SelectedParticipant
 from agent_comms.execution.selected.result import CoordinatedTurn
 from agent_comms.execution.selected.session import SelectedSession
-from agent_comms.execution.selected.turn import (
-    SelectedAttempt,
-    SelectedConsideration,
-)
+from agent_comms.execution.selected.turn import SelectedAttempt, SelectedConsideration
 from agent_comms.execution.turn_failure import RetryableProviderFailure
 from agent_comms.following_inputs import FollowingInputs
 from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.native_execution import NativeExecution, PackagedNativeExecution
 from agent_comms.nominal.field_codec import RootId
 from agent_comms.pi_native_backend import PersistentPiSession
 
@@ -55,28 +48,18 @@ class SessionSetupFailed(ValueError):
     """Native session setup is invalid; stop without retrying its input."""
 
 
-@dataclass(kw_only=True)
-class NativeExecution(ABC):
-    cursor_delivery: CursorDelivery
-    pi_session: PersistentPiSession = field(default_factory=PersistentPiSession, compare=False)
-
-    @abstractmethod
-    def tracked_launch(self, package: VerifiedNativePackage, **options) -> NativePiRpcLaunch: ...
-
-
 class IndependentExecution(NativeExecution):
     def tracked_launch(self, package: VerifiedNativePackage, **options) -> NativePiRpcLaunch:
         return NativePiRpcLaunch.tracked(package, **options)
 
 
 @dataclass(kw_only=True)
-class SelectedExecution(NativeExecution):
+class SelectedExecution(PackagedNativeExecution):
     max_attempts: ClassVar[int] = RetryableProviderFailure.max_retries + 1
 
     root: Path
     wire_root_id: RootId
     owner_name: str
-    native_package: VerifiedNativePackage
     opt_in: bool = True
     after_seq: int = 0
     session_file: Path | None = None

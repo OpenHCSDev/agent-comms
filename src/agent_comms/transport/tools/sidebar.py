@@ -10,6 +10,7 @@ from typing import Annotated
 from pydantic import JsonValue
 
 from agent_comms.acp_extension import CoordinationChangedUpdate
+from agent_comms.cli_bridges.codex_records import CodexRolloutProvenance
 from agent_comms.cli_verbs.cli_command import PreparedTargetAction, TargetAction, TargetEdit
 from agent_comms.cli_verbs.cli_result import TargetEditResult
 from agent_comms.context_store import (
@@ -23,12 +24,7 @@ from agent_comms.display_order import ChannelSort, ThreadSort
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.input_origin import HumanInputOrigin
 from agent_comms.execution.session_revision import SessionObservation
-from agent_comms.execution.turn_context import (
-    CodexRolloutProvenance,
-    ContextSourceText,
-    Provenance,
-    SegmentManifest,
-)
+from agent_comms.execution.turn_context import ContextSourceText, Provenance, SegmentManifest
 from agent_comms.history_views import RetiredViews
 from agent_comms.importing import ThreadImported
 from agent_comms.installer.harness_install import Harness

@@ -27,39 +27,21 @@ from agent_comms.cli_bridges.hook_requests import (
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.errors import CoordinationReadUnavailable
-from agent_comms.errors import (
-    RelationViolationError,
-    TodoError,
-)
+from agent_comms.errors import RelationViolationError, TodoError
 from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.execution.turn_digests import (
-    OrderEditCountRead,
-    OrderEditsRead,
-    TurnsSince,
-)
-from agent_comms.execution.turn_item import (
-    NativeItemId,
-    NativeTurnId,
-)
+from agent_comms.execution.turn_bound import TurnsSince
+from agent_comms.execution.turn_digests import OrderEditCountRead, OrderEditsRead
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.messaging.channel_targets import TeammatesTag
-from agent_comms.nominal.field_codec import (
-    FieldCodec,
-    GoalId,
-    OrderId,
-    ToolCallId,
-)
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId, ToolCallId
 from agent_comms.planning.goal_actions import (
     OrderGoalAction,
     ReissuedOrderGoalAction,
     SetGoalAction,
 )
-from agent_comms.planning.goals import (
-    CountCheckResult,
-    GoalConsentRequired,
-    OrderCheck,
-)
+from agent_comms.planning.goals import CountCheckResult, GoalConsentRequired, OrderCheck
 from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.planning.order_runs import MechanicalOrderRun
 from agent_comms.planning.order_words import StrikeReason
@@ -96,19 +78,10 @@ from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.activity import ActivityState
 from agent_comms.registry.thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation
 from agent_comms.registry.thread_model import DeclaredModel
-from agent_comms.registry.thread_status import (
-    ArchivedThreadStatus,
-    StoppedThreadStatus,
-)
-from agent_comms.registry.thread_text import (
-    ForkedParent,
-    SubagentRole,
-)
+from agent_comms.registry.thread_status import ArchivedThreadStatus, StoppedThreadStatus
+from agent_comms.registry.thread_text import ForkedParent, SubagentRole
 from agent_comms.registry.threads import ExternalThread, ForkThread, NativeThread
-from agent_comms.storage.maintenance_barrier import (
-    MaintenanceBarrier,
-    MaintenanceOperator,
-)
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.storage.typed_table import HeldBusFile
 from agent_comms.team.order import MessageNotification, OrderFile, Team, TeamContext
@@ -118,11 +91,7 @@ from agent_comms.transcript.external_transcript import ExternalTranscript
 from agent_comms.transcript.transcript_events import ToolStartTranscript
 from agent_comms.transport.tool_caller import ForkCaller, SubagentCaller
 from agent_comms.transport.tool_declaration import ToolDeclaration
-from agent_comms.transport.tools.orders import (
-    CommsHudTool,
-    CommsTeamLoadTool,
-    CommsTodoListTool,
-)
+from agent_comms.transport.tools.orders import CommsHudTool, CommsTeamLoadTool, CommsTodoListTool
 from agent_comms.ui_model.teammate_state import TeammateState
 from agent_comms_hooks import forks
 from agent_comms_hooks.watch import WatchRecord

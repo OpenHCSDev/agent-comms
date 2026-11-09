@@ -7,60 +7,27 @@ import sqlite3
 import subprocess
 import sys
 import time
-from abc import (
-    ABC,
-    abstractmethod,
-)
-from collections.abc import (
-    Callable,
-    Collection,
-    Iterable,
-    Iterator,
-    Mapping,
-    Sequence,
-)
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from contextvars import copy_context
-from dataclasses import (
-    dataclass,
-    field,
-    fields,
-    replace,
-)
-from datetime import (
-    UTC,
-    datetime,
-)
-from functools import (
-    cached_property,
-    partial,
-)
-from itertools import (
-    batched,
-    islice,
-)
+from dataclasses import dataclass, field, fields, replace
+from datetime import UTC, datetime
+from functools import cached_property, partial
+from itertools import batched, islice
 from math import ceil
 from pathlib import Path
 from statistics import median
 from subprocess import TimeoutExpired
-from types import (
-    MappingProxyType,
-    get_original_bases,
-)
-from typing import (
-    Annotated,
-    ClassVar,
-    Self,
-    cast,
-    get_args,
-    get_origin,
-)
+from types import MappingProxyType, get_original_bases
+from typing import Annotated, ClassVar, Self, cast, get_args, get_origin
 
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.errors import MissingSourceLine, TodoError
 from agent_comms.execution.child_process import ChildResult, OrderCheckFailedError
 from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.goal_work import GoalAssignment, GoalAssignments
 from agent_comms.installer.build_identity import (
     BuildIdentity,
     CommitInstallation,
@@ -68,6 +35,7 @@ from agent_comms.installer.build_identity import (
     RecordedBuildIdentity,
     UnrecordedBuildIdentity,
 )
+from agent_comms.message_directions import DirectiveWriter
 from agent_comms.messaging.bus import BusReader
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.channel_targets import (
@@ -100,6 +68,7 @@ from agent_comms.nominal.field_codec import (
     boundary_decoder,
 )
 from agent_comms.nominal.lifecycle_capability import LifecycleCapability, Pending
+from agent_comms.order_phase import OrderPhase, UnplannedPhase
 from agent_comms.planning.command import Command
 from agent_comms.planning.delivery_evidence import (
     SOURCE_READ_FAILURES,
@@ -133,7 +102,6 @@ from agent_comms.planning.owner_requests import (
     RequestSelection,
     RequestState,
 )
-from agent_comms.planning.plan_phases import OrderPhase, UnplannedPhase
 from agent_comms.planning.problem_findings import (
     ExpectedProblem,
     FixShape,
@@ -5048,7 +5016,7 @@ class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
 
 
 @dataclass(frozen=True, slots=True)
-class Todo(TodoStoreRows, TypedTable):
+class Todo(TodoStoreRows, TypedTable, GoalAssignment):
     unit_index: ClassVar[ExpressionIndex] = ExpressionIndex((
         Assignment.sql_field('owner_created'), '{state}',
     ))
@@ -5093,6 +5061,11 @@ class Todo(TodoStoreRows, TypedTable):
     @property
     def judged_calls(self) -> tuple[ToolCallId, ...]:
         return self.history.facts_for(self.id).judged_calls
+
+    def goal_instructions(self) -> tuple[str, ...]:
+        """The original pending order contributes one instruction, every other order none."""
+        return tuple(item.order.instructions(item)
+                     for item in self.order.items_with(Pending, self))
 
     def progress_line(self) -> str:
         return " · ".join((f"{self.id}: {self.order.line}",
@@ -5822,7 +5795,7 @@ class RecordMergedTodo(RecordsAssignmentHistory, TodoCommand, declared_name=None
 
 
 @dataclass(frozen=True, slots=True)
-class TodoStore(OwnerRequestStore, TodoHistory):
+class TodoStore(OwnerRequestStore, TodoHistory, GoalAssignments, DirectiveWriter):
     """One SQLite row owns both todo state and its exclusive assignment.
 
     Assignment identity and revision deduplicate known operations. An uncertain

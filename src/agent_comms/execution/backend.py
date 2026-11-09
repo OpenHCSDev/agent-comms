@@ -40,18 +40,22 @@ from agent_comms.agent_backend import NO_INPUT_START_LISTENER, InputStartListene
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution import pi_commands as commands
 from agent_comms.execution import pi_events as pi
-from agent_comms.execution.acp_failure import UnrecordedFailureSource
+from agent_comms.execution.acp_failure import ProviderRetryResult, UnrecordedFailureSource
 from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.execution.extension_ui import ExtensionUiSession
 from agent_comms.execution.image_input import ImageInput
 from agent_comms.execution.native_attestation import AttestationError
-from agent_comms.execution.native_child import PiSessionChild
+from agent_comms.execution.native_child import NativeChildState, PiSessionChild
 from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_input_proof import NativeContextProof, NativeInputCommit
 from agent_comms.execution.native_pi import NativePiRpcLaunch, read_tracked_input_commitment
+from agent_comms.execution.native_session_callbacks import (
+    NativeSessionCallbacks,
+    PromptSessionCallbacks,
+)
 from agent_comms.execution.native_session_files import NativeSessionFiles
-from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
 from agent_comms.execution.native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from agent_comms.execution.participant_identity import ParticipantIdentity
 from agent_comms.execution.pi_rpc import PiRpcChannel
@@ -64,6 +68,7 @@ from agent_comms.execution.request_progress import (
     RequestProgress,
 )
 from agent_comms.execution.send_outcome import NO_SEND_BOUNDARY, SendBoundary
+from agent_comms.execution.session_retention import NativeSessionRetention
 from agent_comms.execution.turn_context import InputContributionCoordinates
 from agent_comms.execution.turn_failure import (
     BackendDidNotExit,
@@ -91,17 +96,14 @@ from agent_comms.execution.turn_watchdog import (
 )
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import InputId, MalformedRecord, boundary_decoder
+from agent_comms.pi_payloads import AssistantMessage, UserMessage
 from agent_comms.transport.native_tool_transport import (
     NativeToolMode,
     ToolTransport,
     UnboundToolTransport,
 )
 from agent_comms.transport.tool_denial import SelectedToolDenied
-
-if TYPE_CHECKING:
-    from agent_comms.execution.acp_failure import ProviderRetryResult
-    from agent_comms.pi_native_backend import PersistentPiSession
-    from agent_comms.pi_payloads import AssistantMessage, UserMessage
+from agent_comms.turn_failure_reads import TerminalSessionRead
 
 # Pi 0.85.1 owns provider-idle detection and defaults it to 300 seconds. This
 # transport backstop must remain strictly longer so Pi can emit its authoritative
@@ -146,7 +148,7 @@ async def stream_agent_events(
     *,
     cursor_delivery: CursorDelivery,
     input_start: InputStartListener,
-    persistent_session: PersistentPiSession,
+    persistent_session: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity],
     package: VerifiedNativePackage,
     root: Path,
     owner: ParticipantIdentity,
@@ -248,7 +250,7 @@ class EventFinishSignal(FinishSignal):
 NO_FINISH_SIGNAL = NoFinishSignal()
 
 
-class NativeSession(MroDispatch, ABC):
+class NativeSession(MroDispatch, NativeSessionCallbacks):
     """Shared child acquisition, attestation, observation and retirement."""
 
     active: ClassVar[dict[asyncio.Task[Any], NativeSession]] = {}
@@ -269,7 +271,7 @@ class NativeSession(MroDispatch, ABC):
         input_start: InputStartListener = NO_INPUT_START_LISTENER,
         ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
         request_observer: RequestObserver = NO_REQUEST_OBSERVER,
-        *, startup: NativeStartup, native_session: PersistentPiSession,
+        *, startup: NativeStartup, native_session: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity],
     ):
         self.launch = launch
         self.tool_socket: ToolTransport
@@ -718,7 +720,7 @@ class TrackedInputContext:
             await self.command.context_committed(turn, proof, source_reads)
 
 
-class TurnSession(NativeSession):
+class TurnSession(NativeSession, PromptSessionCallbacks):
     """A native input adds its declared tools and constructs its connected command."""
 
     prompt_type = UnwrittenPrompt
