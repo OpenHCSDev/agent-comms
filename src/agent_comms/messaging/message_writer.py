@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-import agent_comms.bus_record_builder as bus_record_builder
-from agent_comms.messaging.sending import messages
+import agent_comms.messaging.bus_record_builder as bus_record_builder
+import agent_comms.messaging.messages as messages
 
 
 class MessageWriter(ABC):

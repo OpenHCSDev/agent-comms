@@ -600,5 +600,5 @@ class AnnotationDisclosureGrant(HumanConstraintPin):
             raise AnnotationBudgetExhausted("Original disclosure grant's hourly request budget is exhausted")
 
 from agent_comms import input_attempt
-from agent_comms.messaging.sending import retained_task_facts as task_facts
-from agent_comms.messaging.sending import messages
+import agent_comms.messaging.retained_task_facts as task_facts
+import agent_comms.messaging.messages as messages

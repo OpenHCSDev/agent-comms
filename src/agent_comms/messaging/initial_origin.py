@@ -4,12 +4,12 @@ import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-import agent_comms.bus_record_builder as bus_record_builder
+import agent_comms.messaging.bus_record_builder as bus_record_builder
 import agent_comms.messaging.message_writer as message_writer
 from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
 from agent_comms.messaging.message_directions import MessageDirections
 from agent_comms.messaging.message_reads import MessageIdentityRead
-from agent_comms.messaging.sending import messages
+import agent_comms.messaging.messages as messages
 from agent_comms.nominal.field_codec import MessageId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.task_owner import TaskOwner

@@ -7,10 +7,10 @@ import sqlite3
 from dataclasses import dataclass
 from typing import ClassVar, Self
 
-from agent_comms.bus_record_builder import RecordBuilder
 from agent_comms.coordination.response_acknowledgement import KeyedResponseAcknowledgement
 from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.audience_manifest import AudiencedMessage
+from agent_comms.messaging.bus_record_builder import RecordBuilder
 from agent_comms.messaging.bus_tables import AwaitingAnswerSource, ReceivedSource, SentSource
 from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.delivery_recipients import DeliveryRecipients

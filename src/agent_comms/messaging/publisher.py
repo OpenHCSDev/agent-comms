@@ -11,7 +11,6 @@ from functools import partial
 from itertools import groupby
 from pathlib import Path
 
-from agent_comms.bus_record_builder import RecordBuilder
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.response_acknowledgement import canonical_publication_key
@@ -24,6 +23,7 @@ from agent_comms.errors import (
 from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.messaging.audience_manifest import freeze_audience
 from agent_comms.messaging.bus import Bus, BusReader, BusSnapshot, ClaimRecord, PrivateRecord
+from agent_comms.messaging.bus_record_builder import RecordBuilder
 from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
 from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.envelope_claim_transitions import (

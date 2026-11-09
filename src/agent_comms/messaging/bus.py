@@ -11,13 +11,13 @@ from itertools import islice
 from pathlib import Path
 from typing import Self
 
-from agent_comms.bus_record_builder import RecordBuilder
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
 from agent_comms.execution.input_publication_source import InputPublicationSource
 from agent_comms.messaging.activity_clocks import ActivityClocks, ChannelActivity
 from agent_comms.messaging.bus_activity_index import BusActivityIndex
 from agent_comms.messaging.bus_display_index import BusDisplayIndex
 from agent_comms.messaging.bus_publication import Delivered, KeyedPublication
+from agent_comms.messaging.bus_record_builder import RecordBuilder
 from agent_comms.messaging.bus_route_counts import RouteCounts
 from agent_comms.messaging.bus_tables import (
     AnsweredSource,

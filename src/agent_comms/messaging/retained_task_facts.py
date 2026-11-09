@@ -15,7 +15,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.input_lookup import InputLookup
 from agent_comms.messaging.message_reads import ConversationRead
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.messaging.sending import messages
+import agent_comms.messaging.messages as messages
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.nominal.text_digest import TextDigest
