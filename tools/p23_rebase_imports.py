@@ -20,7 +20,7 @@ from pathlib import Path, PurePosixPath
 from nominal_refactor_advisor.ast_tools import ModuleSyntaxIndex
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "tools" / "p23-rebase-blobs"
+OUTPUT = ROOT / ".verification" / "p23-rebase-inputs" / "current"
 
 
 def git(*arguments: str, repository: Path | None = None) -> str:
@@ -146,19 +146,22 @@ class MergeResult:
     returncode: int
 
 
-def prepare(path: str, moves: ModuleMoves, output: Path, *, sort_imports: bool = False) -> MergeResult:
+def prepare(path: str, moves: ModuleMoves, output: Path, *, sort_imports: bool = False,
+            merge_inputs: bool = False) -> MergeResult:
     fallback = {new: old for old, new in moves.paths.items()}.get(path, path)
-    base = (path if git("ls-tree", "--name-only", "REBASE_HEAD^", "--", path).strip() == path
-            else fallback)
-    old = (path if git("ls-tree", "--name-only", "REBASE_HEAD", "--", path).strip() == path
-           else fallback)
+    base = path if merge_inputs else (
+        path if git("ls-tree", "--name-only", "REBASE_HEAD^", "--", path).strip() == path else fallback)
+    old = path if merge_inputs else (
+        path if git("ls-tree", "--name-only", "REBASE_HEAD", "--", path).strip() == path else fallback)
     destination = output / path
     destination.mkdir(parents=True, exist_ok=True)
     for stage, label, filename in ((1, "base", base), (2, "ours", path), (3, "theirs", old)):
-        source = moves.normalize(git("show", f":{stage}:{path}"), filename)
+        available = git("ls-files", "--unmerged", "--", path).splitlines()
+        stage_exists = any(line.split()[2] == str(stage) for line in available)
+        source = moves.normalize(git("show", f":{stage}:{path}") if stage_exists else "", filename)
         if sort_imports:
             sorted_source = subprocess.run(
-                (sys.executable, "-m", "ruff", "check", "--select", "I001", "--fix-only",
+                (sys.executable, "-m", "ruff", "check", "--isolated", "--select", "I001", "--fix-only",
                  "--stdin-filename", str(ROOT / path), "-"),
                 input=source, text=True, capture_output=True, timeout=30, check=True,
             ).stdout
@@ -185,9 +188,15 @@ def main() -> None:
     global ROOT
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--retained-patches", action="store_true")
+    parser.add_argument("--merge-inputs", action="store_true",
+                        help="Normalize regular merge stages, retaining missing-side conflicts separately")
     parser.add_argument("--sort-imports", action="store_true")
     parser.add_argument("--favor-p23", action="store_true",
                         help="Keep selected P23 conflict sides in retained three-way inputs")
+    parser.add_argument("--favor-ours", action="store_true",
+                        help="Keep current-branch conflict sides in retained merge inputs")
+    parser.add_argument("--favor-theirs-path", action="append", default=[],
+                        help="Take the incoming original declaration for this merge path")
     parser.add_argument("--output", type=Path, default=OUTPUT)
     parser.add_argument("--imports-plan", type=Path)
     parser.add_argument("--target")
@@ -212,20 +221,29 @@ def main() -> None:
                  if arguments.target else ModuleMoves.capture())
         paths = [path for path in git("diff", "--name-only", "--diff-filter=U").splitlines()
                  if path.endswith(".py")]
-        results = [prepare(path, moves, output, sort_imports=arguments.sort_imports)
+        skipped = []
+        if arguments.merge_inputs:
+            for path in tuple(paths):
+                stages = {line.split()[2] for line in git("ls-files", "--unmerged", "--", path).splitlines()}
+                if not {"2", "3"}.issubset(stages):
+                    paths.remove(path)
+                    skipped.append(path)
+        results = [prepare(path, moves, output, sort_imports=arguments.sort_imports,
+                           merge_inputs=arguments.merge_inputs)
                    for path in paths]
-        report = {"target": moves.target, "moves": moves.paths,
+        report = {"target": moves.target, "moves": moves.paths, "skipped": skipped,
                   "results": [asdict(result) for result in results]}
         (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
-    if arguments.favor_p23:
+    if arguments.favor_p23 or arguments.favor_ours:
         favored = []
         for result in results:
             if not result.conflicts_after:
                 favored.append(result)
                 continue
             directory = Path(result.output).parent
+            side = "--ours" if arguments.favor_ours and result.path not in arguments.favor_theirs_path else "--theirs"
             merged = subprocess.run(
-                ("git", "merge-file", "-p", "--theirs", "-L", "upstream", "-L", "base",
+                ("git", "merge-file", "-p", side, "-L", "upstream", "-L", "base",
                  "-L", "P23", str(directory / "ours.py"), str(directory / "base.py"),
                  str(directory / "theirs.py")),
                 text=True, capture_output=True, timeout=30, check=True,

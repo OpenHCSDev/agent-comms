@@ -6,7 +6,7 @@ from pathlib import Path
 
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.published_bus import PublishedBus
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.planning.goal_attempts import GoalAttemptFile, GoalAttemptStore
@@ -25,7 +25,7 @@ from agent_comms.registry.threads import Thread
 
 
 class GoalRecords(GoalWaitRecovery, GoalWorkSource):
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus, agents: AgentActivity):
+    def __init__(self, root: Path, registry: Registration, bus: PublishedBus, agents: AgentActivity):
         self.root = root
         self.registry = registry
         self.bus = bus
