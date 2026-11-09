@@ -1,0 +1,69 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-bind-original-coordinator-after-privacy-declarations",
+          "reason": "Startup on assembled 9283cb271 reaches private_registry_guard while the original Coordination module is still initializing. The guard only needs Coordination in PublicRegistry.prepare_native and PrivateRegistryGuard.prepare_runtime, not in any class header, field or default. Bind the original module unconditionally after the original privacy classes, so both entry orders have the privacy declarations before following the module edge. This does not defer or avoid module execution, add a local/guarded import, substitute a store, or change the Bus/InputPublicationSource boundary owned by friction.",
+          "operations": [
+            {
+              "operation": "insert_after_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/private_registry_guard.py",
+              "target_qualname": "PrivateRegistryGuard",
+              "source": "import agent_comms.coordination.coordinator as coordinator"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-keep-original-privacy-coordinator-acquisition",
+          "reason": "Both procedures construct the SAME actual Coordination class at their original call time, with the same CoordinationStore.path_in argument and context manager lifetime. PublicRegistry keeps guard construction, trusted-root check, original store acquisition, schema install, writing transaction, participant acceptance, pending creation and initial commit in precisely that order. PrivateRegistryGuard keeps declaration loading, original store acquisition and schema install in precisely that order. No field, constructor default, exception, schema, registry lock, root/claim check or I/O order changes.",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/private_registry_guard.py",
+              "replacements": [
+                {
+                  "old_source": "with Coordination(str(CoordinationStore.path_in(registry_path.parent))) as store:",
+                  "new_source": "with coordinator.Coordination(str(CoordinationStore.path_in(registry_path.parent))) as store:"
+                },
+                {
+                  "old_source": "with Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:",
+                  "new_source": "with coordinator.Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:"
+                }
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-remove-premature-coordination-class-read",
+          "reason": "Remove the eager class import after both actual runtime reads use the original module binding. No guard/local import is promoted or bypassed: the original import was unconditional and the replacement remains unconditional. Native application reproof belongs to the assembled pair; no source simulation or suite run is used to hold this usable cut.",
+          "operations": [
+            {
+              "operation": "remove_import_names",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/private_registry_guard.py",
+              "module_name": "agent_comms.coordination.coordinator",
+              "import_names": ["Coordination"]
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}
