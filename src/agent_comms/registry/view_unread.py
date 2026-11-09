@@ -27,6 +27,7 @@ from agent_comms.execution.transcript_cursor_reads import MarksSourceRead
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.messaging.watched import FileSource
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_owned_state import ThreadOwnedState

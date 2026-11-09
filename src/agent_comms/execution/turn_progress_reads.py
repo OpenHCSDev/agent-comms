@@ -8,7 +8,7 @@ from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.execution.turn_terminal import TurnTerminal
 from agent_comms.messaging.routing import TurnRouting
 from agent_comms.registry.threads import Thread
-from agent_comms.transcript.transcripts import TranscriptCursor
+from agent_comms.execution.transcript_sources import TranscriptCursor
 
 
 class ProgressTurn(ABC):

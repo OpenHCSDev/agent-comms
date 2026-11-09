@@ -28,7 +28,7 @@ from agent_comms.execution.native_pi import NativePiPromptRejected, NativePiRpcL
 from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.native_startup import NATIVE_STARTUP_POLICY
-from agent_comms.execution.native_transcript import NativeTranscript
+from agent_comms.execution.transcript_sources import NativeTranscript
 from agent_comms.execution.pi_events import (
     ContextCommitted,
     FailedResponseOutcome,

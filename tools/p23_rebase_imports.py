@@ -13,7 +13,7 @@ import json
 import subprocess
 import sys
 import tokenize
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from io import StringIO
 from pathlib import Path, PurePosixPath
 
@@ -44,6 +44,7 @@ class ModuleMoves:
     paths: dict[str, str]
     modules: dict[str, str]
     target: str
+    symbols: dict[tuple[str, str], str] = field(default_factory=dict)
 
     @classmethod
     def capture(cls) -> "ModuleMoves":
@@ -83,7 +84,8 @@ class ModuleMoves:
             destination = self.modules.get(original, original)
             changed = node.level or destination != original or any(
                 original + "." + alias.name in self.modules for alias in node.names
-            )
+            ) or any(self.symbols.get((original, alias.name), original) != original
+                     for alias in node.names)
             if changed_only and not changed:
                 continue
             indentation = " " * node.col_offset
@@ -97,7 +99,10 @@ class ModuleMoves:
                         module=owner, names=[ast.alias(name=name, asname=binding)], level=0,
                     )
                 else:
-                    projected = ast.ImportFrom(module=destination, names=[alias], level=0)
+                    projected = ast.ImportFrom(
+                        module=self.symbols.get((original, alias.name), destination),
+                        names=[alias], level=0,
+                    )
                 rendered.append(indentation + ast.unparse(projected) + "\n")
             assert node.end_lineno is not None
             original_span = "".join(lines[node.lineno - 1:node.end_lineno])

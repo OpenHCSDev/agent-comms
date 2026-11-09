@@ -40,7 +40,7 @@ from agent_comms.execution.native_session_files import (
     NativeSessionFiles,
     NativeSessionLocks,
 )
-from agent_comms.execution.native_transcript import NativeTranscript
+from agent_comms.execution.transcript_sources import NativeTranscript
 from agent_comms.execution.persistent_pi_session import (
     PersistentPiSession as PersistentPiSession,
 )

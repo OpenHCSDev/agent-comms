@@ -14,6 +14,7 @@ from agent_comms.errors import (
     UnregisteredThreadError,
 )
 from agent_comms.execution.input_ingress import InputUserIdentity
+from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_context import ContextSegment
 from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.input_disposition import InputDispositions

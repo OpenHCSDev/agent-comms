@@ -96,7 +96,8 @@ from agent_comms.registry.thread_presentation import (
 from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
 from agent_comms.registry.view_unread import transcript_read_state
 from agent_comms.storage.private_path import FileRevision
-from agent_comms.transcript.transcripts import TranscriptCursor, Transcripts
+from agent_comms.execution.transcript_sources import TranscriptCursor
+from agent_comms.transcript.transcripts import Transcripts
 from agent_comms.transport.progress import WireExportObserver
 from agent_comms.transport.tool_result import ToolResult
 
