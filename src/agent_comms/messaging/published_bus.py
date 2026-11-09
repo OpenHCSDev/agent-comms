@@ -7,8 +7,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from agent_comms.bus import Bus
 from agent_comms.messaging.activity_clocks import ActivityClocks
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.channel_targets import ChannelTarget
 from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.read_ledger import ReadLedger

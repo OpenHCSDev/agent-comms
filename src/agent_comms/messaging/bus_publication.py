@@ -27,7 +27,7 @@ from agent_comms.storage.typed_table import Column, Generated, sql_literal
 from agent_comms.waking.wake_policy import RecipientDecision
 
 if TYPE_CHECKING:
-    from agent_comms.bus import Bus, BusReader, RecordBuilder
+    from agent_comms.messaging.bus import Bus, BusReader, RecordBuilder
     from agent_comms.planning.goal_management import Goals
     from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.registry.threads import Thread

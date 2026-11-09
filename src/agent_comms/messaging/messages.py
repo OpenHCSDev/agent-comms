@@ -25,7 +25,11 @@ from typing import (
 )
 
 from agent_comms.coordination.errors import IdentityConflict
-from agent_comms.envelope_claim_transitions import (
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.input_key import InputKey
+from agent_comms.execution.turn_origin import TurnOrigin
+from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.messaging.envelope_claim_transitions import (
     ClaimOwner,
     ClaimProducer,
     ClaimProjection,
@@ -34,10 +38,6 @@ from agent_comms.envelope_claim_transitions import (
     ResourceClaim,
     UnclaimedResource,
 )
-from agent_comms.errors import RelationViolationError
-from agent_comms.execution.input_key import InputKey
-from agent_comms.execution.turn_origin import TurnOrigin
-from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.page_traversal import LiveCursor, PageCursor
@@ -48,6 +48,7 @@ from agent_comms.messaging.response_policy import (
     ResponseEligibility,
     ResponsePolicy,
 )
+from agent_comms.messaging.task_sources import Decision, NoTaskAttachment, TaskAttachment
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -83,7 +84,6 @@ from agent_comms.storage.typed_table import (
     TypedRow,
     TypedTable,
 )
-from agent_comms.task_sources import Decision, NoTaskAttachment, TaskAttachment
 from agent_comms.transport.progress import InterruptibleRead
 from agent_comms.ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
 from agent_comms.waking.wake_policy import BoundedTriageWake, PassiveWake

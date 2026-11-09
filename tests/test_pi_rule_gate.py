@@ -20,12 +20,14 @@ from agent_comms.execution.selected.tool_broker import (
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
-from agent_comms.pi_rule_gate import PiRedeal, RulesUnread
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.rule_probes import Probe
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
-from agent_comms.rule_deal import (
+from agent_comms.task_attachments.owner_notices import MeantNotice, RestartNotice
+from agent_comms.team.package import TeamPackage
+from agent_comms.team.pi_rule_gate import PiRedeal, RulesUnread
+from agent_comms.team.rule_deal import (
     Asked,
     AuditDue,
     CompactionDealMode,
@@ -42,8 +44,6 @@ from agent_comms.rule_deal import (
     Unmeant,
     Unread,
 )
-from agent_comms.task_attachments.owner_notices import MeantNotice, RestartNotice
-from agent_comms.team.package import TeamPackage
 from agent_comms.transport.native_tool_call import CodingCall
 from agent_comms.transport.native_tools import McpToolCall, NativeToolDeclaration, ReadTool
 from agent_comms_hooks.skill import DeckReader
@@ -278,7 +278,7 @@ def test_every_refusal_opens_with_why_its_deal_was_dealt(peer_deal):
     why it was dealt instead of diagnosing the gate (rules/spine.md)."""
     import re
 
-    from agent_comms.rule_deal import RefreshDeal, StartedDeal
+    from agent_comms.team.rule_deal import RefreshDeal, StartedDeal
 
     bash = call("bash", {"command": "ls"})
     peer_deal.start()

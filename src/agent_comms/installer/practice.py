@@ -16,6 +16,7 @@ from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.participant_store import ParticipantRows, ParticipantStore
 from agent_comms.coordination.tables.annotations import ContextSpanRows
 from agent_comms.coordination.tables.participants import Participants
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.input_disposition import (
@@ -26,7 +27,6 @@ from agent_comms.input_disposition import (
 from agent_comms.installer.backup import pinned_bus_files, saved_bus_files
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import ThreadLookup, boundary_decoder
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.registry_document import RegistryEntry

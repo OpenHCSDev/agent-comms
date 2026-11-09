@@ -57,10 +57,10 @@ from typing import (
     get_origin,
 )
 
-from agent_comms.bus import BusReader
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.errors import MissingSourceLine, TodoError
 from agent_comms.execution.child_process import ChildResult, OrderCheckFailedError
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.build_identity import (
     BuildIdentity,
     CommitInstallation,
@@ -68,7 +68,7 @@ from agent_comms.installer.build_identity import (
     RecordedBuildIdentity,
     UnrecordedBuildIdentity,
 )
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.messaging.bus import BusReader
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.channel_targets import (
     CommandTarget,

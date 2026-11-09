@@ -5,7 +5,7 @@ from contextlib import aclosing
 from dataclasses import replace
 
 import agent_comms.execution.restart_queue as queue
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.watched import FileSource
 from agent_comms.nominal.field_codec import FieldCodec, RestartId
 from agent_comms.projects.checkouts import Checkout

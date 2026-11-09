@@ -8,13 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus, PublicRecord
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import HistoricalSourceChanged, ReloadRequired
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.transcript_routes import DisplayText
 from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.installer.backup import bus_files
+from agent_comms.messaging.bus import Bus, PublicRecord
 from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.messaging.historical_views import (
     AllHistoricalSenders,

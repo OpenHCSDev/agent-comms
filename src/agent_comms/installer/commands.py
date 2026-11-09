@@ -14,6 +14,7 @@ from threading import Lock
 from typing import BinaryIO
 
 from agent_comms.execution.child_process import SpawnedProcess, SynchronousProcess
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.interpreter_operation import (
     CommandPhase,
     GitPhase,
@@ -30,7 +31,6 @@ from agent_comms.installer.interpreter_operation import (
 )
 from agent_comms.installer.native_build_inputs import ConfiguredChildStdio
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo

@@ -298,7 +298,11 @@ async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope
 async def test_direct_human_input_pin_shares_original_source_lineage_without_replay(live_owner):
     from agent_comms.execution.turn_context import WireProvenance
     from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
-    from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop, UserTaskSupersession
+    from agent_comms.messaging.task_sources import (
+        CorrectionTaskChange,
+        UserTaskDrop,
+        UserTaskSupersession,
+    )
 
     comms, agent = live_owner
     origin = capture(comms)

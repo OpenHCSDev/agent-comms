@@ -11,6 +11,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.launch_runtime import RestoredRuntime
 from agent_comms.execution.owner_cutover import PreserveOwnerRuntime
 from agent_comms.execution.owner_lifecycle import OwnerLifecycle, OwnerRestartSelection
 from agent_comms.execution.owner_restart import (
@@ -20,7 +21,6 @@ from agent_comms.execution.owner_restart import (
 )
 from agent_comms.execution.pi_vocabulary import OffThinkingLevel
 from agent_comms.execution.restart_scope import OwnersNamed
-from agent_comms.launch_runtime import RestoredRuntime
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.owner_release import NoRelease
 from agent_comms.registry.thread_model import DeclaredModel

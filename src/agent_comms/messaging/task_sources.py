@@ -29,13 +29,12 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from typing import Self
 
-    from agent_comms.bus import BusReader
     from agent_comms.cli_bridges.harness_delivery_states import Outcome
     from agent_comms.cli_bridges.shared import CliBridge
     from agent_comms.context_segments.wake import MessageDelivery
-    from agent_comms.execution.turn_context import ContextSegment
     from agent_comms.input_attempt import StoredInput
     from agent_comms.input_disposition import InputDispositions
+    from agent_comms.messaging.bus import BusReader
     from agent_comms.messaging.messages import Message
     from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
     from agent_comms.planning.goal_management import Goals

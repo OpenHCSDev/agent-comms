@@ -11,13 +11,13 @@ from pathlib import Path
 from typing import Any
 
 import agent_comms.storage.store_files as store_files
-from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
 from agent_comms.messaging.message_page import PageBounds
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_counts import PiCount
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import ActivityState
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
 from bus_history import read_history

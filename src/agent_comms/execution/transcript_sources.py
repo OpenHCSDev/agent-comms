@@ -14,22 +14,22 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.bus import Bus
 from agent_comms.coordination.errors import StaleRevision, TranscriptChanged
 from agent_comms.execution.history_view import HistoryView
 from agent_comms.execution.native_entries import TranscriptProjection
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from agent_comms.execution.turn_item import NativeTurnId
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.sent_message import AssignedSourceIdentity, PublishedSentMessage
 from agent_comms.messaging.sent_reports import ResolvesSentReports
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, NullMember
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from agent_comms.rule_deal import Mute, Speaking, Voice
 from agent_comms.storage.private_path import FileIdentity, MissingFile
 from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.storage.typed_table import StoreWriter
+from agent_comms.team.rule_deal import Mute, Speaking, Voice
 from agent_comms.transcript.transcript_events import IncomingTranscript, SentTranscript, TurnDigest
 
 if TYPE_CHECKING:

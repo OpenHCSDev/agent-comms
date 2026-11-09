@@ -22,7 +22,7 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.transport.tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from agent_comms.bus import BusReader
+    from agent_comms.messaging.bus import BusReader
     from agent_comms.messaging.message_page import MessagePage, PageWindow
     from agent_comms.messaging.messages import Message, MessageKind
     from agent_comms.messaging.read_basis import MessageDisplayScope

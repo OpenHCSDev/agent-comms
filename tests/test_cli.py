@@ -7,8 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.activity import ActivityState
-from agent_comms.bus import Bus
 from agent_comms.cli import CliInvocation, build_parser
 from agent_comms.cli_bridges.shared import Send
 from agent_comms.cli_verbs.archive import ArchiveCliCommand
@@ -46,6 +44,7 @@ from agent_comms.execution.turn_lease import (
     RecordedGeneration,
     StoredTurnRecord,
 )
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.channel_management import ArchiveThreadsTagDisposition, TagDisposition
 from agent_comms.messaging.channel_targets import (
     ChannelTarget,
@@ -61,6 +60,7 @@ from agent_comms.projects.checkouts import (
     Checkout,
     LaunchCheckout,
 )
+from agent_comms.registry.activity import ActivityState
 from agent_comms.registry.catalog_document import NoCatalog
 from agent_comms.registry.thread_identity import (
     TurnIdentity,

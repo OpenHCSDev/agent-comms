@@ -4,7 +4,7 @@ The recorded reply is ts-gaming's own `tailscale serve status --json` on 2026-11
 funnelled origin on 443 and one tailnet-only port, both in front of the same connector.
 """
 
-from agent_comms.served_endpoints import (
+from agent_comms.transport.served_endpoints import (
     FunnelServed,
     NothingTailnetOnly,
     OfferedByTailnet,

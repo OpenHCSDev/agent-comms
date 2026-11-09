@@ -14,6 +14,7 @@ from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
 from agent_comms.execution.child_process import Platform
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.build_artifact import BuildArtifact
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe
@@ -34,7 +35,6 @@ from agent_comms.installer.runtime_resolution import (
     ToadPackage,
 )
 from agent_comms.installer.runtime_stack import RuntimeStack
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import FieldCodec
 
 

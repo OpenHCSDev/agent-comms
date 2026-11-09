@@ -8,12 +8,12 @@ from pathlib import Path
 from sqlite3 import Connection
 from typing import ClassVar
 
-from agent_comms.bus import Bus
 from agent_comms.execution.turn_failure import (
     BackendFailed,
     FailedTurnResolution,
 )
 from agent_comms.installer.probes.carry import Carried, Carry
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_tables import MessageIdentitySource
 from agent_comms.nominal.field_codec import (
     FieldCodec,

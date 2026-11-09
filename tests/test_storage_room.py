@@ -7,13 +7,13 @@ import sqlite3
 
 import pytest
 
-from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import RoomTicket
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.shell_effects import shell_storage_effects
 from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.registry.activity import ActivityState
 from agent_comms.registry.thread_status import RunningThreadStatus
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.storage_room import (

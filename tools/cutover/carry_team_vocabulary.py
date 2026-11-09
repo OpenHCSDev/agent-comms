@@ -15,9 +15,9 @@ from contextlib import closing
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.bus import Bus
 from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.installer.probes.carry import Carried, Carry
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.messages import EscalationPosition, Message
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.orders import (

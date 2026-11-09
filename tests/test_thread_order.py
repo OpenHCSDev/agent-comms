@@ -1,11 +1,11 @@
 """Sort timestamps must reflect thread events, never attachment or heartbeat."""
 
-from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import Activity, ActivityState
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.tool_caller import ThreadCaller
 from conftest import installed_comms

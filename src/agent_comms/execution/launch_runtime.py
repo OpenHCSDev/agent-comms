@@ -11,6 +11,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
+import agent_comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -176,7 +177,7 @@ class RunningSource(ABC):
 
     @staticmethod
     def current() -> RunningSource:
-        root = Path(__file__).resolve().parents[1]
+        root = Path(agent_comms.__file__).resolve().parents[1]
         installed = root.is_relative_to(Path(sys.prefix).resolve())
         return (InstalledSource if installed else CheckoutSource)(root)
 

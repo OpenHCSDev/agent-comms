@@ -9,7 +9,7 @@ from importlib.metadata import EntryPoint
 from pathlib import Path
 from typing import Self
 
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.execution.launch_runtime import LaunchRuntime
 
 
 @dataclass(frozen=True)

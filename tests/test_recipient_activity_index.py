@@ -7,16 +7,16 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.message_notification import MessageNotification
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.message_notification import MessageNotification
 from agent_comms.messaging.messages import InfoKind, Message
+from agent_comms.messaging.notification_evidence import AllOutcomes, OwnerOutcomes
 from agent_comms.messaging.read_basis import ConversationCursor, ReadCursor
 from agent_comms.messaging.read_ledger import (
     ReadDocument,
     ReadLedger,
 )
 from agent_comms.notification_assignment import NotificationAssignment, NotificationSelection
-from agent_comms.notification_evidence import AllOutcomes, OwnerOutcomes
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import RegistrySnapshot, ThreadRows
 from agent_comms.registry.registry_provenance import RegistryProvenance

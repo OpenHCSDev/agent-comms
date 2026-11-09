@@ -10,7 +10,6 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, TextIO
 
-from agent_comms.bus import Bus
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import (
     NoProcess,
@@ -20,8 +19,9 @@ from agent_comms.execution.child_process import (
     ProcessState,
     SpawnedProcess,
 )
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBus, RecordedBusIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import PathText, WireOmitDefault

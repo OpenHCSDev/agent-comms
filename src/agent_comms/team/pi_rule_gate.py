@@ -24,16 +24,15 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.registry.threads import Thread
-from agent_comms.rule_deal import (
+from agent_comms.team.meant_voice import BusVoice
+from agent_comms.team.rule_deal import (
     AuditDue,
     DealDelivery,
     DealTrigger,
     DealtRuleGate,
     Redeals,
-    RuleDeal,
     Voice,
 )
-from agent_comms.team.meant_voice import BusVoice
 from agent_comms.transport.tool_denial import SelectedToolDenied
 from agent_comms_hooks.skill import DeckReader, RulesOnly
 
@@ -100,6 +99,7 @@ class PiThreadGate(PiRuleGate, BusVoice):
     def delivery(self) -> DealDelivery:
         """The thread's runtime knows what its launcher put in the system prompt."""
         return self.thread.runtime.deal_delivery()
+
 
 @dataclass(frozen=True)
 class PiRedeal(PiThreadGate, Redeals):

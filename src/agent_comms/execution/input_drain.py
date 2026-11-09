@@ -21,9 +21,7 @@ from agent_comms.acp_extension import (
     QueueScope,
     encode_updates,
 )
-from agent_comms.activity import FailedWakeDiagnostic, StoppedDrainDiagnostic
 from agent_comms.agent_backend import AgentBackend
-from agent_comms.bus import Bus
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
 from agent_comms.coordination.cohort import next_sealed_assignment
@@ -73,11 +71,13 @@ from agent_comms.input_attempt import (
     OwnerQueueInputDeliveryScope,
 )
 from agent_comms.input_disposition import InputDispositions, InputDocument
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.routing import ScheduledTurn
 from agent_comms.messaging.watched import ChangeSignal, FileLifetimeSource, FileSource
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId, ThreadLookup
 from agent_comms.nominal.lifecycle_capability import Executing
+from agent_comms.registry.activity import FailedWakeDiagnostic, StoppedDrainDiagnostic
 from agent_comms.registry.registry_document import RegistryDocument, RegistryEntry
 from agent_comms.registry.registry_store import RegistryEntryRevision
 from agent_comms.registry.thread_identity import ClaimedIdentity, OwnerIdentity

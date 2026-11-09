@@ -26,7 +26,6 @@ from aiohttp import ClientSession, CookieJar, web
 from aiohttp.test_utils import TestClient, TestServer
 from yarl import URL
 
-from agent_comms.bus import Bus
 from agent_comms.comms import Comms, wire
 from agent_comms.connector import (
     ApprovalLink,
@@ -41,25 +40,6 @@ from agent_comms.connector import (
     RunningRequest,
     ServeVerb,
 )
-from agent_comms.connector_store import (
-    CALLBACK,
-    CODE_SECONDS,
-    AuthorizationQuery,
-    ConnectorCredentialsFile,
-    ConnectorGrants,
-    ConnectorStore,
-    ExpiredProfile,
-    HeldUiProfiles,
-    IssuedCode,
-    OpenableProfile,
-    ReadServiceAccess,
-    TrustedBrowser,
-    UiAccess,
-    UiGrantAccess,
-    UiReadAccess,
-    UnreadableProfile,
-    digest,
-)
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import TranscriptChanged
 from agent_comms.coordination.service_passes import ServicePassStore
@@ -69,6 +49,7 @@ from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.watch_passes import WatchPass
 from agent_comms.host_services.connector import ConnectorService
 from agent_comms.installer.backup import StoreBackup
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_identity import BusIdentityStore
 from agent_comms.messaging.bus_read import UiRead
 from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
@@ -104,6 +85,25 @@ from agent_comms.transport.connector_profile import (
     UiConnectionProfile,
     UiGrantId,
     UiGrantSummary,
+)
+from agent_comms.transport.connector_store import (
+    CALLBACK,
+    CODE_SECONDS,
+    AuthorizationQuery,
+    ConnectorCredentialsFile,
+    ConnectorGrants,
+    ConnectorStore,
+    ExpiredProfile,
+    HeldUiProfiles,
+    IssuedCode,
+    OpenableProfile,
+    ReadServiceAccess,
+    TrustedBrowser,
+    UiAccess,
+    UiGrantAccess,
+    UiReadAccess,
+    UnreadableProfile,
+    digest,
 )
 from agent_comms.transport.mcp import (
     PROTOCOL_VERSION,

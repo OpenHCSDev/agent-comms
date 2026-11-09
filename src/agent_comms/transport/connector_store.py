@@ -1,4 +1,5 @@
 """Connector grants and browser trust, independent of the HTTP transport."""
+
 from __future__ import annotations
 
 import hashlib
@@ -40,11 +41,19 @@ from agent_comms.transport.connector_profile import (
 )
 
 ACCESS_SECONDS = 3600
+
+
 UI_GRANT_SECONDS = 7 * 24 * 3600
 """A UI grant is minted by the host owner (grant-ui on the host) and revocable by its ID, so it
 may outlive an OAuth access token. UiGrantAccess declares its own default lifetime."""
+
+
 CODE_SECONDS = 300
+
+
 ClaudeCallback = Literal["https://claude.ai/api/mcp/auth_callback"]
+
+
 CALLBACK: ClaudeCallback = get_args(ClaudeCallback)[0]
 
 

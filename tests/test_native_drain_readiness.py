@@ -3,7 +3,9 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.activity import (
+from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.registry.activity import (
     Activity,
     ActivityState,
     DrainReadiness,
@@ -12,8 +14,6 @@ from agent_comms.activity import (
     StoppedDrainDiagnostic,
     UnavailableDrainDiagnostic,
 )
-from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.thread_identity import (
     OwnerIdentity,
     RecordedThreadIncarnation,

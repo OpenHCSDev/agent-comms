@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from agent_comms.execution.native_output import NativeRecordLocation
     from agent_comms.messaging.read_ledger import ReadLedger
     from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-    from agent_comms.rule_deal import Speaking, Voice
+    from agent_comms.team.rule_deal import Speaking, Voice
 
 
 def reverse_records(

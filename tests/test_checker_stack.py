@@ -12,6 +12,7 @@ import tomli_w
 from checker_stack import CheckerStack
 from packaging.requirements import Requirement
 
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_resolution import (
@@ -22,7 +23,6 @@ from agent_comms.installer.runtime_resolution import (
     StackSources,
 )
 from agent_comms.integration import CiRunner
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.orders import DraftListedPullRequest
 from agent_comms.projects.head_review import BaseSide, HeadSide

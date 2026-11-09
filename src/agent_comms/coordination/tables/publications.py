@@ -33,7 +33,7 @@ from agent_comms.storage.typed_table import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.bus import BusReader
+    from agent_comms.messaging.bus import BusReader
 
 
 @dataclass(frozen=True, slots=True)

@@ -11,7 +11,6 @@ from itertools import islice
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.bus import Bus
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.attempt_recovery import RecoveryMonitorCapability
@@ -20,12 +19,13 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.execution.fresh_private_session import create_fresh_private_session
 from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.launch_runtime import ThreadLaunch
 from agent_comms.execution.native_entries import ImportedSessionWriter, NativeEntry
 from agent_comms.execution.native_session_files import CheckSession
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.transcript_routes import TranscriptRoutes
 from agent_comms.execution.turn_lease import NoTurnRecord
-from agent_comms.launch_runtime import ThreadLaunch
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.read_basis import MemberActivityDisplayScope
 from agent_comms.planning.goals import NoGoal
 from agent_comms.projects.checkouts import Checkout

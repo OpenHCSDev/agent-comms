@@ -5,8 +5,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus import Bus, PublicRecord
 from agent_comms.comms import wire
+from agent_comms.messaging.bus import Bus, PublicRecord
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.channels import ActivityView, AnyOfMatch, ParticipantsView, ViewPredicate
 from agent_comms.messaging.message_page import PageBounds

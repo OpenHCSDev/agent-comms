@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, NoReturn
 
 from agent_comms.execution.child_process import AttachedChild, ChildOutcome, join_retirement
+from agent_comms.execution.launch_runtime import INHERITED_ENVIRONMENT
 from agent_comms.execution.native_attestation import NativeAttestation, PendingAttestation
 from agent_comms.execution.native_failures import NativePiUnavailable, NativeRequestFailure
 from agent_comms.execution.native_pi import NativePiRpcLaunch
@@ -22,7 +23,6 @@ from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.publication_measurements import PublicationMeasurements
 from agent_comms.execution.session_revision import SessionRevision
 from agent_comms.execution.turn_context import Provenance
-from agent_comms.launch_runtime import INHERITED_ENVIRONMENT
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.storage.private_path import PrivateSocketRole
 

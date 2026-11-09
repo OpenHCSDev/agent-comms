@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms import team
-from agent_comms.bus import BusReader
 from agent_comms.cli_bridges.claude_protocol import OwedProgress
 from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
 from agent_comms.cli_bridges.session_watch import DeafWatch
@@ -39,6 +38,7 @@ from agent_comms.installer.logs import InstallLogs, InstallRunning, InstallUnit
 from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import RehearsedUpgrade
+from agent_comms.messaging.bus import BusReader
 from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.declared_family import DeclaredFamily

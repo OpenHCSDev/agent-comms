@@ -8,8 +8,8 @@ from dataclasses import (
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms import launch_runtime
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution import launch_runtime
 from agent_comms.execution.child_process import Platform, ProcessIdentity
 from agent_comms.execution.native_arguments import (
     ConfiguredBinary,

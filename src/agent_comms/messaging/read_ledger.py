@@ -14,8 +14,8 @@ from dataclasses import (
 )
 from pathlib import Path
 
-from agent_comms.bus import Bus, BusReader
 from agent_comms.coordination.errors import DMScopeChanged
+from agent_comms.messaging.bus import Bus, BusReader
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.messages import Message

@@ -8,8 +8,8 @@ from agent_comms.errors import RouteChangedError, UnregisteredThreadError
 from agent_comms.execution.input_key import AcpInputKey
 from agent_comms.input_attempt import UnobservedInputDeliveryScope, UnresolvedInput
 from agent_comms.input_disposition import DeliveryOverview
+from agent_comms.messaging.notification_progress import SendingProgress
 from agent_comms.nominal.field_codec import FieldCodec, InputId
-from agent_comms.notification_progress import SendingProgress
 from agent_comms.registry.thread_presentation import (
     IdleThreadPresentationStatus,
     NoThreadPresentation,

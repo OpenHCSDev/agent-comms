@@ -9,7 +9,6 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from agent_comms.bus import Bus
 from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.errors import RelationViolationError
@@ -33,6 +32,7 @@ from agent_comms.input_attempt import (
     StoredInput,
     UnresolvedInput,
 )
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_tables import MessageIdentitySource
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
@@ -55,9 +55,9 @@ from agent_comms.storage.typed_table import (
 from agent_comms.transport.tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from agent_comms.bus import BusReader
     from agent_comms.channel_input_batch import SingleInputBatch
     from agent_comms.execution.turn_lease import TurnLeaseFence
+    from agent_comms.messaging.bus import BusReader
     from agent_comms.registry.private_registry_guard import RegistryPrivacy
     from agent_comms.registry.registry_document import RegistryEntry, RegistrySnapshot
     from agent_comms.registry.threads import Thread

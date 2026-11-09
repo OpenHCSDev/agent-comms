@@ -10,13 +10,13 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.bus import StoredBusReader
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
     IntegrityViolationError,
 )
 from agent_comms.execution.publication_measurements import PublicationMeasurements
+from agent_comms.messaging.bus import StoredBusReader
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.store_files import (
     DEFAULT_STORE_CONTENTION,

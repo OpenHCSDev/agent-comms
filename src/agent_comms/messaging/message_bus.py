@@ -17,10 +17,10 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from agent_comms.bus import Bus, BusSnapshot
 from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.messaging.agent_inbox import TakenInputCursor
+from agent_comms.messaging.bus import Bus, BusSnapshot
 from agent_comms.messaging.bus_route_counts import HeldUnseenCounts
 from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.messaging.channels import AnyChannel, Channel
@@ -49,8 +49,8 @@ from agent_comms.peer_relevance import Prioritized
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.relationships import PeerRelation
 from agent_comms.registry.threads import Thread
-from agent_comms.relationships import PeerRelation
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
 
 

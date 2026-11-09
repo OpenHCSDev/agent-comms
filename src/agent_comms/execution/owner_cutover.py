@@ -8,8 +8,8 @@ from contextlib import nullcontext
 from typing import TYPE_CHECKING, NoReturn
 
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.restart_refusals import OwnerMaintenancePendingRefusal
-from agent_comms.launch_runtime import LaunchRuntime
 
 if TYPE_CHECKING:
     from agent_comms.execution.owner_lifecycle import (

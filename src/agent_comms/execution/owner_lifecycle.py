@@ -26,6 +26,13 @@ from agent_comms.execution.child_process import Platform, ProcessIdentity
 from agent_comms.execution.diagnostics import OwnerProcessOutput
 from agent_comms.execution.input_key import AcpInputKey, InputKey
 from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.launch_runtime import (
+    INHERITED_ENVIRONMENT,
+    LaunchRuntime,
+    RestartEnvironment,
+    SetVariable,
+    ThreadLaunch,
+)
 from agent_comms.execution.native_arguments import (
     ConfiguredBinary,
     InheritedArguments,
@@ -43,13 +50,6 @@ from agent_comms.execution.restart_scope import AllOwners, RestartScope
 from agent_comms.execution.root_runtime import RootRuntimeStore
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.active_route import resolve_comms_route
-from agent_comms.launch_runtime import (
-    INHERITED_ENVIRONMENT,
-    LaunchRuntime,
-    RestartEnvironment,
-    SetVariable,
-    ThreadLaunch,
-)
 from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import InputId, RecordMember

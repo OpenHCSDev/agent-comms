@@ -18,6 +18,8 @@ from agent_comms.execution.input_origin import (
 )
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.reported_turn import ReportedTurnState
+from agent_comms.messaging.notification_evidence import ConsumptionEvidence
+from agent_comms.messaging.notification_progress import DeliveryProgress, ShownToModelProgress
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -34,8 +36,6 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.nominal.lifecycle_capability import LifecycleCapability, Unresolved
 from agent_comms.nominal.text_digest import TextDigest
-from agent_comms.notification_evidence import ConsumptionEvidence
-from agent_comms.notification_progress import DeliveryProgress, ShownToModelProgress
 from agent_comms.registry.thread_identity import GenerationCounter, ThreadIncarnation
 
 if TYPE_CHECKING:

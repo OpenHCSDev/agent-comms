@@ -29,7 +29,9 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.projects.slop import Slop
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.rule_deal import (
+from agent_comms.team.package import TeamPackage
+from agent_comms.team.pattern_sources import PostmortemFailure
+from agent_comms.team.rule_deal import (
     AuditDue,
     ClearedDeal,
     CompactedDeal,
@@ -42,8 +44,6 @@ from agent_comms.rule_deal import (
     SystemPromptDelivery,
     UnstampedCompactionDeal,
 )
-from agent_comms.team.package import TeamPackage
-from agent_comms.team.pattern_sources import PostmortemFailure
 from agent_comms.team.rule_file import RuleFile
 from agent_comms_hooks import ClaudeSubagentHook
 

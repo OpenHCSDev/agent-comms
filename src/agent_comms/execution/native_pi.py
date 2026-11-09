@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.execution.launch_root import LaunchRoot, started
+from agent_comms.execution.launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from agent_comms.execution.native_arguments import NativeArguments, SelectedModel
 from agent_comms.execution.native_entries import NO_EVIDENCE_READ, NoEvidenceRead
 from agent_comms.execution.native_evidence_read import NativeInputUncommitted
@@ -27,7 +28,6 @@ from agent_comms.execution.pi_vocabulary import NoThinkingOverride, ThinkingChoi
 from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.installer.active_route import ActiveRoute, resolve_comms_route
 from agent_comms.installer.native_package import MANIFEST, SYSTEM_PROMPT, VerifiedNativePackage
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.transport.native_tool_transport import NativeToolMode
 

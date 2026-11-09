@@ -55,7 +55,7 @@ from agent_comms.nominal.field_codec import InputId, NullMember, ToolCallId, Tur
 from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.planning.goal_presentation import GoalSnapshot
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
-from agent_comms.rule_deal import CompactedDeal
+from agent_comms.team.rule_deal import CompactedDeal
 from agent_comms.transcript.transcript_events import SentTranscript
 from agent_comms.transport.tool_declaration import OtherAction, ToolAction, ToolDeclaration
 
@@ -70,7 +70,7 @@ if TYPE_CHECKING:
     from agent_comms.execution.turn_progress import TurnProgress
     from agent_comms.input_disposition import InputDocument
     from agent_comms.planning.goal_presentation import GoalPublicationSnapshot
-    from agent_comms.rule_deal import Redeals
+    from agent_comms.team.rule_deal import Redeals
 
 
 class AgentEvent:

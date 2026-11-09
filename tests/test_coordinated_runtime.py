@@ -24,8 +24,8 @@ from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.execution.pi_vocabulary import HighThinkingLevel
 from agent_comms.execution.turn_context import TurnContext
+from agent_comms.messaging.notification_progress import HumanReadProgress
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.thread_text import GivenThreadText
@@ -134,7 +134,7 @@ def test_channel_wake_frame_carries_declared_goal_state(tmp_path: Path) -> None:
 
 
 def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> None:
-    from agent_comms.message_notification import MessageNotification
+    from agent_comms.messaging.message_notification import MessageNotification
 
     root, _root_id, _comms, initial, people = _root(tmp_path)
     with Coordination(str(root / "coordination.sqlite3")) as store:

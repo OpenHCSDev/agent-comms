@@ -9,7 +9,6 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
@@ -17,6 +16,7 @@ from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.presentation import CountedRead, ThreadView
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import Activity, ActivityState
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import DEFAULT_ROSTER
 from agent_comms.registry.thread_status import (

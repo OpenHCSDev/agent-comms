@@ -11,6 +11,7 @@ from agent_comms.execution.child_process import (
     ProcessIdentity,
     SpawnedProcess,
 )
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.runtime_processes import (
     ImportingRuntimeProcess,
     PointerReference,
@@ -26,7 +27,6 @@ from agent_comms.installer.runtime_retention import (
     RuntimeRetention,
     SweptRetirement,
 )
-from agent_comms.launch_runtime import LaunchRuntime
 
 
 def built(runtimes: Path, name: str, *, completed: bool = True) -> LaunchRuntime:

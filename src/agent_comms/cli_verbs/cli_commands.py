@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.activity import ActivityState
 from agent_comms.cli_verbs import cli_command
 from agent_comms.cli_verbs.cli_result import CliResult, TargetEditResult
 from agent_comms.comms import Comms
@@ -58,6 +57,7 @@ from agent_comms.projects.shell_effects import (
     RemoveCheckoutStorageEffect,
 )
 from agent_comms.projects.storage_projection import StorageProjection
+from agent_comms.registry.activity import ActivityState
 from agent_comms.registry.thread_model import ThreadModel
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.typed_table import SQLiteSchemaDifference, StoreRewrite

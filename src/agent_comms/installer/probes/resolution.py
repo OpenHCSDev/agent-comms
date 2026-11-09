@@ -10,11 +10,11 @@ from pathlib import Path
 from packaging.version import Version
 
 import agent_comms
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe
 from agent_comms.installer.probes.packages import DistributionProbe, PackageRecord
 from agent_comms.installer.runtime_resolution import ProjectMetadata, RuntimeResolution
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.package_stamp import STAMP
 
 

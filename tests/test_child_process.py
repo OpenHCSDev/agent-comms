@@ -34,8 +34,8 @@ from agent_comms.execution.child_process import (
     SynchronousProcess,
     TimedOutOutcome,
 )
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import FieldCodec
 from process_tree_fixture import TREE, identities, ready
 

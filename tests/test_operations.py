@@ -9,17 +9,16 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
-from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.context_reading import ContextUsage
+from agent_comms.execution.launch_runtime import CallingThreadUnavailable, ThreadLaunch
 from agent_comms.execution.native_entries import CompactionEntry, ModelChangeEntry
 from agent_comms.execution.pi_vocabulary import HighThinkingLevel
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.history_views import CallingThreadTarget, NamedThreadTarget
-from agent_comms.launch_runtime import CallingThreadUnavailable, ThreadLaunch
 from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
 from agent_comms.messaging.channels import AnyChannel
 from agent_comms.messaging.message_page import PageBounds
@@ -32,6 +31,7 @@ from agent_comms.projects.checkouts import (
     Checkout,
     LaunchCheckout,
 )
+from agent_comms.registry.activity import ActivityState
 from agent_comms.registry.thread_management import ForkSpec
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.thread_status import (

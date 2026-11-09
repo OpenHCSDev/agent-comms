@@ -69,6 +69,7 @@ from agent_comms_hooks.shell_commands import ShellCommand
 if TYPE_CHECKING:
     from agent_comms.execution.turn_context import TurnContext
     from agent_comms.execution.turn_goal_account import VerifiedGoalSettlement
+    from agent_comms.messaging.task_sources import TaskScope
     from agent_comms.planning.goal_actions import GoalAction, GoalActionContext
     from agent_comms.planning.goal_attempts import GoalAttemptStore, LaunchPermit
     from agent_comms.planning.goal_management import Goals
@@ -76,7 +77,6 @@ if TYPE_CHECKING:
     from agent_comms.planning.goal_waits import GoalWaits
     from agent_comms.planning.orders import Todo
     from agent_comms.registry.threads import Thread
-    from agent_comms.task_sources import TaskScope
 
 
 @dataclass(frozen=True)
@@ -121,7 +121,7 @@ class UnresolvedMention:
     peer_created_at: Literal[None] = None
 
     def project(self, registry, owner, goal, source):
-        from agent_comms.relationships import GoalMentionDiagnostic
+        from agent_comms.registry.relationships import GoalMentionDiagnostic
 
         return (), (
             GoalMentionDiagnostic(
@@ -174,7 +174,7 @@ class ResolvedMentionBinding(GoalMentionBinding):
         return RecordedThreadIncarnation(self.peer_name, self.peer_created_at)
 
     def project(self, registry, owner, goal, source):
-        from agent_comms.relationships import GoalDerivedContact, GoalMentionDiagnostic
+        from agent_comms.registry.relationships import GoalDerivedContact, GoalMentionDiagnostic
 
         diagnostic = GoalMentionDiagnostic(
             owner.name, goal.id, source.text_revision, self.token, "stale_incarnation"

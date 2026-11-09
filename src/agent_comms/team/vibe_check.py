@@ -14,9 +14,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
-from agent_comms.bus import BusReader
 from agent_comms.comms import Comms
 from agent_comms.errors import BirthChangedError
+from agent_comms.messaging.bus import BusReader
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import WireExclude, projected
 from agent_comms.planning.goal_actions import (

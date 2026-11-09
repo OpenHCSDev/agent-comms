@@ -33,7 +33,7 @@ def test_cli_worktree_edit_preserves_live_external_owner(tmp_path):
     import subprocess
     import sys
 
-    from agent_comms.bus import Bus
+    from agent_comms.messaging.bus import Bus
 
     comms = wire(tmp_path / 'wire')
     Bus.install(Bus.path_in(comms.root))

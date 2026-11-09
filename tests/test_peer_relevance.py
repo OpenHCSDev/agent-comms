@@ -33,9 +33,9 @@ from agent_comms.planning.goal_states import (
     CompletedGoal,
 )
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.relationships import RelationshipEdit
 from agent_comms.registry.thread_text import ForkedParent
 from agent_comms.registry.threads import NativeThread
-from agent_comms.relationships import RelationshipEdit
 from conftest import installed_comms, publish_initial
 
 

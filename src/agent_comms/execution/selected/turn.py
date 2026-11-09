@@ -27,7 +27,6 @@ from agent_comms.coordination.snapshot import RecoverySnapshot
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import WireOrigin
 from agent_comms.coordination.tables.responses import ResponseObligation
-from agent_comms.envelope_claim_transitions import WakeClaim
 from agent_comms.execution.channel_coding_tools import SelectedCodingToolOwner
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_pi import NativeTurnResult
@@ -59,6 +58,7 @@ from agent_comms.execution.turn_phase import (
     PromptAcceptancePhase,
     PublishingPhase,
 )
+from agent_comms.messaging.envelope_claim_transitions import WakeClaim
 from agent_comms.waking.wake_candidate_index import WakeCandidateIndex
 
 

@@ -9,9 +9,9 @@ import pytest
 
 from agent_comms.errors import TodoError
 from agent_comms.execution.child_process import OrderCheckFailedError
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.build_identity import RecordedBuildIdentity
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimeResolution
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import FieldCodec, RecordProblems
 from agent_comms.planning.goals import (
     CheckedCommit,

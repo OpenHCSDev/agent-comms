@@ -3,9 +3,9 @@
 import subprocess
 import sys
 
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.publication import RuntimePublication
 from agent_comms.installer.runtime_resolution import RuntimeResolution
-from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_pointer_publication_does_not_kill_unselected_runtime_processes(tmp_path, monkeypatch):

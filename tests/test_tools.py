@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.message_notification import MessageNotification
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.channels import AnyChannel
+from agent_comms.messaging.message_notification import MessageNotification
 from agent_comms.presentation import SentMessageSummary
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
@@ -154,7 +154,7 @@ class TestToolCatalog:
             invoke_tool(comms, "comms_threads", {"active_only": "yes"}, caller=NoThreadCaller())
 
     def test_operator_threads_query_does_not_weaken_actions(self, comms):
-        from agent_comms.launch_runtime import CallingThreadUnavailable
+        from agent_comms.execution.launch_runtime import CallingThreadUnavailable
 
         comms.registry.declare(NativeThread(name='listed', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         result = invoke_tool(comms, "comms_threads", {"active_only": True}, caller=NoThreadCaller())

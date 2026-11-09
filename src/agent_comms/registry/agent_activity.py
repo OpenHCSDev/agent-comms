@@ -10,16 +10,6 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.activity import (
-    Activity,
-    ActivityCapture,
-    ActivityState,
-    ActivityStore,
-    DrainDiagnostic,
-    DrainObservation,
-    NoDrainDiagnostic,
-    ObservedActivity,
-)
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_input_owner import RegistryOwner
@@ -32,19 +22,29 @@ from agent_comms.execution.turn_lease import (
 )
 from agent_comms.execution.turn_phase import IdlePhase, PreparingPhase, TurnPhase
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.notification_progress import TakenProgress, WorkingTakenProgress
 from agent_comms.messaging.routing import NoTurnRouting, Routing
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import ThreadLookup, TurnId
-from agent_comms.notification_progress import TakenProgress, WorkingTakenProgress
+from agent_comms.registry.activity import (
+    Activity,
+    ActivityCapture,
+    ActivityState,
+    ActivityStore,
+    DrainDiagnostic,
+    DrainObservation,
+    NoDrainDiagnostic,
+    ObservedActivity,
+)
 from agent_comms.registry.thread_identity import OwnerIdentity, ThreadIncarnation
 from agent_comms.registry.threads import Thread
 
 if TYPE_CHECKING:
     from agent_comms.agent_backend import AgentBackend
     from agent_comms.agent_events import RuntimeInfoObservation
-    from agent_comms.message_notification import MessageNotification
     from agent_comms.messaging.bus_publication import Delivered
-    from agent_comms.notification_progress import AssignmentProgress, DeliveryProgress
+    from agent_comms.messaging.message_notification import MessageNotification
+    from agent_comms.messaging.notification_progress import AssignmentProgress, DeliveryProgress
     from agent_comms.registry.registration import Registration
     from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.registry.thread_status import ThreadStatus

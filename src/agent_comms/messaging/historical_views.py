@@ -13,15 +13,15 @@ from functools import cache, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.bus import Bus
 from agent_comms.coordination.errors import DMScopeChanged, HistoricalSourceChanged
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.child_process import Platform
 from agent_comms.execution.transcript_routes import TranscriptRoutes
-from agent_comms.message_notification import MessageNotification, NotificationWindow
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.channel_targets import NamedTarget, ThreadTarget
 from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.display_references import ReferenceContext
+from agent_comms.messaging.message_notification import MessageNotification, NotificationWindow
 from agent_comms.messaging.message_page import (
     NEWEST_PAGE,
     ConversationMessagePageRequest,
@@ -31,6 +31,12 @@ from agent_comms.messaging.message_page import (
 )
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import CarriesEnvelope, Message, MessageHistory
+from agent_comms.messaging.notification_evidence import (
+    FirstRecipient,
+    OutcomeViewer,
+    RecipientCursor,
+    RecipientLimit,
+)
 from agent_comms.messaging.page_traversal import HistoryCursor, HistorySourceKey, OlderTraversal
 from agent_comms.messaging.read_basis import (
     AnonymousViewer,
@@ -59,12 +65,6 @@ from agent_comms.nominal.field_codec import (
     SingleFieldValue,
     SubclassUnion,
     TaggedRecordMember,
-)
-from agent_comms.notification_evidence import (
-    FirstRecipient,
-    OutcomeViewer,
-    RecipientCursor,
-    RecipientLimit,
 )
 from agent_comms.presentation import WireRevision
 from agent_comms.projects.checkouts import Checkout

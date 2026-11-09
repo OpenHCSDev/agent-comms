@@ -19,7 +19,7 @@ from agent_comms.nominal.field_codec import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.bus import BusReader
+    from agent_comms.messaging.bus import BusReader
     from agent_comms.messaging.channel_targets import NamedTarget
     from agent_comms.messaging.messages import Message
     from agent_comms.planning.orders import OwnerRequest, Todo, TodoStore

@@ -12,7 +12,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.errors import TodoError
@@ -23,6 +22,7 @@ from agent_comms.execution.turn_item import (
     NativeTurnId,
 )
 from agent_comms.installer.practice import PracticeCopy
+from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.planning.goals import OrderCheck
 from agent_comms.planning.order_runs import MechanicalOrderRun

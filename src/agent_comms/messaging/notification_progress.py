@@ -1,4 +1,5 @@
 """One typed notification state owns its label, activity and proved progress."""
+
 from __future__ import annotations
 
 from abc import abstractmethod
@@ -14,8 +15,8 @@ from agent_comms.registry.thread_presentation import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.message_notification import MessageNotification
     from agent_comms.messaging.bus_publication import Delivered
+    from agent_comms.messaging.message_notification import MessageNotification
 
 
 @dataclass(frozen=True)
@@ -286,6 +287,7 @@ class CompletedProgress(SettledDelivery, ContextualProgress):
 
     label = "Completed"
     detail = "The response workflow completed."
+
 
 class AssignmentProgress(DeliveryProgress):
     @property

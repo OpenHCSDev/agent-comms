@@ -15,13 +15,13 @@ from acp.schema import (
     SetSessionConfigOptionResponse,
 )
 
-from agent_comms.bus import Bus
 from agent_comms.config_options import CatalogConfigOption, ConfigOptions, InvalidConfigChoice
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import Refused
 from agent_comms.execution.child_process import join_retirement
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.turn_inbox import UseSettings
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.watched import FileSource
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.registry.thread_model import CatalogSelection

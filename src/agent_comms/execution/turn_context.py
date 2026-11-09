@@ -57,8 +57,8 @@ if TYPE_CHECKING:
     from agent_comms.context_store import RecordedContextState
     from agent_comms.input_attempt import StoredInput
     from agent_comms.presentation import ThreadView
+    from agent_comms.registry.relationships import PeerRelation
     from agent_comms.registry.threads import Thread
-    from agent_comms.relationships import PeerRelation
 
 
 @dataclass(frozen=True)

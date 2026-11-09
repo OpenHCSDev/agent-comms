@@ -11,26 +11,24 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, NoReturn
 
-from agent_comms.bus import Bus
 from agent_comms.coordination.database import CoordinationStore, StoreFile
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import CurrentExecutions
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordination.tables.publications import PublicationEvidence
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, boundary_decoder
-from agent_comms.notification_evidence import (
+from agent_comms.messaging.notification_evidence import (
     ConsumptionEvidence,
     FirstRecipient,
     OutcomeViewer,
     RecipientCursor,
     RecipientLimit,
 )
-from agent_comms.notification_progress import (
+from agent_comms.messaging.notification_progress import (
     AssignmentProgress,
     AssignmentResponse,
     QueuedProgress,
@@ -38,6 +36,8 @@ from agent_comms.notification_progress import (
     ShownToModelProgress,
     UnansweredResponse,
 )
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, boundary_decoder
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_identity import ThreadIncarnation
@@ -47,8 +47,8 @@ from agent_comms.waking.wake_policy import RecipientDecision
 if TYPE_CHECKING:
 
     from agent_comms.coordination.database import InvalidStore, MissingStore
-    from agent_comms.message_notification import MessageNotification
-    from agent_comms.notification_progress import DeliveryProgress
+    from agent_comms.messaging.message_notification import MessageNotification
+    from agent_comms.messaging.notification_progress import DeliveryProgress
     from agent_comms.registry.agent_activity import RecipientActivity
     from agent_comms.registry.private_registry_guard import RegistryPrivacy
 

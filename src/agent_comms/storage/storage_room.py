@@ -17,11 +17,11 @@ from pathlib import Path
 from sqlite3 import Connection
 from typing import Annotated, ClassVar
 
-from agent_comms.activity import ActivityState
 from agent_comms.execution.child_process import ProcessIdentity, ResidentMemory
 from agent_comms.messaging.watched import ChangeSignal, FileSource
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import RoomTicket
+from agent_comms.registry.activity import ActivityState
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.locked_store import PublishedProperty
 from agent_comms.storage.store_files import StoreContention

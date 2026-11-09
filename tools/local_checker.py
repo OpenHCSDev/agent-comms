@@ -20,6 +20,7 @@ from typing import Annotated, ClassVar
 
 from agent_comms import integration
 from agent_comms.cli_verbs.declared_verb import DeclaredVerb
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.integration import (
     CiEvent,
@@ -29,7 +30,6 @@ from agent_comms.integration import (
     PullRequestSources,
     TestedSources,
 )
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import Argument, FieldCodec
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName

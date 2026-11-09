@@ -9,12 +9,7 @@ from agent_comms.comms import wire
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import RosterVisibility
-from agent_comms.registry.thread_text import (
-    ForkedParent,
-    NoParent,
-)
-from agent_comms.registry.threads import NativeThread
-from agent_comms.relationships import (
+from agent_comms.registry.relationships import (
     ChildrenRelationshipGroup,
     CollaboratingRelationshipGroup,
     InboundRelationshipGroup,
@@ -22,6 +17,11 @@ from agent_comms.relationships import (
     ParentRelationshipGroup,
     RelationshipEdit,
 )
+from agent_comms.registry.thread_text import (
+    ForkedParent,
+    NoParent,
+)
+from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.tools.served import invoke_tool
 from bus_history import read_history
 from conftest import installed_comms
@@ -330,7 +330,7 @@ def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path
 
 def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.relationships import (
+    from agent_comms.registry.relationships import (
         InboundRelationshipGroup,
         SortableRelationshipGroup,
     )

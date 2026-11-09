@@ -19,12 +19,13 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, TextIO
 
 from agent_comms.coordination.errors import DMPaintedBoundChanged, DMScopeChanged
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.launch_runtime import CallingThreadUnavailable
+from agent_comms.execution.launch_runtime import CallingThreadUnavailable
 from agent_comms.messaging.activity_clocks import ChannelActivity
 from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import MessageInput
+from agent_comms.messaging.notification_evidence import AllOutcomes, DisplayOutcomes, OutcomeViewer
 from agent_comms.messaging.projection_source import ProjectionSource
 from agent_comms.messaging.recorded_bus import RecordedBus, RecordedBusIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -38,7 +39,6 @@ from agent_comms.nominal.field_codec import (
     TaggedRecordMember,
     TaggedUnion,
 )
-from agent_comms.notification_evidence import AllOutcomes, DisplayOutcomes, OutcomeViewer
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.storage.bound_set import BoundSet
@@ -47,8 +47,8 @@ from agent_comms.storage.private_path import FileObservation, MissingFile
 if TYPE_CHECKING:
     import sqlite3
 
-    from agent_comms.bus import Bus, BusReader, BusSnapshot
     from agent_comms.history_views import HistoryViews
+    from agent_comms.messaging.bus import Bus, BusReader, BusSnapshot
     from agent_comms.messaging.channels import TagChannel
     from agent_comms.messaging.historical_views import DMHistory, HistoricalSelection, HistorySource
     from agent_comms.messaging.message_bus import MessageBus

@@ -17,6 +17,7 @@ from agent_comms.coordination.owner_fence import prepare_fence_token
 from agent_comms.coordination.tables.executions import WireOrigin
 from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.execution.fresh_private_session import create_fresh_private_session
+from agent_comms.execution.launch_runtime import ThreadLaunch
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.private_send_stage import TriageNativeSend
 from agent_comms.execution.selected.actions import CodingSelectedAction, NoSelectedWritePlans
@@ -27,7 +28,6 @@ from agent_comms.execution.selected.turn import (
     SelectedAttempt,
     SelectedPrompt,
 )
-from agent_comms.launch_runtime import ThreadLaunch
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.private_send_claim import PrivateSendClaim

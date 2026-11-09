@@ -9,9 +9,22 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus, ClaimRecord, KeyedPrivateRecord, PublicRecord, RecordBuilder
 from agent_comms.coordination.errors import IdentityConflict
-from agent_comms.envelope_claim_transitions import (
+from agent_comms.errors import CommittedMessageError
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
+from agent_comms.messaging.bus import (
+    Bus,
+    ClaimRecord,
+    KeyedPrivateRecord,
+    PublicRecord,
+    RecordBuilder,
+)
+from agent_comms.messaging.bus_publication import HumanOrigin
+from agent_comms.messaging.bus_tables import MessageIdentitySource
+from agent_comms.messaging.envelope_claim_transitions import (
     ClaimConflict,
     ClaimOwner,
     ClaimRelease,
@@ -21,13 +34,6 @@ from agent_comms.envelope_claim_transitions import (
     UnclaimedResource,
     WakeClaims,
 )
-from agent_comms.errors import CommittedMessageError
-from agent_comms.execution.child_process import (
-    NoProcess,
-    ProcessIdentity,
-)
-from agent_comms.messaging.bus_publication import HumanOrigin
-from agent_comms.messaging.bus_tables import MessageIdentitySource
 from agent_comms.messaging.messages import (
     BusCapability,
     BusProjectionTables,

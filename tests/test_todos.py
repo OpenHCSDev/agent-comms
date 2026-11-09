@@ -19,7 +19,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.errors import TodoError
 from agent_comms.execution.child_process import (
@@ -33,6 +32,7 @@ from agent_comms.execution.turn_item import (
 )
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.runtime_resolution import CorePackage, TextualPackage, ToadPackage
+from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.goals import (

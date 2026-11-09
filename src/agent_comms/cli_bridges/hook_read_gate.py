@@ -1,4 +1,4 @@
-"""The Claude Code leaf of the rule gate (agent_comms.rule_deal): its deal lives beside the
+"""The Claude Code leaf of the rule gate (agent_comms.team.rule_deal): its deal lives beside the
 transcript, and a refusal is a PreToolUse denial.
 
 PreToolUse only judges: it refuses any tool but reading a dealt file and answering it while one is
@@ -24,9 +24,9 @@ from agent_comms.comms import Comms
 from agent_comms.execution.turn_phase import ToolRunningPhase
 from agent_comms.messaging.compaction_notices import CompactionNotice
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.rule_deal import DealtRuleGate, Mute, Owed, ReadSpan, RuleDeal, Voice
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.meant_voice import BusVoice
+from agent_comms.team.rule_deal import DealtRuleGate, Mute, Owed, ReadSpan, RuleDeal, Voice
 from agent_comms_hooks import Bash, ClaudeToolHook, ClaudeTranscriptHook, HookRecord
 from agent_comms_hooks.shell_commands import ConnectCommand, EmergencyHookStop, ShellCommand
 

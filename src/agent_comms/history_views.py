@@ -10,7 +10,6 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.activity import ActivityCapture, ObservedActivity
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.input_disposition import InputDispositions
@@ -31,11 +30,19 @@ from agent_comms.messaging.historical_views import (
     DMHistory,
     HistorySource,
 )
+from agent_comms.messaging.message_notification import MessageNotification, NotificationWindow
+from agent_comms.messaging.notification_evidence import (
+    FirstRecipient,
+    OutcomeViewer,
+    RecipientCursor,
+    RecipientLimit,
+)
 from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
 from agent_comms.messaging.sent_message import AssignedSourceIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, PresenceExclude, WireForm
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import ActivityCapture, ObservedActivity
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
@@ -54,7 +61,6 @@ from agent_comms.transport.tool_result import ToolResult
 if TYPE_CHECKING:
     from agent_comms.registry.registry_provenance import DeletedThread
 from agent_comms.errors import UnknownChannelError
-from agent_comms.message_notification import MessageNotification, NotificationWindow
 from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
 from agent_comms.messaging.channels import ChannelMemberIndex
 from agent_comms.messaging.message_bus import MessageBus
@@ -69,12 +75,6 @@ from agent_comms.messaging.read_basis import (
     NamedViewer,
 )
 from agent_comms.messaging.sending import Messaging
-from agent_comms.notification_evidence import (
-    FirstRecipient,
-    OutcomeViewer,
-    RecipientCursor,
-    RecipientLimit,
-)
 from agent_comms.planning.goal_management import Goals
 from agent_comms.presentation import (
     BusPresentation,

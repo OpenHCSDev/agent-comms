@@ -17,12 +17,12 @@ from _pytest.config import get_config
 
 from agent_comms.cli_verbs.declared_verb import DeclaredOptions
 from agent_comms.execution.child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
+from agent_comms.execution.launch_runtime import CheckoutSource, RestoredRuntime
 from agent_comms.execution.systemd_unit import AgentsSlice
 from agent_comms.execution.test_lease import LeaseStart, TestLease
 from agent_comms.installer.active_route import resolve_comms_route
 from agent_comms.installer.build_identity import RepositoryCommit
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
-from agent_comms.launch_runtime import CheckoutSource, RestoredRuntime
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     Argument,

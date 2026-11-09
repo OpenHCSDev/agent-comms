@@ -13,8 +13,8 @@ from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.task_sources import CorrectionTaskChange, UserTaskSupersession
 from agent_comms.nominal.field_codec import Argument, Normalize
-from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
 
 
 @dataclass(frozen=True, kw_only=True)

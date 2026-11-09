@@ -15,11 +15,11 @@ from agent_comms.execution.turn_lease import NoTurnLease
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.messages import InfoKind, Message, NoticeRole
+from agent_comms.messaging.task_sources import Decision
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.task_sources import Decision
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
 from bus_history import read_history
@@ -53,7 +53,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
         CurrentHumanConstraintTaskFact,
         RetainedTaskFacts,
     )
-    from agent_comms.task_sources import (
+    from agent_comms.messaging.task_sources import (
         CorrectionTaskChange,
         ExplicitTaskScopeSelection,
         HumanConstraintPin,
@@ -121,7 +121,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
 def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     goal_one_goal_id = GoalId.mint()
     goal_two_goal_id = GoalId.mint()
-    from agent_comms.task_sources import CorrectionTaskChange, GoalTaskScope
+    from agent_comms.messaging.task_sources import CorrectionTaskChange, GoalTaskScope
 
     owner = comms.registry.declare(NativeThread('recipient', frozenset(), Checkout(comms.root),
         goal=Goal('Original goal', goal_one_goal_id, published_seq=0)))
@@ -161,7 +161,11 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
         CurrentConstraintTaskFact,
         RetainedTaskFacts,
     )
-    from agent_comms.task_sources import Constraint, CorrectionTaskChange, UserTaskSupersession
+    from agent_comms.messaging.task_sources import (
+        Constraint,
+        CorrectionTaskChange,
+        UserTaskSupersession,
+    )
 
     owner = admit(comms, "alpha")
     admit(comms, "beta")
@@ -359,7 +363,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
         CurrentUserTaskCorrectionFact,
         RetainedTaskFacts,
     )
-    from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
+    from agent_comms.messaging.task_sources import CorrectionTaskChange, UserTaskSupersession
 
     owner = admit(comms, "alpha")
     owner = replace(owner, goal=Goal("Keep project scope", goal_id, published_seq=0, revision=1))
@@ -403,7 +407,7 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
         DecisionTaskFact,
         RetainedTaskFacts,
     )
-    from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
+    from agent_comms.messaging.task_sources import CorrectionTaskChange, UserTaskSupersession
 
     for name in ("alpha", "beta", "gamma"):
         owner = admit(comms, name)

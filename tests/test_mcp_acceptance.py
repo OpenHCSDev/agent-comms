@@ -40,12 +40,12 @@ from agent_comms.execution.controller import NO_CONTROLLER, SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
-from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms.registry.thread_identity import (
     NoObservedTurn,
     TurnFence,
 )
-from agent_comms.rule_deal import OffDealMode
+from agent_comms.team.pi_rule_gate import PiRedeal
+from agent_comms.team.rule_deal import OffDealMode
 from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX PTY acceptance")

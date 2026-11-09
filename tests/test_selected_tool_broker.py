@@ -17,7 +17,6 @@ import pytest
 import agent_comms.execution.selected.tool_broker as broker
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.envelope_claim_transitions import WakeClaim
 from agent_comms.execution.channel_coding_tools import CodingToolSocket
 from agent_comms.execution.native_runtime_input import (
     AcknowledgedSlot,
@@ -25,6 +24,7 @@ from agent_comms.execution.native_runtime_input import (
     SelectedToolSlot,
 )
 from agent_comms.execution.pi_events import ToolExecutionEnd, ToolExecutionStart
+from agent_comms.messaging.envelope_claim_transitions import WakeClaim
 from agent_comms.nominal.field_codec import (
     AssignmentId,
     ClaimId,
@@ -380,8 +380,8 @@ async def test_a_dealt_rule_gate_refuses_the_selected_write_before_its_owner_act
 ) -> None:
     """The selected write rides the shared gated transport: an unread deal refuses it before
     the owner callback could claim or write anything."""
-    from agent_comms.pi_rule_gate import PiRuleGate, RulesUnread
-    from agent_comms.rule_deal import AuditDue, StartedDeal
+    from agent_comms.team.pi_rule_gate import PiRuleGate, RulesUnread
+    from agent_comms.team.rule_deal import AuditDue, StartedDeal
     from agent_comms_hooks.skill import DeckReader
 
     gate = PiRuleGate(tmp_path / "scratch", tmp_path)

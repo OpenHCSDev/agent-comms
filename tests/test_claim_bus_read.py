@@ -22,7 +22,6 @@ from agent_comms.coordination.owner_fence import prepare_fence_token
 from agent_comms.coordination.reason_codes import NoReasonCode
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.coordination.tables.executions import WireOrigin
-from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.selected.claim import (
     publish_selected_resource_claim,
@@ -37,6 +36,7 @@ from agent_comms.execution.turn_context import (
     TranscriptSegment,
 )
 from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim, WakeClaim
 from agent_comms.messaging.message_page import (
     ConversationMessagePageRequest,
     MessagePageRequest,

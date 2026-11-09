@@ -13,16 +13,16 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.coordination.session import NativeCapture
-from agent_comms.envelope_claim_transitions import (
+from agent_comms.execution.channel_coding_tools import CodingToolSocket
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.pi_events import ToolExecutionEnd, ToolExecutionStart
+from agent_comms.messaging.envelope_claim_transitions import (
     ClaimConflict,
     ClaimTransitionError,
     ExistingFileClaim,
     NativeClaim,
     WritableFileClaim,
 )
-from agent_comms.execution.channel_coding_tools import CodingToolSocket
-from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.execution.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
 from agent_comms.pi_payloads import (
     AssistantMessage,

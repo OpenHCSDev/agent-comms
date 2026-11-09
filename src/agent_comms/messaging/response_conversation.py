@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, replace
 
-from agent_comms.bus import KeyedPrivateRecord
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.response_acknowledgement import (
     KeyedResponseAcknowledgement,
@@ -13,6 +12,7 @@ from agent_comms.coordination.response_acknowledgement import (
 )
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.messaging.audience_manifest import freeze_audience
+from agent_comms.messaging.bus import KeyedPrivateRecord
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.delivery_policy import ResponseDeliveryPolicy

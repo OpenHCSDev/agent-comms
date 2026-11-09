@@ -4,31 +4,25 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from bisect import bisect_left, bisect_right
-from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
-from functools import cached_property
-from itertools import batched
-from types import MappingProxyType
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import JsonValue
 
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
-from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
-    FieldCodec,
-    MalformedRecord,
-    MessageId,
     NullMember,
     RecordMember,
     SingleFieldValue,
     SubclassUnion,
     ThreadLookup,
-    boundary_decoder,
 )
 from agent_comms.registry.thread_identity import ThreadIncarnation
+
+if TYPE_CHECKING:
+    from agent_comms.messaging.bus_publication import Delivered
+    from agent_comms.messaging.notification_progress import DeliveryProgress
 
 
 class ConsumptionEvidence(ABC):
@@ -36,21 +30,6 @@ class ConsumptionEvidence(ABC):
 
     @abstractmethod
     def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress: ...
-
-
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-    from agent_comms.coordination.tables.assignments import WakeAssignment
-    from agent_comms.message_notification import MessageNotification
-    from agent_comms.messaging.bus_publication import Delivered
-    from agent_comms.notification_assignment import AssignmentActivityEvidence
-    from agent_comms.notification_progress import (
-        AssignmentProgress,
-        AssignmentResponse,
-        DeliveryProgress,
-        UnansweredResponse,
-    )
-    from agent_comms.presentation import WireRevision
 
 
 @dataclass(frozen=True)
@@ -181,5 +160,3 @@ class OwnerOutcomes(OutcomeViewer):
     def sees(self, source: Delivered) -> bool:
         """The message's sender and its original recipients may read it."""
         return self.lookup == source.sender_lookup or bool(self.positions(source))
-
-

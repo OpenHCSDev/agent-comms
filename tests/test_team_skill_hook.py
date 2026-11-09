@@ -46,7 +46,11 @@ from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import ForkThread, NativeThread
-from agent_comms.rule_deal import (
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.task_attachments.team_pings import RulePing, TeamDecisions, TeamUpdate
+from agent_comms.team.package import TeamPackage
+from agent_comms.team.pattern_sources import PostmortemFailure
+from agent_comms.team.rule_deal import (
     AuditDue,
     CompactedDeal,
     OffDealMode,
@@ -59,10 +63,6 @@ from agent_comms.rule_deal import (
     Unread,
     UnstampedCompactionDeal,
 )
-from agent_comms.storage.recorded_time import RecordedEventTime
-from agent_comms.task_attachments.team_pings import RulePing, TeamDecisions, TeamUpdate
-from agent_comms.team.package import TeamPackage
-from agent_comms.team.pattern_sources import PostmortemFailure
 from agent_comms.team.rule_file import RuleFile
 from agent_comms.team.spinning import SpinningTeammate
 from agent_comms.team.standing import PlanIdle

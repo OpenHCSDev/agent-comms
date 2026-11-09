@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Callable, ClassVar, NoReturn
 
 from agent_comms.agent_backend import RuntimeLocation
-from agent_comms.bus import Bus
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
@@ -49,11 +48,13 @@ from agent_comms.execution.turn_digests import (
 )
 from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.message_notification import MessageNotification, NotificationWindow
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.historical_views import HistorySource
 from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.message_notification import MessageNotification, NotificationWindow
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.notification_evidence import OwnerOutcomes
 from agent_comms.messaging.page_traversal import HistorySourceKey
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.messaging.routing import TurnRouting
@@ -68,7 +69,6 @@ from agent_comms.nominal.field_codec import (
     projected,
 )
 from agent_comms.notification_assignment import NotificationAssignment, NotificationSelection
-from agent_comms.notification_evidence import OwnerOutcomes
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_store import RegistryStore

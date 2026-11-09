@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.bus import Bus
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.messaging.audience_manifest import AUDIENCE_VERSION, Audience, AudiencedMessage
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.messages import Message

@@ -184,7 +184,7 @@ def test_a_ui_reads_and_orders_relationships_through_core(tmp_path):
     from agent_comms.display_order import ThreadSort
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.presentation import WireRevision
-    from agent_comms.relationships import ChildrenRelationshipGroup, ThreadCommsSnapshot
+    from agent_comms.registry.relationships import ChildrenRelationshipGroup, ThreadCommsSnapshot
     from agent_comms.transport.core_access import LocalCoreAccess
     from agent_comms.transport.tools.sidebar import (
         CommsSetRelationshipOrderTool,

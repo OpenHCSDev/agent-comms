@@ -10,6 +10,7 @@ from agent_comms.cli_bridges.shared import UnobservedBridge
 from agent_comms.cli_verbs.cli_commands import BusReadBack
 from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.errors import RelationViolationError, ThreadNotStoppedError
+from agent_comms.execution.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.execution.root_runtime import RootRuntimeStore
 from agent_comms.host_services import RestartedService
 from agent_comms.installer.backup import BackupReport, RestoreSpace
@@ -46,7 +47,6 @@ from agent_comms.installer.upgrade import (
     Upgrade,
     upgrade,
 )
-from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.messaging.channel_targets import CommsTag
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout

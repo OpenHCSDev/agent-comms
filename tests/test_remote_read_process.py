@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 from yarl import URL
 
+from agent_comms.execution.remote_core_process import ProcessRemoteCoreAccess, ProcessViewerEnd
 from agent_comms.nominal.field_codec import FieldCodec, RootId
-from agent_comms.remote_core_process import ProcessRemoteCoreAccess, ProcessViewerEnd
 from agent_comms.transport.connector_profile import (
     BearerSecret,
     HttpsMcpEndpoint,

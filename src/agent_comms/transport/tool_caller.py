@@ -12,9 +12,9 @@ from agent_comms.coordination.tables.board_delivery import ReaderBoardDelivery
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.turn_phase import IdlePhase
 from agent_comms.messaging.bus_publication import AgentOrigin
+from agent_comms.messaging.notification_evidence import OutcomeViewer, OwnerOutcomes
 from agent_comms.messaging.read_basis import DisplayViewer, OperatorOutcomes, ReadAuthority
 from agent_comms.nominal.field_codec import FieldCodec, WireForm
-from agent_comms.notification_evidence import OutcomeViewer, OwnerOutcomes
 from agent_comms.presentation import SentMessageSummary, ThreadRecord
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import ThreadIncarnation

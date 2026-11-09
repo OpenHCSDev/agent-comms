@@ -35,7 +35,7 @@ from agent_comms_hooks import ToolRefusedError
 if TYPE_CHECKING:
     from agent_comms.execution.backend import TurnSession
     from agent_comms.execution.pi_events import ToolExecutionEnd, ToolExecutionStart
-    from agent_comms.pi_rule_gate import PiRuleGate
+    from agent_comms.team.pi_rule_gate import PiRuleGate
 
 _LOG = logging.getLogger(__name__)
 

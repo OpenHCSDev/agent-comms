@@ -9,12 +9,12 @@ from agent_comms.acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdat
 from agent_comms.comms import Comms
 from agent_comms.coordination.errors import ReloadRequired
 from agent_comms.history_views import HistoryViews
-from agent_comms.message_notification import NotificationPass
 from agent_comms.messaging.bus_read import (
     BusRead,
     OwnerScopedRead,
     UiRead,
 )
+from agent_comms.messaging.message_notification import NotificationPass
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_reads import (
     LiveNotificationRead,
@@ -313,7 +313,7 @@ def test_first_revision_requires_reads_even_for_unchanged_empty_stores():
 
 
 def test_notification_rank_overrides_follow_the_mro_without_changing_parent_ranks():
-    from agent_comms.notification_progress import (
+    from agent_comms.messaging.notification_progress import (
         ActiveDelivery,
         DeliveryRank,
         SelectedConsumedProgress,

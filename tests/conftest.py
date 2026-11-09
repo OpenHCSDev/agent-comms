@@ -23,10 +23,10 @@ from pydantic import JsonValue
 # First: importing it removes the caller's repository from the environment before any git runs.
 import fixture_git  # noqa: F401
 import goal_owner_fixture
-from agent_comms.bus import Bus, BusRecord
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import Comms, wire
 from agent_comms.execution.cursor_publication import CursorDelivery
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_entries import NativeEvidenceScope, SessionEntry
 from agent_comms.execution.pi_durable_backend import PiDurableBackend
 from agent_comms.installer.native_package import (
@@ -35,7 +35,7 @@ from agent_comms.installer.native_package import (
     pinned_native_package,
 )
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.messaging.bus import Bus, BusRecord
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_bus import MessageBus
@@ -49,7 +49,6 @@ from agent_comms.messaging.messages import (
 from agent_comms.messaging.publisher import InitialWrites, ParticipantPublisher
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_payloads import PiMessage
-from agent_comms.pi_rule_gate import PiRedeal, PiRuleGate
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
 from agent_comms.registry.registration import Registration
@@ -60,7 +59,6 @@ from agent_comms.registry.thread_text import (
     GivenThreadText,
 )
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.rule_deal import ReadSpan, RuleDeal, SessionAudit, StartedDeal
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier,
@@ -70,6 +68,8 @@ from agent_comms.storage.maintenance_barrier import (
 )
 from agent_comms.storage.typed_table import TypedTable
 from agent_comms.team.order import Team
+from agent_comms.team.pi_rule_gate import PiRedeal, PiRuleGate
+from agent_comms.team.rule_deal import ReadSpan, RuleDeal, SessionAudit, StartedDeal
 from agent_comms.transport.native_tool_transport import ToolListener
 from agent_comms.transport.tool_caller import PeerCaller
 from agent_comms.transport.tool_declaration import NoToolRecord, ToolDeclaration
@@ -505,7 +505,7 @@ def record_installed_runtime(runtime: Path, resolution: RuntimeResolution) -> La
     A later record re-points the pointer, as a reinstall does, so fixtures that each install
     a build can share one HOME.
     """
-    from agent_comms.launch_runtime import LaunchRuntime
+    from agent_comms.execution.launch_runtime import LaunchRuntime
 
     (runtime / 'bin').mkdir(parents=True)
     (runtime / 'bin/python').symlink_to(sys.executable)
@@ -631,7 +631,7 @@ def probe_answers(owner_words: tuple[str, ...] = ()) -> list[dict[str, str]]:
          "at": "src/agent_comms/team/package.py:15", "derive": "declaration",
          "by": "src/agent_comms/team/package.py:15"},
         {"probe": "flinch", "answer": "No: a fixture session resists nothing; the gate it runs is"
-                                      " src/agent_comms/rule_deal.py:1"},
+                                      " src/agent_comms/team/rule_deal.py:1"},
     ]
     if owner_words:
         answers.append({"probe": "prior", "words": owner_words[0],

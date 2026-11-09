@@ -23,6 +23,7 @@ from agent_comms.config_options import RunningSelection
 from agent_comms.coordination.errors import CoordinationError
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NO_PROCESS, ProcessIdentity, ProcessState
+from agent_comms.execution.launch_runtime import LaunchRuntime, TagListText
 from agent_comms.execution.native_arguments import ConfiguredBinary, NativeArguments
 from agent_comms.execution.native_entries import ImportedSessionWriter
 from agent_comms.execution.native_session_reopen import PiSessionId
@@ -34,7 +35,6 @@ from agent_comms.execution.pi_vocabulary import (
 )
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.importing import ImportedConversation, ImportLimits, ThreadImported
-from agent_comms.launch_runtime import LaunchRuntime, TagListText
 from agent_comms.messaging.channel_targets import DeclaredTag
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import (
@@ -54,6 +54,7 @@ from agent_comms.registry.heartbeat_delivery import HeartbeatDelivery
 from agent_comms.registry.native_settings import NativeThreadDefaults
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_provenance import RegistryNames
+from agent_comms.registry.relationships import RelationshipStore
 from agent_comms.registry.thread_catalog import ThreadCatalog
 from agent_comms.registry.thread_identity import AgentThreadRole, ThreadIncarnation, ThreadRole
 from agent_comms.registry.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
@@ -69,7 +70,6 @@ from agent_comms.registry.threads import (
     Thread,
 )
 from agent_comms.registry.view_unread import transcript_read_state
-from agent_comms.relationships import RelationshipStore
 from agent_comms.storage.locked_store import PatternFile, RuntimeFile
 from agent_comms.transport.tool_declaration import NativeRequestTools
 from agent_comms.transport.tool_result import ToolResult

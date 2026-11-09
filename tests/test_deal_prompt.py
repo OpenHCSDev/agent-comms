@@ -11,7 +11,7 @@ from agent_comms.cli_bridges import claude_launch
 from agent_comms.installer.deal_prompt import DealPrompt
 from agent_comms.installer.native_package import OWNER_INSTRUCTIONS
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.rule_deal import (
+from agent_comms.team.rule_deal import (
     AuditDue,
     DealtRead,
     DealtRuleGate,

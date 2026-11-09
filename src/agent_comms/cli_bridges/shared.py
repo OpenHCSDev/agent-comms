@@ -33,7 +33,6 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, T
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
-from agent_comms.bus import Bus
 from agent_comms.cli_bridges.cli_arguments import CliArguments
 from agent_comms.cli_bridges.cli_protocol import CoreError, EarlierItems, TaggedWire
 from agent_comms.cli_bridges.harness_delivery_states import (
@@ -96,11 +95,12 @@ from agent_comms.execution.child_process import (
     ProcessIdentity,
     SpawnedProcess,
 )
+from agent_comms.execution.launch_runtime import LaunchRuntime, RunningSource
 from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.installer.harness_install import HarnessSession
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.launch_runtime import LaunchRuntime, RunningSource
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_tables import MessageIdentitySource
 from agent_comms.messaging.message_reference import (
     BridgeBeginning,

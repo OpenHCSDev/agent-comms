@@ -55,9 +55,9 @@ from agent_comms.transport.native_tool_transport import OwnerToolConnection
 
 if TYPE_CHECKING:
     from agent_comms.execution.backend import TurnSession
+    from agent_comms.execution.launch_runtime import RestartEnvironment
     from agent_comms.execution.pending_requests import PendingRequest
     from agent_comms.execution.pi_events import Response, ResponseOutcome
-    from agent_comms.launch_runtime import RestartEnvironment
 
 
 class SessionSnapshot:

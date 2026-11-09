@@ -6,7 +6,6 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.activity import StoppedDrainDiagnostic
 from agent_comms.comms import wire
 from agent_comms.coordination.assignment_states import DeferredAssignment
 from agent_comms.coordination.cohort import sealed_cohort_assignments
@@ -23,6 +22,12 @@ from agent_comms.execution.transcript_sources import AssignedTranscriptSource
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.channels import AnyChannel
 from agent_comms.messaging.messages import Message
+from agent_comms.messaging.notification_evidence import AllOutcomes, OwnerOutcomes
+from agent_comms.messaging.notification_progress import (
+    PendingProgress,
+    SentProgress,
+    UnrecordedProgress,
+)
 from agent_comms.messaging.routing import MessageRoute, TurnRouting
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.notification_assignment import (
@@ -31,14 +36,9 @@ from agent_comms.notification_assignment import (
     NotificationAssignment,
     NotificationSelection,
 )
-from agent_comms.notification_evidence import AllOutcomes, OwnerOutcomes
-from agent_comms.notification_progress import (
-    PendingProgress,
-    SentProgress,
-    UnrecordedProgress,
-)
 from agent_comms.pi_payloads import PublishedMessageToolDetails
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import StoppedDrainDiagnostic
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transcript.transcripts import EarlierThan, TranscriptRead, TranscriptSourceWindow

@@ -5,7 +5,6 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.harness_delivery_states import (
     AcceptedOutcome,
@@ -23,9 +22,10 @@ from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.practice import PracticeCopy
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.notification_evidence import AllOutcomes
+from agent_comms.messaging.notification_progress import HarnessConsumedProgress, UnansweredResponse
 from agent_comms.nominal.field_codec import InputId, TurnId
-from agent_comms.notification_evidence import AllOutcomes
-from agent_comms.notification_progress import HarnessConsumedProgress, UnansweredResponse
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 from transcript_record_fixture import transcript_record
 

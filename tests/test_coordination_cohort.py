@@ -231,8 +231,8 @@ def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Pat
 
 def test_no_wake_observer_cannot_gain_legacy_claim_after_seal(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
-    from agent_comms.bus import PrivateRecord
     from agent_comms.messaging.audience_manifest import freeze_audience
+    from agent_comms.messaging.bus import PrivateRecord
     from agent_comms.messaging.frozen_recipient import FrozenRecipient
     from agent_comms.messaging.mentions import ThreadMention
     from agent_comms.messaging.wake import OrdinaryControl

@@ -10,11 +10,11 @@ import pytest
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.session import NativeCapture
-from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim
 from agent_comms.execution.native_input_proof import NativeContextJournal, NativeInputProof
 from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.installer.backup import bus_files
+from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim, NativeClaim
 from agent_comms.nominal.field_codec import ClaimId, GoalId, InputId, TurnId
 from agent_comms.planning.orders import TodoStore
 from agent_comms.projects.checkouts import Checkout

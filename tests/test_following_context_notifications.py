@@ -32,10 +32,10 @@ from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.notification_evidence import AllOutcomes
+from agent_comms.messaging.notification_progress import DeliveryProgress, ShownToModelProgress
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.nominal.lifecycle_capability import Unresolved
-from agent_comms.notification_evidence import AllOutcomes
-from agent_comms.notification_progress import DeliveryProgress, ShownToModelProgress
 from agent_comms.private_send_claim import PrivateSendClaim
 from agent_comms.transport.native_tool_transport import OwnerToolConnection
 from conftest import accept_initial, publish_initial

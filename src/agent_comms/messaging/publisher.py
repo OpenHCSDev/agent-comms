@@ -12,17 +12,8 @@ from itertools import groupby
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.bus import Bus, BusReader, BusSnapshot, ClaimRecord, PrivateRecord, RecordBuilder
 from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.tables.publications import PublicationIntents
-from agent_comms.envelope_claim_transitions import (
-    ClaimOwner,
-    ClaimRelease,
-    ClaimTransition,
-    RecordedScope,
-    ReleasedClaims,
-    WakeClaims,
-)
 from agent_comms.errors import (
     ClaimEnvelopeUnknownError,
     RelationViolationError,
@@ -30,9 +21,25 @@ from agent_comms.errors import (
 )
 from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.messaging.audience_manifest import freeze_audience
+from agent_comms.messaging.bus import (
+    Bus,
+    BusReader,
+    BusSnapshot,
+    ClaimRecord,
+    PrivateRecord,
+    RecordBuilder,
+)
 from agent_comms.messaging.bus_publication import InitialOrigin
 from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
 from agent_comms.messaging.channels import Channel
+from agent_comms.messaging.envelope_claim_transitions import (
+    ClaimOwner,
+    ClaimRelease,
+    ClaimTransition,
+    RecordedScope,
+    ReleasedClaims,
+    WakeClaims,
+)
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.messages import BusRecord, ClaimNoticeKind, Message

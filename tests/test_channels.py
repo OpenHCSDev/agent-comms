@@ -4,7 +4,6 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.display_order import (
     ChannelSort,
@@ -20,6 +19,7 @@ from agent_comms.execution.child_process import (
 )
 from agent_comms.execution.pi_vocabulary import HighThinkingLevel
 from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.channel_management import (
     ArchiveThreadsTagDisposition,
     DeleteExclusiveInactiveThreadsTagDisposition,
@@ -77,7 +77,7 @@ def setup_wire(path):
 
 
 def test_current_membership_cannot_create_an_unfrozen_delivery(tmp_path):
-    from agent_comms.bus import PublicRecord
+    from agent_comms.messaging.bus import PublicRecord
     from agent_comms.messaging.messages import InfoKind, Message
 
     comms = setup_wire(tmp_path)

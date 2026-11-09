@@ -11,6 +11,7 @@ import pytest
 import fixture_git
 from agent_comms.comms import wire
 from agent_comms.execution.check_root import CheckRoot
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.build_identity import (
     DeliveredCommitNotInstalledError,
     ProofBuildMismatchError,
@@ -27,7 +28,6 @@ from agent_comms.installer.probes.packages import (
     PackageRecord,
 )
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimePackage, RuntimeResolution
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.planning.delivery_evidence import FileDeliveryEvidence
 from agent_comms.planning.goal_actions import CreateProblemGoalAction
@@ -138,7 +138,7 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
     run, after_install, proof_build_checkouts, comms, tmp_path,
 ):
     fixture_goal_id = GoalId.mint()
-    from agent_comms.launch_runtime import LaunchRuntime
+    from agent_comms.execution.launch_runtime import LaunchRuntime
     from test_todos import order, thread
 
     graph = next(graph for graph in proof_build_checkouts

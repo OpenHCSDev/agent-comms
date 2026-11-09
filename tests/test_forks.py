@@ -17,7 +17,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.activity import ActivityState
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.hook_forks import SessionSubagents
 from agent_comms.cli_bridges.hook_requests import (
@@ -94,6 +93,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.slop import DeclarationDerivation, ExistingLine, Slop
 from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.registry.activity import ActivityState
 from agent_comms.registry.thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.thread_status import (

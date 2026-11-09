@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus, BusSnapshot, PublicRecord
 from agent_comms.comms import wire
 from agent_comms.errors import HumanSendRefusedError
 from agent_comms.execution.native_transcript import NativeTranscript
+from agent_comms.messaging.bus import Bus, BusSnapshot, PublicRecord
 from agent_comms.messaging.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.messaging.bus_tables import MessageIdentitySource
 from agent_comms.messaging.historical_views import HistoryArchive

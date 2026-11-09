@@ -29,7 +29,6 @@ from typing import (
     cast,
 )
 
-from agent_comms.bus import BusReader
 from agent_comms.cli_verbs.declared_verb import DeclaredVerb
 from agent_comms.comms import Comms
 from agent_comms.coordination.service_passes import FailingPass, ServicePasses, ServicePassStore
@@ -48,6 +47,7 @@ from agent_comms.heartbeat_subjects import (
     HeartbeatSubject,
     TeammateSubject,
 )
+from agent_comms.messaging.bus import BusReader
 from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message

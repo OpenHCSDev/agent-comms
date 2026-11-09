@@ -31,7 +31,6 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TextIO
 
-from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
 from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.cli_verbs.cli_commands import BusReadBack, StoreDifference
@@ -43,6 +42,7 @@ from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.cli_verbs.target_action import TargetActionCliCommand
 from agent_comms.coordination.errors import CoordinationReadUnavailable
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.execution.runtime_processes import RuntimeProcesses
 from agent_comms.host_services import HostService, RestartedService
@@ -149,7 +149,7 @@ from agent_comms.installer.runtime_retention import (
 from agent_comms.installer.runtime_stack import Extendable, RuntimeStack, TargetRuntime
 from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.installer.target_tree import TargetTree
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import PathText

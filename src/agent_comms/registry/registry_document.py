@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Annotated, Literal, Self
 
 from pydantic import JsonValue
 
-from agent_comms.activity import ActivityCapture, ObservedActivity
 from agent_comms.errors import OutsideRegistrySlice, RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.restart_refusals import (
@@ -70,6 +69,7 @@ from agent_comms.projects.checkouts import Checkout, RepositoryReads
 from agent_comms.projects.repo import Repo, RepositorySelection
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.registry.activity import ActivityCapture, ObservedActivity
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.catalog_document import CatalogAccess
 from agent_comms.registry.registration_change import (

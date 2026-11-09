@@ -35,7 +35,6 @@ from aiohttp import (
 from aiohttp.helpers import get_env_proxy_for_url
 from yarl import URL
 
-from agent_comms.bus import Bus
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.claude_transcript import (
     WATCH_DEFERRED,
@@ -51,7 +50,8 @@ from agent_comms.cli_bridges.claude_transcript import (
 )
 from agent_comms.cli_bridges.harness_delivery_states import PrintLedgerId
 from agent_comms.cli_bridges.session_watch import WatchClaim
-from agent_comms.launch_runtime import RunningSource
+from agent_comms.execution.launch_runtime import RunningSource
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.watched import FileSource

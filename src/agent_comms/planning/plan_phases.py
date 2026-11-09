@@ -900,7 +900,7 @@ class RecordsPhase(RemainingSlopPhase):
                 r"^\s*nonlocal\b",
                 (
                     "src/agent_comms/messaging/read_ledger.py",
-                    "src/agent_comms/relationships.py",
+                    "src/agent_comms/registry/relationships.py",
                     "src/agent_comms/registry/shared_ledger.py",
                     "src/agent_comms/input_disposition.py",
                     "src/agent_comms/execution/owner_lifecycle.py",

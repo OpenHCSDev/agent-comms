@@ -23,7 +23,6 @@ from agent_comms.acp_extension import (
     TranscriptSnapshotUpdate,
     decode_updates,
 )
-from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import Refused
 from agent_comms.errors import UnregisteredThreadError
@@ -37,6 +36,7 @@ from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, TurnId
 from agent_comms.pi_counts import PiCount
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import ActivityState
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
 from agent_comms.ui_model.observation import ReadTranscript, SubscribeTranscript
@@ -531,7 +531,7 @@ class TestActivityLayer:
     def test_stale_activity_reads_idle(self, wired):
         import time as _time
 
-        from agent_comms.activity import Activity
+        from agent_comms.registry.activity import Activity
 
         wired.agents.activity.emit(
             Activity(thread="PR111", state=ActivityState.WORKING, detail="old",
@@ -540,7 +540,7 @@ class TestActivityLayer:
         assert wired.agents.activity_of("PR111", snapshot=wired.registry.snapshot()).state is ActivityState.IDLE
 
     def test_store_reads_the_latest_activity_of_exactly_the_requested_threads_after_reopen(self, tmp_path):
-        from agent_comms.activity import Activity, ActivityStore
+        from agent_comms.registry.activity import Activity, ActivityStore
 
         store = ActivityStore(tmp_path)
         store.emit(Activity(thread="a", state=ActivityState.THINKING))

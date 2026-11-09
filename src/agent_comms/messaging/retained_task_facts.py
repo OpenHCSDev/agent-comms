@@ -20,8 +20,8 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.nominal.text_digest import TextDigest
 
 if TYPE_CHECKING:
-    from agent_comms.bus import BusReader
     from agent_comms.input_disposition import InputDispositions
+    from agent_comms.messaging.bus import BusReader
     from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.registry.thread_identity import ThreadIncarnation
     from agent_comms.registry.threads import Thread

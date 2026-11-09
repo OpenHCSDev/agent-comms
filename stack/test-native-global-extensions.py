@@ -18,10 +18,11 @@ import tempfile
 import time
 from pathlib import Path
 
-from agent_comms.repo import Checkout
-from agent_comms.storage_rules import StorageRoots
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_storage import StorageRoots
 
 from agent_comms.comms import wire
+from agent_comms.execution.launch_runtime import RestartEnvironment
 from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.native_pi import CAPABILITY, NativePiRpcLaunch
 from agent_comms.execution.pi_commands import GetState
@@ -31,7 +32,6 @@ from agent_comms.installer.native_package import (
     NativeImportsManifest,
     VerifiedNativePackage,
 )
-from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.nominal.field_codec import FieldCodec
 
 

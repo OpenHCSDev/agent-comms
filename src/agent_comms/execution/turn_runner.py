@@ -59,10 +59,10 @@ from agent_comms.messaging.messages import Message
 from agent_comms.messaging.routing import NoTurnRouting, Routing, ScheduledTurn
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId, InputId, TurnId
 from agent_comms.pi_payloads import NativeContextData, StateData
-from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms.planning.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction
 from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.registry.threads import Thread
+from agent_comms.team.pi_rule_gate import PiRedeal
 from agent_comms.transcript.transcript_updates import TurnTranscriptUpdate
 from agent_comms.transport.runtime_server import RuntimeServer, SubscriberClosed
 

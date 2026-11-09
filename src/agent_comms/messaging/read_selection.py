@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from agent_comms.bus import BusSnapshot
 from agent_comms.messaging.activity_clocks import ActivityClocks
+from agent_comms.messaging.bus import BusSnapshot
 from agent_comms.messaging.channels import Channels
 from agent_comms.messaging.read_basis import (
     ChannelDisplayScope,

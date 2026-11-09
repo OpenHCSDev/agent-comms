@@ -37,15 +37,15 @@ from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_payloads import PiResponseData
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
-from agent_comms.rule_deal import DealDelivery
+from agent_comms.team.rule_deal import DealDelivery
 from agent_comms.transport.tool_result import DeclaredReply
 
 if TYPE_CHECKING:
     from agent_comms.agent_events import AgentEvent
+    from agent_comms.execution.launch_runtime import LaunchRuntime
     from agent_comms.execution.owned_turn import TurnDelivery
     from agent_comms.execution.transcript_sources import TranscriptSource
     from agent_comms.execution.turn_runner import TurnRunner
-    from agent_comms.launch_runtime import LaunchRuntime
     from agent_comms.registry.threads import Thread
 
 

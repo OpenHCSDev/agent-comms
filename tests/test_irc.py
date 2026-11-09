@@ -192,7 +192,7 @@ class TestPresence:
 
 class TestCurrentThreadEnvironment:
     def test_current_thread_decodes_its_launch_record(self, monkeypatch, tmp_path):
-        from agent_comms.launch_runtime import ThreadLaunch
+        from agent_comms.execution.launch_runtime import ThreadLaunch
         from agent_comms.registry.threads import current_thread
 
         monkeypatch.setenv(ThreadLaunch.variable("name"), "me")

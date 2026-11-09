@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus, PublicRecord
 from agent_comms.comms import wire
 from agent_comms.errors import UnresolvedAttemptError
+from agent_comms.messaging.bus import Bus, PublicRecord
 from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.messaging.watched import ChangeSignal, FileLifetimeSource, FileSource
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, GoalWaitId, WatchPaths

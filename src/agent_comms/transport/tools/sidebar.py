@@ -68,6 +68,7 @@ from agent_comms.registry.registry_document import (
     RegistrySlice,
     RegistrySnapshot,
 )
+from agent_comms.registry.relationships import SortableRelationshipGroup, ThreadCommsSnapshot
 from agent_comms.registry.thread_identity import ClaimedIdentity, ThreadIncarnation
 from agent_comms.registry.thread_management import (
     ImportDirectory,
@@ -77,7 +78,6 @@ from agent_comms.registry.thread_management import (
 from agent_comms.registry.thread_presentation import ThreadPresentation
 from agent_comms.registry.thread_text import ExpectedSession
 from agent_comms.registry.threads import Thread
-from agent_comms.relationships import SortableRelationshipGroup, ThreadCommsSnapshot
 from agent_comms.transcript.transcripts import TranscriptCursor
 from agent_comms.transport.request import ObservedRequest, ReadRequest, ToolRequest, tool_field
 from agent_comms.transport.runtime_request import RuntimeRequest

@@ -7,12 +7,12 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus import Bus, ClaimRecord
 from agent_comms.cli import CliInvocation
 from agent_comms.comms import Comms
-from agent_comms.envelope_claim_transitions import UnscopedClaims
 from agent_comms.errors import ExportDestinationExists, RelationViolationError
+from agent_comms.messaging.bus import Bus, ClaimRecord
 from agent_comms.messaging.channels import AnyOfMatch, ParticipantsView, ViewPredicate
+from agent_comms.messaging.envelope_claim_transitions import UnscopedClaims
 from agent_comms.messaging.exporting import (
     ChannelScope,
     DmScope,

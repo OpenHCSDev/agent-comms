@@ -9,13 +9,24 @@ from datetime import datetime
 from functools import cached_property
 from itertools import batched
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from agent_comms.execution.transcript_sources import AssignedTranscriptSource
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
+from agent_comms.messaging.notification_evidence import (
+    FirstRecipient,
+    OutcomeViewer,
+    RecipientCursor,
+    RecipientLimit,
+)
+from agent_comms.messaging.notification_progress import (
+    AssignmentResponse,
+    DeliveryProgress,
+    HumanReadProgress,
+)
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.messaging.revision_views import NotificationEvidenceView
 from agent_comms.nominal.field_codec import MessageId, TaggedRecordMember, TaggedUnion, ThreadLookup
@@ -26,24 +37,13 @@ from agent_comms.notification_assignment import (
     NotificationReadMark,
     NotificationSelection,
 )
-from agent_comms.notification_evidence import (
-    FirstRecipient,
-    OutcomeViewer,
-    RecipientCursor,
-    RecipientLimit,
-)
-from agent_comms.notification_progress import (
-    AssignmentResponse,
-    DeliveryProgress,
-    HumanReadProgress,
-)
 from agent_comms.registry.agent_activity import AgentActivity, RecordedRecipientActivity
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
-    from agent_comms.bus import Bus
     from agent_comms.comms import Comms
+    from agent_comms.messaging.bus import Bus
     from agent_comms.messaging.bus_publication import Delivered
     from agent_comms.presentation import WireRevision
     from agent_comms.registry.agent_activity import RecipientActivity

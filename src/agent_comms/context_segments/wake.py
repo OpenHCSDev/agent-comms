@@ -22,8 +22,8 @@ from agent_comms.execution.turn_context import (
     WireProvenance,
     WireSources,
 )
-from agent_comms.message_notification import SentMessageOutcome
 from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.messaging.message_notification import SentMessageOutcome
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.threads import Thread
 from agent_comms.waking.wake_policy import WakePolicy

@@ -8,12 +8,12 @@ from functools import partial
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.input_key import BusInputKey
 from agent_comms.execution.reported_turn import NoReportedTurn
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.bus_tables import ReceivedSource
 from agent_comms.messaging.messages import ConversationRole, NoticeRole

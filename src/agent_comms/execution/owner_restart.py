@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination.errors import CoordinationError
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
 from agent_comms.execution.native_arguments import (
     ConfiguredBinary,
     GivenArguments,
@@ -28,7 +29,6 @@ from agent_comms.execution.owner_lifecycle import (
 )
 from agent_comms.execution.restart_refusals import OwnerSelectionChangedRefusal
 from agent_comms.execution.restart_scope import AllOwners, RestartScope
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
 from agent_comms.registry.owner_release import OwnerCompletion
 from agent_comms.registry.thread_identity import ThreadAuthority
 from agent_comms.registry.threads import Thread

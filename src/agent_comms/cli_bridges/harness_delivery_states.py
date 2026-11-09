@@ -12,10 +12,10 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.notification_evidence import ConsumptionEvidence
+from agent_comms.messaging.notification_progress import HarnessConsumedProgress
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import TranscriptRecordId
-from agent_comms.notification_evidence import ConsumptionEvidence
-from agent_comms.notification_progress import HarnessConsumedProgress
 from agent_comms.storage.recorded_time import Timestamped
 
 if TYPE_CHECKING:
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from agent_comms.coordination.assignment_states import AssignmentState
     from agent_comms.coordination.assignment_store import AssignmentStore
     from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
-    from agent_comms.notification_progress import DeliveryProgress
+    from agent_comms.messaging.notification_progress import DeliveryProgress
 
 
 class Outcome(DeclaredFamily, affix="Outcome"):

@@ -61,12 +61,13 @@ from agent_comms.execution.turn_phase import (
     PreparingPhase,
     TurnPhase,
 )
-from agent_comms.message_notification import (
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.message_notification import (
     MessageNotification,
     SentMessageOutcome,
 )
-from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.notification_evidence import OwnerOutcomes
 from agent_comms.messaging.publisher import ParticipantPublisher
 from agent_comms.nominal.field_codec import (
     RootId,
@@ -78,7 +79,6 @@ from agent_comms.notification_assignment import (
     NotificationAssignmentRead,
     NotificationSelection,
 )
-from agent_comms.notification_evidence import OwnerOutcomes
 
 
 class NoLivePublication(MroDispatch):

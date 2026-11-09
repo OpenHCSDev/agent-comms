@@ -46,7 +46,6 @@ from agent_comms.cli_bridges.open_viewer import OpenViewer
 from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate
 from agent_comms.cli_bridges.shared import MonitorReadFile, TranscriptConfirmsDelivery
 from agent_comms.comms import Comms, client_wire
-from agent_comms.connector_store import BearerSecret, ConnectorStore, digest
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
@@ -60,6 +59,8 @@ from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 from agent_comms.package_stamp import STAMP
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
+from agent_comms.transport.connector_profile import BearerSecret
+from agent_comms.transport.connector_store import ConnectorStore, digest
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools.inbox import CommsInboxTool
 

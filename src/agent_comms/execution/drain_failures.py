@@ -8,15 +8,15 @@ from contextlib import asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING
 
-from agent_comms.activity import (
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import DrainDeferred, DrainUnavailable
+from agent_comms.execution.native_failures import NativeRequestFailure
+from agent_comms.registry.activity import (
     DrainDiagnostic,
     NativeInputDrainDiagnostic,
     StoppedDrainDiagnostic,
     UnavailableDrainDiagnostic,
 )
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.coordination.errors import DrainDeferred, DrainUnavailable
-from agent_comms.execution.native_failures import NativeRequestFailure
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms

@@ -12,7 +12,6 @@ from agent_comms import agent_events as events
 from agent_comms.agent_backend import InputStartListener
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.session import NativeCapture, NativeCommit
-from agent_comms.envelope_claim_transitions import NativeClaim
 from agent_comms.execution.channel_coding_tools import CodingToolOwner, OrdinaryContextCheck
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit
 from agent_comms.execution.input_drain import InputDrain
@@ -34,6 +33,7 @@ from agent_comms.execution.turn_input_source import (
     TurnInputSource,
 )
 from agent_comms.input_attempt import InputAlreadyCleared
+from agent_comms.messaging.envelope_claim_transitions import NativeClaim
 from agent_comms.nominal.field_codec import AcpSessionId, ClaimId, InputId, TurnId
 from agent_comms.planning.goal_attempts import GoalAttemptStore
 from agent_comms.planning.goal_waits import GoalWait

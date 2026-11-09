@@ -4,8 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.comms import wire
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.messages import InfoKind, Message
 
 

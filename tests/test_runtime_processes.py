@@ -11,6 +11,7 @@ from agent_comms.execution.child_process import (
     ProcessIdentity,
     SpawnedProcess,
 )
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.runtime_processes import (
     RuntimeProcesses,
     RuntimeProcessOutcome,
@@ -18,7 +19,6 @@ from agent_comms.execution.runtime_processes import (
     UnretiredRuntimeProcess,
 )
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import FieldCodec
 
 

@@ -28,13 +28,13 @@ from agent_comms.execution.child_process import (
     SpawnedProcess,
 )
 from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.execution.pi_vocabulary import ThinkingLevelField
 from agent_comms.execution.restart_scope import OwnersNamed
 from agent_comms.execution.session_file import NoSessionFile
 from agent_comms.execution.turn_failure import BackendFailed, FailedTurnResolution
 from agent_comms.installer.native_package import MANIFEST
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId, TurnId, compile_decoder
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.owner_release import NoRelease
@@ -441,7 +441,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
 
 
 def test_native_configuration_retains_original_home_across_writable_fork(tmp_path, monkeypatch):
-    from agent_comms.launch_runtime import RestartEnvironment
+    from agent_comms.execution.launch_runtime import RestartEnvironment
 
     original = tmp_path / "original-home"
     canonical = original / "credentials"
@@ -467,7 +467,7 @@ def test_native_configuration_retains_original_home_across_writable_fork(tmp_pat
 
 
 def test_native_configuration_uses_original_pi_directory_when_not_explicit(tmp_path):
-    from agent_comms.launch_runtime import RestartEnvironment
+    from agent_comms.execution.launch_runtime import RestartEnvironment
 
     configuration = RestartEnvironment.inherit({
         "HOME": str(tmp_path), "PI_CODING_AGENT_DIR": "~/configured-agent",

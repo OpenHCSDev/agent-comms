@@ -11,9 +11,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Self
 
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.root_runtime import RootRuntime
 from agent_comms.installer.active_route import CommsRoute
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.registration import Registration
 from agent_comms.storage.locked_store import RegistryFile

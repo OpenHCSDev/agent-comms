@@ -16,10 +16,10 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from weakref import WeakValueDictionary, finalize
 
 from agent_comms.agent_backend import RuntimeLocation
-from agent_comms.bus import Bus
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.execution.native_entries import NativeEntry
 from agent_comms.execution.native_transcript import SessionCut, record_end, reverse_records
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.messaging.watched import FileSource
 from agent_comms.registry.registry_document import RosterVisibility

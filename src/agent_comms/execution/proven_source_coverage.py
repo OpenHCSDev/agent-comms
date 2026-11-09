@@ -13,7 +13,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from agent_comms.bus import Bus
 from agent_comms.coordination.cohort import AcceptedCohort, _claim_record
 from agent_comms.coordination.cohort_schema import ClaimBatchAcknowledgements, CohortTable
 from agent_comms.coordination.coordinator import Coordination
@@ -33,6 +32,7 @@ from agent_comms.execution.native_runtime_input import (
     NativeRuntimeInput,
     NativeRuntimeTable,
 )
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.bus_source_page import CoveragePage
 from agent_comms.messaging.frozen_recipient import FrozenRecipient

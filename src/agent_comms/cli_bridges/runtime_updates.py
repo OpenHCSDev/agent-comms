@@ -12,13 +12,13 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms import activity
 from agent_comms.agent_events import RuntimeInfoObservation
 from agent_comms.cli_bridges.cli_protocol import EarlierItems
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId, NoSourceTurn, TurnItem
 from agent_comms.execution.turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.sending import Messaging
+from agent_comms.registry import activity
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.thread_identity import OfferedTools
 from agent_comms.registry.thread_text import NoThreadText, ThreadText

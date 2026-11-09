@@ -9,12 +9,12 @@ from pathlib import Path
 from sqlite3 import Connection
 from typing import Annotated, ClassVar
 
-from agent_comms.bus import BusReader
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.input_key import InputKey, InputKeyText
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.turn_lease import TurnCompletion, TurnDeclaration, TurnLease
 from agent_comms.input_attempt import StoredInput, UnresolvedInput
+from agent_comms.messaging.bus import BusReader
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.published_bus import PublishedBus

@@ -11,13 +11,6 @@ from itertools import islice
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.envelope_claim_transitions import (
-    ClaimOwner,
-    ClaimProjection,
-    ClaimTransition,
-    RecordedScope,
-    ResourceClaim,
-)
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
 from agent_comms.messaging.activity_clocks import ActivityClocks, ChannelActivity
 from agent_comms.messaging.bus_activity_index import BusActivityIndex
@@ -35,6 +28,13 @@ from agent_comms.messaging.bus_tables import (
     SentSource,
 )
 from agent_comms.messaging.channel_targets import NamedTarget
+from agent_comms.messaging.envelope_claim_transitions import (
+    ClaimOwner,
+    ClaimProjection,
+    ClaimTransition,
+    RecordedScope,
+    ResourceClaim,
+)
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import (
     Addressed,

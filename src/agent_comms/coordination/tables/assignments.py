@@ -22,7 +22,7 @@ from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.participants import Participants
 from agent_comms.coordination.tables.responses import ResponseObligation
-from agent_comms.envelope_claim_transitions import AssignmentBinding
+from agent_comms.messaging.envelope_claim_transitions import AssignmentBinding
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import (

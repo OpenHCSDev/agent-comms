@@ -22,7 +22,6 @@ from typing import (
     ClassVar,
 )
 
-from agent_comms.activity import ObservedActivity
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, ProcessState
@@ -42,6 +41,7 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.nominal.lifecycle_capability import Executing, LifecycleCapability
 from agent_comms.planning.goal_presentation import RunningExecution
+from agent_comms.registry.activity import ObservedActivity
 from agent_comms.registry.thread_identity import (
     NoObservedTurn,
     ObservedTurn,

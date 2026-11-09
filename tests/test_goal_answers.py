@@ -13,6 +13,7 @@ from agent_comms import agent_events as events
 from agent_comms.coordination.errors import Refused
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.goal_turn_permit import NoLaunchPermit
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.owned_turn import TurnGoalAccount
 from agent_comms.execution.owner_protocol import OwnerFailure
 from agent_comms.execution.pi_wire import PiUsage
@@ -20,7 +21,6 @@ from agent_comms.execution.turn_terminal import (
     EndedWithoutResult,
     OperatorStopped,
 )
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.planning.goal_actions import (
     ClearGoalAction,

@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.envelope_claim_transitions import ClaimOwner, FileClaimPath, WakeClaim
 from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.reservation_rules import ReservationRule, RuleCheck
@@ -27,16 +26,17 @@ from agent_comms.execution.selected.claim import (
 from agent_comms.execution.selected.tool_broker import consume_selected_slot, verify_sent_full_input
 from agent_comms.execution.turn_goal_permission import TurnGoalPermission
 from agent_comms.execution.turn_input_source import TurnInputSource
+from agent_comms.messaging.envelope_claim_transitions import ClaimOwner, FileClaimPath, WakeClaim
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord
 from agent_comms.nominal.lifecycle_capability import Executing
 from agent_comms.pi_payloads import StorageDenialToolDetails
-from agent_comms.pi_rule_gate import PiRuleGate
 from agent_comms.planning.goal_waits import GoalWait
 from agent_comms.planning.goals import GoalDeclaration
 from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.registry.thread_identity import OfferedTools
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.storage_room import NoRoomNeeded, RoomReservation
+from agent_comms.team.pi_rule_gate import PiRuleGate
 from agent_comms.transport.native_tool_call import CodingCall, ToolNotExecuting
 from agent_comms.transport.native_tool_transport import (
     GatedToolTransport,

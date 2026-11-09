@@ -95,9 +95,9 @@ def store(path: Path) -> StandaloneCoordination:
 
 
 def wire_source(db: StandaloneCoordination, assignment_id: AssignmentId, original: Message, mode: WakePolicy) -> SelectedSource:
-    from agent_comms.bus import PrivateRecord
     from agent_comms.execution.selected.source_batch import SelectedSource
     from agent_comms.messaging.audience_manifest import freeze_audience
+    from agent_comms.messaging.bus import PrivateRecord
     from agent_comms.messaging.frozen_recipient import FrozenRecipient
     from agent_comms.waking.wake_policy import WakeDecision
 

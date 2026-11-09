@@ -4,8 +4,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus import PublicRecord
 from agent_comms.comms import wire
+from agent_comms.messaging.bus import PublicRecord
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.message_page import PageBounds

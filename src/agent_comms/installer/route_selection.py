@@ -12,9 +12,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms import errors
-from agent_comms.bus import Bus
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 
 

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import ClassVar, TextIO
 
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.storage.store_files import SourceTier
 from agent_comms_hooks.process_claim import ClaimHeldError, ProcessSingleton
 

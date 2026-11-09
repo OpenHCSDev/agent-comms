@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.cli import CliInvocation
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.runtime_updates import FinishedItem
@@ -41,6 +40,7 @@ from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.watched import FileSource
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout

@@ -33,11 +33,11 @@ from agent_comms.registry.thread_presentation import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.activity import ObservedActivity
     from agent_comms.execution.turn_item import SourceTurn
     from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
     from agent_comms.messaging.message_reference import MessageReference
     from agent_comms.messaging.sending import Messaging
+    from agent_comms.registry.activity import ObservedActivity
     from agent_comms.registry.registry_document import (
         RegistryEntry,
         RegistrySnapshot,

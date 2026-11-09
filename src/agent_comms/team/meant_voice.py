@@ -6,8 +6,8 @@ from abc import abstractmethod
 
 from agent_comms.comms import Comms
 from agent_comms.messaging.channel_targets import ThreadTarget
-from agent_comms.rule_deal import Asked, RuleDeal, Speaking
 from agent_comms.task_attachments.owner_notices import MeantNotice
+from agent_comms.team.rule_deal import Asked, RuleDeal, Speaking
 
 
 class BusVoice(Speaking):

@@ -54,7 +54,6 @@ from pydantic import BaseModel, JsonValue, ValidationError
 
 from agent_comms import acp_extension
 from agent_comms.acp_extension import encode_updates
-from agent_comms.activity import FailedWakeDiagnostic
 from agent_comms.agent_backend import CompactionOutcome
 from agent_comms.comms import Comms, wire
 from agent_comms.config_options import ConfigOptions
@@ -109,6 +108,7 @@ from agent_comms.nominal.field_codec import (
     FieldCodec,
     RootId,
 )
+from agent_comms.registry.activity import FailedWakeDiagnostic
 from agent_comms.registry.thread_identity import OwnerIdentity
 from agent_comms.registry.threads import Thread
 from agent_comms.transport.owner_connection import socket_path

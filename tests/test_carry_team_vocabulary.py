@@ -12,9 +12,9 @@ from cutover.carry_team_vocabulary import (
     TeamVocabularyTodos,
 )
 
-from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.coordination.service_passes import ServicePassStore
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import FieldCodec

@@ -21,8 +21,8 @@ from typing import Annotated, ClassVar, Literal, Self
 from agent_comms.coordination.errors import DrainUnavailable
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.send_outcome import GrantedSend, HeldSend
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     ClaimId,

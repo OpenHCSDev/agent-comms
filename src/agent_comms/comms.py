@@ -34,11 +34,11 @@ from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.collaboration_ledger import CollaborationLedger
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot, UnreadRegistry
+from agent_comms.registry.relationships import ThreadRelationships
 from agent_comms.registry.route_client import ActivityClient
 from agent_comms.registry.thread_configuration import ThreadConfiguration
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_management import ThreadManagement
-from agent_comms.relationships import ThreadRelationships
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage.private_path import FileRevision
 from agent_comms.transcript.transcripts import Transcripts

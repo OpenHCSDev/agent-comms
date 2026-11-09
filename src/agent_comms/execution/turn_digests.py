@@ -21,12 +21,12 @@ from typing import (
 
 from pydantic import JsonValue
 
-from agent_comms.bus import Bus
 from agent_comms.context_store import ContextStore
 from agent_comms.coordination.service_passes import ServiceReading
 from agent_comms.execution.historical_native_inputs import HistoricalNativeAnswers
 from agent_comms.execution.transcript_sources import TranscriptSource
 from agent_comms.execution.turn_item import NativeTurnId
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (

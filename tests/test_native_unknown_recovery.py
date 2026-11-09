@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.cli import CliInvocation
 from agent_comms.cli_bridges.cli_protocol import WATCH_LINE, CoreError
 from agent_comms.comms import wire
@@ -30,6 +29,7 @@ from agent_comms.execution.child_process import (
 )
 from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.launch_runtime import ThreadLaunch
 from agent_comms.execution.native_arguments import GivenBinary
 from agent_comms.execution.native_input_record import (
     FullNativeExecution,
@@ -41,7 +41,7 @@ from agent_comms.execution.selected.participant import SelectedParticipant
 from agent_comms.execution.selected.turn import SelectedAttempt
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.launch_runtime import ThreadLaunch
+from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import InputId, TurnId
 from agent_comms.nominal.lifecycle_capability import Failed
 from agent_comms.registry.thread_model import DeclaredModel

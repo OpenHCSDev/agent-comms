@@ -10,15 +10,14 @@ from datetime import UTC, datetime
 
 import pytest
 
-from agent_comms.activity import ActivityState
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.launch_runtime import LaunchRoot
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
 from agent_comms.installer.runtime_resolution import CorePackage
-from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.nominal.field_codec import OrderId, ToolCallId
 from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from agent_comms.planning.order_runs import ApplicationOrderRun
@@ -32,6 +31,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.work_branches import WorkBranchError
+from agent_comms.registry.activity import ActivityState
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.thread_text import ForkedParent
 from agent_comms.registry.threads import ExternalThread, ForkThread

@@ -6,7 +6,7 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.bus_source_page import CandidateQuery
 from agent_comms.nominal.field_codec import MalformedRecord, MessageId, ThreadLookup

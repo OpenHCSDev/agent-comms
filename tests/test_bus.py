@@ -14,13 +14,6 @@ from pathlib import Path
 import pytest
 
 import fixture_git
-from agent_comms.bus import (
-    Bus,
-    BusRecord,
-    KeyedPrivateRecord,
-    PrivateRecord,
-    PublicRecord,
-)
 from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.tables.publications import PublicationIntents
 from agent_comms.errors import (
@@ -28,6 +21,13 @@ from agent_comms.errors import (
     HumanSendRefusedError,
     RelationViolationError,
     UnclaimedError,
+)
+from agent_comms.messaging.bus import (
+    Bus,
+    BusRecord,
+    KeyedPrivateRecord,
+    PrivateRecord,
+    PublicRecord,
 )
 from agent_comms.messaging.bus_publication import Delivered, HumanOrigin, KeyedPublication
 from agent_comms.messaging.bus_route_counts import BusRouteCounts
@@ -314,7 +314,7 @@ def test_display_import_does_not_add_projection_producers(
     before = pristine_projection.digest
     path = projection_source / "producer_stamp.py"
     original = path.read_text()
-    declaration = "from agent_comms.bus import Bus as Bus"
+    declaration = "from agent_comms.messaging.bus import Bus as Bus"
     assert original.count(declaration) == 1
     path.write_text(original.replace(declaration, declaration + "\nfrom agent_comms import cli"))
     assert projection_source_digest(projection_source) == before

@@ -3,8 +3,8 @@ from pathlib import Path
 
 from agent_comms.peer_relevance import GoalContactRelevance
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.relationships import MutualThreadRelation, RelationRecord
 from agent_comms.registry.threads import NativeThread
-from agent_comms.relationships import MutualThreadRelation, RelationRecord
 
 
 def test_new_relation_reuses_owned_incident_and_counterpart_behavior(*, thread_registration):

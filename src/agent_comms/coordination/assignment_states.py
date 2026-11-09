@@ -8,6 +8,16 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.coordination.errors import IdentityConflict, IntegrityViolationError
 from agent_comms.coordination.vocabulary import CoordinatorVocabulary
+from agent_comms.messaging.notification_progress import (
+    CompletedProgress,
+    ContextualProgress,
+    FailedProgress,
+    IgnoredProgress,
+    InterruptedProgress,
+    PassiveProgress,
+    PendingProgress,
+    UnrecordedProgress,
+)
 from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, ThreadLookup
 from agent_comms.nominal.lifecycle import LifecycleState
 from agent_comms.nominal.lifecycle_capability import (
@@ -17,16 +27,6 @@ from agent_comms.nominal.lifecycle_capability import (
     Failed,
     Pending,
     Terminal,
-)
-from agent_comms.notification_progress import (
-    CompletedProgress,
-    ContextualProgress,
-    FailedProgress,
-    IgnoredProgress,
-    InterruptedProgress,
-    PassiveProgress,
-    PendingProgress,
-    UnrecordedProgress,
 )
 from agent_comms.storage.typed_table import sql_literal
 from agent_comms.waking.source_proof_requirement import (
@@ -54,9 +54,9 @@ if TYPE_CHECKING:
         HistoricalNativeInput,
     )
     from agent_comms.execution.native_input_record import TriageNativeExecution
-    from agent_comms.message_notification import MessageNotification
     from agent_comms.messaging.bus_publication import Delivered
     from agent_comms.messaging.frozen_recipient import FrozenRecipient
+    from agent_comms.messaging.message_notification import MessageNotification
     from agent_comms.notification_assignment import AssignmentActivity
     from agent_comms.registry.agent_activity import RecipientActivity
 
@@ -172,7 +172,7 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment")
         updated_at_ms: int = 0,
         triage_inflight: bool = False,
     ) -> MessageNotification:
-        from agent_comms.message_notification import MessageNotification
+        from agent_comms.messaging.message_notification import MessageNotification
 
         return MessageNotification(
             recipient,
