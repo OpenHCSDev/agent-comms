@@ -181,13 +181,13 @@ def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_
     # Historical frames own their original references; new frames leave those
     # references with the per-message body. Both reconstruct the same history.
     frame_sources = (() if original_in_body else (WireProvenance(asked.reference),))
-    wake = SegmentManifest(SelectedWakeSegment,
-                           (*frame_sources, WireProvenance(sent_outcome.reference)), digest, 1, 1)
+    wake = SegmentManifest(kind=SelectedWakeSegment,
+                           provenance=(*frame_sources, WireProvenance(sent_outcome.reference)), sha256=digest, utf8_bytes=1, tokens=1)
     originals = (UserInputSegment(
         provenance=(WireProvenance(asked.reference),), content=asked.body,
     ).manifest(0),) if original_in_body else ()
-    entry = SegmentManifest(TranscriptSegment, (JournalProvenance(str(source), ('u1',)),),
-                            digest, len(frame), 1, contributors=(wake, *originals))
+    entry = SegmentManifest(kind=TranscriptSegment, provenance=(JournalProvenance(str(source), ('u1',)),),
+                            sha256=digest, utf8_bytes=len(frame), tokens=1, contributors=(wake, *originals))
     with comms.contexts.writing() as db:
         ContextEntry(
             PiSessionId("source"), str(source), NativeItemId("u1"), entry
@@ -270,10 +270,10 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     recorded = comms.transcripts.external('claude').turns(LastTurns(300))
     comms.registry.declare(ExternalThread('paged', frozenset(), Checkout(tmp_path)))
     items = [
-        FinishedItem(turn.turn_id, NativeItemId(turn.turn_id), turn.events)
+        FinishedItem(turn_id=turn.turn_id, item_id=NativeItemId(turn.turn_id), events=turn.events)
         for turn in reversed(recorded)
     ]
-    items.insert(empty_index, FinishedItem(undated_edge_turn_id, NativeItemId('undated-edge'), ()))
+    items.insert(empty_index, FinishedItem(turn_id=undated_edge_turn_id, item_id=NativeItemId('undated-edge'), events=()))
     comms.transcripts.external('paged').publish_page(items, NoEarlierPage())
     pages = list(paged_answers(comms, 'paged'))
     seen = [turn['turn_id'] for page in pages for turn in page['turns']]
@@ -313,8 +313,8 @@ def test_missing_native_session_is_empty_and_nonpositive_count_is_rejected(tmp_p
 def test_undated_and_equal_time_transcripts_page_without_timestamp_assumptions(tmp_path, events):
     comms = wire(tmp_path)
     comms.registry.declare(ExternalThread('undated', frozenset(), Checkout(tmp_path)))
-    items = tuple(FinishedItem(NativeTurnId(f'undated-{index}'), NativeItemId(f'item-{index}'),
-        events) for index in range(251))
+    items = tuple(FinishedItem(turn_id=NativeTurnId(f'undated-{index}'), item_id=NativeItemId(f'item-{index}'),
+        events=events) for index in range(251))
     comms.transcripts.external('undated').publish_page(items, NoEarlierPage())
     pages = list(paged_answers(comms, 'undated'))
     seen = [turn['turn_id'] for page in pages for turn in page['turns']]

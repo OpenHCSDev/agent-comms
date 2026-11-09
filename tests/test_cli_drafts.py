@@ -264,9 +264,9 @@ def test_completed_only_sources_do_not_retain_draft_state(tmp_path):
     output.publish_batch(
         [
             FinishedItem(
-                t_turn_id,
-                NativeItemId("a"),
-                (AssistantTranscript("complete", timestamp=1.0, position=NativeItemId("a")),),
+                turn_id=t_turn_id,
+                item_id=NativeItemId("a"),
+                events=(AssistantTranscript("complete", timestamp=1.0, position=NativeItemId("a")),),
             )
         ]
     )

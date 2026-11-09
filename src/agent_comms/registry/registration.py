@@ -120,9 +120,9 @@ class Registration:
                 # never an occupied destination while the original tree still exists.
                 rule.require_completed_transfer(
                     current, source.path, destination, edit.document.threads.values(), repository)
-                return CheckoutTransfer(source.path, destination,
-                    Repo.git(destination, 'rev-parse', '--abbrev-ref', 'HEAD').strip(),
-                    Repo.git(destination, 'rev-parse', 'HEAD').strip())
+                return CheckoutTransfer(source=source.path, destination=destination,
+                    branch=Repo.git(destination, 'rev-parse', '--abbrev-ref', 'HEAD').strip(),
+                    head=Repo.git(destination, 'rev-parse', 'HEAD').strip())
             # A child working in its parent's tree is part of that allocation: it stops and
             # moves with the parent instead of counting as a foreign owner.
             sharing = tuple(child for child in edit.document.threads.children(current.name)

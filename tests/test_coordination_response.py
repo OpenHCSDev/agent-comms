@@ -112,11 +112,11 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     token = prepare_fence_token()
     first = store.start(
         AttemptStart(
-            "exec",
-            1,
-            recipient.recipient_lookup,
-            1,
-            token,
+            execution_id="exec",
+            attempt_ordinal=1,
+            owner_lookup=recipient.recipient_lookup,
+            owner_generation=1,
+            token=token,
             expected_execution_revision=2,
             expected_pointer_revision=0,
         )

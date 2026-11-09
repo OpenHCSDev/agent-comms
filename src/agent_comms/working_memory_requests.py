@@ -32,8 +32,8 @@ class DisclosureRequest:
 
     @classmethod
     def capture(cls, span, classifier, question: type[SpanQuestion], state, grant: MessageReference):
-        return cls(span, classifier, QuestionVersion.current(question, state.owner_rules),
-                   FieldCodec.decode(ChoiceQuestionDefinition, question.declaration()), state, grant)
+        return cls(span=span, classifier=classifier, question=QuestionVersion.current(question, state.owner_rules),
+                   definition=FieldCodec.decode(ChoiceQuestionDefinition, question.declaration()), state=state, grant=grant)
 
     def payload(self):
         return {"model": self.classifier.pin,

@@ -63,7 +63,7 @@ class DraftAccumulator:
 
     def finish(self, update: CompletedItem) -> tuple[ClosedDraft, FinishedItem]:
         """Close with the completed record's own already decoded event times."""
-        return ClosedDraft(self.started_at), FinishedItem(update.turn_id, update.item_id, update.events)
+        return ClosedDraft(self.started_at), FinishedItem(turn_id=update.turn_id, item_id=update.item_id, events=update.events)
 
 
 class NoPrefixDraft(DraftAccumulator):
@@ -365,7 +365,7 @@ class RuntimeUpdate(ABC):
 
     def page_record(self, turn_id: NativeTurnId, item_id: NativeItemId) -> FinishedItem:
         """Even an invisible item owns a source position and its page continuation."""
-        return FinishedItem(turn_id, item_id, ())
+        return FinishedItem(turn_id=turn_id, item_id=item_id, events=())
 
     def add_to(self, history: ImportBuffer) -> None:  # noqa: B027 - default hook
         """What this update adds to an imported conversation; activity adds nothing."""

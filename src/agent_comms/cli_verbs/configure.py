@@ -21,5 +21,5 @@ class ConfigureCliCommand(
         thread = ctx.registry.require(self.name)
         asyncio.run(ConfigOptions.configured().validate(self.configured(thread)))
         updated = ctx.threads.set_thread_configuration(thread, self)
-        return ThreadConfiguredResult(updated.name, updated.model, updated.thinking_level,
-                                      updated.service_tier)
+        return ThreadConfiguredResult(configured=updated.name, model=updated.model, thinking_level=updated.thinking_level,
+                                      service_tier=updated.service_tier)

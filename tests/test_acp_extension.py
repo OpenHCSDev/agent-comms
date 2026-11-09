@@ -98,7 +98,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     )
     samples = (
         ContextAnnotatedUpdate(
-            ContextManifest(owner.incarnation, NextContextTurn(), (), "source-codec-control"),
+            ContextManifest(thread=owner.incarnation, turn=NextContextTurn(), segments=(), counter="source-codec-control"),
             (),
         ),
         RequestFailedUpdate(ACPFailure.from_detail(-32603, "The usage limit has been reached")),

@@ -64,15 +64,15 @@ class CurrentContextCliCommand(CliCommand, declared_name=None):
                         NativeContextData, await connection.request("context")
                     ).require_session_file(owner.runtime.path)
                 except Refused as error:
-                    return CoreContextInspection("current-core-contributors; before future input",
-                                                 False, context, segments, str(error))
+                    return CoreContextInspection(scope="current-core-contributors; before future input",
+                                                 input_supplied=False, core_context=context, segments=segments, native_error=str(error))
             finally:
                 await connection.close()
             native_context = native.for_turn(owner.incarnation, NextContextTurn())
             return NativeContextInspection(
-                "next-native-base-and-core-contributors; before future input and provider hooks",
-                False, context, segments, native_context.segments, native_context.render().provider,
-                tuple(NativeSourceSpans(position, segment.measured_manifest().sha256,
+                scope="next-native-base-and-core-contributors; before future input and provider hooks",
+                input_supplied=False, core_context=context, segments=segments, native_manifest=native_context.segments, native_provider_context=native_context.render().provider,
+                native_source_spans=tuple(NativeSourceSpans(position, segment.measured_manifest().sha256,
                                         segment.source_ranges())
                       for position, segment in enumerate(native.segments)))
 

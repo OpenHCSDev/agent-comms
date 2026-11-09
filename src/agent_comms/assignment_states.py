@@ -486,7 +486,7 @@ class InterruptedAssignment(
     @classmethod
     def build(cls, mode: WakePolicy, execution_id: str | None, target: str | None) -> Self:
         return cls(
-            PendingDecision(mode) if execution_id is None else mode.engage(execution_id, target)
+            PendingDecision(mode=mode) if execution_id is None else mode.engage(execution_id, target)
         )
 
 
@@ -547,7 +547,7 @@ class DeliveredAssignment(
 
     @classmethod
     def build(cls, mode: WakePolicy, execution_id: str | None, target: str | None) -> Self:
-        return cls(PendingDecision(mode))
+        return cls(PendingDecision(mode=mode))
 
 
 class FailedAssignment(Failed, Terminal, InterruptedAssignment):

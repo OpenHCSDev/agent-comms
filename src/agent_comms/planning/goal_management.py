@@ -297,9 +297,9 @@ class Goals(GoalRecords, ProblemGoals):
             with store.reader_snapshot() as connection:
                 generation = Generation.require_in(connection, goal.id)
                 source = GoalExecutionSource(
-                    goal, wait(goal), generation,
-                    generation.lifecycle.evidence(connection, generation),
-                    owner, snapshot, self.agents,
+                    goal=goal, wait=wait(goal), generation=generation,
+                    evidence=generation.lifecycle.evidence(connection, generation),
+                    owner=owner, snapshot=snapshot, agents=self.agents,
                 )
                 return GoalSnapshot(goal, source.execution())
         return GoalSnapshot(owner.goal, IdleGoalExecution())

@@ -43,8 +43,8 @@ class NativeContextManifestData(StrictFields, PiResponseData):
         if any(not any(segment.contains_value(value) for segment in self.segments)
                for value in self.values):
             raise ValueError("Captured SDK value is outside the original manifest")
-        return ContextManifest(thread, turn, tuple(segment.capture_public(self.values)
-            for segment in self.segments), self.counter, request_id=self.request_id)
+        return ContextManifest(thread=thread, turn=turn, segments=tuple(segment.capture_public(self.values)
+            for segment in self.segments), counter=self.counter, request_id=self.request_id)
 
     async def record(self, contexts, prior, thread, lease) -> CapturedContext:
         """Publish the original SDK observation under its leased owner turn, after the

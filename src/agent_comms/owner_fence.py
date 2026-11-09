@@ -38,8 +38,8 @@ class OwnerFence:
     @property
     def authority(self) -> AttemptAuthority:
         return AttemptAuthority(
-            self.execution_id, self.attempt_ordinal, self.owner_lookup,
-            self.owner_generation, _digest(self.token),
+            execution_id=self.execution_id, ordinal=self.attempt_ordinal, owner_lookup=self.owner_lookup,
+            owner_generation=self.owner_generation, token_digest=_digest(self.token),
         )
 
     def __post_init__(self) -> None:

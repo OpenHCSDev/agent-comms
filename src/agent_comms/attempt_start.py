@@ -43,12 +43,12 @@ class AttemptStart:
 
     def fence(self, revision: int) -> OwnerFence:
         return OwnerFence(
-            self.execution_id,
-            self.attempt_ordinal,
-            self.owner_lookup,
-            self.owner_generation,
-            revision,
-            self.token,
+            execution_id=self.execution_id,
+            attempt_ordinal=self.attempt_ordinal,
+            owner_lookup=self.owner_lookup,
+            owner_generation=self.owner_generation,
+            revision=revision,
+            token=self.token,
         )
 
     def replayed_fence(self, snapshot: RecoverySnapshot, old: AttemptRecord) -> OwnerFence:

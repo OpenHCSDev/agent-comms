@@ -50,25 +50,25 @@ def context(owner, path, count, turn):
     provenance = (NativeProvenance(native, 1, 'a' * 64),)
     def segment(kind, text, sources=provenance, contributors=()):
         raw = text.encode()
-        return SegmentManifest(kind, sources, hashlib.sha256(raw).hexdigest(),
-                               len(raw), 100, contributors=contributors, captured_text=(text,))
+        return SegmentManifest(kind=kind, provenance=sources, sha256=hashlib.sha256(raw).hexdigest(),
+                               utf8_bytes=len(raw), tokens=100, contributors=contributors, captured_text=(text,))
     contributors = tuple(segment(TranscriptSegment, f'Entry {i}',
         (*provenance, JournalProvenance(native.session_file, (f'entry-{i}',))))
         for i in range(count))
     transcript = segment(TranscriptSegment, '\n'.join(f'Entry {i}' for i in range(count)),
                          contributors=contributors)
     return ContextManifest(
-        owner.incarnation,
-        RecordedContextTurn(
+        thread=owner.incarnation,
+        turn=RecordedContextTurn(
             TurnId(f"{turn:032x}"), TurnIdentity(owner.incarnation, turn)
         ),
-        (
+        segments=(
             segment(SystemLayerSegment, 's' * 27000),
             segment(ToolCatalogSegment, 't' * 64000),
             transcript,
         ),
-        'counter',
-        ObservedDispatchRequest(PiRequestKey(f'request-{turn}')),
+        counter='counter',
+        request_id=ObservedDispatchRequest(PiRequestKey(f'request-{turn}')),
     )
 
 

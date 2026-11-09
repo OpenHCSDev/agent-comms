@@ -171,11 +171,11 @@ class AttemptRecord(
     @property
     def authority(self) -> AttemptAuthority:
         return AttemptAuthority(
-            self.execution_id,
-            self.attempt_ordinal,
-            self.owner_lookup,
-            self.owner_generation,
-            self.owner_token_digest,
+            execution_id=self.execution_id,
+            ordinal=self.attempt_ordinal,
+            owner_lookup=self.owner_lookup,
+            owner_generation=self.owner_generation,
+            token_digest=self.owner_token_digest,
         )
 
     execution_id: Annotated[str, SnapshotExclude(), FrozenColumn(primary_key=True)]

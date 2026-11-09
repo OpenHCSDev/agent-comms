@@ -308,9 +308,9 @@ class Checkout(SingleFieldValue, PresentMember):
         common = self.common_dir
         modules = tuple(SubmoduleTransfer.capture(module, source, destination)
                         for module in self.initialized_submodules())
-        transfer = CheckoutTransfer(source, destination,
-                                    Repo.git(source, 'rev-parse', '--abbrev-ref', 'HEAD').strip(),
-                                    Repo.git(source, 'rev-parse', 'HEAD').strip())
+        transfer = CheckoutTransfer(source=source, destination=destination,
+                                    branch=Repo.git(source, 'rev-parse', '--abbrev-ref', 'HEAD').strip(),
+                                    head=Repo.git(source, 'rev-parse', 'HEAD').strip())
         with ExitStack() as rollback:
             source.rename(destination)
             rollback.callback(transfer.restore, common, modules)

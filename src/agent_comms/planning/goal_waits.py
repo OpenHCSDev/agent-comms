@@ -281,7 +281,7 @@ class GoalWaitReview:
             snapshot = cut.snapshot
             for owner in snapshot.threads_for(incarnation):
                 return GoalWaitReview(
-                    snapshot, owner, goals.waits.resolve(owner.goal), owner.turn_lease,
+                    snapshot=snapshot, owner=owner, wait=goals.waits.resolve(owner.goal), turn=owner.turn_lease,
                 )
             raise UnregisteredThreadError("The reviewed thread incarnation was removed.")
 

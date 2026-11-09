@@ -91,11 +91,11 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 execution_id, expected_revision=snapshot.execution.revision
             ).value
             started = store.start(AttemptStart(
-                execution_id,
-                1,
-                alice_lookup,
-                person.owner_identity.generation,
-                prepare_fence_token(),
+                execution_id=execution_id,
+                attempt_ordinal=1,
+                owner_lookup=alice_lookup,
+                owner_generation=person.owner_identity.generation,
+                token=prepare_fence_token(),
                 expected_execution_revision=snapshot.execution.revision,
                 expected_pointer_revision=snapshot.pointer_revision,
             ))

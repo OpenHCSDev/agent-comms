@@ -22,15 +22,15 @@ from conftest import publish_initial
 
 def manifest(owner, generation=1):
     source=OwnerProvenance(owner.incarnation, 'original-input-source')
-    segment=SegmentManifest(TranscriptSegment,(source,),hashlib.sha256(b'PRIVATE INPUT').hexdigest(),13,4)
+    segment=SegmentManifest(kind=TranscriptSegment,provenance=(source,),sha256=hashlib.sha256(b'PRIVATE INPUT').hexdigest(),utf8_bytes=13,tokens=4)
     return ContextManifest(
-        owner.incarnation,
-        RecordedContextTurn(
+        thread=owner.incarnation,
+        turn=RecordedContextTurn(
             TurnId('ab87f599dc0a50a56b7c65de71c39426'),
             TurnIdentity(owner.incarnation, generation),
         ),
-        (segment,),
-        'pi.estimateTokens',
+        segments=(segment,),
+        counter='pi.estimateTokens',
     )
 
 

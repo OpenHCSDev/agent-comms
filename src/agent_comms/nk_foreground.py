@@ -109,7 +109,7 @@ def reserve_foreground_owner(
         )
         edit.document.require_fresh_name(owner.name)
         comms.registry._declare_in(edit, owner)
-    return ForegroundOwner(root, wire_root_id, owner.name, native_package)
+    return ForegroundOwner(root=root, wire_root_id=wire_root_id, name=owner.name, native_package=native_package)
 
 
 def _emit(payload: dict[str, object]) -> None:

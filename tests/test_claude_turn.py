@@ -69,7 +69,7 @@ def test_prompt_identifies_finished_and_active_items_with_the_same_turn():
     result = TimedRecord(uuid=transcript_record('result'), timestamp='2026-10-18T00:00:01Z', position=18)
     completed, active, read = session.tool_result('call', 'done', True, result)
     assert isinstance(read, ReadResultObserved) and read.source_turn.require_id() == turn_id_turn_id
-    assert completed == FinishedItem(turn_id_turn_id, NativeItemId('call'), (
+    assert completed == FinishedItem(turn_id=turn_id_turn_id, item_id=NativeItemId('call'), events=(
         call.started(prompt.position, prompt.timestamp),
         call.ended('done', True, result.position, result.timestamp),
     ))

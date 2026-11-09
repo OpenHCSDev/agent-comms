@@ -1071,7 +1071,7 @@ async def confirm_and_finish_reply(
     # A delivery that opens no turn leaves any other turn's final with nothing to answer.
     turn = next((row.turn_id for row in opened), NativeTurnId('unopened-turn'))
     item = NativeItemId('answer')
-    output.publish_batch([FinishedItem(turn, item, (AssistantTranscript(
+    output.publish_batch([FinishedItem(turn_id=turn, item_id=item, events=(AssistantTranscript(
         'the opened turn final', timestamp=2., position=item),))])
     assert replies() == ()
     output.publish_batch([end(turn)])
@@ -1079,7 +1079,7 @@ async def confirm_and_finish_reply(
     # Completion is idempotent, and another turn cannot inherit these routes.
     later, later_item = NativeTurnId('later-turn'), NativeItemId('later-answer')
     output.publish_batch([FinishedTurn(turn), AllTurnsEnded(), FinishedItem(
-        later, later_item, (AssistantTranscript(
+        turn_id=later, item_id=later_item, events=(AssistantTranscript(
             'a later final', timestamp=3., position=later_item),)), AllTurnsEnded()])
     assert replies() == tuple((target, 'the opened turn final') for target in expected)
 
@@ -1132,7 +1132,7 @@ def test_independent_sessions_share_the_delivered_message_reply_policy(comms, tm
         turn = NativeTurnId(f"{speaker.name}-turn")
         output.delivered(turn, (original.reference,))
         item_id = NativeItemId("a")
-        output.publish_item(FinishedItem(turn, item_id, (AssistantTranscript(
+        output.publish_item(FinishedItem(turn_id=turn, item_id=item_id, events=(AssistantTranscript(
             f"{speaker.name} answers", timestamp=1.0, position=item_id),)))
         output.end_turn(turn)
     replies = tuple((message.target, message.body) for message in comms.bus.bus.message_history()

@@ -250,7 +250,7 @@ class FencedOwnerBatch:
             handoff = OwnerRestartHandoff(str(self.lifecycle.root), progress.retired, self.runtime,
                                          self.request.agent_bin, self.request.agent_args,
                                          self.request.launch_runtime)
-            stopped = StoppedOwnerBatch(self.lifecycle, handoff, self.ownership.pop_all())
+            stopped = StoppedOwnerBatch(lifecycle=self.lifecycle, handoff=handoff, ownership=self.ownership.pop_all())
         except BaseException as cause:
             cutover.failed(StoppedOwnerFailure(progress, cutover, cause))
         return stopped.complete(cutover)
@@ -297,10 +297,10 @@ class ClaimedOwnerBatch:
                     thread.require_process(),
                 )
                 current.require_stopping_owner(thread, generation)
-            authorized = cls(lifecycle, tuple(captured), launches, request, runtime)
+            authorized = cls(lifecycle=lifecycle, captured=tuple(captured), launches=launches, request=request, runtime=runtime)
             fenced = authorized.fence(edit)
         return fenced.complete(cutover)
 
     def fence(self, edit: RegistryEdit) -> FencedOwnerBatch:
         captured = edit.fence_restart_owners(self.captured)
-        return FencedOwnerBatch(self.lifecycle, captured, self.launches, self.request, self.runtime)
+        return FencedOwnerBatch(lifecycle=self.lifecycle, captured=captured, launches=self.launches, request=self.request, runtime=self.runtime)
