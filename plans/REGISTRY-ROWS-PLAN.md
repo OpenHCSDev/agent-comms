@@ -58,6 +58,11 @@ Readers do not read the file; they read revisions of it. `RegistryCut`, `Registr
    document. `save_unlocked` commits `ThreadRows.differing(original)` plus the changed statuses,
    aliases and generations. Precedent: presence already left registry.json for `PresenceStore`
    because every heartbeat rewrote the whole file.
+   Pair cuts need no change: `CopyingStore._capturing_sources` (`storage/locked_store.py:1151`)
+   takes the ordered locks and calls each store's `_capture_unlocked()`, and each store decodes its
+   own capture through `read_copied`. `DocumentBytes` becomes one member of a capture family; the
+   registry's member carries the row revision and `changes_since(cached revision)` instead of the
+   file's bytes, so pair cuts, lock ranks and every other store keep their code.
 5. Carry: `tools/cutover/registry_rows.py` reads `registry.json` once into the table and is deleted
    after the install that runs it. Rehearsed on a copy of the live registry before any install.
 
