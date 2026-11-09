@@ -15,7 +15,7 @@ from agent_comms.execution.native_arguments import NativeInputProofArgument
 from agent_comms.execution.native_input_proof import NativeContextJournal
 from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.turn_inbox import (
-    ClearQueue,
+    ClearQueuedInputs,
     InputContent,
     InputRequest,
     SteerInputPolicy,
@@ -97,7 +97,7 @@ async def test_written_following_input_settles_after_native_queue_decision(
             await wait_for(lambda: bool(running.inputs.pending))
             await running.native.reader.pending.before_settlement()
             if clear:
-                inbox.put_nowait(ClearQueue((following.input_id,)))
+                inbox.put_nowait(ClearQueuedInputs((following.input_id,)))
                 await wait_for(lambda: not running.inputs.pending)
             native.provider.response_gate.set()
             result = await task

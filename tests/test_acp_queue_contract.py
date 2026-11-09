@@ -144,7 +144,7 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
 async def test_queue_preview_preserves_long_input_identity_body_and_actions(tmp_path, count, text):
     from agent_comms.acp_extension import AvailableQueueProjection, QueueItem
     from agent_comms.execution.turn_inbox import (
-        ClearQueue,
+        ClearQueuedInputs,
         SendNow,
     )
 
@@ -165,7 +165,7 @@ async def test_queue_preview_preserves_long_input_identity_body_and_actions(tmp_
     await agent.inputs.send_now(BETA)
     assert inbox.get_nowait() == SendNow(tuple(r.input_id for r in requests))
     await agent.inputs.clear_queued_inputs(BETA)
-    assert inbox.get_nowait() == ClearQueue(tuple(r.input_id for r in requests))
+    assert inbox.get_nowait() == ClearQueuedInputs(tuple(r.input_id for r in requests))
     assert not agent.inputs.state(BETA).queued
     assert (await agent.inputs.queue_state(BETA)).projection.status == "available"
 

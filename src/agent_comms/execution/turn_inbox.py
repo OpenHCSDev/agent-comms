@@ -148,7 +148,7 @@ class UseSettings(TurnInboxItem):
 
 
 @dataclass(frozen=True)
-class ClearQueue(TurnInboxItem):
+class ClearQueuedInputs(TurnInboxItem):
     """Clear only these queued user inputs, never delivered bus inputs."""
 
     input_ids: tuple[InputId, ...]

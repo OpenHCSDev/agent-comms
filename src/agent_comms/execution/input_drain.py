@@ -44,7 +44,7 @@ from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.session_lifecycle import SessionLifecycle
 from agent_comms.execution.turn_context import TurnContext, UserFollowupSegment
 from agent_comms.execution.turn_inbox import (
-    ClearQueue,
+    ClearQueuedInputs,
     InputContent,
     SendNow,
     TurnInbox,
@@ -1028,7 +1028,7 @@ class InputDrain(InputObservation):
                 ))
             state.queued = retained
             if cleared:
-                state.to_turn(ClearQueue(tuple(item.input_id for item in cleared)))
+                state.to_turn(ClearQueuedInputs(tuple(item.input_id for item in cleared)))
             state.restored = {}
         await self.emit_queue_state(session_id)
 

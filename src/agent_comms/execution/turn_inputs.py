@@ -18,7 +18,7 @@ from agent_comms.acp_failure import UnrecordedFailureSource
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.turn_failure import PromptSendFailed
 from agent_comms.execution.turn_inbox import (
-    ClearQueue,
+    ClearQueuedInputs,
     InputRequest,
     SendNow,
     TurnInbox,
@@ -155,8 +155,8 @@ class InputForwarding(MroDispatch):
         await asyncio.gather(*(entry.response() for entry in candidates.values()))
         return tuple(key for key in candidates if key in self.pending)
 
-    @handles(ClearQueue)
-    async def clear_queue(self, item: ClearQueue, session: TurnSession) -> bool:
+    @handles(ClearQueuedInputs)
+    async def clear_queue(self, item: ClearQueuedInputs, session: TurnSession) -> bool:
         command = commands.ClearQueue(input_ids=await self.queued(item.input_ids))
         if not command.input_ids:
             return True

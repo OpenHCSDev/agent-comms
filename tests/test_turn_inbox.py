@@ -10,7 +10,7 @@ from agent_comms.execution.turn_failure import (
     QueuedInputNotSent,
 )
 from agent_comms.execution.turn_inbox import (
-    ClearQueue,
+    ClearQueuedInputs,
     FollowUpInputPolicy,
     InputContent,
     InputRequest,
@@ -44,7 +44,7 @@ def test_inbox_owns_ready_work_and_retains_parked_input():
 
 
 @pytest.mark.parametrize("control", (
-    ClearQueue((InputId.mint(),)),
+    ClearQueuedInputs((InputId.mint(),)),
     SendNow((InputId.mint(),)),
     UseSettings(model=UndeclaredModel(), thinking_level=OffThinkingLevel),
 ))
