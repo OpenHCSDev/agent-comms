@@ -4,7 +4,7 @@ from functools import partial
 import pytest
 from acp.schema import NewSessionResponse
 
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import CoordinationChangedUpdate, TextRouteUpdate, decode_updates
 from agent_comms.agent_event_updates import AcpEventConsumer, Routed, RoutedTurnEventConsumer
 from agent_comms.agent_events import Chunk

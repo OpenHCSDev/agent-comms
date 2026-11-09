@@ -11,7 +11,7 @@ from uuid import uuid4
 import pytest
 from acp.schema import TextContentBlock
 
-from agent_comms.acp import CommsClient
+from agent_comms.execution.acp import CommsClient
 from agent_comms.acp_extension import (
     CompactionChangedUpdate,
     CompactionCommittedUpdate,

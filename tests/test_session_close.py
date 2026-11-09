@@ -8,7 +8,7 @@ from acp import RequestError
 from acp.agent.router import build_agent_router
 from acp.schema import SessionInfoUpdate
 
-from agent_comms.acp import CommsAgent, CommsClient
+from agent_comms.execution.acp import CommsAgent, CommsClient
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.controller import CancelledOutcome, SessionUpdateSink

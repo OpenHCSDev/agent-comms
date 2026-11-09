@@ -360,7 +360,7 @@ class BusHistoryReadersPhase(VirtualBusPhase):
             "src/agent_comms/transcript/transcripts.py",
             "src/agent_comms/execution/transcript_sources.py",
             "src/agent_comms/installer/active_route.py",
-            "src/agent_comms/acp.py",
+            "src/agent_comms/execution/acp.py",
             "src/agent_comms/comms.py",
             "src/agent_comms/messaging/message_bus.py",
             "scripts/attach_historical_views.py",

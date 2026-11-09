@@ -3,7 +3,7 @@ requests, recorded once by the origin that speaks for the owner."""
 
 import pytest
 
-from agent_comms.connector import ConnectorSendTool
+from agent_comms.transport.connector import ConnectorSendTool
 from agent_comms.errors import CommittedMessageError
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.planning.owner_requests import RequestDirective

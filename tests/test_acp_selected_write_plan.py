@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import (
     SelectedWriteAcceptedUpdate,
     SelectedWriteRequest,

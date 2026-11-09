@@ -19,7 +19,7 @@ from local_checker import LocalCheckerVerb
 from module_layers import MaterializedClients, Package
 from nominal_refactor_advisor import audit
 
-from agent_comms import integration
+from agent_comms.projects import integration
 from agent_comms.errors import TodoError
 from agent_comms.execution.test_lease import TestLease
 from agent_comms.installer.runtime_resolution import PrivateUvProject, StackSources
@@ -110,7 +110,7 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
     environment = {**os.environ, **ENVIRONMENT,
                    "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
     words = ci_event(tmp_path, pair.core.github, tested, event, document)
-    command = (sys.executable, "-m", "agent_comms.integration")
+    command = (sys.executable, "-m", "agent_comms.projects.integration")
     workflow_output = tmp_path / "workflow-output"
     result = subprocess.run((*command, "--resolve-ci-inputs", str(output),
                              "--workflow-output", str(workflow_output), *words), cwd=checkout.path,
@@ -195,7 +195,7 @@ def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_
     environment = {**os.environ, **ENVIRONMENT,
                    "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
     workflow_output = tmp_path / "ordinary-workflow-output"
-    result = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--resolve-ci-inputs", str(output),
+    result = subprocess.run((sys.executable, "-m", "agent_comms.projects.integration", "--resolve-ci-inputs", str(output),
                              "--workflow-output", str(workflow_output), *words),
                             cwd=checkout.path, env=environment, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -213,14 +213,14 @@ def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_
     assert Package(base, resource.at(checkout.path, baseline, tested, BaseSide)).missing_names == ()
     assert {name for _, name in Package(candidate, resource.at(checkout.path, baseline, tested, HeadSide)).missing_names} == {"old_api"}
     assert not any("state=success" in call or call[:2] == ("pr", "merge") for call in github_cli.calls())
-    ordinary = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--check-merge-inputs",
+    ordinary = subprocess.run((sys.executable, "-m", "agent_comms.projects.integration", "--check-merge-inputs",
                                str(tmp_path / "ordinary"), *words), cwd=checkout.path,
                               env=environment, capture_output=True, text=True, timeout=120)
     assert ordinary.returncode == 0 and "combined=False" in ordinary.stdout, ordinary.stderr
     request.document.write_text(json.dumps({"merge_group": {
         "head_sha": tested, "base_sha": baseline,
         "head_ref": f"refs/heads/gh-readonly-queue/main/pr-{pair.core.number}-{head}"}}))
-    queued = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--check-merge-inputs",
+    queued = subprocess.run((sys.executable, "-m", "agent_comms.projects.integration", "--check-merge-inputs",
                              str(tmp_path / "ordinary-queue"),
                              *integration.CiEvent.to_arguments(
                                  replace(request, event=integration.MergeGroupSources))),
@@ -281,7 +281,7 @@ def test_required_hosted_merge_gate_distinguishes_source_review_from_combined_pr
     document.write_text(json.dumps(documents[event]))
     environment = {**os.environ, **ENVIRONMENT,
                    "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
-    command = (sys.executable, "-m", "agent_comms.integration",
+    command = (sys.executable, "-m", "agent_comms.projects.integration",
                *ci_event(tmp_path, pair.core.github, tested, event, document), "--check-merge-inputs")
     result = subprocess.run((*command, str(tmp_path / "before-promotion")), cwd=checkout.path,
                             env=environment, capture_output=True, text=True, timeout=120)
@@ -383,7 +383,7 @@ def test_actual_main_cli_keeps_merged_local_members_exact_and_refuses_later_head
     output = tmp_path / "main-inputs"
     environment = {**os.environ, **ENVIRONMENT,
                    "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
-    command = (sys.executable, "-m", "agent_comms.integration",
+    command = (sys.executable, "-m", "agent_comms.projects.integration",
                *ci_event(tmp_path, pair.core.github, tested, "push", document))
     result = subprocess.run((*command, "--resolve-ci-inputs", str(output)), cwd=pair.core.checkout,
                             env=environment, capture_output=True, text=True, timeout=120)

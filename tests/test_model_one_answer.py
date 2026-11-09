@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.agent_events import NativeMetadataObservation
 from agent_comms.config_options import ModelConfigOption
 from agent_comms.execution.native_arguments import NativeArguments

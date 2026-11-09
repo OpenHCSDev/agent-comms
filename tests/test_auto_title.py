@@ -1,6 +1,6 @@
 import pytest
 
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.execution.native_arguments import GivenArguments
 from agent_comms.transport.tool_caller import ThreadCaller
 

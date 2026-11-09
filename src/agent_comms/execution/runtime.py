@@ -46,7 +46,7 @@ from agent_comms.transport.runtime_requests import SubscribeRuntimeRequest
 from agent_comms.transport.runtime_server import ClientPermissionResponse
 
 if TYPE_CHECKING:
-    from agent_comms.acp import CommsAgent
+    from agent_comms.execution.acp import CommsAgent
 
 _LOG = logging.getLogger(__name__)
 

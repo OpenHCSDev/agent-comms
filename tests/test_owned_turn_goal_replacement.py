@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.execution.backend import TurnSession
 from agent_comms.execution.channel_coding_tools import OrdinaryGoalRule
 from agent_comms.execution.child_process import ProcessIdentity

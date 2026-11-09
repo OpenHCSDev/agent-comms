@@ -18,11 +18,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-from agent_comms import integration
+from agent_comms.projects import integration
 from agent_comms.cli_verbs.declared_verb import DeclaredVerb
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.declared_uv import DeclaredUv
-from agent_comms.integration import (
+from agent_comms.projects.integration import (
     CiEvent,
     CiRunner,
     IntegrationFailed,

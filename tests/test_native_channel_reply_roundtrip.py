@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from acp.schema import SessionNotification, TextContentBlock
 
-from agent_comms.acp import CommsClient
+from agent_comms.execution.acp import CommsClient
 from agent_comms.acp_extension import (
     CursorAdvancedUpdate,
     TurnChangedUpdate,

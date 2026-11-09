@@ -49,7 +49,7 @@ from agent_comms.cli_bridges.inbox_watch_client import (
 )
 from agent_comms.cli_bridges.shared import MonitorReadFile
 from agent_comms.comms import Comms
-from agent_comms.connector import Connector
+from agent_comms.transport.connector import Connector
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.execution.launch_runtime import InstalledSource, LaunchRuntime
 from agent_comms.messaging.channel_targets import CommandTarget

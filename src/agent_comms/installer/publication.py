@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Annotated
 
 import agent_comms
-from agent_comms.connector import LOOPBACK, PORT
+from agent_comms.transport.connector import LOOPBACK, PORT
 from agent_comms.execution.child_process import ResidentManager
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.harness_install import ConnectorClientHarness, Harness, replace_link

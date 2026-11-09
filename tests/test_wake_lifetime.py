@@ -4,7 +4,7 @@
 import asyncio
 import os
 
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.controller import UNBOUND_CONTROLLER

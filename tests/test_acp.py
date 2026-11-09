@@ -17,7 +17,7 @@ from acp.schema import TextContentBlock
 
 import agent_comms.agent_events as ae
 import agent_comms.execution.backend as backend
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
     TranscriptSnapshotUpdate,
@@ -409,7 +409,7 @@ class TestWireProtocol:
             },
         ]
         proc = subprocess.Popen(
-            [sys.executable, "-m", "agent_comms.acp"],
+            [sys.executable, "-m", "agent_comms.execution.acp"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

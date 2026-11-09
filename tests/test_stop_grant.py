@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.coordination.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.coordination.attempt_states import UnknownOutcomeAttempt
 from agent_comms.coordination.coordinator import Coordination
