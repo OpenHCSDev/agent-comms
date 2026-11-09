@@ -2325,6 +2325,11 @@ class CheckedProblemOrder(CheckCorrectionSource, ProblemOrder, declared_name=Non
 class OpenProblemOrder(CheckedProblemOrder, declared_name=None):
     """An active order keeps corrections and accepts its checked delivery by identity."""
 
+    def require_transfer(self, todo: Todo) -> None:
+        """Delivery stage does not own unfinished work. The assignment command checks
+        holder consent, receiver consent and the exact recorded revision.
+        """
+
     def corrected(self, correction: CorrectOrderTodo) -> OpenProblemOrder:
         return correction.corrected(self)
 
@@ -2490,9 +2495,6 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
 
     line: ClassVar[str] = "Open"
 
-    def require_transfer(self, todo: Todo) -> None:
-        pass
-
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         """An undelivered order waits on install once its PR merged."""
         return read[todo.id].waiting_on_install(todo)
@@ -2582,11 +2584,6 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
         Repo.git(repo, "fetch", "-q", Repo.remote, f"refs/pull/{self.claim.pull_request.number}/head")
         return super().check_base(repo)
 
-    def require_reassignment(self, todo: Todo, proposed: Assignment) -> None:
-        """A corrected order to the claimant replaces its claim; another owner is a transfer."""
-        if proposed.owner_identity != todo.holder_state.previous_assignment().owner_identity:
-            self.require_transfer(todo)
-
     def team_claims(self) -> tuple[OrderClaim, ...]:
         return (self.claim,)
 
@@ -2669,10 +2666,6 @@ class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
 
     def story(self) -> tuple[StoryLine, ...]:
         return (*super().story(), *self.delivery.story())
-
-    def require_transfer(self, todo: Todo) -> None:
-        owner = todo.holder_state.previous_assignment().owner
-        raise TodoError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
 
     def delivered(self, delivery):
         return replace(self, delivery=self.delivery.reproved(delivery))
