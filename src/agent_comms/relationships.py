@@ -27,6 +27,7 @@ from agent_comms.messaging.messages import Message, MessageInput, MessageRole
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import GoalId
+from agent_comms.peer_relation import PeerRelation, RelationRecord, RelationRevision
 from agent_comms.peer_relevance import (
     ChannelmateRelevance,
     CollaboratorRelevance,
@@ -45,27 +46,6 @@ from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 from agent_comms.tool_result import ToolResult
-
-
-@dataclass(frozen=True, slots=True)
-class RelationRevision:
-    """An earlier note of a relation and when it was replaced or written."""
-
-    note: str
-    at: float
-
-
-@dataclass(frozen=True, slots=True)
-class RelationRecord:
-    """One relation as a thread reads it: who made it, when, why and how it changed."""
-
-    peer: str
-    relevance: type[PeerRelevance]
-    author: str
-    # None when the relation records no time of its own.
-    created_at: float | None
-    note: str
-    history: tuple[RelationRevision, ...]
 
 
 class MutualThreadRelation(ABC):
@@ -454,29 +434,6 @@ class ThreadCommsSnapshot(ToolResult):
     @property
     def sortable_groups(self) -> tuple[SortableRelationshipGroup, ...]:
         return tuple(selected for group in self.groups for selected in group.selectable())
-
-
-@dataclass(frozen=True, slots=True)
-class PeerRelation:
-    """How much one peer matters to a thread, and why."""
-
-    peer: ThreadIncarnation
-    relevance: type[PeerRelevance]
-    records: tuple[RelationRecord, ...] = ()
-
-    @property
-    def note(self) -> str:
-        return "\n".join(record.note for record in self.records if record.note)
-
-    @staticmethod
-    def order(first: PeerRelation, second: PeerRelation) -> int:
-        """More derived relevance first, read from the hierarchy; then name."""
-        if first.relevance is not second.relevance:
-            if issubclass(first.relevance, second.relevance):
-                return -1
-            if issubclass(second.relevance, first.relevance):
-                return 1
-        return (first.peer.name > second.peer.name) - (first.peer.name < second.peer.name)
 
 
 @dataclass(frozen=True, slots=True)

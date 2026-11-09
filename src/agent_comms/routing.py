@@ -6,12 +6,13 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.turn_origin import TurnOrigin
 from agent_comms.input_key import InputKey
+from agent_comms.message_sender import PublicSender
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.messaging.messages import PublicSender
+from agent_comms.messaging.read_basis import DMDisplayScope, MessageDisplayScope
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     NullMember,
@@ -23,7 +24,6 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.planning.goal_scope import AllGoals, GoalScope
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.read_basis import DMDisplayScope, MessageDisplayScope
 from agent_comms.response_policy import NO_ALIASES
 
 if TYPE_CHECKING:

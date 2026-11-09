@@ -2,39 +2,21 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from abc import (
-    ABC,
-    abstractmethod,
-)
-from collections.abc import (
-    Iterable,
-    Mapping,
-)
+from abc import ABC, abstractmethod
+from collections.abc import Iterable, Mapping
 from contextlib import AbstractContextManager
-from dataclasses import (
-    dataclass,
-    field,
-)
-from typing import (
-    Annotated,
-    ClassVar,
-    Self,
-)
+from dataclasses import dataclass, field
+from typing import Annotated, ClassVar, Self
 
 from agent_comms.bus_publication import Delivered
 from agent_comms.bus_tables import ReceivedSource
 from agent_comms.class_fact import ClassFact
-from agent_comms.messaging.messages import (
-    BusProjectionTables,
-    BusRow,
-    MessageInput,
-    PublicRecord,
-    PublicSender,
-)
+from agent_comms.message_sender import PublicSender
+from agent_comms.messaging.messages import BusProjectionTables, BusRow, MessageInput, PublicRecord
+from agent_comms.messaging.read_basis import ReadCursor
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.page_traversal import PageTraversal
 from agent_comms.projection_source import ProducedRow
-from agent_comms.messaging.read_basis import ReadCursor
 from agent_comms.routing import DeliveryScope
 from agent_comms.storage.typed_table import Column, ExpressionIndex, Index, TypedRow
 

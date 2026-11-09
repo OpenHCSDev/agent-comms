@@ -14,7 +14,7 @@ from typing import Generic, TypeVar
 from agent_comms.agent_activity import UnavailableRecipientActivity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.messaging.messages import PublicSender
+from agent_comms.message_sender import PublicSender
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread, ThreadProvenance

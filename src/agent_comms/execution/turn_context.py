@@ -16,6 +16,7 @@ from pydantic import JsonValue
 from agent_comms import instructions
 from agent_comms.annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
 from agent_comms.cli_result import CliResult
+from agent_comms.context_owner import ContextOwner
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.turn_item import NativeItemId, PiRequestKey
@@ -32,6 +33,7 @@ from agent_comms.nominal.field_codec import (
     TurnId,
     WireOmitDefault,
 )
+from agent_comms.peer_relation import PeerRelation
 from agent_comms.peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from agent_comms.planning.goals import Goal, NoGoal
 from agent_comms.projects.checkouts import Checkout
@@ -42,8 +44,7 @@ from agent_comms.wake_policy import WakePolicy
 if TYPE_CHECKING:
     from agent_comms.input_attempt import StoredInput
     from agent_comms.presentation import ThreadView
-    from agent_comms.registry.threads import Thread
-    from agent_comms.relationships import PeerRelation
+
 
 
 @dataclass(frozen=True)
@@ -1063,7 +1064,7 @@ class CoordinationSegment(InstructionSegment):
 
     @classmethod
     def capture(
-        cls, owner: Thread, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...], goals
+        cls, owner: ContextOwner, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...], goals
     ) -> CoordinationSegment:
         response_instruction = WakePolicy.relevance_instruction()
         viewed = {view.thread.incarnation: view for view in views}
@@ -1096,7 +1097,7 @@ class GoalSegment(InstructionSegment):
     progress: str = ""
 
     @classmethod
-    def capture(cls, owner: Thread, goal: Goal, goals) -> GoalSegment:
+    def capture(cls, owner: ContextOwner, goal: Goal, goals) -> GoalSegment:
         todos = goal.order.todos(goals, owner.incarnation, goal.id)
         orders_text = goal.order.instructions(todos)
         progress = goal.order.progress(goal, todos)
@@ -1132,7 +1133,7 @@ class RenderedInput:
 @dataclass(frozen=True)
 class ContextTurn(DeclaredFamily, affix="ContextTurn"):
     @abstractmethod
-    def provenance(self, owner: Thread) -> Provenance: ...
+    def provenance(self, owner: ContextOwner) -> Provenance: ...
 
     def require_recorded(self) -> RecordedContextTurn:
         raise ValueError("A next-context preview cannot be published as a recorded turn")
@@ -1159,7 +1160,7 @@ class RecordedContextTurn(ContextTurn):
         if self.occurrence.generation < 1:
             raise ValueError("Context requires the original authorized turn generation")
 
-    def provenance(self, owner: Thread) -> Provenance:
+    def provenance(self, owner: ContextOwner) -> Provenance:
         return TurnProvenance(owner.incarnation, self.identity)
 
     def require_recorded(self) -> RecordedContextTurn:
@@ -1170,7 +1171,7 @@ class RecordedContextTurn(ContextTurn):
 
 
 class NextContextTurn(ContextTurn):
-    def provenance(self, owner: Thread) -> Provenance:
+    def provenance(self, owner: ContextOwner) -> Provenance:
         return OwnerProvenance(
             owner.incarnation,
             hashlib.sha256(json.dumps(owner.to_wire(), sort_keys=True).encode()).hexdigest(),
@@ -1331,7 +1332,7 @@ class TurnContext(DeclaredReply):
     segments: tuple[ContextSegment, ...]
 
     @classmethod
-    def for_inspection(cls, comms, owner: Thread) -> TurnContext:
+    def for_inspection(cls, comms, owner: ContextOwner) -> TurnContext:
         """Preview the Core context that would be added before the next input.
 
         Use the same context builders as turn preparation. This preview is not
@@ -1341,16 +1342,16 @@ class TurnContext(DeclaredReply):
         context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations, comms.goals)
         return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations)
 
-    def with_goal(self, owner: Thread, goals) -> TurnContext:
+    def with_goal(self, owner: ContextOwner, goals) -> TurnContext:
         return owner.goal.active().add_context(
             self, partial(self.prepend_goal, owner, goals=goals),
         )
 
-    def prepend_goal(self, owner: Thread, goal: Goal, goals) -> TurnContext:
+    def prepend_goal(self, owner: ContextOwner, goal: Goal, goals) -> TurnContext:
         return self.prepend(GoalSegment.capture(owner, goal, goals))
 
     def with_awareness(
-        self, comms, owner: Thread, relations: tuple[PeerRelation, ...]
+        self, comms, owner: ContextOwner, relations: tuple[PeerRelation, ...]
     ) -> TurnContext:
         """Append what the owner should know without being asked.
 
@@ -1390,7 +1391,7 @@ class TurnContext(DeclaredReply):
     @classmethod
     def for_owner(
         cls,
-        owner: Thread,
+        owner: ContextOwner,
         turn: ContextTurn,
         task: str,
         views: tuple[ThreadView, ...],

@@ -13,6 +13,7 @@ from typing import Annotated, ClassVar
 
 from agent_comms.activity import ObservedActivity
 from agent_comms.agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
+from agent_comms.context_owner import ContextOwner
 from agent_comms.context_segments.wake_values import WakeWorkContext, WakeWorkSource
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity, ProcessState
@@ -93,7 +94,6 @@ from agent_comms.registry.thread_text import NoParent, NoThreadText, ThreadParen
 from agent_comms.session_file import NoSessionFile, SessionFile
 from agent_comms.storage.locked_store import DurableFile, PatternFile
 from agent_comms.task_scope import TaskScope
-from agent_comms.task_scope_owner import TaskScopeOwner
 
 
 class ThreadCommandAvailability:
@@ -323,7 +323,7 @@ class ThreadCatalogFile(DurableFile, PatternFile):
 
 
 @dataclass(frozen=True, slots=True)
-class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, TaskScopeOwner[TaskScope], affix="Thread"):
+class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, ContextOwner, affix="Thread"):
     """Declares one agent thread's identity and provenance; each member is how it executes.
 
     The registration owns transport intent; presence does not imply an RPC.

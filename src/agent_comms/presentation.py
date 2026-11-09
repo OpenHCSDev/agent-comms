@@ -90,7 +90,6 @@ from agent_comms.ui_model.unread import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.agent_activity import AgentActivity
     from agent_comms.bus import BusSnapshot
     from agent_comms.catalog_document import CatalogDocument
     from agent_comms.catalog_store import ChannelCatalog
