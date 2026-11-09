@@ -62,7 +62,7 @@ from agent_comms.registry.threads import (
     NextTurnConfiguration,
     Thread,
 )
-from agent_comms.registry_provenance import RegistryNames
+from agent_comms.registry_names import RegistryNames
 from agent_comms.relationships import RelationshipStore
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.storage.locked_store import PatternFile, RuntimeFile

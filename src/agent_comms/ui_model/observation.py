@@ -93,7 +93,7 @@ from agent_comms.registry.registry_document import (
 )
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_presentation import ThreadPresentation
-from agent_comms.registry_provenance import DeletedThread
+from agent_comms.registry_names import DeletedThread
 from agent_comms.revision_views import (
     NotificationsView,
     RegistrationsView,

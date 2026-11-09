@@ -12,10 +12,9 @@ from collections.abc import (
 )
 from dataclasses import dataclass
 
-from agent_comms.agent_events import AgentEvent
-from agent_comms.planning.goal_presentation import GoalPublicationSnapshot
-from agent_comms.planning.goal_presentation import GoalSnapshot
+from agent_comms.agent_event import AgentEvent
 from agent_comms.nominal.field_codec import NullMember
+from agent_comms.planning.goal_presentation import GoalPublicationSnapshot, GoalSnapshot
 
 
 class GoalChange(ABC):

@@ -1,64 +1,78 @@
 """Goal publication callbacks remain inspectable by runtime consumers."""
 
+import subprocess
+import sys
 from collections.abc import Callable
 from inspect import isfunction
 from pathlib import Path
-import subprocess
-import sys
 from types import NoneType
 from typing import get_args, get_origin, get_type_hints
 
 import pytest
 
 from agent_comms import agent_events
-from agent_comms.agent_event_updates import AcpEventConsumer, AcpToolAction
 from agent_comms.acp import AcpSelectedWriteAuthority, CommsAgent, SdkSessionConnection
-from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
-from agent_comms.execution.turn_runner import TurnRunner
-from agent_comms.execution.turn_progress import TurnProgress
-from agent_comms.route_client import ActivityClient
-from agent_comms.comms import Comms
-from agent_comms.messaging.sending import Messaging
 from agent_comms.acp_extension import AgentCommsUpdate, LiveQueueScope, PromptRequest, QueueScope
-from agent_comms.context_segments.wake_values import WakeWorkContext
-from agent_comms.execution.input_drain import InputDrain
-from agent_comms.following_inputs import FollowingInputs, OwnerFollowingInputs
-from agent_comms.private_send_claim import PrivateSendClaim
-from agent_comms.tracked_turn import TrackedTurnSession
+from agent_comms.agent_event_updates import AcpEventConsumer, AcpToolAction
+from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOption, ConfigOptions
+from agent_comms.context_segments.wake_values import WakeWorkContext
 from agent_comms.display_order import ChannelSort, ThreadSort
-from agent_comms.planning.goal_attempts import LaunchPermit
-from agent_comms.planning.goal_attempt_phase import GoalAttemptPhase
-from agent_comms.planning.goal_generation import GenerationState
-from agent_comms.goal_ledger import FailedTurnEvidence, FailedTurnObservation, Generation
-from agent_comms.planning.goal_failure_observation import NoFailedTurnEvidence
-from agent_comms.execution.goal_turn_permit import GoalTurnPermit
-from agent_comms.planning.goal_actions import GoalAction
-from agent_comms.planning.goal_actions import SetGoalAction
-from agent_comms.planning.goal_actions import StandbyGoalAction
-from agent_comms.goal_control import GoalControlSource
 from agent_comms.execution.goal_scheduler import GoalScheduler
-from agent_comms.goal_mutation import GoalTurnProjection
+from agent_comms.execution.goal_turn_permit import GoalTurnPermit
+from agent_comms.execution.input_drain import InputDrain
+from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
+from agent_comms.execution.turn_failure import (
+    NativePiTerminalFailure,
+    RetryableProviderFailure,
+    TurnFailure,
+)
 from agent_comms.execution.turn_lease import TurnDeclaration
+from agent_comms.execution.turn_progress import TurnProgress
+from agent_comms.execution.turn_runner import TurnRunner
+from agent_comms.following_inputs import FollowingInputs, OwnerFollowingInputs
+from agent_comms.goal_control import GoalControlSource
+from agent_comms.goal_ledger import FailedTurnEvidence, FailedTurnObservation, Generation
+from agent_comms.goal_mutation import GoalTurnProjection
 from agent_comms.goal_wait_target import GoalWaitTarget
-from agent_comms.planning.goal_waits import GoalWait, NoGoalWait, RecordedGoalWait, GoalWaits
-from agent_comms.transport.tools.goals import GoalChangeTool, CommsGoalTool, CommsGoalHistoryTool
+from agent_comms.goal_work import GoalFailureOwner, GoalOwner, GoalWorkSource
+from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.field_codec import ThreadLookup
+from agent_comms.planning.goal_actions import GoalAction, SetGoalAction, StandbyGoalAction
+from agent_comms.planning.goal_attempt_phase import GoalAttemptPhase
+from agent_comms.planning.goal_attempts import LaunchPermit
+from agent_comms.planning.goal_failure_observation import NoFailedTurnEvidence
+from agent_comms.planning.goal_generation import GenerationState
 from agent_comms.planning.goal_records import GoalRecords
 from agent_comms.planning.goal_states import GoalState
-from agent_comms.planning.goals import GoalDeclaration
-from agent_comms.planning.goals import GoalMentionBinding
-from agent_comms.planning.goals import GoalOrder
-from agent_comms.planning.goals import GoalUnavailable
-from agent_comms.goal_work import GoalFailureOwner, GoalOwner, GoalWorkSource
-from agent_comms.registry.threads import Thread
-from agent_comms.relationships import RelationshipSource, ThreadRelationships
-from agent_comms.session_config_options import SessionConfigOptions
-from agent_comms.registry.thread_presentation import ThreadOwnerBinding
+from agent_comms.planning.goal_waits import GoalWait, GoalWaits, NoGoalWait, RecordedGoalWait
+from agent_comms.planning.goals import (
+    GoalDeclaration,
+    GoalMentionBinding,
+    GoalOrder,
+    GoalUnavailable,
+)
+from agent_comms.private_send_claim import PrivateSendClaim
+from agent_comms.registry.registry_document import (
+    RegistryDocument,
+    RegistryPresence,
+    RegistrySnapshot,
+)
 from agent_comms.registry.thread_identity import TurnFence
-from agent_comms.execution.turn_failure import NativePiTerminalFailure
-from agent_comms.execution.turn_failure import RetryableProviderFailure
-from agent_comms.execution.turn_failure import TurnFailure
+from agent_comms.registry.thread_presentation import ThreadOwnerBinding
+from agent_comms.registry.threads import (
+    Thread,
+    ThreadProvenance,
+)
+from agent_comms.relationships import RelationshipSource, ThreadRelationships
+from agent_comms.route_client import ActivityClient
+from agent_comms.session_config_options import SessionConfigOptions
+from agent_comms.task_owner import TaskOwner
+from agent_comms.task_registry import TaskRegistry
+from agent_comms.task_sources import ScopedTaskDeclaration
+from agent_comms.thread_identity_source import ThreadIdentitySource
+from agent_comms.tracked_turn import TrackedTurnSession
+from agent_comms.transport.tools.goals import CommsGoalHistoryTool, CommsGoalTool, GoalChangeTool
 
 
 @pytest.mark.parametrize(
@@ -306,6 +320,12 @@ def test_dependency_reply_reads_its_original_sender_identity() -> None:
     "agent_comms.task_scope",
     "agent_comms.task_scope_owner",
     "agent_comms.task_sources",
+    "agent_comms.agent_event",
+    "agent_comms.registry_names",
+    "agent_comms.task_owner",
+    "agent_comms.task_registry",
+    "agent_comms.thread_identity_source",
+    "agent_comms.retained_task_facts",
     'agent_comms.messaging.sending',
 ))
 def test_goal_publication_contracts_resolve_cold(first_module: str) -> None:
@@ -314,3 +334,26 @@ def test_goal_publication_contracts_resolve_cold(first_module: str) -> None:
         capture_output=True, text=True, timeout=30,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def test_task_namespace_contracts_are_inherited_by_original_providers() -> None:
+    assert issubclass(ThreadProvenance, ThreadIdentitySource)
+    assert issubclass(Thread, TaskOwner)
+    assert issubclass(RegistryDocument, TaskRegistry)
+    assert issubclass(RegistrySnapshot, TaskRegistry)
+    for declaration in ScopedTaskDeclaration.members_with(ScopedTaskDeclaration):
+        hints = get_type_hints(declaration.applies)
+        assert hints["owner"] is TaskOwner
+        assert get_origin(hints["registry"]) is TaskRegistry
+        assert get_args(hints["registry"]) == (TaskOwner,)
+
+
+def test_live_namespace_member_selection_retains_its_kind() -> None:
+    method = RegistryPresence.require_member
+    assert get_type_hints(method)["return"] is method.__type_params__[0]
+
+
+def test_task_publication_validation_and_original_lease_contracts_resolve() -> None:
+    assert get_type_hints(TaskOwner.require_publication_turn)["claim_generation"] == Callable[[], int]
+    fence = get_type_hints(TaskOwner.require_turn_lease)["return"]
+    assert issubclass(get_type_hints(Thread.require_turn_lease)["return"], fence)

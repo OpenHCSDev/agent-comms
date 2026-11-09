@@ -32,7 +32,7 @@ from agent_comms.registry.thread_identity import (
     UserThreadRole,
 )
 from agent_comms.registry.threads import NativeThread
-from agent_comms.registry_provenance import DeletedThread
+from agent_comms.registry_names import DeletedThread
 from agent_comms.revision_views import (
     ActivityView,
     NotificationEvidenceView,

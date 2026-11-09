@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Annotated, Self
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.turn_context import ContextSegment, Provenance, WireProvenance
+from agent_comms.harness_delivery_states import Outcome
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -22,8 +23,12 @@ from agent_comms.registry.thread_identity import (
     TurnIdentity,
     UserThreadRole,
 )
+from agent_comms.registry_names import RegistryNames
 from agent_comms.storage.typed_table import TypedTable
+from agent_comms.task_owner import TaskOwner
+from agent_comms.task_registry import TaskRegistry
 from agent_comms.task_scope import TaskScope, TaskScopeSelection
+from agent_comms.thread_identity_source import ThreadIdentitySource
 from agent_comms.ui_model.message_category import MessageCategory
 from agent_comms.working_memory_requests import AnnotationBudgetExhausted
 
@@ -31,21 +36,17 @@ if TYPE_CHECKING:
     from agent_comms.bus import BusReader
     from agent_comms.cli_bridges.shared import CliBridge
     from agent_comms.context_segments.wake import MessageDelivery
-    from agent_comms.harness_delivery_states import Outcome
     from agent_comms.input_attempt import StoredInput
     from agent_comms.input_disposition import InputDispositions
     from agent_comms.messaging.messages import Message
     from agent_comms.planning.goal_management import Goals
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry.threads import Thread
-    from agent_comms.registry_provenance import RegistryProvenance
     from agent_comms.retained_task_facts import RetainedTaskFacts
     from agent_comms.task_attachments.team_pings import TeamUpdate
 
 
 class TaskChange(DeclaredFamily, affix="TaskChange"):
     @abstractmethod
-    def require_publication(self, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot,
+    def require_publication(self, declaration: ScopedTaskDeclaration, registry: TaskRegistry[TaskOwner],
                             original_source: BusReader) -> None: ...
 
     @abstractmethod
@@ -55,7 +56,7 @@ class TaskChange(DeclaredFamily, affix="TaskChange"):
 
 @dataclass(frozen=True)
 class OriginalTaskChange(TaskChange, declared_name="original"):
-    def require_publication(self, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot, original_source: BusReader) -> None:
+    def require_publication(self, declaration: ScopedTaskDeclaration, registry: TaskRegistry[TaskOwner], original_source: BusReader) -> None:
         pass
 
     def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
@@ -73,7 +74,7 @@ class CorrectionTaskChange(TaskChange, declared_name="correction"):
             raise RelationViolationError("Decision correction requires its original wire reference")
         return original
 
-    def require_publication(self, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot, original_source: BusReader) -> None:
+    def require_publication(self, declaration: ScopedTaskDeclaration, registry: TaskRegistry[TaskOwner], original_source: BusReader) -> None:
         original = self.require_original(original_source)
         declaration.require_correction(original, registry)
 
@@ -172,7 +173,7 @@ class TaskAttachment(
         raise RelationViolationError("Ordinary message is not a decision lineage event")
 
     def current_roots(self, message: Message, originals: dict[MessageReference, Message],
-                      owner: Thread, registry: RegistrySnapshot) -> tuple[Message, ...]:
+                      owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> tuple[Message, ...]:
         return ()
 
     def revises_after(self, previous: Message) -> bool:
@@ -181,10 +182,10 @@ class TaskAttachment(
     def require_sender(self, sender: str) -> None:
         pass
 
-    def require_target(self, target: str, registry: RegistrySnapshot) -> None:
+    def require_target(self, target: str, registry: TaskRegistry[TaskOwner]) -> None:
         pass
 
-    def require_publication(self, sender: str, registry: RegistrySnapshot, original_source: BusReader) -> None:
+    def require_publication(self, sender: str, registry: TaskRegistry[TaskOwner], original_source: BusReader) -> None:
         pass
 
     def retained_task_facts(self, message: Message):
@@ -235,8 +236,8 @@ class UserTaskSupersession(TaskAttachment, declared_name="user_supersession"):
         self,
         message: Message,
         originals: dict[MessageReference, Message],
-        owner: Thread,
-        registry: RegistrySnapshot,
+        owner: TaskOwner,
+        registry: TaskRegistry[TaskOwner],
     ):
         # This exact user row may address a recipient who never received the
         # private original. It only revises an eligible captured owned lineage.
@@ -247,7 +248,7 @@ class UserTaskSupersession(TaskAttachment, declared_name="user_supersession"):
     def revises_after(self, previous: Message) -> bool:
         return True
 
-    def require_publication(self, sender: str, registry: RegistrySnapshot, original_source: BusReader) -> None:
+    def require_publication(self, sender: str, registry: TaskRegistry[TaskOwner], original_source: BusReader) -> None:
         registry.require(sender).role.require_user(
             RelationViolationError("A task revision requires the original human sender")
         )
@@ -288,28 +289,28 @@ class ScopedTaskDeclaration(TaskAttachment):
     def retained_task_facts(self, message: Message): ...
 
     @abstractmethod
-    def applies(self, owner: Thread, registry: RegistrySnapshot) -> bool: ...
+    def applies(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> bool: ...
 
     @property
     @abstractmethod
     def author(self): ...
 
-    def turn_scope_matches(self, owner: Thread, registry: RegistrySnapshot) -> bool:
+    def turn_scope_matches(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> bool:
         return False
 
-    def require_same_turn(self, correction: ScopedTaskDeclaration, registry: RegistrySnapshot) -> None:
+    def require_same_turn(self, correction: ScopedTaskDeclaration, registry: TaskRegistry[TaskOwner]) -> None:
         raise RelationViolationError("This declaration owns no model turn")
 
-    def turn_scope_matches_original(self, previous: ModelTaskDeclaration, registry: RegistryProvenance) -> bool:
+    def turn_scope_matches_original(self, previous: ModelTaskDeclaration, registry: RegistryNames[ThreadIdentitySource]) -> bool:
         return False
 
-    def require_user_revision(self, sender: str, registry: RegistryProvenance) -> None:
+    def require_user_revision(self, sender: str, registry: RegistryNames[ThreadIdentitySource]) -> None:
         pass
 
     def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
         return self.change.root_source(message, originals)
 
-    def current_roots(self, message: Message, originals: dict[MessageReference, Message], owner: Thread, registry: RegistrySnapshot):
+    def current_roots(self, message: Message, originals: dict[MessageReference, Message], owner: TaskOwner, registry: TaskRegistry[TaskOwner]):
         if not self.applies(owner, registry):
             return ()
         return (self.root_source(message, originals),)
@@ -321,7 +322,7 @@ class ScopedTaskDeclaration(TaskAttachment):
         if self.author.name != sender:
             raise RelationViolationError("Task declaration does not belong to this message author")
 
-    def require_correction(self, original: Message, registry: RegistrySnapshot) -> None:
+    def require_correction(self, original: Message, registry: TaskRegistry[TaskOwner]) -> None:
         previous = self.require_previous(original)
         if previous.author.resolved(registry) != self.author.resolved(registry):
             raise RelationViolationError("An agent cannot correct another author's task declaration")
@@ -337,7 +338,7 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
     permits_agent_revision = True
 
     @classmethod
-    def from_claim(cls, owner: Thread, scope: TaskScopeSelection, change: TaskChange, **content) -> Self:
+    def from_claim(cls, owner: TaskOwner, scope: TaskScopeSelection, change: TaskChange, **content) -> Self:
         lease = owner.require_turn_lease()
         return cls(scope=scope.select(owner), source_turn=lease.identity,
                    source_turn_id=lease.turn_id, change=change, **content)
@@ -351,35 +352,32 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
     def author(self):
         return self.source_turn.incarnation
 
-    def applies(self, owner: Thread, registry: RegistrySnapshot) -> bool:
+    def applies(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> bool:
         return (self.author.current(registry)
                 and self.author.resolved(registry) == owner.incarnation
                 and self.scope.applies(owner, partial(self.turn_scope_matches, owner, registry)))
 
-    def turn_scope_matches(self, owner: Thread, registry: RegistrySnapshot) -> bool:
+    def turn_scope_matches(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> bool:
         return owner.has_authored_turn(self.source_turn.resolved(registry), self.source_turn_id)
 
-    def require_same_turn(self, correction: ScopedTaskDeclaration, registry: RegistrySnapshot) -> None:
+    def require_same_turn(self, correction: ScopedTaskDeclaration, registry: TaskRegistry[TaskOwner]) -> None:
         if not correction.turn_scope_matches_original(self, registry):
             raise RelationViolationError("Task correction belongs to a different turn scope")
 
-    def turn_scope_matches_original(self, previous: ModelTaskDeclaration, registry: RegistryProvenance) -> bool:
+    def turn_scope_matches_original(self, previous: ModelTaskDeclaration, registry: RegistryNames[ThreadIdentitySource]) -> bool:
         return (previous.source_turn.resolved(registry), previous.source_turn_id) == (
             self.source_turn.resolved(registry), self.source_turn_id)
 
-    def require_emission(self, owner: Thread) -> None:
+    def require_emission(self, owner: TaskOwner) -> None:
         self.require_sender(owner.name)
         lease = owner.require_turn_lease()
         if (lease.identity, lease.turn_id) != (self.source_turn, self.source_turn_id):
             raise RelationViolationError("Task declaration's original turn is no longer authorized")
         self.scope.require_current(owner)
 
-    def require_publication(self, sender: str, registry: RegistrySnapshot, original_source: BusReader):
+    def require_publication(self, sender: str, registry: TaskRegistry[TaskOwner], original_source: BusReader):
         author = registry.require(sender)
-        author.turn_record.read().require_current(
-            registry.claim_generation(sender), author.turn_generation,
-        )
-        author.turn_record.read().require_turn(self.source_turn_id)
+        author.require_publication_turn(partial(registry.claim_generation, sender), self.source_turn_id)
         self.require_emission(author)
         self.change.require_publication(self, registry, original_source)
 
@@ -401,10 +399,10 @@ class Subtask(ModelTaskDeclaration):
     def require_previous(self, original: Message) -> Subtask:
         return original.task.require_subtask()
 
-    def turn_scope_matches(self, owner: Thread, registry: RegistrySnapshot) -> bool:
+    def turn_scope_matches(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> bool:
         return owner.has_observed_task_turn(self.source_turn.resolved(registry), self.source_turn_id)
 
-    def applies(self, owner: Thread, registry: RegistrySnapshot) -> bool:
+    def applies(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> bool:
         return super().applies(owner, registry) and self.turn_scope_matches(owner, registry)
 
     def retained_task_facts(self, message: Message):
@@ -437,12 +435,12 @@ class HumanConstraintPin(ScopedTaskDeclaration):
     def require_previous(self, original: Message) -> HumanConstraintPin:
         return original.task.require_human_constraint()
 
-    def require_correction(self, original: Message, registry: RegistrySnapshot) -> None:
+    def require_correction(self, original: Message, registry: TaskRegistry[TaskOwner]) -> None:
         super().require_correction(original, registry)
         if self.require_previous(original).recipient.resolved(registry) != self.recipient.resolved(registry):
             raise RelationViolationError("USER pin correction must preserve its recipient")
 
-    def require_user_revision(self, sender: str, registry: RegistryProvenance) -> None:
+    def require_user_revision(self, sender: str, registry: RegistryNames[ThreadIdentitySource]) -> None:
         if self.author.resolved(registry) != registry.require(sender).incarnation:
             raise RelationViolationError("A USER cannot revise another human's constraint")
 
@@ -452,7 +450,7 @@ class HumanConstraintPin(ScopedTaskDeclaration):
     def lineage_reference(self, root: Message) -> MessageReference:
         return self.subject
 
-    def applies(self, owner: Thread, registry: RegistrySnapshot) -> bool:
+    def applies(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> bool:
         return (self.recipient.current(registry)
                 and self.recipient.resolved(registry) == owner.incarnation
                 and self.scope.applies(owner, partial(self.turn_scope_matches, owner, registry)))
@@ -463,11 +461,11 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         except KeyError as error:
             raise RelationViolationError("USER pin lacks its original captured wording") from error
 
-    def require_target(self, target: str, registry: RegistrySnapshot):
+    def require_target(self, target: str, registry: TaskRegistry[TaskOwner]):
         if not self.recipient.matches_recorded_name(target, registry):
             raise RelationViolationError("USER pin must address its original recipient")
 
-    def require_publication(self, sender: str, registry: RegistrySnapshot, original_source: BusReader):
+    def require_publication(self, sender: str, registry: TaskRegistry[TaskOwner], original_source: BusReader):
         registry.require(sender).role.require_user(
             RelationViolationError("A USER pin requires the original human sender")
         )
@@ -479,7 +477,7 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         self.scope.require_human_context(owner)
         self.change.require_publication(self, registry, original_source)
 
-    def require_wording_publication(self, registry: RegistrySnapshot, original_source: BusReader) -> None:
+    def require_wording_publication(self, registry: TaskRegistry[TaskOwner], original_source: BusReader) -> None:
         delivery, = original_source.deliveries_for_references((self.subject,))
         delivery.message.sender_role.require_user(
             RelationViolationError("Original wording must come from a human sender")
@@ -522,7 +520,7 @@ class NativeInputConstraintPin(HumanConstraintPin):
         return dict(wording=FieldCodec.encode(original.context_provenance()),
                     author=origin.author.sender, author_role=FieldCodec.encode(UserThreadRole))
 
-    def require_wording_publication(self, registry: RegistrySnapshot, original_source: BusReader) -> None:
+    def require_wording_publication(self, registry: TaskRegistry[TaskOwner], original_source: BusReader) -> None:
         from agent_comms.input_disposition import InputDispositions
         from agent_comms.registry.registry_store import RegistryStore
 
@@ -550,7 +548,7 @@ class Decision(ModelTaskDeclaration, declared_name="choice"):
         return self
 
     def require_previous(self, original: Message) -> Decision:
-        return original.require_decision()
+        return original.task.require_decision()
 
     def retained_task_facts(self, message: Message):
         from agent_comms.retained_task_facts import DecisionTaskFact

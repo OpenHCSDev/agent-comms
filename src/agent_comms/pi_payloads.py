@@ -163,7 +163,7 @@ class StrictFields(PiPayload):
         return super().decode_fields(value, decoded)
 
 if TYPE_CHECKING:
-    from agent_comms.agent_events import AgentEvent
+    from agent_comms.agent_event import AgentEvent
     from agent_comms.backend import NativeSession, TurnSession
     from agent_comms.execution.native_entries import TranscriptProjection
     from agent_comms.execution.turn_goal_permission import TurnGoalPermission

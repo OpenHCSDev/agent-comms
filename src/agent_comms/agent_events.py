@@ -22,6 +22,7 @@ from agent_comms.acp_failure import (
     UnrecordedFailureSource,
     UnresolvedNativeTurnOutcome,
 )
+from agent_comms.agent_event import AgentEvent as AgentEvent
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_output import NativeOutputLocation, NativeRecordLocation
@@ -55,16 +56,6 @@ from agent_comms.started_input import StartedInput
 from agent_comms.tool_declaration import OtherAction, ToolAction, ToolDeclaration
 from agent_comms.tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from agent_comms.transcript_events import SentTranscript
-
-
-class AgentEvent:
-    """Identity and data for one observation, with its constructor owned by its dataclass."""
-
-    def require_preparation_success(self) -> None:
-        pass
-
-    def retain_terminal(self, turn) -> None:
-        pass
 
 
 @dataclass(frozen=True)

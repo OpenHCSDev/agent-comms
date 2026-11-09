@@ -1,6 +1,5 @@
 """One registry document: thread facts, identity domains and lifecycle behavior."""
 
-from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
@@ -85,10 +84,9 @@ from agent_comms.registry.thread_status import (
 )
 from agent_comms.registry.thread_text import ForkedParent, NoParent
 from agent_comms.registry.threads import Thread, ThreadWorkState
+from agent_comms.registry_names import DeletedThread
 from agent_comms.registry_provenance import (
-    DeletedThread,
     RegisteredRecipient,
-    RegistryNames,
     RegistryProvenance,
     RetiredRecipient,
 )
@@ -106,6 +104,7 @@ from agent_comms.snapshot_slices import (
     ThreadSlice,
     WholeDocumentValue,
 )
+from agent_comms.task_registry import TaskRegistry
 from agent_comms.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 
@@ -190,10 +189,14 @@ class SeveralProjectThreads(TaggedRecordMember, ProjectThreadSelection):
     threads: tuple[Thread, ...]
 
 
-class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thread]):
+class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](TaskRegistry[Thread]):
     """Presence reads shared by the acquired document and its detached cut."""
 
     __slots__ = ()
+
+    def require_member[Kind: Thread](self, name: str, kind: type[Kind]) -> Kind:
+        """The registered declaration, narrowed to the member an operation needs."""
+        return kind.stored(self.require(name))
 
     def __contains__(self, name: str) -> bool:
         """A thread is present under its name or any alias the namespace keeps for it."""
@@ -261,8 +264,6 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
     @abstractmethod
     def owner_generation(self, name: str) -> int: ...
 
-    @abstractmethod
-    def claim_generation(self, name: str) -> int: ...
 
     def entry(self, name: str) -> RegistryEntry:
         thread = self.require(name)

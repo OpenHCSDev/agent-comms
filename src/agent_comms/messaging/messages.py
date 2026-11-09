@@ -84,7 +84,10 @@ from agent_comms.storage.typed_table import (
     TypedRow,
     TypedTable,
 )
-from agent_comms.task_sources import Decision, NoTaskAttachment, TaskAttachment
+from agent_comms.task_sources import (
+    NoTaskAttachment,
+    TaskAttachment,
+)
 from agent_comms.transport.progress import InterruptibleRead
 from agent_comms.ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
 from agent_comms.wake_policy import BoundedTriageWake, PassiveWake
@@ -1037,9 +1040,6 @@ class Message(MessageInput, TurnOrigin):
     def category(self) -> type[MessageCategory]:
         """The filter category this message files under, answered by what it carries."""
         return self.task.category(self.role.category)
-
-    def require_decision(self) -> Decision:
-        return self.task.require_decision()
 
     @property
     def retains_authored_task(self) -> bool:

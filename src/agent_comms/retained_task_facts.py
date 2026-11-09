@@ -9,22 +9,19 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
+from agent_comms.bus import BusReader
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_attempt import StoredInput
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import ClaimMessage, Message
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.threads import Thread
 from agent_comms.text_digest import TextDigest
-
-if TYPE_CHECKING:
-    from agent_comms.bus import BusReader
-    from agent_comms.input_disposition import InputDispositions
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry.thread_identity import ThreadIncarnation
-    from agent_comms.registry.threads import Thread
 
 
 class ExactTaskFact(DeclaredFamily, affix="TaskFact"):
@@ -86,7 +83,7 @@ class AuthoredTaskFact(ExactTaskFact):
 @dataclass(frozen=True)
 class DecisionTaskFact(AuthoredTaskFact, declared_name="historical_decision"):
     def __post_init__(self):
-        self.source.require_decision()
+        self.source.task.require_decision()
 
     def current_fact(self):
         return CurrentDecisionTaskFact(self.source)

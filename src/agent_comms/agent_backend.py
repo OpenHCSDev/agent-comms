@@ -41,7 +41,7 @@ from agent_comms.session_revision import NoSessionObservation, SessionObservatio
 from agent_comms.tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from agent_comms.agent_events import AgentEvent
+    from agent_comms.agent_event import AgentEvent
     from agent_comms.execution.owned_turn import TurnDelivery
     from agent_comms.execution.turn_runner import TurnRunner
     from agent_comms.launch_runtime import LaunchRuntime

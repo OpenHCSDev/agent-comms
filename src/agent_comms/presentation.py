@@ -100,7 +100,7 @@ if TYPE_CHECKING:
     from agent_comms.planning.goal_management import Goals
     from agent_comms.registry.registration import Registration
     from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry_provenance import DeletedThread
+    from agent_comms.registry_names import DeletedThread
     from agent_comms.ui_model.observation import ThreadsObserved
 
 

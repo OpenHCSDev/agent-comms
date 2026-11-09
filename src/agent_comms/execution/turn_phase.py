@@ -12,7 +12,7 @@ from typing import (
 )
 
 from agent_comms.activity import Activity, ActivityState, ObservedActivity
-from agent_comms.agent_events import AgentEvent
+from agent_comms.agent_event import AgentEvent
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import ToolCallId

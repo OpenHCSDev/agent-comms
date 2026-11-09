@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.turn_origin import TurnOrigin
 from agent_comms.input_key import InputKey
-from agent_comms.message_sender import PublicSender
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.read_basis import DMDisplayScope, MessageDisplayScope
@@ -254,22 +253,6 @@ class DeliveryScope(MessageDisplayScope):
     def delivers_sql(actor: str, sender: str, canonical_sender: str) -> str:
         """Sender exclusion for SQL routes already selected by index_targets."""
         return f"coalesce({canonical_sender},{sender})<>{actor}"
-
-    @staticmethod
-    def sender_lookups(
-        source: ThreadIncarnation, on_unrecorded: Callable[[], None]
-    ) -> Iterator[ThreadLookup | PublicSender]:
-        """Share format discovery; each consumer owns its missing-birth action.
-
-        The unstamped format matches before a birth is required. An index must
-        probe for an assigned stamp; starting input requires a verified stamp.
-        """
-        def missing() -> tuple[ThreadLookup, ...]:
-            on_unrecorded()
-            return ()
-
-        yield PublicSender()
-        yield from source.recorded_or(lambda recorded: (recorded.lookup,), missing)
 
     def conversation(self, sender: str, target: str) -> str:
         return CommandTarget.named(target).conversation(sender, self.actor, self.canonical)

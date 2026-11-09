@@ -13,7 +13,7 @@ from agent_comms.registry.registry_document import DEFAULT_ROSTER
 from agent_comms.registry.thread_presentation import NoThreadPresentation, ThreadRetired
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.registry_provenance import DeletedThread
+from agent_comms.registry_names import DeletedThread
 from agent_comms.ui_model.observation import (
     LocalRouteObservation,
     ObservationProcess,

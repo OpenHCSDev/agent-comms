@@ -58,7 +58,8 @@ from agent_comms.session_revision import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.agent_events import AgentEvent, AgentInfo
+    from agent_comms.agent_event import AgentEvent
+    from agent_comms.agent_events import AgentInfo
     from agent_comms.comms import Comms
     from agent_comms.config_options import ConfigOptions
     from agent_comms.execution.native_child import NativeChildState, PiSessionChild

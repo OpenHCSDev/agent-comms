@@ -13,7 +13,6 @@ from typing import Annotated, ClassVar
 
 from agent_comms.activity import ObservedActivity
 from agent_comms.agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from agent_comms.context_owner import ContextOwner
 from agent_comms.context_segments.wake_values import WakeWorkContext, WakeWorkSource
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity, ProcessState
@@ -93,7 +92,9 @@ from agent_comms.registry.thread_storage import (
 from agent_comms.registry.thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from agent_comms.session_file import NoSessionFile, SessionFile
 from agent_comms.storage.locked_store import DurableFile, PatternFile
+from agent_comms.task_owner import TaskOwner
 from agent_comms.task_scope import TaskScope
+from agent_comms.thread_identity_source import ThreadIdentitySource
 
 
 class ThreadCommandAvailability:
@@ -249,7 +250,7 @@ class NextTurnConfiguration:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadProvenance:
+class ThreadProvenance(ThreadIdentitySource):
     """Recorded thread identity, without permission to own a process or start a turn."""
 
     name: str = field(kw_only=False)
@@ -323,7 +324,7 @@ class ThreadCatalogFile(DurableFile, PatternFile):
 
 
 @dataclass(frozen=True, slots=True)
-class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, ContextOwner, affix="Thread"):
+class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, TaskOwner, affix="Thread"):
     """Declares one agent thread's identity and provenance; each member is how it executes.
 
     The registration owns transport intent; presence does not imply an RPC.
@@ -654,6 +655,10 @@ class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, ContextOwner, a
     def require_idle(self) -> None:
         if self.executing:
             raise RelationViolationError("live owner already has an active turn")
+
+    def require_publication_turn(self, claim_generation: Callable[[], int], turn_id: TurnId) -> None:
+        self.turn_record.read().require_current(claim_generation(), self.turn_generation)
+        self.turn_record.read().require_turn(turn_id)
 
     def require_turn(self, turn_id: TurnId, claim_scope: int) -> None:
         if not self.turn_lease.attests(claim_scope, turn_id):

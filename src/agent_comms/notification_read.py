@@ -15,7 +15,7 @@ from agent_comms.message_notification import (
 )
 from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.presentation import WireRevision
-from agent_comms.registry_provenance import DeletedThread
+from agent_comms.registry_names import DeletedThread
 from agent_comms.revision_views import ActivityView, NotificationEvidenceView
 
 if TYPE_CHECKING:

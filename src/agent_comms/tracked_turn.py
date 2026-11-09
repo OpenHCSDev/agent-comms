@@ -15,7 +15,7 @@ from types import MappingProxyType
 from agent_comms import pi_commands as commands
 from agent_comms import pi_events as pi
 from agent_comms.acp_failure import ProviderRetryResult
-from agent_comms.agent_events import AgentEvent
+from agent_comms.agent_event import AgentEvent
 from agent_comms.backend import TurnSession
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
