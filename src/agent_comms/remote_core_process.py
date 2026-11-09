@@ -9,7 +9,7 @@ from typing import ClassVar, cast
 
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
-from .child_process import HelperStart, SpawnedHelper
+from .execution.child_process import HelperStart, SpawnedHelper
 from .launch_runtime import ThreadLaunch
 from .remote_core import RemoteCoreAccess
 from .tool_result import ToolResult
