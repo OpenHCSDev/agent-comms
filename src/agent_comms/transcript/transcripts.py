@@ -4,15 +4,20 @@ from __future__ import annotations
 
 import logging
 from abc import abstractmethod
-from collections.abc import Awaitable, Iterator, Sequence
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Callable, ClassVar, NoReturn
+from sqlite3 import Connection
+from typing import Annotated, ClassVar, NoReturn
 
 from agent_comms.agent_backend import RuntimeLocation
-from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.database import (
+    CoordinationStore,
+    InvalidStore,
+    MissingStore,
+)
 from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
     ReloadRequired,
@@ -24,31 +29,47 @@ from agent_comms.execution.history_view import HistoryView, OwnHistory
 from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.native_output import NativeRecordLocation
+from agent_comms.execution.native_record_file import RecordsCut, SessionCut
 from agent_comms.execution.native_runtime_input import PublishedReplyRevision
 from agent_comms.execution.native_session_files import NativeSessionFiles
-from agent_comms.execution.native_transcript import NativeTranscript, RecordsCut, SessionCut
+from agent_comms.execution.transcript_cursor_reads import (
+    MarksSourceRead,
+    TranscriptRuntime,
+)
 from agent_comms.execution.transcript_routes import TranscriptRoutes
 from agent_comms.execution.transcript_sources import (
-    AssignedSourceCursor,
     AssignedTranscriptSource,
-    EarlierTranscript,
-    LaterTranscript,
+    AtFrontier,
+    ExternalTranscript,
+    FileTranscriptCursor,
+    LatestPage,
     LiveAssignedTranscriptSource,
+    NativeTranscript,
+    NativeTranscriptCursor,
     NoWireFrontier,
-    TranscriptDraft,
+    PageLimit,
+    PagePosition,
+    Through,
+    TranscriptCursor,
     TranscriptSource,
-    TranscriptTraversal,
     WireFrontier,
 )
 from agent_comms.execution.turn_bound import TurnBound
-from agent_comms.execution.turn_digests import InputAnswerRead, ThreadTurns, TurnDigestRead
+from agent_comms.execution.turn_digests import (
+    InputAnswerRead,
+    ThreadTurns,
+    TurnDigestRead,
+)
 from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.historical_views import HistorySource
 from agent_comms.messaging.message_bus import MessageBus
-from agent_comms.messaging.message_notification import MessageNotification, NotificationWindow
+from agent_comms.messaging.message_notification import (
+    MessageNotification,
+    NotificationWindow,
+)
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_evidence import OwnerOutcomes
 from agent_comms.messaging.page_traversal import HistorySourceKey
@@ -64,185 +85,35 @@ from agent_comms.nominal.field_codec import (
     WireName,
     projected,
 )
-from agent_comms.notification_assignment import NotificationAssignment, NotificationSelection
+from agent_comms.notification_assignment import (
+    NotificationAssignment,
+    NotificationSelection,
+)
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_provenance import RegistryProvenance
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.registry_tables import RegistryRowRevision
+from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_presentation import ThreadPresentation
+from agent_comms.registry.thread_text import ThreadParent, ThreadText
 from agent_comms.registry.threads import Thread, ThreadProvenance
+from agent_comms.registry.view_unread import TranscriptReadState
 from agent_comms.storage.private_path import (
     FileIdentity,
     FileObservation,
     FileRevision,
     MissingFile,
 )
-from agent_comms.transcript.external_transcript import ExternalTranscript
+from agent_comms.transcript.transcript_drafts import TranscriptDraft
 from agent_comms.transcript.transcript_events import (
     ForkOriginTranscript,
     ForkTaskTranscript,
     TranscriptEvent,
 )
 
-if TYPE_CHECKING:
-    from sqlite3 import Connection
-
-    from agent_comms.coordination.database import InvalidStore, MissingStore
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry.registry_provenance import RegistryProvenance
-    from agent_comms.registry.thread_identity import ThreadIncarnation
-    from agent_comms.registry.thread_text import ThreadParent, ThreadText
-    from agent_comms.registry.view_unread import TranscriptReadState
-
 _LOG = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
-    """A native transcript position; WireTranscriptCursor adds an assigned wire source."""
-
-    session_file: ClassVar[str | None] = None
-    offset: ClassVar[int] = 0
-    wire: ClassVar[WireFrontier] = NoWireFrontier()
-
-    def indexed_by(self, current: RecordsCut) -> bool:
-        """Whether the current source still indexes this position. A position in no file's bytes
-        has nothing a rewrite can move."""
-        return True
-
-    def at_offset(self, offset: int) -> TranscriptCursor:
-        return replace(self, offset=offset)
-
-    def at_sequence(self, sequence: int) -> TranscriptCursor:
-        return self.with_frontier(self.wire.at(sequence))
-
-    @abstractmethod
-    def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor: ...
-
-    @abstractmethod
-    def mark_read(self, reads: TranscriptReadState, viewer: str, runtime: RuntimeLocation) -> None: ...
-
-    def contains(self, other: TranscriptCursor) -> bool:
-        return other.within(self)
-
-    def same_position(self, other: TranscriptCursor) -> bool:
-        return self == other
-
-    def accepts_source(self, other: TranscriptCursor) -> bool:
-        return self.session_file == other.session_file
-
-    def within(self, other: TranscriptCursor) -> bool:
-        return (self.accepts_source(other) and self.offset <= other.offset
-                and self.wire.within(other.wire))
-
-    def earlier_page(self) -> PagePosition:
-        """The page that ends where this read position starts."""
-        return EarlierThan(self)
-
-    def later_page(self) -> PagePosition:
-        """The page that starts where this read position ends."""
-        return LaterThan(self)
-
-    def page_limit(self) -> PageLimit:
-        """A painted read position pins the page to the source it was read from."""
-        return Through(self)
-
-    def matches_runtime(self, runtime: RuntimeLocation) -> bool:
-        return self.session_file == runtime.read_key
-
-    def require_readable(
-        self, runtime: RuntimeLocation, reader: TranscriptSource, current: RecordsCut, through: int,
-    ) -> None:
-        if (not self.matches_runtime(runtime) or not reader.valid_offset(self.offset, through)
-                or not self.indexed_by(current)):
-            raise TranscriptChanged()
-
-    def requires_commit(self) -> bool:
-        """A changed transcript at a read position needs no commit before it is read again."""
-        return False
-
-    def painted_read[Result](self, acknowledge: Callable[[TranscriptCursor], Result],
-                             nothing: Result) -> Result:
-        """Choose painted acknowledgement work before any reader or write lock is opened."""
-        return acknowledge(self)
-
-    async def read_page(self, loader: Callable[..., Awaitable[TranscriptPage]],
-                        position: PagePosition) -> TranscriptPage:
-        return await loader(position=position, limit=self.page_limit())
-
-    def covers_incoming(self, sequence: int) -> bool:
-        # Callers hold a canonical recipient assignment, never an arbitrary seq.
-        return 0 < sequence <= self.wire.sequence
-
-    def over_native(self, prefixes: Sequence[TranscriptCursor]) -> TranscriptCursor:
-        """This wire position over the furthest committed native prefix within it: wire
-        assignment can advance without transferring anonymous native output."""
-        within = tuple(prefix for prefix in prefixes if prefix.wire.within(self.wire))
-        prefix = max((prefix for prefix in within if prefix.session_file == self.session_file),
-                     key=lambda prefix: prefix.offset, default=self.inherited_prefix(within))
-        return self.with_prefix(prefix)
-
-    def inherited_prefix(self, prefixes: Sequence[TranscriptCursor]) -> TranscriptCursor:
-        return self.at_offset(0)
-
-    def with_prefix(self, prefix: TranscriptCursor) -> TranscriptCursor:
-        return self.at_offset(prefix.offset)
-
-
-@dataclass(frozen=True, slots=True)
-class UnreadTranscriptCursor(TranscriptCursor):
-    """No source has been read; this is not a source position or a read mark."""
-
-    def contains(self, other: TranscriptCursor) -> bool:
-        return False
-
-    def within(self, other: TranscriptCursor) -> bool:
-        return False
-
-    def same_position(self, other: TranscriptCursor) -> bool:
-        return False
-
-    def accepts_source(self, other: TranscriptCursor) -> bool:
-        return True
-
-    def earlier_page(self) -> PagePosition:
-        """Nothing read bounds no page: the latest one."""
-        return LatestPage()
-
-    def later_page(self) -> PagePosition:
-        return LatestPage()
-
-    def page_limit(self) -> PageLimit:
-        """Nothing read pins no source window; the page's own frontier applies."""
-        return AtFrontier()
-
-    def requires_commit(self) -> bool:
-        """A replaced source with nothing read must be committed before it is read again."""
-        return True
-
-    def painted_read[Result](self, acknowledge: Callable[[TranscriptCursor], Result],
-                             nothing: Result) -> Result:
-        return nothing
-
-    def at_offset(self, offset: int) -> TranscriptCursor:
-        return self
-
-    def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor:
-        return self
-
-    def mark_read(self, reads: TranscriptReadState, viewer: str, runtime: RuntimeLocation) -> None:
-        """Nothing has been drawn, so there is nothing to acknowledge."""
-
-
-class FileTranscriptCursor(TranscriptCursor, declared_name=None):
-    """A position in a file's bytes: a session rewritten through os.replace is another file,
-    and every old offset past 0 indexes nothing in it, even where it still fits."""
-
-    __slots__ = ()
-    file: FileIdentity | MissingFile
-
-    def indexed_by(self, current: RecordsCut) -> bool:
-        return current.indexes(self.file, self.offset)
 
 
 @dataclass(frozen=True, slots=True)
@@ -261,35 +132,8 @@ class NoNativeTranscriptCursor(FileTranscriptCursor):
     def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor:
         return replace(self, wire=frontier)
 
-    def mark_read(self, reads: TranscriptReadState, viewer: str, runtime: RuntimeLocation) -> None:
+    def mark_read(self, reads: MarksSourceRead[SessionCut], viewer: str, runtime: TranscriptRuntime) -> None:
         """There is no painted native transcript to acknowledge."""
-
-
-@dataclass(frozen=True, slots=True)
-class NativeTranscriptCursor(FileTranscriptCursor):
-    session_file: str = field()
-    offset: int = field()
-    file: FileIdentity | MissingFile = field(kw_only=True)
-
-    def inherited_prefix(self, prefixes: Sequence[TranscriptCursor]) -> TranscriptCursor:
-        return next(iter(prefixes), self.at_offset(0))
-
-    def with_prefix(self, prefix: TranscriptCursor) -> TranscriptCursor:
-        return prefix.with_frontier(self.wire)
-
-    def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor:
-        return frontier.cursor(self.session_file, self.offset, file=self.file)
-
-    def mark_read(self, reads: TranscriptReadState, viewer: str, runtime: RuntimeLocation) -> None:
-        if self.session_file != runtime.read_key:
-            raise TranscriptChanged()
-        for key in runtime.read_keys():
-            # A mark painted from a replaced file would count the new file read through an
-            # offset that indexes nothing in it.
-            current = NativeTranscript(Path(key)).cut()
-            if not self.indexed_by(current):
-                raise TranscriptChanged()
-            reads.mark_read(viewer, key, self.offset, current)
 
 
 @dataclass(frozen=True)
@@ -312,109 +156,6 @@ class NativeCommittedPrefix:
             and self.page_bound.within(current.page_bound)
             and self.records_cut.holds(current.records_cut, self.original.session_entry_end)
         )
-
-
-@dataclass(frozen=True, slots=True)
-class WireTranscriptCursor(NativeTranscriptCursor):
-    wire: AssignedSourceCursor = field()
-
-
-@dataclass(frozen=True)
-class PagePosition(DeclaredFamily, affix=""):
-    """Where a bounded transcript page starts: the latest page, or one side of a read cursor."""
-
-    def require_readable(
-        self, runtime: RuntimeLocation, reader: TranscriptSource, current: RecordsCut, through: int,
-    ) -> None:
-        """The latest page has no cursor to validate."""
-
-    def within(self, frontier: TranscriptCursor) -> bool:
-        return True
-
-    def initial(self, frontier: TranscriptCursor) -> TranscriptCursor:
-        return frontier
-
-    def traversal(self) -> TranscriptTraversal:
-        return EarlierTranscript()
-
-    def shows_fork_start(self, frontier: TranscriptCursor) -> bool:
-        """An inherited thread's fork origin closes its oldest page; the latest page reaches it."""
-        return True
-
-    def later_only(self) -> PagePosition:
-        """A re-read under a new limit keeps only a later-than cursor; any other page starts latest."""
-        return LatestPage()
-
-
-@dataclass(frozen=True, slots=True)
-class LatestPage(PagePosition):
-    """The newest page up to the frontier."""
-
-
-@dataclass(frozen=True, slots=True)
-class CursorPage(PagePosition, declared_name=None):
-    """A page beside a read cursor, which must belong to the page's source and fit its cut."""
-
-    cursor: TranscriptCursor
-
-    def require_readable(
-        self, runtime: RuntimeLocation, reader: TranscriptSource, current: RecordsCut, through: int,
-    ) -> None:
-        self.cursor.require_readable(runtime, reader, current, through)
-
-    def within(self, frontier: TranscriptCursor) -> bool:
-        return frontier.contains(self.cursor)
-
-    def initial(self, frontier: TranscriptCursor) -> TranscriptCursor:
-        return self.cursor
-
-
-@dataclass(frozen=True, slots=True)
-class EarlierThan(CursorPage):
-    def shows_fork_start(self, frontier: TranscriptCursor) -> bool:
-        return self.cursor == frontier
-
-
-@dataclass(frozen=True, slots=True)
-class LaterThan(CursorPage):
-    def traversal(self) -> TranscriptTraversal:
-        return LaterTranscript()
-
-    def shows_fork_start(self, frontier: TranscriptCursor) -> bool:
-        return False
-
-    def later_only(self) -> PagePosition:
-        return self
-
-
-@dataclass(frozen=True)
-class PageLimit(DeclaredFamily, affix=""):
-    """How far a page's source reaches: its live frontier, or a cursor already painted."""
-
-    def bound(self, frontier: TranscriptCursor) -> TranscriptCursor:
-        return frontier
-
-    def accepts_runtime(self, runtime: RuntimeLocation) -> bool:
-        """An unpinned page uses the thread's first available transcript source."""
-        return True
-
-
-@dataclass(frozen=True, slots=True)
-class AtFrontier(PageLimit):
-    """The page reaches the source's current frontier."""
-
-
-@dataclass(frozen=True, slots=True)
-class Through(PageLimit):
-    """The page reaches no further than a cursor already painted, in that cursor's source."""
-
-    cursor: TranscriptCursor
-
-    def bound(self, frontier: TranscriptCursor) -> TranscriptCursor:
-        return self.cursor
-
-    def accepts_runtime(self, runtime: RuntimeLocation) -> bool:
-        return self.cursor.matches_runtime(runtime)
 
 
 @dataclass(frozen=True, slots=True)

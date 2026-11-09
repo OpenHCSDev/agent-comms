@@ -11,7 +11,11 @@ from pydantic import JsonValue
 from agent_comms.context_store import ContextStore
 from agent_comms.coordination.service_passes import ServiceReading
 from agent_comms.execution.historical_native_inputs import HistoricalNativeAnswers
-from agent_comms.execution.transcript_sources import TranscriptSource
+from agent_comms.execution.transcript_sources import (
+    ExternalTranscript,
+    StoreRead,
+    TranscriptSource,
+)
 from agent_comms.execution.turn_bound import TurnBound, TurnsSince
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.message_reference import MessageReference
@@ -39,7 +43,6 @@ from agent_comms.projects.work_branches import WorkBranchError
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import ConversationPreparation, Thread
-from agent_comms.transcript.external_transcript import ExternalTranscript, StoreRead
 from agent_comms.transcript.transcript_events import IncomingTranscript, TurnDigest
 from agent_comms.transport.tool_declaration import EditCall
 from agent_comms.transport.tool_result import ToolResult

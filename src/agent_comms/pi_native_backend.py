@@ -11,8 +11,6 @@ implementation modules (``backend``, ``pi_commands``, ``pi_events``,
 
 from __future__ import annotations
 
-from agent_comms.execution.persistent_pi_session import PersistentPiSession as PersistentPiSession
-
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
@@ -43,14 +41,14 @@ from agent_comms.execution.native_session_files import (
     NativeSessionLocks,
 )
 from agent_comms.execution.native_transcript import NativeTranscript
+from agent_comms.execution.persistent_pi_session import (
+    PersistentPiSession as PersistentPiSession,
+)
 from agent_comms.execution.pi_commands import Compact, NativeQuery
 from agent_comms.execution.pi_events import NativePiEvent
 from agent_comms.execution.pi_wire import PiOmitted
 from agent_comms.execution.selected.session import SavedSelectedSession
-from agent_comms.execution.session_revision import (
-    SessionObservation,
-    SessionRevision,
-)
+from agent_comms.execution.session_revision import SessionObservation, SessionRevision
 from agent_comms.execution.turn_inbox import InputContent
 from agent_comms.installer.native_package import SYSTEM_PROMPT
 from agent_comms.nominal.field_codec import AcpSessionId
@@ -180,7 +178,9 @@ class PiNativeBackend(
 
     async def prepare(self, thread: Thread, *, open_native=None) -> StateData:
         """Launch (or reuse) and attest the idle child for ``thread``'s saved session."""
-        from agent_comms.execution.native_session_prepare import NativeSessionPreparation
+        from agent_comms.execution.native_session_prepare import (
+            NativeSessionPreparation,
+        )
 
         if open_native is None:
             open_native = NativeSessionPreparation.open

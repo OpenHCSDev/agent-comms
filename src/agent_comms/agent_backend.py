@@ -30,6 +30,7 @@ from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.pi_commands import NativeQuery
 from agent_comms.execution.pi_vocabulary import CompactionReason
 from agent_comms.execution.session_revision import NoSessionObservation, SessionObservation
+from agent_comms.execution.transcript_cursor_reads import TranscriptRuntime
 from agent_comms.execution.turn_inbox import InputContent
 from agent_comms.execution.turn_outcome import TurnOutcome
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -53,7 +54,7 @@ class BackendDeclarationError(TypeError):
     """A backend declaration is incomplete; the message names every missing piece."""
 
 
-class RuntimeLocation(DeclaredFamily, affix="Runtime"):
+class RuntimeLocation(DeclaredFamily, TranscriptRuntime, affix='Runtime'):
     """Runtime behavior derived once by the owning thread record."""
 
     path: str

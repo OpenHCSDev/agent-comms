@@ -59,7 +59,10 @@ from agent_comms.planning.goals import GoalConsentRequired, GoalDeclaration, NoG
 from agent_comms.planning.task_scope import TaskScope
 from agent_comms.projects.checkouts import Checkout, RepositoryReads
 from agent_comms.registry.activity import ObservedActivity
-from agent_comms.registry.heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
+from agent_comms.registry.heartbeat_delivery import (
+    HeartbeatDelivery,
+    OffHeartbeatDelivery,
+)
 from agent_comms.registry.presence_reads import PresenceThread
 from agent_comms.registry.tagged_thread_source import TaggedThreadSource
 from agent_comms.registry.task_owner import TaskOwner
@@ -79,6 +82,7 @@ from agent_comms.registry.thread_identity import (
     TurnIdentity,
     UnobservedTools,
 )
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
 from agent_comms.registry.thread_model import (
     CatalogSelection,
     DeclaredModel,
@@ -100,7 +104,12 @@ from agent_comms.registry.thread_storage import (
     ThreadStorage,
     UnassignedThreadStorage,
 )
-from agent_comms.registry.thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
+from agent_comms.registry.thread_text import (
+    NoParent,
+    NoThreadText,
+    ThreadParent,
+    ThreadText,
+)
 from agent_comms.storage.locked_store import DurableFile, PatternFile
 
 

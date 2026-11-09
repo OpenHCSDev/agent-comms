@@ -33,8 +33,8 @@ from agent_comms.execution.native_prompt_binding import (
 )
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.execution.native_session_files import NativeSessionFiles
-from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.selected.triage import SelectedTriage
+from agent_comms.execution.transcript_sources import NativeTranscript
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (

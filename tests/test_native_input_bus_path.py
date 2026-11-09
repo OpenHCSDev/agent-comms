@@ -13,7 +13,7 @@ from agent_comms.execution.backend import NativeSession
 from agent_comms.execution.child_process import Platform
 from agent_comms.execution.native_arguments import NativeInputProofArgument
 from agent_comms.execution.native_input_proof import NativeContextJournal
-from agent_comms.execution.native_transcript import NativeTranscript
+from agent_comms.execution.transcript_sources import NativeTranscript
 from agent_comms.execution.turn_inbox import (
     ClearQueuedInputs,
     InputContent,

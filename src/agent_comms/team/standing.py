@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import ClassVar, Self
 
 from agent_comms import team
 from agent_comms.cli_bridges.claude_protocol import OwedProgress
@@ -70,6 +70,7 @@ from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.owner_notices import OrderNotice, TeamNotice
 from agent_comms.team.questions import UnansweredTeammateAsks
 from agent_comms.team.standing_rules import (
+    ClearingVerb,
     CoreActsStandingRule,
     DatedStandingRule,
     FamilyScan,
@@ -85,8 +86,6 @@ from agent_comms.team.team_service import TeamService
 from agent_comms.ui_model.teammate_state import AwaitingTeam, TeammateState
 from agent_comms_hooks import SubagentId
 
-if TYPE_CHECKING:
-    from agent_comms.team.order import TeamVerb
 
 
 @dataclass(frozen=True)
@@ -463,7 +462,7 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         return False
 
-    def blocks(self, reached: frozenset[str], action: TeamVerb,
+    def blocks(self, reached: frozenset[str], action: ClearingVerb,
                answered: tuple[OwedAnswer, ...]) -> bool:
         """Work sent to the holder waits on this judgement; an answer to the holder's own ask
         never does, or the gate would refuse the conversation the answer gate demands."""

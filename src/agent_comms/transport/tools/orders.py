@@ -8,7 +8,11 @@ from typing import Annotated
 
 from pydantic import JsonValue
 
-from agent_comms.acp_extension import GoalSnapshotReply, TurnChangedUpdate, UpdateMetadata
+from agent_comms.acp_extension import (
+    GoalSnapshotReply,
+    TurnChangedUpdate,
+    UpdateMetadata,
+)
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.service_passes import ServicePassStore
@@ -23,7 +27,11 @@ from agent_comms.execution.turn_digests import (
 )
 from agent_comms.input_attempt import UNOBSERVED_DELIVERY_SCOPE
 from agent_comms.input_disposition import DeliveryOverview
-from agent_comms.messaging.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
+from agent_comms.messaging.bus_read import (
+    CapturesTranscriptPage,
+    OwnerScopedRead,
+    UiRead,
+)
 from agent_comms.messaging.channel_targets import CommsTag
 from agent_comms.messaging.read_basis import ReadAuthority
 from agent_comms.messaging.send_result import MessagePublished
@@ -75,7 +83,11 @@ from agent_comms.planning.orders import (
 from agent_comms.planning.problem_number import ProblemNumber
 from agent_comms.planning.progress_claims import ProgressClaim
 from agent_comms.planning.pull_requests import PullRequestLink
-from agent_comms.projects.head_review import HeadReviewOrder, PreparedHeadReview, PullRequestHead
+from agent_comms.projects.head_review import (
+    HeadReviewOrder,
+    PreparedHeadReview,
+    PullRequestHead,
+)
 from agent_comms.projects.work_branches import WorkBranchError
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.team.team_hud import TeamFrame, TeamHud, TeamLoad

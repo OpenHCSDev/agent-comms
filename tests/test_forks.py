@@ -16,6 +16,10 @@ from functools import partial
 from pathlib import Path
 
 import pytest
+from cli_command import team
+from hook_session_fixture import resident_hook, resident_session, resident_stdout
+from source_revision_fixture import SourceRepository
+from team_heartbeat_fixture import ObservedHeartbeat, capture_frame
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.hook_forks import SessionSubagents
@@ -28,8 +32,11 @@ from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.errors import RelationViolationError, TodoError
-from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.transcript_sources import (
+    ExternalTranscript,
+    NativeTranscript,
+)
 from agent_comms.execution.turn_bound import TurnsSince
 from agent_comms.execution.turn_digests import OrderEditCountRead, OrderEditsRead
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
@@ -76,29 +83,34 @@ from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.slop import DeclarationDerivation, ExistingLine, Slop
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.activity import ActivityState
-from agent_comms.registry.thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import (
+    CoreWatcherIncarnation,
+    RecordedThreadIncarnation,
+)
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 from agent_comms.registry.thread_text import ForkedParent, SubagentRole
 from agent_comms.registry.threads import ExternalThread, ForkThread, NativeThread
-from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.storage.maintenance_barrier import (
+    MaintenanceBarrier,
+    MaintenanceOperator,
+)
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.storage.typed_table import HeldBusFile
 from agent_comms.team.order import MessageNotification, OrderFile, Team, TeamContext
 from agent_comms.team.standing import Unjudged
 from agent_comms.team.team_heartbeat import TeamObservation
-from agent_comms.transcript.external_transcript import ExternalTranscript
 from agent_comms.transcript.transcript_events import ToolStartTranscript
 from agent_comms.transport.tool_caller import ForkCaller, SubagentCaller
 from agent_comms.transport.tool_declaration import ToolDeclaration
-from agent_comms.transport.tools.orders import CommsHudTool, CommsTeamLoadTool, CommsTodoListTool
+from agent_comms.transport.tools.orders import (
+    CommsHudTool,
+    CommsTeamLoadTool,
+    CommsTodoListTool,
+)
 from agent_comms.ui_model.teammate_state import TeammateState
 from agent_comms_hooks import forks
 from agent_comms_hooks.watch import WatchRecord
-from cli_command import team
-from hook_session_fixture import resident_hook, resident_session, resident_stdout
-from source_revision_fixture import SourceRepository
-from team_heartbeat_fixture import ObservedHeartbeat, capture_frame
 
 
 @pytest.fixture

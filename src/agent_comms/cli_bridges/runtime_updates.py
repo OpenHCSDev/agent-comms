@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.agent_events import RuntimeInfoObservation
 from agent_comms.cli_bridges.cli_protocol import EarlierItems
+from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId, NoSourceTurn, TurnItem
 from agent_comms.execution.turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
 from agent_comms.messaging.message_reference import MessageReference
@@ -23,7 +24,7 @@ from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.thread_identity import OfferedTools
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
 from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
-from agent_comms.transcript.external_transcript import ExternalPage, ExternalTranscript
+from agent_comms.transcript.external_transcript_rows import ExternalPage
 from agent_comms.transcript.transcript_events import (
     LiveTextTranscript,
     ToolStartTranscript,

@@ -8,6 +8,7 @@ from threading import Event
 from typing import ClassVar
 
 import pytest
+from conftest import installed_comms
 
 from agent_comms.cli_bridges.history import History, OfflineHistory
 from agent_comms.cli_verbs.restore_owner import RestoreOwnerCliCommand
@@ -20,7 +21,6 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.thread_text import AnySession
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from conftest import installed_comms
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

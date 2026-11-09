@@ -65,7 +65,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 from agent_comms.coordination.coordinator import Coordination
                 from agent_comms.coordination.tables.assignments import WakeAssignment
                 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
-                from agent_comms.execution.native_transcript import NativeTranscript
+                from agent_comms.execution.transcript_sources import NativeTranscript
 
                 # Pi commits each tracked input in a request's context (session
                 # entry, generation, context digest) right before sending it

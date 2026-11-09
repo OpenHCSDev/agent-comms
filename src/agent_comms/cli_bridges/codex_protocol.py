@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
+from asyncio import Future
+from collections import deque
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, TypeVar
+from typing import Annotated, ClassVar, Generic, Literal, TypeVar
 
 from pydantic import (
     Field,
@@ -56,7 +58,7 @@ from agent_comms.nominal.field_codec import (
     boundary_decoder,
 )
 from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
-from agent_comms.transcript.external_transcript import EarlierPage, NoEarlierPage
+from agent_comms.transcript.external_transcript_rows import EarlierPage, NoEarlierPage
 from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
@@ -316,20 +318,27 @@ class RpcError(WireModel):
         return refused(f'Codex: {self.message}')
 
 
-if TYPE_CHECKING:
-    from agent_comms.cli_bridges.codex_connection import CodexConnection
+
+
+class RpcReplyTarget(ABC):
+    """Match replies and retain notifications on their existing connection."""
+
+    pending: deque[RpcNotification]
+
+    @abstractmethod
+    def answer(self, request_id: int) -> Future[JsonValue]: ...
 
 
 class RpcReply(WireModel, ABC):
     @abstractmethod
-    def route(self, connection: CodexConnection) -> None: ...
+    def route(self, connection: RpcReplyTarget) -> None: ...
 
 
 class RpcSuccess(RpcReply):
     id: int
     result: JsonValue
 
-    def route(self, connection: CodexConnection) -> None:
+    def route(self, connection: RpcReplyTarget) -> None:
         connection.answer(self.id).set_result(self.result)
 
 
@@ -340,14 +349,14 @@ class RpcFailure(RpcReply):
 class RpcRequestFailure(RpcFailure):
     id: int
 
-    def route(self, connection: CodexConnection) -> None:
+    def route(self, connection: RpcReplyTarget) -> None:
         connection.answer(self.id).set_exception(self.error.refusal())
 
 
 class RpcConnectionFailure(RpcFailure):
     id: None
 
-    def route(self, connection: CodexConnection) -> None:
+    def route(self, connection: RpcReplyTarget) -> None:
         raise ConnectionError('Codex reported a failure outside any request')
 
 
@@ -355,7 +364,7 @@ class RpcNotification(RpcReply):
     method: str
     params: JsonValue
 
-    def route(self, connection: CodexConnection) -> None:
+    def route(self, connection: RpcReplyTarget) -> None:
         connection.pending.append(self)
 
 

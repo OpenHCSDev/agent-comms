@@ -14,6 +14,7 @@ from typing import IO, BinaryIO, Self
 
 import pytest
 from pydantic import JsonValue
+from transcript_record_fixture import transcript_record
 
 from agent_comms.cli import CliInvocation
 from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
@@ -32,7 +33,11 @@ from agent_comms.cli_bridges.codex_records import (
     ForeignRecord,
     ResponseItemRecord,
 )
-from agent_comms.cli_bridges.history import DefaultAddress, OfflineHistory, OnlineHistory
+from agent_comms.cli_bridges.history import (
+    DefaultAddress,
+    OfflineHistory,
+    OnlineHistory,
+)
 from agent_comms.cli_bridges.opencode import OpenCodeConnection, OpenCodeServer
 from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Session
@@ -76,8 +81,11 @@ from agent_comms.registry.threads import ExternalThread, NativeThread, ThreadPro
 from agent_comms.transcript.transcript_events import TextTranscript
 from agent_comms.transport.core_access import LocalCoreAccess
 from agent_comms.transport.tools.sidebar import CommsImportedSourceTool
-from agent_comms.ui_model.message_category import AgentCategory, ThinkingCategory, UserCategory
-from transcript_record_fixture import transcript_record
+from agent_comms.ui_model.message_category import (
+    AgentCategory,
+    ThinkingCategory,
+    UserCategory,
+)
 
 
 def lines(path: Path, records: Iterable[dict[str, JsonValue]], tail: str = "") -> Path:

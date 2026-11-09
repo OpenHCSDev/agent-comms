@@ -42,6 +42,7 @@ from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.pi_vocabulary import NoThinkingOverride, ThinkingChoice
 from agent_comms.execution.request_progress import NO_REQUEST_OBSERVER, RequestObserver
 from agent_comms.execution.selected.session import SelectedSession
+from agent_comms.execution.transcript_sources import DraftPublication, DraftRow
 from agent_comms.execution.turn_context import InputContributionCoordinates
 from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.execution.turn_inbox import TurnInbox
@@ -51,7 +52,6 @@ from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import InputId, MalformedRecord
 from agent_comms.pi_payloads import UserMessage
 from agent_comms.storage.maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
-from agent_comms.transcript.external_transcript import DraftPublication, DraftRow
 from agent_comms.transport.native_tool_transport import NativeToolMode
 from agent_comms.transport.tool_denial import SelectedToolDenied
 

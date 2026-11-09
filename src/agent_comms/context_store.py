@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
+from agent_comms.execution.context_entry_reader import ReadsContextEntries
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
 from agent_comms.execution.turn_context import (
     ContextEntryManifest,
@@ -493,7 +494,7 @@ class ContextManifestPage:
 
 
 @dataclass(frozen=True)
-class ContextStore(DurableStore, InputCaptureFile):
+class ContextStore(ReadsContextEntries, DurableStore, InputCaptureFile):
     root: Path
     filename: ClassVar[str] = "turn_context.sqlite3"
     tables = ContextStoreRows

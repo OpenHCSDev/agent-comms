@@ -16,7 +16,11 @@ from agent_comms.errors import UnknownChannelError
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.activity_clocks import ChannelActivity
 from agent_comms.messaging.channel_management import ChannelManagement
-from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
+from agent_comms.messaging.channel_targets import (
+    ChannelTarget,
+    CommandTarget,
+    ThreadTarget,
+)
 from agent_comms.messaging.channels import ChannelMemberIndex
 from agent_comms.messaging.exporting import (
     WireExportBoundary,
@@ -34,7 +38,10 @@ from agent_comms.messaging.historical_views import (
     HistorySource,
 )
 from agent_comms.messaging.message_bus import MessageBus
-from agent_comms.messaging.message_notification import MessageNotification, NotificationWindow
+from agent_comms.messaging.message_notification import (
+    MessageNotification,
+    NotificationWindow,
+)
 from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
@@ -82,7 +89,10 @@ from agent_comms.registry.relationships import RelationshipSource
 from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
 from agent_comms.registry.shared_ledger import LedgerDocument
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.registry.thread_presentation import NoThreadPresentation, ThreadPresentation
+from agent_comms.registry.thread_presentation import (
+    NoThreadPresentation,
+    ThreadPresentation,
+)
 from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
 from agent_comms.registry.view_unread import transcript_read_state
 from agent_comms.storage.private_path import FileRevision

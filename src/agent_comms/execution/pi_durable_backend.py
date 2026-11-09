@@ -25,7 +25,7 @@ from agent_comms.execution.transcript_sources import TranscriptSource
 from agent_comms.nominal import field_codec
 from agent_comms.pi_payloads import PiResponseData
 from agent_comms.storage.locked_store import SQLiteFile
-from agent_comms.transcript.external_transcript import ExternalCut
+from agent_comms.transcript.external_transcript_rows import ExternalCut
 
 
 @dataclass(frozen=True)

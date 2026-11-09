@@ -16,14 +16,22 @@ from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.config_options import RunningSelection
 from agent_comms.coordination.errors import CoordinationError
 from agent_comms.errors import RelationViolationError
-from agent_comms.execution.child_process import NO_PROCESS, ProcessIdentity, ProcessState
+from agent_comms.execution.child_process import (
+    NO_PROCESS,
+    ProcessIdentity,
+    ProcessState,
+)
 from agent_comms.execution.imported_conversation import ImportedConversation
 from agent_comms.execution.imported_messages import ImportLimits
 from agent_comms.execution.launch_runtime import LaunchRuntime, TagListText
 from agent_comms.execution.native_arguments import ConfiguredBinary, NativeArguments
 from agent_comms.execution.native_entries import ImportedSessionWriter
 from agent_comms.execution.native_session_reopen import PiSessionId
-from agent_comms.execution.owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
+from agent_comms.execution.owner_lifecycle import (
+    LaunchInput,
+    OwnerLifecycle,
+    TaskLaunchInput,
+)
 from agent_comms.execution.pi_vocabulary import (
     NoThinkingOverride,
     ThinkingChoice,
@@ -54,8 +62,16 @@ from agent_comms.registry.registry_names import RegistryNames
 from agent_comms.registry.registry_store import RegistryEdit
 from agent_comms.registry.relationships import RelationshipStore
 from agent_comms.registry.thread_catalog import ThreadCatalog
-from agent_comms.registry.thread_identity import AgentThreadRole, ThreadIncarnation, ThreadRole
-from agent_comms.registry.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
+from agent_comms.registry.thread_identity import (
+    AgentThreadRole,
+    ThreadIncarnation,
+    ThreadRole,
+)
+from agent_comms.registry.thread_model import (
+    DeclaredModel,
+    ThreadModel,
+    UndeclaredModel,
+)
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.thread_text import ForkedParent, GivenThreadText, ThreadText

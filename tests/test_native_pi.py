@@ -10,6 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from native_proof_cases import read_context_proof, read_proof_rows, write_proof_rows
 
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.execution.native_arguments import SelectedModel
@@ -19,7 +20,10 @@ from agent_comms.execution.native_entries import (
     NativeInputEvidenceRead,
 )
 from agent_comms.execution.native_failures import NativePiUnavailable
-from agent_comms.execution.native_input_proof import NativeContextJournal, NativeContextProof
+from agent_comms.execution.native_input_proof import (
+    NativeContextJournal,
+    NativeContextProof,
+)
 from agent_comms.execution.native_pi import NativePiPromptRejected, NativePiRpcLaunch
 from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.native_session_reopen import PiSessionId
@@ -35,7 +39,10 @@ from agent_comms.execution.pi_events import (
 from agent_comms.execution.selected.actions import NoSelectedTools
 from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.execution.tracked_turn import TrackedTurnSession
-from agent_comms.execution.turn_failure import ModelRequestFailed, NativePiTerminalFailure
+from agent_comms.execution.turn_failure import (
+    ModelRequestFailed,
+    NativePiTerminalFailure,
+)
 from agent_comms.execution.turn_output import TurnOutput
 from agent_comms.execution.turn_usage import UsageAccount
 from agent_comms.execution.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog
@@ -43,7 +50,6 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, InputId
 from agent_comms.pi_payloads import ReportedText
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-from native_proof_cases import read_context_proof, read_proof_rows, write_proof_rows
 
 INPUT_ID = InputId('a' * 32)
 DIGEST = 'b' * 64

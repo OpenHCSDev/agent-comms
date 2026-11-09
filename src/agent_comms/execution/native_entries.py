@@ -27,7 +27,10 @@ from agent_comms.execution.native_input_proof import (
     NativeContextRecord,
     NativeInputLocation,
 )
-from agent_comms.execution.native_session_files import BusTranscriptFile, NativeSessionFiles
+from agent_comms.execution.native_session_files import (
+    BusTranscriptFile,
+    NativeSessionFiles,
+)
 from agent_comms.execution.native_session_reopen import (
     NativeReopenError,
     NativeSessionIdentity,

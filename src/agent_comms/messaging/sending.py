@@ -53,13 +53,15 @@ from agent_comms.messaging.task_sources import (
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.planning.goal_management import Goals
 from agent_comms.planning.orders import TodoStore
-from agent_comms.planning.task_scope import CurrentTaskScopeSelection, TaskScopeSelection
+from agent_comms.planning.task_scope import (
+    CurrentTaskScopeSelection,
+    TaskScopeSelection,
+)
 from agent_comms.projects.change_report import NoChangeReport, ReportEvidence
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
-from agent_comms.transcript.external_transcript import ExternalTranscript
 
 
 class AnswerAuthority(ABC):

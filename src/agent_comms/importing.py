@@ -23,7 +23,11 @@ from agent_comms.execution.imported_messages import (
     NoRetainedRequest,
 )
 from agent_comms.execution.imported_session_metadata import ImportedSessionMetadata
-from agent_comms.execution.native_entries import ImportedSessionWriter, NativeEntry, SessionEntry
+from agent_comms.execution.native_entries import (
+    ImportedSessionWriter,
+    NativeEntry,
+    SessionEntry,
+)
 from agent_comms.execution.turn_context import HistoricalInstructionProvenance
 from agent_comms.execution.turn_item import NativeItemId
 from agent_comms.installer.harness_install import Harness

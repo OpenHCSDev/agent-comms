@@ -15,10 +15,10 @@ from agent_comms.coordination.database import (
 )
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.coordination.tables.refusals import SendRefusal
+from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.installer.backup import BackupName, SavedFile, StoreBackup
 from agent_comms.storage.locked_store import RollbackRetained, SQLiteFile
 from agent_comms.storage.store_files import StoreBusy
-from agent_comms.transcript.external_transcript import ExternalTranscript
 
 
 def _try_external_writer(path, result):

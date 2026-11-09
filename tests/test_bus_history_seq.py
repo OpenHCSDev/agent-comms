@@ -11,7 +11,11 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.errors import HumanSendRefusedError
-from agent_comms.execution.native_transcript import NativeTranscript
+from agent_comms.execution.transcript_sources import (
+    NativeTranscript,
+    NativeTranscriptCursor,
+    TranscriptCursor,
+)
 from agent_comms.messaging.bus import Bus, BusSnapshot, PublicRecord
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.bus_tables import MessageIdentitySource
@@ -33,7 +37,6 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.private_path import FileIdentity
 from agent_comms.storage.typed_table import RowNotFoundError
-from agent_comms.transcript.transcripts import NativeTranscriptCursor, TranscriptCursor
 
 
 def channel_bus(root):

@@ -11,7 +11,11 @@ from pydantic import JsonValue
 
 from agent_comms.acp_extension import CoordinationChangedUpdate
 from agent_comms.cli_bridges.codex_records import CodexRolloutProvenance
-from agent_comms.cli_verbs.cli_command import PreparedTargetAction, TargetAction, TargetEdit
+from agent_comms.cli_verbs.cli_command import (
+    PreparedTargetAction,
+    TargetAction,
+    TargetEdit,
+)
 from agent_comms.cli_verbs.cli_result import TargetEditResult
 from agent_comms.context_store import (
     LATEST_CONTEXT,
@@ -24,7 +28,12 @@ from agent_comms.display_order import ChannelSort, ThreadSort
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.input_origin import HumanInputOrigin
 from agent_comms.execution.session_revision import SessionObservation
-from agent_comms.execution.turn_context import ContextSourceText, Provenance, SegmentManifest
+from agent_comms.execution.transcript_sources import TranscriptCursor
+from agent_comms.execution.turn_context import (
+    ContextSourceText,
+    Provenance,
+    SegmentManifest,
+)
 from agent_comms.history_views import RetiredViews
 from agent_comms.importing import ThreadImported
 from agent_comms.installer.harness_install import Harness
@@ -64,7 +73,10 @@ from agent_comms.registry.registry_document import (
     RegistrySlice,
     RegistrySnapshot,
 )
-from agent_comms.registry.relationships import SortableRelationshipGroup, ThreadCommsSnapshot
+from agent_comms.registry.relationships import (
+    SortableRelationshipGroup,
+    ThreadCommsSnapshot,
+)
 from agent_comms.registry.thread_identity import ClaimedIdentity, ThreadIncarnation
 from agent_comms.registry.thread_management import (
     ImportDirectory,
@@ -74,8 +86,12 @@ from agent_comms.registry.thread_management import (
 from agent_comms.registry.thread_presentation import ThreadPresentation
 from agent_comms.registry.thread_text import ExpectedSession
 from agent_comms.registry.threads import Thread
-from agent_comms.transcript.transcripts import TranscriptCursor
-from agent_comms.transport.request import ObservedRequest, ReadRequest, ToolRequest, tool_field
+from agent_comms.transport.request import (
+    ObservedRequest,
+    ReadRequest,
+    ToolRequest,
+    tool_field,
+)
 from agent_comms.transport.runtime_request import RuntimeRequest
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.working_memory.working_memory_labels import ModelLabel
