@@ -13,7 +13,7 @@ import pytest
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.comms import wire
 from agent_comms.errors import UnresolvedAttemptError
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, GoalWaitId, WatchPaths
 from agent_comms.planning.goal_attempts import (
     Generation,

@@ -37,7 +37,7 @@ from agent_comms.installer.upgrade import (
     Upgrade,
 )
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.messages import Message, TeamUpdatePosition
+from agent_comms.messaging.messages import Message, TeamUpdatePosition
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout, ScratchCheckout
 from agent_comms.projects.storage_rules import StorageRule
@@ -118,7 +118,7 @@ def test_runtime_producer_digests_ignore_foreign_source(installed_home, tmp_path
     home = Path(installed_home["HOME"])
     runtime = LaunchRuntime((home / ".local/share/agent-comms/current").resolve() / "bin/python")
     foreign = shared_clone(tmp_path / "review").path
-    source = foreign / "src/agent_comms/messages.py"
+    source = foreign / "src/agent_comms/messaging/messages.py"
     # A producer digest covers column declarations, not reader source (P978), so the
     # dirty review retypes one projection column.
     declared = '    teammate_lookup: ThreadLookup\n    indexes = (Index(("teammate_lookup", "seq")),)\n'
@@ -137,7 +137,7 @@ def test_runtime_producer_digests_ignore_foreign_source(installed_home, tmp_path
 import json
 import agent_comms
 from agent_comms import cli
-from agent_comms.messages import BusProjectionTables
+from agent_comms.messaging.messages import BusProjectionTables
 from agent_comms.package_stamp import STAMP
 from agent_comms.storage.typed_table import ProjectionProducer
 rows = BusProjectionTables.projection_rows()

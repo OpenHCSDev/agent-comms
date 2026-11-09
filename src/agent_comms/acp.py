@@ -59,7 +59,7 @@ from agent_comms.acp_request_consumer import AcpRequestConsumer
 from agent_comms.active_route import ActiveRoute
 from agent_comms.activity import FailedWakeDiagnostic
 from agent_comms.agent_backend import CompactionOutcome
-from agent_comms.channel_targets import NamedTarget
+from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms, wire
 from agent_comms.config_options import ConfigOptions

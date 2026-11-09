@@ -9,7 +9,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.turn_lease import NoFinishedTurn
-from agent_comms.messages import ConversationRole, NoticeRole
+from agent_comms.messaging.messages import ConversationRole, NoticeRole
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.planning.goal_actions import (
     EditGoalAction,

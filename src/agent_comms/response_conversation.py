@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING
 from agent_comms.audience_manifest import freeze_audience
 from agent_comms.bus import KeyedPrivateRecord
 from agent_comms.bus_publication import Delivered
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.delivery_policy import ResponseDeliveryPolicy
 from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
 from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement,

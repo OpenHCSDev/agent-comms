@@ -23,9 +23,9 @@ from agent_comms.tool_result import ToolResult
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
-    from agent_comms.messages import Message, MessageKind
+    from agent_comms.messaging.messages import Message, MessageKind
     from agent_comms.messaging.message_page import MessagePage, PageWindow
-    from agent_comms.read_basis import MessageDisplayScope
+    from agent_comms.messaging.read_basis import MessageDisplayScope
 
 
 class HistorySourceKey(NominalText):

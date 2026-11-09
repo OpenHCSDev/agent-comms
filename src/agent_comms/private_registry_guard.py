@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from agent_comms.acp_extension import CursorAdvancedUpdate, CursorScope
     from agent_comms.cursor_publication import CursorPublication
     from agent_comms.historical_native_inputs import HistoricalNativeAnswers
-    from agent_comms.messages import MessageReference
+    from agent_comms.messaging.message_reference import MessageReference
     from agent_comms.notification_assignment import (
         NotificationAssignmentRead,
         NotificationSelection,

@@ -21,7 +21,7 @@ from agent_comms.owner_connection import (
     OwnerReading,
     OwnerReplyConnection,
 )
-from agent_comms.read_basis import NoDisplaySelection, ReadAuthority
+from agent_comms.messaging.read_basis import NoDisplaySelection, ReadAuthority
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_store import RegistryCut
 from agent_comms.registry.thread_identity import ThreadIncarnation

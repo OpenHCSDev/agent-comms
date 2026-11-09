@@ -30,14 +30,15 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import (
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import (
     BusProjectionTables,
     BusRow,
     BusTables,
     Claimed,
     ClaimHistoryKind,
     ClaimNoticeKind,
+    ConversationActivity,
     HandoffKind,
     InfoKind,
     MembershipTransition,
@@ -51,7 +52,7 @@ from agent_comms.messages import (
 from agent_comms.messaging.bus_route_counts import BusRouteCounts
 from agent_comms.nominal.field_codec import GitCommitText, MessageId, MessageIdText
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.read_basis import RepliesDisplayScope
+from agent_comms.messaging.read_basis import RepliesDisplayScope
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.response_acknowledgement import (
     canonical_publication_key,
@@ -118,11 +119,16 @@ def projection_source_digest(source: Path) -> str:
     ).stdout.strip()
 
 
+def source_file(source: Path, owner: type) -> Path:
+    """The private source's copy of the module that declares `owner`."""
+    return source.joinpath(*owner.__module__.split(".")[1:]).with_suffix(".py")
+
+
 def edit_inside(
     source: Path, owner: type, member: str, change: Callable[[ast.stmt], None],
 ) -> None:
     """Change an actual declaration in the private source, never a digest return value."""
-    path = source.joinpath(*owner.__module__.split(".")[1:]).with_suffix(".py")
+    path = source_file(source, owner)
     module = ast.parse(path.read_text())
     declaration, = (node for node in module.body
                      if isinstance(node, ast.ClassDef) and node.name == owner.__name__)
@@ -165,7 +171,7 @@ import importlib, inspect, json, sys
 startup = sys.argv[1]
 if startup != "table-first":
     importlib.import_module(startup)
-from agent_comms.messages import TeamUpdatePosition
+from agent_comms.messaging.messages import TeamUpdatePosition
 if startup == "table-first":
     # The cold direct call: nothing has completed the writer family yet.
     from agent_comms.projection_source import ProjectionSource
@@ -175,7 +181,7 @@ if startup == "agent_comms.cli_verbs.reconcile_stores":
     first = stamped_digests()[TeamUpdatePosition.declared_name]
 else:
     first = TeamUpdatePosition.producer_digest()
-from agent_comms.messages import BusRecord
+from agent_comms.messaging.messages import BusRecord
 from agent_comms.projection_source import ProjectionSource
 writers = ProjectionSource.writers_for(TeamUpdatePosition)
 print(json.dumps(dict(
@@ -289,7 +295,7 @@ def test_activity_source_changes_only_sent_activity(
     pristine_projection: PristineProjection, projection_source: Path,
 ) -> None:
     before = json.loads(pristine_projection.digest)
-    path = projection_source / "messages.py"
+    path = source_file(projection_source, ConversationActivity)
     original = path.read_text()
     old = "return (SentActivity(message.sender, message.timestamp),)"
     assert original.count(old) == 1
@@ -903,8 +909,9 @@ def test_moving_a_producer_module_to_another_package_keeps_every_producer_digest
     checkout = projection_source.parents[1]
     # The codemod moves with `git mv`, so the copy's files are tracked first.
     subprocess.run(("git", "-C", str(checkout), "add", "-A"), check=True, capture_output=True)
+    package = ConversationActivity.__module__.split(".")[1]
     subprocess.run((sys.executable, str(Path(__file__).resolve().parents[1] / "tools" /
-                    "move_flat_modules.py"), str(checkout), "relocated", "messages"),
+                    "move_flat_modules.py"), str(checkout), "relocated", package),
                    check=True, capture_output=True, timeout=120)
-    assert (projection_source / "relocated" / "messages.py").exists()
+    assert source_file(projection_source / "relocated", ConversationActivity).exists()
     assert projection_source_digest(projection_source) == pristine_projection.digest

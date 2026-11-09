@@ -12,7 +12,7 @@ from functools import cached_property
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, Generic, Self, TypeVar
 
-from agent_comms.channel_targets import IncarnationThreadTarget, ThreadTarget
+from agent_comms.messaging.channel_targets import IncarnationThreadTarget, ThreadTarget
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import SlicePolicy
 from agent_comms.registry.thread_identity import ThreadIncarnation
@@ -21,7 +21,7 @@ from agent_comms.tool_result import ToolResult
 
 if TYPE_CHECKING:
     from agent_comms.historical_views import HistorySource
-    from agent_comms.messages import MessageHistory
+    from agent_comms.messaging.messages import MessageHistory
     from agent_comms.registry.registry_document import RegistrySnapshot
 
 

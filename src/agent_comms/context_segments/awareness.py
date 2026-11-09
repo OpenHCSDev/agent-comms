@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from agent_comms.execution.turn_context import InstructionSegment, WireProvenance
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import FieldCodec
 
 

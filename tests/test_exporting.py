@@ -8,7 +8,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.bus import Bus, ClaimRecord
-from agent_comms.channels import AnyOfMatch, ParticipantsView, ViewPredicate
+from agent_comms.messaging.channels import AnyOfMatch, ParticipantsView, ViewPredicate
 from agent_comms.cli import CliInvocation
 from agent_comms.comms import Comms
 from agent_comms.envelope_claim_transitions import UnscopedClaims
@@ -27,7 +27,7 @@ from agent_comms.exporting import (
     WireExportLimit,
     WireTranscriptExporter,
 )
-from agent_comms.messages import ClaimNoticeKind, InfoKind, Message
+from agent_comms.messaging.messages import ClaimNoticeKind, InfoKind, Message
 from agent_comms.nominal.field_codec import ClaimId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread

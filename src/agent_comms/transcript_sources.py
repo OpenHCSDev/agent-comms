@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from agent_comms.execution.turn_context import SegmentManifest
     from agent_comms.execution.turn_digests import TurnBound
     from agent_comms.external_transcript import ExternalPageRow
-    from agent_comms.message_reference import MessageReference
+    from agent_comms.messaging.message_reference import MessageReference
     from agent_comms.registry.threads import Thread, ThreadProvenance
     from agent_comms.transcript_events import TextTranscript, TranscriptEvent
     from agent_comms.transcript_routes import TranscriptRoutes, _SessionRoutes

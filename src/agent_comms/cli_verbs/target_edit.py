@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.cli_command import TargetActionCommand, TargetEdit
 from agent_comms.cli_result import CliResult
 from agent_comms.cli_verbs.target_action import TargetActionCliCommand

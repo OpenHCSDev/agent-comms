@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Annotated, Self
 
 from agent_comms.catalog_document import CatalogAccess
-from agent_comms.channel_targets import SurroundingChannel
+from agent_comms.messaging.channel_targets import SurroundingChannel
 from agent_comms.cli_command import ChannelBound, MultipleTargets, TargetActionCommand
 from agent_comms.cli_commands import ThreadPinnedResult
 from agent_comms.cli_support.named import NamedCliCommand

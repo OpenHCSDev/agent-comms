@@ -28,7 +28,7 @@ from agent_comms.execution_states import (
     FailedExecution,
 )
 from agent_comms.lifecycle_capability import Active, Complete, Failed, Successful, Terminal
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.obligation_states import PublishedResponse, ResponseState
 from agent_comms.response_acknowledgement import canonical_publication_key

@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.input_disposition import InputDispositions
@@ -22,7 +22,7 @@ from agent_comms.planning.goal_actions import (
 from agent_comms.planning.goal_presentation import GoalExecution
 from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.read_basis import NamedViewer
+from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.tools.goals import CommsGoalTool

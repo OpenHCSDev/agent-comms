@@ -15,16 +15,16 @@ from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from itertools import product
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, TextIO
+from typing import Annotated, ClassVar, NoReturn, Self, TYPE_CHECKING, TextIO
 
 from agent_comms.activity_clocks import ChannelActivity
-from agent_comms.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.coordination.errors import DMPaintedBoundChanged, DMScopeChanged
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.launch_runtime import CallingThreadUnavailable
 from agent_comms.mentions import ThreadMention
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import MessageInput
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import MessageInput
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     CapabilityUnion,
@@ -43,6 +43,25 @@ from agent_comms.recorded_bus import RecordedBus, RecordedBusIdentity
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.storage.bound_set import BoundSet
 from agent_comms.storage.private_path import FileObservation, MissingFile
+
+if TYPE_CHECKING:
+    import sqlite3
+
+    from agent_comms.bus import Bus, BusReader, BusSnapshot
+    from agent_comms.historical_views import DMHistory, HistoricalSelection, HistorySource
+    from agent_comms.history_views import HistoryViews
+    from agent_comms.messaging.messages import Message, MessageKind
+    from agent_comms.messaging.channels import TagChannel
+    from agent_comms.messaging.message_bus import MessageBus
+    from agent_comms.messaging.message_page import MessagePage, PageBounds
+    from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
+    from agent_comms.messaging.read_selection import CapturedSelection
+    from agent_comms.presentation import BusPresentation
+    from agent_comms.private_registry_guard import RegistryPrivacy
+    from agent_comms.registry.registration import Registration
+    from agent_comms.registry.registry_document import RegistrySnapshot, UserThreadLookup
+    from agent_comms.registry.threads import Thread
+    from agent_comms.registry_provenance import RegistryProvenance
 
 
 class DisplayViewer(SubclassUnion, affix="Viewer"):
@@ -340,27 +359,6 @@ class LineOutput:
         self.stream.flush()
 
 
-
-if TYPE_CHECKING:
-    import sqlite3
-
-    from agent_comms.bus import Bus, BusReader, BusSnapshot
-    from agent_comms.channels import TagChannel
-    from agent_comms.historical_views import DMHistory, HistoricalSelection, HistorySource
-    from agent_comms.history_views import HistoryViews
-    from agent_comms.messages import Message, MessageKind
-    from agent_comms.messaging.message_bus import MessageBus
-    from agent_comms.messaging.message_page import MessagePage, PageBounds
-    from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
-    from agent_comms.messaging.read_selection import CapturedSelection
-    from agent_comms.presentation import BusPresentation
-    from agent_comms.private_registry_guard import RegistryPrivacy
-    from agent_comms.registry.registration import Registration
-    from agent_comms.registry.registry_document import RegistrySnapshot, UserThreadLookup
-    from agent_comms.registry.threads import Thread
-    from agent_comms.registry_provenance import RegistryProvenance
-
-
 @dataclass(frozen=True, slots=True)
 class CursorRow:
     """One actor's cursor on one (target, sender) key: the row `read_cursors` reads."""
@@ -567,7 +565,7 @@ class AllConversation(Conversation):
         return self
 
     def scope(self, snapshot: RegistryProvenance) -> AllChannelDisplayScope:
-        from agent_comms.channels import AnyChannel
+        from agent_comms.messaging.channels import AnyChannel
 
         return AllChannelDisplayScope(AnyChannel.address())
 
@@ -1260,5 +1258,3 @@ class UnreadQuery:
         return replace(self, lower_bound=max(self.lower_bound, floor),
                        predicate=f"({self.predicate}) AND {targets.within('target')}",
                        parameters=(*self.parameters, *targets.parameters))
-
-

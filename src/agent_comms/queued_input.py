@@ -38,7 +38,7 @@ from agent_comms.input_attempt import InputAttempt, ReservedInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import AcpInputKey, InputKey
 from agent_comms.input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
-from agent_comms.messages import Message
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId, InputId, RootId
 from agent_comms.ordinary_turn_rules import MissingAcceptedInputCheck
 from agent_comms.planning.goals import GoalDeclaration, NoGoal

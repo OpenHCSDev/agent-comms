@@ -5,7 +5,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Annotated, Literal
 
-from agent_comms.messages import Message
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import MessageId, WireName
 from agent_comms.tool_result import ToolResult

@@ -67,7 +67,7 @@ from agent_comms.message_notification import (
     NotificationPass,
     NotificationWindow,
 )
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
 from agent_comms.nominal.field_codec import (
     DeclaredError,
@@ -85,7 +85,7 @@ from agent_comms.notification_read import (
 from agent_comms.notification_reads import NotificationRead
 from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState, WireRevision
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.read_basis import DisplayCut, NoDisplaySelection
+from agent_comms.messaging.read_basis import DisplayCut, NoDisplaySelection
 from agent_comms.registry.registry_document import (
     RegistrySnapshot,
     RosterVisibility,

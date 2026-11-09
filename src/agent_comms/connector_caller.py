@@ -13,7 +13,7 @@ from agent_comms.bus_publication import DirectorOrigin
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RootId
 from agent_comms.planning.order_words import DirectiveText
-from agent_comms.read_basis import OperatorOutcomes
+from agent_comms.messaging.read_basis import OperatorOutcomes
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.tool_caller import (
     ForkCaller,

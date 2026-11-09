@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import DMPaintedBoundChanged, ReadAgain
 from agent_comms.execution.child_process import ProcessIdentity
@@ -25,7 +25,7 @@ from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.page_traversal import PageCursor
 from agent_comms.presentation import ReadThrough
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.read_basis import (
+from agent_comms.messaging.read_basis import (
     ChannelConversation,
     ConversationCursor,
     DMConversation,
@@ -214,7 +214,7 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
             sys.executable,
             "-c",
             "import os, sys\n"
-            "from agent_comms.channel_targets import ThreadTarget\n"
+            "from agent_comms.messaging.channel_targets import ThreadTarget\n"
             "from agent_comms.comms import wire\n"
             "from pathlib import Path\n"
             "from agent_comms.projects.checkouts import Checkout\n"
@@ -271,7 +271,7 @@ def test_shown_only_property_across_pages_modes_and_reopen(tmp_path, seed):
 
 
 def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
-    from agent_comms.read_basis import AllChannelDisplayScope
+    from agent_comms.messaging.read_basis import AllChannelDisplayScope
 
     class AlternateMessages(AllChannelDisplayScope):
         @property
@@ -313,7 +313,7 @@ def test_all_read_uses_one_watermark_without_sparse_sequences(tmp_path):
     comms.views.mark_user_view_read("#any", worktree=Checkout(tmp_path))
     snapshot = comms.registry.snapshot()
     seen = comms.bus.reads.cursor(viewer, snapshot)
-    from agent_comms.read_basis import AllConversation
+    from agent_comms.messaging.read_basis import AllConversation
     assert tuple(seen.conversations) == (AllConversation(),)
     assert seen.for_conversation(AllConversation()).high_water == messages[-1].seq
     assert all(message.seq in seen.for_conversation(ReadLedger.conversation(message, snapshot))

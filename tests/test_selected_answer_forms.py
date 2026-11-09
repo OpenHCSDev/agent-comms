@@ -24,7 +24,7 @@ from agent_comms.execution.selected.source_batch import (
     SelectedSource,
     SelectedSourceBatch,
 )
-from agent_comms.messages import InfoKind
+from agent_comms.messaging.messages import InfoKind
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from bus_record_fixture import prepare_native_comms

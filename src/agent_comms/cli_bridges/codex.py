@@ -36,7 +36,7 @@ from agent_comms.cli_bridges.shared import (
 from agent_comms.cli_protocol import EarlierItems
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.harness_delivery_states import AcceptedOutcome, Outcome
-from agent_comms.messages import Message
+from agent_comms.messaging.messages import Message
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import UnreportedTools
 from agent_comms.runtime_updates import (

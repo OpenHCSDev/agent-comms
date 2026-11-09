@@ -1,4 +1,4 @@
-from agent_comms.messages import ConversationRole, InfoKind, Message
+from agent_comms.messaging.messages import ConversationRole, InfoKind, Message
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.projects.checkouts import Checkout

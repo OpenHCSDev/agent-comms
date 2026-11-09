@@ -26,8 +26,8 @@ from agent_comms.activity import ActivityCapture, ObservedActivity
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.catalog_document import CatalogAccess
 from agent_comms.change_report import CitationProject
-from agent_comms.channel_targets import ResolvedTarget, SurroundingChannel, TeammatesTag
-from agent_comms.channels import Channel, ChannelMemberIndex
+from agent_comms.messaging.channel_targets import ResolvedTarget, SurroundingChannel, TeammatesTag
+from agent_comms.messaging.channels import Channel, ChannelMemberIndex
 from agent_comms.errors import OutsideRegistrySlice, RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.turn_lease import (

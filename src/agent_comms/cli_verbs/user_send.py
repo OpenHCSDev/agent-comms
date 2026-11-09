@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.cli_commands import UserMessageSentResult, WorktreeArgument
 from agent_comms.cli_result import CliResult
 from agent_comms.cli_support.publishing import PublishingCliCommand

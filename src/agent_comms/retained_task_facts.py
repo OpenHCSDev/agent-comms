@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_attempt import StoredInput
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import ClaimMessage, Message
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import ClaimMessage, Message
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.text_digest import TextDigest

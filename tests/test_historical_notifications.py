@@ -15,7 +15,7 @@ from agent_comms.assignment_states import (
     IgnoredAssignment,
 )
 from agent_comms.bus import Bus
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination
@@ -39,7 +39,7 @@ from agent_comms.notification_progress import (
     WorkingTakenProgress,
 )
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.read_basis import ReadCursor
+from agent_comms.messaging.read_basis import ReadCursor
 from agent_comms.registry.thread_identity import (
     AgentThreadRole,
     UserThreadRole,
@@ -231,7 +231,7 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
     recipient, = old.bus.bus.delivery(messages[0].seq).recipients
     from agent_comms.activity import ActivityState, ObservedActivity, ReadyDrainReadiness
     from agent_comms.agent_activity import LiveRecipientActivity
-    from agent_comms.message_reference import MessageReference
+    from agent_comms.messaging.message_reference import MessageReference
     from agent_comms.notification_assignment import AssignmentActivity
     from agent_comms.notification_progress import (
         IgnoredProgress,

@@ -33,7 +33,7 @@ from agent_comms.installer.practice import PracticeCopy, PracticeMeasurement
 from agent_comms.installer.probes.inputs import SelectedInputsProbe
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import MessageId, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import (

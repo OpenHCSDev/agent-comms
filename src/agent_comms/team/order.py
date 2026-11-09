@@ -59,8 +59,8 @@ from agent_comms.planning.goal_actions import CreateProblemGoalAction, OrderGoal
 from agent_comms.planning.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
 from agent_comms.held_orders import HeldOrders
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
 from agent_comms.planning.plan_phases import OrderPhase, PlanPhase
 from agent_comms.notification_evidence import AllOutcomes

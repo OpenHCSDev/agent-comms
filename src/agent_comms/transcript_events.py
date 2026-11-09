@@ -14,8 +14,8 @@ from pydantic import JsonValue
 from agent_comms import tool_declaration
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.history_view import Dated
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     ActivityExclude,

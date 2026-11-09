@@ -12,10 +12,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.agent_activity import AgentActivity, RecordedRecipientActivity
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.nominal.field_codec import MessageId, TaggedRecordMember, TaggedUnion, ThreadLookup
 from agent_comms.notification_assignment import (

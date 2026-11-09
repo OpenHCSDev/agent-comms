@@ -53,7 +53,7 @@ if TYPE_CHECKING:
     )
     from agent_comms.execution.native_runtime_input import NativeRuntimeInput
     from agent_comms.historical_native_inputs import HistoricalNativeInput
-    from agent_comms.message_reference import MessageReference
+    from agent_comms.messaging.message_reference import MessageReference
     from agent_comms.transcript_events import TranscriptEvent
 
 

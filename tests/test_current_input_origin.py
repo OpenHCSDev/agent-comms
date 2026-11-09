@@ -7,7 +7,7 @@ import pytest
 from acp.schema import TextContentBlock
 
 from agent_comms.acp_extension import QueuePromptRequest, decode_request, encode_request
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.controller import (
     NO_CONTROLLER,
     CancelledOutcome,
@@ -20,8 +20,8 @@ from agent_comms.input_attempt import ReservedInput
 from agent_comms.input_key import AcpInputKey
 from agent_comms.input_origin import HumanInputOrigin, UnattributedInputOrigin, WireInputOrigin
 from agent_comms.lifecycle_capability import Unresolved
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message, NoticeRole
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message, NoticeRole
 from agent_comms.nominal.field_codec import (
     AcpSessionId,
     FieldCodec,

@@ -12,7 +12,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.tables.executions import NoPointedExecution
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.turn_phase import CancellingPhase
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread

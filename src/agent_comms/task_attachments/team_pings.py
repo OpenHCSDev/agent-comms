@@ -12,13 +12,13 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from agent_comms.channel_targets import ThreadTarget
+from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.disclosure_text import AccentTone, ViewHeading, ViewTable, WarningTone
 from agent_comms.errors import RelationViolationError
 from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
 from agent_comms.heartbeat_subjects import HeartbeatSubject, TeamHistory
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import (
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import (
     ConversationRole,
     Message,
     MessageRole,

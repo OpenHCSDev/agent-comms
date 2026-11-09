@@ -3,8 +3,8 @@
 import pytest
 
 from agent_comms.acp import CommsAgent
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.channels import AnyChannel
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.channels import AnyChannel
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import IdentityConflict, PublicationActivationBlocked
 from agent_comms.cursor_owner import UnstartedCursor

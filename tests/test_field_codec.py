@@ -9,7 +9,7 @@ from pydantic import BaseModel, JsonValue
 from typing_extensions import TypeForm
 
 from agent_comms.execution.turn_item import NativeItemId
-from agent_comms.messages import (
+from agent_comms.messaging.messages import (
     ConversationRole,
     InfoKind,
     JoinedMembership,

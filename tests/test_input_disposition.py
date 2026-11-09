@@ -24,7 +24,7 @@ from agent_comms.input_attempt import (
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import AcpInputKey, BusInputKey
 from agent_comms.input_origin import DeliveredInput, UndeliveredInput, WireInputOrigin
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import InputId, MessageId, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread

@@ -16,8 +16,8 @@ from agent_comms.activity import Activity, ActivityData, ActivityState, Observed
 from agent_comms.activity_clocks import ChannelActivity
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.bus import DisplayUnread
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.channels import Channel, ChannelMemberIndex, Channels
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.channels import Channel, ChannelMemberIndex, Channels
 from agent_comms.cli_result import CliResult
 from agent_comms.coordination.errors import DMPaintedBoundChanged, StaleRevision
 from agent_comms.display_order import ChannelSort, NameChannelSort
@@ -25,7 +25,7 @@ from agent_comms.display_references import CurrentDisplayReferences
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.mentions import MentionCandidate
 from agent_comms.message_notification import MessageNotification, NotificationPass
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
 from agent_comms.messaging.read_ledger import NoReadNotice, ReadNotice
 from agent_comms.messaging.read_selection import CapturedSelection
@@ -47,7 +47,12 @@ from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.planning.goal_presentation import GoalExecution
 from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.planning.orders import TodoStore
-from agent_comms.read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer
+from agent_comms.messaging.read_basis import (
+    AnonymousViewer,
+    ChannelDisplayScope,
+    DisplayViewer,
+    NamedViewer,
+)
 from agent_comms.recorded_bus import NoRecordedBus, RecordedBusIdentity
 from agent_comms.registry.registry_document import DEFAULT_ROSTER, RosterVisibility
 from agent_comms.registry.thread_presentation import (

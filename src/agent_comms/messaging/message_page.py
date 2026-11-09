@@ -13,9 +13,9 @@ from dataclasses import (
 from typing import ClassVar
 
 from agent_comms.bus import BusReader
-from agent_comms.messages import Message, MessageKind
+from agent_comms.messaging.messages import Message, MessageKind
 from agent_comms.page_traversal import OlderTraversal, PageCursor, PageTraversal
-from agent_comms.read_basis import (
+from agent_comms.messaging.read_basis import (
     DisplayBasis,
     ListedDeliveries,
     MessageDisplayScope,

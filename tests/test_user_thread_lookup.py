@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 
-from agent_comms.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout

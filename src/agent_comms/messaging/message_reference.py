@@ -21,8 +21,8 @@ from agent_comms.projection_source import ProducedRow, ProjectionSource
 from agent_comms.storage.typed_table import TypedRow
 
 if TYPE_CHECKING:
+    from agent_comms.messaging.read_basis import ReadCursor
     from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
-    from agent_comms.read_basis import ReadCursor
     from agent_comms.registry.registry_document import RegistrySnapshot
 
 
@@ -116,6 +116,7 @@ class BridgeStart(RecordMember, AfterMessageStart, BridgePosition):
 @dataclass(frozen=True, slots=True)
 class BridgeBeginning(RecordMember, StreamBeginning, BridgePosition):
     """An empty bus starts the bridge stream before its first message."""
+
 
 @dataclass(frozen=True, slots=True)
 class FirstUnreadStart(NullMember, StreamBeginning):

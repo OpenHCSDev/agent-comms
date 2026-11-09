@@ -10,7 +10,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import agent_events as events
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.cli_bridges.hook_read_gate import ReadInput
 from agent_comms.context_reading import ContextUsage
 from agent_comms.execution.selected.tool_broker import (

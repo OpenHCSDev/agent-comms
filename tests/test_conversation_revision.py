@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.comms import wire
 from agent_comms.historical_views import (
     ChannelDisplayHistory,

@@ -49,7 +49,7 @@ from agent_comms.execution.turn_context import (
     ResourceProvenance,
     WireProvenance,
 )
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup
 from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.registration import Registration

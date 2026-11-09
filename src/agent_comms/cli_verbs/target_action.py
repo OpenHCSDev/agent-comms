@@ -6,7 +6,7 @@ from typing import Annotated
 
 from pydantic import JsonValue
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_result import CliResult
 from agent_comms.cli_support.target_arguments import TargetArguments

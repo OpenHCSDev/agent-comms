@@ -24,7 +24,7 @@ from agent_comms.harness_delivery_states import (
 )
 from agent_comms.harness_install import HarnessSession
 from agent_comms.input_origin import HarnessAttemptOrigin
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import MessageId, ThreadLookup, TranscriptRecordId
 from agent_comms.storage.typed_table import (
     LOCAL_TABLE_SOURCE,

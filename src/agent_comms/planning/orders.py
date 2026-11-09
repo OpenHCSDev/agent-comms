@@ -69,7 +69,12 @@ from agent_comms.build_identity import BuildIdentity, CommitInstallation, Instal
 from agent_comms.bus import BusReader
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.change_report import CitationProject, CitedRevisions, CommitRevision, Declaration, FileLine, MainRevision, NoSourceReference, OrderRoots, SourceReference, SourceRevision, SourceRoots, SourceText, WorkingTree
-from agent_comms.channel_targets import CommandTarget, CommsTag, IncarnationThreadTarget, NamedTarget
+from agent_comms.messaging.channel_targets import (
+    CommandTarget,
+    CommsTag,
+    IncarnationThreadTarget,
+    NamedTarget,
+)
 from agent_comms.execution.child_process import ChildResult, OrderCheckFailedError
 from agent_comms.command import Command
 from agent_comms.coordination.session import NativeCapture
@@ -80,8 +85,8 @@ from agent_comms.planning.goals import CheckedCommit, OrderCheck
 from agent_comms.head_review import HeadReview, HeadReviewOrder, HeadReviewRelation, HeadReviewStatus, IntegrationInput, MergeArm, MergeHeadReview, PreparedHeadReview, PullRequestHead, ReadPullRequestHead, UnpromotedHeadReview, UntouchedMergeArm
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import DefaultNonNull, Description, DisclosedRecord, FieldCodec, GitCommitText, GoalId, HuntId, MalformedRecord, MessageId, NullMember, OrderId, RecordProblems, ThreadLookup, ToolCallId, WireOmitDefault, WireTransient, boundary_decoder
 from agent_comms.order_runs import OrderRun

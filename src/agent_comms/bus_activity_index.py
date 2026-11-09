@@ -8,7 +8,7 @@ from typing import Annotated
 
 from agent_comms import activity_clocks
 from agent_comms.class_fact import ClassFact
-from agent_comms.messages import BusProjectionTables
+from agent_comms.messaging.messages import BusProjectionTables
 from agent_comms.projection_source import ProducedRow
 from agent_comms.storage.typed_table import Column
 

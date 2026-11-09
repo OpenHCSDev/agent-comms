@@ -31,7 +31,7 @@ from agent_comms.cli_result import CliResult
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.turn_item import NativeItemId, PiRequestKey
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,

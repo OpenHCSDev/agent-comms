@@ -15,14 +15,14 @@ from agent_comms.bus_tables import (
     ReceivedSource,
     SentSource,
 )
-from agent_comms.channel_targets import ThreadTarget
+from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.class_fact import ClassFact
 from agent_comms.errors import (
     CommittedMessageError,
     HumanSendRefusedError,
     RelationViolationError,
 )
-from agent_comms.messages import BusRecord, BusRow, Message
+from agent_comms.messaging.messages import BusRecord, BusRow, Message
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, ThreadLookup
 from agent_comms.projection_source import ProducedRow
 from agent_comms.projects.checkouts import Checkout

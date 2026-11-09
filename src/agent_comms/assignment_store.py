@@ -14,7 +14,7 @@ from agent_comms.coordination.errors import (
 from agent_comms.coordination.results import AlreadyApplied, Applied
 from agent_comms.coordination.session import CoordinationSession
 from agent_comms.coordination.tables.assignments import WakeAssignment
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import AssignmentId, ThreadLookup
 from agent_comms.storage.typed_table import sql_literal
 

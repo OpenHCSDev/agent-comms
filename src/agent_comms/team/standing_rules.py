@@ -30,7 +30,7 @@ from typing import (
 )
 
 from agent_comms.bus import BusReader
-from agent_comms.channel_targets import ThreadTarget
+from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.execution.child_process import ProcessIdentity, ResidentMemory
 from agent_comms.comms import Comms
 from agent_comms.declared_verb import DeclaredVerb
@@ -39,8 +39,8 @@ from agent_comms.planning.goal_management import Goals
 from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.heartbeat_subjects import AnswerSubject, HeadSubject, HeartbeatSubject, TeammateSubject
 from agent_comms.held_orders import HeldOrders
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.declared_family import DeclaredFamily, RegisteredFamily
 from agent_comms.nominal.field_codec import DefaultExternalName, DefaultedName, FieldCodec, OrderId
 from agent_comms.owner_requests import OwnerRequestId, RequestDirective

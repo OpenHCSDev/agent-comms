@@ -7,8 +7,8 @@ from agent_comms.cli_commands import ConstraintPinnedResult, _message_reference
 from agent_comms.cli_result import CliResult
 from agent_comms.cli_support.constraint_pin import OriginalConstraintPin
 from agent_comms.comms import Comms
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import Argument, Normalize
 
 

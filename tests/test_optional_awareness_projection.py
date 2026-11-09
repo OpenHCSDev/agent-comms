@@ -23,7 +23,7 @@ from agent_comms.coordination.tables.executions import WireOrigin
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.selected.source_batch import SelectedSource
 from agent_comms.lifecycle_capability import Executing
-from agent_comms.messages import NoticeRole
+from agent_comms.messaging.messages import NoticeRole
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.projects.checkouts import Checkout

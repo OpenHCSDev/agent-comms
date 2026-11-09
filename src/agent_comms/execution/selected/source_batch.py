@@ -10,7 +10,7 @@ from agent_comms.execution.turn_context import (
     ReplyRouteSegment,
     WireProvenance,
 )
-from agent_comms.messages import (
+from agent_comms.messaging.messages import (
     InfoKind,
     Message,
 )

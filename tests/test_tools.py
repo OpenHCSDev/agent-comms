@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.channels import AnyChannel
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.channels import AnyChannel
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.message_notification import MessageNotification
 from agent_comms.presentation import SentMessageSummary

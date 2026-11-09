@@ -17,7 +17,7 @@ import pytest
 
 from agent_comms.agent_inbox import TakenInputStart
 from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
-from agent_comms.channel_targets import ThreadTarget
+from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_protocol import (
     ClaudeMonitorFrame,
@@ -70,8 +70,8 @@ from agent_comms.harness_delivery_states import (
 )
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.launch_runtime import InstalledSource, LaunchRuntime, RuntimeReplacedError
-from agent_comms.message_reference import BridgeStart, MessageReference
-from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole, QuestionKind
+from agent_comms.messaging.message_reference import BridgeStart, MessageReference
+from agent_comms.messaging.messages import AlertKind, InfoKind, Message, NoticeRole, QuestionKind
 from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.nominal.field_codec import FieldCodec, InputId
 from agent_comms.projects.checkouts import Checkout

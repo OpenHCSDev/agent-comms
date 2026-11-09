@@ -23,7 +23,7 @@ from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import Thread
 
 if TYPE_CHECKING:
-    from agent_comms.messages import Message
+    from agent_comms.messaging.messages import Message
 
 
 class GoalRecords(GoalWaitRecovery):

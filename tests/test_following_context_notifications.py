@@ -29,7 +29,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import InputKey
 from agent_comms.input_origin import WireInputOrigin
 from agent_comms.lifecycle_capability import Unresolved
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.notification_progress import DeliveryProgress, ShownToModelProgress

@@ -6,10 +6,10 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.turn_context import Provenance, WireProvenance
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, TurnId, WireOmitDefault
 from agent_comms.owner_requests import OwnerRequestId, RequestDirective
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from agent_comms.harness_delivery_states import Outcome
     from agent_comms.input_attempt import StoredInput
     from agent_comms.input_disposition import InputDispositions
-    from agent_comms.messages import Message
+    from agent_comms.messaging.messages import Message
     from agent_comms.planning.goal_management import Goals
     from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.registry.threads import Thread

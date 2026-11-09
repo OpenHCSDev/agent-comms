@@ -9,9 +9,17 @@ from dataclasses import dataclass
 from itertools import batched
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms import messages
 from agent_comms.errors import RelationViolationError
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import (
+    Addressed,
+    BusProjectionTables,
+    BusRecord,
+    BusRow,
+    BusTables,
+    MessageInput,
+    MessageKind,
+)
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 from agent_comms.storage.typed_table import (
     Column,
@@ -25,8 +33,8 @@ from agent_comms.storage.typed_table import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.channel_targets import NamedTarget
-    from agent_comms.read_basis import RepliesDisplayScope
+    from agent_comms.messaging.channel_targets import NamedTarget
+    from agent_comms.messaging.read_basis import RepliesDisplayScope
     from agent_comms.registry_provenance import RegistryProvenance
 
 
@@ -37,13 +45,13 @@ class ReferenceMatch(TypedRow):
     matched: bool
 
 
-class BusSchema(ComposedSchemas, messages.BusTables, ProjectionProducerTables, messages.BusProjectionTables,
+class BusSchema(ComposedSchemas, BusTables, ProjectionProducerTables, BusProjectionTables,
                 declared_name=None):
     """One file reconciles its declared families using each family's carry policy."""
 
 
 @dataclass(frozen=True)
-class ParticipantSource(messages.BusProjectionTables, declared_name=None):
+class ParticipantSource(BusProjectionTables, declared_name=None):
     """A recorded participant's positions in actual frozen deliveries."""
 
     lookup: Annotated[ThreadLookup, Column(primary_key=True)]
@@ -109,12 +117,12 @@ class DirectReplySource(AwaitingAnswerSource, declared_name=None):
 
 
 @dataclass(frozen=True)
-class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
+class MessageIdentitySource(MessageReference, BusProjectionTables):
     """A record's existing reference, searchable without recomputing its content hash."""
 
     @classmethod
     def practice_sequence(cls, db: sqlite3.Connection, source: TableSource) -> int:
-        through = messages.BusRow.last_seq(db, table_source=source)
+        through = BusRow.last_seq(db, table_source=source)
         if through:
             expected = cls.require(db, table_source=source, seq=through)
             if cls.require(db, seq=through) != expected:
@@ -176,7 +184,7 @@ class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
     ) -> tuple[MessageReference, ...]:
         """Validate a batch's identities and select its exact reply destination once."""
         predicate, parameters = route.answered_sql(
-            messages.Addressed.table._sql("addressed.{target}"), "identity.sender", snapshot,
+            Addressed.table._sql("addressed.{target}"), "identity.sender", snapshot,
         )
         query = (
             "WITH supplied AS (SELECT key AS position, "
@@ -187,7 +195,7 @@ class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
             f"COALESCE(({predicate}),0) AS answers FROM supplied "
             f'LEFT JOIN "{cls.declared_name}" AS identity ON identity.seq=supplied.seq '
             "AND identity.message_id=supplied.message_id "
-            f'LEFT JOIN "{messages.Addressed.table.declared_name}" AS addressed '
+            f'LEFT JOIN "{Addressed.table.declared_name}" AS addressed '
             "ON addressed.seq=identity.seq) "
             "SELECT seq, message_id, matched FROM selected "
             "WHERE NOT matched OR answers ORDER BY position"
@@ -226,7 +234,7 @@ class AuthoredAnswers(RecordedAnswers):
 
 
 @dataclass(frozen=True)
-class AnsweredSource(messages.BusProjectionTables):
+class AnsweredSource(BusProjectionTables):
     original: Annotated[int, Column(
         primary_key=True, references=TableReference(MessageIdentitySource, ("seq",)),
     )]
@@ -291,7 +299,7 @@ class AnsweredSource(messages.BusProjectionTables):
     @classmethod
     def latest_reply(
         cls, db: sqlite3.Connection, sequences: tuple[int, ...], responders: frozenset[str],
-    ) -> tuple[messages.BusRecord, ...]:
+    ) -> tuple[BusRecord, ...]:
         """The newest reply the responders sent naming any of those originals, from one read."""
         if not sequences:
             return ()
@@ -305,15 +313,15 @@ class AnsweredSource(messages.BusProjectionTables):
             + f'AND author.sender IN ({replying}) ORDER BY answered.seq DESC LIMIT 1',
             (*sequences, *responders),
         )
-        headers = (messages.BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
+        headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
     @classmethod
     def unanswered(
         cls, db: sqlite3.Connection, scope: RepliesDisplayScope,
         since: float, before: float, upper: int, limit: int,
-        kinds: tuple[type[messages.MessageKind], ...] = (),
-    ) -> tuple[messages.BusRecord, ...]:
+        kinds: tuple[type[MessageKind], ...] = (),
+    ) -> tuple[BusRecord, ...]:
         """Read unanswered originals through the existing reference and sender indexes."""
         requesters, responders = scope.second_names - scope.first_names, scope.first_names
         eligible, eligibility = AwaitingAnswerSource.recipient_predicate(
@@ -322,15 +330,15 @@ class AnsweredSource(messages.BusProjectionTables):
         asking = ",".join("?" for _ in requesters)
         replying = ",".join("?" for _ in responders)
         kind_filter = (
-            "AND " + messages.MessageInput.table._sql("message.{type}")
+            "AND " + MessageInput.table._sql("message.{type}")
             + " IN (" + ",".join("?" for _ in kinds) + ") "
             if kinds else ""
         )
         query = (
             f'SELECT asked.seq FROM "{MessageIdentitySource.declared_name}" AS asked '
-            f'JOIN "{messages.MessageInput.table.declared_name}" AS message USING(seq) '
+            f'JOIN "{MessageInput.table.declared_name}" AS message USING(seq) '
             f'WHERE asked.sender IN ({asking}) AND '
-            + messages.MessageInput.table._sql('message.{timestamp} BETWEEN ? AND ? ')
+            + MessageInput.table._sql('message.{timestamp} BETWEEN ? AND ? ')
             + f'AND asked.seq < ? {kind_filter}AND ({eligible}) AND NOT EXISTS ('
             f'SELECT 1 FROM "{cls.declared_name}" AS answered '
             f'JOIN "{MessageIdentitySource.declared_name}" AS author ON author.seq=answered.seq '
@@ -341,5 +349,5 @@ class AnsweredSource(messages.BusProjectionTables):
             *requesters, since, before, upper, *(kind.declared_name for kind in kinds),
             *eligibility, *responders, limit,
         ))
-        headers = (messages.BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
+        headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)

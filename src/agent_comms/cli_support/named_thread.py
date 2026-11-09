@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Self
 
 from agent_comms.catalog_document import CatalogAccess
-from agent_comms.channel_targets import OneChannel
+from agent_comms.messaging.channel_targets import OneChannel
 from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.cli_support.thread_bound import ThreadBoundCliCommand
 from agent_comms.comms import Comms

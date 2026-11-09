@@ -2,9 +2,9 @@
 
 from dataclasses import replace
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.comms import wire
-from agent_comms.messages import NoticeRole
+from agent_comms.messaging.messages import NoticeRole
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.retained_task_facts import RetainedTaskFacts
 from bus_record_fixture import context_comms

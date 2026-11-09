@@ -10,8 +10,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Self
 
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.transcript_events import SentTranscript
 

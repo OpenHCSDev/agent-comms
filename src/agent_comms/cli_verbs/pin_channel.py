@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Annotated, Self
 
 from agent_comms.catalog_document import CatalogAccess
-from agent_comms.channels import Channel
+from agent_comms.messaging.channels import Channel
 from agent_comms.cli_command import CliCommand, MultipleTargets, TargetActionCommand
 from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.cli_verbs.pin_thread import PinThreadCliCommand

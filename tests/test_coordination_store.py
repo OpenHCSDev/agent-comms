@@ -68,7 +68,7 @@ from agent_comms.execution_states import (
     FailedExecution,
     PendingExecution,
 )
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, SnapshotExclude
 from agent_comms.owner_fence import OwnerFence, prepare_fence_token
 from agent_comms.reason_codes import GivenReasonCode, NoDetail

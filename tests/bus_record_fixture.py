@@ -16,7 +16,7 @@ from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.launch_runtime import RestoredRuntime
-from agent_comms.messages import ClaimMessage, ConversationRole, InfoKind, Message
+from agent_comms.messaging.messages import ClaimMessage, ConversationRole, InfoKind, Message
 from agent_comms.nominal.field_codec import ClaimId, InputId, RootId, ThreadLookup
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread

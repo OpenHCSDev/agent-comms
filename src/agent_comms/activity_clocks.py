@@ -11,8 +11,8 @@ from agent_comms.projection_source import ProducedRow, ProjectionSource
 from agent_comms.storage.typed_table import TypedRow
 
 if TYPE_CHECKING:
-    from agent_comms.channels import Channel
-    from agent_comms.messages import Message
+    from agent_comms.messaging.channels import Channel
+    from agent_comms.messaging.messages import Message
 
 
 @dataclass(frozen=True, slots=True)

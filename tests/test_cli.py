@@ -11,7 +11,7 @@ from agent_comms.activity import ActivityState
 from agent_comms.bus import Bus
 from agent_comms.catalog_document import NoCatalog
 from agent_comms.channel_management import ArchiveThreadsTagDisposition, TagDisposition
-from agent_comms.channel_targets import (
+from agent_comms.messaging.channel_targets import (
     ChannelTarget,
     CommandTarget,
     NoChannel,
@@ -53,7 +53,7 @@ from agent_comms.execution.turn_lease import (
     StoredTurnRecord,
 )
 from agent_comms.lifecycle_capability import Successful
-from agent_comms.messages import NoticeRole, SendableRole
+from agent_comms.messaging.messages import NoticeRole, SendableRole
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId, compile_decoder
 from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.projects.checkouts import (

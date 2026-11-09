@@ -20,7 +20,7 @@ from agent_comms.history_result import (
     DmHistoryPageResult,
     EverythingHistoryPageResult,
 )
-from agent_comms.messages import InfoKind
+from agent_comms.messaging.messages import InfoKind
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.projects.checkouts import Checkout

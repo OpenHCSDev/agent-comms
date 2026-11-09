@@ -38,7 +38,13 @@ from agent_comms.coordination.tables.publications import (
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
+from agent_comms.messaging.messages import (
+    ConversationRole,
+    InfoKind,
+    Message,
+    MessageKind,
+    MessageRole,
+)
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import MessageId, RootId, ThreadLookup
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse

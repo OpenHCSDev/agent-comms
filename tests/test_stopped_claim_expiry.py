@@ -13,7 +13,7 @@ from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
 )
-from agent_comms.messages import ClaimNoticeKind
+from agent_comms.messaging.messages import ClaimNoticeKind
 from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_status import (

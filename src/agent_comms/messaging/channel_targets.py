@@ -1,10 +1,11 @@
 """Named destinations own route behavior; strings are decoded at the boundary."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar, TYPE_CHECKING
 
 from agent_comms.activity_clocks import ActivityClocks
 from agent_comms.class_fact import ClassFact
@@ -27,7 +28,6 @@ from agent_comms.wake_policy import BoundedTriageWake, FullWake, MessageAudience
 if TYPE_CHECKING:
     from agent_comms.audience_manifest import AudiencedMessage
     from agent_comms.catalog_document import CatalogAccess, CatalogDocument
-    from agent_comms.channels import Channel
     from agent_comms.cli_command import CliCommand
     from agent_comms.comms import Comms
     from agent_comms.historical_views import (
@@ -38,21 +38,18 @@ if TYPE_CHECKING:
     )
     from agent_comms.history_result import HistoryPageResult
     from agent_comms.history_views import HistoryViews
-    from agent_comms.messages import Message, MessageInput
-    from agent_comms.planning.goal_management import Goals
-    from agent_comms.read_basis import (
+    from agent_comms.messaging.channels import Channel
+    from agent_comms.messaging.messages import Message, MessageInput
+    from agent_comms.messaging.read_basis import (
         ChannelConversation,
         Conversation,
-        DisplayViewer,
         DMConversation,
         DMDisplayScope,
+        DisplayViewer,
         MessageDisplayScope,
     )
-    from agent_comms.registry.registry_document import (
-        RegistrySnapshot,
-        ResolvedChannel,
-        ResolvedThread,
-    )
+    from agent_comms.planning.goal_management import Goals
+    from agent_comms.registry.registry_document import RegistrySnapshot, ResolvedChannel, ResolvedThread
     from agent_comms.registry.threads import Thread
     from agent_comms.registry_provenance import RegistryProvenance
     from agent_comms.response_policy import ResponsePolicy
@@ -115,7 +112,7 @@ class PerTargetChannels(SingleFieldValue, ChannelSelection):
 
 
 def exact_stored_target(name: str) -> bool:
-    from agent_comms.channels import BuiltinChannelView
+    from agent_comms.messaging.channels import BuiltinChannelView
 
     return (BuiltinChannelView.addressed(name).exact_stored_target()
             if name in BuiltinChannelView.addresses() else True)
@@ -580,7 +577,7 @@ class ChannelTarget(NamedTarget):
         return snapshot.resolve_channel(require_channel(self.name))
 
     def validate(self, sender: Message | None = None):
-        from agent_comms.channels import BuiltinChannelView
+        from agent_comms.messaging.channels import BuiltinChannelView
 
         if self.name not in BuiltinChannelView.addresses():
             Tag.validate(self.name[1:], label=f"Channel {self.name!r}")
@@ -678,7 +675,7 @@ class Tag(ProjectionSource):
 
     @staticmethod
     def validate(name: str, *, label: str = "Tags") -> None:
-        from agent_comms.channels import BuiltinChannelView
+        from agent_comms.messaging.channels import BuiltinChannelView
 
         if (not name or not set(name) <= _TAG_CHARS
                 or ChannelTarget.normalize_name(name) in BuiltinChannelView.addresses()):

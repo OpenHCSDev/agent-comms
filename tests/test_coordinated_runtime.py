@@ -155,7 +155,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
 
 
 def test_selected_and_following_use_the_original_question_contract(tmp_path: Path) -> None:
-    from agent_comms.channel_targets import CommandTarget
+    from agent_comms.messaging.channel_targets import CommandTarget
     from agent_comms.registry.thread_identity import UserThreadRole
     from agent_comms.task_attachments.owner_notices import MeantNotice
 

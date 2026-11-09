@@ -2,7 +2,7 @@
 import pytest
 
 from agent_comms.bus_activity_index import BusActivityIndex
-from agent_comms.channels import RetiredTagChannel
+from agent_comms.messaging.channels import RetiredTagChannel
 from agent_comms.errors import UnknownChannelError
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration

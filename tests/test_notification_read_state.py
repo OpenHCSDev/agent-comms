@@ -10,7 +10,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination.errors import ReloadRequired
 from agent_comms.history_views import HistoryViews
 from agent_comms.message_notification import NotificationPass
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.bus_read import (
     BusRead,
     OwnerScopedRead,

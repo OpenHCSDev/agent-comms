@@ -8,7 +8,7 @@ from dataclasses import fields, replace
 
 import pytest
 
-from agent_comms.channel_targets import IncarnationThreadTarget, ThreadTarget
+from agent_comms.messaging.channel_targets import IncarnationThreadTarget, ThreadTarget
 from agent_comms.display_references import (
     ChannelDisplayReference,
     CurrentDisplayReferences,

@@ -40,7 +40,7 @@ from agent_comms.historical_views import HistorySource
 from agent_comms.history_view import HistoryView, OwnHistory
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.message_notification import MessageNotification, NotificationWindow
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (

@@ -20,7 +20,7 @@ from typing import (
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.agent_backend import RuntimeLocation
 from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.channel_targets import DeclaredTag
+from agent_comms.messaging.channel_targets import DeclaredTag
 from agent_comms.cli_result import CliResult
 from agent_comms.collaboration_ledger import CollaborationLedger
 from agent_comms.config_options import RunningSelection

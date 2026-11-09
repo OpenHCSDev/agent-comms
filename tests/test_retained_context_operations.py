@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.cli import CliInvocation
 from agent_comms.cli_commands import ConstraintPinnedResult
 from agent_comms.context_segments.retained import RetainedSegment

@@ -21,7 +21,7 @@ from pydantic import JsonValue
 
 from agent_comms.active_route import ActiveRoute
 from agent_comms.catalog_document import CatalogAccess, NoCatalog
-from agent_comms.channel_targets import (
+from agent_comms.messaging.channel_targets import (
     ChannelSelection,
     CommandTarget,
     NoChannel,
@@ -29,7 +29,7 @@ from agent_comms.channel_targets import (
     ResolvedTarget,
     SurroundingChannel,
 )
-from agent_comms.channels import Channel
+from agent_comms.messaging.channels import Channel
 from agent_comms.cli_failures import CLI_FAILURES
 from agent_comms.cli_result import CliResult, ResultShower, TargetEditResult
 from agent_comms.command import Command

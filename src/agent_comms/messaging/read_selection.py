@@ -7,9 +7,14 @@ from agent_comms.activity_clocks import ActivityClocks
 from agent_comms.bus import BusSnapshot
 from agent_comms.catalog_document import CatalogDocument
 from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.channels import Channels
+from agent_comms.messaging.channels import Channels
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
-from agent_comms.read_basis import ChannelDisplayScope, DisplayViewer, ReadCursor, UnreadQuery
+from agent_comms.messaging.read_basis import (
+    ChannelDisplayScope,
+    DisplayViewer,
+    ReadCursor,
+    UnreadQuery,
+)
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry_provenance import RegistryProvenance

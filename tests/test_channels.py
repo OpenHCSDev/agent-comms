@@ -10,8 +10,8 @@ from agent_comms.channel_management import (
     DeleteExclusiveInactiveThreadsTagDisposition,
     DeleteThreadsTagDisposition,
 )
-from agent_comms.channel_targets import CommandTarget, CommsTag, DeclaredTag
-from agent_comms.channels import (
+from agent_comms.messaging.channel_targets import CommandTarget, CommsTag, DeclaredTag
+from agent_comms.messaging.channels import (
     AllOfMatch,
     AnyOfMatch,
     BuiltinChannelView,
@@ -78,7 +78,7 @@ def setup_wire(path):
 
 def test_current_membership_cannot_create_an_unfrozen_delivery(tmp_path):
     from agent_comms.bus import PublicRecord
-    from agent_comms.messages import InfoKind, Message
+    from agent_comms.messaging.messages import InfoKind, Message
 
     comms = setup_wire(tmp_path)
     before_join = comms.messaging.send("a", "#api", "before other joined").message

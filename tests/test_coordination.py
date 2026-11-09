@@ -62,7 +62,7 @@ from agent_comms.execution_states import (
     PendingExecution,
 )
 from agent_comms.installer.native_build_inputs import ConfiguredChildStdio
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, SnapshotExclude
 from agent_comms.obligation_states import (
     PendingResponse,

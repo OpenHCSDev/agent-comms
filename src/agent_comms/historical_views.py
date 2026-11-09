@@ -15,15 +15,15 @@ from typing import TYPE_CHECKING, Self
 
 from agent_comms.bus import Bus
 from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.channel_targets import NamedTarget, ThreadTarget
-from agent_comms.channels import Channel
+from agent_comms.messaging.channel_targets import NamedTarget, ThreadTarget
+from agent_comms.messaging.channels import Channel
 from agent_comms.coordination.errors import DMScopeChanged, HistoricalSourceChanged
 from agent_comms.display_references import ReferenceContext
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.child_process import Platform
 from agent_comms.message_notification import MessageNotification, NotificationWindow
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import CarriesEnvelope, Message, MessageHistory
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import CarriesEnvelope, Message, MessageHistory
 from agent_comms.messaging.message_page import (
     NEWEST_PAGE,
     ConversationMessagePageRequest,
@@ -50,7 +50,7 @@ from agent_comms.notification_evidence import (
 from agent_comms.page_traversal import HistoryCursor, HistorySourceKey, OlderTraversal
 from agent_comms.presentation import WireRevision
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.read_basis import (
+from agent_comms.messaging.read_basis import (
     AnonymousViewer,
     ChannelDisplayIdentity,
     ChannelDisplayScope,

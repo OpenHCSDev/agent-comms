@@ -29,7 +29,7 @@ from agent_comms.storage.typed_table import Column, DurableStore, ForeignKey, FU
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.registry.registration import Registration
 from agent_comms.messaging.published_bus import PublishedBus
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.registry.registry_store import RegistryEdit
 from agent_comms.planning.goal_attempts import Generation

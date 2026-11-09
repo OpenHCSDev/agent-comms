@@ -26,7 +26,7 @@ from agent_comms.execution.turn_goal_permission import TurnGoalPermission
 from agent_comms.execution.turn_inbox import BusyInputPolicy, SteerInputPolicy
 from agent_comms.input_attempt import InputAlreadyCleared, MissingInput
 from agent_comms.input_key import InputKey
-from agent_comms.messages import Message
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, TurnId
 from agent_comms.ordinary_turn_rules import UnboundOrdinaryInputRule, UnconsumedDependencyRule
 from agent_comms.registry.registry_document import RegistrySnapshot

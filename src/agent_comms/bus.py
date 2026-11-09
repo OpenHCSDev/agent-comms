@@ -24,7 +24,7 @@ from agent_comms.bus_tables import (
     RecordedAnswers,
     SentSource,
 )
-from agent_comms.channel_targets import NamedTarget
+from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.envelope_claim_transitions import (
     ClaimOwner,
     ClaimProjection,
@@ -33,8 +33,8 @@ from agent_comms.envelope_claim_transitions import (
     ResourceClaim,
 )
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import (
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import (
     Addressed,
     BusCapability,
     BusRecord,
@@ -52,7 +52,7 @@ from agent_comms.messages import (
 from agent_comms.messaging.bus_display_index import BusDisplayIndex
 from agent_comms.messaging.bus_route_counts import RouteCounts
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
-from agent_comms.read_basis import CursorRow, ReadCursor, RepliesDisplayScope, UnreadQuery
+from agent_comms.messaging.read_basis import CursorRow, ReadCursor, RepliesDisplayScope, UnreadQuery
 from agent_comms.storage.locked_store import (
     BusFile,
     CompleteInputReader,

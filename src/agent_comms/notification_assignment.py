@@ -20,7 +20,7 @@ from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordination.tables.publications import PublicationEvidence
 from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, boundary_decoder
 from agent_comms.notification_evidence import (

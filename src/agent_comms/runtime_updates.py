@@ -19,7 +19,7 @@ from agent_comms.cli_protocol import EarlierItems
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId, NoSourceTurn, TurnItem
 from agent_comms.execution.turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
 from agent_comms.external_transcript import ExternalPage, ExternalTranscript
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.sending import Messaging
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.registry.thread_identity import OfferedTools

@@ -27,7 +27,7 @@ from agent_comms.context_store import ContextStore
 from agent_comms.external_transcript import ExternalTranscript, StoreRead
 from agent_comms.held_orders import HeldOrders, LiveHold
 from agent_comms.historical_native_inputs import HistoricalNativeAnswers
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import ActivityExclude, FieldCodec, WireExclude, WireTransient, projected
 from agent_comms.order_work import OrderWork

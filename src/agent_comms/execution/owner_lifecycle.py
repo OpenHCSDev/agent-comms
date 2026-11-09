@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.active_route import resolve_comms_route
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
-from agent_comms.channel_targets import ThreadTarget
+from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.cli_result import TargetEditResult
 from agent_comms.diagnostics import OwnerProcessOutput
 from agent_comms.errors import RelationViolationError

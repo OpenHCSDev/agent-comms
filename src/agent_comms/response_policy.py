@@ -15,7 +15,7 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.projection_source import ProducedRow, ProjectionSource
 
 if TYPE_CHECKING:
-    from agent_comms.messages import Message, MessageInput
+    from agent_comms.messaging.messages import Message, MessageInput
     from agent_comms.registry.threads import Thread
 
 

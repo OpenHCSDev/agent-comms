@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, ProjectTarget
+from agent_comms.messaging.channel_targets import (
+    CommandTarget,
+    IncarnationThreadTarget,
+    ProjectTarget,
+)
 from agent_comms.cli_command import (
     CliCommand,
     OneTarget,
