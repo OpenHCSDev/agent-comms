@@ -9,10 +9,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Callable, ClassVar, NoReturn
+from sqlite3 import Connection
+from typing import Annotated, Callable, ClassVar, NoReturn
 
 from agent_comms.agent_backend import RuntimeLocation
-from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.database import CoordinationStore, InvalidStore, MissingStore
 from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
     ReloadRequired,
@@ -24,9 +25,10 @@ from agent_comms.execution.history_view import HistoryView, OwnHistory
 from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.native_output import NativeRecordLocation
+from agent_comms.execution.native_record_file import RecordsCut, SessionCut
 from agent_comms.execution.native_runtime_input import PublishedReplyRevision
 from agent_comms.execution.native_session_files import NativeSessionFiles
-from agent_comms.execution.native_transcript import NativeTranscript, RecordsCut, SessionCut
+from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.transcript_routes import TranscriptRoutes
 from agent_comms.execution.transcript_sources import (
     AssignedSourceCursor,
@@ -71,10 +73,15 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.notification_assignment import NotificationAssignment, NotificationSelection
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_provenance import RegistryProvenance
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.registry_tables import RegistryRowRevision
+from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_presentation import ThreadPresentation
+from agent_comms.registry.thread_text import ThreadParent, ThreadText
 from agent_comms.registry.threads import Thread, ThreadProvenance
+from agent_comms.registry.view_unread import TranscriptReadState
 from agent_comms.storage.private_path import (
     FileIdentity,
     FileObservation,
@@ -88,15 +95,6 @@ from agent_comms.transcript.transcript_events import (
     TranscriptEvent,
 )
 
-if TYPE_CHECKING:
-    from sqlite3 import Connection
-
-    from agent_comms.coordination.database import InvalidStore, MissingStore
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry.registry_provenance import RegistryProvenance
-    from agent_comms.registry.thread_identity import ThreadIncarnation
-    from agent_comms.registry.thread_text import ThreadParent, ThreadText
-    from agent_comms.registry.view_unread import TranscriptReadState
 
 _LOG = logging.getLogger(__name__)
 

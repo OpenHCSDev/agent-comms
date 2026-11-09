@@ -31,6 +31,7 @@ from agent_comms.messaging.read_basis import (
     ReadCursor,
 )
 from agent_comms.messaging.recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
+from agent_comms.messaging.transcript_read_mark import MarksTranscriptRead
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from agent_comms.nominal.sealed import Sealed
 from agent_comms.registry.registry_document import RegistrySnapshot
@@ -109,7 +110,7 @@ class ReadDocument:
         )
 
 
-class ReadLedger(SingleFileStore, Sealed, ThreadOwnedState, CarriedDocument[ReadDocument], DependentStateTier):
+class ReadLedger(MarksTranscriptRead, SingleFileStore, Sealed, ThreadOwnedState, CarriedDocument[ReadDocument], DependentStateTier):
     filename = "read_ledger.json"
 
     record_type = ReadDocument

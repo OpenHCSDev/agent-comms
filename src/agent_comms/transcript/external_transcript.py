@@ -15,16 +15,17 @@ from contextlib import aclosing, closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from sqlite3 import Connection
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.native_record_file import RecordsCut
 from agent_comms.execution.native_records import TranscriptRecord
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
-from agent_comms.execution.native_transcript import RecordsCut
 from agent_comms.execution.transcript_sources import (
     TranscriptDraft,
     TranscriptSource,
 )
+from agent_comms.execution.turn_bound import TurnBound
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.watched import FileSource, Watched
@@ -60,8 +61,6 @@ from agent_comms.transcript.transcript_events import (
 from agent_comms.transport.native_tools import MutatingPathTool
 from agent_comms.transport.tool_declaration import ToolDeclaration
 
-if TYPE_CHECKING:
-    from agent_comms.execution.turn_bound import TurnBound
 
 
 class ReplyWindow(DeclaredFamily, affix="Replies"):
