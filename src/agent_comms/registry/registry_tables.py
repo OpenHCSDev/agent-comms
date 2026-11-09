@@ -8,38 +8,78 @@ the name the document keys them by; the document's scalar fields are the one hea
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Annotated
+import sqlite3
+from collections.abc import Iterable
+from dataclasses import dataclass, replace
+from pathlib import Path
+from typing import Annotated, ClassVar
 
-from agent_comms.coordination.errors import SchemaVersionError
 from agent_comms.registry.registry_document import RootPurpose, TeamProject
 from agent_comms.registry.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.typed_table import (
     Column,
-    DurableTables,
+    DurableStore,
     FrozenColumn,
     Index,
-    SharedFileTables,
+    StoreRows,
     TypedTable,
 )
 
 
-class RegistryTable(SharedFileTables, DurableTables):
-    """The registry's tables; each row family is one field of the old document."""
-
-    schema_error = SchemaVersionError
-
-    @classmethod
-    def declarations(cls) -> tuple[type[TypedTable], ...]:
-        return TypedTable.members_with(cls)
-
-    @classmethod
-    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
-        return cls.declarations()
+class RegistryRows(StoreRows):
+    """The registry store discovers its rows through this membership declaration."""
 
 
-class RegistryRow(RegistryTable, TypedTable, declared_name=None):
+@dataclass(frozen=True, slots=True)
+class RegistryRowStore(DurableStore):
+    """The registry's rows, one owner-only SQLite file beside the bus: every installation
+    carries it, and nothing else can rebuild it."""
+
+    root: Path
+    filename: ClassVar[str] = "registry.sqlite3"
+    tables = RegistryRows
+
+    def revision(self) -> int:
+        with self.snapshot() as db:
+            return self.revision_in(db)
+
+    @staticmethod
+    def revision_in(db: sqlite3.Connection) -> int:
+        """The last committed revision; 0 before the first commit."""
+        return max((header.revision for header in RegistryHeader.select(db)), default=0)
+
+    def commit(
+        self, header: RegistryHeader, rows: Iterable[RegistryNamedRow],
+        removals: Iterable[tuple[type[RegistryNamedRow], str]],
+    ) -> int:
+        """Write only these rows and removals, stamped with the next revision, in one
+        transaction: the cost is the change, never the registry's size."""
+        with self.writing() as db:
+            revision = self.revision_in(db) + 1
+            replace(header, revision=revision).upsert(db)
+            for row in rows:
+                replace(row, changed_at=revision).upsert(db)
+            for family, name in removals:
+                family.delete(db, **{family.key_field(): name})
+                RegistryRemovals(changed_at=revision, family=family, name=name).upsert(db)
+            return revision
+
+    def changes_since(self, revision: int) -> RegistryChanges:
+        """Every row written and every row removed after ``revision``, read in one snapshot."""
+        with self.snapshot() as db:
+            return RegistryChanges(
+                revision=self.revision_in(db),
+                rows=tuple(
+                    row for family in RegistryNamedRow.families()
+                    for row in family.select(db, where="changed_at > ?", parameters=(revision,))
+                ),
+                removals=tuple(RegistryRemovals.select(
+                    db, where="changed_at > ?", parameters=(revision,))),
+            )
+
+
+class RegistryRow(RegistryRows, TypedTable, declared_name=None):
     """A row of the registry."""
 
 
@@ -55,6 +95,17 @@ class RevisionStamped(RegistryRow, declared_name=None):
 @dataclass(frozen=True)
 class RegistryNamedRow(RevisionStamped, declared_name=None):
     """A row keyed by a thread name or alias."""
+
+    @classmethod
+    def key_field(cls) -> str:
+        """The one field the row declares as its primary key."""
+        (key,) = (item.name for item in cls._fields if item.column.primary_key)
+        return key
+
+    @classmethod
+    def families(cls) -> tuple[type[RegistryNamedRow], ...]:
+        return tuple(member for member in TypedTable.members_with(RegistryRows)
+                     if issubclass(member, RegistryNamedRow))
 
 
 @dataclass(frozen=True)
@@ -116,3 +167,12 @@ class RegistryRemovals(RevisionStamped):
 
     family: Annotated[type[RegistryNamedRow], FrozenColumn(primary_key=True)]
     name: Annotated[str, FrozenColumn(primary_key=True)]
+
+
+@dataclass(frozen=True)
+class RegistryChanges:
+    """What changed after a revision: the rows written and the rows removed."""
+
+    revision: int
+    rows: tuple[RegistryNamedRow, ...]
+    removals: tuple[RegistryRemovals, ...]
