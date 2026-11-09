@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+import agent_comms
 import agent_comms_hooks
 from agent_comms import native_package
 from agent_comms.execution.turn_failure import FailedTurnResolution
@@ -249,7 +250,7 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
     checkout = tmp_path / "unprepared"
     # A clean checkout holds both source packages, and neither bytecode nor the untracked
     # node_modules install. Copying one lets the other import from whatever is installed.
-    for module in (native_package, agent_comms_hooks):
+    for module in (agent_comms, agent_comms_hooks):
         package = Path(module.__file__).parent
         shutil.copytree(package, checkout / "src" / package.name,
                         ignore=shutil.ignore_patterns("__pycache__", "node_modules"))
