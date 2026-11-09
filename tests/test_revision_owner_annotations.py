@@ -21,6 +21,7 @@ from agent_comms.presentation import (
     expiry_period_changed,
     revision_source,
 )
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
 from agent_comms.ui_model.observation import ThreadsObserved
 
@@ -48,19 +49,21 @@ def test_presentation_sources_are_actual_nominal_providers() -> None:
     bus_source = get_type_hints(BusPresentation.__init__)["bus"]
     goal_alias = get_type_hints(BusPresentation.__init__)["goals"]
     goal_source = get_origin(goal_alias)
-    owner, snapshot_contract = get_args(goal_alias)
+    owner, snapshot_contract, registry_contract = get_args(goal_alias)
     assert bus_source in MessageBus.__bases__
     assert goal_source in Goals.__bases__
     assert not isabstract(MessageBus)
     assert not isabstract(Goals)
     assert bus_source.opened_activity is PublishedBus.opened_activity
     assert owner is Thread
+    assert registry_contract is RegistrySnapshot
     assert snapshot_contract in GoalSnapshot.__bases__
     assert get_type_hints(GoalSnapshot)["execution"] is GoalExecutionControls
     owning_alias, = (base for base in Goals.__orig_bases__
                       if get_origin(base) is goal_source)
-    assert get_args(owning_alias) == (Thread, GoalSnapshot)
-    owner_parameter, snapshot_parameter = goal_source.__type_params__
+    assert get_args(owning_alias) == (Thread, GoalSnapshot, RegistrySnapshot)
+    owner_parameter, snapshot_parameter, registry_parameter = goal_source.__type_params__
+    assert get_type_hints(goal_source.snapshot_for)["snapshot"] is registry_parameter
     assert get_type_hints(goal_source.snapshot_for)["owner"] is owner_parameter
     assert get_type_hints(goal_source.snapshot_for)["return"] is snapshot_parameter
     for member in InboxRead.members_with(InboxRead):
