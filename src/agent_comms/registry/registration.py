@@ -12,6 +12,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity
 from agent_comms.execution.input_ingress import InputRegistration
 from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
 from agent_comms.messaging.channel_targets import DeclaredTag
 from agent_comms.messaging.routing import NoTurnRouting, Routing
 from agent_comms.nominal.field_codec import ThreadLookup, TurnId
@@ -21,9 +22,9 @@ from agent_comms.projects.checkouts import Checkout, CheckoutTransfer, Repositor
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import StorageRule
-from agent_comms.registry.activity_registry_reads import ActivityRegistration
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration_change import RegistrationChange
+from agent_comms.registry.registration_reads import ActivityRegistration
 from agent_comms.registry.registry_document import (
     FoundProjectThread,
     ProjectThreadSelection,
@@ -48,7 +49,11 @@ from agent_comms.registry.threads import ExternalThread, NativeThread, SubagentT
 _DEFAULT_PRESENCE = ProcessThreadStatus()
 
 
-class Registration(Container[str], InputRegistration[Thread], ActivityRegistration):
+class Registration(
+    Container[str],
+    InputRegistration[Thread],
+    ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],
+):
     """Own registration transactions; never borrow a Comms or facade's state."""
 
     def __init__(self, store_path: Path):

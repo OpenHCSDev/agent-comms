@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
 from agent_comms.messaging.assignment_notice import AssignmentNotice
 from agent_comms.messaging.message_reads import MessageDeliveryRead, MessageReferencesRead
 from agent_comms.messaging.notification_contracts import NotificationEvidenceSource, RevisionChanges, RecipientActivityRead
@@ -14,7 +15,6 @@ from datetime import datetime
 from functools import cached_property
 from itertools import batched
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms.execution.transcript_sources import AssignedTranscriptSource
 from agent_comms.messaging.channel_targets import CommandTarget
@@ -35,6 +35,7 @@ from agent_comms.messaging.notification_progress import (
 )
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.messaging.revision_views import NotificationEvidenceView
+from agent_comms.messaging.routing import Routing
 from agent_comms.nominal.field_codec import MessageId, TaggedRecordMember, TaggedUnion, ThreadLookup
 from agent_comms.notification_assignment import (
     AssignmentSource,
@@ -43,14 +44,15 @@ from agent_comms.notification_assignment import (
     NotificationReadMark,
     NotificationSelection,
 )
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.agent_activity import AgentActivity, RecordedRecipientActivity
 from agent_comms.registry.namespace_reads import NamespaceRead
+from agent_comms.registry.registration_reads import ActivityRegistration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_identity_source import ThreadIdentitySource
+from agent_comms.registry.threads import NativeThread, Thread
 
-if TYPE_CHECKING:
-    from agent_comms.registry.registration import Registration
 
 
 @dataclass(frozen=True)
@@ -233,7 +235,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
     def references(
         cls,
         root: Path,
-        registry: Registration,
+        registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],
         log: MessageReferencesRead[Message],
         references: Sequence[MessageReference],
         *,
@@ -272,7 +274,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
     def delivery_window(
         cls,
         root: Path,
-        registry: Registration,
+        registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],
         assignment_read: NotificationAssignmentRead,
     ) -> NotificationWindow:
         """The captured selection owns original membership and viewer visibility."""
@@ -410,7 +412,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
 
     @classmethod
     def sent_sources(
-        cls, root: Path, registry: Registration, log: MessageReferencesRead[Message], name: str, *, limit: int = 5
+        cls, root: Path, registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion], log: MessageReferencesRead[Message], name: str, *, limit: int = 5
     ):
         """Read up to the requested number of messages sent by this thread."""
         if not 1 <= limit <= NotificationSelection.window_limit:
@@ -426,7 +428,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
     def for_sources(
         cls,
         root: Path,
-        registry: Registration,
+        registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[MessageNotification, ...]:
         """Attach notification outcomes, as the read's viewer sees them, to the public

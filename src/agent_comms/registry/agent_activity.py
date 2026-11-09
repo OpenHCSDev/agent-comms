@@ -14,7 +14,6 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms.agent_backend import AgentBackend
 from agent_comms.coordination.coordinator import Coordination
@@ -39,6 +38,7 @@ from agent_comms.messaging.notification_progress import (
 from agent_comms.messaging.routing import NoTurnRouting, Routing
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import ThreadLookup, TurnId
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.activity import (
     Activity,
     ActivityCapture,
@@ -49,20 +49,12 @@ from agent_comms.registry.activity import (
     NoDrainDiagnostic,
     ObservedActivity,
 )
-from agent_comms.registry.activity_registry_reads import ActivityRegistration, ActivityRegistryRead
+from agent_comms.registry.activity_registry_reads import ActivityRegistryRead
+from agent_comms.registry.registration_reads import ActivityRegistration
 from agent_comms.registry.thread_identity import OwnerIdentity, ThreadIncarnation
 from agent_comms.registry.thread_status import ThreadStatus
-from agent_comms.registry.threads import Thread
+from agent_comms.registry.threads import NativeThread, Thread
 
-if TYPE_CHECKING:
-    from agent_comms.agent_backend import AgentBackend
-    from agent_comms.agent_events import RuntimeInfoObservation
-    from agent_comms.messaging.bus_publication import Delivered
-    from agent_comms.messaging.message_notification import MessageNotification
-    from agent_comms.messaging.notification_progress import AssignmentProgress, DeliveryProgress
-    from agent_comms.registry.registration import Registration
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry.thread_status import ThreadStatus
 
 _LOG = logging.getLogger(__name__)
 
@@ -129,7 +121,7 @@ class LiveRecipientActivity(RecipientActivity):
         return notification.with_state(state)
 
 class AgentActivity(RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):
-    def __init__(self, root: Path, registry: ActivityRegistration):
+    def __init__(self, root: Path, registry: ActivityRegistration[Thread, NativeThread, ActivityRegistryRead, StorageRule, Routing, TurnLeaseFence, TurnCompletion]):
         self.registry = registry
         self.activity = ActivityStore(root)
         self.runtime_info = RuntimeInfoStore.at(root)

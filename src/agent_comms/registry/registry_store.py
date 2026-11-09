@@ -34,7 +34,6 @@ from agent_comms.execution.turn_lease import (
 from agent_comms.execution.turn_registry import TurnRegistry
 from agent_comms.messaging.routing import Routing
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, TurnId
-from agent_comms.registry.activity_registry_reads import RegistryPathRead
 from agent_comms.registry.presence import PresenceStore
 from agent_comms.registry.private_registry_guard import (
     PrivateRegistryGuard,
@@ -42,6 +41,7 @@ from agent_comms.registry.private_registry_guard import (
     RegistryPrivacy,
 )
 from agent_comms.registry.registration_change import InitialRegistration, NativeSourcePublication
+from agent_comms.registry.registration_reads import RegistryPathRead
 from agent_comms.registry.registry_document import (
     HistoricalRootPurpose,
     RegistryDocument,
