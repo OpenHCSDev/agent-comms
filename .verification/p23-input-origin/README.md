@@ -1,6 +1,10 @@
 # P23 InputOrigin contribution
 
-## Current provider closure on packaged source
+## Current applied-source repair
+
+The provider prefix and RecordBuilder placement were applied at `19a3fb77f5bc801e3836036d5d675a3fb9461be9`; their exact diff has been read. Do not replay them. That applied tree still has one executable old-path import at `tests/test_bus_resource_claims.py:12`. `record-builder-consumer-repair.plan.json` supplies its one native import correction; the test body and assertions stay unchanged. No extra simulation or test lap is needed here: friction applies it with the corrected `--include-tests` scope and keeps the combined consumer run. Other grep hits in retained `tools/p23_*` authors are embedded historical source strings, not additional executable imports at those lines.
+
+## Applied provider closure — do not replay
 
 `message-module-owners.plan.json` is the usable prefix on Core `356d83cc0` / owned Toad `77c300b0c`: one native stage, six operations, seven imports. It replaces absent module names imported from `messaging.sending` with their actual original module owners. Source checks preserve all class/function ASTs; native simulation is clean across 2,306 modules (`message-module-owners.plan.receipt.json`). No product write, cold run or SCC reduction is claimed here.
 
