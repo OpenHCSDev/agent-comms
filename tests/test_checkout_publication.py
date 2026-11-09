@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.checkout_publication import PublishingCheckout
+from agent_comms.projects.checkout_publication import PublishingCheckout
 from agent_comms.cli import build_parser
 from agent_comms.cli_verbs.publish_checkout import PublishCheckoutCliCommand
 from agent_comms.cli_verbs.sync_checkout import SyncCheckoutCliCommand
@@ -17,7 +17,7 @@ from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.threads import NativeThread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_denial import StorageDenied
 from source_revision_fixture import SourceRepository

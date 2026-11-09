@@ -13,7 +13,7 @@ from agent_comms.installer.logs import InstallLogs, InstallRunning, InstallUnit
 from agent_comms.installer.request import InstallRequest
 from agent_comms.nominal.field_codec import FieldCodec, Id128
 from agent_comms.projects.repo import Repo
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.team import standing
 
 FAKE = """#!{python}

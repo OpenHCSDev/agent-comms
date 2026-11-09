@@ -15,6 +15,8 @@ from agent_comms.nominal.field_codec import MalformedRecord, WireValue
 # A request naming its method is attempted once, because a timeout cannot say whether
 # it was applied.
 READ_ATTEMPTS = 2
+
+
 READ_TIMEOUT_SECONDS = 60
 
 

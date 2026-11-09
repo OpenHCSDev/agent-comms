@@ -6,7 +6,7 @@ from agent_comms.projects.git_errors import (
     UnavailableCommitError,
 )
 from agent_comms.projects.repo import Repo
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from test_order_progress import git
 
 

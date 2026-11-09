@@ -20,7 +20,7 @@ from agent_comms.planning.orders import TodoStore
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.threads import NativeThread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.storage.locked_store import (
     DeclaredFile,
     DurableFile,

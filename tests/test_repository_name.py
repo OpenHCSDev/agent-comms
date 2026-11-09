@@ -9,7 +9,7 @@ from agent_comms.planning.orders import (
     PullRequests,
     UnmergedListedPullRequest,
 )
-from agent_comms.repository_name import READ_ATTEMPTS, READ_TIMEOUT_SECONDS, RepositoryName
+from agent_comms.projects.repository_name import READ_ATTEMPTS, READ_TIMEOUT_SECONDS, RepositoryName
 from github_fixture import GitHubFixture
 
 

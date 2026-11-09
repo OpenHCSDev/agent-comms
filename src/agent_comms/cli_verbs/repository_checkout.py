@@ -11,7 +11,7 @@ from agent_comms.nominal.field_codec import Argument
 from agent_comms.projects.repository_sources import LocalRepositorySource, RepositorySource
 from agent_comms.projects.storage_rules import RepositoryCheckoutAllocation, StorageRule
 from agent_comms.registry.threads import Thread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 
 
 @dataclass(frozen=True, kw_only=True)

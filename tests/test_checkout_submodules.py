@@ -40,7 +40,7 @@ from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_creation import RecordedCreationTime
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.tool_denial import StorageDenied
 from cli_command import core, core_process
 from order_scope_fixture import FIX_SCOPE

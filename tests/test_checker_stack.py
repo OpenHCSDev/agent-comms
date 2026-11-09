@@ -26,7 +26,7 @@ from agent_comms.integration import CiRunner
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.orders import DraftListedPullRequest
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
 from source_revision_fixture import SourceRepository

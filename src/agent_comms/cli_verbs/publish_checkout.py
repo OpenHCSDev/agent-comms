@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.checkout_publication import CheckoutPublication
+from agent_comms.projects.checkout_publication import CheckoutPublication
 from agent_comms.cli_result import CliResult
 from agent_comms.cli_support.home_checkout import HomeCheckoutCliCommand
 from agent_comms.comms import Comms

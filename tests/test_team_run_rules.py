@@ -13,7 +13,7 @@ from agent_comms.planning.orders import (
     TodoStore,
 )
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms_hooks import ToolRefusedError
 from test_forks import fork_bus  # noqa: F401
 from test_todos import order, thread

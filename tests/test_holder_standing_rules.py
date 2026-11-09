@@ -99,7 +99,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice, VibeCheckNotice

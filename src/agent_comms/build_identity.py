@@ -14,7 +14,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import GitCommitText, WireOmitDefault
 from agent_comms.projects.repo import Repo
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from agent_comms.order_runs import OrderRun

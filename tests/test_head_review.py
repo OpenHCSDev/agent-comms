@@ -75,7 +75,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.task_attachments.team_pings import (
     RulePing,
     TeamDecisions,
