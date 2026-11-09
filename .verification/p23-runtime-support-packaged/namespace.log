@@ -1,0 +1,5 @@
+declare-namespace-read-contract clean
+bind-original-namespace-provider-and-consumer clean
+inherit-namespace-reads-with-original-concrete-fields clean
+promote-proved-namespace-read-import clean
+SOURCE SIMULATION ONLY; original fields/method bodies retained; no apply

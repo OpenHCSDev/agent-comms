@@ -1,0 +1,26 @@
+registration stage 1 clean
+registration stage 2 clean
+registration stage 3 clean
+registration stage 4 clean
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/registration_cut.py", line 91, in <module>
+    main()
+    ~~~~^^
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/registration_cut.py", line 78, in main
+    run(doc('promote-proved-registration-read-import',(
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        PromoteGuardedImportOperation(target=target('messaging/message_notification'),module_name='agent_comms.registry.activity_registration_reads',import_names=('ActivityRegistration',)),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )))
+    ^^^
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/registration_cut.py", line 40, in run
+    result=preflight.simulate()
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 1351, in simulate
+    edit_batch = self.required_edit_batch
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 1315, in required_edit_batch
+    self.report.require_clean()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_preflight.py", line 53, in require_clean
+    raise CodemodOperationPreflightError(report)
+nominal_refactor_advisor.codemod_preflight.CodemodOperationPreflightError: 'agent_comms.registry.activity_registration_reads' already imports 'agent_comms.messaging.message_notification' at runtime; the guard hides a cycle, so move the declaration instead

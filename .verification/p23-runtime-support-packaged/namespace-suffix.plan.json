@@ -1,0 +1,110 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "declare-namespace-read-contract",
+          "operations": [
+            {
+              "operation": "create_file",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/projected/src/agent_comms/registry/namespace_reads.py",
+              "rationale": "",
+              "source": "\"\"\"Recorded and live namespace callbacks, supplied by the original registry values.\"\"\"\nfrom __future__ import annotations\nfrom abc import ABC, abstractmethod\nfrom agent_comms.messaging.frozen_recipient import FrozenRecipient\nfrom agent_comms.registry_names import RegistryNames\nfrom agent_comms.thread_identity_source import ThreadIdentitySource\n\n\nclass NamespaceRead[Member: ThreadIdentitySource, Selection](RegistryNames[Member], ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def displayed_recipient_effect(self, reads, message, thread: Member, *, document=None): ...\n\n    @abstractmethod\n    def historical_recipient(self, recipient: FrozenRecipient) -> Selection: ...\n"
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "bind-original-namespace-provider-and-consumer",
+          "operations": [
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/projected/src/agent_comms/registry/registry_provenance.py",
+              "rationale": "",
+              "import_source": "from agent_comms.registry.namespace_reads import NamespaceRead"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/projected/src/agent_comms/messaging/message_notification.py",
+              "rationale": "",
+              "import_source": "from agent_comms.thread_identity_source import ThreadIdentitySource"
+            },
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "    from agent_comms.registry.registration import Registration\n    from agent_comms.registry.registry_provenance import RegistryProvenance\n\n",
+                  "new_source": "    from agent_comms.registry.registration import Registration\n    from agent_comms.registry.namespace_reads import NamespaceRead\n\n"
+                },
+                {
+                  "old_source": "    @classmethod\n    def recorded_delivery_window(\n        cls,\n        root: Path,\n        namespace: RegistryProvenance,\n        sources: Sequence[MessageDeliveryRead[Message]],\n",
+                  "new_source": "    @classmethod\n    def recorded_delivery_window[Member: ThreadIdentitySource, Selection](\n        cls,\n        root: Path,\n        namespace: NamespaceRead[Member, Selection],\n        sources: Sequence[MessageDeliveryRead[Message]],\n"
+                },
+                {
+                  "old_source": "    @classmethod\n    def project_delivery_window(\n        cls,\n        root: Path,\n        snapshot: RegistryProvenance,\n        observations: Mapping[ThreadLookup, RecipientActivityRead[AssignmentNotice[DeliveryProgress], AssignmentProgress, DeliveryProgress]],\n",
+                  "new_source": "    @classmethod\n    def project_delivery_window[Member: ThreadIdentitySource, Selection](\n        cls,\n        root: Path,\n        snapshot: NamespaceRead[Member, Selection],\n        observations: Mapping[ThreadLookup, RecipientActivityRead[AssignmentNotice[DeliveryProgress], AssignmentProgress, DeliveryProgress]],\n"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/projected/src/agent_comms/messaging/message_notification.py",
+              "rationale": ""
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "inherit-namespace-reads-with-original-concrete-fields",
+          "operations": [
+            {
+              "operation": "replace_class_base",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/projected/src/agent_comms/registry/registry_provenance.py",
+              "target_qualname": "RegistryProvenance",
+              "rationale": "",
+              "base_name": "RegistryNames[ThreadProvenance]",
+              "replacement_base_name": "NamespaceRead[ThreadProvenance, RecipientSelection]"
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "promote-proved-namespace-read-import",
+          "operations": [
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/projected/src/agent_comms/messaging/message_notification.py",
+              "rationale": "",
+              "module_name": "agent_comms.registry.namespace_reads",
+              "import_names": [
+                "NamespaceRead"
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

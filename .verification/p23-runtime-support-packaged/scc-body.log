@@ -1,0 +1,5 @@
+1 import cycles (strongly connected components) among 182 modules
+
+182 modules; shortest cycle 2:
+  agent_comms.execution.input_origin -> agent_comms.input_attempt   (src/agent_comms/execution/input_origin.py:206)
+  agent_comms.input_attempt -> agent_comms.execution.input_origin   (src/agent_comms/input_attempt.py:13)

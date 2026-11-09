@@ -1,0 +1,31 @@
+stage 1 clean
+stage 2 clean
+stage 3 clean
+stage 4 clean
+stage 5 clean
+stage 6 clean
+stage 7 clean
+stage 8 clean
+stage 9 clean
+stage 10 clean
+stage 11 clean
+stage 12 clean
+stage 13 clean
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/author_support.py", line 239, in <module>
+    main()
+    ~~~~^^
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/author_support.py", line 229, in main
+    run(guarded_plan(current,ROOT))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/author_support.py", line 129, in run
+    result=preflight.simulate()
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 1351, in simulate
+    edit_batch = self.required_edit_batch
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 1315, in required_edit_batch
+    self.report.require_clean()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_preflight.py", line 53, in require_clean
+    raise CodemodOperationPreflightError(report)
+nominal_refactor_advisor.codemod_preflight.CodemodOperationPreflightError: 'agent_comms.registry.registration' already imports 'agent_comms.messaging.message_notification' at runtime; the guard hides a cycle, so move the declaration instead

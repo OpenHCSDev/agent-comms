@@ -1,0 +1,116 @@
+{
+  "reports": [
+    {
+      "operation": "relocate_symbols_to_new_module",
+      "status": "passed",
+      "message": "Module symbol move dependency closure is clean",
+      "details": {
+        "destination_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/before/src/agent_comms/execution/finish_signal.py",
+        "import_dependencies": [
+          {
+            "module_name": "abc",
+            "member_name": "ABC",
+            "imported_name": "ABC",
+            "destination_import_required": true,
+            "source_removal_required": false,
+            "name": "ABC",
+            "source": "from abc import ABC\n",
+            "scope": "runtime"
+          },
+          {
+            "module_name": "abc",
+            "member_name": "abstractmethod",
+            "imported_name": "abstractmethod",
+            "destination_import_required": true,
+            "source_removal_required": false,
+            "name": "abstractmethod",
+            "source": "from abc import abstractmethod\n",
+            "scope": "runtime"
+          },
+          {
+            "module_name": "asyncio",
+            "imported_name": null,
+            "destination_import_required": true,
+            "source_removal_required": false,
+            "name": "asyncio",
+            "source": "import asyncio\n",
+            "scope": "runtime"
+          },
+          {
+            "module_name": "agent_comms.nominal.field_codec",
+            "member_name": "boundary_decoder",
+            "imported_name": "boundary_decoder",
+            "destination_import_required": true,
+            "source_removal_required": true,
+            "name": "boundary_decoder",
+            "source": "from agent_comms.nominal.field_codec import boundary_decoder\n",
+            "scope": "runtime"
+          },
+          {
+            "module_name": "dataclasses",
+            "member_name": "dataclass",
+            "imported_name": "dataclass",
+            "destination_import_required": true,
+            "source_removal_required": false,
+            "name": "dataclass",
+            "source": "from dataclasses import dataclass\n",
+            "scope": "runtime"
+          }
+        ],
+        "source_local_dependencies": [],
+        "destination_dependency_names": [],
+        "destination_insertion_line": 2,
+        "source_annotation_evaluation_mode": "stringized",
+        "destination_annotation_evaluation_mode": "stringized",
+        "moved_annotation_count": 8,
+        "source_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/before/src/agent_comms/execution/backend.py",
+        "requested_symbol_names": [
+          "FinishSignal",
+          "NoFinishSignal",
+          "EventFinishSignal",
+          "NO_FINISH_SIGNAL"
+        ],
+        "moved_symbol_names": [
+          "FinishSignal",
+          "NoFinishSignal",
+          "EventFinishSignal",
+          "NO_FINISH_SIGNAL"
+        ],
+        "derived_symbol_names": [],
+        "requested_symbol_count": 4,
+        "moved_symbol_count": 4,
+        "derived_symbol_count": 0,
+        "closure_within_budget": true,
+        "imported_dependency_names": [
+          "ABC",
+          "abstractmethod",
+          "asyncio",
+          "boundary_decoder",
+          "dataclass"
+        ],
+        "import_sources": [
+          "from abc import ABC\n",
+          "from abc import abstractmethod\n",
+          "import asyncio\n",
+          "from agent_comms.nominal.field_codec import boundary_decoder\n",
+          "from dataclasses import dataclass\n"
+        ],
+        "source_import_removal_names": [
+          "boundary_decoder"
+        ],
+        "is_clean": true,
+        "annotation_evaluation_is_preserved": true,
+        "source_local_dependency_names": [],
+        "source_module_context_dependency_names": [],
+        "destination_builtin_conflict_names": [],
+        "unresolved_dependency_names": [],
+        "ambiguous_import_dependency_names": [],
+        "destination_import_conflict_names": [],
+        "annotation_evaluation_mode_change": []
+      }
+    }
+  ],
+  "is_clean": true,
+  "preflight_failed": false,
+  "report_count": 1
+}

@@ -1,0 +1,43 @@
+{
+  "reports": [
+    {
+      "operation": "promote_guarded_import",
+      "status": "passed",
+      "message": "The guarded import closes no runtime import cycle",
+      "details": {
+        "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/before/src/agent_comms/execution/turn_stats.py",
+        "module_name": "agent_comms.execution.finish_signal",
+        "import_names": [
+          "FinishSignal"
+        ]
+      }
+    },
+    {
+      "operation": "promote_guarded_import",
+      "status": "passed",
+      "message": "The guarded import closes no runtime import cycle",
+      "details": {
+        "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/before/src/agent_comms/execution/turn_watchdog.py",
+        "module_name": "agent_comms.execution.native_startup",
+        "import_names": [
+          "NativeStartupPolicy"
+        ]
+      }
+    },
+    {
+      "operation": "promote_guarded_import",
+      "status": "passed",
+      "message": "The guarded import closes no runtime import cycle",
+      "details": {
+        "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/before/src/agent_comms/execution/turn_watchdog.py",
+        "module_name": "agent_comms.execution.pi_events",
+        "import_names": [
+          "PiEvent"
+        ]
+      }
+    }
+  ],
+  "is_clean": true,
+  "preflight_failed": false,
+  "report_count": 3
+}

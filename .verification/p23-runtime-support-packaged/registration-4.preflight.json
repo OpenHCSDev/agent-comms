@@ -1,0 +1,19 @@
+{
+  "reports": [
+    {
+      "operation": "promote_guarded_import",
+      "status": "failed",
+      "message": "'agent_comms.registry.activity_registration_reads' already imports 'agent_comms.messaging.message_notification' at runtime; the guard hides a cycle, so move the declaration instead",
+      "details": {
+        "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-packaged/namespace-projected/src/agent_comms/messaging/message_notification.py",
+        "module_name": "agent_comms.registry.activity_registration_reads",
+        "import_names": [
+          "ActivityRegistration"
+        ]
+      }
+    }
+  ],
+  "is_clean": false,
+  "preflight_failed": true,
+  "report_count": 1
+}
