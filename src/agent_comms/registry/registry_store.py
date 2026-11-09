@@ -368,10 +368,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
 
     record_type = RegistryDocument
 
-    def stored_files(self) -> tuple[Path, Path]:
-        """The files that together are this registry: its document, and the presence rows every
-        declared thread must have. A copy that leaves one behind cannot be read."""
-        return self.path, self.presence.path
+    def stored_files(self) -> tuple[Path, ...]:
+        """The files that together are this registry: its rows with their WAL, and the presence
+        rows every declared thread must have. A copy that leaves one behind cannot be read."""
+        return (*self.rows.files(self.path), self.presence.path)
 
     def empty(self) -> RegistryDocument:
         return RegistryDocument()
@@ -507,9 +507,9 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         return PrivateRegistryGuard.path_in(self.path.parent)
 
     @property
-    def written(self) -> tuple[Path, Path]:
-        """The files every write replaces together, as ``revision_unlocked`` reads them."""
-        return self.path, self.guard_path
+    def written(self) -> tuple[Path, ...]:
+        """The files every commit writes together, as ``revision_unlocked`` reads them."""
+        return (*self.rows.files(self.path), self.guard_path)
 
     @property
     def cut_paths(self) -> tuple[Path, ...]:
@@ -612,7 +612,8 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         original = self.read_revision_unlocked()
         original.document.purpose.require_write()
         document.threads.bind(self._bind_thread)
-        source = self._commit_unlocked(self._encode(document), original.source)
+        raw = original.source.encoded(document, original.document)
+        source = self._commit_unlocked(raw, original.source)
         # Still under the exclusive lock: the committed revision is this document.
         self.cache.entry = RegistryRevision.presented(self, source, document.copy())
 
