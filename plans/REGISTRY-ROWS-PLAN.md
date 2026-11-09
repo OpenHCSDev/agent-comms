@@ -1,0 +1,52 @@
+# Registry rows: one change writes one row (P1441)
+
+Tristan, 2026-11-09: "anything that's quadratic needs to be obliterated."
+
+## The defect, measured
+
+The registry is one JSON document, `registry.json` (`RegistryFile`, `storage/locked_store.py:759`).
+On the live bus it is 5.6 MB and holds 2,933 threads. Every change (a declare, a status change, a
+claim) rewrites all of it (`RegistryStore.save_unlocked`, `registry/registry_store.py:590`):
+
+| step | cost on the live bus |
+|---|---|
+| `FieldCodec.encode(document)`: walks every cached row | about 20 ms (7 us per row: 0.35 / 1.43 / 2.86 ms at 50 / 200 / 400 threads) |
+| `json.dumps(raw, indent=2)` | 19 ms |
+| private guard writes the file and digests all of it | 5.6 MB written and synced |
+| `DocumentBytes.capture`: rereads the file to pin the revision | 5.6 MB read |
+
+One row changes; 2,933 are paid for, so a bus's life costs O(n^2). #4479 removed the re-encode of
+unchanged rows; the whole-document rewrite under it remains.
+
+## Why this is a redesign, not a storage swap
+
+Readers do not read the file; they read revisions of it. `RegistryCut`, `RegistryEntriesCut` and
+`RegistryPairCut` pin `FileObservation`s, and `snapshot_pair` pins the registry and another
+`LockedStore` at one pair of file revisions. "Did it change since I read" is "did the bytes change".
+26 modules use the store or the document; 35 sites read `threads`/`statuses` directly.
+
+## Target
+
+- Thread rows, statuses, aliases, owners and claims are `TypedTable` rows in one SQLite file, keyed
+  by thread name. A change is one transaction touching its rows.
+- A revision is the table's commit counter, not a file stat. A cut is a read transaction pinned at
+  that counter; a pair cut opens both stores' transactions in one declared order.
+- The private guard's whole-file digest becomes the database's own integrity: private file mode,
+  `PRAGMA quick_check` at open, and writes only through the store.
+- `RegistryDocument` stops being the stored form. Readers that need many rows ask the table
+  (children of a parent, threads in a project) instead of walking a decoded document.
+
+## Steps, each a commit on one PR
+
+1. Table declarations for the five row families beside their current types; nothing reads them yet.
+2. The revision and cut owners on the table: one counter, read transactions, pair cuts.
+3. Move the 35 direct readers onto table queries, by NRA where the shape allows.
+4. `save_unlocked` writes changed rows only; delete `ThreadRows`' raw/decoded cache and the JSON path.
+5. Carry: `tools/cutover/registry_rows.py` reads `registry.json` once into the table and is deleted
+   after the install that runs it. Rehearsed on a copy of the live registry before any install.
+
+## Done
+
+- Declaring a thread at 3,000 threads writes one row and costs the same as at 30 (measured).
+- `grep -c 'filename = "registry.json"' src/agent_comms/storage/locked_store.py` is 0.
+- The installed build declares a thread on the live bus and a real message is answered.
