@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Protocol
 
 from agent_comms.attempt_resolution import WorkDecision
 from agent_comms.planning.goal_attempt_identity import GoalAttemptIdentity
@@ -85,14 +84,14 @@ class GoalGenerationProjection[Execution](ABC):
     def completed(self) -> Execution: ...
 
 
-class GoalGenerationRead(Protocol):
-    @property
-    def goal_id(self) -> GoalId: ...
+class GoalGenerationRead(ABC):
+    __slots__ = ()
+
+    goal_id: GoalId
+    number: int
 
     @property
-    def number(self) -> int: ...
-
-    @property
+    @abstractmethod
     def attempt_identity(self) -> GoalAttemptIdentity: ...
 
 
@@ -112,7 +111,10 @@ class GoalGenerationChanges(ABC):
     ) -> object: ...
 
 
-class GoalStoppedAttempt[Reservation](Protocol):
+class GoalStoppedAttempt[Reservation](ABC):
+    __slots__ = ()
+
+    @abstractmethod
     def stopped_permit(
         self, make_permit: Callable[[Reservation], GoalTurnPermit],
     ) -> GoalTurnPermit: ...
@@ -140,7 +142,10 @@ class GoalReadyGrantSource[Owner, Generation](ABC):
     ) -> str: ...
 
 
-class GoalContextSource[Owner, Goals, Context](Protocol):
+class GoalContextSource[Owner, Goals, Context](ABC):
+    __slots__ = ()
+
+    @abstractmethod
     def with_goal(self, owner: Owner, goals: Goals) -> Context: ...
 
 

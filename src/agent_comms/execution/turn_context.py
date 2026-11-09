@@ -20,6 +20,8 @@ from agent_comms.context_provenance_source import ContextProvenanceSource
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.turn_item import NativeItemId, PiRequestKey
+from agent_comms.goal_mutation import GoalContextSource
+from agent_comms.goal_work import GoalWorkSource
 from agent_comms.instruction_bytes import InstructionBytes
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -1069,7 +1071,7 @@ class GoalSegment(InstructionSegment):
     progress: str = ""
 
     @classmethod
-    def capture(cls, owner: ContextOwner, goal: Goal, goals) -> GoalSegment:
+    def capture(cls, owner: ContextOwner, goal: Goal, goals: GoalWorkSource) -> GoalSegment:
         todos = goal.order.todos(goals, owner.incarnation, goal.id)
         orders_text = goal.order.instructions(todos)
         progress = goal.order.progress(goal, todos)
@@ -1298,17 +1300,17 @@ class RecordedContextManifest(RecordedContextIdentity):
 
 
 @dataclass(frozen=True)
-class TurnContext(DeclaredReply):
+class TurnContext(DeclaredReply, GoalContextSource[ContextOwner, GoalWorkSource, "TurnContext"]):
     thread: ThreadIncarnation
     turn: ContextTurn
     segments: tuple[ContextSegment, ...]
 
-    def with_goal(self, owner: ContextOwner, goals) -> TurnContext:
+    def with_goal(self, owner: ContextOwner, goals: GoalWorkSource) -> TurnContext:
         return owner.goal.active().add_context(
             self, partial(self.prepend_goal, owner, goals=goals),
         )
 
-    def prepend_goal(self, owner: ContextOwner, goal: Goal, goals) -> TurnContext:
+    def prepend_goal(self, owner: ContextOwner, goal: Goal, goals: GoalWorkSource) -> TurnContext:
         return self.prepend(GoalSegment.capture(owner, goal, goals))
 
     def require_source(self, source: Provenance) -> Provenance:

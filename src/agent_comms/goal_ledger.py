@@ -27,7 +27,7 @@ from agent_comms.planning.goal_generation import BlockedGeneration
 from agent_comms.planning.goal_generation import GenerationState
 from agent_comms.planning.goal_generation import ReadyGeneration
 from agent_comms.planning.goal_generation import ReservedGeneration
-from agent_comms.goal_mutation import GoalFailureProjection
+from agent_comms.goal_mutation import GoalFailureProjection, GoalGenerationRead, GoalStoppedAttempt
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit
 from agent_comms.goal_work import GoalFailureOwner
 from agent_comms.planning.goals import Goal
@@ -137,7 +137,7 @@ class FailedTurnObservation:
 
 
 @dataclass(frozen=True)
-class Generation(GoalLedgerTable, TypedTable):
+class Generation(GoalLedgerTable, TypedTable, GoalGenerationRead):
     goal_id: Annotated[GoalId, Column(primary_key=True)]
     number: Annotated[int, Column(check="number>0")]
     lifecycle: GenerationState
@@ -425,7 +425,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence["Faile
 
 
 @dataclass(frozen=True)
-class LedgerAttempt(DeclaredFamily, affix="Attempt"):
+class LedgerAttempt(DeclaredFamily, GoalStoppedAttempt[Reservation], affix="Attempt"):
     """What the ledger holds for one attempt ID: a record, nothing, or nothing by design.
 
     Each member answers what the store asks of an attempt; nothing above decides it by None.
