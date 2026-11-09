@@ -1,0 +1,5 @@
+backup
+capture / worker read-back
++ CliProbePhase: cli_command --root /home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-carry-worker-diagnosis/case/comms read-back
+= 2.162s CliProbePhase: cli_command --root /home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-carry-worker-diagnosis/case/comms read-back (2.441s elapsed)
+captured BusReadBack(threads=0)

@@ -1,0 +1,15 @@
++ CliProbePhase: cli_command --root /home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-carry-worker-diagnosis/isolated-case/test_a_backup_undoes_a_real_wo0/comms read-back
+= 3.031s CliProbePhase: cli_command --root /home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-carry-worker-diagnosis/isolated-case/test_a_backup_undoes_a_real_wo0/comms read-back (3.348s elapsed)
++ CarryPhase: migrate
++ CliProbePhase: cli_command --root /home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-carry-worker-diagnosis/isolated-case/test_a_backup_undoes_a_real_wo0/comms reconcile-stores
+= 2.982s CliProbePhase: cli_command --root /home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-carry-worker-diagnosis/isolated-case/test_a_backup_undoes_a_real_wo0/comms reconcile-stores (6.175s elapsed)
++ CliProbePhase: cli_command --root /home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-carry-worker-diagnosis/isolated-case/test_a_backup_undoes_a_real_wo0/comms read-back
+= 3.082s CliProbePhase: cli_command --root /home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-carry-worker-diagnosis/isolated-case/test_a_backup_undoes_a_real_wo0/comms read-back (3.362s elapsed)
+.
+=============================== warnings summary ===============================
+../../.cache/toad/test-env/4f4f4f5751050005/lib/python3.14/site-packages/_pytest/config/__init__.py:885
+  /home/ts/.cache/toad/test-env/4f4f4f5751050005/lib/python3.14/site-packages/_pytest/config/__init__.py:885: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; goal_owner_fixture
+    self.import_plugin(import_spec)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 1 warning in 16.64s

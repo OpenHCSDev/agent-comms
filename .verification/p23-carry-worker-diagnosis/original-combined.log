@@ -1,0 +1,17 @@
+........................................................................ [  5%]
+.....................................s.................................. [ 11%]
+...........................................
+=============================== warnings summary ===============================
+../../.cache/toad/test-env/4f4f4f5751050005/lib/python3.14/site-packages/_pytest/config/__init__.py:885
+  /home/ts/.cache/toad/test-env/4f4f4f5751050005/lib/python3.14/site-packages/_pytest/config/__init__.py:885: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; goal_owner_fixture
+    self.import_plugin(import_spec)
+
+tests/guards/test_agent_comms_gate.py: 48 warnings
+  /usr/lib/python3.14/multiprocessing/popen_fork.py:76: DeprecationWarning: This process (pid=639745) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    self.pid = os.fork()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/home/ts/wt/comms-friction--P17/src/agent_comms/installer/commands.py:96: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+186 passed, 1 skipped, 38 deselected, 49 warnings in 297.18s (0:04:57)
