@@ -1,0 +1,13 @@
+--- a/home/ts/wt/comms-friction--P23--toad/tests/support/native_steps.py
++++ b/home/ts/wt/comms-friction--P23--toad/tests/support/native_steps.py
+@@ -164,4 +164,10 @@
+             await asyncio.to_thread(arrange, comms, session, goal, provider)
+ 
+     async with native_session(workspace, prepare=prepare, size=size, provider=provider) as native:
++        expected_goal = native.comms.registry.require(native.thread).goal
++        view = native.ui.conversation
++        await native.ui.until(
++            lambda: view.goal_display.snapshot == expected_goal and view.goal_bar.controls.is_mounted,
++            why="the owner's current goal and its mounted controls",
++        )
+         yield native

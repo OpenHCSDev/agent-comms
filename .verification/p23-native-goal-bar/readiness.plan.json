@@ -1,0 +1,29 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "stage-1-patch_target",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "    async with native_session(workspace, prepare=prepare, size=size, provider=provider) as native:\n        yield native\n",
+                  "new_source": "    async with native_session(workspace, prepare=prepare, size=size, provider=provider) as native:\n        expected_goal = native.comms.registry.require(native.thread).goal\n        view = native.ui.conversation\n        await native.ui.until(\n            lambda: view.goal_display.snapshot == expected_goal and view.goal_bar.controls.is_mounted,\n            why=\"the owner's current goal and its mounted controls\",\n        )\n        yield native\n"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-friction--P23--toad/tests/support/native_steps.py",
+              "target_qualname": "goal_on_real_owner",
+              "rationale": "ACP session connection does not imply the separate owner-goal observation has arrived or lazy goal controls have mounted. Preserve the actual tests and wait on their existing source and widget owners before yielding the arranged native journey."
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}
