@@ -463,7 +463,7 @@ def own_background_jobs() -> int:
     import subprocess
 
     return jobs_among([line.split(None, 2) for line in subprocess.run(
-        ["ps", "-eo", "pid=,ppid=,args="], capture_output=True, text=True).stdout.splitlines()], os.getpid())
+        ["ps", "-ww", "-eo", "pid=,ppid=,args="], capture_output=True, text=True).stdout.splitlines()], os.getpid())
 
 
 def jobs_among(rows: list[list[str]], pid: int) -> int:
