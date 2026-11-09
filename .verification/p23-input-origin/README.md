@@ -1,8 +1,14 @@
 # P23 InputOrigin contribution
 
-## Current ingress cut
+## Current provider closure on packaged source
 
-`low-contracts.plan.json` moves the original `InputRootAuthority` and `InputTextContext` to their own `execution/` modules. Two native stages are clean against Core `622c26d425` and owned Toad `4f4feee8e`, with all 2,237 source/test/tool modules supplied. Eight Core files change; no product file was written. Native relocation already removes the unused imports: the extra cleanup was refused and deleted, with its original failure retained in `low-contracts-simulation.log`. The successful receipt is `low-contracts.simulation.json`, with `low-contracts-two-moves.log`/`.exit` (0). Apply within friction's component batch, not behind another cold run.
+`message-module-owners.plan.json` is the usable prefix on Core `356d83cc0` / owned Toad `77c300b0c`: one native stage, six operations, seven imports. It replaces absent module names imported from `messaging.sending` with their actual original module owners. Source checks preserve all class/function ASTs; native simulation is clean across 2,306 modules (`message-module-owners.plan.receipt.json`). No product write, cold run or SCC reduction is claimed here.
+
+`record-builder-placement.plan.json` is a separate two-operation suffix for the original alias still left at root `bus_record_builder.py`. It follows the prefix, moves the alias to `messaging/`, and dissolves the root module. `message-owners-and-builder.plan.json` composes both for normal native reproof; a suffix refusal never holds the usable prefix. Full native reports now stay under the named scratch cache; the small receipts here link to those reports by SHA256. The combined relocation suffix currently refuses on the live P34 `pyproject.toml:152` merge marker (`Invalid value`), not on a construction proof. Python sources are pinned; native relocation also reads that live manifest. Friction owns resolving it, then ordinary suffix reproof. The usable seven-binding prefix is separate and already handed over.
+
+## Applied ingress cut — do not replay
+
+Friction applied and pushed the original low-contract move at `143892f2acccfc31818c837addcdc3d510e38646`; its eight-file diff has been independently read. `low-contracts.plan.json` moves the original `InputRootAuthority` and `InputTextContext` to their own `execution/` modules. Two native stages are clean against Core `622c26d425` and owned Toad `4f4feee8e`, with all 2,237 source/test/tool modules supplied. Eight Core files change; no product file was written. Native relocation already removes the unused imports: the extra cleanup was refused and deleted, with its original failure retained in `low-contracts-simulation.log`. The successful receipt is `low-contracts.simulation.json`, with `low-contracts-two-moves.log`/`.exit` (0). Apply within friction's component batch, not behind another cold run.
 
 The source path is `input_ingress.py` on that pinned source. After friction's 66-module placement, regenerate with `author_low_contracts.py --source-module execution/input_ingress.py`. Both destinations are already packaged. The two namespace repairs are already carried by `622c26d425` and must not be reapplied.
 

@@ -1,0 +1,18 @@
+{
+  "operation": "relocate_symbols_to_new_module",
+  "status": "failed",
+  "message": "Invalid value (at line 152, column 1)",
+  "details": {
+    "target": {
+      "target_id": null,
+      "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus_record_builder.py",
+      "target_qualname": null
+    },
+    "causes": [
+      {
+        "violation": null,
+        "message": "Invalid value (at line 152, column 1)"
+      }
+    ]
+  }
+}
