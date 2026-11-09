@@ -1,0 +1,27 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-close-live-record-builder-consumer",
+          "reason": "Applied 19a3fb77f deletes the root bus_record_builder module, but tests/test_bus_resource_claims.py:12 still imports RecordBuilder from it. Point this actual executable reader at the original alias now declared in messaging/bus_record_builder.py. Keep the test's behavior and assertions unchanged; do not resurrect a compatibility module. The remaining grep hits in tools are strings inside historical plan authors, not additional executable from-imports at those lines. Application must retain tests in the selected migration context.",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/tests/test_bus_resource_claims.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.bus_record_builder import RecordBuilder",
+                  "new_source": "from agent_comms.messaging.bus_record_builder import RecordBuilder"
+                }
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}
