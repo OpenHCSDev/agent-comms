@@ -235,7 +235,7 @@ class Goals(
     MessageDirections[Message],
     GoalStoreSource[GoalAttemptStore],
     GoalReadyGrantSource[NativeThread, Generation],
-    GoalSnapshots[Thread, GoalSnapshot],
+    GoalSnapshots[Thread, GoalSnapshot, RegistrySnapshot],
 ):
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
         """Create a teammate's child goal from its parent's active work."""

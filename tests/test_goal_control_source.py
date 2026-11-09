@@ -16,7 +16,7 @@ from agent_comms.planning.goals import NoGoal
 from agent_comms.nominal.field_codec import GoalId
 
 
-class ControlProbe(GoalControlSource[object, GoalAction[GoalDeclaration]]):
+class ControlProbe(GoalControlSource[object, GoalAction[GoalDeclaration], Goal, GoalDeclaration]):
     def __init__(self, observed: GoalDeclaration, reply: GoalDeclaration) -> None:
         self.observed = observed
         self.reply = reply

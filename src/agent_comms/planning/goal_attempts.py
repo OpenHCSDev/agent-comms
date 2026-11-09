@@ -52,6 +52,7 @@ from agent_comms.planning.goal_attempt_phase import (
     ResolvedAttempt,
     SucceededAttempt,
 )
+from agent_comms.planning.goal_failure_owner import GoalFailureOwner
 from agent_comms.planning.goal_generation import (
     BlockedGeneration,
     CancelledGeneration,
@@ -80,7 +81,6 @@ from agent_comms.planning.goal_mutation import (
 )
 from agent_comms.planning.goal_permit_source import GoalPermitSource, GoalStoreSource
 from agent_comms.planning.goal_scope import GoalScope
-from agent_comms.planning.goal_work import GoalFailureOwner
 from agent_comms.planning.goals import Goal
 from agent_comms.registry.thread_identity import TurnFence
 from agent_comms.storage.locked_store import FileStore, GoalWakeFile, SQLiteReader

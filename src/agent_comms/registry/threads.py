@@ -53,8 +53,8 @@ from agent_comms.nominal.registration_inheritance import (
     InheritEmpty,
     InheritPrevious,
 )
+from agent_comms.planning.goal_failure_owner import GoalFailureOwner
 from agent_comms.planning.goal_mutation import GoalFork
-from agent_comms.planning.goal_work import GoalFailureOwner
 from agent_comms.planning.goals import GoalConsentRequired, GoalDeclaration, NoGoal
 from agent_comms.planning.task_scope import TaskScope
 from agent_comms.projects.checkouts import Checkout, RepositoryReads

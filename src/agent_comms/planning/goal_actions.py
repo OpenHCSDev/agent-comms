@@ -194,7 +194,7 @@ class GoalAction[Result: GoalDeclaration](
 
     @classmethod
     async def submit_control[Authority](
-        cls, source: GoalControlSource[Authority, GoalAction[GoalDeclaration]],
+        cls, source: GoalControlSource[Authority, GoalAction[GoalDeclaration], Goal, GoalDeclaration],
         authority: Authority, text: str = "",
     ) -> GoalDeclaration:
         goal = (await source.observed_goal(authority)).require()
@@ -202,7 +202,7 @@ class GoalAction[Result: GoalDeclaration](
 
     @classmethod
     async def submit_checkpoint[Authority](
-        cls, source: GoalControlSource[Authority, GoalAction[GoalDeclaration]],
+        cls, source: GoalControlSource[Authority, GoalAction[GoalDeclaration], Goal, GoalDeclaration],
         authority: Authority, goal: Goal,
     ) -> GoalDeclaration:
         return await source.change_goal_control(authority, cls, goal)
@@ -562,7 +562,7 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
 
     @classmethod
     async def submit_control[Authority](
-        cls, source: GoalControlSource[Authority, GoalAction[GoalDeclaration]],
+        cls, source: GoalControlSource[Authority, GoalAction[GoalDeclaration], Goal, GoalDeclaration],
         authority: Authority, text: str = "",
     ) -> GoalDeclaration:
         return await source.set_goal_control(authority, text)
@@ -786,7 +786,7 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
 
     @classmethod
     async def submit_checkpoint[Authority](
-        cls, source: GoalControlSource[Authority, GoalAction[GoalDeclaration]],
+        cls, source: GoalControlSource[Authority, GoalAction[GoalDeclaration], Goal, GoalDeclaration],
         authority: Authority, goal: Goal,
     ) -> GoalDeclaration:
         return await source.retry_goal_control(authority, goal)

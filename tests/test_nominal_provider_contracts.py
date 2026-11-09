@@ -32,11 +32,11 @@ from agent_comms.messaging.display_sources import (
     SortedChannel,
     StoredThreadOrder,
 )
+from agent_comms.planning.goal_failure_owner import GoalFailureOwner
 from agent_comms.planning.goal_ledger import AttemptRecord, Generation, Reservation
 from agent_comms.planning.goal_work import (
     GoalAssignment,
     GoalAssignments,
-    GoalFailureOwner,
     GoalObservation,
     GoalOwner,
 )

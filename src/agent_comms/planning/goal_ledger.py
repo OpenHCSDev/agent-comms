@@ -44,6 +44,7 @@ from agent_comms.planning.goal_failure_observation import (
     GoalFailureEvidence,
     NoFailedTurnEvidence,
 )
+from agent_comms.planning.goal_failure_owner import GoalFailureOwner
 from agent_comms.planning.goal_generation import (
     BlockedGeneration,
     GenerationState,
@@ -55,7 +56,6 @@ from agent_comms.planning.goal_mutation import (
     GoalGenerationRead,
     GoalStoppedAttempt,
 )
-from agent_comms.planning.goal_work import GoalFailureOwner
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import (

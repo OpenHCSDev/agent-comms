@@ -2,20 +2,19 @@
 
 from abc import ABC, abstractmethod
 
-from agent_comms.planning.goals import Goal, GoalDeclaration
 
 
-class GoalControlSource[Authority, Action](ABC):
+class GoalControlSource[Authority, Action, Subject, Declaration](ABC):
     @abstractmethod
-    async def observed_goal(self, authority: Authority) -> GoalDeclaration: ...
+    async def observed_goal(self, authority: Authority) -> Declaration: ...
 
     @abstractmethod
     async def change_goal_control(
-        self, authority: Authority, action: type[Action], goal: Goal,
-    ) -> GoalDeclaration: ...
+        self, authority: Authority, action: type[Action], goal: Subject,
+    ) -> Declaration: ...
 
     @abstractmethod
-    async def set_goal_control(self, authority: Authority, text: str) -> GoalDeclaration: ...
+    async def set_goal_control(self, authority: Authority, text: str) -> Declaration: ...
 
     @abstractmethod
-    async def retry_goal_control(self, authority: Authority, goal: Goal) -> GoalDeclaration: ...
+    async def retry_goal_control(self, authority: Authority, goal: Subject) -> Declaration: ...

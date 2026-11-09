@@ -64,6 +64,7 @@ from agent_comms.planning.goal_attempt_phase import GoalAttemptPhase
 from agent_comms.planning.goal_attempts import LaunchPermit
 from agent_comms.planning.goal_control import GoalControlSource
 from agent_comms.planning.goal_failure_observation import NoFailedTurnEvidence
+from agent_comms.planning.goal_failure_owner import GoalFailureOwner
 from agent_comms.planning.goal_generation import GenerationState
 from agent_comms.planning.goal_ledger import FailedTurnEvidence, FailedTurnObservation, Generation
 from agent_comms.planning.goal_mutation import GoalTurnProjection
@@ -71,7 +72,7 @@ from agent_comms.planning.goal_records import GoalRecords
 from agent_comms.planning.goal_states import GoalState
 from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goal_waits import GoalWait, GoalWaits, NoGoalWait, RecordedGoalWait
-from agent_comms.planning.goal_work import GoalFailureOwner, GoalOwner, GoalWorkSource
+from agent_comms.planning.goal_work import GoalOwner, GoalWorkSource
 from agent_comms.planning.goals import (
     GoalDeclaration,
     GoalMentionBinding,

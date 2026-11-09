@@ -169,7 +169,7 @@ class ReadThrough(ChannelReadMark):
 class BusPresentation:
     def __init__(
         self, bus: BusReadSource, registry: Registration, catalog: ChannelCatalog,
-        agents: AgentActivity, goals: GoalSnapshots[Thread, GoalExecutionSnapshot],
+        agents: AgentActivity, goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot],
     ):
         self.bus = bus
         self.registry = registry
@@ -341,7 +341,7 @@ class ThreadRecord(CliResult):
 
     @classmethod
     def read(cls, snapshot: RegistrySnapshot, agents: AgentActivity,
-             goals: GoalSnapshots[Thread, GoalExecutionSnapshot], threads: Iterable[Thread],
+             goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot], threads: Iterable[Thread],
              pending: Mapping[str, InboxCount]) -> tuple[ThreadRecord, ...]:
         """Only active threads are observed; the rest show the absent activity."""
         threads = tuple(threads)
@@ -381,7 +381,7 @@ class ThreadView(ThreadRecord):
     @classmethod
     def roster(
         cls, snapshot: RegistrySnapshot, agents: AgentActivity,
-        goals: GoalSnapshots[Thread, GoalExecutionSnapshot],
+        goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot],
         visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> tuple[ThreadView, ...]:
         threads = tuple(snapshot.visible_threads(visibility, names=names))
@@ -443,7 +443,7 @@ class CoordinationSnapshot:
         cls, root: Path, registry: RegistrySnapshot, catalog: CatalogDocument,
         agents: AgentActivity, declarations: Channels,
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
-        goals: GoalSnapshots[Thread, GoalExecutionSnapshot], unread: Mapping[str, int], channel_unread: Mapping[str, int],
+        goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot], unread: Mapping[str, int], channel_unread: Mapping[str, int],
         visibility: RosterVisibility, read_marker_notice: ReadNotice = NoReadNotice(),
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""

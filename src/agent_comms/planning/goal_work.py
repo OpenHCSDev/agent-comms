@@ -2,10 +2,8 @@
 
 from abc import ABC, abstractmethod
 
-from agent_comms.execution.child_process import ProcessState
 from agent_comms.nominal.field_codec import GoalId
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_identity import ObservedTurn, ThreadIncarnation
+from agent_comms.registry.thread_identity import ThreadIncarnation
 
 
 class GoalObservation(ABC):
@@ -30,15 +28,6 @@ class GoalOwner(ABC):
 
     @abstractmethod
     def require_goal_assignment(self, actor: ThreadIncarnation) -> None: ...
-
-
-class GoalFailureOwner(GoalOwner):
-    __slots__ = ()
-    worktree: Checkout
-    process_identity: ProcessState
-
-    @abstractmethod
-    def observed_turn(self, claim_scope: int) -> ObservedTurn: ...
 
 
 class GoalAssignment(ABC):
