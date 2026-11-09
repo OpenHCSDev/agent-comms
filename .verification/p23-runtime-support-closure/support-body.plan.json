@@ -1,0 +1,513 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "declare-support-contracts",
+          "operations": [
+            {
+              "operation": "create_file",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/execution/stats_callbacks.py",
+              "rationale": "",
+              "source": "\"\"\"Reads used by native wait/settlement callbacks, without importing the backend.\"\"\"\nfrom __future__ import annotations\nfrom abc import ABC, abstractmethod\n\nfrom agent_comms import agent_events as events\nfrom agent_comms.execution.native_session_callbacks import NativeSessionCallbacks\n\n\nclass StatsWatchdogRead[Wait](ABC):\n    __slots__ = ()\n    poll_wait: Wait\n\n\nclass StatsProgressRead[Phase](ABC):\n    __slots__ = ()\n    phase: Phase\n\n\nclass WatchdogSessionRead[Watchdog, Stats](NativeSessionCallbacks):\n    __slots__ = ()\n    watchdog: Watchdog\n    stats: Stats\n    started_input: bool\n    started_during_abort: list[events.InputStarted]\n\n    @abstractmethod\n    def finish_request(self) -> None: ...\n\n    @abstractmethod\n    def ensure_input_forwarding(self) -> None: ...\n\n    @abstractmethod\n    async def abort_stalled_rpc(self) -> None: ...\n"
+            },
+            {
+              "operation": "create_file",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/messaging/notification_contracts.py",
+              "rationale": "",
+              "source": "\"\"\"Notification callbacks use the original evidence/revision providers.\"\"\"\nfrom __future__ import annotations\nfrom abc import ABC, abstractmethod\nfrom pathlib import Path\nfrom agent_comms.revision_views import RevisionView\n\n\nclass NotificationEvidenceSource[Evidence](ABC):\n    __slots__ = ()\n    root: Path\n\n    @abstractmethod\n    def notification_evidence(self) -> Evidence: ...\n\n\nclass RecipientActivityRead[Notice, Assignment, Progress](ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def turn_started_by(self, updated_at_ms: int) -> bool: ...\n\n    @abstractmethod\n    def displayed_recipient(self, notification, source, reads, document, snapshot): ...\n\n    @abstractmethod\n    def selected_response(self, notification: Notice, updated_at_ms: int, progress: Assignment) -> Notice: ...\n\n    @abstractmethod\n    def taken_response(self, notification: Notice, progress: Progress) -> Notice: ...\n\n\nclass RevisionChanges(ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def changed_since(self, view: RevisionView, earlier: RevisionChanges) -> bool: ...\n"
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "lower-original-finishsignal",
+          "operations": [
+            {
+              "operation": "relocate_symbols_to_new_module",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/backend.py",
+              "rationale": "",
+              "destination_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/execution/finish_signal.py",
+              "batch": [],
+              "symbol_qualnames": [
+                "FinishSignal",
+                "NoFinishSignal",
+                "EventFinishSignal",
+                "NO_FINISH_SIGNAL"
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "bind-stats-callbacks",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "from __future__ import annotations\n\n",
+                  "new_source": "from __future__ import annotations\n\nfrom agent_comms.execution.stats_callbacks import StatsWatchdogRead, StatsProgressRead, WatchdogSessionRead\n\n"
+                },
+                {
+                  "old_source": "from agent_comms.execution.turn_failure import BackendFailed\nfrom agent_comms.execution.turn_phase import ModelWaitPhase\nfrom agent_comms.pending_requests import PendingRequest\n",
+                  "new_source": "from agent_comms.execution.turn_failure import BackendFailed\nfrom agent_comms.execution.turn_phase import ModelWaitPhase, TurnPhase\nfrom agent_comms.pending_requests import PendingRequest\n"
+                },
+                {
+                  "old_source": "\n    def wait_for(self, watchdog: ProgressWatchdog, active: TurnWait) -> TurnWait:\n        return active\n",
+                  "new_source": "\n    def wait_for[Wait](self, watchdog: StatsWatchdogRead[Wait], active: Wait) -> Wait:\n        return active\n"
+                },
+                {
+                  "old_source": "\n    def permits_live_status(self, session: NativeSession) -> bool:\n        return session.prompt_state.permits_extension_ui(session)\n",
+                  "new_source": "\n    def permits_live_status(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest]) -> bool:\n        return session.prompt_state.permits_extension_ui(session)\n"
+                },
+                {
+                  "old_source": "\n    async def request(self, session: NativeSession) -> None:\n        # A newer native settlement replaces an older in-flight snapshot. Its\n",
+                  "new_source": "\n    async def request(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest]) -> None:\n        # A newer native settlement replaces an older in-flight snapshot. Its\n"
+                },
+                {
+                  "old_source": "    @staticmethod\n    async def _request(session: NativeSession) -> ReadingStats:\n        # Forwarding has stopped. No get_state query may overtake an input still\n",
+                  "new_source": "    @staticmethod\n    async def _request(session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest]) -> ReadingStats:\n        # Forwarding has stopped. No get_state query may overtake an input still\n"
+                },
+                {
+                  "old_source": "\n    def advance_if_done(self, session: NativeSession, completed: Collection[object]) -> bool:\n        return False\n",
+                  "new_source": "\n    def advance_if_done(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest], completed: Collection[object]) -> bool:\n        return False\n"
+                },
+                {
+                  "old_source": "\n    def expired(self, session: NativeSession) -> None:\n        session.output.record_failure(BackendFailed(\n",
+                  "new_source": "\n    def expired(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest]) -> None:\n        session.output.record_failure(BackendFailed(\n"
+                },
+                {
+                  "old_source": "\n    async def settle(self, session: NativeSession) -> AsyncIterator[events.AgentEvent]:\n        return\n",
+                  "new_source": "\n    async def settle(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest]) -> AsyncIterator[events.AgentEvent]:\n        return\n"
+                },
+                {
+                  "old_source": "\n    def permits_live_status(self, session: NativeSession) -> bool:\n        return False\n",
+                  "new_source": "\n    def permits_live_status(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest]) -> bool:\n        return False\n"
+                },
+                {
+                  "old_source": "\n    def advance_if_done(self, session: NativeSession, completed: Collection[object]) -> bool:\n        if self.task not in completed:\n",
+                  "new_source": "\n    def advance_if_done(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest], completed: Collection[object]) -> bool:\n        if self.task not in completed:\n"
+                },
+                {
+                  "old_source": "\n    def wait_for(self, watchdog: ProgressWatchdog, active: TurnWait) -> TurnWait:\n        # Only the metadata replies use the short snapshot wait. A prompt still\n",
+                  "new_source": "\n    def wait_for[Wait](self, watchdog: StatsWatchdogRead[Wait], active: Wait) -> Wait:\n        # Only the metadata replies use the short snapshot wait. A prompt still\n"
+                },
+                {
+                  "old_source": "\n    async def settle(self, session: NativeSession) -> AsyncIterator[events.AgentEvent]:\n        if not all(entry.future.done() for entry in self.pending):\n",
+                  "new_source": "\n    async def settle(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest]) -> AsyncIterator[events.AgentEvent]:\n        if not all(entry.future.done() for entry in self.pending):\n"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/execution/turn_stats.py",
+              "rationale": ""
+            },
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "from __future__ import annotations\n\n",
+                  "new_source": "from __future__ import annotations\n\nfrom agent_comms.execution.stats_callbacks import WatchdogSessionRead\n\n"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/backend.py",
+              "rationale": ""
+            },
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "from __future__ import annotations\n\n",
+                  "new_source": "from __future__ import annotations\n\nfrom agent_comms.execution.stats_callbacks import WatchdogSessionRead, StatsWatchdogRead, StatsProgressRead\nfrom agent_comms.execution.turn_stats import StatsRequest\n\n"
+                },
+                {
+                  "old_source": "\n    def diagnosis(self, session: TurnSession) -> str:\n        return f\"{self.reason}: phase={self.phase}\"\n\n    def expired(self, session: TurnSession) -> TurnWaitExpired:\n        return TurnWaitExpired(\n",
+                  "new_source": "\n    def diagnosis(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> str:\n        return f\"{self.reason}: phase={self.phase}\"\n\n    def expired(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> TurnWaitExpired:\n        return TurnWaitExpired(\n"
+                },
+                {
+                  "old_source": "\n    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:\n        session.finish_request()\n",
+                  "new_source": "\n    async def expire(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> AsyncIterator[events.AgentEvent]:\n        session.finish_request()\n"
+                },
+                {
+                  "old_source": "\n    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:\n        watchdog = session.watchdog\n",
+                  "new_source": "\n    async def expire(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> AsyncIterator[events.AgentEvent]:\n        watchdog = session.watchdog\n"
+                },
+                {
+                  "old_source": "\n    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:\n        session.output.record_failure(\n",
+                  "new_source": "\n    async def expire(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> AsyncIterator[events.AgentEvent]:\n        session.output.record_failure(\n"
+                },
+                {
+                  "old_source": "\n    def diagnosis(self, session: TurnSession) -> str:\n        stalled = session.watchdog.phase.stalled()\n",
+                  "new_source": "\n    def diagnosis(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> str:\n        stalled = session.watchdog.phase.stalled()\n"
+                },
+                {
+                  "old_source": "\n    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:\n        await session.abort_stalled_rpc()\n",
+                  "new_source": "\n    async def expire(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> AsyncIterator[events.AgentEvent]:\n        await session.abort_stalled_rpc()\n"
+                },
+                {
+                  "old_source": "\n    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:\n        session.stats.expired(session)\n",
+                  "new_source": "\n    async def expire(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> AsyncIterator[events.AgentEvent]:\n        session.stats.expired(session)\n"
+                },
+                {
+                  "old_source": "    @handles(AcceptsPrompt)\n    def accept_prompt(self, event: PiEvent, session: TurnSession) -> None:\n        if event.invalidates_stop:\n",
+                  "new_source": "    @handles(AcceptsPrompt)\n    def accept_prompt(self, event: PiEvent, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> None:\n        if event.invalidates_stop:\n"
+                },
+                {
+                  "old_source": "\n    def wait_for(self, session: TurnSession) -> TurnWait:\n        if session.awaiting_native_attestation:\n",
+                  "new_source": "\n    def wait_for(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> TurnWait:\n        if session.awaiting_native_attestation:\n"
+                },
+                {
+                  "old_source": "\n    async def read(self, session: TurnSession) -> bytes:\n        if session.rejected_signal.is_set():\n",
+                  "new_source": "\n    async def read(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> bytes:\n        if session.rejected_signal.is_set():\n"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/execution/turn_watchdog.py",
+              "rationale": ""
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "inherit-stats-callbacks",
+          "operations": [
+            {
+              "operation": "replace_class_base",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/backend.py",
+              "target_qualname": "NativeSession",
+              "rationale": "",
+              "base_name": "NativeSessionCallbacks",
+              "replacement_base_name": "WatchdogSessionRead[ProgressWatchdog, StatsRequest]"
+            },
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/execution/turn_watchdog.py",
+              "target_qualname": "ProgressWatchdog",
+              "rationale": "",
+              "base_name": "StatsWatchdogRead[TurnWait]"
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "inherit-watchdog-phase-read",
+          "operations": [
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/execution/turn_watchdog.py",
+              "target_qualname": "ProgressWatchdog",
+              "rationale": "",
+              "base_name": "StatsProgressRead[TurnPhase]"
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "bind-notification-callbacks",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "from __future__ import annotations\n\n",
+                  "new_source": "from __future__ import annotations\n\nfrom agent_comms.messaging.notification_contracts import NotificationEvidenceSource, RevisionChanges, RecipientActivityRead\nfrom agent_comms.message_reads import MessageDeliveryRead, MessageReferencesRead\n\n"
+                },
+                {
+                  "old_source": "from agent_comms.notification_progress import (\n    AssignmentResponse,\n",
+                  "new_source": "from agent_comms.notification_progress import (\n    AssignmentProgress,\n    AssignmentResponse,\n"
+                },
+                {
+                  "old_source": "\n    def __init__(self, comms: Comms, revision: WireRevision) -> None:\n        self.comms = comms\n",
+                  "new_source": "\n    def __init__(self, comms: NotificationEvidenceSource[CapturedNotificationEvidence], revision: RevisionChanges) -> None:\n        self.comms = comms\n"
+                },
+                {
+                  "old_source": "    def evidence(self) -> CapturedNotificationEvidence:\n        reads = self.comms.bus.reads\n        return CapturedNotificationEvidence(\n            self.comms.root, reads, reads.read(), self.comms.registry.snapshot())\n\n    def changed(self, window: NotificationWindow, earlier: WireRevision) -> bool:\n        return (self.revision.changed_since(NotificationEvidenceView(), earlier)\n",
+                  "new_source": "    def evidence(self) -> CapturedNotificationEvidence:\n        return self.comms.notification_evidence()\n\n    def changed(self, window: NotificationWindow, earlier: RevisionChanges) -> bool:\n        return (self.revision.changed_since(NotificationEvidenceView(), earlier)\n"
+                },
+                {
+                  "old_source": "        registry: Registration,\n        log: Bus,\n        references: Sequence[MessageReference],\n",
+                  "new_source": "        registry: Registration,\n        log: MessageReferencesRead[Message],\n        references: Sequence[MessageReference],\n"
+                },
+                {
+                  "old_source": "        viewer may see them.\"\"\"\n        def project(sources: Sequence[Delivered]) -> NotificationWindow:\n            read = NotificationAssignment.read(\n",
+                  "new_source": "        viewer may see them.\"\"\"\n        def project(sources: Sequence[MessageDeliveryRead[Message]]) -> NotificationWindow:\n            read = NotificationAssignment.read(\n"
+                },
+                {
+                  "old_source": "    def read_references(\n        cls, log: Bus, references: Sequence[MessageReference],\n        project: Callable[[Sequence[Delivered]], NotificationWindow],\n    ) -> NotificationWindow:\n",
+                  "new_source": "    def read_references(\n        cls, log: MessageReferencesRead[Message], references: Sequence[MessageReference],\n        project: Callable[[Sequence[MessageDeliveryRead[Message]]], NotificationWindow],\n    ) -> NotificationWindow:\n"
+                },
+                {
+                  "old_source": "        namespace: RegistryProvenance,\n        sources: Sequence[Delivered],\n        *,\n",
+                  "new_source": "        namespace: RegistryProvenance,\n        sources: Sequence[MessageDeliveryRead[Message]],\n        *,\n"
+                },
+                {
+                  "old_source": "        snapshot: RegistryProvenance,\n        observations: Mapping[ThreadLookup, RecipientActivity],\n        *,\n",
+                  "new_source": "        snapshot: RegistryProvenance,\n        observations: Mapping[ThreadLookup, RecipientActivityRead[AssignmentNotice[DeliveryProgress], AssignmentProgress, DeliveryProgress]],\n        *,\n"
+                },
+                {
+                  "old_source": "    def sent_sources(\n        cls, root: Path, registry: Registration, log: Bus, name: str, *, limit: int = 5\n    ):\n",
+                  "new_source": "    def sent_sources(\n        cls, root: Path, registry: Registration, log: MessageReferencesRead[Message], name: str, *, limit: int = 5\n    ):\n"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/message_notification.py",
+              "rationale": ""
+            },
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "from __future__ import annotations\n\n",
+                  "new_source": "from __future__ import annotations\n\nfrom agent_comms.messaging.notification_contracts import RevisionChanges\n\n"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/presentation.py",
+              "rationale": ""
+            },
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "from __future__ import annotations\n\n",
+                  "new_source": "from __future__ import annotations\n\nfrom agent_comms.messaging.notification_contracts import NotificationEvidenceSource\nfrom agent_comms.message_notification import CapturedNotificationEvidence\n\n"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/comms.py",
+              "rationale": ""
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "own-notification-evidence-acquisition",
+          "operations": [
+            {
+              "operation": "insert_after_target",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/comms.py",
+              "target_qualname": "Comms.__init__",
+              "rationale": "",
+              "source": "    def notification_evidence(self) -> CapturedNotificationEvidence:\n        reads = self.bus.reads\n        return CapturedNotificationEvidence(\n            self.root, reads, reads.read(), self.registry.snapshot())"
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "inherit-notification-callbacks",
+          "operations": [
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/presentation.py",
+              "target_qualname": "ReadState",
+              "rationale": "",
+              "base_name": "RevisionChanges"
+            },
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/comms.py",
+              "target_qualname": "Comms",
+              "rationale": "",
+              "base_name": "NotificationEvidenceSource[CapturedNotificationEvidence]"
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "delete-replaced-concrete-annotation-imports",
+          "operations": [
+            {
+              "operation": "remove_import_bindings",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/execution/turn_stats.py",
+              "rationale": "",
+              "bound_names": [
+                "NativeSession",
+                "ProgressWatchdog",
+                "TurnWait"
+              ]
+            },
+            {
+              "operation": "remove_import_bindings",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/execution/turn_watchdog.py",
+              "rationale": "",
+              "bound_names": [
+                "TurnSession"
+              ]
+            },
+            {
+              "operation": "remove_import_bindings",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/message_notification.py",
+              "rationale": "",
+              "bound_names": [
+                "Comms",
+                "WireRevision",
+                "Bus",
+                "Delivered"
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "bind-original-recipient-activity-read",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "from __future__ import annotations\n\n",
+                  "new_source": "from __future__ import annotations\n\nfrom agent_comms.messaging.notification_contracts import RecipientActivityRead\n\n"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/agent_activity.py",
+              "rationale": ""
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "inherit-original-recipient-activity-read",
+          "operations": [
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/agent_activity.py",
+              "target_qualname": "RecipientActivity",
+              "rationale": "",
+              "base_name": "RecipientActivityRead[AssignmentNotice[DeliveryProgress], AssignmentProgress, DeliveryProgress]"
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "delete-replaced-recipient-activity-annotation-import",
+          "operations": [
+            {
+              "operation": "remove_import_bindings",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/message_notification.py",
+              "rationale": "",
+              "bound_names": [
+                "RecipientActivity"
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "promote-only-cycle-free-remaining-support-imports",
+          "operations": [
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/execution/turn_stats.py",
+              "rationale": "",
+              "module_name": "agent_comms.execution.finish_signal",
+              "import_names": [
+                "FinishSignal"
+              ]
+            },
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/execution/turn_watchdog.py",
+              "rationale": "",
+              "module_name": "agent_comms.execution.native_startup",
+              "import_names": [
+                "NativeStartupPolicy"
+              ]
+            },
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/execution/turn_watchdog.py",
+              "rationale": "",
+              "module_name": "agent_comms.pi_events",
+              "import_names": [
+                "PiEvent"
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

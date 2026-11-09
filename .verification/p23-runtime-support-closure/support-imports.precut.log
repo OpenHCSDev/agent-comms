@@ -1,0 +1,80 @@
+{
+  "reports": [
+    {
+      "operation": "promote_guarded_import",
+      "status": "passed",
+      "message": "The guarded import closes no runtime import cycle",
+      "details": {
+        "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/projected/src/agent_comms/execution/turn_stats.py",
+        "module_name": "agent_comms.execution.finish_signal",
+        "import_names": [
+          "FinishSignal"
+        ]
+      }
+    },
+    {
+      "operation": "promote_guarded_import",
+      "status": "passed",
+      "message": "The guarded import closes no runtime import cycle",
+      "details": {
+        "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/projected/src/agent_comms/execution/turn_watchdog.py",
+        "module_name": "agent_comms.execution.native_startup",
+        "import_names": [
+          "NativeStartupPolicy"
+        ]
+      }
+    },
+    {
+      "operation": "promote_guarded_import",
+      "status": "passed",
+      "message": "The guarded import closes no runtime import cycle",
+      "details": {
+        "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/projected/src/agent_comms/execution/turn_watchdog.py",
+        "module_name": "agent_comms.pi_events",
+        "import_names": [
+          "PiEvent"
+        ]
+      }
+    },
+    {
+      "operation": "promote_guarded_import",
+      "status": "failed",
+      "message": "'agent_comms.agent_activity' already imports 'agent_comms.message_notification' at runtime; the guard hides a cycle, so move the declaration instead",
+      "details": {
+        "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/projected/src/agent_comms/message_notification.py",
+        "module_name": "agent_comms.agent_activity",
+        "import_names": [
+          "RecipientActivity"
+        ]
+      }
+    },
+    {
+      "operation": "promote_guarded_import",
+      "status": "failed",
+      "message": "'agent_comms.registry.registration' already imports 'agent_comms.message_notification' at runtime; the guard hides a cycle, so move the declaration instead",
+      "details": {
+        "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/projected/src/agent_comms/message_notification.py",
+        "module_name": "agent_comms.registry.registration",
+        "import_names": [
+          "Registration"
+        ]
+      }
+    },
+    {
+      "operation": "promote_guarded_import",
+      "status": "failed",
+      "message": "'agent_comms.registry_provenance' already imports 'agent_comms.message_notification' at runtime; the guard hides a cycle, so move the declaration instead",
+      "details": {
+        "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/projected/src/agent_comms/message_notification.py",
+        "module_name": "agent_comms.registry_provenance",
+        "import_names": [
+          "RegistryProvenance"
+        ]
+      }
+    }
+  ],
+  "is_clean": false,
+  "preflight_failed": true,
+  "report_count": 6
+}
+PREFLIGHT ONLY; original vocabulary check still present; no simulate/apply

@@ -1,0 +1,37 @@
+{
+  "reports": [
+    {
+      "operation": "authority_claims",
+      "status": "failed",
+      "message": "Object capture remains open: unproved_execution_effects",
+      "details": {
+        "recipe_id": "promote-original-vocabulary-check",
+        "declaration_preflight": {
+          "operation": "promote_class_members_to_ancestor",
+          "status": "failed",
+          "message": "Object capture remains open: unproved_execution_effects",
+          "details": {
+            "target": {
+              "target_id": null,
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/agent_backend.py",
+              "target_qualname": "AgentBackend"
+            },
+            "causes": [
+              {
+                "violation": "unproved_execution_effects",
+                "message": "Object capture remains open: unproved_execution_effects"
+              },
+              {
+                "violation": null,
+                "message": "Native class entry 'agent_comms.agent_backend.RuntimeLocation' has unproved construction hooks at line 53"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "is_clean": false,
+  "preflight_failed": true,
+  "report_count": 1
+}

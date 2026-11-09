@@ -1,0 +1,16 @@
+stage 1 clean
+stage 2 clean
+stage 3 clean
+stage 4 clean
+stage 5 clean
+stage 6 clean
+stage 7 clean
+stage 8 clean
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/author_support.py", line 267, in <module>
+    main()
+    ~~~~^^
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/author_support.py", line 228, in main
+    RemoveImportBindingsOperation(file_path=path('execution/turn_stats'),bound_names=('NativeSession','ProgressWatchdog','TurnWait')),
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: RemoveImportBindingsOperation.__init__() got an unexpected keyword argument 'file_path'

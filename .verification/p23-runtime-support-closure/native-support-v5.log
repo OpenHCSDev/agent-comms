@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/author_support.py", line 267, in <module>
+    main()
+    ~~~~^^
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/author_support.py", line 138, in main
+    run(doc('declare-support-contracts', (
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        CreateFileOperation(target=target('execution/stats_callbacks'), source=(OUT/'support_contracts.py.txt').read_text()),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        CreateFileOperation(target=target('messaging/notification_contracts'), source=(OUT/'notification_contracts.py.txt').read_text()),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        CreateFileOperation(target=target('execution/event_vocabulary'), source='"""Runtime event vocabularies and their original declaration check."""\nfrom __future__ import annotations\nfrom typing import ClassVar\n'),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )))
+    ^^^
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/author_support.py", line 131, in run
+    (OUT/f'stage-{label}.json').write_text(json.dumps(result.execution_payload(),indent=2)+'\n')
+                                                      ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'CodemodPlanDocumentSimulation' object has no attribute 'execution_payload'. Did you mean: 'simulation_payload'?

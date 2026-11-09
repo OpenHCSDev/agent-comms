@@ -1,6 +1,5 @@
 """Reads used by native wait/settlement callbacks, without importing the backend."""
 from __future__ import annotations
-import asyncio
 from abc import ABC, abstractmethod
 
 from agent_comms import agent_events as events
@@ -17,9 +16,10 @@ class StatsProgressRead[Phase](ABC):
     phase: Phase
 
 
-class WatchdogSessionRead[Watchdog](NativeSessionCallbacks):
+class WatchdogSessionRead[Watchdog, Stats](NativeSessionCallbacks):
     __slots__ = ()
     watchdog: Watchdog
+    stats: Stats
     started_input: bool
     started_during_abort: list[events.InputStarted]
 

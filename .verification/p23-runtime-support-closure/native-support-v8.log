@@ -1,0 +1,55 @@
+stage 1 clean
+stage 2 clean
+stage 3 clean
+stage 4 clean
+stage 5 clean
+stage 6 clean
+stage 7 clean
+stage 8 clean
+stage 9 clean
+stage 10 clean
+stage 11 clean
+stage 12 clean
+stage 13 clean
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/author_support.py", line 292, in <module>
+    main()
+    ~~~~^^
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/author_support.py", line 261, in main
+    run(doc('delete-stats-empty-guard-imports',tuple(
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        RemoveImportBindingsOperation(target=target(module),bound_names=('TYPE_CHECKING',))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        for module in ('execution/turn_stats','execution/turn_watchdog')
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )))
+    ^^^
+  File "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/author_support.py", line 138, in run
+    preflight=document.preflight(current)
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 1240, in preflight
+    return CodemodPlanDocumentPreflight.from_snapshot(self, snapshot)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 1332, in from_snapshot
+    candidate = rewrite_snapshot.edit_batch_for_recipes(document.recipes)
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 665, in edit_batch_for_recipes
+    tuple(
+    ^^^^^
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 669, in <genexpr>
+    for edit in operation.originated_edits(
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self,
+        ^^^^^
+        recipe_id=recipe.recipe_id,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        plan_item_index=index,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/codemod_operations.py", line 121, in originated_edits
+    return tuple(edit.with_origin(origin) for edit in self.source_edits(context))
+                                                      ~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor/nominal_refactor_advisor/refactors/source_insertion.py", line 250, in source_edits
+    raise ValueError(
+        f"{source_path!r} has no import binding {tuple(sorted(unbound))!r}"
+    )
+ValueError: '/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-runtime-support-closure/before/src/agent_comms/execution/turn_stats.py' has no import binding ('TYPE_CHECKING',)

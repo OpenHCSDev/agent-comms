@@ -8,6 +8,7 @@ import csv
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import subprocess
 
 from nominal_refactor_advisor.codemod import (
@@ -15,14 +16,17 @@ from nominal_refactor_advisor.codemod import (
     PatchTargetOperation, RefactorRecipe, SourceRewriteTarget,
 )
 from nominal_refactor_advisor.json_reports import json_report_object
-from nominal_refactor_advisor.refactors.source_insertion import CreateFileOperation, InsertAfterTargetOperation
+from nominal_refactor_advisor.codemod_preflight import CodemodOperationPreflightError
+from nominal_refactor_advisor.codemod_import_scopes import ModuleImportScope
+from nominal_refactor_advisor.refactors.source_insertion import CreateFileOperation, InsertAfterTargetOperation, RemoveImportBindingsOperation
+from nominal_refactor_advisor.refactors.module_move import PromoteGuardedImportOperation
 from nominal_refactor_advisor.refactors.class_base import AddClassBaseOperation, ReplaceClassBaseOperation
-from nominal_refactor_advisor.refactors.class_member_authority import PromoteClassMembersToAncestorOperation
-from author_callbacks import guard_free, minimal_replacements
+from author_callbacks import minimal_replacements
 
-ROOT = Path('/home/ts/wt/comms-friction--P17')
-OUT = Path(__file__).parent
-TARGETS = ('execution/turn_stats', 'pi_native_backend', 'message_notification')
+ORIGINAL_ROOT = Path('/home/ts/wt/comms-friction--P17')
+OUT = Path(__file__).resolve().parent
+ROOT = OUT / 'before'
+TARGETS = ('execution/turn_stats', 'execution/turn_watchdog', 'message_notification')
 
 
 def path(module):
@@ -37,14 +41,6 @@ def doc(label, operations):
     return CodemodPlanDocument(recipes=(RefactorRecipe(recipe_id=label, operations=tuple(operations)),))
 
 
-def relocate(module, names, destination):
-    return CodemodPlanRoot.from_json_value({'recipes': [{
-        'recipe_id': 'lower-original-' + names[0].lower(),
-        'operations': [{'operation': 'relocate_symbols_to_module', 'file_path': path(module),
-                        'symbol_qualnames': names, 'destination_path': path(destination)}],
-    }]})
-
-
 def relocate_new(module, names, destination):
     return CodemodPlanRoot.from_json_value({'recipes': [{
         'recipe_id': 'lower-original-' + names[0].lower(),
@@ -54,40 +50,23 @@ def relocate_new(module, names, destination):
 
 
 def capture():
-    retained = OUT / 'before'
-    if retained.is_dir():
-        sources = {str(ROOT / file.relative_to(retained)): file.read_text()
-                   for file in retained.rglob('*.py')}
-        expected = json.loads((OUT/'source-manifest.json').read_text())['sources']
-        assert {name: hashlib.sha256(text.encode()).hexdigest() for name,text in sources.items()} == expected
-        return sources
-    listing = subprocess.run(['git', '-C', str(ROOT), 'ls-files', '--cached', '--others',
-                              '--exclude-standard', 'src', 'tests', 'AGENTS.md', 'pyproject.toml'], check=True,
-                             capture_output=True, text=True, timeout=30).stdout.splitlines()
-    sources = {}
-    resources = {}
-    for rel in sorted(set(listing)):
-        file = ROOT / rel
-        if not file.is_file():
-            continue
-        content = file.read_bytes()
-        if rel.endswith('.py'):
-            sources[str(file)] = content.decode()
-        else:
-            resources[rel] = content
-    manifest = {'head': subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'],
-                     check=True, capture_output=True, text=True).stdout.strip(),
-                'sources': {name: hashlib.sha256(source.encode()).hexdigest()
-                            for name, source in sources.items()}}
-    (OUT / 'source-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
-    for file, source in sources.items():
-        dest = OUT / 'before' / Path(file).relative_to(ROOT)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(source)
-    for rel, content in resources.items():
-        dest = OUT / 'projected' / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(content)
+    # Both Python source and package configuration belong to the retained proof root.
+    # A virtual source mapping must not read friction's changing rebase configuration.
+    for resource in (OUT/'projected').rglob('*'):
+        if resource.is_file() and resource.suffix != '.py' and '__pycache__' not in resource.parts:
+            destination=ROOT/resource.relative_to(OUT/'projected')
+            destination.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copyfile(resource,destination)
+    sources = {str(file): file.read_text() for file in ROOT.rglob('*.py')}
+    manifest=json.loads((OUT/'source-manifest.json').read_text())
+    expected={str(ROOT/Path(name).relative_to(ORIGINAL_ROOT)):digest
+              for name,digest in manifest['sources'].items()}
+    assert {name:hashlib.sha256(text.encode()).hexdigest() for name,text in sources.items()} == expected
+    (OUT/'proof-root.json').write_text(json.dumps({
+        'original_root':str(ORIGINAL_ROOT),'proof_root':str(ROOT),
+        'resources':{str(file.relative_to(ROOT)):hashlib.sha256(file.read_bytes()).hexdigest()
+                     for file in ROOT.rglob('*') if file.is_file() and file.suffix != '.py'},
+    },indent=2)+'\n')
     return sources
 
 
@@ -115,6 +94,22 @@ def replace_required(source, changes):
     return source
 
 
+def guarded_plan(snapshot, root, modules=TARGETS):
+    operations=[]
+    for module in modules:
+        file=str(root/'src/agent_comms'/(module+'.py'))
+        parsed=snapshot.parsed_module_for_source_path(file)
+        for statement in ModuleImportScope.TYPE_CHECKING.import_statements(parsed.module):
+            match statement:
+                case ast.ImportFrom(module=dependency, names=names, level=0) if dependency:
+                    operations.append(PromoteGuardedImportOperation(
+                        target=SourceRewriteTarget(file_path=file),module_name=dependency,
+                        import_names=tuple(alias.name for alias in names)))
+                case _:
+                    raise ValueError(f'Unsupported support import: {ast.dump(statement)}')
+    return doc('promote-only-cycle-free-remaining-support-imports',operations)
+
+
 def main():
     sources = capture()
     original = current = CodemodSourceSnapshot.from_source_mapping(sources, analysis_roots=(ROOT/'src',))
@@ -128,49 +123,36 @@ def main():
 
     def run(plan):
         nonlocal current
-        result=plan.as_sequence().simulate(current)
+        documents=plan.as_sequence().documents
+        assert len(documents)==1
+        document=documents[0]
+        preflight=document.preflight(current)
         label=f'{len(stages):02d}'
-        (OUT/f'stage-{label}.json').write_text(json.dumps(result.execution_payload(),indent=2)+'\n')
+        (OUT/f'preflight-{label}.json').write_text(json.dumps(json_report_object(preflight.report),indent=2)+'\n')
+        try:
+            result=preflight.simulate()
+        except CodemodOperationPreflightError:
+            failed=CodemodPlanSequence(documents=tuple(stages)+documents)
+            (OUT/'refused.plan.json').write_text(json.dumps(json_report_object(failed),indent=2)+'\n')
+            (OUT/'refusal.json').write_text(json.dumps(json_report_object(preflight.report),indent=2)+'\n')
+            raise
+        (OUT/f'stage-{label}.json').write_text(json.dumps(json_report_object(result),indent=2)+'\n')
         assert result.is_clean
-        stages.extend(plan.as_sequence().documents)
+        stages.extend(documents)
         reports.append(result)
-        current=result.final_snapshot
+        current=result.required_after_snapshot
         print('stage',len(stages),'clean',flush=True)
 
     run(doc('declare-support-contracts', (
         CreateFileOperation(target=target('execution/stats_callbacks'), source=(OUT/'support_contracts.py.txt').read_text()),
         CreateFileOperation(target=target('messaging/notification_contracts'), source=(OUT/'notification_contracts.py.txt').read_text()),
-        CreateFileOperation(target=target('execution/event_vocabulary'), source='"""Runtime event vocabularies and their original declaration check."""\nfrom __future__ import annotations\nfrom typing import ClassVar\n'),
     )))
     run(relocate_new('backend', ['FinishSignal','NoFinishSignal','EventFinishSignal','NO_FINISH_SIGNAL'], 'execution/finish_signal'))
-    run(relocate('agent_backend', ['BackendDeclarationError','_event_family_problems'], 'execution/event_vocabulary'))
-    run(relocate('pi_native_backend', ['PI_0_85_1_EVENT_KINDS'], 'execution/event_vocabulary'))
-    run(doc('declare-vocabulary-providers', (patch(current, 'execution/event_vocabulary', lambda parsed:
-        parsed.source + '\n\nclass RuntimeEventVocabulary:\n    """The runtime declaration checks its complete external event vocabulary."""\n\n\nclass PiNativeEventVocabulary(RuntimeEventVocabulary):\n    """Pi owns the pinned native event vocabulary."""\n'),)))
-    run(doc('bind-vocabulary-ancestry', (
-        patch(current,'agent_backend',lambda p:add_import(p.source,'from agent_comms.execution.event_vocabulary import RuntimeEventVocabulary')),
-        patch(current,'pi_native_backend',lambda p:add_import(p.source,'from agent_comms.execution.event_vocabulary import PiNativeEventVocabulary')),
-    )))
-    run(doc('inherit-vocabulary-check', (
-        AddClassBaseOperation(target=target('agent_backend','AgentBackend'),base_name='RuntimeEventVocabulary'),
-        AddClassBaseOperation(target=target('pi_native_backend','PiNativeBackend'),base_name='PiNativeEventVocabulary'),
-    )))
-    run(doc('move-original-vocabulary-check', (
-        PromoteClassMembersToAncestorOperation(target=target('agent_backend','AgentBackend'),destination=target('execution/event_vocabulary','RuntimeEventVocabulary'),member_names=('require_event_family','event_kinds')),
-        PromoteClassMembersToAncestorOperation(target=target('pi_native_backend','PiNativeBackend'),destination=target('execution/event_vocabulary','PiNativeEventVocabulary'),member_names=('event_kinds',)),
-    )))
-    run(doc('validate-vocabulary-without-loading-implementation', (patch(current,'pi_events',lambda p:replace_required(p.source,(
-        ('from agent_comms.pi_native_backend import PiNativeBackend  # noqa: E402','from agent_comms.execution.event_vocabulary import PiNativeEventVocabulary  # noqa: E402'),
-        ('PiNativeBackend.require_event_family(NativePiEvent)','PiNativeEventVocabulary.require_event_family(NativePiEvent)'),
-    ))),)))
-
     def stats(p):
-        source=guard_free(p)
+        source=p.source
         source=replace_required(source,(
-            ('from agent_comms.backend import NativeSession',''),
-            ('from agent_comms.execution.turn_watchdog import ProgressWatchdog, TurnWait',''),
             ('from agent_comms.execution.turn_phase import ModelWaitPhase','from agent_comms.execution.turn_phase import ModelWaitPhase, TurnPhase'),
-            ('session: NativeSession','session: WatchdogSessionRead[StatsProgressRead[TurnPhase]]'),
+            ('session: NativeSession','session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest]'),
             ('def wait_for(self, watchdog: ProgressWatchdog, active: TurnWait) -> TurnWait:',
              'def wait_for[Wait](self, watchdog: StatsWatchdogRead[Wait], active: Wait) -> Wait:'),
         ))
@@ -179,13 +161,12 @@ def main():
     run(doc('bind-stats-callbacks',(
         patch(current,'execution/turn_stats',stats),
         patch(current,'backend',lambda p:add_import(p.source,'from agent_comms.execution.stats_callbacks import WatchdogSessionRead')),
-        patch(current,'execution/turn_watchdog',lambda p:add_import(replace_required(guard_free(p),(
-            ('from agent_comms.backend import TurnSession',''),
-            ('session: TurnSession','session: WatchdogSessionRead[ProgressWatchdog]'),
-        )),'from agent_comms.execution.stats_callbacks import WatchdogSessionRead, StatsWatchdogRead, StatsProgressRead')),
+        patch(current,'execution/turn_watchdog',lambda p:add_import(replace_required(p.source,(
+            ('session: TurnSession','session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]'),
+        )),'from agent_comms.execution.stats_callbacks import WatchdogSessionRead, StatsWatchdogRead, StatsProgressRead\nfrom agent_comms.execution.turn_stats import StatsRequest')),
     )))
     run(doc('inherit-stats-callbacks',(
-        ReplaceClassBaseOperation(target=target('backend','NativeSession'),base_name='NativeSessionCallbacks',replacement_base_name='WatchdogSessionRead[ProgressWatchdog]'),
+        ReplaceClassBaseOperation(target=target('backend','NativeSession'),base_name='NativeSessionCallbacks',replacement_base_name='WatchdogSessionRead[ProgressWatchdog, StatsRequest]'),
         AddClassBaseOperation(target=target('execution/turn_watchdog','ProgressWatchdog'),base_name='StatsWatchdogRead[TurnWait]'),
     )))
     run(doc('inherit-watchdog-phase-read',(
@@ -193,21 +174,19 @@ def main():
     )))
 
     def notifications(p):
-        source=guard_free(p)
+        source=p.source
         source=replace_required(source,(
-            ('from agent_comms.comms import Comms',''),
-            ('from agent_comms.presentation import WireRevision',''),
-            ('from agent_comms.bus import Bus',''),
-            ('from agent_comms.bus_publication import Delivered',''),
             ('comms: Comms','comms: NotificationEvidenceSource[CapturedNotificationEvidence]'),
             ('revision: WireRevision','revision: RevisionChanges'),
             ('Sequence[Delivered]','Sequence[MessageDeliveryRead[Message]]'),
             ('log: Bus','log: MessageReferencesRead[Message]'),
             ('earlier: WireRevision','earlier: RevisionChanges'),
+            ('Mapping[ThreadLookup, RecipientActivity]','Mapping[ThreadLookup, RecipientActivityRead[AssignmentNotice[DeliveryProgress], AssignmentProgress, DeliveryProgress]]'),
+            ('    AssignmentResponse,','    AssignmentProgress,\n    AssignmentResponse,'),
             ('        reads = self.comms.bus.reads\n        return CapturedNotificationEvidence(\n            self.comms.root, reads, reads.read(), self.comms.registry.snapshot())',
              '        return self.comms.notification_evidence()'),
         ))
-        return add_import(source,'from agent_comms.messaging.notification_contracts import NotificationEvidenceSource, RevisionChanges\nfrom agent_comms.message_reads import MessageDeliveryRead, MessageReferencesRead')
+        return add_import(source,'from agent_comms.messaging.notification_contracts import NotificationEvidenceSource, RevisionChanges, RecipientActivityRead\nfrom agent_comms.message_reads import MessageDeliveryRead, MessageReferencesRead')
 
     run(doc('bind-notification-callbacks',(
         patch(current,'message_notification',notifications),
@@ -224,6 +203,34 @@ def main():
         AddClassBaseOperation(target=target('presentation','ReadState'),base_name='RevisionChanges'),
         AddClassBaseOperation(target=target('comms','Comms'),base_name='NotificationEvidenceSource[CapturedNotificationEvidence]'),
     )))
+
+    run(doc('delete-replaced-concrete-annotation-imports',(
+        RemoveImportBindingsOperation(target=target('execution/turn_stats'),bound_names=('NativeSession','ProgressWatchdog','TurnWait')),
+        RemoveImportBindingsOperation(target=target('execution/turn_watchdog'),bound_names=('TurnSession',)),
+        RemoveImportBindingsOperation(target=target('message_notification'),bound_names=('Comms','WireRevision','Bus','Delivered')),
+    )))
+    run(doc('bind-original-recipient-activity-read',(
+        patch(current,'agent_activity',lambda p:add_import(p.source,'from agent_comms.messaging.notification_contracts import RecipientActivityRead')),
+    )))
+    run(doc('inherit-original-recipient-activity-read',(
+        AddClassBaseOperation(target=target('agent_activity','RecipientActivity'),base_name='RecipientActivityRead[AssignmentNotice[DeliveryProgress], AssignmentProgress, DeliveryProgress]'),
+    )))
+    run(doc('delete-replaced-recipient-activity-annotation-import',(
+        RemoveImportBindingsOperation(target=target('message_notification'),bound_names=('RecipientActivity',)),
+    )))
+    run(guarded_plan(current,ROOT,('execution/turn_stats','execution/turn_watchdog')))
+    body_plan=CodemodPlanSequence(documents=tuple(stages))
+    (OUT/'support-body.plan.json').write_text(json.dumps(json_report_object(body_plan),indent=2)+'\n')
+    for file,source in current.sources_by_file_path.items():
+        destination=OUT/'projected'/Path(file).relative_to(ROOT)
+        destination.parent.mkdir(parents=True,exist_ok=True)
+        destination.write_text(source)
+    graph=subprocess.run(['/home/ts/code/projects/agent-comms/.venv/bin/python','/home/ts/wt/import_cycles.py',str(OUT/'projected/src')],capture_output=True,text=True,timeout=30)
+    (OUT/'scc-body.log').write_text(graph.stdout+graph.stderr)
+    graph.check_returncode()
+    pending=guarded_plan(current,ROOT).preflight(current)
+    (OUT/'support-imports.precut.preflight.json').write_text(json.dumps(json_report_object(pending.report),indent=2)+'\n')
+    run(guarded_plan(current,ROOT))
 
     plan=CodemodPlanSequence(documents=tuple(stages))
     (OUT/'support.plan.json').write_text(json.dumps(json_report_object(plan),indent=2)+'\n')
