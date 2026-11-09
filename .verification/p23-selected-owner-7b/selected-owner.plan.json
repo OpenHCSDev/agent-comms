@@ -1,0 +1,101 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "declare-selected-registry-owner-capability",
+          "operations": [
+            {
+              "operation": "create_file",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-selected-owner-7b/before/src/agent_comms/execution/selected/owner_source.py",
+              "rationale": "",
+              "source": "\"\"\"The mutable original registry owner held by a selected participant.\"\"\"\nfrom abc import ABC\n\n\nclass RegistryOwnerSource[Owner](ABC):\n    __slots__ = ()\n    owner: Owner\n"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-selected-owner-7b/before/src/agent_comms/execution/selected/participant.py",
+              "rationale": "",
+              "import_source": "from agent_comms.execution.selected.owner_source import RegistryOwnerSource"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-selected-owner-7b/before/src/agent_comms/registry/registration.py",
+              "rationale": "",
+              "import_source": "from agent_comms.execution.selected.owner_source import RegistryOwnerSource"
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "compose-original-selected-participant-owner-capability",
+          "operations": [
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-selected-owner-7b/before/src/agent_comms/execution/selected/participant.py",
+              "target_qualname": "SelectedParticipant",
+              "rationale": "",
+              "base_name": "RegistryOwnerSource[RegistryOwner]"
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "type-registration-callback-by-its-required-original-owner",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "participant: selected_participant.SelectedParticipant",
+                  "new_source": "participant: RegistryOwnerSource[RegistryOwner]"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-selected-owner-7b/before/src/agent_comms/registry/registration.py",
+              "target_qualname": "Registration.claim_fresh_session",
+              "rationale": ""
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "delete-unread-high-selected-participant-module-import",
+          "operations": [
+            {
+              "operation": "remove_import_bindings",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-selected-owner-7b/before/src/agent_comms/registry/registration.py",
+              "rationale": "",
+              "bound_names": [
+                "selected_participant"
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

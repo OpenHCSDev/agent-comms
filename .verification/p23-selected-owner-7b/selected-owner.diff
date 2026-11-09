@@ -1,0 +1,62 @@
+diff --git a/.verification/p23-selected-owner-7b/projected/src/agent_comms/execution/selected/owner_source.py b/.verification/p23-selected-owner-7b/projected/src/agent_comms/execution/selected/owner_source.py
+new file mode 100644
+index 000000000..4d9724c5a
+--- /dev/null
++++ b/.verification/p23-selected-owner-7b/projected/src/agent_comms/execution/selected/owner_source.py
+@@ -0,0 +1,7 @@
++"""The mutable original registry owner held by a selected participant."""
++from abc import ABC
++
++
++class RegistryOwnerSource[Owner](ABC):
++    __slots__ = ()
++    owner: Owner
+diff --git a/.verification/p23-selected-owner-7b/before/src/agent_comms/execution/selected/participant.py b/.verification/p23-selected-owner-7b/projected/src/agent_comms/execution/selected/participant.py
+index 6dcf96f8d..31e3648bc 100644
+--- a/.verification/p23-selected-owner-7b/before/src/agent_comms/execution/selected/participant.py
++++ b/.verification/p23-selected-owner-7b/projected/src/agent_comms/execution/selected/participant.py
+@@ -46,6 +46,7 @@ from agent_comms.execution.native_input_owner import (
+ )
+ from agent_comms.execution.native_runtime_input import NativeRuntimeTable
+ from agent_comms.execution.pi_events import TurnContextObserved
++from agent_comms.execution.selected.owner_source import RegistryOwnerSource
+ from agent_comms.execution.selected.source_batch import (
+     SelectedSource,
+     SelectedSourceBatch,
+@@ -95,7 +96,7 @@ class TriagePublication(MroDispatch):
+ 
+ 
+ @dataclass
+-class SelectedParticipant(MroDispatch):
++class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
+     comms: Comms
+     bus: MessageBus
+     store: Coordination
+diff --git a/.verification/p23-selected-owner-7b/before/src/agent_comms/registry/registration.py b/.verification/p23-selected-owner-7b/projected/src/agent_comms/registry/registration.py
+index e7232731a..f9905dc62 100644
+--- a/.verification/p23-selected-owner-7b/before/src/agent_comms/registry/registration.py
++++ b/.verification/p23-selected-owner-7b/projected/src/agent_comms/registry/registration.py
+@@ -12,6 +12,7 @@ from agent_comms.errors import RelationViolationError
+ from agent_comms.execution.child_process import NoProcess, ProcessIdentity
+ from agent_comms.execution.input_ingress import InputRegistration
+ from agent_comms.execution.native_input_owner import RegistryOwner
++from agent_comms.execution.selected.owner_source import RegistryOwnerSource
+ from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
+ from agent_comms.messaging.channel_targets import DeclaredTag
+ from agent_comms.messaging.routing import NoTurnRouting, Routing
+@@ -286,7 +287,7 @@ class Registration(
+         with self.store.editing() as edit:
+             return self._attach_native_session(edit, original, session_file)
+ 
+-    def claim_fresh_session(self, participant: selected_participant.SelectedParticipant) -> agent_backend.RuntimeLocation:
++    def claim_fresh_session(self, participant: RegistryOwnerSource[RegistryOwner]) -> agent_backend.RuntimeLocation:
+         """Create and record the first session while the registry owns its selection.
+ 
+         An execution captured before the first claim joins the recorded session;
+@@ -519,6 +520,5 @@ class Registration(
+         return name in self.store.read()
+ 
+ from agent_comms import agent_backend
+-from agent_comms.execution.selected import participant as selected_participant
+ from agent_comms.planning import goal_management, goals
+ from agent_comms.registry import catalog_document
