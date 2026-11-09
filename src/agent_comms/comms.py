@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from agent_comms.messaging.notification_contracts import NotificationEvidenceSource
+from agent_comms.messaging.message_notification import CapturedNotificationEvidence
+
 import math
 import time
 from collections.abc import AsyncGenerator, Callable, Mapping
@@ -97,8 +100,13 @@ class UntakenCut:
         return self.registry is snapshot and self.key == key
 
 
-class Comms(ActivityClient, ContextAssembly, InputIngressContext[Thread],
-            InputTextContext[InputAttempt]):
+class Comms(
+    ActivityClient,
+    ContextAssembly,
+    InputIngressContext[Thread],
+    InputTextContext[InputAttempt],
+    NotificationEvidenceSource[CapturedNotificationEvidence],
+):
     input_dispositions: ClassVar[Callable[[Path], InputLookup[InputAttempt]]] = InputDispositions
 
     def __init__(self, root: CommsRoute) -> None:
@@ -127,6 +135,11 @@ class Comms(ActivityClient, ContextAssembly, InputIngressContext[Thread],
             self.ledger,
         )
         self.relationships = ThreadRelationships(self.views)
+
+    def notification_evidence(self) -> CapturedNotificationEvidence:
+        reads = self.bus.reads
+        return CapturedNotificationEvidence(
+            self.root, reads, reads.read(), self.registry.snapshot())
 
     async def watch(
         self, name: str, *, after: InboxStart = TakenInputStart(),

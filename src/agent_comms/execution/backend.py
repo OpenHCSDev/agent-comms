@@ -15,6 +15,8 @@ message also fail the turn, carrying ``errorMessage`` and typed diagnostics.
 
 from __future__ import annotations
 
+from agent_comms.execution.stats_callbacks import WatchdogSessionRead
+
 import asyncio
 import json
 from abc import ABC, abstractmethod
@@ -43,6 +45,7 @@ from agent_comms.execution import pi_events as pi
 from agent_comms.execution.acp_failure import ProviderRetryResult, UnrecordedFailureSource
 from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.execution.extension_ui import ExtensionUiSession
+from agent_comms.execution.finish_signal import NO_FINISH_SIGNAL, FinishSignal
 from agent_comms.execution.image_input import ImageInput
 from agent_comms.execution.native_attestation import AttestationError
 from agent_comms.execution.native_child import NativeChildState, PiSessionChild
@@ -95,7 +98,7 @@ from agent_comms.execution.turn_watchdog import (
     TurnWaitExpired,
 )
 from agent_comms.installer.native_package import VerifiedNativePackage
-from agent_comms.nominal.field_codec import InputId, MalformedRecord, boundary_decoder
+from agent_comms.nominal.field_codec import InputId, MalformedRecord
 from agent_comms.pi_payloads import AssistantMessage, UserMessage
 from agent_comms.transport.native_tool_transport import (
     NativeToolMode,
@@ -216,41 +219,7 @@ async def stream_agent_events(
                 yield event
 
 
-class FinishSignal(ABC):
-    """Own the optional external finish wait, without a nullable task in the reader."""
-
-    @classmethod
-    @boundary_decoder
-    def from_event(cls, event: asyncio.Event | None) -> FinishSignal:
-        return NoFinishSignal() if event is None else EventFinishSignal(event)
-
-    @abstractmethod
-    def waiters(self) -> tuple[asyncio.Task[bool], ...]: ...
-
-    def consumed(self) -> None:
-        pass
-
-
-class NoFinishSignal(FinishSignal):
-    def waiters(self) -> tuple[asyncio.Task[bool], ...]:
-        return ()
-
-
-@dataclass(frozen=True)
-class EventFinishSignal(FinishSignal):
-    event: asyncio.Event
-
-    def waiters(self) -> tuple[asyncio.Task[bool], ...]:
-        return (asyncio.create_task(self.event.wait()),)
-
-    def consumed(self) -> None:
-        self.event.clear()
-
-
-NO_FINISH_SIGNAL = NoFinishSignal()
-
-
-class NativeSession(MroDispatch, NativeSessionCallbacks):
+class NativeSession(MroDispatch, WatchdogSessionRead[ProgressWatchdog, StatsRequest]):
     """Shared child acquisition, attestation, observation and retirement."""
 
     active: ClassVar[dict[asyncio.Task[Any], NativeSession]] = {}

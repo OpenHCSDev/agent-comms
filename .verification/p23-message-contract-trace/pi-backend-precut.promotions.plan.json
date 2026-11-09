@@ -1,0 +1,106 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-pi-backend-native-guarded-import-proof",
+          "reason": "Existing native cycle-checking promotions on saved df33d646, before the independently owned vocabulary cut. Refusals are declaration-cut obligations, not permission to replace this operation with an unguard patch. No local-import proof or product qualification is claimed.",
+          "operations": [
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/pi_native_backend.py",
+              "module_name": "agent_comms.agent_event",
+              "import_names": [
+                "AgentEvent"
+              ]
+            },
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/pi_native_backend.py",
+              "module_name": "agent_comms.agent_events",
+              "import_names": [
+                "AgentInfo"
+              ]
+            },
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/pi_native_backend.py",
+              "module_name": "agent_comms.comms",
+              "import_names": [
+                "Comms"
+              ]
+            },
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/pi_native_backend.py",
+              "module_name": "agent_comms.config_options",
+              "import_names": [
+                "ConfigOptions"
+              ]
+            },
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/pi_native_backend.py",
+              "module_name": "agent_comms.execution.native_child",
+              "import_names": [
+                "NativeChildState",
+                "PiSessionChild"
+              ]
+            },
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/pi_native_backend.py",
+              "module_name": "agent_comms.execution.native_session_reopen",
+              "import_names": [
+                "NativeSessionIdentity"
+              ]
+            },
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/pi_native_backend.py",
+              "module_name": "agent_comms.execution.owned_turn",
+              "import_names": [
+                "TurnDelivery"
+              ]
+            },
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/pi_native_backend.py",
+              "module_name": "agent_comms.execution.turn_runner",
+              "import_names": [
+                "TurnRunner"
+              ]
+            },
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/pi_native_backend.py",
+              "module_name": "agent_comms.launch_runtime",
+              "import_names": [
+                "LaunchRuntime"
+              ]
+            },
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/pi_native_backend.py",
+              "module_name": "agent_comms.pi_payloads",
+              "import_names": [
+                "StateData"
+              ]
+            },
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/pi_native_backend.py",
+              "module_name": "agent_comms.registry.threads",
+              "import_names": [
+                "Thread"
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

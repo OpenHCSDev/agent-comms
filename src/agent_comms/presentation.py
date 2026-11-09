@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.messaging.notification_contracts import RevisionChanges
+
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -504,7 +506,7 @@ def revision_source(paths: Callable[..., tuple[Path, ...]], *views: type[Revisio
     return WatchPaths(paths), WatchViews(views)
 
 
-class ReadState:
+class ReadState(RevisionChanges):
     """Without a revision on either side, every view has changed."""
     __slots__ = ()
 

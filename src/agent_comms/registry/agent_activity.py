@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.messaging.notification_contracts import RecipientActivityRead
+
 import logging
 import time
 from collections.abc import Callable, Iterable, Mapping
@@ -65,7 +67,11 @@ if TYPE_CHECKING:
 _LOG = logging.getLogger(__name__)
 
 
-class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
+class RecipientActivity(
+    DeclaredFamily,
+    RecipientActivityRead[AssignmentNotice[DeliveryProgress], AssignmentProgress, DeliveryProgress],
+    affix='RecipientActivity',
+):
     """Acquired recipient availability; no assignment, start or retry authority."""
 
     def turn_started_by(self, updated_at_ms: int) -> bool:

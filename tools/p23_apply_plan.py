@@ -8,8 +8,10 @@ from nominal_refactor_advisor.ast_tools import parse_python_module_roots
 from nominal_refactor_advisor.codemod_preflight import CodemodOperationPreflightError
 from nominal_refactor_advisor.codemod import CodemodPlanRoot, CodemodSourceSnapshot
 from nominal_refactor_advisor.json_reports import json_report_object
+from nominal_refactor_advisor.scan_cache import ScanCache
 
 
+@ScanCache.scope()
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("plan", type=Path)

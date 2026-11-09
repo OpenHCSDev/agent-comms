@@ -1,0 +1,91 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-native-child-uses-original-retention-contract",
+          "reason": "The four child inspection annotations require only the original retention parent's lock and child_state, not the whole registered backend. No concrete wire field or method body changes. This is a live provider annotation, not generic wire decoding.",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/execution/native_child.py",
+              "target_qualname": "NativeChildState.inspect",
+              "replacements": [
+                {
+                  "old_source": "persistent: PiNativeBackend",
+                  "new_source": "persistent: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity]"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/execution/native_child.py",
+              "target_qualname": "RetiringNative.inspect",
+              "replacements": [
+                {
+                  "old_source": "persistent: PiNativeBackend",
+                  "new_source": "persistent: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity]"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/execution/native_child.py",
+              "target_qualname": "BorrowedNative.inspect",
+              "replacements": [
+                {
+                  "old_source": "persistent: PiNativeBackend",
+                  "new_source": "persistent: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity]"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/execution/native_child.py",
+              "target_qualname": "RetainedNative.inspect_acquired",
+              "replacements": [
+                {
+                  "old_source": "persistent: PiNativeBackend",
+                  "new_source": "persistent: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity]"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/execution/native_child.py",
+              "replacements": [
+                {
+                  "old_source": "    from agent_comms.pi_native_backend import PiNativeBackend\n",
+                  "new_source": ""
+                }
+              ]
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/execution/native_child.py",
+              "import_source": "from agent_comms.execution.session_retention import NativeSessionRetention"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-original-persistent-session-below-registered-backend",
+          "reason": "Move the original concrete PersistentPiSession unchanged below the registered backend; native extraction owns dependency and consumer rewriting. Keep its original child states and acquisition order. No vocabulary member promotion or construction-hook bypass.",
+          "operations": [
+            {
+              "operation": "extract_symbols_to_new_module",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/pi_native_backend.py",
+              "symbol_qualnames": [
+                "PersistentPiSession"
+              ],
+              "destination_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/execution/persistent_pi_session.py"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
