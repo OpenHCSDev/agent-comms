@@ -18,7 +18,7 @@ from pydantic import ValidationError
 from yarl import URL
 
 from agent_comms.activity import ActivityState, ObservedActivity
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.cli_bridges.claude_protocol import (
     ClaudeMonitorFrame,
     MonitorTaskNotification,
@@ -56,7 +56,7 @@ from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.harness_delivery_states import PrintLedgerId
 from agent_comms.inbox_watch import OpenWatch
 from agent_comms.launch_runtime import InstalledSource, LaunchRuntime
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_status import (
     ConnectedThreadStatus,

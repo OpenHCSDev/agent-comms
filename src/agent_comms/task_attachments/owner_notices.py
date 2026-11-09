@@ -13,9 +13,9 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.channel_targets import CommandTarget, CommsTag, NamedTarget, ThreadTarget
+from agent_comms.messaging.channel_targets import CommandTarget, CommsTag, NamedTarget, ThreadTarget
 from agent_comms.errors import RelationViolationError
-from agent_comms.messages import (
+from agent_comms.messaging.messages import (
     ConversationRole,
     EscalationPosition,
     Message,

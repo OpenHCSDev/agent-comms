@@ -18,7 +18,7 @@ from agent_comms.transport.request import tool_field
 from agent_comms.acp_extension import GoalSnapshotReply, TurnChangedUpdate, UpdateMetadata
 from agent_comms.runtime_requests import OwnedRead, OwnerLiveRead
 from agent_comms.messaging.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
-from agent_comms.channel_targets import CommsTag
+from agent_comms.messaging.channel_targets import CommsTag
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.planning.goal_actions import CompliedGoalAction, CreateProblemGoalAction, OrderGoalAction, OwnerInvocable
@@ -37,7 +37,7 @@ from agent_comms.planning.orders import DeliverTodo, AssignedClaimReviewer, Clai
 from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import ProgressClaim
-from agent_comms.read_basis import ReadAuthority
+from agent_comms.messaging.read_basis import ReadAuthority
 from agent_comms.runtime_server import AttachedRuntimeRequestContext
 from agent_comms.send_result import MessagePublished
 from agent_comms.service_passes import ServicePassStore

@@ -18,7 +18,7 @@ from agent_comms.execution.child_process import (
 )
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.launch_runtime import CallingThreadUnavailable
-from agent_comms.messages import HandoffKind, InfoKind, Message
+from agent_comms.messaging.messages import HandoffKind, InfoKind, Message
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.pi_counts import PiCount
 from agent_comms.planning.goals import Goal

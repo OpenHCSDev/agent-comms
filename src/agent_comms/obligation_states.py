@@ -9,7 +9,7 @@ from agent_comms.coordination.errors import IdentityConflict, IntegrityViolation
 from agent_comms.coordination.vocabulary import CoordinatorVocabulary
 from agent_comms.lifecycle import LifecycleState
 from agent_comms.lifecycle_capability import Deferred, Failed, Pending, Successful, Terminal
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import MessageId, NullMember
 from agent_comms.reason_codes import NoReasonCode
 

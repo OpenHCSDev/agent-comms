@@ -35,7 +35,7 @@ from agent_comms.history_result import HistoryPageResult
 from agent_comms.importing import ThreadImported
 from agent_comms.input_origin import InputProvenance
 from agent_comms.lifecycle_capability import Complete
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     Argument,

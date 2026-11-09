@@ -21,7 +21,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.native_transcript import RecordsCut
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,

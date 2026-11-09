@@ -20,8 +20,8 @@ from agent_comms.nominal.field_codec import (
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
-    from agent_comms.channel_targets import NamedTarget
-    from agent_comms.messages import Message
+    from agent_comms.messaging.channel_targets import NamedTarget
+    from agent_comms.messaging.messages import Message
     from agent_comms.planning.orders import OwnerRequest, Todo, TodoStore
     from agent_comms.registry.registration import Registration
     from agent_comms.registry.thread_identity import ThreadIncarnation

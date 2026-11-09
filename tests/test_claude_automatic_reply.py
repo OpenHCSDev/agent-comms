@@ -9,7 +9,7 @@ import pytest
 from aiohttp import web
 
 from agent_comms.bus_tables import AuthoredAnswers
-from agent_comms.channel_targets import TeammatesTag, ThreadTarget
+from agent_comms.messaging.channel_targets import TeammatesTag, ThreadTarget
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_protocol import ClaudeRecord, ClaudeSession
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
@@ -25,7 +25,7 @@ from agent_comms.execution.turn_item import (
     NativeTurnId,
 )
 from agent_comms.harness_delivery_states import DeliveredOutcome
-from agent_comms.messages import (
+from agent_comms.messaging.messages import (
     AckKind,
     AlertKind,
     HandoffKind,

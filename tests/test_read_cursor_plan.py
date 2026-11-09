@@ -2,7 +2,7 @@
 
 import sqlite3
 
-from agent_comms.read_basis import ReadCursor
+from agent_comms.messaging.read_basis import ReadCursor
 
 
 def test_the_unread_join_searches_cursors_by_target():

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.channel_targets import TeammatesTag
+from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.cli_bridges.hook_deferral import StopHook
 from agent_comms.cli_bridges.hook_forks import SubagentHook
 from agent_comms.cli_bridges.hook_read_gate import GatedCall, MonitorInput

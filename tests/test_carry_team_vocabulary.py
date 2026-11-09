@@ -13,9 +13,9 @@ from cutover.carry_team_vocabulary import (
 )
 
 from agent_comms.bus import Bus
-from agent_comms.channel_targets import ThreadTarget
+from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.comms import wire
-from agent_comms.messages import Message
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.orders import (
     OwnerRequest,

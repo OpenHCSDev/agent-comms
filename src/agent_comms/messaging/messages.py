@@ -14,10 +14,10 @@ from functools import cache
 from inspect import get_annotations
 from itertools import accumulate, batched
 from typing import (
-    TYPE_CHECKING,
     Annotated,
     ClassVar,
     Self,
+    TYPE_CHECKING,
     Type,
     cast,
     dataclass_transform,
@@ -25,7 +25,7 @@ from typing import (
 )
 
 from agent_comms.change_report import NoChangeReport, ReportEvidence, SourceRoots
-from agent_comms.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.class_fact import ClassFact
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.envelope_claim_transitions import (
@@ -41,7 +41,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.turn_origin import TurnOrigin
 from agent_comms.input_key import InputKey
 from agent_comms.mentions import ThreadMention
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     ClaimId,
@@ -63,19 +63,19 @@ from agent_comms.projection_source import ProducedRow, ProjectionOutputs, Projec
 from agent_comms.recorded_time import Timestamped
 from agent_comms.registry.thread_identity import AgentThreadRole, ThreadRole
 from agent_comms.response_policy import (
-    NO_ALIASES,
     InformationalPolicy,
+    NO_ALIASES,
     ResponseEligibility,
     ResponsePolicy,
 )
 from agent_comms.storage.typed_table import (
-    LOCAL_TABLE_SOURCE,
     AppendOnlyTables,
     Column,
     DerivedTables,
     DurableTables,
     ForeignKey,
     Index,
+    LOCAL_TABLE_SOURCE,
     ProducedTable,
     SharedFileTables,
     TableReference,

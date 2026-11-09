@@ -6,7 +6,7 @@ import pytest
 
 from agent_comms.bus import Bus
 from agent_comms.comms import wire
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messaging.messages import InfoKind, Message
 
 
 def test_independent_writers_merge_under_wire_then_document_lock(tmp_path):

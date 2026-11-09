@@ -45,7 +45,7 @@ from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRou
 from yarl import URL
 
 from agent_comms.active_route import CommsRoute, resolve_comms_route
-from agent_comms.channel_targets import NamedTarget
+from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.cli_bridges.claude_transcript import WATCH_REPLACED
 from agent_comms.closed_pull_requests import ClosedPullRequestWatch
 from agent_comms.command import Command
@@ -89,7 +89,7 @@ from agent_comms.execution.watch_passes import Watch
 from agent_comms.host_services import HostService
 from agent_comms.inbox_watch import InboxWatch, OpenWatch, WatchRoute, WatchTickets
 from agent_comms.launch_root import started
-from agent_comms.messages import QuestionKind
+from agent_comms.messaging.messages import QuestionKind
 from agent_comms.messaging.bus_identity import BusIdentityStore
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (

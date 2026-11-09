@@ -25,7 +25,7 @@ import fixture_git  # noqa: F401
 import goal_owner_fixture
 from agent_comms.bus import Bus, BusRecord
 from agent_comms.bus_publication import AgentOrigin
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import Comms, wire
 from agent_comms.cursor_publication import CursorDelivery
@@ -37,7 +37,13 @@ from agent_comms.installer.native_package import (
 )
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
+from agent_comms.messaging.messages import (
+    ConversationRole,
+    InfoKind,
+    Message,
+    MessageKind,
+    MessageRole,
+)
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_durable_backend import PiDurableBackend

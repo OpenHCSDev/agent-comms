@@ -28,7 +28,7 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.planning.goal_presentation import GoalSnapshot
 from agent_comms.heartbeat_subjects import HeartbeatSubject, TeammateSubject
-from agent_comms.messages import Message
+from agent_comms.messaging.messages import Message
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.recorded_time import RecordedEventTime

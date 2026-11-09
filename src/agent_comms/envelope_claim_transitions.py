@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from agent_comms.class_fact import ClassFact
 from agent_comms.coordination.errors import IdentityConflict
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import (
     AssignmentId,
     BoundedText,
@@ -150,7 +150,7 @@ class ClaimScope(SubclassUnion, ABC, ProjectionSource, affix=""):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from agent_comms.messages import ClaimOperations
+        from agent_comms.messaging.messages import ClaimOperations
         return (ClaimOperations,)
 
 
@@ -290,7 +290,7 @@ class ClaimProducer(ProjectionOutputs):
     @ClassFact
     @staticmethod
     def writes(cls: type[ClaimProducer]) -> tuple[type[ProducedRow], ...]:
-        from agent_comms.messages import ClaimOperations, HeldResources
+        from agent_comms.messaging.messages import ClaimOperations, HeldResources
         return (HeldResources, ClaimOperations)
 
 
@@ -482,7 +482,7 @@ class ClaimProjection(Mapping[str, ClaimOwner], ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from agent_comms.messages import HeldResources
+        from agent_comms.messaging.messages import HeldResources
         return (HeldResources,)
 
 

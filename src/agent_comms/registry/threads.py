@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.activity import ObservedActivity
 from agent_comms.agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from agent_comms.channel_targets import DeclaredTag, Tag
+from agent_comms.messaging.channel_targets import DeclaredTag, Tag
 from agent_comms.context_segments.wake_values import WakeWorkContext
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity, ProcessState

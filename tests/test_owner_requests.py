@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.change_report import FileLine, MainRevision
-from agent_comms.channel_targets import TeammatesTag
+from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.comms import Comms
 from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import CALLER, DirectorCaller

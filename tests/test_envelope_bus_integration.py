@@ -25,8 +25,8 @@ from agent_comms.envelope_claim_transitions import ClaimConflict, ExistingFileCl
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.exporting import EverythingScope, FullLimit, JsonlFormat
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_status import RunningThreadStatus

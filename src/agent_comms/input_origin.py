@@ -12,7 +12,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.turn_context import Provenance
 from agent_comms.harness_install import HarnessSession
 from agent_comms.input_key import InputKey, InputKeyText
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import RootId
 from agent_comms.planning.goals import GoalCheckpoint

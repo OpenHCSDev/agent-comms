@@ -24,7 +24,7 @@ from typing import (
 from agent_comms.bus_publication import Delivered
 from agent_comms.bus_tables import ReceivedSource
 from agent_comms.class_fact import ClassFact
-from agent_comms.messages import (
+from agent_comms.messaging.messages import (
     BusProjectionTables,
     BusRow,
     MessageInput,
@@ -34,7 +34,7 @@ from agent_comms.messages import (
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.page_traversal import PageTraversal
 from agent_comms.projection_source import ProducedRow
-from agent_comms.read_basis import ReadCursor
+from agent_comms.messaging.read_basis import ReadCursor
 from agent_comms.routing import DeliveryScope
 from agent_comms.storage.typed_table import Column, ExpressionIndex, Index, TypedRow
 

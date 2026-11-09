@@ -33,7 +33,7 @@ from agent_comms.planning.goal_scope import AllGoals, GoalScope, OneGoal
 from agent_comms.planning.goals import Goal, GoalDeclaration
 from agent_comms.input_attempt import InputDeliveryScope, UNOBSERVED_DELIVERY_SCOPE, UnresolvedInputReference
 from agent_comms.input_disposition import DeliveryOverview
-from agent_comms.messages import Message
+from agent_comms.messaging.messages import Message
 from agent_comms.execution.native_input_owner import GoalLaunchOwner
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.owner_requests import NewestOpenRequest, RequestDirective

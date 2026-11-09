@@ -49,7 +49,7 @@ from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, R
 
 if TYPE_CHECKING:
     from agent_comms.execution.child_process import ProcessIdentity
-    from agent_comms.messages import Message
+    from agent_comms.messaging.messages import Message
     from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
     from agent_comms.registry.threads import Thread
     from agent_comms.registry_provenance import RegistryProvenance

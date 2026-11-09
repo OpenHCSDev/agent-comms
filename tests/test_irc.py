@@ -3,13 +3,13 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.channel_targets import CommandTarget, DeclaredTag
-from agent_comms.channels import AllChannel, BuiltinChannelView
+from agent_comms.messaging.channel_targets import CommandTarget, DeclaredTag
+from agent_comms.messaging.channels import AllChannel, BuiltinChannelView
 from agent_comms.comms import wire
 from agent_comms.errors import UnknownChannelError, UnregisteredThreadError
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.read_basis import NamedViewer
+from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_store import UncachedRegistry
 from agent_comms.registry.thread_text import (

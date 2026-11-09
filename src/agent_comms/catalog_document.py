@@ -6,10 +6,9 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 
-from agent_comms import channels
 from agent_comms.activity_clocks import ActivityClocks
-from agent_comms.channel_targets import ChannelTarget, DeclaredTag, Tag
-from agent_comms.channels import (
+from agent_comms.messaging.channel_targets import ChannelTarget, DeclaredTag, Tag
+from agent_comms.messaging.channels import (
     BuiltinChannelView,
     Channel,
     Channels,
@@ -20,6 +19,7 @@ from agent_comms.channels import (
 )
 from agent_comms.display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
 from agent_comms.errors import RelationViolationError, UnknownChannelError
+from agent_comms.messaging.channels import RetiredTagChannel
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,7 +225,7 @@ class CatalogDocument(CatalogPreferences):
             return preference.channel(TagChannel, target, frozenset({tag}))
         if target in activity.channels:
             preference = self.preferences.get(target, ChannelPreferences())
-            return preference.channel(channels.RetiredTagChannel, target, frozenset({tag}))
+            return preference.channel(RetiredTagChannel, target, frozenset({tag}))
         raise UnknownChannelError(f"Unknown channel: {target!r}")
 
     def targets_for(self, tags: frozenset[str]) -> frozenset[str]:

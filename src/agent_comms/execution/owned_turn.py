@@ -49,7 +49,7 @@ from agent_comms.image_input import ImageInput
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.input_key import InputKey
 from agent_comms.input_origin import WireInputOrigin
-from agent_comms.messages import Message
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, GoalId, TurnId
 from agent_comms.owned_send import OwnedSend
 from agent_comms.pi_events import DialogUiRequest, ExtensionUiChoice

@@ -16,12 +16,12 @@ from pathlib import Path
 
 from agent_comms.bus import Bus, BusReader
 from agent_comms.bus_publication import Delivered
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.coordination.errors import DMScopeChanged
-from agent_comms.messages import Message
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from agent_comms.nominal.sealed import Sealed
-from agent_comms.read_basis import (
+from agent_comms.messaging.read_basis import (
     AllConversation,
     ChannelConversation,
     Conversation,

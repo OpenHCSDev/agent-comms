@@ -37,7 +37,7 @@ from agent_comms.exporting import (
     FullLimit,
     JsonlFormat,
 )
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.messaging.message_page import PageBounds
 from agent_comms.nominal.field_codec import AssignmentId
 from agent_comms.projects.checkouts import Checkout

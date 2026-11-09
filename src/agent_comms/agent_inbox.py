@@ -19,7 +19,7 @@ from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
-from agent_comms.message_reference import (
+from agent_comms.messaging.message_reference import (
     AfterMessageStart,
     InboxStart,
     MessageReference,
@@ -33,7 +33,7 @@ from agent_comms.nominal.field_codec import (
     SubclassUnion,
 )
 from agent_comms.private_registry_guard import RegistryPrivacy
-from agent_comms.read_basis import ReadCursor
+from agent_comms.messaging.read_basis import ReadCursor
 from agent_comms.watched import Watched
 
 if TYPE_CHECKING:

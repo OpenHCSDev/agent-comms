@@ -4,9 +4,15 @@ import builtins
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms import messages
 from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.declared_verb import DeclaredOptions
+from agent_comms.messaging.messages import (
+    ConversationRole,
+    InfoKind,
+    MessageKind,
+    SendableMessageKind,
+    SendableRole,
+)
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.send_result import SendResult
@@ -23,15 +29,15 @@ class SendRequest(DeclaredOptions):
     target: Annotated[str, field_codec.Argument(flags=("--to",))]
     body: Annotated[str, field_codec.Argument(flags=("--body",))]
     type: Annotated[
-        builtins.type[messages.MessageKind],
+        builtins.type[MessageKind],
         field_codec.Editor(ChoiceTargetField),
         field_codec.Argument(
-            flags=("--type",), options={"choices": messages.SendableMessageKind.names()}
+            flags=("--type",), options={"choices": SendableMessageKind.names()}
         ),
-    ] = messages.InfoKind
+    ] = InfoKind
     role: Annotated[
-        builtins.type[messages.SendableRole], field_codec.Argument(flags=("--role",))
-    ] = messages.ConversationRole
+        builtins.type[SendableRole], field_codec.Argument(flags=("--role",))
+    ] = ConversationRole
     report: Annotated[
         ReportEvidence,
         field_codec.Argument(

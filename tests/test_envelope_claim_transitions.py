@@ -20,7 +20,7 @@ from agent_comms.envelope_claim_transitions import (
     WakeClaim,
     WakeClaims,
 )
-from agent_comms.messages import ClaimMessage, ClaimNoticeKind, Message
+from agent_comms.messaging.messages import ClaimMessage, ClaimNoticeKind, Message
 from agent_comms.nominal.field_codec import (
     AssignmentId,
     ClaimId,

@@ -19,7 +19,7 @@ import pytest
 
 from agent_comms.activity import ActivityState
 from agent_comms.change_report import FileLine, NamedRepository
-from agent_comms.channel_targets import TeammatesTag
+from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.hook_forks import SessionSubagents
 from agent_comms.cli_bridges.hook_requests import (

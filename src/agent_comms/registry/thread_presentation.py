@@ -24,7 +24,7 @@ from agent_comms.coordination.work import CoordinationWork
 from agent_comms.errors import RelationViolationError, RouteChangedError, UnregisteredThreadError
 from agent_comms.execution.child_process import NativeBinding, ProcessIdentity
 from agent_comms.execution.native_arguments import GivenArguments
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.thread_identity import OwnerIdentity

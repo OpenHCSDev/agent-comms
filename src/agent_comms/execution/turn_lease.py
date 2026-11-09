@@ -29,7 +29,7 @@ from agent_comms.execution.child_process import ProcessIdentity, ProcessState
 from agent_comms.execution.turn_phase import IdlePhase, PreparingPhase, TurnPhase
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.lifecycle_capability import Executing, LifecycleCapability
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import (
     NullMember,
     RecordMember,

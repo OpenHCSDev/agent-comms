@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-from agent_comms.channel_targets import CommsTag
+from agent_comms.messaging.channel_targets import CommsTag
 from agent_comms.comms import client_wire
 from agent_comms.installer.interpreter_operation import RuntimeProbe
 from agent_comms.nominal.field_codec import PathText

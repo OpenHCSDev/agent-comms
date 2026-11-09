@@ -52,8 +52,8 @@ from agent_comms.harness_delivery_states import (
     TakingLedger,
     UnconfirmedOutcome,
 )
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 from agent_comms.open_viewer import OpenViewer
 from agent_comms.package_stamp import STAMP

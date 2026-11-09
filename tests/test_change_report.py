@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 from agent_comms.change_report import ChangedFact, ChangeReport, FileLine, OrderRoots
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.errors import MissingSourceLine
-from agent_comms.messages import (
+from agent_comms.messaging.messages import (
     AckKind,
     AlertKind,
     ChangeReportKind,
@@ -21,7 +21,7 @@ from agent_comms.messages import (
     QuestionKind,
 )
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.read_basis import NamedViewer
+from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.registry.registry_document import NoTeamProject
 from agent_comms.registry.threads import NativeThread
 from agent_comms.repository_name import RepositoryName

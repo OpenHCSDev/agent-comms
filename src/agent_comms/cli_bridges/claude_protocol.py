@@ -52,7 +52,7 @@ from agent_comms.execution.turn_item import (
     SourceTurn,
 )
 from agent_comms.execution.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import (
     MalformedRecord,
     ToolCallId,

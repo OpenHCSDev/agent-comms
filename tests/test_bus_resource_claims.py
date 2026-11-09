@@ -28,7 +28,7 @@ from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
 )
-from agent_comms.messages import (
+from agent_comms.messaging.messages import (
     BusCapability,
     BusProjectionTables,
     BusRow,

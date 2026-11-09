@@ -10,7 +10,7 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.cursor_owner import UnstartedCursor
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.messaging.bus_source_page import CoveragePage
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.proven_source_coverage import SourceCoverage, SourcePrefix

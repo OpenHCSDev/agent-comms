@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Concatenate
 
 from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.channel_targets import DeclaredTag
+from agent_comms.messaging.channel_targets import DeclaredTag
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity
 from agent_comms.execution.native_input_owner import RegistryOwner

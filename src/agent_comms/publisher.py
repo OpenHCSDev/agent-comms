@@ -17,7 +17,7 @@ from agent_comms.audience_manifest import freeze_audience
 from agent_comms.bus import Bus, BusReader, BusSnapshot, ClaimRecord, PrivateRecord, RecordBuilder
 from agent_comms.bus_publication import InitialOrigin
 from agent_comms.change_report import OrderRoots
-from agent_comms.channel_targets import CommandTarget, NamedTarget
+from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.tables.publications import (
@@ -38,7 +38,7 @@ from agent_comms.errors import (
 )
 from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.mentions import ThreadMention
-from agent_comms.messages import BusRecord, ClaimNoticeKind, Message
+from agent_comms.messaging.messages import BusRecord, ClaimNoticeKind, Message
 from agent_comms.nominal.field_codec import ClaimId
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
@@ -52,7 +52,7 @@ if TYPE_CHECKING:
 
 from agent_comms.catalog_document import CatalogDocument
 from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.channels import Channel
+from agent_comms.messaging.channels import Channel
 
 
 @dataclass(eq=False, repr=False)

@@ -12,7 +12,7 @@ from typing import Annotated, ClassVar, Literal, Type
 
 import pytest
 
-from agent_comms.messages import InfoKind, MessageKind
+from agent_comms.messaging.messages import InfoKind, MessageKind
 from agent_comms.nominal.field_codec import (
     AttemptId,
     BoundedText,

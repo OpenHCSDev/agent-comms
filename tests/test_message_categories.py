@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from agent_comms.bus_publication import Delivered
-from agent_comms.messages import (
+from agent_comms.messaging.messages import (
     ConversationRole,
     HistoricalConversationRole,
     HistoricalNoticeRole,

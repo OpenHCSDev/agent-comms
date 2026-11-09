@@ -22,8 +22,8 @@ from agent_comms import agent_events as events
 from agent_comms import pi_events as pi
 from agent_comms.agent_backend import AgentBackend
 from agent_comms.agent_event_updates import AcpEventConsumer, TurnEventConsumer
-from agent_comms.channel_targets import NamedTarget
-from agent_comms.channels import AllChannel
+from agent_comms.messaging.channel_targets import NamedTarget
+from agent_comms.messaging.channels import AllChannel
 from agent_comms.controller import Controller
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
@@ -48,7 +48,7 @@ from agent_comms.following_inputs import OwnerFollowingInputs
 from agent_comms.image_input import ImageInput
 from agent_comms.input_key import InputKey
 from agent_comms.input_origin import InputOrigin, UnattributedInputOrigin
-from agent_comms.messages import Message
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId, InputId, TurnId
 from agent_comms.pi_commands import (
     AgentCommsInspectContext,

@@ -53,7 +53,7 @@ from agent_comms.cli_bridges.claude_transcript import (
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.harness_delivery_states import PrintLedgerId
 from agent_comms.launch_runtime import RunningSource
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.watched import FileSource
 

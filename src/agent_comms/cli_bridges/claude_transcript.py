@@ -26,7 +26,7 @@ from agent_comms.cli_bridges.history import (
 from agent_comms.cli_bridges.shared import WireReference
 from agent_comms.cli_protocol import TaggedWire
 from agent_comms.harness_delivery_states import PrintLedgerId, TakingLedger
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import StoredSessionId
 from agent_comms.registry.thread_text import NamedSession, NoThreadText, ThreadText
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts

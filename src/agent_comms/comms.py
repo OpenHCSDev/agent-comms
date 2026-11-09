@@ -23,8 +23,8 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.owner_lifecycle import OwnerLifecycle
 from agent_comms.history_views import HistoryViews
-from agent_comms.message_reference import InboxStart
-from agent_comms.messages import Message
+from agent_comms.messaging.message_reference import InboxStart
+from agent_comms.messaging.messages import Message
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_page import InboxPage
 from agent_comms.messaging.sending import Messaging

@@ -18,7 +18,7 @@ if __name__ == "__main__":
             raise SystemExit(f"producer_stamp takes at most one commit, not {unexpected!r}")
 
 from agent_comms.bus import Bus as Bus  # noqa: E402
-from agent_comms.messages import BusRecord  # noqa: E402
+from agent_comms.messaging.messages import BusRecord  # noqa: E402
 from agent_comms.storage.typed_table import ProducedRow, ProducedTable  # noqa: E402
 
 

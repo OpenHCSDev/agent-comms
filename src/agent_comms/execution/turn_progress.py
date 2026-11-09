@@ -33,7 +33,7 @@ from agent_comms.execution.native_turn_context import ContextObserved
 from agent_comms.execution.turn_failure import ModelRequestFailed, NoTurnFailure
 from agent_comms.execution.turn_lease import TurnState
 from agent_comms.execution.turn_phase import NativePhaseChanged, PublishingPhase
-from agent_comms.messages import AlertKind, NoticeRole
+from agent_comms.messaging.messages import AlertKind, NoticeRole
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.publication_measurements import PublicationMeasurements
 from agent_comms.registry.thread_identity import ClaimedIdentity

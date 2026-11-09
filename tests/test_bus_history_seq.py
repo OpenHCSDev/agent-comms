@@ -16,7 +16,7 @@ from agent_comms.comms import wire
 from agent_comms.errors import HumanSendRefusedError
 from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.historical_views import HistoryArchive
-from agent_comms.messages import BusRow, InfoKind, Message
+from agent_comms.messaging.messages import BusRow, InfoKind, Message
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_page import (
     MessagePageRequest,
@@ -27,7 +27,7 @@ from agent_comms.page_traversal import LiveCursor, OlderTraversal
 from agent_comms.presentation import WireRevision
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.publisher import Publisher
-from agent_comms.read_basis import ChannelDisplayScope
+from agent_comms.messaging.read_basis import ChannelDisplayScope
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import NativeThread

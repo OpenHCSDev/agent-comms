@@ -40,7 +40,12 @@ from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.probes.carry import WriterOwnedOpeningProbe
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.messages import BusProjectionTables, BusRow, ClaimOperations, HeldResources
+from agent_comms.messaging.messages import (
+    BusProjectionTables,
+    BusRow,
+    ClaimOperations,
+    HeldResources,
+)
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, MessageId
 from agent_comms.planning.goal_attempts import GoalAttemptStore
 from agent_comms.planning.goal_failure_observation import FailedTurnEvidence

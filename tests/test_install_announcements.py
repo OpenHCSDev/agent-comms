@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.channel_targets import CommsTag
+from agent_comms.messaging.channel_targets import CommsTag
 from agent_comms.cli import build_parser
 from agent_comms.cli_bridges.shared import UnobservedBridge
 from agent_comms.cli_commands import BusReadBack

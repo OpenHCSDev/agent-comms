@@ -10,7 +10,7 @@ from agent_comms.input_key import InputKey
 
 if TYPE_CHECKING:
     from agent_comms.input_disposition import InputDispositions
-    from agent_comms.messages import Message
+    from agent_comms.messaging.messages import Message
     from agent_comms.registry.threads import Thread
 
 

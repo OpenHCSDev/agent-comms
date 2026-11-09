@@ -62,7 +62,7 @@ from agent_comms.message_notification import (
     MessageNotification,
     SentMessageOutcome,
 )
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import (
     RootId,

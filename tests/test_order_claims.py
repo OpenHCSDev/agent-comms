@@ -19,7 +19,7 @@ from agent_comms.errors import (
     HumanSendRefusedError,
     TodoError,
 )
-from agent_comms.messages import HandoffKind, Message, QuestionKind
+from agent_comms.messaging.messages import HandoffKind, Message, QuestionKind
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     GoalId,

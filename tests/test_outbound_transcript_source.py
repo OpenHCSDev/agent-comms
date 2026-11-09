@@ -8,8 +8,8 @@ import pytest
 
 from agent_comms.activity import StoppedDrainDiagnostic
 from agent_comms.assignment_states import DeferredAssignment
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.channels import AnyChannel
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.channels import AnyChannel
 from agent_comms.comms import wire
 from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.coordination.coordinator import Coordination
@@ -21,7 +21,7 @@ from agent_comms.coordination.errors import (
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_runtime_input import NativeRuntimeTable
-from agent_comms.messages import Message
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.notification_assignment import (
     AssignmentActivityEvidence,

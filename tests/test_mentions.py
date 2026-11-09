@@ -1,10 +1,10 @@
 
 import pytest
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.comms import wire
 from agent_comms.mentions import MentionCandidate, MentionQuery, ThreadMention
-from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole
+from agent_comms.messaging.messages import AlertKind, InfoKind, Message, NoticeRole
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import (
     AgentThreadRole,
@@ -163,7 +163,7 @@ def test_completion_uses_the_model_syntax_at_the_cursor():
 
 
 def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
-    from agent_comms.messages import AlertKind
+    from agent_comms.messaging.messages import AlertKind
 
     comms = installed_comms(tmp_path)
     for name in ("sender", "owner"):

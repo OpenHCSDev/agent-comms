@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.bus import BusReader
-from agent_comms.messages import Message, MessageInput, MessageKind, NeedsAnswerKind
+from agent_comms.messaging.messages import Message, MessageInput, MessageKind, NeedsAnswerKind
 from agent_comms.messaging.message_page import MessageReadRequest
 from agent_comms.planning.orders import Todo
-from agent_comms.read_basis import RepliesDisplayScope
+from agent_comms.messaging.read_basis import RepliesDisplayScope
 
 if TYPE_CHECKING:
     from agent_comms.registry.registry_document import RegistrySnapshot

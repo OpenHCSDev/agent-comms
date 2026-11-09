@@ -10,8 +10,13 @@ from typing import Annotated
 from pydantic import JsonValue
 
 from agent_comms.acp_extension import CoordinationChangedUpdate
-from agent_comms.channel_targets import ChannelSelection, CommandTarget, NamedTarget, NoChannel
-from agent_comms.channels import Channel
+from agent_comms.messaging.channel_targets import (
+    ChannelSelection,
+    CommandTarget,
+    NamedTarget,
+    NoChannel,
+)
+from agent_comms.messaging.channels import Channel
 from agent_comms.cli_command import PreparedTargetAction, TargetAction, TargetEdit
 from agent_comms.cli_result import TargetEditResult
 from agent_comms.context_store import (

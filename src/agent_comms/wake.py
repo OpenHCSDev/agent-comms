@@ -8,9 +8,9 @@ a later bus-owned boundary must attest its durable commit before live use.
 from __future__ import annotations
 
 from agent_comms.audience_manifest import AudiencedMessage
-from agent_comms.channel_targets import CommandTarget, NamedTarget
+from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
 from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.messages import Message
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.wake_policy import NoWakeDecision, PassiveWake, RecipientDecision, WakePolicy
 

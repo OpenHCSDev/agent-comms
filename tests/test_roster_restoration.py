@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.assignment_states import FullPendingAssignment, TriagePendingAssignment
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.comms import wire
 from agent_comms.coordination.tables.executions import NoPointedExecution
 from agent_comms.display_order import LastActivityThreadSort

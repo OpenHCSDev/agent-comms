@@ -9,11 +9,11 @@ from functools import partial
 import pytest
 
 from agent_comms.bus_publication import AgentOrigin
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.turn_lease import NoTurnLease
-from agent_comms.messages import InfoKind, Message, NoticeRole
+from agent_comms.messaging.messages import InfoKind, Message, NoticeRole
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout

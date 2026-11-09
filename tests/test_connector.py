@@ -27,7 +27,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from yarl import URL
 
 from agent_comms.bus import Bus
-from agent_comms.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import Comms, wire
 from agent_comms.connector import (
     ApprovalLink,

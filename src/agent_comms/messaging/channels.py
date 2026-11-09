@@ -7,9 +7,9 @@ from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar, TYPE_CHECKING
 
-from agent_comms.channel_targets import ChannelTarget, Tag
+from agent_comms.messaging.channel_targets import ChannelTarget, Tag
 from agent_comms.cli_result import CliResult
 from agent_comms.display_order import CreatedThreadSort, ThreadSort
 from agent_comms.errors import RelationViolationError
@@ -18,11 +18,11 @@ from agent_comms.history_result import (
     EverythingHistoryPageResult,
     HistoryPageResult,
 )
-from agent_comms.messages import MembershipTransition
+from agent_comms.messaging.messages import MembershipTransition
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import CatalogExclude, FieldCodec
 from agent_comms.projection_source import ProjectionSource
-from agent_comms.read_basis import (
+from agent_comms.messaging.read_basis import (
     AllChannelDisplayScope,
     ChannelDisplayScope,
     MemberActivityDisplayScope,

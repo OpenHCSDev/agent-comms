@@ -19,10 +19,10 @@ from agent_comms.nominal.field_codec import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.channel_targets import NamedTarget
+    from agent_comms.messaging.channel_targets import NamedTarget
     from agent_comms.coordination.session import NativeCapture
     from agent_comms.external_transcript import ExternalTranscript
-    from agent_comms.message_reference import MessageReference
+    from agent_comms.messaging.message_reference import MessageReference
     from agent_comms.routing import Routing
     from agent_comms.transcript_routes import _SessionRoutes
 

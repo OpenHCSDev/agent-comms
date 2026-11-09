@@ -30,8 +30,8 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import (
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import (
     BusProjectionTables,
     BusRow,
     BusTables,
@@ -51,7 +51,7 @@ from agent_comms.messages import (
 from agent_comms.messaging.bus_route_counts import BusRouteCounts
 from agent_comms.nominal.field_codec import GitCommitText, MessageId, MessageIdText
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.read_basis import RepliesDisplayScope
+from agent_comms.messaging.read_basis import RepliesDisplayScope
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.response_acknowledgement import (
     canonical_publication_key,
@@ -165,7 +165,7 @@ import importlib, inspect, json, sys
 startup = sys.argv[1]
 if startup != "table-first":
     importlib.import_module(startup)
-from agent_comms.messages import TeamUpdatePosition
+from agent_comms.messaging.messages import TeamUpdatePosition
 if startup == "table-first":
     # The cold direct call: nothing has completed the writer family yet.
     from agent_comms.projection_source import ProjectionSource
@@ -175,7 +175,7 @@ if startup == "agent_comms.cli_verbs.reconcile_stores":
     first = stamped_digests()[TeamUpdatePosition.declared_name]
 else:
     first = TeamUpdatePosition.producer_digest()
-from agent_comms.messages import BusRecord
+from agent_comms.messaging.messages import BusRecord
 from agent_comms.projection_source import ProjectionSource
 writers = ProjectionSource.writers_for(TeamUpdatePosition)
 print(json.dumps(dict(
