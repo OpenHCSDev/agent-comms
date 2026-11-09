@@ -15,43 +15,18 @@ from typing import Annotated, ClassVar
 
 from _pytest.config import get_config
 
-from .active_route import resolve_comms_route
-from .build_identity import RepositoryCommit
-from .execution.child_process import (
-    STOP_GRACE_SECONDS,
-    ResidentManager,
-    SpawnedProcess,
-)
-from .planning.order_words import VerdictReason
-from .planning.orders import (
-    CarriedHeadVerdict,
-    PullRequests,
-    RecordPullRequest,
-    StoredHeadReview,
-    Todo,
-)
-from .planning.pull_requests import PullRequestLink
-from .team.order import TeamContext
-from .nominal.declared_family import DeclaredFamily
-from agent_comms_hooks import ToolRefusedError
-from .declared_verb import DeclaredOptions
-from .nominal.field_codec import (
-    Argument,
-    FieldCodec,
-    GitCommitText,
-    GoalId,
-    PathText,
-    WireName,
-    boundary_decoder,
-)
-from .head_review import (
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.build_identity import RepositoryCommit
+from agent_comms.declared_verb import DeclaredOptions
+from agent_comms.execution.child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
+from agent_comms.head_review import (
     BaseSide,
     CombinedInput,
     HeadReview,
     HeadSide,
+    InputPublication,
     IntegrationInput,
     IntegrationSource,
-    InputPublication,
     LocalIntegrationSource,
     MergedIntegrationSource,
     MergeHeadReview,
@@ -61,22 +36,40 @@ from .head_review import (
     ResolvedIntegrationSource,
     Side,
     SourceCheckout,
-    UnpublishedInput,
     UnpromotedHeadReview,
+    UnpublishedInput,
 )
-from .launch_runtime import CheckoutSource, RestoredRuntime
-from .installer.native_build_inputs import DetachedChildStdio
-from .projects.git_errors import GitCommandError
-from .projects.repo import Repo
-from .projects.checkouts import (
-    DetachedStart,
-    RepositoryReads,
+from agent_comms.installer.native_build_inputs import DetachedChildStdio
+from agent_comms.launch_runtime import CheckoutSource, RestoredRuntime
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    Argument,
+    FieldCodec,
+    GitCommitText,
+    GoalId,
+    PathText,
+    WireName,
+    boundary_decoder,
 )
-from .repository_name import RepositoryName
-from .systemd_unit import AgentsSlice
-from .test_lease import LeaseStart, TestLease
-from .tool_caller import PeerCaller
-from .work_branches import WorkBranches
+from agent_comms.planning.order_words import VerdictReason
+from agent_comms.planning.orders import (
+    CarriedHeadVerdict,
+    PullRequests,
+    RecordPullRequest,
+    StoredHeadReview,
+    Todo,
+)
+from agent_comms.planning.pull_requests import PullRequestLink
+from agent_comms.projects.checkouts import DetachedStart, RepositoryReads
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
+from agent_comms.repository_name import RepositoryName
+from agent_comms.systemd_unit import AgentsSlice
+from agent_comms.team.order import TeamContext
+from agent_comms.test_lease import LeaseStart, TestLease
+from agent_comms.tool_caller import PeerCaller
+from agent_comms.work_branches import WorkBranches
+from agent_comms_hooks import ToolRefusedError
 
 
 class IntegrationFailed(ToolRefusedError):

@@ -8,6 +8,10 @@ from inspect import isabstract
 
 import pytest
 
+from agent_comms.errors import TodoError
+from agent_comms.head_review import HeadReviewOrder, PullRequestHead
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
+from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.order_words import (
     StrikeReason,
     VerdictReason,
@@ -32,12 +36,11 @@ from agent_comms.planning.orders import (
     UnderReviewHeadVerdict,
 )
 from agent_comms.planning.pull_requests import PullRequestLink
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registry.threads import ExternalThread, ForkThread
+from agent_comms.task_attachments.team_pings import RulePing
 from agent_comms.team import judge, order
-from agent_comms.errors import TodoError
-from agent_comms.registry.threads import ForkThread, ExternalThread
 from agent_comms.team.standing import DeliveryAwaitingJudgement
-from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.team.standing_rules import (
     HeadReviewTimerUp,
     LinkedUnreviewedHead,
@@ -45,13 +48,9 @@ from agent_comms.team.standing_rules import (
     ReviewTimerUp,
     StandingRule,
 )
-from team_heartbeat_fixture import capture_frame
-from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.tool_caller import ForkCaller, PeerCaller, ThreadCaller
 from agent_comms_hooks import ToolRefusedError
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.task_attachments.team_pings import RulePing
-
+from team_heartbeat_fixture import capture_frame
 from test_held_problem_orders import merge_two_commit_fix
 from test_team_notifications import beat, notifications
 

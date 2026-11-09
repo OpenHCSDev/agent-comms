@@ -4,55 +4,33 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from sqlite3 import Connection
 from typing import (
-    ClassVar,
     TYPE_CHECKING,
+    ClassVar,
 )
 
-from ..errors import (
-    GoalRefused,
-    UnresolvedAttemptError,
-)
-from .goal_attempt_phase import (
-    FailedAttempt,
-    GoalAttemptPhase,
-)
-from .goal_failure_observation import NoFailedTurnEvidence
-from .goal_presentation import (
+from agent_comms.errors import GoalRefused, UnresolvedAttemptError
+from agent_comms.execution.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
+from agent_comms.lifecycle import LifecycleState
+from agent_comms.lifecycle_capability import Complete, Failed, Terminal
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import AttemptId, NoAttemptId
+from agent_comms.planning.goal_attempt_phase import FailedAttempt, GoalAttemptPhase
+from agent_comms.planning.goal_failure_observation import NoFailedTurnEvidence
+from agent_comms.planning.goal_presentation import (
     AttemptUnresolvedExecution,
     CompletedExecution,
     RunnableExecution,
 )
-from ..execution.goal_turn_permit import (
-    GoalTurnPermit,
-    NoLaunchPermit,
-)
-from ..lifecycle import LifecycleState
-from ..lifecycle_capability import (
-    Complete,
-    Failed,
-    Terminal,
-)
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
-    AttemptId,
-    NoAttemptId,
-)
 
 if TYPE_CHECKING:
-    from .goal_actions import GoalActionContext
-    from .goal_attempts import (
-        Generation,
-        GoalAttemptStore,
-    )
-    from .goal_management import (
-        GoalExecutionSource,
-        Goals,
-    )
-    from ..attempt_resolution import WorkDecision
-    from .goal_failure_observation import GoalFailureEvidence
-    from .goal_presentation import GoalExecution
-    from .goals import Goal
-    from ..registry.threads import NativeThread
+    from agent_comms.attempt_resolution import WorkDecision
+    from agent_comms.planning.goal_actions import GoalActionContext
+    from agent_comms.planning.goal_attempts import Generation, GoalAttemptStore
+    from agent_comms.planning.goal_failure_observation import GoalFailureEvidence
+    from agent_comms.planning.goal_management import GoalExecutionSource, Goals
+    from agent_comms.planning.goal_presentation import GoalExecution
+    from agent_comms.planning.goals import Goal
+    from agent_comms.registry.threads import NativeThread
 
 
 @dataclass(frozen=True)

@@ -7,31 +7,28 @@ owners for each process. This module installs no marker, participant, schema or 
 
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import RootId
-
 import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.bus import Bus
 from agent_comms.coordination.errors import IdentityConflict, PublicationActivationBlocked
-
-from .bus import Bus
-from .storage.locked_store import RegistryFile
-
-from .execution.native_arguments import NativeArguments
-from .installer.native_package import (
+from agent_comms.execution.native_arguments import NativeArguments
+from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.installer.native_package import (
     NativePackageError,
     VerifiedNativePackage,
     pinned_native_package,
 )
-from .execution.native_session_files import NativeSessionFiles
+from agent_comms.nominal.field_codec import RootId
+from agent_comms.storage.locked_store import RegistryFile
 
 if TYPE_CHECKING:
-    from .active_route import CommsRoute
-    from .launch_runtime import LaunchRuntime
-    from .registry.threads import Thread
+    from agent_comms.active_route import CommsRoute
+    from agent_comms.launch_runtime import LaunchRuntime
+    from agent_comms.registry.threads import Thread
 
 
 class RootLaunch(ABC):
@@ -46,7 +43,7 @@ class RootLaunch(ABC):
         The registry guard owns the native namespace; the installed pin owns
         the package. No bus-file metadata participates in either decision.
         """
-        from .registry.registry_store import RegistryStore
+        from agent_comms.registry.registry_store import RegistryStore
 
         root = route.observe_root()
         return RegistryStore.at(root).privacy().launch(root)
@@ -71,7 +68,7 @@ class RootLaunch(ABC):
 
     def prepare_owner(self, thread: Thread, agent_bin: str, runtime: LaunchRuntime) -> str:
         """Explicit owner launch prepares registry authority, then native tables."""
-        from .registry.registry_store import RegistryStore
+        from agent_comms.registry.registry_store import RegistryStore
 
         if agent_bin == NativeArguments.default_binary:
             agent_bin = runtime.native_entrypoint
@@ -146,7 +143,7 @@ class PrivateNkLaunch(RootLaunch):
         directory, registry or database and make no provider request.
         """
         NativeSessionFiles.require_private_directory(self.validated_root)
-        from .registry.registry_store import RegistryStore
+        from agent_comms.registry.registry_store import RegistryStore
 
         Bus(Bus.path_in(self.validated_root)).revision()
         registry = RegistryStore(RegistryFile.path_in(self.validated_root))

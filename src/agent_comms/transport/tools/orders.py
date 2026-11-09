@@ -10,71 +10,47 @@ from dataclasses import (
 from functools import partial
 from typing import Annotated
 
-from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
-from .reads import (
-    InputDeliveryRead,
-    OwnerGoalRead,
-    TeammateRead,
-    TranscriptPageRead,
+from agent_comms.acp_extension import GoalSnapshotReply, TurnChangedUpdate, UpdateMetadata
+from agent_comms.channel_targets import CommsTag
+from agent_comms.comms import Comms
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.turn_digests import (
+    ActivityTurnView,
+    LastTurns,
+    OrderEditsRead,
+    ThreadTurns,
+    TurnBound,
+    TurnsSince,
+    TurnView,
+    UnavailableOrderEdits,
+    UnjudgedEdits,
 )
-from ..request import tool_field
-from ...acp_extension import (
-    GoalSnapshotReply,
-    TurnChangedUpdate,
-    UpdateMetadata,
-)
-from ...runtime_requests import (
-    OwnedRead,
-    OwnerLiveRead,
-)
-from ...messaging.bus_read import (
-    CapturesTranscriptPage,
-    OwnerScopedRead,
-    UiRead,
-)
-from ...channel_targets import CommsTag
-from ...comms import Comms
-from ...coordination.coordinator import Coordination
-from ...planning.goal_actions import (
-    CompliedGoalAction,
-    CreateProblemGoalAction,
-    OrderGoalAction,
-    OwnerInvocable,
-)
-from ...planning.goals import (
-    Goal,
-    OrderCheck,
-)
-from ...head_review import (
-    HeadReviewOrder,
-    PreparedHeadReview,
-    PullRequestHead,
-)
-from ...held_orders import HeldOrders
-from ...input_attempt import UNOBSERVED_DELIVERY_SCOPE
-from ...input_disposition import DeliveryOverview
-from ...nominal.field_codec import (
+from agent_comms.head_review import HeadReviewOrder, PreparedHeadReview, PullRequestHead
+from agent_comms.held_orders import HeldOrders
+from agent_comms.input_attempt import UNOBSERVED_DELIVERY_SCOPE
+from agent_comms.input_disposition import DeliveryOverview
+from agent_comms.messaging.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     MessageId,
     OrderId,
     RecordProblems,
     ToolCallId,
 )
-from ...order_story import (
-    OrderStory,
-    TeamStory,
+from agent_comms.order_story import OrderStory, TeamStory
+from agent_comms.order_work import OrderWork
+from agent_comms.planning.delivery_evidence import TodoProblems
+from agent_comms.planning.goal_actions import (
+    CompliedGoalAction,
+    CreateProblemGoalAction,
+    OrderGoalAction,
+    OwnerInvocable,
 )
-from ...order_work import OrderWork
-from ...planning.plan_phases import OrderPhase
-from ...planning.delivery_evidence import TodoProblems
-from ...planning.order_words import (
-    DeliveryReport,
-    PlainText,
-    StrikeReason,
-)
-from ...planning.orders import (
+from agent_comms.planning.goals import Goal, OrderCheck
+from agent_comms.planning.order_words import DeliveryReport, PlainText, StrikeReason
+from agent_comms.planning.orders import (
     AssignedClaimReviewer,
     ClaimOrder,
     ClaimReviewer,
@@ -98,50 +74,38 @@ from ...planning.orders import (
     ToolCallVerdict,
     WaivedVerdict,
 )
-from ...planning.pull_requests import PullRequestLink
-from ...problem_number import ProblemNumber
-from ...progress_claims import ProgressClaim
-from ...read_basis import ReadAuthority
-from ...runtime_server import AttachedRuntimeRequestContext
-from ...send_result import MessagePublished
-from ...service_passes import ServicePassStore
-from ...team_hud import (
-    TeamFrame,
-    TeamHud,
-    TeamLoad,
-)
-from ...team_hud_records import (
-    TeamOrderDetail,
-    Teammate,
-    TeammateDetail,
-)
-from ...registry.thread_identity import ThreadIncarnation
-from ...tool_caller import (
-    ThreadCaller,
-    ToolCaller,
-)
-from ...tool_declaration import EditCall
-from ...tool_request import (
+from agent_comms.planning.plan_phases import OrderPhase
+from agent_comms.planning.pull_requests import PullRequestLink
+from agent_comms.problem_number import ProblemNumber
+from agent_comms.progress_claims import ProgressClaim
+from agent_comms.read_basis import ReadAuthority
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.runtime_requests import OwnedRead, OwnerLiveRead
+from agent_comms.runtime_server import AttachedRuntimeRequestContext
+from agent_comms.send_result import MessagePublished
+from agent_comms.service_passes import ServicePassStore
+from agent_comms.team_hud import TeamFrame, TeamHud, TeamLoad
+from agent_comms.team_hud_records import Teammate, TeammateDetail, TeamOrderDetail
+from agent_comms.tool_caller import ThreadCaller, ToolCaller
+from agent_comms.tool_declaration import EditCall
+from agent_comms.tool_request import (
     NativeToolRequest,
     PublishingToolRequest,
     ReadTool,
     ThreadReadTool,
     ThreadToolRequest,
 )
-from ...tool_result import ToolResult
-from ...transcripts import TranscriptRead
-from ...execution.turn_digests import (
-    ActivityTurnView,
-    LastTurns,
-    OrderEditsRead,
-    ThreadTurns,
-    TurnBound,
-    TurnView,
-    TurnsSince,
-    UnavailableOrderEdits,
-    UnjudgedEdits,
+from agent_comms.tool_result import ToolResult
+from agent_comms.transcripts import TranscriptRead
+from agent_comms.transport.request import tool_field
+from agent_comms.transport.tools.reads import (
+    InputDeliveryRead,
+    OwnerGoalRead,
+    TeammateRead,
+    TranscriptPageRead,
 )
-from ...work_branches import WorkBranchError
+from agent_comms.work_branches import WorkBranchError
+from agent_comms_hooks import ToolRefusedError
 
 
 @dataclass(frozen=True)

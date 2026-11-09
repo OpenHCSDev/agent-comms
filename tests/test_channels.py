@@ -1,8 +1,4 @@
 
-from agent_comms.projects.checkouts import (
-    Checkout,
-    LaunchCheckout,
-)
 import os
 from dataclasses import replace
 
@@ -25,10 +21,6 @@ from agent_comms.channels import (
     TagChannel,
     ViewPredicate,
 )
-from agent_comms.execution.child_process import (
-    NoProcess,
-    ProcessIdentity,
-)
 from agent_comms.comms import wire
 from agent_comms.display_order import (
     ChannelSort,
@@ -38,10 +30,17 @@ from agent_comms.display_order import (
     ThreadSort,
 )
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.pi_vocabulary import HighThinkingLevel
+from agent_comms.projects.checkouts import (
+    Checkout,
+    LaunchCheckout,
+)
 from agent_comms.registry.registry_document import RosterVisibility
-from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.registry.thread_management import (
     ForkSpec,
     GivenTags,
@@ -54,6 +53,7 @@ from agent_comms.registry.thread_status import (
 )
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
 from conftest import installed_comms
@@ -246,9 +246,8 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
     action = next(action for action in catalog if action.declaration.declared_name == 'delete-tag')
     disposition = DeleteExclusiveInactiveThreadsTagDisposition()
     editor_value = compile_decoder(TagDisposition).encode_editor(disposition)
-    from agent_comms.launch_root import LaunchRoot
-
     from agent_comms.config_options import ConfigOptions
+    from agent_comms.launch_root import LaunchRoot
     from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 
     with LaunchRoot.from_path(comms.root).selected():
@@ -377,8 +376,8 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path, s
     import json
 
     from agent_comms.cli_bridges.history import OfflineHistory
-    from agent_comms.registry.thread_text import AnySession
     from agent_comms.harness_install import OpenCodeHarness
+    from agent_comms.registry.thread_text import AnySession
 
     comms = setup_wire(tmp_path)
     predicate = ViewPredicate(AnyOfMatch, frozenset({"api"}))

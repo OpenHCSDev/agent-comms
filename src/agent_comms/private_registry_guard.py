@@ -26,37 +26,36 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
-from .execution.child_process import Platform
-from .storage import store_files
-from .coordination.database import CoordinationStore
-from .cohort_schema import AcceptanceFrontier, PrivateCoordinatorSchema
-from .coordination.errors import PublicationActivationBlocked
-from .coordination.schema import CoordinatorTable
-from .coordination.tables.participants import Participants
-from .coordination.coordinator import Coordination
-from .errors import RelationViolationError
-from .nominal.field_codec import RootId, ThreadLookup
-from .storage.locked_store import RollbackRetained, WireWakeFile
-from .execution.native_input_owner import RegistryOwner
-from .execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
-from .private_nk_entrypoint import (
-    PrivateNkLaunch,
-    SharedRootLaunch,
-)
-from .storage.private_path import FileObservation, PrivateFileRole
-from .private_runtime_schema import PrivateCoordinatorTable
-from .registry.thread_identity import ClaimedIdentity
-
+from agent_comms.cohort_schema import AcceptanceFrontier, PrivateCoordinatorSchema
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import PublicationActivationBlocked
+from agent_comms.coordination.schema import CoordinatorTable
+from agent_comms.coordination.tables.participants import Participants
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import Platform
+from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from agent_comms.nominal.field_codec import RootId, ThreadLookup
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch, SharedRootLaunch
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
+from agent_comms.registry.thread_identity import ClaimedIdentity
+from agent_comms.storage import store_files
+from agent_comms.storage.locked_store import RollbackRetained, WireWakeFile
+from agent_comms.storage.private_path import FileObservation, PrivateFileRole
 
 if TYPE_CHECKING:
-    from .notification_assignment import NotificationAssignmentRead, NotificationSelection
-    from .acp_extension import CursorAdvancedUpdate, CursorScope
-    from .cursor_publication import CursorPublication
-    from .historical_native_inputs import HistoricalNativeAnswers
-    from .messages import MessageReference
-    from .private_nk_entrypoint import RootLaunch
-    from .registry.registry_document import RegistrySnapshot
-    from .storage.typed_table import TableSchema
+    from agent_comms.acp_extension import CursorAdvancedUpdate, CursorScope
+    from agent_comms.cursor_publication import CursorPublication
+    from agent_comms.historical_native_inputs import HistoricalNativeAnswers
+    from agent_comms.messages import MessageReference
+    from agent_comms.notification_assignment import (
+        NotificationAssignmentRead,
+        NotificationSelection,
+    )
+    from agent_comms.private_nk_entrypoint import RootLaunch
+    from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.storage.typed_table import TableSchema
 
 _MAGIC = b"ACRG"
 _VERSION = 1
@@ -221,7 +220,7 @@ class PublicRegistry(RegistryPrivacy):
     def cursor_scope(
         self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
     ) -> CursorScope:
-        from .acp_extension import NoCursorScope
+        from agent_comms.acp_extension import NoCursorScope
 
         return NoCursorScope()
 
@@ -281,7 +280,7 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         ).insert_if_absent(db)
 
     def publication_connection(self, connection: sqlite3.Connection) -> sqlite3.Connection:
-        from .coordination.response import ResponseTable
+        from agent_comms.coordination.response import ResponseTable
 
         NativeRuntimeTable.require_installed(connection)
         ResponseTable.require_installed(connection)
@@ -339,7 +338,7 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
     def cursor_scope(
         self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
     ) -> CursorScope:
-        from .acp_extension import LiveCursorScope, NoCursorScope
+        from agent_comms.acp_extension import LiveCursorScope, NoCursorScope
 
         try:
             owner = RegistryOwner.capture_local(snapshot, thread_name)

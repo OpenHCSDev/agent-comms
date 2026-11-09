@@ -9,16 +9,14 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from agent_comms.nominal import field_codec
-
-from .bus import Bus
-from .bus_tables import MessageIdentitySource
-from .channel_targets import CommandTarget
-from .coordination.database import CoordinationStore, ReadableStore
-from .coordination.tables.harness_deliveries import HarnessDelivery
-from .errors import RelationViolationError
-from .nominal.field_codec import GoalId, InputId, RootId, ThreadLookup, TurnId
-from .input_attempt import (
+from agent_comms.bus import Bus
+from agent_comms.bus_tables import MessageIdentitySource
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.coordination.database import CoordinationStore, ReadableStore
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     GoalInputDecision,
     HistoricalInput,
@@ -30,16 +28,16 @@ from .input_attempt import (
     StoredInput,
     UnresolvedInput,
 )
-from .input_key import InputKey, InputKeyText, TurnInputKey
-from .input_origin import HarnessAttemptOrigin, InputOrigin, UnattributedInputOrigin
-from .lifecycle_capability import Unresolved
-from .storage.locked_store import CompleteInputReader, DocumentChange, PublishedProperty
-from .message_reference import MessageReference
-from .messages import MessageInput
-from .execution.native_input_proof import NativeContextProof
-from .reported_turn import ReportedTurnState
-from .tool_result import ToolResult
-from .storage.typed_table import (
+from agent_comms.input_key import InputKey, InputKeyText, TurnInputKey
+from agent_comms.input_origin import HarnessAttemptOrigin, InputOrigin, UnattributedInputOrigin
+from agent_comms.lifecycle_capability import Unresolved
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import MessageInput
+from agent_comms.nominal import field_codec
+from agent_comms.nominal.field_codec import GoalId, InputId, RootId, ThreadLookup, TurnId
+from agent_comms.reported_turn import ReportedTurnState
+from agent_comms.storage.locked_store import CompleteInputReader, DocumentChange, PublishedProperty
+from agent_comms.storage.typed_table import (
     AttachedPracticeRebuild,
     Column,
     DurableStore,
@@ -50,14 +48,15 @@ from .storage.typed_table import (
     TypedTable,
     sql_literal,
 )
+from agent_comms.tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from .bus import BusReader
-    from .channel_input_batch import SingleInputBatch
-    from .private_registry_guard import RegistryPrivacy
-    from .registry.registry_document import RegistryEntry, RegistrySnapshot
-    from .registry.threads import Thread
-    from .execution.turn_lease import TurnLeaseFence
+    from agent_comms.bus import BusReader
+    from agent_comms.channel_input_batch import SingleInputBatch
+    from agent_comms.execution.turn_lease import TurnLeaseFence
+    from agent_comms.private_registry_guard import RegistryPrivacy
+    from agent_comms.registry.registry_document import RegistryEntry, RegistrySnapshot
+    from agent_comms.registry.threads import Thread
 
 
 @dataclass(frozen=True)
@@ -372,7 +371,7 @@ class InputDispositions(DurableStore, CompleteInputReader):
         *, ownership: ExitStack,
     ) -> SingleInputBatch:
         """Enlist rollback before publication; caller retains the original wire scope."""
-        from .channel_input_batch import SingleInputBatch
+        from agent_comms.channel_input_batch import SingleInputBatch
 
         row = ReservedInput(TurnInputKey(turn), None, owner, claim_scope, owner, text)
 

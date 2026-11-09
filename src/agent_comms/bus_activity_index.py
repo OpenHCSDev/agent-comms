@@ -6,11 +6,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Annotated
 
-from .class_fact import ClassFact
-from .projection_source import ProducedRow
-from . import activity_clocks
-from .messages import BusProjectionTables
-from .storage.typed_table import Column
+from agent_comms import activity_clocks
+from agent_comms.class_fact import ClassFact
+from agent_comms.messages import BusProjectionTables
+from agent_comms.projection_source import ProducedRow
+from agent_comms.storage.typed_table import Column
 
 
 class ActivityMaximum(BusProjectionTables, declared_name=None):
@@ -18,7 +18,7 @@ class ActivityMaximum(BusProjectionTables, declared_name=None):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .messaging.bus_display_index import BusDisplayIndex
+        from agent_comms.messaging.bus_display_index import BusDisplayIndex
 
         return (BusActivityIndex, SentActivity, BusDisplayIndex)
 

@@ -1,21 +1,21 @@
-from agent_comms.transcript_sources import NoDraft
-from agent_comms.projects.checkouts import Checkout
 import asyncio
 
 import pytest
 
 from agent_comms.bus import Bus
-from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.comms import wire
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
-from agent_comms.transcripts import LatestPage, TranscriptReadIdentity, UnreadTranscriptCursor
 from agent_comms.execution.turn_digests import LastTurns
-from agent_comms.registry.threads import NativeThread
 from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import NativeThread
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
+from agent_comms.transcript_sources import NoDraft
+from agent_comms.transcripts import LatestPage, TranscriptReadIdentity, UnreadTranscriptCursor
 
 
 @pytest.fixture(autouse=True)
@@ -201,7 +201,7 @@ def test_a_native_session_thread_takes_no_cli_items(tmp_path):
 def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     t_turn_id = NativeTurnId('t')
     t2_turn_id = NativeTurnId('t2')
-    from agent_comms.acp_extension import TranscriptSnapshotUpdate, encode_updates, decode_updates
+    from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates, encode_updates
     from agent_comms.coordination.errors import StaleRevision
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread('codex', frozenset(), Checkout(tmp_path)))

@@ -8,6 +8,8 @@ from typing import ClassVar, Literal
 from pydantic import ConfigDict, Field, JsonValue, model_validator
 
 from agent_comms.cli_protocol import Declared, TaggedWire, TextWire, WireHeader
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
+from agent_comms.execution.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     ToolCallId,
@@ -31,17 +33,7 @@ from agent_comms.transcript_events import (
     ThinkingTranscript,
     UserTranscript,
 )
-from ..execution.turn_item import (
-    NativeItemId,
-    NativeTurnId,
-)
-from ..execution.turn_phase import (
-    ModelWaitPhase,
-    ToolRunningPhase,
-    TurnPhase,
-)
-
-from ..wire_models import WireModel
+from agent_comms.wire_models import WireModel
 
 
 class MessageTime(WireModel):

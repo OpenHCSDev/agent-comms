@@ -1,29 +1,32 @@
 """Actual process birth is the registration/claim_scope authority, never PID alone."""
 
-from agent_comms.projects.checkouts import Checkout
 import os
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.installer.native_build_inputs import DetachedChildStdio
+from agent_comms.comms import wire
+from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
     SpawnedProcess,
 )
-from agent_comms.comms import wire
-from agent_comms.errors import RelationViolationError
+from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.nominal.field_codec import TurnId
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import RegistryDocument
+from agent_comms.registry.thread_text import GivenThreadText
+from agent_comms.registry.threads import ExternalThread, ForkThread, NativeThread
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.storage.maintenance_barrier import (
+    InstallingPhase,
+    MaintenanceHeldError,
+    MaintenanceOperator,
+    PausedPhase,
+)
 from agent_comms.transport.project_request import ProjectRuntimeRequest
 from served_requests import served
-from agent_comms.registry.threads import ExternalThread, ForkThread, NativeThread
-from agent_comms.storage.maintenance_barrier import (
-    InstallingPhase, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
-)
-from agent_comms.registry.thread_text import GivenThreadText
-from agent_comms.session_file import RegistrySessionLocation
 
 
 def test_cli_worktree_edit_preserves_live_external_owner(tmp_path):

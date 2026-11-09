@@ -8,29 +8,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..execution.native_arguments import (
-    NativeArguments,
-    SelectedModel,
-)
-from ..execution.native_failures import NativePiUnavailable
-from ..nominal.field_codec import (
-    SubclassUnion,
-    boundary_decoder,
-)
-from ..pi_vocabulary import (
-    NoThinkingOverride,
-    ServiceTier,
-    ThinkingChoice,
-)
-from .thread_text import (
-    AbsentText,
-    GivenText,
-    TextChoice,
-)
+from agent_comms.execution.native_arguments import NativeArguments, SelectedModel
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.nominal.field_codec import SubclassUnion, boundary_decoder
+from agent_comms.pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingChoice
+from agent_comms.registry.thread_text import AbsentText, GivenText, TextChoice
 
 if TYPE_CHECKING:
-    from ..execution.native_arguments import ProviderChoice
-    from ..pi_commands import SetModel
+    from agent_comms.execution.native_arguments import ProviderChoice
+    from agent_comms.pi_commands import SetModel
 
 
 class ModelSelection(TextChoice):

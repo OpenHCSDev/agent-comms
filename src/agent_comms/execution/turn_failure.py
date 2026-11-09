@@ -9,25 +9,25 @@ from dataclasses import (
     replace,
 )
 from typing import (
-    ClassVar,
     TYPE_CHECKING,
+    ClassVar,
 )
 
-from ..attempt_resolution import RecordedResolution
-from ..errors import StaleAttemptError
-from .native_arguments import SelectedModel
-from .native_failures import NativePiUnavailable
-from ..nominal.declared_family import DeclaredFamily
+from agent_comms.attempt_resolution import RecordedResolution
+from agent_comms.errors import StaleAttemptError
+from agent_comms.execution.native_arguments import SelectedModel
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from ..backend import NativeSession
-    from ..planning.goal_attempts import (
+    from agent_comms.backend import NativeSession
+    from agent_comms.execution.turn_inputs import InputForwarding
+    from agent_comms.execution.turn_output import TurnOutput
+    from agent_comms.planning.goal_attempts import (
         FailedTurnObservation,
         GoalAttemptStore,
         LaunchPermit,
     )
-    from .turn_inputs import InputForwarding
-    from .turn_output import TurnOutput
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,7 @@ class TurnFailure(DeclaredFamily):
 
     def prepare_execution_retry(self, db, execution_id: str) -> None:
         """Consume any earlier provider proof for this nonretryable failure."""
-        from ..coordination.tables.executions import ReplayAssessments
+        from agent_comms.coordination.tables.executions import ReplayAssessments
 
         ReplayAssessments.revoke(db, execution_id)
 
@@ -153,7 +153,7 @@ class ModelRequestFailed(TurnFailure):
         return ProviderRetryExhausted(self.text)
 
     def raise_native(self, proof, model: SelectedModel) -> None:
-        from .native_pi import NativePiTerminalFailure
+        from agent_comms.execution.native_pi import NativePiTerminalFailure
 
         raise NativePiTerminalFailure(self.text, proof, model, self)
 
@@ -167,7 +167,7 @@ class RetryableProviderFailure:
 
     def prepare_execution_retry(self, db, execution_id: str) -> None:
         """A provider refusal may retry only while durable output facts are absent."""
-        from ..coordination.tables.executions import ReplayAssessments
+        from agent_comms.coordination.tables.executions import ReplayAssessments
 
         ReplayAssessments.authorize_if_unobserved(db, execution_id)
 

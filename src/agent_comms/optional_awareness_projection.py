@@ -19,45 +19,44 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import ClassVar
 
-from agent_comms.coordination.errors import CoordinationError
-from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink, WakeAssignment
-from agent_comms.coordination.tables.executions import ExecutionRecord
-from agent_comms.coordination.tables.participants import OwnerGenerations
-from agent_comms.coordination.tables.responses import ResponseObligation
-
-from .bus_publication import Delivered
-from .execution.child_process import ProcessIdentity
-from .cohort_schema import (
+from agent_comms.bus_publication import Delivered
+from agent_comms.cohort_schema import (
     AwarenessClaimGenerations,
     ClaimBatchAcknowledgements,
     ClaimBatchMembers,
     CohortDeliveries,
     CohortTable,
 )
-from .context_segments.optional_awareness import (
+from agent_comms.context_segments.optional_awareness import (
     CompleteAwareness,
     OmittedAwareness,
     OptionalAwarenessResult,
     _OpenObligation,
     _SelectedDecision,
 )
-from .coordination.cohort import _claim_record
-from .errors import RelationViolationError
-from .nominal.field_codec import FieldCodec, RootId, ThreadLookup
-from .message_reference import MessageReference
-from .execution.native_input_owner import RegistryOwner
-from .private_registry_guard import RegistryPrivacy
-from .registry.registration import Registration
-from .storage.store_files import StoreBusy
-from .registry.threads import NativeThread, Thread
-from .execution.turn_context import (
+from agent_comms.coordination.cohort import _claim_record
+from agent_comms.coordination.errors import CoordinationError
+from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink, WakeAssignment
+from agent_comms.coordination.tables.executions import ExecutionRecord
+from agent_comms.coordination.tables.participants import OwnerGenerations
+from agent_comms.coordination.tables.responses import ResponseObligation
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.turn_context import (
     ContextSegment,
     InstructionFile,
     ResourceProvenance,
     WireProvenance,
 )
-from .storage.typed_table import TypedRow
-from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup
+from agent_comms.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.storage.store_files import StoreBusy
+from agent_comms.storage.typed_table import TypedRow
+from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 
 
 @dataclass(frozen=True)

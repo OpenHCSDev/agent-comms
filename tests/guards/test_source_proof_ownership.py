@@ -12,8 +12,12 @@ SOURCE = Path(__file__).resolve().parents[2] / "src" / "agent_comms"
 def test_original_wire_reply_has_no_native_streaming_membership():
     """Real215-05 and composition215-01 rendered one row through both handlers."""
     from agent_comms.transcript_events import (
-        AgentTextTranscript, IncomingTranscript, SentTranscript, UserTranscript,
-        MarkdownTranscript, WireTextTranscript,
+        AgentTextTranscript,
+        IncomingTranscript,
+        MarkdownTranscript,
+        SentTranscript,
+        UserTranscript,
+        WireTextTranscript,
     )
     from agent_comms.transcript_merge import StreamingMerge
 
@@ -27,7 +31,8 @@ def test_original_wire_reply_has_no_native_streaming_membership():
 def test_archived_identity_cannot_reacquire_a_live_registry_or_thread():
     from dataclasses import MISSING, fields
     from typing import get_type_hints
-    from agent_comms.historical_views import HistorySource, HistoricalThread
+
+    from agent_comms.historical_views import HistoricalThread, HistorySource
     from agent_comms.registry.threads import ThreadProvenance
 
     provenance = next(item for item in fields(HistorySource) if item.name == "provenance")

@@ -2,13 +2,13 @@
 
 import json
 
-from agent_comms.team.tool_watch import emit
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.transport.native_tools import NativeToolDeclaration
 from agent_comms.execution.selected.triage import (
     FullSelectedTriage,
     SelectedTriage,
 )
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.team.tool_watch import emit
+from agent_comms.transport.native_tools import NativeToolDeclaration
 
 
 def test_coordination_call_digests_its_arguments():

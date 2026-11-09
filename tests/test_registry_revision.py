@@ -1,15 +1,15 @@
 """Registry reads reuse unchanged declarations but follow external wire writes."""
 
-from agent_comms.projects.checkouts import Checkout
 import json
 
 import pytest
 
 from agent_comms.nominal.field_codec import MalformedRecord
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
-from agent_comms.storage.store_files import AtomicFile
 from agent_comms.registry.thread_status import StoppedThreadStatus
-from agent_comms.registry.threads import Thread, NativeThread
+from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.storage.store_files import AtomicFile
 
 
 @pytest.mark.parametrize("select", [
@@ -149,6 +149,7 @@ def test_reading_thread_rows_reuses_their_existing_wire_values(thread_rows_wire,
 
 def test_assigning_and_removing_thread_rows_changes_only_the_written_rows(thread_rows_wire):
     from dataclasses import replace
+
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.registry.registry_document import ThreadRows
     from agent_comms.registry.thread_text import GivenThreadText

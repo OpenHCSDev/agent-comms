@@ -27,39 +27,43 @@ from typing import (
 from pydantic import BaseModel
 
 import agent_comms
-
-from .command import Command
-from .controller import (
-    UNBOUND_CONTROLLER, CancelledOutcome, Controller, PermissionOutcome, SessionUpdateSink,
+from agent_comms.command import Command
+from agent_comms.controller import (
+    UNBOUND_CONTROLLER,
+    CancelledOutcome,
+    Controller,
+    PermissionOutcome,
+    SessionUpdateSink,
 )
-from .coordination.coordinator import Coordination
-from .coordination.errors import CoordinationError, IdentityConflict, Refused
-from .errors import RelationViolationError
-from .execution.native_failures import NativeRequestFailure
-from .nominal.field_codec import (
-    AcpSessionId,
-    FieldCodec,
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import CoordinationError, IdentityConflict, Refused
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.native_failures import NativeRequestFailure
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
+from agent_comms.nominal.served_declaration import ServesDeclaration
+from agent_comms.owner_connection import socket_path
+from agent_comms.owner_protocol import (
+    ClientLine,
+    OwnerFailure,
+    OwnerLine,
+    OwnerPermissionRequest,
+    OwnerResult,
+    OwnerUpdate,
 )
-from .nominal.served_declaration import ServesDeclaration
-from .owner_connection import socket_path
-from .owner_protocol import (
-    ClientLine, OwnerFailure, OwnerLine, OwnerPermissionRequest, OwnerResult, OwnerUpdate,
-)
-from .storage.private_path import PrivateSocketRole
-from .registry.registry_document import RegistryEntry
-from .registry.threads import Thread
-from .tool_result import DeclaredReply
-from .transport.runtime_request import (
+from agent_comms.registry.registry_document import RegistryEntry
+from agent_comms.registry.threads import Thread
+from agent_comms.storage.private_path import PrivateSocketRole
+from agent_comms.tool_result import DeclaredReply
+from agent_comms.transport.runtime_request import (
     AttachedResultRuntimeRequest,
     AttachedRuntimeRequest,
     ResultRuntimeRequest,
     RuntimeRequest,
 )
 
-
 if TYPE_CHECKING:
-    from .acp import AcpSelectedWriteAuthority, CommsAgent
-    from .execution.turn_runner import TurnRunner
+    from agent_comms.acp import AcpSelectedWriteAuthority, CommsAgent
+    from agent_comms.execution.turn_runner import TurnRunner
 
 
 _LOG = logging.getLogger(__name__)

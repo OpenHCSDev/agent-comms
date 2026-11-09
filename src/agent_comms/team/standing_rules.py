@@ -24,58 +24,40 @@ from itertools import combinations
 from pathlib import Path
 from subprocess import TimeoutExpired
 from typing import (
+    TYPE_CHECKING,
     ClassVar,
     Self,
-    TYPE_CHECKING,
     cast,
 )
 
-from ..bus import BusReader
-from ..channel_targets import ThreadTarget
-from ..execution.child_process import (
-    ProcessIdentity,
-    ResidentMemory,
+from agent_comms.bus import BusReader
+from agent_comms.channel_targets import ThreadTarget
+from agent_comms.comms import Comms
+from agent_comms.declared_verb import DeclaredVerb
+from agent_comms.errors import RejectedEnforcementError, RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity, ResidentMemory
+from agent_comms.execution.turn_digests import (
+    LastTurns,
+    OrderEditCountRead,
+    RecentTurnsSince,
+    TurnDigestRead,
 )
-from ..comms import Comms
-from ..declared_verb import DeclaredVerb
-from ..errors import (
-    RejectedEnforcementError,
-    RelationViolationError,
-)
-from ..planning.goal_management import Goals
-from ..head_review import (
-    HeadReviewOrder,
-    PullRequestHead,
-)
-from ..heartbeat_subjects import (
+from agent_comms.head_review import HeadReviewOrder, PullRequestHead
+from agent_comms.heartbeat_subjects import (
     AnswerSubject,
     HeadSubject,
     HeartbeatSubject,
     TeammateSubject,
 )
-from ..held_orders import HeldOrders
-from ..message_reference import MessageReference
-from ..messages import Message
-from ..nominal.declared_family import (
-    DeclaredFamily,
-    RegisteredFamily,
-)
-from ..nominal.field_codec import (
-    DefaultExternalName,
-    DefaultedName,
-    FieldCodec,
-    OrderId,
-)
-from ..owner_requests import (
-    OwnerRequestId,
-    RequestDirective,
-)
-from ..planning.plan_phases import PlanPhase
-from ..plan_reading import (
-    PlanReading,
-    PlanReadings,
-)
-from ..planning.orders import (
+from agent_comms.held_orders import HeldOrders
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
+from agent_comms.nominal.declared_family import DeclaredFamily, RegisteredFamily
+from agent_comms.nominal.field_codec import DefaultedName, DefaultExternalName, FieldCodec, OrderId
+from agent_comms.owner_requests import OwnerRequestId, RequestDirective
+from agent_comms.plan_reading import PlanReading, PlanReadings
+from agent_comms.planning.goal_management import Goals
+from agent_comms.planning.orders import (
     ClosedHeadReading,
     EditWorkplaces,
     HeadReviewRecord,
@@ -92,42 +74,23 @@ from ..planning.orders import (
     TodoConflict,
     TodoStore,
 )
-from ..planning.pull_requests import MergeBlock
-from ..recorded_time import (
-    EventTime,
-    RecordedEventTime,
-)
-from ..registry.registry_document import (
-    RegisteredTeamProject,
-    RegistrySnapshot,
-)
-from ..registry.threads import Thread
-from ..projects.git_errors import GitCommandError
-from ..projects.repo import Repo
-from ..repository_name import RepositoryName
-from ..root_runtime import RootRuntimeStore
-from ..service_passes import (
-    FailingPass,
-    ServicePassStore,
-    ServicePasses,
-)
-from ..projects.storage_rules import (
-    MemoryUse,
-    StorageRule,
-    UnitStorage,
-)
-from ..task_attachments.owner_notices import OrderNotice
-from ..team_service import TeamService
-from ..text_digest import TextDigest
-from ..registry.thread_identity import ThreadIncarnation
-from ..transcript_events import TurnDigest
-from ..execution.turn_digests import (
-    LastTurns,
-    OrderEditCountRead,
-    RecentTurnsSince,
-    TurnDigestRead,
-)
-from ..work_branches import (
+from agent_comms.planning.plan_phases import PlanPhase
+from agent_comms.planning.pull_requests import MergeBlock
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.storage_rules import MemoryUse, StorageRule, UnitStorage
+from agent_comms.recorded_time import EventTime, RecordedEventTime
+from agent_comms.registry.registry_document import RegisteredTeamProject, RegistrySnapshot
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.threads import Thread
+from agent_comms.repository_name import RepositoryName
+from agent_comms.root_runtime import RootRuntimeStore
+from agent_comms.service_passes import FailingPass, ServicePasses, ServicePassStore
+from agent_comms.task_attachments.owner_notices import OrderNotice
+from agent_comms.team_service import TeamService
+from agent_comms.text_digest import TextDigest
+from agent_comms.transcript_events import TurnDigest
+from agent_comms.work_branches import (
     BranchDifference,
     SourceGrowth,
     UnparsedSource,
@@ -135,10 +98,7 @@ from ..work_branches import (
 )
 
 if TYPE_CHECKING:
-    from ..ui_model.teammate_state import (
-        TeammateObservation,
-        TeammateState,
-    )
+    from agent_comms.ui_model.teammate_state import TeammateObservation, TeammateState
 
 
 @dataclass(frozen=True)

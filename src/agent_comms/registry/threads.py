@@ -11,26 +11,26 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from ..activity import ObservedActivity
-from ..agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from ..channel_targets import DeclaredTag, Tag
-from ..execution.child_process import (
-    NoProcess,
-    ProcessIdentity,
-    ProcessState,
+from agent_comms.activity import ObservedActivity
+from agent_comms.agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
+from agent_comms.channel_targets import DeclaredTag, Tag
+from agent_comms.context_segments.wake_values import WakeWorkContext
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import NoProcess, ProcessIdentity, ProcessState
+from agent_comms.execution.turn_lease import (
+    FinishedTurn,
+    NoTurnRecord,
+    TurnLease,
+    TurnLeaseFence,
+    TurnRecord,
+    TurnState,
 )
-from ..context_segments.wake_values import WakeWorkContext
-from ..errors import RelationViolationError
-from ..planning.goals import (
-    GoalDeclaration,
-    NoGoal,
-)
-from ..heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
-from ..launch_runtime import ThreadLaunch
-from ..lifecycle import LifecycleState
-from ..lifecycle_capability import Executing
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
+from agent_comms.heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
+from agent_comms.launch_runtime import ThreadLaunch
+from agent_comms.lifecycle import LifecycleState
+from agent_comms.lifecycle_capability import Executing
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     Argument,
     Description,
     FieldCodec,
@@ -42,30 +42,21 @@ from ..nominal.field_codec import (
     WireOmitDefault,
     WireRequired,
 )
-from ..pi_vocabulary import (
+from agent_comms.pi_vocabulary import (
     NoThinkingOverride,
     ServiceTier,
     ThinkingChoice,
     ThinkingLevelField,
 )
-from ..registration_inheritance import (
-    InheritApplied,
-    InheritEmpty,
-    InheritPrevious,
-)
-from ..projects.checkouts import (
-    Checkout,
-    RepositoryReads,
-)
-from ..session_file import NoSessionFile, SessionFile
-from ..storage.locked_store import DurableFile, PatternFile
-from ..task_sources import TaskScope
-from .thread_creation import (
+from agent_comms.planning.goals import GoalDeclaration, NoGoal
+from agent_comms.projects.checkouts import Checkout, RepositoryReads
+from agent_comms.registration_inheritance import InheritApplied, InheritEmpty, InheritPrevious
+from agent_comms.registry.thread_creation import (
     CreationSeconds,
     CreationTime,
     GeneratedCreationTime,
 )
-from .thread_identity import (
+from agent_comms.registry.thread_identity import (
     AgentThreadRole,
     ObservedTurn,
     OfferedTools,
@@ -76,7 +67,7 @@ from .thread_identity import (
     TurnIdentity,
     UnobservedTools,
 )
-from .thread_model import (
+from agent_comms.registry.thread_model import (
     CatalogSelection,
     DeclaredModel,
     ModelSelection,
@@ -85,39 +76,26 @@ from .thread_model import (
     UndeclaredModel,
     UnselectedModel,
 )
-from .thread_presentation import (
+from agent_comms.registry.thread_presentation import (
     ThreadOwnerBinding,
     ThreadPresentation,
     UnavailableThreadOwnerBinding,
 )
-from .thread_status import (
-    ServiceThreadStatus,
-    ThreadStatus,
-)
-from .thread_storage import (
+from agent_comms.registry.thread_status import ServiceThreadStatus, ThreadStatus
+from agent_comms.registry.thread_storage import (
     AssignedStorageRoots,
     ThreadStorage,
     UnassignedThreadStorage,
 )
-from .thread_text import (
-    NoParent,
-    NoThreadText,
-    ThreadParent,
-    ThreadText,
-)
-from ..execution.turn_lease import (
-    FinishedTurn,
-    NoTurnRecord,
-    TurnLease,
-    TurnLeaseFence,
-    TurnRecord,
-    TurnState,
-)
+from agent_comms.registry.thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
+from agent_comms.session_file import NoSessionFile, SessionFile
+from agent_comms.storage.locked_store import DurableFile, PatternFile
+from agent_comms.task_sources import TaskScope
 
 if TYPE_CHECKING:
-    from ..planning.goal_management import Goals
-    from ..projects.storage_rules import StorageRule
-    from .registry_document import RegistrySnapshot
+    from agent_comms.planning.goal_management import Goals
+    from agent_comms.projects.storage_rules import StorageRule
+    from agent_comms.registry.registry_document import RegistrySnapshot
 
 
 class ThreadCommandAvailability:
@@ -972,6 +950,6 @@ def current_thread(registry) -> Thread:
 
 # Thread's backend field is the lookup boundary. Declare both implementations
 # after the record graph, then reject incomplete declarations before any lookup.
-from .. import pi_durable_backend, pi_native_backend  # noqa: E402, F401
+from agent_comms import pi_durable_backend, pi_native_backend  # noqa: E402, F401
 
 AgentBackend.seal()

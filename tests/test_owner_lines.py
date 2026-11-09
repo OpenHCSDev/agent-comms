@@ -5,14 +5,7 @@ import pytest
 
 from agent_comms.coordination.errors import Refused
 from agent_comms.errors import StaleAttemptError, UnresolvedAttemptError
-from agent_comms.planning.goal_attempts import (
-    MissingGoalGenerationError,
-    ReservationConflictError,
-    StorageUncertainError,
-)
 from agent_comms.nominal.field_codec import GoalId
-from agent_comms.runtime_server import ClientPermissionResponse
-
 from agent_comms.owner_protocol import (
     ClientLine,
     OwnerAnnouncement,
@@ -24,6 +17,12 @@ from agent_comms.owner_protocol import (
     OwnerRpcError,
     OwnerUpdate,
 )
+from agent_comms.planning.goal_attempts import (
+    MissingGoalGenerationError,
+    ReservationConflictError,
+    StorageUncertainError,
+)
+from agent_comms.runtime_server import ClientPermissionResponse
 
 
 def test_every_declared_line_round_trips_through_its_family():

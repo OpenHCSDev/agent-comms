@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from .coordination.errors import SchemaVersionError
-from .storage.typed_table import (
-    DurableTables,
-    SharedFileTables,
-    TypedTable,
-)
+from agent_comms.coordination.errors import SchemaVersionError
+from agent_comms.storage.typed_table import DurableTables, SharedFileTables, TypedTable
+
 
 class PrivateCoordinatorTable(SharedFileTables, DurableTables):
     """The mandatory private capabilities that share the coordinator file."""
@@ -16,7 +13,10 @@ class PrivateCoordinatorTable(SharedFileTables, DurableTables):
 
     @classmethod
     def declarations(cls) -> tuple[type[TypedTable], ...]:
-        import agent_comms.cohort_schema, agent_comms.coordination.response, agent_comms.execution.native_runtime_input, agent_comms.triage_native_sources  # noqa: E401, F401 - declarations register in the existing TypedTable family
+        import agent_comms.cohort_schema  # noqa: E401, F401 - declarations register in the existing TypedTable family
+        import agent_comms.coordination.response
+        import agent_comms.execution.native_runtime_input
+        import agent_comms.triage_native_sources
 
         return TypedTable.members_with(cls)
 

@@ -2,15 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.coordination.response import PublicationAppendDispatches
-
-
-from .execution.native_session_files import NativeSessionFiles
-from .execution.child_process import ProcessIdentity
-
-from .execution.native_entries import NativeEntry
-from .execution.native_failures import NativePiUnavailable
-
 import os
 import shutil
 import time
@@ -21,7 +12,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.reason_codes import GivenReasonCode, NoDetail
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
     IdentityConflict,
     PublicationUncertain,
@@ -30,40 +22,39 @@ from agent_comms.coordination.errors import (
     StaleRevision,
     UnrecordedNativeContext,
 )
+from agent_comms.coordination.response import PublicationAppendDispatches
 from agent_comms.coordination.results import Applied
+from agent_comms.coordination.session import NativeCapture
 from agent_comms.coordination.snapshot import RecoverySnapshot
 from agent_comms.coordination.tables.attempts import AttemptRecord
 from agent_comms.coordination.tables.executions import CurrentExecutions
 from agent_comms.coordination.tables.recovery import (
     RecoveryAudit,
 )
-from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
-from .execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
-from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
-
-from .coordination.database import CoordinationStore
-from .coordination.session import NativeCapture
-from .execution.native_input_record import FullNativeExecution, TriageNativeExecution
-from .execution.native_prompt_binding import (
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.native_entries import NativeEntry
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_input_record import FullNativeExecution, TriageNativeExecution
+from agent_comms.execution.native_prompt_binding import (
     expected_prompt_bindings,
     expected_prompt_matches_journal,
 )
-from .pi_vocabulary import PendingStopReason, PiStopReason
-from .storage.private_path import (
-    FileRevision,
-    MissingFile,
-)
-from .private_send_stage import TriageNativeSend
-from .lifecycle_capability import Deferred
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.lifecycle_capability import Deferred
+from agent_comms.nominal.field_codec import MalformedRecord, ScratchName, ThreadLookup
+from agent_comms.owner_release import OwnerRelease, OwnerReleaseEvidence
+from agent_comms.pi_vocabulary import PendingStopReason, PiStopReason
+from agent_comms.private_send_stage import TriageNativeSend
+from agent_comms.reason_codes import GivenReasonCode, NoDetail
+from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.threads import Thread
+from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.private_path import FileRevision, MissingFile
 from agent_comms.storage.typed_table import RowNotFoundError
-from .nominal.field_codec import MalformedRecord, ScratchName, ThreadLookup
-from .input_disposition import InputDispositions
-from .storage.locked_store import RegistryFile
-from .registry.registration import Registration
-from .registry.threads import Thread
-
-from .owner_release import OwnerRelease, OwnerReleaseEvidence
 
 if TYPE_CHECKING:
     from agent_comms.execution.owner_lifecycle import OwnerLifecycle

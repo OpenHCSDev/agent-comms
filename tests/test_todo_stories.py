@@ -5,6 +5,16 @@ import time
 from dataclasses import replace
 
 import pytest
+from cutover.carry_todo_stories import INLINE_FIELDS, TodoStories
+
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    GoalId,
+    MessageId,
+    OrderId,
+    ToolCallId,
+)
+from agent_comms.order_story import StoryEvent
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     AcceptedVerdict,
@@ -28,26 +38,16 @@ from agent_comms.planning.orders import (
     WaivedVerdict,
     WordingCorrection,
 )
-from agent_comms.transport.tools.orders import CommsTodoListTool
-from cutover.carry_todo_stories import INLINE_FIELDS, TodoStories
-
-from agent_comms.team.order import Team
-from agent_comms.nominal.field_codec import (
-    FieldCodec,
-    GoalId,
-    MessageId,
-    OrderId,
-    ToolCallId,
-)
-from agent_comms.storage.locked_store import LiveFilesRequest
-from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
-from agent_comms.order_story import StoryEvent
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import LiveFilesRequest
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.team.order import Team
 from agent_comms.tool_caller import NoThreadCaller
+from agent_comms.transport.tools.orders import CommsTodoListTool
 from test_todos import order
 
 

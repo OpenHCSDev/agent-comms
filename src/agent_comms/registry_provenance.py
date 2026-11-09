@@ -11,16 +11,15 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import Generic, TypeVar
 
+from agent_comms.agent_activity import UnavailableRecipientActivity
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.frozen_recipient import FrozenRecipient
+from agent_comms.messages import PublicSender
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
-
-from .agent_activity import UnavailableRecipientActivity
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.threads import Thread, ThreadProvenance
+from agent_comms.routing import DeliveryScope
 from agent_comms_hooks import ToolRefusedError
-from .errors import RelationViolationError, UnregisteredThreadError
-from .messages import PublicSender
-from .frozen_recipient import FrozenRecipient
-from .routing import DeliveryScope
-from .registry.thread_identity import ThreadIncarnation
-from .registry.threads import Thread, ThreadProvenance
 
 Member = TypeVar("Member", bound=ThreadProvenance, covariant=True)
 

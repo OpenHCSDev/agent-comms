@@ -12,25 +12,21 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-
-from .cli_result import CliResult
-from .tool_result import ToolResult
-from .nominal.field_codec import FieldCodec, WireName
-from .harness_install import Harness
-from .registry.thread_text import (
-    NoThreadText,
-    ThreadText,
-)
-from .transcript_events import ImportedInput, ImportedMessage, NoRetainedRequest
-from .execution.turn_context import CodexRolloutProvenance
-from .execution.turn_item import NativeItemId
+from agent_comms.cli_result import CliResult
+from agent_comms.execution.turn_context import CodexRolloutProvenance
+from agent_comms.execution.turn_item import NativeItemId
+from agent_comms.harness_install import Harness
+from agent_comms.nominal.field_codec import FieldCodec, WireName
+from agent_comms.registry.thread_text import NoThreadText, ThreadText
+from agent_comms.tool_result import ToolResult
+from agent_comms.transcript_events import ImportedInput, ImportedMessage, NoRetainedRequest
 
 if TYPE_CHECKING:
-    from .cli_bridges.history import History
-    from .runtime_updates import SessionFacts
-    from .transcript_events import TranscriptEvent
+    from agent_comms.cli_bridges.history import History
+    from agent_comms.runtime_updates import SessionFacts
+    from agent_comms.transcript_events import TranscriptEvent
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,7 +124,11 @@ class ImportSnapshot(ImportedConversation):
 
     def pi_session(self, project: Path) -> str:
         """A valid Pi v3 tree, using text-only portable historical context."""
-        from .execution.native_entries import ImportedSessionWriter, NativeEntry, SessionEntry
+        from agent_comms.execution.native_entries import (
+            ImportedSessionWriter,
+            NativeEntry,
+            SessionEntry,
+        )
 
         timestamp = datetime.now(UTC)
         iso = timestamp.isoformat()

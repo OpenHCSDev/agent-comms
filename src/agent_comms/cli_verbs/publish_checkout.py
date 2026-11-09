@@ -9,7 +9,7 @@ from agent_comms.cli_result import CliResult
 from agent_comms.cli_support.home_checkout import HomeCheckoutCliCommand
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, GitCommitText, PathText
-from ..projects.storage_projection import StorageProjection
+from agent_comms.projects.storage_projection import StorageProjection
 
 
 @dataclass(frozen=True)

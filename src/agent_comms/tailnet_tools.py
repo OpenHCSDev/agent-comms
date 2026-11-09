@@ -8,7 +8,9 @@ from agent_comms.tailnet_profiles import AskedPeer, TailnetProfiles
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.tool_request import CoreRead, HumanToolRequest
 from agent_comms.transport.tools.tailnet import (
-    CommsTailnetBusesTool, CommsTailnetProfileTool, TailnetBusesRead,
+    CommsTailnetBusesTool,
+    CommsTailnetProfileTool,
+    TailnetBusesRead,
 )
 
 

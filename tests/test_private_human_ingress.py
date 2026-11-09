@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-
-from agent_comms.projects.checkouts import Checkout
 import os
 import subprocess
 import sys
@@ -18,26 +16,27 @@ import pytest
 from agent_comms.bus_publication import HumanOrigin
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.comms import Comms, wire
-from conftest import accept_initial
-from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.errors import (
     CommittedMessageError,
     RelationViolationError,
     UnregisteredThreadError,
 )
-from agent_comms.nominal.field_codec import PathText
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
+from agent_comms.nominal.field_codec import PathText
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.read_basis import NamedViewer
-from agent_comms.task_sources import TaskAttachment
 from agent_comms.registry.thread_identity import (
     RecordedThreadIncarnation,
     UserThreadRole,
 )
-from bus_record_fixture import prepare_native_comms
 from agent_comms.registry.threads import NativeThread
+from agent_comms.task_sources import TaskAttachment
+from bus_record_fixture import prepare_native_comms
+from conftest import accept_initial
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="private bus requires POSIX owner/directory durability"

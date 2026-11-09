@@ -5,28 +5,25 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .goal_waits import (
+from agent_comms.agent_activity import AgentActivity
+from agent_comms.input_attempt import ReservedInput
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.nominal.field_codec import GoalId
+from agent_comms.planning.goal_attempts import GoalAttemptFile, GoalAttemptStore
+from agent_comms.planning.goal_presentation import GoalWaitTarget
+from agent_comms.planning.goal_waits import (
     GoalInputReview,
     GoalWaitRecovery,
     GoalWaitReview,
     GoalWaits,
 )
-from .orders import TodoStore
-from ..agent_activity import AgentActivity
-from .goal_attempts import (
-    GoalAttemptFile,
-    GoalAttemptStore,
-)
-from .goal_presentation import GoalWaitTarget
-from ..input_attempt import ReservedInput
-from ..input_disposition import InputDispositions
-from ..messaging.message_bus import MessageBus
-from ..nominal.field_codec import GoalId
-from ..registry.registration import Registration
-from ..registry.threads import Thread
+from agent_comms.planning.orders import TodoStore
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.threads import Thread
 
 if TYPE_CHECKING:
-    from ..messages import Message
+    from agent_comms.messages import Message
 
 
 class GoalRecords(GoalWaitRecovery):

@@ -6,27 +6,26 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
+from agent_comms.bus_publication import AgentOrigin
+from agent_comms.cli_result import ThreadToolCatalogResult, ToolCatalogResult
+from agent_comms.coordination.tables.board_delivery import ReaderBoardDelivery
+from agent_comms.execution.turn_phase import IdlePhase
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.nominal.field_codec import FieldCodec, WireForm
+from agent_comms.notification_evidence import OutcomeViewer, OwnerOutcomes
+from agent_comms.presentation import SentMessageSummary, ThreadRecord
+from agent_comms.read_basis import DisplayViewer, OperatorOutcomes, ReadAuthority
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.threads import ForkThread, SubagentThread, Thread
+from agent_comms.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 from agent_comms_hooks.watch import SessionEndpoint
 
-from .bus_publication import AgentOrigin
-from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
-from .coordination.tables.board_delivery import ReaderBoardDelivery
-from .nominal.field_codec import FieldCodec, WireForm
-from .launch_root import LaunchRoot
-from .read_basis import DisplayViewer, OperatorOutcomes, ReadAuthority
-from .registry.registration import Registration
-from .notification_evidence import OutcomeViewer, OwnerOutcomes
-from .presentation import SentMessageSummary, ThreadRecord
-from .registry.threads import ForkThread, SubagentThread, Thread
-from .registry.thread_identity import ThreadIncarnation
-from .tool_result import ToolResult
-from .execution.turn_phase import IdlePhase
-
 if TYPE_CHECKING:
-    from .comms import Comms
-    from .head_review import HeadReviewOrder, PullRequestHead
-    from .tool_request import ServedRequest
+    from agent_comms.comms import Comms
+    from agent_comms.head_review import HeadReviewOrder, PullRequestHead
+    from agent_comms.tool_request import ServedRequest
 
 
 @dataclass(frozen=True)

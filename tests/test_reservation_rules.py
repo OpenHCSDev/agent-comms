@@ -4,16 +4,14 @@
 
 import pytest
 
+from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import AcpInputKey
 from agent_comms.nominal.field_codec import FieldCodec, InputId, TurnId
-from agent_comms.input_disposition import InputDispositions
-from agent_comms.execution.native_session_files import NativeSessionFiles
-from agent_comms.execution.native_session_reopen import NativeSessionIdentity
-from agent_comms.session_revision import SessionRevision
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.session_revision import SessionRevision
 from stored_inputs import stored_inputs
-from agent_comms.execution.native_session_reopen import PiSessionId
-
 
 FIRST_KEY = AcpInputKey(InputId.mint())
 SECOND_KEY = AcpInputKey(InputId.mint())

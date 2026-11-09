@@ -7,16 +7,14 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from types import get_original_bases
-from typing import Self, Annotated, ClassVar, ParamSpec, TypeVar, cast, get_args, get_origin
-
-from typing_extensions import TypeVarTuple
+from typing import Annotated, ClassVar, ParamSpec, Self, TypeVar, cast, get_args, get_origin
 
 from pydantic import JsonValue
+from typing_extensions import TypeVarTuple
 
-from ..coordination.errors import CoordinationReadUnavailable
-from .progress import WireExportObserver
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
+from agent_comms.coordination.errors import CoordinationReadUnavailable
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     ArgumentsExclude,
     ContextSource,
     DefaultNonNull,
@@ -28,9 +26,10 @@ from ..nominal.field_codec import (
     WireName,
     WireTransient,
 )
-from ..storage.maintenance_barrier import FreshIngress
-from ..tool_declaration import ToolDeclaration
-from ..tool_result import ToolResult
+from agent_comms.storage.maintenance_barrier import FreshIngress
+from agent_comms.tool_declaration import ToolDeclaration
+from agent_comms.tool_result import ToolResult
+from agent_comms.transport.progress import WireExportObserver
 
 
 class ArgumentTool:

@@ -5,7 +5,11 @@ funnelled origin on 443 and one tailnet-only port, both in front of the same con
 """
 
 from agent_comms.served_endpoints import (
-    FunnelServed, NothingTailnetOnly, OfferedByTailnet, ServedEndpoints, ServedTarget,
+    FunnelServed,
+    NothingTailnetOnly,
+    OfferedByTailnet,
+    ServedEndpoints,
+    ServedTarget,
     TailnetServed,
 )
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import IdentityExclude, TaggedUnion
-
 import json
 import sqlite3
 from abc import ABC, abstractmethod
@@ -13,15 +11,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
-from .errors import RelationViolationError, StoredHistoryUnreadable
-from .storage.locked_store import InputCaptureFile
-from .nominal.field_codec import (
-    ContextStoreId, FieldCodec, MalformedRecord, NullMember, TaggedRecordMember,
-)
-from .execution.native_session_reopen import NativeSessionIdentity
-from .registry.registration import Registration
-from .registry.thread_identity import ThreadIncarnation
-from .execution.turn_context import (
+from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
+from agent_comms.execution.turn_context import (
     ContextEntryManifest,
     ContextEntryReference,
     ContextManifest,
@@ -33,13 +25,31 @@ from .execution.turn_context import (
     SegmentRecording,
     UnrecordedSegment,
 )
-
-from .storage.typed_table import (
-    AttachedPracticeRebuild, StoreRows, Column, DurableStore, Generated, Index,
-    RowidSequenced, SingletonRow, TableSchema, TypedTable,
+from agent_comms.execution.turn_item import NativeItemId
+from agent_comms.nominal.field_codec import (
+    ContextStoreId,
+    FieldCodec,
+    IdentityExclude,
+    MalformedRecord,
+    NullMember,
+    TaggedRecordMember,
+    TaggedUnion,
 )
-from .execution.turn_item import NativeItemId
-from .execution.native_session_reopen import PiSessionId
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.storage.locked_store import InputCaptureFile
+from agent_comms.storage.typed_table import (
+    AttachedPracticeRebuild,
+    Column,
+    DurableStore,
+    Generated,
+    Index,
+    RowidSequenced,
+    SingletonRow,
+    StoreRows,
+    TableSchema,
+    TypedTable,
+)
 
 
 @dataclass(frozen=True)

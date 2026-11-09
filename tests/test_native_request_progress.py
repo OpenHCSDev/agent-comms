@@ -6,7 +6,10 @@ from pathlib import Path
 
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.request_progress import (
-    IteratorStreamId, IteratorTiming, RequestProgress, UnreportedIteratorTiming,
+    IteratorStreamId,
+    IteratorTiming,
+    RequestProgress,
+    UnreportedIteratorTiming,
 )
 
 

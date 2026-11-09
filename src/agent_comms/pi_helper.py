@@ -8,14 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from .execution.child_process import (
-    BoundedRun,
-    ChildResult,
-)
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec, MalformedRecord
-from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestartEnvironment
-from .installer.native_package import VerifiedNativePackage
+from agent_comms.execution.child_process import BoundedRun, ChildResult
+from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestartEnvironment
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 
 
 class PiHelperError(ValueError):

@@ -7,15 +7,15 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from .catalog_document import CatalogDocument
-from .storage.locked_store import DocumentChange
-from .storage.maintenance_barrier import CarriedDocument
-from .storage.store_files import CatalogTier, SingleFileStore
-from .registry.thread_owned_state import ThreadOwnedState
+from agent_comms.catalog_document import CatalogDocument
+from agent_comms.registry.thread_owned_state import ThreadOwnedState
+from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.storage.maintenance_barrier import CarriedDocument
+from agent_comms.storage.store_files import CatalogTier, SingleFileStore
 
 if TYPE_CHECKING:
-    from .activity_clocks import ActivityClocks
-    from .registry.threads import Thread
+    from agent_comms.activity_clocks import ActivityClocks
+    from agent_comms.registry.threads import Thread
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from pydantic import JsonValue
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from typing import cast
 
+from pydantic import JsonValue
+
+from agent_comms.config_options import CatalogChoice, CatalogConfigOption, ConfigOptions
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.field_codec import FieldCodec
-from collections.abc import Callable
-from dataclasses import dataclass
-from dataclasses import replace
-from agent_comms.config_options import CatalogChoice, CatalogConfigOption, ConfigOptions
-from .registry.thread_model import CatalogSelection
+from agent_comms.registry.thread_model import CatalogSelection
 
 
 @dataclass(frozen=True)

@@ -20,22 +20,29 @@ from agent_comms.attempt_resolution import (
 )
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.nominal.field_codec import FieldCodec, GoalId, MessageId, OrderId, RetryDecisionId, TurnId
+from agent_comms.execution.turn_failure import (
+    BackendFailed,
+    FailedTurnResolution,
+)
+from agent_comms.installer.probes.carry import Carried, Carry
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    GoalId,
+    MessageId,
+    OrderId,
+    RetryDecisionId,
+    TurnId,
+)
 from agent_comms.planning.goal_attempts import (
     AttemptRecord,
     GoalAttemptStore,
     GoalWorkDecision,
 )
-from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.planning.orders import (
     Todo,
     TodoStore,
 )
 from agent_comms.storage.locked_store import RootFile
-from agent_comms.execution.turn_failure import (
-    BackendFailed,
-    FailedTurnResolution,
-)
 from agent_comms.storage.typed_table import TypedRow
 
 

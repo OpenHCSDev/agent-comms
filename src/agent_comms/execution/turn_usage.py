@@ -5,10 +5,7 @@ from dataclasses import (
     field,
 )
 
-from ..pi_counts import (
-    PiCount,
-    UnreportedCount,
-)
+from agent_comms.pi_counts import PiCount, UnreportedCount
 
 
 @dataclass

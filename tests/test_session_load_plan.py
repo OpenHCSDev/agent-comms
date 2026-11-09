@@ -4,18 +4,16 @@ import pytest
 
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.registry.thread_presentation import (
-    EnsuringSessionLoadPlan,
-    ExistingSessionLoadPlan,
-    FailedSessionLoadPlan,
-    SessionLoadPlan,
-)
 from agent_comms.registry.thread_identity import (
     OwnerIdentity,
     RecordedThreadIncarnation,
 )
 from agent_comms.registry.thread_presentation import (
+    EnsuringSessionLoadPlan,
+    ExistingSessionLoadPlan,
+    FailedSessionLoadPlan,
     LiveThreadOwnerBinding,
+    SessionLoadPlan,
     UnavailableThreadOwnerBinding,
 )
 

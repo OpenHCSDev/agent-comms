@@ -3,25 +3,21 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Annotated, Literal
 
-from agent_comms.nominal.field_codec import BoundedText, SingleFieldValue, SubclassUnion
 from agent_comms.installer.reporting import UnpostedWriter
-from .projects.storage_rules import StorageRule
-from .registry.thread_text import (
-    AbsentText,
-    GivenText,
-    TextChoice,
-)
+from agent_comms.nominal.field_codec import BoundedText, SingleFieldValue, SubclassUnion
+from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.registry.thread_text import AbsentText, GivenText, TextChoice
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.shared import SessionBridgeResumes
-    from agent_comms.installer.probes.harnesses import InstallResult
     from agent_comms.installer.launch import InstallReport
+    from agent_comms.installer.probes.harnesses import InstallResult
     from agent_comms.installer.reporting import RootWriter
     from agent_comms.installer.upgrade import (
         Install,

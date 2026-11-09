@@ -8,12 +8,17 @@ from dataclasses import (
 )
 from functools import partial
 
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
+
 from agent_comms.agent_events import CompactionEvent
 from agent_comms.cohort_schema import CohortTable
 from agent_comms.comms import Comms
 from agent_comms.context_store import (
-    ContextPrior,
     UNREAD_CONTEXT,
+    ContextPrior,
 )
 from agent_comms.coordination.cohort import (
     _claim_record,
@@ -33,6 +38,17 @@ from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import WireOrigin
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.native_arguments import SelectedModel
+from agent_comms.execution.native_attestation import ObservedAttestation
+from agent_comms.execution.native_input_owner import (
+    ParticipantOwner,
+    RegistryOwner,
+)
+from agent_comms.execution.native_runtime_input import NativeRuntimeTable
+from agent_comms.execution.selected.source_batch import (
+    SelectedSource,
+    SelectedSourceBatch,
+)
 from agent_comms.execution.turn_goal_permission import (
     OwnerGoalPermission,
     TurnGoalPermission,
@@ -48,13 +64,6 @@ from agent_comms.message_notification import (
 )
 from agent_comms.message_reference import MessageReference
 from agent_comms.messaging.message_bus import MessageBus
-from agent_comms.execution.native_arguments import SelectedModel
-from agent_comms.execution.native_attestation import ObservedAttestation
-from agent_comms.execution.native_input_owner import (
-    ParticipantOwner,
-    RegistryOwner,
-)
-from agent_comms.execution.native_runtime_input import NativeRuntimeTable
 from agent_comms.nominal.field_codec import (
     RootId,
     ThreadLookup,
@@ -70,14 +79,6 @@ from agent_comms.participant_store import ParticipantSnapshot
 from agent_comms.pi_events import TurnContextObserved
 from agent_comms.publisher import ParticipantPublisher
 from agent_comms.reason_codes import GivenReasonCode
-from agent_comms.execution.selected.source_batch import (
-    SelectedSource,
-    SelectedSourceBatch,
-)
-from metaclass_registry.mro_dispatch import (
-    MroDispatch,
-    handles,
-)
 
 
 class NoLivePublication(MroDispatch):

@@ -17,15 +17,16 @@ from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, TextIO
 
-from .projects.checkouts import Checkout
-
-from .activity_clocks import ChannelActivity
-from .channel_targets import CommandTarget, ThreadTarget
-from .coordination.errors import DMPaintedBoundChanged, DMScopeChanged
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError, UnregisteredThreadError
-from .nominal.field_codec import (
-    TaggedUnion,
+from agent_comms.activity_clocks import ChannelActivity
+from agent_comms.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.coordination.errors import DMPaintedBoundChanged, DMScopeChanged
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.launch_runtime import CallingThreadUnavailable
+from agent_comms.mentions import ThreadMention
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import MessageInput
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     CapabilityUnion,
     FieldCodec,
     NullMember,
@@ -33,20 +34,15 @@ from .nominal.field_codec import (
     SingleFieldValue,
     SubclassUnion,
     TaggedRecordMember,
+    TaggedUnion,
 )
-from .launch_runtime import CallingThreadUnavailable
-from .mentions import ThreadMention
-from .message_reference import MessageReference
-from .messages import MessageInput
-from .notification_evidence import AllOutcomes, DisplayOutcomes, OutcomeViewer
-from .storage.bound_set import BoundSet
-from .storage.private_path import FileObservation, MissingFile
-from .projection_source import ProjectionSource
-from .recorded_bus import RecordedBus, RecordedBusIdentity
-from .registry.thread_identity import (
-    RecordedThreadIncarnation,
-    ThreadIncarnation,
-)
+from agent_comms.notification_evidence import AllOutcomes, DisplayOutcomes, OutcomeViewer
+from agent_comms.projection_source import ProjectionSource
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.recorded_bus import RecordedBus, RecordedBusIdentity
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from agent_comms.storage.bound_set import BoundSet
+from agent_comms.storage.private_path import FileObservation, MissingFile
 
 
 class DisplayViewer(SubclassUnion, affix="Viewer"):
@@ -296,7 +292,7 @@ class ChannelSelection(TaggedRecordMember, SelectedDisplay):
         return self.scope.identity(self.history_revision)
 
     def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
-        from .presentation import ReadThrough
+        from agent_comms.presentation import ReadThrough
 
         views.presentation.mark_channel_read(
             self.scope.channel, viewer=views.messaging.user_identity(worktree).name,
@@ -346,30 +342,23 @@ class LineOutput:
 
 
 if TYPE_CHECKING:
-    from .messaging.read_selection import CapturedSelection
-    from agent_comms.historical_views import HistoricalSelection
     import sqlite3
 
-    from .bus import Bus, BusReader, BusSnapshot
-    from .channels import TagChannel
-    from .historical_views import DMHistory, HistorySource
-    from .history_views import HistoryViews
-    from .messaging.message_bus import MessageBus
-    from .messaging.message_page import (
-        MessagePage,
-        PageBounds,
-    )
-    from .messages import Message, MessageKind
-    from .presentation import BusPresentation
-    from .private_registry_guard import RegistryPrivacy
-    from .messaging.read_ledger import (
-        ReadDocument,
-        ReadLedger,
-    )
-    from .registry.registration import Registration
-    from .registry.registry_document import RegistrySnapshot, UserThreadLookup
-    from .registry_provenance import RegistryProvenance
-    from .registry.threads import Thread
+    from agent_comms.bus import Bus, BusReader, BusSnapshot
+    from agent_comms.channels import TagChannel
+    from agent_comms.historical_views import DMHistory, HistoricalSelection, HistorySource
+    from agent_comms.history_views import HistoryViews
+    from agent_comms.messages import Message, MessageKind
+    from agent_comms.messaging.message_bus import MessageBus
+    from agent_comms.messaging.message_page import MessagePage, PageBounds
+    from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
+    from agent_comms.messaging.read_selection import CapturedSelection
+    from agent_comms.presentation import BusPresentation
+    from agent_comms.private_registry_guard import RegistryPrivacy
+    from agent_comms.registry.registration import Registration
+    from agent_comms.registry.registry_document import RegistrySnapshot, UserThreadLookup
+    from agent_comms.registry.threads import Thread
+    from agent_comms.registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True, slots=True)
@@ -578,7 +567,7 @@ class AllConversation(Conversation):
         return self
 
     def scope(self, snapshot: RegistryProvenance) -> AllChannelDisplayScope:
-        from .channels import AnyChannel
+        from agent_comms.channels import AnyChannel
 
         return AllChannelDisplayScope(AnyChannel.address())
 

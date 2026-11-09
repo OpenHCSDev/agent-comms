@@ -8,31 +8,35 @@ from contextlib import aclosing, asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING
 
-from .coordination.errors import Refused
-from acp.schema import (ConfigOptionUpdate, SessionConfigOptionSelect,
-                        SessionConfigSelectOption, SetSessionConfigOptionResponse)
+from acp.schema import (
+    ConfigOptionUpdate,
+    SessionConfigOptionSelect,
+    SessionConfigSelectOption,
+    SetSessionConfigOptionResponse,
+)
 
-from .execution.turn_inbox import UseSettings
-from .bus import Bus
-from .execution.child_process import join_retirement
-from .config_options import (CatalogConfigOption,
-                             ConfigOptions, InvalidConfigChoice)
-from .coordination.coordinator import Coordination
-from .nominal.field_codec import AcpSessionId, FieldCodec
-from .execution.native_failures import NativePiUnavailable
-from .registry.threads import ChosenModel, NextTurnConfiguration, Thread
-from .registry.thread_model import CatalogSelection
-from .watched import FileSource
+from agent_comms.bus import Bus
+from agent_comms.config_options import CatalogConfigOption, ConfigOptions, InvalidConfigChoice
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import Refused
+from agent_comms.execution.child_process import join_retirement
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.turn_inbox import UseSettings
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
+from agent_comms.registry.thread_model import CatalogSelection
+from agent_comms.registry.threads import ChosenModel, NextTurnConfiguration, Thread
+from agent_comms.watched import FileSource
 
 if TYPE_CHECKING:
     from acp.schema import SessionConfigOptionBoolean
-    from .comms import Comms
-    from .controller import SessionUpdateSink
-    from .pi_commands import SettingCommand
-    from .runtime_server import RuntimeServer
-    from .session_effects import SessionEffects
-    from .execution.session_lifecycle import SessionLifecycle
-    from .execution.input_drain import OwnerSession
+
+    from agent_comms.comms import Comms
+    from agent_comms.controller import SessionUpdateSink
+    from agent_comms.execution.input_drain import OwnerSession
+    from agent_comms.execution.session_lifecycle import SessionLifecycle
+    from agent_comms.pi_commands import SettingCommand
+    from agent_comms.runtime_server import RuntimeServer
+    from agent_comms.session_effects import SessionEffects
 
 
 class SessionConfigOptions:

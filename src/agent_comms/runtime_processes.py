@@ -7,13 +7,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
-from .execution.child_process import (
-    IdentityMismatchError,
-    Platform,
-    ProcessIdentity,
-)
-from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.execution.child_process import IdentityMismatchError, Platform, ProcessIdentity
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 
 class RuntimeReference(DeclaredFamily, ABC, affix="Reference"):

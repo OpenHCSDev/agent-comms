@@ -5,17 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from .coordination.errors import IdentityConflict, IntegrityViolationError
-from .coordination.vocabulary import CoordinatorVocabulary
-from .nominal.field_codec import MessageId, NullMember
-from .lifecycle import LifecycleState
-from .lifecycle_capability import Deferred, Failed, Pending, Successful, Terminal
-from .message_reference import MessageReference
-from .reason_codes import NoReasonCode
+from agent_comms.coordination.errors import IdentityConflict, IntegrityViolationError
+from agent_comms.coordination.vocabulary import CoordinatorVocabulary
+from agent_comms.lifecycle import LifecycleState
+from agent_comms.lifecycle_capability import Deferred, Failed, Pending, Successful, Terminal
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.field_codec import MessageId, NullMember
+from agent_comms.reason_codes import NoReasonCode
 
 if TYPE_CHECKING:
-    from .coordination.session import CoordinationSession
-    from .coordination.tables.responses import ResponseObligation
+    from agent_comms.coordination.session import CoordinationSession
+    from agent_comms.coordination.tables.responses import ResponseObligation
 
 
 @dataclass(frozen=True, slots=True)

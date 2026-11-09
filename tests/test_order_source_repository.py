@@ -17,10 +17,10 @@ from agent_comms.planning.pull_requests import (
     PullRequestCommit,
     PullRequestLink,
 )
-from agent_comms.team.order import Team
-from github_fixture import GitHubFixture
 from agent_comms.repository_name import RepositoryName
+from agent_comms.team.order import Team
 from agent_comms.work_branches import WorkBranches
+from github_fixture import GitHubFixture
 from test_held_problem_orders import merge_two_commit_fix
 from test_todos import adopt_pr, pr_order
 

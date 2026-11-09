@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.projects.checkouts import Checkout
 import asyncio
 import os
 import pwd
@@ -18,21 +17,20 @@ from aiohttp import ClientSession, web
 
 from agent_comms.active_route import (
     ActiveRoute,
-    active_route_path,
     ActiveRouteFile,
+    active_route_path,
     route_new_bus,
 )
 from agent_comms.bus import Bus
+from agent_comms.comms import client_wire
+from agent_comms.connector import ConnectorVerb, SystemdSite
+from agent_comms.connector_store import ConnectorStore
 from agent_comms.execution.child_process import (
     NoResidentManager,
     ResidentManager,
     SystemdUserManager,
     UnmanagedHomeError,
 )
-from agent_comms.comms import client_wire
-from agent_comms.connector import ConnectorVerb, SystemdSite
-from agent_comms.connector_store import ConnectorStore
-from agent_comms.nominal.field_codec import Id128
 from agent_comms.harness_install import CodexHarness
 from agent_comms.host_services import (
     HostService,
@@ -50,9 +48,11 @@ from agent_comms.installer.logs import InstallUnit
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.nominal.field_codec import Id128
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import DocumentChange
 from connector_readiness import ConnectorReadiness
 
 

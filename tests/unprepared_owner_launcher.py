@@ -7,13 +7,13 @@ because the package is really missing.
 
 from __future__ import annotations
 
-from agent_comms.projects.checkouts import Checkout
 import sys
 from contextlib import suppress
 from pathlib import Path
 
 from agent_comms.comms import wire
 from agent_comms.owner_connection import OwnerReplyLostError
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 
 

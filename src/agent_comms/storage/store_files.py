@@ -27,23 +27,29 @@ from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from functools import partial
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING, BinaryIO, ClassVar, Final, TextIO
+from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, Final, TextIO
 
+from agent_comms.coordination.errors import (
+    ContendedRead,
+    CoordinationReadUnavailable,
+    StaleRevision,
+)
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import LockHolder, Platform
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import PathText, ScratchName
+from agent_comms.storage.private_path import (
+    FileIdentity,
+    FileObservation,
+    FileRevision,
+    OwnedDirectoryRole,
+    PrivateFileRole,
+)
 from agent_comms_hooks.process_claim import (
     ExclusiveFlock,
     FlockMode,
     SharedFlock,
 )
-
-from ..execution.child_process import (
-    LockHolder,
-    Platform,
-)
-from ..coordination.errors import ContendedRead, CoordinationReadUnavailable, StaleRevision
-from ..nominal.declared_family import DeclaredFamily
-from ..errors import RelationViolationError
-from ..nominal.field_codec import PathText, ScratchName
-from .private_path import FileIdentity, FileObservation, FileRevision, OwnedDirectoryRole, PrivateFileRole
 
 if TYPE_CHECKING:
     from sqlite3 import _IsolationLevel

@@ -11,24 +11,24 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     JsonShapeFamily,
     JsonShapeMember,
+    NativeScope,
     PathText,
+    RuntimeScope,
     SubclassUnion,
     TextRepresentation,
-    boundary_decoder,
-    NativeScope,
-    RuntimeScope,
     WireName,
     WireOmitDefault,
+    boundary_decoder,
 )
-from agent_comms.launch_root import LaunchRoot
-from .projects.checkouts import Checkout
-from .registry.thread_text import (
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_text import (
     AbsentText,
     GivenText,
     NoParent,

@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import SnapshotExclude
-
-from agent_comms.lifecycle_capability import Active, Complete
-
 from dataclasses import dataclass
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
+from agent_comms.attempt_states import SucceededAttempt
 from agent_comms.coordination.errors import (
     IdentityConflict,
     IntegrityViolationError,
@@ -36,22 +33,21 @@ from agent_comms.coordination.tables.executions import (
 from agent_comms.coordination.tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination.tables.recovery import RecoveryAudit
 from agent_comms.coordination.tables.responses import ResponseObligation
+from agent_comms.execution_states import CompletedExecution
+from agent_comms.lifecycle_capability import Active, Complete
 from agent_comms.nominal.field_codec import (
+    SnapshotExclude,
+    SnapshotName,
+    ThreadLookup,
+    WireName,
     boundary_decoder,
     projected,
-    SnapshotName,
-    WireName,
-    ThreadLookup,
 )
 from agent_comms.reason_codes import ReasonCode
 
-from ..attempt_states import SucceededAttempt
-from ..execution_states import CompletedExecution
-
-
 if TYPE_CHECKING:
-    from ..attempt_states import TerminalAttempt
-    from .session import CoordinationCapture, NativeCapture
+    from agent_comms.attempt_states import TerminalAttempt
+    from agent_comms.coordination.session import CoordinationCapture, NativeCapture
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,7 +310,7 @@ class RecoverySnapshot:
 
     def finish_publications(self, session, boundary: NativeCapture) -> None:
         """Release this one native attempt only when every original route settled."""
-        from .tables.executions import CurrentExecutions
+        from agent_comms.coordination.tables.executions import CurrentExecutions
 
         if not all(row.lifecycle.published for row in self.require_wire_responses()):
             return

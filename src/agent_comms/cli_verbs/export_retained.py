@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Annotated
+
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
-from dataclasses import dataclass
-from typing import Annotated
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -1,30 +1,18 @@
 """Read evidence follows displayed messages across projections and restarts."""
 
 
-from agent_comms.projects.checkouts import Checkout
 import random
 from dataclasses import replace
 
 import pytest
 
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import DMPaintedBoundChanged, ReadAgain
-from agent_comms.nominal.field_codec import FieldCodec, TurnId
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.messaging.message_page import (
     MessagePageRequest,
     PageBounds,
-)
-from agent_comms.page_traversal import PageCursor
-from agent_comms.presentation import ReadThrough
-from agent_comms.read_basis import (
-    ChannelConversation,
-    ConversationCursor,
-    DMConversation,
-    NamedViewer,
-    NoDisplaySelection,
-    ReadCursor,
 )
 from agent_comms.messaging.read_ledger import (
     NoReadNotice,
@@ -33,9 +21,21 @@ from agent_comms.messaging.read_ledger import (
     ReadLedger,
     ReadNotice,
 )
+from agent_comms.nominal.field_codec import FieldCodec, TurnId
+from agent_comms.page_traversal import PageCursor
+from agent_comms.presentation import ReadThrough
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.read_basis import (
+    ChannelConversation,
+    ConversationCursor,
+    DMConversation,
+    NamedViewer,
+    NoDisplaySelection,
+    ReadCursor,
+)
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-from bus_record_fixture import prepare_native_comms
 from agent_comms.registry.threads import NativeThread
+from bus_record_fixture import prepare_native_comms
 
 
 def prepared(root):
@@ -328,9 +328,9 @@ def test_all_read_uses_one_watermark_without_sparse_sequences(tmp_path):
 
 def test_recorded_bus_identity_is_one_member(tmp_path):
     from agent_comms.coordination.errors import DMScopeChanged
-    from agent_comms.storage.private_path import FileIdentity, ObservedPath
     from agent_comms.messaging.read_ledger import ReadDocument
     from agent_comms.recorded_bus import NoRecordedBus, RecordedBus
+    from agent_comms.storage.private_path import FileIdentity, ObservedPath
 
     comms = prepared(tmp_path)
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name

@@ -1,11 +1,6 @@
 """Shared fixtures: an isolated Comms wire per test."""
 
 
-from agent_comms.cli_bridges.session_watch import WatchClaim
-
-
-from agent_comms_hooks.watch import WatchRecord
-from agent_comms.projects.checkouts import Checkout
 import asyncio
 import fcntl
 import json
@@ -19,18 +14,11 @@ import sysconfig
 import tempfile
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
-from pydantic import JsonValue
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.pi_payloads import PiMessage
-from agent_comms.pi_rule_gate import PiRedeal, PiRuleGate
-from agent_comms.rule_deal import RuleDeal, SessionAudit, StartedDeal
-from agent_comms.rule_deal import ReadSpan
-from agent_comms.execution.native_entries import SessionEntry
-from agent_comms.tool_declaration import ToolDeclaration, NoToolRecord
 from contextlib import AsyncExitStack, contextmanager
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue
 
 # First: importing it removes the caller's repository from the environment before any git runs.
 import fixture_git  # noqa: F401
@@ -38,36 +26,50 @@ import goal_owner_fixture
 from agent_comms.bus import Bus, BusRecord
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.channel_targets import CommandTarget
+from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import Comms, wire
-from agent_comms.storage.locked_store import RegistryFile
-from agent_comms.storage.maintenance_barrier import (
-    MaintenanceBarrier, MaintenanceClaimHolder, MaintenanceHolder, MaintenanceOperator,
+from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.execution.native_entries import NativeEvidenceScope, SessionEntry
+from agent_comms.installer.native_package import (
+    VerifiedNativePackage,
+    pinned_location,
+    pinned_native_package,
 )
-from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
-from agent_comms.installer.native_package import pinned_location, pinned_native_package
-from agent_comms.transport.native_tool_transport import ToolListener
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_durable_backend import PiDurableBackend
+from agent_comms.pi_payloads import PiMessage
+from agent_comms.pi_rule_gate import PiRedeal, PiRuleGate
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repo import Repo
 from agent_comms.publisher import InitialWrites, ParticipantPublisher
 from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import RegisteredTeamProject
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.thread_text import (
     ForkedParent,
     GivenThreadText,
 )
+from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.rule_deal import ReadSpan, RuleDeal, SessionAudit, StartedDeal
+from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.maintenance_barrier import (
+    MaintenanceBarrier,
+    MaintenanceClaimHolder,
+    MaintenanceHolder,
+    MaintenanceOperator,
+)
 from agent_comms.storage.typed_table import TypedTable
-from agent_comms.execution.native_entries import NativeEvidenceScope
-from agent_comms.cursor_publication import CursorDelivery
-from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.team.order import Team
 from agent_comms.tool_caller import PeerCaller
-from agent_comms.projects.repo import Repo
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
+from agent_comms.tool_declaration import NoToolRecord, ToolDeclaration
+from agent_comms.transport.native_tool_transport import ToolListener
+from agent_comms_hooks.watch import WatchRecord
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
-from agent_comms.registry.threads import Thread, NativeThread
-from agent_comms.registry.thread_model import DeclaredModel
-from agent_comms.registry.registry_document import RegisteredTeamProject
 
 pytest_plugins = (goal_owner_fixture.__name__, "github_fixture", "owner_socket_fixture", "pytest_session")
 
@@ -349,8 +351,8 @@ def test_uv(monkeypatch: pytest.MonkeyPatch) -> Path:
 @pytest.fixture(scope="session")
 def native_runtime_package(pinned_native: Path) -> VerifiedNativePackage:
     """The running interpreter's artifact, qualified by the real installer before tests."""
-    from agent_comms.installer.native_package import VerifiedNativePackage
     from agent_comms.deal_prompt import DealPrompt
+    from agent_comms.installer.native_package import VerifiedNativePackage
 
     package = VerifiedNativePackage.qualify(pinned_native)
     DealPrompt.prepare()
@@ -443,8 +445,8 @@ def root(tmp_path: Path) -> Path:
 @pytest.fixture
 def configured_repository(durable_home: Path, github_cli) -> Callable[[Comms, *tuple[Repo, ...]], Team]:
     """Declare the temporary colleague on its bus and use its real plan-bearing checkout."""
-    from agent_comms.team.order import Team
     from agent_comms.projects.repo import Repo
+    from agent_comms.team.order import Team
 
     repository = Repo.of(Path(__file__).resolve().parents[1])
 
@@ -538,9 +540,9 @@ def ledger_one_failure_short(root: Path) -> Path:
     install must carry before any opening accepts it."""
     from contextlib import closing
 
+    from agent_comms.execution.turn_failure import TurnFailure
     from agent_comms.planning.goal_attempts import GoalAttemptStore
     from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
-    from agent_comms.execution.turn_failure import TurnFailure
     from agent_comms.storage.typed_table import sql_literal
 
     directory = root / GoalAttemptStore.root_directory

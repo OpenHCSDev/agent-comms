@@ -6,8 +6,8 @@ import json
 import logging
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, replace
 from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Self
@@ -22,6 +22,20 @@ from pydantic import (
 )
 
 from agent_comms.agent_events import TranscriptModelUsage
+from agent_comms.cli_bridges.shared import (
+    MONITOR_FRAME,
+    ConfirmedDelivery,
+    ForeignMonitorFrame,
+    MonitorFrame,
+    MonitorIncomingFrame,
+    MonitorObservation,
+    MonitorPart,
+    MonitorProtocolFrame,
+    MonitorReadFile,
+    ObservedMonitor,
+    TranscriptConfirmsDelivery,
+    WireReference,
+)
 from agent_comms.cli_protocol import (
     Declared,
     OpenWire,
@@ -30,17 +44,29 @@ from agent_comms.cli_protocol import (
     TimestampedWire,
     WireHeader,
 )
+from agent_comms.execution.turn_item import (
+    NamedSourceTurn,
+    NativeItemId,
+    NativeTurnId,
+    NoSourceTurn,
+    SourceTurn,
+)
+from agent_comms.execution.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
+from agent_comms.message_reference import MessageReference
 from agent_comms.nominal.field_codec import (
     MalformedRecord,
     ToolCallId,
     TranscriptRecordId,
 )
-from agent_comms.message_reference import MessageReference
 from agent_comms.pi_counts import PiCount, PiCountWire
 from agent_comms.recorded_time import EventTime
+from agent_comms.registry.thread_identity import OfferedTools, ToolName, UnobservedTools
+from agent_comms.registry.thread_model import ThreadModel
+from agent_comms.registry.thread_text import ThreadText
 from agent_comms.runtime_updates import (
     ActiveItem,
-    AllTurnsCancelled, AllTurnsEnded,
+    AllTurnsCancelled,
+    AllTurnsEnded,
     FinishedItem,
     HiddenItem,
     HistoryNotice,
@@ -56,56 +82,21 @@ from agent_comms.runtime_updates import (
     TurnEnded,
     TurnStarted,
 )
-from ..registry.thread_identity import (
-    OfferedTools,
-    ToolName,
-    UnobservedTools,
-)
-from ..registry.thread_model import ThreadModel
-from ..registry.thread_text import ThreadText
+from agent_comms.session_receipts import SessionReceipts
 from agent_comms.tool_calls import CliToolArguments, ToolCall
-from agent_comms.tool_declaration import one_line
+from agent_comms.tool_declaration import ContextRows, one_line
 from agent_comms.transcript_events import (
     AssistantTranscript,
     NarrationTranscript,
-    ThinkingTranscript,
     NoticeTranscript,
+    ThinkingTranscript,
     TranscriptEvent,
     UserTranscript,
 )
-from ..execution.turn_item import (
-    NativeItemId,
-    NativeTurnId,
-    NamedSourceTurn,
-    NoSourceTurn,
-    SourceTurn,
-)
-from ..execution.turn_phase import (
-    ModelWaitPhase,
-    ToolRunningPhase,
-    TurnPhase,
-)
-
-from ..session_receipts import SessionReceipts
-from ..tool_declaration import ContextRows
-from ..wire_models import WireModel
-from .shared import (
-    MONITOR_FRAME,
-    ConfirmedDelivery,
-    ForeignMonitorFrame,
-    MonitorFrame,
-    MonitorIncomingFrame,
-    MonitorObservation,
-    MonitorPart,
-    MonitorProtocolFrame,
-    MonitorReadFile,
-    ObservedMonitor,
-    TranscriptConfirmsDelivery,
-    WireReference,
-)
+from agent_comms.wire_models import WireModel
 
 if TYPE_CHECKING:
-    from .shared import MonitorAttachment
+    from agent_comms.cli_bridges.shared import MonitorAttachment
 
 
 class ClaudeMonitorFrame(MonitorIncomingFrame):

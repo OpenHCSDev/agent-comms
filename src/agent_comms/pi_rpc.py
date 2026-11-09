@@ -1,20 +1,20 @@
 """Pi JSON-line transport; tolerant discovery and strict native proof share one decoder."""
 
 from __future__ import annotations
-from .nominal.field_codec import FieldCodec, MalformedRecord
-from .jsonl_stream import JsonlStreamReader
-from .pi_events import PiEvent, Response
-from contextlib import asynccontextmanager
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
-from .pending_requests import PendingRequest, PendingRequests
-from .nominal.sealed import Sealed
+from agent_comms.jsonl_stream import JsonlStreamReader
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
+from agent_comms.nominal.sealed import Sealed
+from agent_comms.pending_requests import PendingRequest, PendingRequests
+from agent_comms.pi_events import PiEvent, Response
 
 if TYPE_CHECKING:
-    from .pi_commands import PiCommand
+    from agent_comms.pi_commands import PiCommand
 
 
 class PiRpcChannel(JsonlStreamReader, Sealed):

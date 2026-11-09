@@ -1,6 +1,5 @@
-from pathlib import Path
-from agent_comms.projects.checkouts import Checkout
 import json
+from pathlib import Path
 
 import pytest
 
@@ -9,6 +8,7 @@ from agent_comms.channels import AnyChannel
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.message_notification import MessageNotification
 from agent_comms.presentation import SentMessageSummary
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tool_declaration import NativeRequestTools

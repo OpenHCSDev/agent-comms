@@ -13,26 +13,49 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from ..cohort_schema import CohortTable
-from ..coordination.coordinator import Coordination
-from ..coordination.errors import IdentityConflict
-from ..coordination.tables.assignments import WakeAssignment
-from .native_entries import NO_EVIDENCE_READ, NativeEvidenceRead, NoEvidenceRead
-from .native_input_owner import ParticipantOwner
-from .native_input_record import NativeColumn, NativeInputExecution, NativeInputRecord
-from .native_pi import read_tracked_input_commitment
-from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
-from ..nominal.field_codec import FieldCodec, InputId, MalformedRecord, RootId, Sha256Text, ThreadLookup
-from ..private_send_rules import NativeIdentityCheck
-from ..private_sidecar import PrivateSnapshotFile, native_request_digest
-from ..registry.threads import Thread
-from ..reservation_rules import ReservationViolationError
-from ..storage.typed_table import Column, DurableTables, ImmutableRows, IntegerStorage, TextStorage, TypedRow, WithoutRowid
+from agent_comms.cohort_schema import CohortTable
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.execution.native_entries import (
+    NO_EVIDENCE_READ,
+    NativeEvidenceRead,
+    NoEvidenceRead,
+)
+from agent_comms.execution.native_input_owner import ParticipantOwner
+from agent_comms.execution.native_input_record import (
+    NativeColumn,
+    NativeInputExecution,
+    NativeInputRecord,
+)
+from agent_comms.execution.native_pi import read_tracked_input_commitment
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    InputId,
+    MalformedRecord,
+    RootId,
+    Sha256Text,
+    ThreadLookup,
+)
+from agent_comms.private_send_rules import NativeIdentityCheck
+from agent_comms.private_sidecar import PrivateSnapshotFile, native_request_digest
+from agent_comms.registry.threads import Thread
+from agent_comms.reservation_rules import ReservationViolationError
+from agent_comms.storage.typed_table import (
+    Column,
+    DurableTables,
+    ImmutableRows,
+    IntegerStorage,
+    TextStorage,
+    TypedRow,
+    WithoutRowid,
+)
 
 if TYPE_CHECKING:
-    from ..private_send_stage import NativeSendStage
+    from agent_comms.private_send_stage import NativeSendStage
 
 
 @dataclass(frozen=True, slots=True)

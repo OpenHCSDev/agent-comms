@@ -16,10 +16,10 @@ from agent_comms.planning.orders import (
     RejectedHeadVerdict,
     ReviewedHeadVerdict,
 )
-from agent_comms_hooks.watch import WatchRecord
-from hook_session_fixture import resident_hook, resident_session
 from agent_comms_hooks.queue_bypass import MergeTarget, MergeTargetUnreadable, QueueBypass
 from agent_comms_hooks.shell_commands import HereDocument, ShellCommand
+from agent_comms_hooks.watch import WatchRecord
+from hook_session_fixture import resident_hook, resident_session
 from test_head_review import ACCEPTED, QUALIFIED, REASON, invoke, opened
 
 pytest_plugins = ("test_head_review",)

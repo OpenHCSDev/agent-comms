@@ -17,44 +17,55 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Self, TextIO
 
-from agent_comms_hooks.process_claim import (
-    ClaimHeldError,
-    ProcessSingleton,
-)
-
-
-from .cli_result import ResultShower, TargetEditResult
-from .execution.child_process import (
+from agent_comms.cli_result import ResultShower, TargetEditResult
+from agent_comms.comms import Comms, wire
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import CoordinationError
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import (
     OutlivesLauncherLifetime,
     Platform,
     ProcessIdentity,
     SpawnedProcess,
 )
-from .comms import Comms, wire
-from .coordination.errors import CoordinationError
-from .coordination.coordinator import Coordination
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import FieldCodec, RecordMember, RestartId, WireOmitDefault
-from .launch_runtime import LaunchRuntime, RecordedRuntime, RestartEnvironment
-from .lifecycle_capability import Active, LifecycleCapability, Pending
-from .storage.locked_store import RuntimeFile
-from .storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceHolder
-from .execution.native_arguments import GivenBinary, NativeArguments
-from .owner_cutover import PreserveOwnerRuntime
-from .transport.owner_requests import RetainedOwnerLaunch
-from .execution.owner_lifecycle import OwnerRestartSelection
-from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
-from .storage.private_path import PrivateDirectoryRole
-from .restart_refusals import RestartRefusal
-from .restart_scope import OwnersNamed
-from .registry.thread_identity import (
+from agent_comms.execution.native_arguments import GivenBinary, NativeArguments
+from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
+from agent_comms.launch_runtime import LaunchRuntime, RecordedRuntime, RestartEnvironment
+from agent_comms.lifecycle_capability import Active, LifecycleCapability, Pending
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, RecordMember, RestartId, WireOmitDefault
+from agent_comms.owner_cutover import PreserveOwnerRuntime
+from agent_comms.owner_restart import OwnerRestartRequest, StoppedOwnerFailure
+from agent_comms.registry.thread_identity import (
     OwnerIdentity,
     RecordedThreadIncarnation,
     ThreadIncarnationRecord,
 )
-from .storage.typed_table import Column, DurableStore, FrozenColumn, Generated, Index, StoreRows, TypedTable, sql_literal
-from .watched import ChangeSignal, FileSource
+from agent_comms.restart_refusals import RestartRefusal
+from agent_comms.restart_scope import OwnersNamed
+from agent_comms.storage.locked_store import RuntimeFile
+from agent_comms.storage.maintenance_barrier import (
+    MaintenanceBarrier,
+    MaintenanceHeldError,
+    MaintenanceHolder,
+)
+from agent_comms.storage.private_path import PrivateDirectoryRole
+from agent_comms.storage.typed_table import (
+    Column,
+    DurableStore,
+    FrozenColumn,
+    Generated,
+    Index,
+    StoreRows,
+    TypedTable,
+    sql_literal,
+)
+from agent_comms.transport.owner_requests import RetainedOwnerLaunch
+from agent_comms.watched import ChangeSignal, FileSource
+from agent_comms_hooks.process_claim import (
+    ClaimHeldError,
+    ProcessSingleton,
+)
 
 DIRECTORY = "owner-restart-queue"
 

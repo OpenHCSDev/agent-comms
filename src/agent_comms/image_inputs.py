@@ -14,7 +14,7 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from . import image_input
+from agent_comms import image_input
 
 MAX_PROMPT_IMAGES = 8
 

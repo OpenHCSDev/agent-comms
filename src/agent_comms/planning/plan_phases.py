@@ -2,23 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import (
-    ClassVar,
     TYPE_CHECKING,
+    ClassVar,
 )
 
-from agent_comms_hooks.process_claim import ProcessSingleton
-from agent_comms_hooks.queue_bypass import QueueBypassGuard
-
-from .phase_artifacts import RecordedArtifact
-from ..installer.probes.carry import Carry
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
-    Id128,
-    MessageId,
-    NominalSpelling,
-    NominalText,
-)
-from ..phase_evidence import (
+from agent_comms.installer.probes.carry import Carry
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import Id128, MessageId, NominalSpelling, NominalText
+from agent_comms.phase_evidence import (
     AllEvidence,
     AuditPatternPresent,
     BusStorageAbsent,
@@ -41,19 +32,19 @@ from ..phase_evidence import (
     QualifiedName,
     RestatedMembersAbsent,
 )
-from ..phase_tasks import (
-    PhaseTask,
-    UnspecifiedPhaseTask,
-)
-from ..pi_events import PiEvent
-from ..private_registry_guard import RegistryPrivacy
-from ..storage.store_files import SqliteStore
-from ..registry.thread_identity import BirthlessIncarnation
-from ..tool_calls import CliToolArguments
+from agent_comms.phase_tasks import PhaseTask, UnspecifiedPhaseTask
+from agent_comms.pi_events import PiEvent
+from agent_comms.planning.phase_artifacts import RecordedArtifact
+from agent_comms.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.thread_identity import BirthlessIncarnation
+from agent_comms.storage.store_files import SqliteStore
+from agent_comms.tool_calls import CliToolArguments
+from agent_comms_hooks.process_claim import ProcessSingleton
+from agent_comms_hooks.queue_bypass import QueueBypassGuard
 
 if TYPE_CHECKING:
-    from .orders import Todo
-    from ..plan_reading import PlanReading
+    from agent_comms.plan_reading import PlanReading
+    from agent_comms.planning.orders import Todo
 
 
 class Plan(DeclaredFamily, affix="Plan"):

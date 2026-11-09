@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.display_references import CurrentDisplayReferences
-from agent_comms.registry.registration import Registration
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import ThreadRows
 from agent_comms.registry.threads import ExternalThread
 

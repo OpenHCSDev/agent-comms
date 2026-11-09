@@ -10,7 +10,10 @@ from dataclasses import dataclass
 from typing import Self
 
 from agent_comms.coordination.contracts import (
-    MAX_IDENTIFIER_CHARS, require_bounded, require_nonempty, validate_execution_id,
+    MAX_IDENTIFIER_CHARS,
+    require_bounded,
+    require_nonempty,
+    validate_execution_id,
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import (
@@ -18,8 +21,8 @@ from agent_comms.nominal.field_codec import (
     MalformedRecord,
     NullMember,
     RecordMember,
-    SubclassUnion,
     RootId,
+    SubclassUnion,
 )
 
 

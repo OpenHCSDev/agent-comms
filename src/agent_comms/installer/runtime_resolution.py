@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from urllib.parse import parse_qsl, urlencode, urlsplit
 from zipfile import ZipFile
 
-from agent_comms.installer.building_runtime import BuildingRuntime
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 from packaging.markers import Marker, default_environment
 from packaging.requirements import Requirement
@@ -28,8 +27,7 @@ from packaging.utils import canonicalize_name, parse_wheel_filename
 from packaging.version import Version
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import FieldCodec, GitCommitText, boundary_decoder
+from agent_comms.installer.building_runtime import BuildingRuntime
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import RuntimeProbe
 from agent_comms.installer.probes.interpreter import (
@@ -46,7 +44,9 @@ from agent_comms.installer.probes.packages import (
 )
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
-from ..projects.repo import Repo
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, GitCommitText, boundary_decoder
+from agent_comms.projects.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.work_branches import WorkBranches
 

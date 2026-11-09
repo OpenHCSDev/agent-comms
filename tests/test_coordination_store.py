@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import SnapshotExclude
-
 import hashlib
 import multiprocessing
 import sqlite3
@@ -35,6 +33,7 @@ from agent_comms.attempt_states import (
     SettlingAttempt,
     SucceededAttempt,
 )
+from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.coordination.errors import (
     IdentityConflict,
     IntegrityViolationError,
@@ -60,7 +59,8 @@ from agent_comms.coordination.tables.executions import (
 from agent_comms.coordination.tables.publications import (
     PublicationIntents,
 )
-from agent_comms.coordination.coordinator import StandaloneCoordination
+from agent_comms.execution.selected.source_batch import SelectedSource
+from agent_comms.execution.turn_failure import ProviderRetryExhausted
 from agent_comms.execution_states import (
     ActiveExecution,
     CompletedExecution,
@@ -68,14 +68,12 @@ from agent_comms.execution_states import (
     FailedExecution,
     PendingExecution,
 )
-from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId
 from agent_comms.messages import InfoKind, Message
+from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, SnapshotExclude
 from agent_comms.owner_fence import OwnerFence, prepare_fence_token
 from agent_comms.reason_codes import GivenReasonCode, NoDetail
 from agent_comms.recovery_states import FailedRecovery
 from agent_comms.response_acknowledgement import canonical_publication_key
-from agent_comms.execution.selected.source_batch import SelectedSource
-from agent_comms.execution.turn_failure import ProviderRetryExhausted
 from agent_comms.storage.typed_table import SQLiteForeignKeys
 from agent_comms.wake_policy import (
     BoundedTriageWake,
@@ -98,9 +96,9 @@ def store(path: Path) -> StandaloneCoordination:
 
 def wire_source(db: StandaloneCoordination, assignment_id: AssignmentId, original: Message, mode: WakePolicy) -> SelectedSource:
     from agent_comms.audience_manifest import freeze_audience
-    from agent_comms.frozen_recipient import FrozenRecipient
     from agent_comms.bus import PrivateRecord
     from agent_comms.execution.selected.source_batch import SelectedSource
+    from agent_comms.frozen_recipient import FrozenRecipient
     from agent_comms.wake_policy import WakeDecision
 
     audience = freeze_audience(original, (FrozenRecipient(SENDER_LOOKUP, "Owner"),),

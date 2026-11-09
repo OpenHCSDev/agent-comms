@@ -16,16 +16,15 @@ from dataclasses import (
 )
 from pathlib import Path
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     ClassVar,
     Literal,
-    TYPE_CHECKING,
 )
 
-from agent_comms_hooks.shell_commands import ShellCommand
-
-from ..change_report import CitationProject
-from ..execution.child_process import (
+from agent_comms.change_report import CitationProject
+from agent_comms.errors import GoalRefused, RejectedEnforcementError, RelationViolationError
+from agent_comms.execution.child_process import (
     BoundedRun,
     CheckPrinted,
     ChildOutcome,
@@ -35,27 +34,15 @@ from ..execution.child_process import (
     SignaledOutcome,
     TimedOutOutcome,
 )
-from ..errors import (
-    GoalRefused,
-    RejectedEnforcementError,
-    RelationViolationError,
+from agent_comms.execution.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
+from agent_comms.execution.turn_goal_permission import (
+    ContinuationGoalPermission,
+    GoalPermission,
+    InactiveGoalPermission,
 )
-from .goal_authority import (
-    GoalAuthority,
-    GoalTurnAuthority,
-    NoGoalAuthority,
-)
-from .goal_states import (
-    ActiveGoal,
-    GoalState,
-)
-from ..execution.goal_turn_permit import (
-    GoalTurnPermit,
-    NoLaunchPermit,
-)
-from ..lifecycle_capability import Active
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
+from agent_comms.lifecycle_capability import Active
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     GoalId,
     MalformedRecord,
@@ -66,47 +53,30 @@ from ..nominal.field_codec import (
     SubclassUnion,
     TurnId,
 )
-from ..projects.checkouts import (
-    DetachedStart,
-    ScratchCheckout,
-)
-from ..projects.git_errors import GitCommandError
-from ..projects.repo import Repo
-from ..registration_inheritance import RegistrationInheritance
-from ..reported_turn import (
-    NoReportedTurn,
-    ReportedTurnState,
-)
-from ..shell_effects import shell_storage_effects
-from ..text_digest import TextDigest
-from ..registry.thread_identity import (
-    RecordedThreadIncarnation,
-    ThreadIncarnation,
-)
-from ..execution.turn_goal_permission import (
-    ContinuationGoalPermission,
-    GoalPermission,
-    InactiveGoalPermission,
-)
-from ..ui_model.goal import GoalDisplay
+from agent_comms.planning.goal_authority import GoalAuthority, GoalTurnAuthority, NoGoalAuthority
+from agent_comms.planning.goal_states import ActiveGoal, GoalState
+from agent_comms.projects.checkouts import DetachedStart, ScratchCheckout
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
+from agent_comms.registration_inheritance import RegistrationInheritance
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from agent_comms.reported_turn import NoReportedTurn, ReportedTurnState
+from agent_comms.shell_effects import shell_storage_effects
+from agent_comms.text_digest import TextDigest
+from agent_comms.ui_model.goal import GoalDisplay
+from agent_comms_hooks.shell_commands import ShellCommand
 
 if TYPE_CHECKING:
-    from .goal_actions import (
-        GoalAction,
-        GoalActionContext,
-    )
-    from .goal_attempts import (
-        GoalAttemptStore,
-        LaunchPermit,
-    )
-    from .goal_management import Goals
-    from .goal_presentation import GoalExecution
-    from .goal_waits import GoalWaits
-    from .orders import Todo
-    from ..registry.threads import Thread
-    from ..task_sources import TaskScope
-    from ..execution.turn_context import TurnContext
-    from ..execution.turn_goal_account import VerifiedGoalSettlement
+    from agent_comms.execution.turn_context import TurnContext
+    from agent_comms.execution.turn_goal_account import VerifiedGoalSettlement
+    from agent_comms.planning.goal_actions import GoalAction, GoalActionContext
+    from agent_comms.planning.goal_attempts import GoalAttemptStore, LaunchPermit
+    from agent_comms.planning.goal_management import Goals
+    from agent_comms.planning.goal_presentation import GoalExecution
+    from agent_comms.planning.goal_waits import GoalWaits
+    from agent_comms.planning.orders import Todo
+    from agent_comms.registry.threads import Thread
+    from agent_comms.task_sources import TaskScope
 
 
 @dataclass(frozen=True)
@@ -151,7 +121,7 @@ class UnresolvedMention:
     peer_created_at: Literal[None] = None
 
     def project(self, registry, owner, goal, source):
-        from ..relationships import GoalMentionDiagnostic
+        from agent_comms.relationships import GoalMentionDiagnostic
 
         return (), (
             GoalMentionDiagnostic(
@@ -204,7 +174,7 @@ class ResolvedMentionBinding(GoalMentionBinding):
         return RecordedThreadIncarnation(self.peer_name, self.peer_created_at)
 
     def project(self, registry, owner, goal, source):
-        from ..relationships import GoalDerivedContact, GoalMentionDiagnostic
+        from agent_comms.relationships import GoalDerivedContact, GoalMentionDiagnostic
 
         diagnostic = GoalMentionDiagnostic(
             owner.name, goal.id, source.text_revision, self.token, "stale_incarnation"

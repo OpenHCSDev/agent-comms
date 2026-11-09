@@ -7,19 +7,18 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import ClassVar
 
+from agent_comms.coordination.errors import IntegrityViolationError
+from agent_comms.coordination.vocabulary import CoordinatorVocabulary
+from agent_comms.lifecycle_capability import Active, LifecycleCapability
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
-
-from .coordination.errors import IntegrityViolationError
-from .coordination.vocabulary import CoordinatorVocabulary
-from .nominal.declared_family import DeclaredFamily
-from .lifecycle_capability import Active, LifecycleCapability
-from .source_proof_requirement import (
+from agent_comms.source_proof_requirement import (
     FullSourceProof,
     NoSourceProof,
     SourceProofRequirement,
     TriageSourceProof,
 )
-from .storage.typed_table import sql_literal
+from agent_comms.storage.typed_table import sql_literal
 
 
 class MessageAudience(StrEnum):
@@ -175,7 +174,7 @@ class WakePolicy(LifecycleCapability, CoordinatorVocabulary, SourceProofRequirem
 
     @classmethod
     def relevance_instruction(cls):
-        from .execution.turn_context import InstructionFile
+        from agent_comms.execution.turn_context import InstructionFile
 
         return InstructionFile.read("reply-relevance.md")
 
@@ -193,7 +192,7 @@ class PassiveWake(NoSourceProof, WakePolicy):
 
     @classmethod
     def initial_state(cls):
-        from .assignment_states import PassiveAssignment
+        from agent_comms.assignment_states import PassiveAssignment
 
         return PassiveAssignment
 
@@ -214,7 +213,7 @@ class BoundedTriageWake(Active, TriageSourceProof, WakePolicy):
 
     @classmethod
     def initial_state(cls):
-        from .assignment_states import TriagePendingAssignment
+        from agent_comms.assignment_states import TriagePendingAssignment
 
         return TriagePendingAssignment
 
@@ -226,6 +225,6 @@ class FullWake(Active, FullSourceProof, WakePolicy):
 
     @classmethod
     def initial_state(cls):
-        from .assignment_states import FullPendingAssignment
+        from agent_comms.assignment_states import FullPendingAssignment
 
         return FullPendingAssignment

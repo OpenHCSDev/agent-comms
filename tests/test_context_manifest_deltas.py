@@ -1,31 +1,34 @@
 """Recorded context reuses source-bound text and transcript prefixes."""
-from agent_comms.context_store import UNREAD_CONTEXT
-from dataclasses import replace
 import hashlib
+import json
+import sqlite3
 import sys
-from pathlib import Path
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from agent_comms.context_store import (
-    CapturedContext, ContextEntry, ContextManifestReference, ContextRequest, ContextSegmentVersion,
-    ContextStore, ContextStoreIdentity, ContextStoreInfo,
+    UNREAD_CONTEXT,
+    CapturedContext,
+    ContextEntry,
+    ContextManifestReference,
+    ContextPriorSupersededError,
+    ContextRequest,
+    ContextSegmentVersion,
+    ContextStore,
+    ContextStoreIdentity,
+    ContextStoreInfo,
 )
 from agent_comms.errors import RelationViolationError
-from agent_comms.installer.practice import PracticeCopy
-from agent_comms.storage.typed_table import RowNotFoundError, SQLitePageSize
-import json
-import sqlite3
-
-from agent_comms.nominal.field_codec import ContextStoreId, FieldCodec, TurnId
-from agent_comms.execution.native_session_reopen import NativeSessionIdentity
-from agent_comms.registry.thread_identity import TurnIdentity
-from agent_comms.execution.turn_context import ObservedDispatchRequest
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
 from agent_comms.execution.turn_context import (
     ContextManifest,
     JournalProvenance,
     NativeProvenance,
+    ObservedDispatchRequest,
     RecordedContextPredecessor,
     RecordedContextTurn,
     RecordedSegmentManifest,
@@ -34,15 +37,13 @@ from agent_comms.execution.turn_context import (
     ToolCatalogSegment,
     TranscriptSegment,
 )
-from bus_record_fixture import context_comms
 from agent_comms.execution.turn_item import PiRequestKey
-from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.installer.practice import PracticeCopy
+from agent_comms.nominal.field_codec import ContextStoreId, FieldCodec, TurnId
+from agent_comms.registry.thread_identity import TurnIdentity
+from agent_comms.storage.typed_table import RowNotFoundError, SQLitePageSize
+from bus_record_fixture import context_comms
 
-
-from agent_comms.context_store import ContextStoreInfo
-from agent_comms.errors import RelationViolationError
-from concurrent.futures import ThreadPoolExecutor
-from agent_comms.context_store import ContextPriorSupersededError
 
 def context(owner, path, count, turn):
     native = NativeSessionIdentity(PiSessionId('manifest-delta'), str(path / 'history.jsonl'))

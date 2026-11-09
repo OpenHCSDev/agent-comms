@@ -4,12 +4,9 @@ import hashlib
 import json
 from dataclasses import dataclass
 
-from ..nominal.field_codec import FieldCodec
-from ..relationships import RelationRecord
-from ..execution.turn_context import (
-    InstructionSegment,
-    OwnerProvenance,
-)
+from agent_comms.execution.turn_context import InstructionSegment, OwnerProvenance
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.relationships import RelationRecord
 
 
 @dataclass(frozen=True, kw_only=True)

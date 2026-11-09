@@ -14,46 +14,39 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from .history_view import HistoryView
-from .execution.native_entries import TranscriptProjection
+from agent_comms.execution.native_entries import TranscriptProjection
+from agent_comms.history_view import HistoryView
 
 if TYPE_CHECKING:
-    from .context_store import ContextStore
-    from .external_transcript import ExternalPageRow
-    from .message_reference import MessageReference
-    from .execution.native_entries import TranscriptProjection
-    from .execution.native_output import NativeRecordLocation
-    from .execution.native_transcript import NativeRecord, NativeTranscript, SessionCut
-    from .registry.threads import Thread, ThreadProvenance
-    from .transcript_events import TextTranscript, TranscriptEvent
-    from .transcript_routes import TranscriptRoutes, _SessionRoutes
-    from .transcripts import NativeTranscriptCursor, TranscriptCursor
-    from .execution.turn_context import SegmentManifest
-    from .execution.turn_digests import TurnBound
+    from agent_comms.context_store import ContextStore
+    from agent_comms.execution.native_entries import TranscriptProjection
+    from agent_comms.execution.native_output import NativeRecordLocation
+    from agent_comms.execution.native_transcript import NativeRecord, NativeTranscript, SessionCut
+    from agent_comms.execution.turn_context import SegmentManifest
+    from agent_comms.execution.turn_digests import TurnBound
+    from agent_comms.external_transcript import ExternalPageRow
+    from agent_comms.message_reference import MessageReference
+    from agent_comms.registry.threads import Thread, ThreadProvenance
+    from agent_comms.transcript_events import TextTranscript, TranscriptEvent
+    from agent_comms.transcript_routes import TranscriptRoutes, _SessionRoutes
+    from agent_comms.transcripts import NativeTranscriptCursor, TranscriptCursor
 
-from .bus import Bus
-from .bus_publication import Delivered
-from .coordination.errors import StaleRevision, TranscriptChanged
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec, MalformedRecord, NullMember
-from .execution.native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
-from .recorded_time import EventTime, UnrecordedEventTime
-from .storage.private_path import FileIdentity, MissingFile
-from .routing import TurnRouting
-from .rule_deal import Mute, Speaking, Voice
-from .sent_message import AssignedSourceIdentity, PublishedSentMessage
-from .sent_reports import ResolvesSentReports
-from .registry.thread_identity import (
-    RecordedThreadIncarnation,
-    ThreadIncarnation,
-)
-from .transcript_events import (
-    IncomingTranscript,
-    SentTranscript,
-    TurnDigest,
-)
-from .execution.turn_item import NativeTurnId
-from .storage.typed_table import StoreWriter
+from agent_comms.bus import Bus
+from agent_comms.bus_publication import Delivered
+from agent_comms.coordination.errors import StaleRevision, TranscriptChanged
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+from agent_comms.execution.turn_item import NativeTurnId
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, NullMember
+from agent_comms.recorded_time import EventTime, UnrecordedEventTime
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from agent_comms.routing import TurnRouting
+from agent_comms.rule_deal import Mute, Speaking, Voice
+from agent_comms.sent_message import AssignedSourceIdentity, PublishedSentMessage
+from agent_comms.sent_reports import ResolvesSentReports
+from agent_comms.storage.private_path import FileIdentity, MissingFile
+from agent_comms.storage.typed_table import StoreWriter
+from agent_comms.transcript_events import IncomingTranscript, SentTranscript, TurnDigest
 
 
 class WireFrontier(DeclaredFamily, ResolvesSentReports, affix="WireFrontier"):
@@ -63,7 +56,7 @@ class WireFrontier(DeclaredFamily, ResolvesSentReports, affix="WireFrontier"):
 
     def cursor(self, session_file: str, offset: int, *,
                file: FileIdentity | MissingFile) -> NativeTranscriptCursor:
-        from .transcripts import NativeTranscriptCursor
+        from agent_comms.transcripts import NativeTranscriptCursor
         return NativeTranscriptCursor(session_file, offset, file=file)
 
     def at(self, sequence: int) -> Self:
@@ -100,7 +93,7 @@ class AssignedSourceCursor(AssignedSourceIdentity, WireFrontier):
 
     def cursor(self, session_file: str, offset: int, *,
                file: FileIdentity | MissingFile) -> NativeTranscriptCursor:
-        from .transcripts import WireTranscriptCursor
+        from agent_comms.transcripts import WireTranscriptCursor
         return WireTranscriptCursor(session_file, offset, self, file=file)
 
     def within(self, parent: WireFrontier) -> bool:
@@ -434,12 +427,12 @@ class TranscriptSource(ResolvesSentReports):
                 pending.clear()
 
     def current_draft(self, root: Path, incarnation: ThreadIncarnation) -> TranscriptDraft:
-        from .external_transcript import DraftRow
+        from agent_comms.external_transcript import DraftRow
         with self.draft_snapshot(root, incarnation) as connection:
             return DraftRow.one(connection, thread=incarnation.require_recorded().lookup) or NoDraft()
 
     def draft_snapshot(self, root: Path, incarnation: ThreadIncarnation):
-        from .external_transcript import ExternalTranscript
+        from agent_comms.external_transcript import ExternalTranscript
         return ExternalTranscript(root, incarnation).snapshot()
 
     def publication_revision(self, root: Path, recipient: RecordedThreadIncarnation):
@@ -643,7 +636,7 @@ class LiveAssignedTranscriptSource(AssignedTranscriptSource):
         reader: NativeTranscript,
     ) -> Iterator[tuple[NativeRecord, tuple[TranscriptEvent, ...]]]:
         """Native ancestry precedes one atomic SQL read per bounded fragment."""
-        from .transcripts import TranscriptRead
+        from agent_comms.transcripts import TranscriptRead
 
         lookup = self.recipient.lookup
         for fragment in fragments:

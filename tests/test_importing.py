@@ -1,25 +1,45 @@
-import sys
-
-from agent_comms.core_access import LocalCoreAccess
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.comms import Comms
-from agent_comms.registry.registration import Registration
-from agent_comms.registry.thread_text import (
-    GivenThreadText,
-    NoThreadText,
-    ThreadText,
-)
 import asyncio
 import json
 import os
 import sqlite3
 import stat
-from dataclasses import replace
+import sys
 from collections.abc import Callable, Iterable
-from typing import BinaryIO, IO, Self
+from dataclasses import replace
+from pathlib import Path
 from types import TracebackType
-from agent_comms.transport.tools.sidebar import CommsImportedSourceTool
+from typing import IO, BinaryIO, Self
+
+import pytest
 from pydantic import JsonValue
+
+from agent_comms.cli import CliInvocation
+from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
+from agent_comms.cli_bridges.codex import CodexAppServer
+from agent_comms.cli_bridges.codex_connection import CodexConnection
+from agent_comms.cli_bridges.codex_protocol import (
+    BusInput,
+    InitializeResponse,
+    ItemsList,
+    RequestParams,
+)
+from agent_comms.cli_bridges.codex_rollout import (
+    ROLLOUT_RECORD,
+    ForeignItem,
+    ForeignRecord,
+    ResponseItemRecord,
+)
+from agent_comms.cli_bridges.history import DefaultAddress, OfflineHistory, OnlineHistory
+from agent_comms.cli_bridges.opencode import OpenCodeConnection, OpenCodeServer
+from agent_comms.cli_bridges.opencode_parts import SavedMessage
+from agent_comms.cli_bridges.opencode_protocol import Session
+from agent_comms.comms import Comms
+from agent_comms.core_access import LocalCoreAccess
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import NO_PROCESS
+from agent_comms.execution.native_entries import ImportedMetadataEntry, NativeEntry
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.turn_context import CodexRolloutProvenance
 from agent_comms.harness_install import (
     ClaudeCodeHarness,
     CodexHarness,
@@ -27,52 +47,38 @@ from agent_comms.harness_install import (
     OpenCodeHarness,
     PiHarness,
 )
-from agent_comms.registry.thread_text import ExpectedSession
+from agent_comms.importing import (
+    ImportBuffer,
+    ImportedSessionMetadata,
+    ImportLimits,
+    ImportSnapshot,
+    ThreadImported,
+)
+from agent_comms.nominal.field_codec import FieldCodec, MessageId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_creation import RecordedCreationTime
+from agent_comms.registry.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_text import (
+    AnySession,
+    ExpectedSession,
+    GivenThreadText,
+    NamedSession,
+    NoThreadText,
+    ThreadText,
+)
+from agent_comms.registry.threads import ExternalThread, NativeThread, ThreadProvenance
+from agent_comms.runtime_updates import FinishedItem, TurnEnded
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.transcript_events import (
     ImportedMessage,
     ImportedReply,
     ImportedRequest,
     TextTranscript,
 )
-from pathlib import Path
-
-import pytest
-from transcript_record_fixture import transcript_record
-
-from agent_comms.session_file import RegistrySessionLocation
-
-from agent_comms.importing import (
-    ImportBuffer,
-    ImportLimits,
-    ImportSnapshot,
-    ImportedSessionMetadata,
-    ThreadImported,
-)
-from agent_comms.cli import CliInvocation
-from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
-from agent_comms.cli_bridges.codex import CodexAppServer
-from agent_comms.cli_bridges.codex_connection import CodexConnection
-from agent_comms.cli_bridges.codex_protocol import BusInput, InitializeResponse, RequestParams, ItemsList
-from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD, ForeignItem, ForeignRecord, ResponseItemRecord
-from agent_comms.cli_bridges.history import DefaultAddress, OfflineHistory, OnlineHistory
-from agent_comms.registry.thread_text import (
-    AnySession,
-    NamedSession,
-)
-from agent_comms.cli_bridges.opencode import OpenCodeServer, OpenCodeConnection
-from agent_comms.cli_bridges.opencode_parts import SavedMessage
-from agent_comms.cli_bridges.opencode_protocol import Session
-from agent_comms.nominal.field_codec import FieldCodec, MessageId
-from agent_comms.execution.native_entries import NativeEntry, ImportedMetadataEntry
-from agent_comms.registry.threads import ThreadProvenance, ExternalThread, NativeThread
-from agent_comms.registry.thread_status import StoppedThreadStatus
-from agent_comms.runtime_updates import FinishedItem, TurnEnded
+from agent_comms.transport.tools.sidebar import CommsImportedSourceTool
 from agent_comms.ui_model.message_category import AgentCategory, ThinkingCategory, UserCategory
-from agent_comms.execution.turn_context import CodexRolloutProvenance
-from agent_comms.execution.child_process import NO_PROCESS
-from agent_comms.errors import RelationViolationError
-from agent_comms.execution.native_failures import NativePiUnavailable
+from transcript_record_fixture import transcript_record
 
 
 def lines(path: Path, records: Iterable[dict[str, JsonValue]], tail: str = "") -> Path:

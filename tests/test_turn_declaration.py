@@ -2,17 +2,10 @@
 
 import pytest
 
+from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
-)
-from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.registry.thread_identity import (
-    NoObservedTurn,
-    RecordedThreadIncarnation,
-    TurnFence,
-    TurnIdentity,
 )
 from agent_comms.execution.turn_lease import (
     ActiveTurn,
@@ -21,8 +14,15 @@ from agent_comms.execution.turn_lease import (
     NoTurnRecord,
     TurnDeclaration,
 )
-from agent_comms.reported_turn import NoReportedTurn
 from agent_comms.execution.turn_phase import ToolRunningPhase
+from agent_comms.nominal.field_codec import FieldCodec, TurnId
+from agent_comms.registry.thread_identity import (
+    NoObservedTurn,
+    RecordedThreadIncarnation,
+    TurnFence,
+    TurnIdentity,
+)
+from agent_comms.reported_turn import NoReportedTurn
 
 
 @pytest.mark.parametrize('turn', [

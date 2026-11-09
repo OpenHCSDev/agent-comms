@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .class_fact import ClassFact
-from .nominal.field_codec import ThreadLookup
-from .participant_identity import ParticipantIdentity
-from .projection_source import ProducedRow, ProjectionSource
+from agent_comms.class_fact import ClassFact
+from agent_comms.nominal.field_codec import ThreadLookup
+from agent_comms.participant_identity import ParticipantIdentity
+from agent_comms.projection_source import ProducedRow, ProjectionSource
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +27,6 @@ class FrozenRecipient(ParticipantIdentity, ProjectionSource):
 
     @ClassFact
     def writes(cls: type[FrozenRecipient]) -> tuple[type[ProducedRow], ...]:
-        from .bus_tables import AwaitingAnswerSource, ReceivedSource
+        from agent_comms.bus_tables import AwaitingAnswerSource, ReceivedSource
 
         return (ReceivedSource, AwaitingAnswerSource)

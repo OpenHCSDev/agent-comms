@@ -11,30 +11,6 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from pydantic import JsonValue
 
-from ...planning.goal_actions import (
-    ActiveGoalAction,
-    ClearGoalAction,
-    EditGoalAction,
-    GoalAction,
-    GoalActor,
-    GoalPrecondition,
-    ModelInvocable,
-    PausedGoalAction,
-    PeerInvocable,
-    RuntimeInvocable,
-    SetGoalAction,
-    TransitionGoalAction,
-)
-from ...planning.goal_history import RecordedGoalHistory
-from ...planning.goal_presentation import (
-    GoalExecution,
-    GoalSnapshot,
-)
-from ...planning.goal_scope import (
-    AllGoals,
-    OneGoal,
-)
-from ...planning.goals import GoalDeclaration
 from agent_comms.input_key import InputKeyText
 from agent_comms.lifecycle_capability import Active
 from agent_comms.nominal.field_codec import (
@@ -48,6 +24,24 @@ from agent_comms.nominal.field_codec import (
     projected,
 )
 from agent_comms.pi_payloads import PublishedGoalToolDetails
+from agent_comms.planning.goal_actions import (
+    ActiveGoalAction,
+    ClearGoalAction,
+    EditGoalAction,
+    GoalAction,
+    GoalActor,
+    GoalPrecondition,
+    ModelInvocable,
+    PausedGoalAction,
+    PeerInvocable,
+    RuntimeInvocable,
+    SetGoalAction,
+    TransitionGoalAction,
+)
+from agent_comms.planning.goal_history import RecordedGoalHistory
+from agent_comms.planning.goal_presentation import GoalExecution, GoalSnapshot
+from agent_comms.planning.goal_scope import AllGoals, OneGoal
+from agent_comms.planning.goals import GoalDeclaration
 from agent_comms.progress_claims import ProgressClaim
 from agent_comms.tool_caller import ThreadCaller, ToolCaller
 from agent_comms.tool_request import ThreadReadTool, ThreadToolRequest

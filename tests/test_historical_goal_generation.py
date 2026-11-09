@@ -1,18 +1,17 @@
 """A fresh carry generation says nothing about the old goal's execution."""
 
-from agent_comms.projects.checkouts import Checkout
-from contextlib import closing
-from dataclasses import replace
 import os
 import sqlite3
+from contextlib import closing
+from dataclasses import replace
 
 import pytest
 
-from agent_comms.nominal.field_codec import InputId
-from agent_comms.input_key import AcpInputKey
-from agent_comms.nominal.field_codec import GoalId
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_key import AcpInputKey
+from agent_comms.nominal.field_codec import GoalId, InputId
 from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
@@ -26,12 +25,11 @@ from agent_comms.planning.goal_attempts import (
     MissingGoalGenerationError,
 )
 from agent_comms.planning.goal_generation import ReadyGeneration
+from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.planning.goal_states import BlockedGoal
 from agent_comms.planning.goals import Goal
-from agent_comms.input_disposition import InputDispositions
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.planning.goal_scope import OneGoal
-
 
 UNKNOWN_ORIGINAL_KEY = AcpInputKey(InputId.mint())
 

@@ -1,31 +1,28 @@
 """One original decision/correction journey through declared tools and wire ownership."""
 
 
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.channel_targets import CommandTarget
-
-
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.bus_publication import AgentOrigin
-from agent_comms.messages import NoticeRole
-import os
 import json
+import os
 from dataclasses import replace
+from functools import partial
 
 import pytest
 
-from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.bus_publication import AgentOrigin
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import FieldCodec, TurnId, GoalId
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.turn_lease import NoTurnLease
+from agent_comms.messages import InfoKind, Message, NoticeRole
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.planning.goals import Goal
-from agent_comms.messages import Message, InfoKind
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import NativeThread
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.task_sources import Decision
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
-from agent_comms.execution.turn_lease import NoTurnLease
-from functools import partial
 from bus_history import read_history
-from agent_comms.registry.threads import NativeThread
 
 # These source declarations belong to alpha unless a case explicitly supplies beta.
 invoke_tool = partial(invoke_tool, caller=ThreadCaller("alpha"))
@@ -54,8 +51,12 @@ def admit(comms, name):
 def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms):
     from agent_comms.retained_task_facts import CurrentHumanConstraintTaskFact, RetainedTaskFacts
     from agent_comms.task_sources import (
-        CorrectionTaskChange, ExplicitTaskScopeSelection, HumanConstraintPin,
-        TurnTaskScope, UserTaskDrop, UserTaskSupersession,
+        CorrectionTaskChange,
+        ExplicitTaskScopeSelection,
+        HumanConstraintPin,
+        TurnTaskScope,
+        UserTaskDrop,
+        UserTaskSupersession,
     )
 
     owner = comms.registry.declare(NativeThread('recipient', frozenset({'team'}), Checkout(comms.root)))
@@ -388,8 +389,10 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
 
 def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, monkeypatch):
     from agent_comms.retained_task_facts import (
-        CurrentDecisionTaskFact, CurrentUserTaskCorrectionFact,
-        DecisionTaskFact, RetainedTaskFacts,
+        CurrentDecisionTaskFact,
+        CurrentUserTaskCorrectionFact,
+        DecisionTaskFact,
+        RetainedTaskFacts,
     )
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
 

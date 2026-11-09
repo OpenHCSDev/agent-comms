@@ -6,11 +6,11 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
-from .bus import Bus
-from .bus_publication import Delivered
-from .messaging.bus_source_page import CandidateQuery
-from .nominal.field_codec import MalformedRecord, MessageId, ThreadLookup
-from .wake_policy import WakePolicy
+from agent_comms.bus import Bus
+from agent_comms.bus_publication import Delivered
+from agent_comms.messaging.bus_source_page import CandidateQuery
+from agent_comms.nominal.field_codec import MalformedRecord, MessageId, ThreadLookup
+from agent_comms.wake_policy import WakePolicy
 
 
 class ProjectionUnavailableError(RuntimeError):

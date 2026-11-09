@@ -6,29 +6,23 @@ from abc import (
 )
 from contextlib import ExitStack
 from typing import (
-    ClassVar,
     TYPE_CHECKING,
+    ClassVar,
 )
 
-from ..nominal.field_codec import (
-    GoalId,
-    TurnId,
-)
-from .turn_item import UsageChargeId
+from agent_comms.execution.turn_item import UsageChargeId
+from agent_comms.nominal.field_codec import GoalId, TurnId
 
 if TYPE_CHECKING:
-    from .owned_turn import TurnGoalAccount
-    from ..pi_wire import PiUsage
-    from ..planning.goal_attempts import (
-        GoalAttemptStore,
-        LaunchPermit,
-    )
-    from ..planning.goal_management import Goals
-    from ..planning.goals import GoalDeclaration
-    from ..registry.threads import Thread
-    from .turn_context import TurnContext
-    from .turn_goal_account import VerifiedGoalSettlement
-    from .turn_terminal import TurnTerminal
+    from agent_comms.execution.owned_turn import TurnGoalAccount
+    from agent_comms.execution.turn_context import TurnContext
+    from agent_comms.execution.turn_goal_account import VerifiedGoalSettlement
+    from agent_comms.execution.turn_terminal import TurnTerminal
+    from agent_comms.pi_wire import PiUsage
+    from agent_comms.planning.goal_attempts import GoalAttemptStore, LaunchPermit
+    from agent_comms.planning.goal_management import Goals
+    from agent_comms.planning.goals import GoalDeclaration
+    from agent_comms.registry.threads import Thread
 
 
 class GoalTurnPermit(ABC):

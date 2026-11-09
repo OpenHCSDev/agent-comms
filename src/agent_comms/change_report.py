@@ -18,19 +18,18 @@ from typing import ClassVar, cast
 from pydantic import JsonValue
 
 from agent_comms.errors import MissingSourceLine
-
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import (
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     MalformedRecord,
     NullMember,
     RecordMember,
     SubclassUnion,
     WireValue,
 )
-from .projects.git_errors import GitCommandError
-from .projects.repo import Repo
-from .projects.checkouts import Checkout
-from .repository_name import RepositoryName
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
+from agent_comms.repository_name import RepositoryName
 
 
 class SourceText(ABC):

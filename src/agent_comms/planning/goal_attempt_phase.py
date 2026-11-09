@@ -6,23 +6,20 @@ from abc import (
 )
 from dataclasses import dataclass
 from typing import (
-    ClassVar,
     TYPE_CHECKING,
+    ClassVar,
 )
 
-from ..attempt_resolution import AttemptResolution
-from ..errors import UnresolvedAttemptError
-from ..lifecycle import LifecycleState
-from ..lifecycle_capability import (
-    Failed,
-    Terminal,
-)
-from ..nominal.declared_family import DeclaredFamily
+from agent_comms.attempt_resolution import AttemptResolution
+from agent_comms.errors import UnresolvedAttemptError
+from agent_comms.lifecycle import LifecycleState
+from agent_comms.lifecycle_capability import Failed, Terminal
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
     import sqlite3
 
-    from .goal_attempts import AttemptRecord
+    from agent_comms.planning.goal_attempts import AttemptRecord
 
 
 class ReadyAttempt[Evidence](ABC):

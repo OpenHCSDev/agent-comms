@@ -1,6 +1,7 @@
 """Core owns what an order and a strike may say, for every caller."""
-import pytest
 from dataclasses import replace
+
+import pytest
 
 from agent_comms.planning.order_words import (
     BluntText,
@@ -10,8 +11,8 @@ from agent_comms.planning.order_words import (
     PlainText,
     StrikeReason,
 )
-from test_todos import order as checked_order
 from agent_comms.team.order import OrderFile
+from test_todos import order as checked_order
 
 TEN = "the teammate pushed a commit that deleted the store test file"
 

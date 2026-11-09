@@ -49,29 +49,112 @@ from types import (
     get_original_bases,
 )
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     ClassVar,
     Self,
-    TYPE_CHECKING,
     cast,
     get_args,
     get_origin,
 )
 
-from agent_comms_hooks import ToolRefusedError
-
-from .delivery_evidence import (
+from agent_comms.build_identity import (
+    BuildIdentity,
+    CommitInstallation,
+    InstalledBuild,
+    RecordedBuildIdentity,
+    UnrecordedBuildIdentity,
+)
+from agent_comms.bus import BusReader
+from agent_comms.bus_publication import AgentOrigin
+from agent_comms.change_report import (
+    CitationProject,
+    CitedRevisions,
+    CommitRevision,
+    Declaration,
+    FileLine,
+    MainRevision,
+    NoSourceReference,
+    OrderRoots,
+    SourceReference,
+    SourceRevision,
+    SourceRoots,
+    SourceText,
+    WorkingTree,
+)
+from agent_comms.channel_targets import (
+    CommandTarget,
+    CommsTag,
+    IncarnationThreadTarget,
+    NamedTarget,
+)
+from agent_comms.command import Command
+from agent_comms.coordination.session import NativeCapture
+from agent_comms.errors import MissingSourceLine, TodoError
+from agent_comms.execution.child_process import ChildResult, OrderCheckFailedError
+from agent_comms.head_review import (
+    HeadReview,
+    HeadReviewOrder,
+    HeadReviewRelation,
+    HeadReviewStatus,
+    IntegrationInput,
+    MergeArm,
+    MergeHeadReview,
+    PreparedHeadReview,
+    PullRequestHead,
+    ReadPullRequestHead,
+    UnpromotedHeadReview,
+    UntouchedMergeArm,
+)
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.lifecycle_capability import LifecycleCapability, Pending
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import InfoKind, Message
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    DefaultNonNull,
+    Description,
+    DisclosedRecord,
+    FieldCodec,
+    GitCommitText,
+    GoalId,
+    HuntId,
+    MalformedRecord,
+    MessageId,
+    NullMember,
+    OrderId,
+    RecordProblems,
+    ThreadLookup,
+    ToolCallId,
+    WireOmitDefault,
+    WireTransient,
+    boundary_decoder,
+)
+from agent_comms.order_runs import OrderRun
+from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
+from agent_comms.owner_requests import (
+    OpenRequestState,
+    OwnerRequestId,
+    RequestAtRevision,
+    RequestDirective,
+    RequestLink,
+    RequestSelection,
+    RequestState,
+)
+from agent_comms.planning.delivery_evidence import (
+    SOURCE_READ_FAILURES,
     BranchPointCheck,
     DeliveryEvidence,
     EvidenceRequirements,
     FileDeliveryEvidence,
     FreshMainCheck,
     NoDeliveryEvidence,
-    SOURCE_READ_FAILURES,
     TodoProblems,
     WorkingEvidence,
 )
-from .order_words import (
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goals import CheckedCommit, OrderCheck
+from agent_comms.planning.order_words import (
     DirectiveText,
     GrowthReason,
     OrderCorrectionReason,
@@ -79,7 +162,8 @@ from .order_words import (
     StrikeReason,
     VerdictReason,
 )
-from .problem_findings import (
+from agent_comms.planning.plan_phases import OrderPhase, UnplannedPhase
+from agent_comms.planning.problem_findings import (
     ExpectedProblem,
     FixShape,
     NoOrderDeletion,
@@ -89,13 +173,13 @@ from .problem_findings import (
     Successor,
     UnlocatedProblemFinding,
 )
-from .progress_readings import (
+from agent_comms.planning.progress_readings import (
     DistanceReading,
     DistanceReadings,
     Moving,
     ProgressPoint,
 )
-from .pull_requests import (
+from agent_comms.planning.pull_requests import (
     BehindMergeBlock,
     BranchDeliveryMerge,
     ConflictMergeBlock,
@@ -115,158 +199,38 @@ from .pull_requests import (
     WaitingMergeBlock,
     _github_time,
 )
-from .todo_refusals import (
+from agent_comms.planning.todo_refusals import (
     ForeignRequest,
     HolderConsentRequired,
     SharedWorktreeRefusal,
     TeammateOccupied,
     TodoStoreUnwritable,
 )
-from ..build_identity import (
-    BuildIdentity,
-    CommitInstallation,
-    InstalledBuild,
-    RecordedBuildIdentity,
-    UnrecordedBuildIdentity,
-)
-from ..bus import BusReader
-from ..bus_publication import AgentOrigin
-from ..change_report import (
-    CitationProject,
-    CitedRevisions,
-    CommitRevision,
-    Declaration,
-    FileLine,
-    MainRevision,
-    NoSourceReference,
-    OrderRoots,
-    SourceReference,
-    SourceRevision,
-    SourceRoots,
-    SourceText,
-    WorkingTree,
-)
-from ..channel_targets import (
-    CommandTarget,
-    CommsTag,
-    IncarnationThreadTarget,
-    NamedTarget,
-)
-from ..execution.child_process import (
-    ChildResult,
-    OrderCheckFailedError,
-)
-from ..command import Command
-from ..coordination.session import NativeCapture
-from ..errors import (
-    MissingSourceLine,
-    TodoError,
-)
-from .goal_scope import OneGoal
-from .goals import (
-    CheckedCommit,
-    OrderCheck,
-)
-from ..head_review import (
-    HeadReview,
-    HeadReviewOrder,
-    HeadReviewRelation,
-    HeadReviewStatus,
-    IntegrationInput,
-    MergeArm,
-    MergeHeadReview,
-    PreparedHeadReview,
-    PullRequestHead,
-    ReadPullRequestHead,
-    UnpromotedHeadReview,
-    UntouchedMergeArm,
-)
-from ..launch_runtime import LaunchRuntime
-from ..lifecycle_capability import (
-    LifecycleCapability,
-    Pending,
-)
-from ..message_reference import MessageReference
-from ..messages import (
-    InfoKind,
-    Message,
-)
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
-    DefaultNonNull,
-    Description,
-    DisclosedRecord,
-    FieldCodec,
-    GitCommitText,
-    GoalId,
-    HuntId,
-    MalformedRecord,
-    MessageId,
-    NullMember,
-    OrderId,
-    RecordProblems,
-    ThreadLookup,
-    ToolCallId,
-    WireOmitDefault,
-    WireTransient,
-    boundary_decoder,
-)
-from ..order_runs import OrderRun
-from ..order_story import (
-    ProblemStory,
-    StoryEvent,
-    StoryLine,
-    StorySource,
-)
-from ..owner_requests import (
-    OpenRequestState,
-    OwnerRequestId,
-    RequestAtRevision,
-    RequestDirective,
-    RequestLink,
-    RequestSelection,
-    RequestState,
-)
-from .plan_phases import (
-    OrderPhase,
-    UnplannedPhase,
-)
-from ..problem_number import ProblemNumber
-from ..progress_claims import (
-    MergedClaim,
-    ProgressClaim,
-    WorkingClaim,
-)
-from ..recorded_time import (
-    EventTime,
-    RecordedEventTime,
-    UnrecordedEventTime,
-)
-from ..registry.registration import Registration
-from ..registry.registry_document import (
-    RegistrySnapshot,
-    TeamProject,
-)
-from ..registry.registry_store import RegistryStore
-from ..registry.threads import Thread
-from ..projects.git_errors import (
-    FailedGitCommand,
-    SourceReadFailure,
-)
-from ..projects.repo import Repo
-from ..projects.checkouts import (
+from agent_comms.problem_number import ProblemNumber
+from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
+from agent_comms.projects.checkouts import (
     Checkout,
     CommitFilter,
     CommitsNaming,
     EveryCommit,
     RepositoryReads,
 )
-from ..repository_name import RepositoryName
-from ..slop import (
-    DeclarationDerivation,
-    Slop,
+from agent_comms.projects.git_errors import FailedGitCommand, SourceReadFailure
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.storage_rules import CheckoutAllocation, StorageRule
+from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import RegistrySnapshot, TeamProject
+from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.registry.thread_identity import (
+    CoreWatcherIncarnation,
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
 )
-from ..storage.typed_table import (
+from agent_comms.registry.threads import Thread
+from agent_comms.repository_name import RepositoryName
+from agent_comms.slop import DeclarationDerivation, Slop
+from agent_comms.storage.typed_table import (
     CapturedRows,
     Column,
     DurableStore,
@@ -284,18 +248,9 @@ from ..storage.typed_table import (
     TypedRow,
     TypedTable,
 )
-from ..projects.storage_rules import (
-    CheckoutAllocation,
-    StorageRule,
-)
-from ..team.rule_file import RuleFile
-from ..registry.thread_identity import (
-    CoreWatcherIncarnation,
-    RecordedThreadIncarnation,
-    ThreadIncarnation,
-)
-from ..tool_result import ToolResult
-from ..work_branches import (
+from agent_comms.team.rule_file import RuleFile
+from agent_comms.tool_result import ToolResult
+from agent_comms.work_branches import (
     BranchComparison,
     BranchDifference,
     CommitBase,
@@ -303,18 +258,13 @@ from ..work_branches import (
     WorkBranchError,
     WorkBranches,
 )
+from agent_comms_hooks import ToolRefusedError
 
 if TYPE_CHECKING:
-    from ..comms import Comms
-    from .goal_management import Goals
-    from ..held_orders import LiveHold
-    from ..team.order import (
-        OrderFile,
-        OrderedProblems,
-        Reassignment,
-        Team,
-        TeamContext,
-    )
+    from agent_comms.comms import Comms
+    from agent_comms.held_orders import LiveHold
+    from agent_comms.planning.goal_management import Goals
+    from agent_comms.team.order import OrderedProblems, OrderFile, Reassignment, Team, TeamContext
 
 
 class OrderCompletion(DeclaredFamily, affix="Delivery"):
@@ -3375,10 +3325,7 @@ class Assignment(TodoHolder):
 
     def record_review(self, goals: Goals, current: Todo,
                       operation: RecordOrderHeadVerdict) -> None:
-        from .goal_actions import (
-    GoalPrecondition,
-    HeadReviewedOrderGoalAction,
-)
+        from agent_comms.planning.goal_actions import GoalPrecondition, HeadReviewedOrderGoalAction
 
         goals.update_goal(self.owner, HeadReviewedOrderGoalAction(
             expect=GoalPrecondition(goal_id=OneGoal(self.generation)),

@@ -11,19 +11,23 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
-from .message_reference import MessageReference
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import TranscriptRecordId
-from .notification_evidence import ConsumptionEvidence
-from .recorded_time import Timestamped
-from .notification_progress import HarnessConsumedProgress
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import TranscriptRecordId
+from agent_comms.notification_evidence import ConsumptionEvidence
+from agent_comms.notification_progress import HarnessConsumedProgress
+from agent_comms.recorded_time import Timestamped
 
 if TYPE_CHECKING:
-    from .assignment_states import AssignmentState
-    from .assignment_store import AssignmentStore
-    from .cli_bridges.shared import MonitorPart, MonitorReadFile, TranscriptConfirmsDelivery
-    from .coordination.tables.harness_deliveries import HarnessDelivery
-    from .notification_progress import DeliveryProgress
+    from agent_comms.assignment_states import AssignmentState
+    from agent_comms.assignment_store import AssignmentStore
+    from agent_comms.cli_bridges.shared import (
+        MonitorPart,
+        MonitorReadFile,
+        TranscriptConfirmsDelivery,
+    )
+    from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
+    from agent_comms.notification_progress import DeliveryProgress
 
 
 class Outcome(DeclaredFamily, affix="Outcome"):

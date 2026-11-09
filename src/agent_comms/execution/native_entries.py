@@ -10,39 +10,61 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from itertools import repeat
 from pathlib import Path
-from typing import Annotated, ClassVar, Literal, Never, Self, TYPE_CHECKING, TextIO, cast
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Never, Self, TextIO, cast
 
-from .turn_item import FreshNativeId, NativeItemId
-from ..importing import ImportedSessionMetadata
-from .native_evidence_read import (
+from agent_comms.execution.native_evidence_read import (
     NativeEvidencePrefixChanged,
     NativeInputUncommitted,
     PrivateEvidenceRead,
 )
-from .native_failures import NativePiUnavailable
-from .native_input_proof import (
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_input_proof import (
     NativeContextJournal,
     NativeContextProof,
     NativeContextRecord,
     NativeInputLocation,
 )
-from .native_session_files import BusTranscriptFile, NativeSessionFiles
-from .native_session_reopen import NativeReopenError, NativeSessionIdentity, PiSessionId
-from ..nominal.declared_family import DeclaredFamily, UnknownFamilyMember
-from ..nominal.field_codec import FieldCodec, InputId, MalformedRecord, NullMember, RecordedTimestamp, Sha256Text, TimestampText, WireName, WireOmitDefault
-from ..pi_payloads import PiMessage, ReportedText
-from ..pi_vocabulary import PendingStopReason, ThinkingLevel
-from ..pi_wire import Opaque, PiField, PiOmitted, PiPayload, PiReported, ReportedInputId, TaggedPayload
-from ..recorded_time import GeneratedTimestamp
-from ..registry.thread_model import DeclaredModel
-from ..routing import NoTurnRouting, Routing
-from ..storage.locked_store import DurableFile
-from ..storage.store_files import AtomicFile
-from ..transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
-from ..transcript_routes import InputPresentation, NoInputDisplay, _SessionRoutes
+from agent_comms.execution.native_session_files import BusTranscriptFile, NativeSessionFiles
+from agent_comms.execution.native_session_reopen import (
+    NativeReopenError,
+    NativeSessionIdentity,
+    PiSessionId,
+)
+from agent_comms.execution.turn_item import FreshNativeId, NativeItemId
+from agent_comms.importing import ImportedSessionMetadata
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    InputId,
+    MalformedRecord,
+    NullMember,
+    RecordedTimestamp,
+    Sha256Text,
+    TimestampText,
+    WireName,
+    WireOmitDefault,
+)
+from agent_comms.pi_payloads import PiMessage, ReportedText
+from agent_comms.pi_vocabulary import PendingStopReason, ThinkingLevel
+from agent_comms.pi_wire import (
+    Opaque,
+    PiField,
+    PiOmitted,
+    PiPayload,
+    PiReported,
+    ReportedInputId,
+    TaggedPayload,
+)
+from agent_comms.recorded_time import GeneratedTimestamp
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.routing import NoTurnRouting, Routing
+from agent_comms.storage.locked_store import DurableFile
+from agent_comms.storage.store_files import AtomicFile
+from agent_comms.transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
+from agent_comms.transcript_routes import InputPresentation, NoInputDisplay, _SessionRoutes
 
 if TYPE_CHECKING:
-    from ..importing import ImportedConversation
+    from agent_comms.importing import ImportedConversation
 
 
 @dataclass(frozen=True)

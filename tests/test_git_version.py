@@ -1,8 +1,7 @@
 """Only a partial clone's reads pass --no-lazy-fetch, so only they refuse a Git that predates it."""
 
-from pathlib import Path
-
 import subprocess
+from pathlib import Path
 
 import pytest
 

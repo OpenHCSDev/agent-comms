@@ -10,11 +10,6 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict
-from agent_comms.fresh_private_session import create_fresh_private_session
-from agent_comms.launch_runtime import (
-    RestartEnvironment,
-    ThreadLaunch,
-)
 from agent_comms.execution.native_arguments import (
     NativeArguments,
     NativeInputProofArgument,
@@ -24,6 +19,11 @@ from agent_comms.execution.native_evidence_read import session_location
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+from agent_comms.fresh_private_session import create_fresh_private_session
+from agent_comms.launch_runtime import (
+    RestartEnvironment,
+    ThreadLaunch,
+)
 from agent_comms.nominal.field_codec import boundary_decoder
 from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.pi_vocabulary import ThinkingChoice

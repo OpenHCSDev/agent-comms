@@ -6,24 +6,22 @@ import hashlib
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
+from agent_comms.audience_manifest import freeze_audience
 from agent_comms.bus import KeyedPrivateRecord
+from agent_comms.bus_publication import Delivered
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.delivery_policy import ResponseDeliveryPolicy
-
+from agent_comms.frozen_recipient import FrozenRecipient
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
+from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement,
     public_envelope_digest,
 )
 from agent_comms.wake import OrdinaryControl
-
-from .audience_manifest import freeze_audience
-from .frozen_recipient import FrozenRecipient
-from .bus_publication import Delivered
-from .private_registry_guard import RegistryPrivacy
-from .channel_targets import CommandTarget
-from .coordination.errors import IdentityConflict
-from .coordination.tables.responses import ResponseObligation
-from .message_reference import MessageReference
-from .messages import Message
 
 if TYPE_CHECKING:
     from agent_comms.bus import KeyedPrivateRecord

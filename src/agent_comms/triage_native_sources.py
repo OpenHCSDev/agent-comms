@@ -8,9 +8,9 @@ ordered like ``ExecutionAssignmentLink``. It contains no handling state.
 from dataclasses import dataclass
 from typing import Annotated
 
-from .nominal.field_codec import AssignmentId, InputId
-from .execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
-from .storage.typed_table import (
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from agent_comms.nominal.field_codec import AssignmentId, InputId
+from agent_comms.storage.typed_table import (
     Column,
     GuardedInserts,
     ImmutableRows,

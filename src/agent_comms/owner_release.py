@@ -19,24 +19,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from .execution.child_process import ProcessState
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .registry.registry_document import RegistrySnapshot
-from .registry.thread_identity import (
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessState
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.thread_identity import (
     ClaimedIdentity,
     OwnerIdentity,
     ThreadIncarnationRecord,
 )
-from .registry.thread_owned_state import ThreadOwnedState
-from .registry.threads import Thread
-from .storage.typed_table import (
-    Column,
-    DurableStore,
-    JsonStorage,
-    StoreRows,
-    TypedTable,
-)
+from agent_comms.registry.thread_owned_state import ThreadOwnedState
+from agent_comms.registry.threads import Thread
+from agent_comms.storage.typed_table import Column, DurableStore, JsonStorage, StoreRows, TypedTable
 
 
 class OwnerRelease(ABC):

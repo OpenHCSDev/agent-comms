@@ -24,6 +24,7 @@ import sys
 import time
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
+from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -40,82 +41,89 @@ from acp.schema import (
     LoadSessionResponse,
     NewSessionRequest,
     NewSessionResponse,
+    PermissionOption,
     PromptRequest,
     PromptResponse,
-    PermissionOption,
     RequestPermissionResponse,
-    ToolCallUpdate,
     SetSessionConfigOptionResponse,
     TextContentBlock,
+    ToolCallUpdate,
 )
 from acp.stdio import stdio_streams
 from pydantic import BaseModel, JsonValue, ValidationError
 
-from agent_comms.coordination.errors import IdentityConflict, Refused
+from agent_comms import acp_extension, manual_compaction_bridge
+from agent_comms.acp_extension import encode_updates
+from agent_comms.acp_failure import NativeTurnError
+from agent_comms.acp_request_consumer import AcpRequestConsumer
+from agent_comms.active_route import ActiveRoute
+from agent_comms.activity import FailedWakeDiagnostic
+from agent_comms.agent_backend import CompactionOutcome
+from agent_comms.channel_targets import NamedTarget
+from agent_comms.cohort_foreground import _accept_visible_deliveries
+from agent_comms.comms import Comms, wire
+from agent_comms.config_options import ConfigOptions
+from agent_comms.controller import (
+    ACP_PERMISSION_TIMEOUT_SECONDS,
+    CancelledOutcome,
+    Controller,
+    NoController,
+    PermissionOutcome,
+    SessionUpdateSink,
+)
+from agent_comms.coordinated_runtime import SelectedExecution
+from agent_comms.coordination.cohort import next_sealed_assignment
 from agent_comms.coordination.coordinator import Coordination
-
-from . import (
-    acp_extension,
-    manual_compaction_bridge,
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import IdentityConflict, Refused
+from agent_comms.cursor_owner import CursorOwner
+from agent_comms.cursor_publication import CursorPublication
+from agent_comms.drain_failures import drain_failures
+from agent_comms.execution.input_drain import (
+    InputDrain,
+    SchedulesWake,
+    WakeDue,
+    WakeHeld,
+    WakeOutcome,
 )
-from .acp_extension import (
-    encode_updates,
-)
-from .acp_failure import NativeTurnError
-from .acp_request_consumer import AcpRequestConsumer
-from .active_route import ActiveRoute
-from .agent_backend import CompactionOutcome
-from .channel_targets import NamedTarget
-from .cohort_foreground import _accept_visible_deliveries
-from .comms import Comms, wire
-from .controller import (
-    ACP_PERMISSION_TIMEOUT_SECONDS, CancelledOutcome, Controller, PermissionOutcome, NoController, SessionUpdateSink,
-)
-from .coordinated_runtime import SelectedExecution
-from .coordination.cohort import next_sealed_assignment
-from .coordination.database import CoordinationStore
-from .cursor_owner import CursorOwner
-from .cursor_publication import CursorPublication
-from .nominal.field_codec import AcpSessionId, AcpSessionIdText, ClaimId, FieldCodec, RootId
-from .image_inputs import prompt_images
-from .execution.input_drain import InputDrain
-from .config_options import ConfigOptions
-from .transport.owner_requests import RetainedOwnerLaunch
-from .input_effects import InputEffects
-from .launch_root import LaunchRoot, started
-from .messaging.message_bus import MessageBus
-from .publisher import ResponseWrites
-from .queued_input import DeliveredInput
-from .runtime_server import RuntimeServer
-from .owner_connection import socket_path
-from .runtime import RuntimeProxy
-from agent_comms.execution.selected.write_plan import SelectedWritePlans
-from .session_effects import SessionEffects
-from .execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
-from .registry.threads import Thread
-from .execution.turn_effects import TurnEffects
-from .execution.turn_runner import TurnRunner
-from .working_memory_policy import AnnotationPolicy
-from .working_memory_worker import AnnotationWorker
-
-
-from dataclasses import dataclass
-from .drain_failures import drain_failures
-from .activity import FailedWakeDiagnostic
-from agent_comms.execution.input_drain import SchedulesWake, WakeDue, WakeHeld, WakeOutcome
-from .registry.thread_identity import OwnerIdentity
-
 from agent_comms.execution.selected.actions import BoundSelectedWriteAuthority
-if TYPE_CHECKING:
-    from .coordination.tables.assignments import WakeAssignment
+from agent_comms.execution.selected.write_plan import SelectedWritePlans
+from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
+from agent_comms.execution.turn_effects import TurnEffects
+from agent_comms.execution.turn_runner import TurnRunner
+from agent_comms.image_inputs import prompt_images
+from agent_comms.input_effects import InputEffects
+from agent_comms.launch_root import LaunchRoot, started
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.nominal.field_codec import (
+    AcpSessionId,
+    AcpSessionIdText,
+    ClaimId,
+    FieldCodec,
+    RootId,
+)
+from agent_comms.owner_connection import socket_path
+from agent_comms.publisher import ResponseWrites
+from agent_comms.queued_input import DeliveredInput
+from agent_comms.registry.thread_identity import OwnerIdentity
+from agent_comms.registry.threads import Thread
+from agent_comms.runtime import RuntimeProxy
+from agent_comms.runtime_server import RuntimeServer
+from agent_comms.session_effects import SessionEffects
+from agent_comms.transport.owner_requests import RetainedOwnerLaunch
+from agent_comms.working_memory_policy import AnnotationPolicy
+from agent_comms.working_memory_worker import AnnotationWorker
 
-from .execution.native_arguments import (
+if TYPE_CHECKING:
+    from agent_comms.coordination.tables.assignments import WakeAssignment
+
+from agent_comms.execution.native_arguments import (
     ConfiguredBinary,
     InheritedArguments,
     LaunchArguments,
     LaunchBinary,
 )
-from .execution.turn_runner import RELAY_PREFIX
+from agent_comms.execution.turn_runner import RELAY_PREFIX
 
 
 @dataclass
@@ -627,7 +635,7 @@ def main() -> int:
     root = LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
     started()
     if "--login" in sys.argv[1:]:
-        from .login import run_login
+        from agent_comms.login import run_login
 
         index = sys.argv.index("--login")
         return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "")

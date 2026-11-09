@@ -13,37 +13,29 @@ from dataclasses import (
 )
 from functools import partial
 from typing import (
+    TYPE_CHECKING,
     ClassVar,
     Self,
-    TYPE_CHECKING,
 )
 
 import agent_comms.registry.thread_presentation as thread_presentation
-
-from ..execution.child_process import (
-    NativeBinding,
-    ProcessIdentity,
-)
-from ..coordination.errors import StaleRevision
-from ..coordination.work import CoordinationWork
-from ..errors import (
-    RelationViolationError,
-    RouteChangedError,
-    UnregisteredThreadError,
-)
-from ..message_reference import MessageReference
-from ..execution.native_arguments import GivenArguments
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import FieldCodec
-from .thread_identity import OwnerIdentity
-from ..tool_result import ToolResult
+from agent_comms.coordination.errors import StaleRevision
+from agent_comms.coordination.work import CoordinationWork
+from agent_comms.errors import RelationViolationError, RouteChangedError, UnregisteredThreadError
+from agent_comms.execution.child_process import NativeBinding, ProcessIdentity
+from agent_comms.execution.native_arguments import GivenArguments
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.registry.thread_identity import OwnerIdentity
+from agent_comms.tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
-    from .threads import Thread
-    from ..execution.session_lifecycle import AttachedSessionLifecycle
-    from ..presentation import MessageNotification
-    from ..transcripts import (
+    from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle
+    from agent_comms.presentation import MessageNotification
+    from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.registry.threads import Thread
+    from agent_comms.transcripts import (
         AcquiredThreadPresentation,
         TranscriptReadIdentity,
         Transcripts,
@@ -277,7 +269,7 @@ class ThreadOwnerBinding(
         """An unavailable owner cannot supply a new existing-session load."""
 
     def recipient_activity(self, activity, snapshot, thread):
-        from ..agent_activity import UnavailableRecipientActivity
+        from agent_comms.agent_activity import UnavailableRecipientActivity
 
         return UnavailableRecipientActivity()
 
@@ -306,7 +298,7 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
         return ordinary
 
     def recipient_activity(self, activity, snapshot, thread):
-        from ..agent_activity import LiveRecipientActivity
+        from agent_comms.agent_activity import LiveRecipientActivity
 
         return LiveRecipientActivity(thread, activity[thread.name])
 

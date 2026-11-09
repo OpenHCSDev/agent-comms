@@ -9,45 +9,33 @@ from typing import (
 
 from acp.schema import PromptRequest
 
-from .runtime_request import (
-    AttachedResultRuntimeRequest,
-    AttachedRuntimeRequest,
-)
-from .tools.sidebar import (
-    ClearQueueQueueAction,
-    QueueAction,
-    SendNowQueueAction,
-)
-from ..annotation_correction import CorrectsAnnotation
-from ..context_store import ContextManifestReference
-from ..execution.turn_context import (
+from agent_comms.annotation_correction import CorrectsAnnotation
+from agent_comms.context_store import ContextManifestReference
+from agent_comms.execution.turn_context import (
     DispatchRequest,
     PreviewProvenance,
     Provenance,
     RecordedContextTurn,
     SegmentManifest,
 )
-from ..nominal.field_codec import (
-    GoalId,
-    WireName,
+from agent_comms.nominal.field_codec import GoalId, WireName
+from agent_comms.owner_connection import NoControllerToken, OwnerConnection
+from agent_comms.planning.goal_actions import GoalAction
+from agent_comms.planning.goal_scope import AllGoals, OneGoal
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.threads import Thread
+from agent_comms.transport.runtime_request import (
+    AttachedResultRuntimeRequest,
+    AttachedRuntimeRequest,
 )
-from ..owner_connection import (
-    NoControllerToken,
-    OwnerConnection,
+from agent_comms.transport.tools.sidebar import (
+    ClearQueueQueueAction,
+    QueueAction,
+    SendNowQueueAction,
 )
-from ..planning.goal_actions import GoalAction
-from ..planning.goal_scope import (
-    AllGoals,
-    OneGoal,
-)
-from ..projects.checkouts import Checkout
-from ..registry.threads import Thread
-from ..registry.thread_identity import ThreadIncarnation
-from ..working_memory_labels import (
-    ClassifierVersion,
-    ModelLabel,
-)
-from ..working_memory_questions import SpanAnswer
+from agent_comms.working_memory_labels import ClassifierVersion, ModelLabel
+from agent_comms.working_memory_questions import SpanAnswer
 
 
 @dataclass(frozen=True, kw_only=True)

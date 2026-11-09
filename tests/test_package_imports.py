@@ -1,8 +1,8 @@
 """Entrypoints import their APIs, not the package root's former catalog."""
 import json
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 

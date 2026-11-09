@@ -7,16 +7,24 @@ from collections.abc import Sequence
 from contextlib import nullcontext
 from typing import TYPE_CHECKING, NoReturn
 
-from .errors import RelationViolationError
-from .launch_runtime import LaunchRuntime
-from .restart_refusals import OwnerMaintenancePendingRefusal
+from agent_comms.errors import RelationViolationError
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.restart_refusals import OwnerMaintenancePendingRefusal
 
 if TYPE_CHECKING:
-    from .storage.maintenance_barrier import MaintenanceState
-    from .execution.owner_lifecycle import OwnerLifecycle, OwnerRestartResult, OwnerRestartSelection
-    from .owner_restart import OwnerRestartRequest, StoppedOwnerBatch, StoppedOwnerFailure
-    from .registry.registry_document import RegistrySnapshot
-    from .registry.threads import Thread
+    from agent_comms.execution.owner_lifecycle import (
+        OwnerLifecycle,
+        OwnerRestartResult,
+        OwnerRestartSelection,
+    )
+    from agent_comms.owner_restart import (
+        OwnerRestartRequest,
+        StoppedOwnerBatch,
+        StoppedOwnerFailure,
+    )
+    from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.registry.threads import Thread
+    from agent_comms.storage.maintenance_barrier import MaintenanceState
 
 
 class OwnerCutover(ABC):
@@ -29,7 +37,7 @@ class OwnerCutover(ABC):
 
     def restart(self, lifecycle: OwnerLifecycle, request: OwnerRestartRequest) -> tuple[OwnerRestartResult, ...]:
         """The cutover member owns which runtime may decode original records."""
-        from .owner_restart import ClaimedOwnerBatch
+        from agent_comms.owner_restart import ClaimedOwnerBatch
 
         return ClaimedOwnerBatch.restart(lifecycle, request, self)
 

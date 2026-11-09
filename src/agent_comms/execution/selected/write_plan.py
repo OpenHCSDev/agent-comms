@@ -18,16 +18,16 @@ from dataclasses import (
 )
 from pathlib import Path
 from typing import (
-    Literal,
     TYPE_CHECKING,
+    Literal,
 )
 
-from agent_comms.execution.child_process import Platform
 from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
+from agent_comms.execution.child_process import Platform
 from agent_comms.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -40,8 +40,8 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import (
-    ClaimScoped,
     ClaimedIdentity,
+    ClaimScoped,
     RecordedThreadIncarnation,
 )
 from agent_comms.storage.locked_store import (
@@ -248,7 +248,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
                 # The visible file may have committed despite the error. Keep
                 # it as an UNKNOWN barrier; never unlink/retry the operation.
                 raise
-            from ...acp_extension import SelectedWriteAcceptedUpdate
+            from agent_comms.acp_extension import SelectedWriteAcceptedUpdate
 
             return SelectedWriteAcceptedUpdate(operation_id, source_seq, selected[0].assignment_id)
 

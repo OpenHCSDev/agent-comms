@@ -12,11 +12,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms import errors
-
-from .active_route import CommsRoute, resolve_comms_route
-from .bus import Bus
-from .launch_root import LaunchRoot
-from .recorded_bus import RecordedBusIdentity
+from agent_comms.active_route import CommsRoute, resolve_comms_route
+from agent_comms.bus import Bus
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.recorded_bus import RecordedBusIdentity
 
 
 @dataclass(frozen=True)

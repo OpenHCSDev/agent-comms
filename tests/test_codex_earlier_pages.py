@@ -1,6 +1,4 @@
 """Real Unix WebSocket replies, watch frames and Core pager; no replaced transports."""
-from agent_comms.transcripts import EarlierThan, Through
-from agent_comms.projects.checkouts import Checkout
 import asyncio
 import json
 from contextlib import suppress
@@ -10,14 +8,16 @@ from aiohttp import web
 
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
 from agent_comms.cli_bridges.codex_protocol import BusClientId
-from agent_comms.nominal.field_codec import MessageId
 from agent_comms.cli_bridges.shared import Binding, StoredBinding, Watch
 from agent_comms.cli_protocol import WATCH_LINE, EarlierItems
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.external_transcript import ExternalItemRow
-from agent_comms.runtime_updates import ThreadOutput
+from agent_comms.nominal.field_codec import MessageId
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.runtime_updates import ThreadOutput
+from agent_comms.transcripts import EarlierThan, Through
 from conftest import installed_comms
 
 

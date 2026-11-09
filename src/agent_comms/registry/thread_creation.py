@@ -10,12 +10,8 @@ from collections.abc import Set
 
 from metaclass_registry.mro_dispatch import handles
 
-from ..errors import RelationViolationError
-from ..nominal.field_codec import (
-    FieldCodec,
-    FieldRepresentation,
-    WireValue,
-)
+from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.field_codec import FieldCodec, FieldRepresentation, WireValue
 
 
 class CreationTime(float, WireValue, ABC):

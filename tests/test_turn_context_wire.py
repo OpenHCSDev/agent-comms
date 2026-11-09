@@ -2,11 +2,6 @@
 import hashlib
 import json
 
-from agent_comms.nominal.field_codec import FieldCodec, InputId, TurnId
-from agent_comms.image_input import ImageInput
-from agent_comms.transport.native_tool_transport import OwnerToolConnection
-from agent_comms.pi_commands import Prompt
-from agent_comms.registry.thread_identity import TurnIdentity
 from agent_comms.execution.turn_context import (
     ContextManifest,
     OwnerProvenance,
@@ -16,6 +11,11 @@ from agent_comms.execution.turn_context import (
     TurnContext,
     UserInputSegment,
 )
+from agent_comms.image_input import ImageInput
+from agent_comms.nominal.field_codec import FieldCodec, InputId, TurnId
+from agent_comms.pi_commands import Prompt
+from agent_comms.registry.thread_identity import TurnIdentity
+from agent_comms.transport.native_tool_transport import OwnerToolConnection
 from bus_record_fixture import context_comms
 from conftest import publish_initial
 

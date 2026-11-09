@@ -1,9 +1,9 @@
 """Read/correct original annotation addresses without reader-side installation."""
 from dataclasses import replace
+
 import pytest
 
 from agent_comms.coordination.database import ReadableStore
-
 from agent_comms.execution.turn_context import (
     ContextSpan,
     ContributionCoordinates,

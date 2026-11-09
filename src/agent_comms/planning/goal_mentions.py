@@ -3,7 +3,8 @@ from __future__ import annotations
 import hashlib
 import re
 
-from .goals import (
+from agent_comms.nominal.field_codec import GoalId
+from agent_comms.planning.goals import (
     AliasMentionBinding,
     GoalMentionBinding,
     GoalMentionSource,
@@ -14,9 +15,8 @@ from .goals import (
     SelfMentionBinding,
     UnknownMentionBinding,
 )
-from ..nominal.field_codec import GoalId
-from ..registry.registry_document import RegistrySnapshot
-from ..registry.threads import Thread
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.threads import Thread
 
 _GOAL_TOKEN = re.compile(
     r"(?<![\w@/\\])@([A-Za-z0-9_-]+(?:[./\\@][A-Za-z0-9_-]+)*)(?![\w@/\\]|\.[A-Za-z0-9_.-])"

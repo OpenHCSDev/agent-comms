@@ -5,11 +5,11 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Annotated, Literal
 
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import MessageId, WireName
-from .messages import Message
-from .tool_result import ToolResult
-from .transcript_events import SentTranscript
+from agent_comms.messages import Message
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import MessageId, WireName
+from agent_comms.tool_result import ToolResult
+from agent_comms.transcript_events import SentTranscript
 
 
 class CorrectionResult(DeclaredFamily):
@@ -49,6 +49,7 @@ class SendResult:
 
 from agent_comms.cli_result import CliResult
 from agent_comms.nominal.field_codec import FieldCodec
+
 
 @dataclass(frozen=True)
 class MessageSentResult(CliResult):

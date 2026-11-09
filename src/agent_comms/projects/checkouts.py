@@ -29,19 +29,16 @@ from typing import (
     Self,
 )
 
-from .git_errors import (
-    GitCommandError,
-    UnavailableCommitError,
-)
-from .repo import Repo
-from ..errors import MissingSourceLine
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
+from agent_comms.errors import MissingSourceLine
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     GitCommitText,
     PresentMember,
     SingleFieldValue,
 )
+from agent_comms.projects.git_errors import GitCommandError, UnavailableCommitError
+from agent_comms.projects.repo import Repo
 
 
 class CheckoutHoldsWorkError(ValueError):

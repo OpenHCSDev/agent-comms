@@ -22,14 +22,17 @@ from typing import TYPE_CHECKING, BinaryIO, ClassVar, Self
 from pydantic import TypeAdapter
 
 from agent_comms.agent_runtime import ReadsHistory
-from agent_comms.nominal.field_codec import SubclassUnion
 from agent_comms.harness_install import (
-    ClaudeCodeHarness, CodexHarness, Harness, HarnessSession, OpenCodeHarness, PiHarness,
+    ClaudeCodeHarness,
+    CodexHarness,
+    Harness,
+    HarnessSession,
+    OpenCodeHarness,
+    PiHarness,
 )
-from agent_comms.importing import ImportLimits, ImportSnapshot, ImportedConversation
-
-from agent_comms.runtime_updates import EarlierRequest, HistoryNotice, RuntimeUpdate, SessionFacts
-from ..registry.thread_text import (
+from agent_comms.importing import ImportedConversation, ImportLimits, ImportSnapshot
+from agent_comms.nominal.field_codec import SubclassUnion
+from agent_comms.registry.thread_text import (
     AbsentText,
     AnySession,
     ExpectedSession,
@@ -37,10 +40,11 @@ from ..registry.thread_text import (
     TextChoice,
     ThreadText,
 )
+from agent_comms.runtime_updates import EarlierRequest, HistoryNotice, RuntimeUpdate, SessionFacts
 
 if TYPE_CHECKING:
-    from .opencode_parts import SavedMessage
-    from .opencode_protocol import Session
+    from agent_comms.cli_bridges.opencode_parts import SavedMessage
+    from agent_comms.cli_bridges.opencode_protocol import Session
 
 
 class History(ReadsHistory, HarnessSession, declared_name=None):

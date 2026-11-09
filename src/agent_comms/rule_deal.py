@@ -29,16 +29,15 @@ from importlib.util import find_spec
 from pathlib import Path, PurePosixPath
 from typing import ClassVar, Self
 
-from .nominal.declared_family import DeclaredFamily
-from .instruction_deck import DealtCalls
-from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId
-from .storage.locked_store import DocumentChange, LockedStore
-from .storage.store_files import AtomicFile, DependentStateTier, SingleFileStore
-
-from .projects.repo import Repo
-from .rule_probes import Probe, ProbeContext
-from .team.rule_file import RuleFile
-from .context_reading import ContextUsage
+from agent_comms.context_reading import ContextUsage
+from agent_comms.instruction_deck import DealtCalls
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, MessageId
+from agent_comms.projects.repo import Repo
+from agent_comms.rule_probes import Probe, ProbeContext
+from agent_comms.storage.locked_store import DocumentChange, LockedStore
+from agent_comms.storage.store_files import AtomicFile, DependentStateTier, SingleFileStore
+from agent_comms.team.rule_file import RuleFile
 
 
 @dataclass(frozen=True)

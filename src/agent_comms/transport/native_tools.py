@@ -6,25 +6,53 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .request import ArgumentTool
-from ..envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
-from .native_tool_call import CodingCall, RefusedCodingCall
-from ..nominal.declared_family import UnknownFamilyMember
-from ..nominal.field_codec import FieldCodec, MalformedRecord, NullMember, ToolCallId, WireContext, WireOmitDefault
-from ..pi_wire import PiReported
-from ..recorded_time import EventTime
-from ..registry.thread_identity import OfferedTools, UnobservedTools
-from ..rule_deal import ReadSpan
-from ..shell_effects import ShellOutput, WriteStorageEffect, physical_path, shell_storage_effects
-from ..tool_declaration import ContextRows, EditAction, EditCall, ExecuteAction, GlobalCommsExtension, PlainContextRows, ReadAction, ReplacementEdit, SearchAction, ToolDeclaration, one_line
-from ..tool_denial import SelectedToolDenied
+from agent_comms.envelope_claim_transitions import (
+    ExistingFileClaim,
+    FileClaimPath,
+    WritableFileClaim,
+)
+from agent_comms.nominal.declared_family import UnknownFamilyMember
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    NullMember,
+    ToolCallId,
+    WireContext,
+    WireOmitDefault,
+)
+from agent_comms.pi_wire import PiReported
+from agent_comms.recorded_time import EventTime
+from agent_comms.registry.thread_identity import OfferedTools, UnobservedTools
+from agent_comms.rule_deal import ReadSpan
+from agent_comms.shell_effects import (
+    ShellOutput,
+    WriteStorageEffect,
+    physical_path,
+    shell_storage_effects,
+)
+from agent_comms.tool_declaration import (
+    ContextRows,
+    EditAction,
+    EditCall,
+    ExecuteAction,
+    GlobalCommsExtension,
+    PlainContextRows,
+    ReadAction,
+    ReplacementEdit,
+    SearchAction,
+    ToolDeclaration,
+    one_line,
+)
+from agent_comms.tool_denial import SelectedToolDenied
+from agent_comms.transport.native_tool_call import CodingCall, RefusedCodingCall
+from agent_comms.transport.request import ArgumentTool
 
 if TYPE_CHECKING:
-    from ..execution.turn_goal_permission import TurnGoalPermission
-    from ..pi_payloads import PiToolResult
-    from ..pi_rule_gate import PiRuleGate
+    from agent_comms.execution.turn_goal_permission import TurnGoalPermission
+    from agent_comms.pi_payloads import PiToolResult
+    from agent_comms.pi_rule_gate import PiRuleGate
 
 
 @dataclass(frozen=True, slots=True)

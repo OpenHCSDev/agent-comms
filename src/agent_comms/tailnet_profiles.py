@@ -19,12 +19,15 @@ from pathlib import Path
 
 from agent_comms.connector_profile import ReachedRoute, UiConnectionProfile, UiGrantId
 from agent_comms.connector_store import (
-    ExpiredProfile, HeldUiProfiles, OpenableProfile, UiAccess,
+    ExpiredProfile,
+    HeldUiProfiles,
+    OpenableProfile,
+    UiAccess,
 )
-from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.tool_result import ToolResult
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.tailnet_buses import PeerBus, TailnetBuses
+from agent_comms.tool_result import ToolResult
 
 
 class AskedPeer(ToolResult, DeclaredFamily, ABC, affix="Peer"):

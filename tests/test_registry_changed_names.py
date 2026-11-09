@@ -5,9 +5,9 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import UnreadRegistry
-from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_text import (
     ForkedParent,
     GivenThreadText,
@@ -64,6 +64,7 @@ def test_a_slice_holds_what_the_named_presentation_reads(tmp_path: Path) -> None
 
 def test_a_name_outside_the_slice_says_so(tmp_path: Path) -> None:
     import pytest
+
     from agent_comms.errors import OutsideRegistrySlice, UnregisteredThreadError
 
     cut = registry_with_a_fork(tmp_path).snapshot().only(("alpha",))
@@ -75,6 +76,7 @@ def test_a_name_outside_the_slice_says_so(tmp_path: Path) -> None:
 
 def test_a_name_asked_for_but_never_registered_is_unregistered(tmp_path: Path) -> None:
     import pytest
+
     from agent_comms.errors import OutsideRegistrySlice, UnregisteredThreadError
 
     cut = registry_with_a_fork(tmp_path).snapshot().only(("alpha", "nobody"))

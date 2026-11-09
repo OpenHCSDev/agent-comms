@@ -7,10 +7,10 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from .nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from .execution.turn_context import ContextSpan
+    from agent_comms.execution.turn_context import ContextSpan
 
 
 class DisclosureWithheld(ValueError):  # noqa: N818 - nominal refusal state

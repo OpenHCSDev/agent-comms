@@ -1,5 +1,5 @@
-from dataclasses import replace
 import sqlite3
+from dataclasses import replace
 
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.planning.goal_presentation import GoalWaitTarget

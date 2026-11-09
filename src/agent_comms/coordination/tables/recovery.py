@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import Annotated
 
-from agent_comms.nominal import field_codec
 from agent_comms.coordination.contracts import (
     MAX_SANITIZED_DETAIL_CHARS,
     validate_execution_id,
@@ -14,6 +13,7 @@ from agent_comms.coordination.contracts import (
 from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.coordination.tables.attempts import AttemptRecord
 from agent_comms.coordination.tables.executions import ExecutionReference
+from agent_comms.nominal import field_codec
 from agent_comms.reason_codes import GivenReasonCode, RecoveryDetail
 from agent_comms.recovery_states import RecoveryCondition
 from agent_comms.storage.typed_table import (

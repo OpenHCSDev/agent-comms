@@ -25,31 +25,28 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .history_view import OwnHistory
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import AcpSessionId, InputId
-from .execution.native_input_proof import NativeContextProof
-from .pi_counts import PiCount
-from .registry.thread_model import (
-    ThreadModel,
-    UndeclaredModel,
-)
-from .pi_commands import NativeQuery
-from .pi_payloads import PiResponseData
-from .pi_vocabulary import CompactionReason
-from .rule_deal import DealDelivery
-from .session_revision import NoSessionObservation, SessionObservation
-from .execution.turn_inbox import InputContent
-from .tool_result import DeclaredReply
-from .execution.turn_outcome import TurnOutcome
+from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.execution.turn_inbox import InputContent
+from agent_comms.execution.turn_outcome import TurnOutcome
+from agent_comms.history_view import OwnHistory
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import AcpSessionId, InputId
+from agent_comms.pi_commands import NativeQuery
+from agent_comms.pi_counts import PiCount
+from agent_comms.pi_payloads import PiResponseData
+from agent_comms.pi_vocabulary import CompactionReason
+from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
+from agent_comms.rule_deal import DealDelivery
+from agent_comms.session_revision import NoSessionObservation, SessionObservation
+from agent_comms.tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from .agent_events import AgentEvent
-    from .launch_runtime import LaunchRuntime
-    from .execution.owned_turn import TurnDelivery
-    from .registry.threads import Thread
-    from .transcript_sources import TranscriptSource
-    from .execution.turn_runner import TurnRunner
+    from agent_comms.agent_events import AgentEvent
+    from agent_comms.execution.owned_turn import TurnDelivery
+    from agent_comms.execution.turn_runner import TurnRunner
+    from agent_comms.launch_runtime import LaunchRuntime
+    from agent_comms.registry.threads import Thread
+    from agent_comms.transcript_sources import TranscriptSource
 
 
 class BackendDeclarationError(TypeError):

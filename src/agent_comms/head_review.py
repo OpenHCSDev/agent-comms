@@ -14,27 +14,28 @@ from pathlib import Path
 from time import monotonic, sleep
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
+from agent_comms.build_identity import RepositoryCommit
+from agent_comms.installer.runtime_resolution import PrivateUvProject, StackSources
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    GitCommitText,
+    MalformedRecord,
+    RecordProblems,
+    boundary_decoder,
+)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.repository_name import RepositoryName
+from agent_comms.work_branches import WorkBranches
 from agent_comms_hooks import ToolRefusedError
 
-from .build_identity import RepositoryCommit
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems, boundary_decoder
-from .installer.runtime_resolution import PrivateUvProject, StackSources
-from .projects.git_errors import GitCommandError
-from .projects.repo import Repo
-from .projects.checkouts import Checkout
-from .repository_name import RepositoryName
-from .registry.thread_identity import ThreadIncarnation
-from .work_branches import WorkBranches
-
 if TYPE_CHECKING:
-    from .planning.orders import (
-        HeadReviewRecord,
-        HeadVerdict,
-        Todo,
-    )
-    from .team.order import TeamContext
-    from .planning.goal_management import Goals
+    from agent_comms.planning.goal_management import Goals
+    from agent_comms.planning.orders import HeadReviewRecord, HeadVerdict, Todo
+    from agent_comms.team.order import TeamContext
 
 
 @dataclass(frozen=True, kw_only=True)

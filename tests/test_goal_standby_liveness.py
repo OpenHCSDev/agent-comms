@@ -1,17 +1,15 @@
 """Standby liveness preserves goal authority and never replays an input."""
 
 
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.messages import ConversationRole, NoticeRole
 import os
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.execution.turn_lease import NoFinishedTurn
-
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.turn_lease import NoFinishedTurn
+from agent_comms.messages import ConversationRole, NoticeRole
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.planning.goal_actions import (
     EditGoalAction,
@@ -21,18 +19,16 @@ from agent_comms.planning.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.planning.goal_waits import GoalWaits
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_waits import GoalWaits, NoGoalWait, RecordedGoalWait
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_status import (
     RunningThreadStatus,
     StoppedThreadStatus,
 )
-from goal_owner_fixture import canonical_goal_wire
-from agent_comms.planning.goal_waits import NoGoalWait
-from agent_comms.planning.goal_waits import RecordedGoalWait
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
-from agent_comms.planning.goal_scope import OneGoal
-
+from goal_owner_fixture import canonical_goal_wire
 
 
 def _thread(comms, name, worktree):

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from ..messaging.bus_write import HeldBusWrite
+from functools import partial
+
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
-from functools import partial
+from agent_comms.messaging.bus_write import HeldBusWrite
 
 
 class PublishingCliCommand(HeldBusWrite, CliCommand, declared_name=None):

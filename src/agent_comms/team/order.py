@@ -31,18 +31,22 @@ from typing import Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 
-from agent_comms.change_report import CitationProject, RegisteredRoots
-from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
-from agent_comms.team.standing import (
-    DeliveryAwaitingJudgement,
-    InstallDue,
-    UnownedWheelSpin,
+from agent_comms.change_report import (
+    CitationProject,
+    FileLine,
+    MainRevision,
+    NoSourceReference,
+    RegisteredRoots,
 )
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.errors import DeferredRead
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from ..messaging.sending import TeamReceipts
+from agent_comms.held_orders import HeldOrders
+from agent_comms.message_notification import MessageNotification
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
+from agent_comms.messaging.sending import TeamReceipts
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     Argument,
     FieldCodec,
@@ -55,63 +59,26 @@ from agent_comms.nominal.field_codec import (
     SubclassUnion,
     boundary_decoder,
 )
-from ..planning.goal_actions import (
-    CreateProblemGoalAction,
-    OrderGoalAction,
-)
-from ..planning.goals import (
-    CheckCommand,
-    CheckResult,
-    CountCheckResult,
-    OrderCheck,
-)
-from agent_comms.held_orders import HeldOrders
-from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
-from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
-from ..planning.plan_phases import (
-    OrderPhase,
-    PlanPhase,
-)
 from agent_comms.notification_evidence import AllOutcomes
-from agent_comms.message_notification import MessageNotification
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry.registry_document import RegisteredTeamProject
-from ..projects.repo import Repo
-from ..projects.checkouts import RepositoryReads
-from agent_comms.repository_name import RepositoryName
-from agent_comms.team_hud import TeamPlanDocument
-from agent_comms.slop import Slop
-from ..registry.thread_identity import ThreadIncarnation
-from agent_comms.tool_caller import ForkCaller, PeerCaller, NoThreadCaller
-from agent_comms.storage.typed_table import RowNotFoundError
-
-from .standing_rules import (
-    ClearingVerb,
-    HuntDue,
-    OwedAnswer,
-)
-from ..planning.delivery_evidence import (
-    DeliveryEvidence,
-    TodoProblems,
-    WorkingEvidence,
-)
-from ..planning.order_words import (
+from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
+from agent_comms.planning.delivery_evidence import DeliveryEvidence, TodoProblems, WorkingEvidence
+from agent_comms.planning.goal_actions import CreateProblemGoalAction, OrderGoalAction
+from agent_comms.planning.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
+from agent_comms.planning.order_words import (
     BluntText,
     DirectiveText,
     OrderText,
     OrderWords,
     StrikeReason,
 )
-from ..planning.orders import (
+from agent_comms.planning.orders import (
     CheckedDelivery,
     CleanHunt,
     CorrectLinkTodo,
     DeliverySource,
     OperationDelivery,
-    OrderProgress,
     OrderedHunt,
+    OrderProgress,
     PendingProblemOrder,
     PullRequests,
     RecordPullRequest,
@@ -122,7 +89,8 @@ from ..planning.orders import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
-from ..planning.problem_findings import (
+from agent_comms.planning.plan_phases import OrderPhase, PlanPhase
+from agent_comms.planning.problem_findings import (
     ExpectedProblem,
     LocatedProblemFinding,
     NoSuccessor,
@@ -130,8 +98,25 @@ from ..planning.problem_findings import (
     Successor,
     UnlocatedProblemFinding,
 )
-from ..planning.pull_requests import PullRequestLink
-from ..transport.tools.orders import (
+from agent_comms.planning.pull_requests import PullRequestLink
+from agent_comms.projects.checkouts import RepositoryReads
+from agent_comms.projects.repo import Repo
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registry.registry_document import RegisteredTeamProject
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.repository_name import RepositoryName
+from agent_comms.slop import Slop
+from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
+from agent_comms.storage.typed_table import RowNotFoundError
+from agent_comms.team.standing import (
+    DeliveryAwaitingJudgement,
+    InstallDue,
+    UnownedWheelSpin,
+)
+from agent_comms.team.standing_rules import ClearingVerb, HuntDue, OwedAnswer
+from agent_comms.team_hud import TeamPlanDocument
+from agent_comms.tool_caller import ForkCaller, NoThreadCaller, PeerCaller
+from agent_comms.transport.tools.orders import (
     CommsChangeProblemTool,
     CommsFireTool,
     CommsOrderCheckTool,

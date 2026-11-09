@@ -8,16 +8,19 @@ from http.client import HTTPException
 
 from acp.schema import SessionInfoUpdate
 
-from .acp_extension import ContextAnnotatedUpdate, encode_updates
-from .coordination.database import CoordinationStore
-from .coordination.coordinator import Coordination
-from .working_memory_annotations import PreviouslyRequestedAnnotation, WorkingMemoryAnnotations
-from .annotation_disclosure import DisclosureWithheld
-from .working_memory_disclosure import DisclosureState
-from .working_memory_labels import QuestionVersion
-from .working_memory_policy import AnnotationPolicy
-from .working_memory_questions import KindQuestion
-from .working_memory_requests import (
+from agent_comms.acp_extension import ContextAnnotatedUpdate, encode_updates
+from agent_comms.annotation_disclosure import DisclosureWithheld
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.working_memory_annotations import (
+    PreviouslyRequestedAnnotation,
+    WorkingMemoryAnnotations,
+)
+from agent_comms.working_memory_disclosure import DisclosureState
+from agent_comms.working_memory_labels import QuestionVersion
+from agent_comms.working_memory_policy import AnnotationPolicy
+from agent_comms.working_memory_questions import KindQuestion
+from agent_comms.working_memory_requests import (
     AnnotationBudgetExhausted,
     DisclosureRequest,
     FailedAnnotationOutcome,
@@ -62,7 +65,7 @@ class AnnotationWorker:
         rows = await Coordination.run_worker(partial(WorkingMemoryAnnotations.labels,
             self.comms.registry.store.coordinator_reader, span, version, grant.classifier))
         if rows:
-            from .coordination.tables.annotations import SpanAnnotationsRow
+            from agent_comms.coordination.tables.annotations import SpanAnnotationsRow
 
             return SpanAnnotationsRow.effective(rows)
         state = DisclosureState.capture(segment, span, question, rules)

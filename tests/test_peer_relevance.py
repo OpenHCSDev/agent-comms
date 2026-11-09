@@ -1,24 +1,16 @@
 """How much one thread matters to another, and what its peers see of that."""
 
-from agent_comms.projects.checkouts import Checkout
-from conftest import publish_initial
 import json
 from dataclasses import replace
 
-from agent_comms.execution.child_process import NoProcess
-
 import pytest
 
-from conftest import installed_comms
 from agent_comms.context_segments.partner_activity import PartnerActivitySegment
-from agent_comms.planning.goal_actions import (
-    CompletedGoalAction,
-    GoalPrecondition,
-    SetGoalAction,
-)
-from agent_comms.planning.goal_states import (
-    ActiveGoal,
-    CompletedGoal,
+from agent_comms.execution.child_process import NoProcess
+from agent_comms.execution.turn_context import (
+    CoordinationSegment,
+    NextContextTurn,
+    TurnContext,
 )
 from agent_comms.peer_relevance import (
     AlwaysListed,
@@ -30,15 +22,21 @@ from agent_comms.peer_relevance import (
     StrangerRelevance,
     Visible,
 )
-from agent_comms.relationships import RelationshipEdit
-from agent_comms.registry.thread_text import ForkedParent
-from agent_comms.registry.threads import NativeThread
-from agent_comms.execution.turn_context import (
-    CoordinationSegment,
-    NextContextTurn,
-    TurnContext,
+from agent_comms.planning.goal_actions import (
+    CompletedGoalAction,
+    GoalPrecondition,
+    SetGoalAction,
 )
 from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_states import (
+    ActiveGoal,
+    CompletedGoal,
+)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_text import ForkedParent
+from agent_comms.registry.threads import NativeThread
+from agent_comms.relationships import RelationshipEdit
+from conftest import installed_comms, publish_initial
 
 
 def _wire(tmp_path, *threads):

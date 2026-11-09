@@ -12,29 +12,21 @@ from functools import cached_property
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Mapping, Self
 
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.comms import Comms
-from agent_comms.nominal.field_codec import MessageId
 from agent_comms.head_review import PullRequestHead
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import MessageId
 from agent_comms.owner_requests import OwnerRequestId
-from .planning.plan_phases import PlanPhase
+from agent_comms.planning.orders import HeadVerdict, StoredHeadReview
+from agent_comms.planning.plan_phases import PlanPhase
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.service_passes import ServicePasses, ServicePassStore
 from agent_comms.team_service import TeamService
-from .registry.thread_identity import (
-    RecordedThreadIncarnation,
-    ThreadIncarnation,
-)
-
-from .planning.orders import (
-    HeadVerdict,
-    StoredHeadReview,
-)
-
 
 if TYPE_CHECKING:
-    from .planning.plan_phases import OrderPhase
+    from agent_comms.planning.plan_phases import OrderPhase
 
 
 @dataclass(frozen=True)

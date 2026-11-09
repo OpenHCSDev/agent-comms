@@ -4,22 +4,28 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Annotated
 from pathlib import Path
+from typing import Annotated
 
-from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
-from .bus_publication import DirectorOrigin
-from .comms import Comms
-from .nominal.field_codec import FieldCodec, MalformedRecord, RootId
-from .planning.order_words import DirectiveText
-from .registry.registry_store import RegistryStore
-from .read_basis import OperatorOutcomes
-from .tool_caller import ForkCaller, HumanCaller, NoThreadCaller, ThreadCaller, ToolCaller
-from .tool_request import ReadTool, ServedRequest, ToolArgumentsRefusedError
-from .transport.request import ToolRequest, tool_field
-from .tool_result import ToolResult
+from agent_comms.bus_publication import DirectorOrigin
+from agent_comms.comms import Comms
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RootId
+from agent_comms.planning.order_words import DirectiveText
+from agent_comms.read_basis import OperatorOutcomes
+from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.tool_caller import (
+    ForkCaller,
+    HumanCaller,
+    NoThreadCaller,
+    ThreadCaller,
+    ToolCaller,
+)
+from agent_comms.tool_request import ReadTool, ServedRequest, ToolArgumentsRefusedError
+from agent_comms.tool_result import ToolResult
+from agent_comms.transport.request import ToolRequest, tool_field
+from agent_comms_hooks import ToolRefusedError
 
 
 class GrantRefusedError(ToolRefusedError):

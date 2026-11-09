@@ -7,12 +7,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .child_process import NoProcess, ProcessState
-from ..nominal.field_codec import boundary_decoder
-from ..publication_measurements import PublicationMeasurements
+from agent_comms.execution.child_process import NoProcess, ProcessState
+from agent_comms.nominal.field_codec import boundary_decoder
+from agent_comms.publication_measurements import PublicationMeasurements
 
 if TYPE_CHECKING:
-    from .native_pi import NativePiRpcLaunch
+    from agent_comms.execution.native_pi import NativePiRpcLaunch
 
 
 class SessionLoad(ABC):

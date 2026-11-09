@@ -8,15 +8,15 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.coordination.errors import PublicationActivationBlocked
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import PublicationActivationBlocked
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
+from agent_comms.tool_caller import ThreadCaller
 from bus_record_fixture import prepare_native_comms
 from test_coordinated_runtime import tmp_path as private_root_fixture
 

@@ -2,11 +2,11 @@
 import pytest
 
 from agent_comms.bus_activity_index import BusActivityIndex
-from agent_comms.errors import UnknownChannelError
 from agent_comms.channels import RetiredTagChannel
+from agent_comms.errors import UnknownChannelError
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import ThreadRows
-from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread
 from conftest import installed_comms
 

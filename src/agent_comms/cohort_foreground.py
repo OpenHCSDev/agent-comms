@@ -5,15 +5,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+from agent_comms.cohort_schema import AcceptanceFrontier, CohortDeliveries, CohortTable
+from agent_comms.coordination.cohort import AcceptedCohort
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.session import NativeCommit
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.errors import RelationViolationError
+from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import RootId, ThreadLookup
-
-from .cohort_schema import AcceptanceFrontier, CohortDeliveries, CohortTable
-from .coordination.cohort import AcceptedCohort
-from .errors import RelationViolationError
-from .messaging.message_bus import MessageBus
 
 
 async def _accept_visible_deliveries(

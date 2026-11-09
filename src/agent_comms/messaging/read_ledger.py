@@ -14,50 +14,34 @@ from dataclasses import (
 )
 from pathlib import Path
 
-from ..bus import (
-    Bus,
-    BusReader,
-)
-from ..bus_publication import Delivered
-from ..channel_targets import CommandTarget
-from ..coordination.errors import DMScopeChanged
-from ..messages import Message
-from ..nominal.field_codec import (
-    FieldCodec,
-    NullMember,
-    SingleFieldValue,
-    SubclassUnion,
-)
-from ..nominal.sealed import Sealed
-from ..read_basis import (
+from agent_comms.bus import Bus, BusReader
+from agent_comms.bus_publication import Delivered
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.coordination.errors import DMScopeChanged
+from agent_comms.messages import Message
+from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.nominal.sealed import Sealed
+from agent_comms.read_basis import (
     AllConversation,
     ChannelConversation,
     Conversation,
     ConversationCursor,
-    DMConversation,
     DisplayBasis,
     DisplayedConversation,
+    DMConversation,
     MessageDisplayScope,
     ReadCursor,
 )
-from ..recorded_bus import (
-    NoRecordedBus,
-    RecordedBus,
-    RecordedBusIdentity,
-)
-from ..registry.registry_document import RegistrySnapshot
-from ..registry.threads import Thread
-from ..registry_provenance import RegistryProvenance
-from ..storage.locked_store import DocumentChange
-from ..storage.maintenance_barrier import CarriedDocument
-from ..storage.private_path import ObservedPath
-from ..storage.store_files import (
-    DependentStateTier,
-    SingleFileStore,
-)
-from ..registry.thread_identity import RecordedThreadIncarnation
-from ..registry.thread_owned_state import ThreadOwnedState
-
+from agent_comms.recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_owned_state import ThreadOwnedState
+from agent_comms.registry.threads import Thread
+from agent_comms.registry_provenance import RegistryProvenance
+from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.storage.maintenance_barrier import CarriedDocument
+from agent_comms.storage.private_path import ObservedPath
+from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 
 
 class ReadNotice(SubclassUnion, affix="ReadNotice"):

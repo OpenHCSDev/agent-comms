@@ -12,8 +12,8 @@ import tempfile
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
-from ..execution.child_process import ResidentManager
 from agent_comms.build_artifact import BuildArtifact
+from agent_comms.execution.child_process import ResidentManager
 from agent_comms.installer.building_runtime import BuildingRuntime
 from agent_comms.installer.carry import STEPS
 from agent_comms.installer.commands import InstallCommands
@@ -25,19 +25,23 @@ from agent_comms.installer.interpreter_operation import (
     RuntimeProbe,
     TargetProgram,
 )
+from agent_comms.installer.native_build_inputs import NativeBuildInputs
+from agent_comms.installer.native_package import NativePackageStore, pinned_package_for
 from agent_comms.installer.practice import RuntimeHome
 from agent_comms.installer.probes.imports import ClientImportsProbe
 from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
 from agent_comms.installer.probes.resolution import InstalledPackagesProbe, RuntimeResolutionProbe
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_resolution import (
-    ConsoleScriptPackage, ProjectMetadata, ResolvedLock, RuntimePackage, RuntimeResolution,
+    ConsoleScriptPackage,
+    ProjectMetadata,
+    ResolvedLock,
+    RuntimePackage,
+    RuntimeResolution,
 )
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
-from .native_build_inputs import NativeBuildInputs
-from .native_package import NativePackageStore, pinned_package_for
-from ..projects.checkouts import Checkout
-from ..projects.storage_rules import StorageRule
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.storage_rules import StorageRule
 
 HOME = Path.home()
 

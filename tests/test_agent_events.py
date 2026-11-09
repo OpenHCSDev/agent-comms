@@ -1,17 +1,17 @@
 """Nominal extension, dispatch ordering, and shared settlement contracts."""
 
-from agent_comms.pi_wire import RequestId
 from dataclasses import dataclass, replace
 
 import pytest
-
-import agent_comms.agent_events as events
-from agent_comms.pending_requests import PendingRequests
 from metaclass_registry.mro_dispatch import (
     MroDispatch,
     handles,
 )
+
+import agent_comms.agent_events as events
 from agent_comms.execution.turn_item import PiRequestKey
+from agent_comms.pending_requests import PendingRequests
+from agent_comms.pi_wire import RequestId
 
 
 async def test_mro_specific_before_shared_and_consumer_override():

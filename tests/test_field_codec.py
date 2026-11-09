@@ -1,5 +1,4 @@
 
-from agent_comms.nominal.field_codec import ReportExclude, StatusExclude, WireExclude
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -9,6 +8,18 @@ import pytest
 from pydantic import BaseModel, JsonValue
 from typing_extensions import TypeForm
 
+from agent_comms.execution.turn_item import NativeItemId
+from agent_comms.messages import (
+    ConversationRole,
+    InfoKind,
+    JoinedMembership,
+    LeftMembership,
+    MembershipConversationRole,
+    MembershipNoticeRole,
+    Message,
+    MessageRole,
+    NoticeRole,
+)
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     DeclaredWireType,
@@ -26,8 +37,10 @@ from agent_comms.nominal.field_codec import (
     PathText,
     RecordedTimestamp,
     RecordMember,
+    ReportExclude,
     RootId,
     SnapshotExclude,
+    StatusExclude,
     SubclassUnion,
     TextRepresentation,
     ThreadLookup,
@@ -36,29 +49,18 @@ from agent_comms.nominal.field_codec import (
     TurnId,
     UnsupportedFieldType,
     ValueDecoder,
-    compile_decoder,
     WireAbsentNone,
     WireContext,
+    WireExclude,
     WireInline,
     WireName,
     WireNonNull,
     WireTransient,
     WireValue,
+    compile_decoder,
     projected,
 )
-from agent_comms.messages import (
-    ConversationRole,
-    InfoKind,
-    JoinedMembership,
-    LeftMembership,
-    MembershipConversationRole,
-    MembershipNoticeRole,
-    Message,
-    MessageRole,
-    NoticeRole,
-)
 from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.execution.turn_item import NativeItemId
 from conftest import transcript_records
 
 

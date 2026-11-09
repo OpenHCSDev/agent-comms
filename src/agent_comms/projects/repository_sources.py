@@ -7,17 +7,14 @@ from typing import TYPE_CHECKING
 
 from pydantic import JsonValue
 
-from .checkouts import Checkout
-from .repo import Repo
-from ..nominal.field_codec import (
-    FieldCodec,
-    WireValue,
-)
-from ..repository_name import RepositoryName
+from agent_comms.nominal.field_codec import FieldCodec, WireValue
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repo import Repo
+from agent_comms.repository_name import RepositoryName
 
 if TYPE_CHECKING:
-    from ..registry.threads import Thread
-    from .storage_rules import StorageRule
+    from agent_comms.projects.storage_rules import StorageRule
+    from agent_comms.registry.threads import Thread
 
 
 class RepositorySource(WireValue):

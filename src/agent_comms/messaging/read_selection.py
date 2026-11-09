@@ -3,25 +3,16 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from .read_ledger import (
-    ReadDocument,
-    ReadLedger,
-)
-from ..activity_clocks import ActivityClocks
-from ..bus import BusSnapshot
-from ..catalog_document import CatalogDocument
-from ..catalog_store import ChannelCatalog
-from ..channels import Channels
-from ..read_basis import (
-    ChannelDisplayScope,
-    DisplayViewer,
-    ReadCursor,
-    UnreadQuery,
-)
-from ..registry.registration import Registration
-from ..registry.registry_document import RegistrySnapshot
-from ..registry_provenance import RegistryProvenance
-
+from agent_comms.activity_clocks import ActivityClocks
+from agent_comms.bus import BusSnapshot
+from agent_comms.catalog_document import CatalogDocument
+from agent_comms.catalog_store import ChannelCatalog
+from agent_comms.channels import Channels
+from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
+from agent_comms.read_basis import ChannelDisplayScope, DisplayViewer, ReadCursor, UnreadQuery
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True, slots=True)

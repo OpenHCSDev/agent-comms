@@ -1,11 +1,4 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.transport.runtime_requests import QueueActionRuntimeRequest
-from agent_comms.owner_connection import (
-    CapturedOwner, OwnerIdentityChangedError, OwnerReplyConnection, OwnerReplyLostError, socket_path,
-)
-from agent_comms.controller import SessionUpdateSink
-
 import asyncio
 import json
 import os
@@ -14,7 +7,10 @@ from dataclasses import replace
 
 import pytest
 from acp.schema import (
-    ConfigOptionUpdate, SessionConfigOptionSelect, SessionConfigSelectOption, SessionInfoUpdate,
+    ConfigOptionUpdate,
+    SessionConfigOptionSelect,
+    SessionConfigSelectOption,
+    SessionInfoUpdate,
 )
 
 from agent_comms.acp_extension import (
@@ -23,24 +19,33 @@ from agent_comms.acp_extension import (
     decode_updates,
     encode_updates,
 )
+from agent_comms.comms import wire
+from agent_comms.controller import SessionUpdateSink
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.execution.native_arguments import GivenBinary
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.input_key import BusInputKey
 from agent_comms.messaging.bus_read import OwnerReadRuntimeRequest
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, RootId
+from agent_comms.owner_connection import (
+    CapturedOwner,
+    OwnerIdentityChangedError,
+    OwnerReplyConnection,
+    OwnerReplyLostError,
+    socket_path,
+)
+from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.runtime import RuntimeConnection, present_session
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.storage.private_path import PrivateSocketRole
+from agent_comms.tool_caller import ToolCaller
+from agent_comms.transport.runtime_request import RuntimeRequest
+from agent_comms.transport.runtime_requests import QueueActionRuntimeRequest
 from agent_comms.transport.tools.orders import ServedInputDeliveryRead
 from agent_comms.transport.tools.reads import InputDeliveryRead
-from agent_comms.transport.runtime_request import RuntimeRequest
-from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.tool_caller import ToolCaller
-from agent_comms.comms import wire
-from agent_comms.nominal.field_codec import AcpSessionId, RootId
-from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
-from agent_comms.runtime import RuntimeConnection, present_session
-from agent_comms.storage.private_path import PrivateSocketRole
-from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.execution.native_arguments import GivenBinary
 from delivery_owner_fixture import canonical_agent
 from owner_socket_fixture import declare_owner, silent_socket
 from stored_inputs import stored_inputs

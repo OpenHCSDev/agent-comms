@@ -1,6 +1,5 @@
 """Acquired original native fixture: a saved Pi session, its owner and a loopback provider."""
 
-from agent_comms.projects.checkouts import Checkout
 import asyncio
 import json
 import os
@@ -11,29 +10,30 @@ from unittest.mock import patch
 
 import agent_comms.agent_events as events
 import agent_comms.backend as backend
+from agent_comms.acp import SdkSessionConnection
 from agent_comms.agent_backend import NoInputStartListener
+from agent_comms.comms import wire
+from agent_comms.controller import NO_CONTROLLER, NoController
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.execution.child_process import (
+    BoundedRun,
+    join_retirement,
+)
+from agent_comms.execution.native_arguments import GivenArguments, GivenBinary, NativeArguments
+from agent_comms.execution.native_child import PiSessionChild
+from agent_comms.execution.selected.actions import NoSelectedTools
 from agent_comms.execution.turn_inbox import (
     InputContent,
     InputRequest,
     SteerInputPolicy,
     TurnInbox,
 )
-from agent_comms.execution.child_process import (
-    BoundedRun,
-    join_retirement,
-)
-from agent_comms.acp import SdkSessionConnection
-from agent_comms.comms import wire
-from agent_comms.controller import NO_CONTROLLER, NoController
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.cursor_publication import CursorDelivery
-from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.fresh_private_session import create_fresh_private_session
-from agent_comms.execution.native_arguments import GivenArguments, GivenBinary, NativeArguments
-from agent_comms.execution.native_child import PiSessionChild
 from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.pi_native_backend import PersistentPiSession
-from agent_comms.execution.selected.actions import NoSelectedTools
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread

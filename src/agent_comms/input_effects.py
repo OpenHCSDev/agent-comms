@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 from agent_comms.nominal.field_codec import AcpSessionId, RootId
 
 if TYPE_CHECKING:
-    from .cursor_publication import CursorPublication
-    from .execution.turn_runner import TurnRunner
+    from agent_comms.cursor_publication import CursorPublication
+    from agent_comms.execution.turn_runner import TurnRunner
 
 
 class InputEffects(ABC):

@@ -21,28 +21,22 @@ from typing import (
     Self,
 )
 
-from ..bus_publication import Delivered
-from ..bus_tables import ReceivedSource
-from ..class_fact import ClassFact
-from ..messages import (
+from agent_comms.bus_publication import Delivered
+from agent_comms.bus_tables import ReceivedSource
+from agent_comms.class_fact import ClassFact
+from agent_comms.messages import (
     BusProjectionTables,
     BusRow,
     MessageInput,
     PublicRecord,
     PublicSender,
 )
-from ..nominal.field_codec import ThreadLookup
-from ..page_traversal import PageTraversal
-from ..projection_source import ProducedRow
-from ..read_basis import ReadCursor
-from ..routing import DeliveryScope
-from ..storage.typed_table import (
-    Column,
-    ExpressionIndex,
-    Index,
-    TypedRow,
-)
-
+from agent_comms.nominal.field_codec import ThreadLookup
+from agent_comms.page_traversal import PageTraversal
+from agent_comms.projection_source import ProducedRow
+from agent_comms.read_basis import ReadCursor
+from agent_comms.routing import DeliveryScope
+from agent_comms.storage.typed_table import Column, ExpressionIndex, Index, TypedRow
 
 
 @dataclass(frozen=True)

@@ -6,12 +6,12 @@ from abc import abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .coordination.errors import IdentityConflict, IntegrityViolationError
-from .coordination.vocabulary import CoordinatorVocabulary
-from .nominal.field_codec import AssignmentId, FieldCodec, ThreadLookup
-from .lifecycle import LifecycleState
-from .lifecycle_capability import Active, Complete, Deferred, Failed, Pending, Terminal
-from .notification_progress import (
+from agent_comms.coordination.errors import IdentityConflict, IntegrityViolationError
+from agent_comms.coordination.vocabulary import CoordinatorVocabulary
+from agent_comms.lifecycle import LifecycleState
+from agent_comms.lifecycle_capability import Active, Complete, Deferred, Failed, Pending, Terminal
+from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, ThreadLookup
+from agent_comms.notification_progress import (
     CompletedProgress,
     ContextualProgress,
     FailedProgress,
@@ -21,23 +21,31 @@ from .notification_progress import (
     PendingProgress,
     UnrecordedProgress,
 )
-from .source_proof_requirement import ProvedByInput, SettledWithoutInput, SourceSettlement, Unproved
-from .storage.typed_table import sql_literal
-from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
+from agent_comms.source_proof_requirement import (
+    ProvedByInput,
+    SettledWithoutInput,
+    SourceSettlement,
+    Unproved,
+)
+from agent_comms.storage.typed_table import sql_literal
+from agent_comms.wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from typing import Self
 
-    from .agent_activity import RecipientActivity
-    from .frozen_recipient import FrozenRecipient
-    from .bus_publication import Delivered
-    from .coordination.tables.assignments import WakeAssignment
-    from .coordination.tables.responses import ResponseObligation
-    from .historical_native_inputs import FailedTriageHistoricalNativeInput, HistoricalNativeInput
-    from .execution.native_input_record import TriageNativeExecution
-    from .notification_assignment import AssignmentActivity
-    from .message_notification import MessageNotification
+    from agent_comms.agent_activity import RecipientActivity
+    from agent_comms.bus_publication import Delivered
+    from agent_comms.coordination.tables.assignments import WakeAssignment
+    from agent_comms.coordination.tables.responses import ResponseObligation
+    from agent_comms.execution.native_input_record import TriageNativeExecution
+    from agent_comms.frozen_recipient import FrozenRecipient
+    from agent_comms.historical_native_inputs import (
+        FailedTriageHistoricalNativeInput,
+        HistoricalNativeInput,
+    )
+    from agent_comms.message_notification import MessageNotification
+    from agent_comms.notification_assignment import AssignmentActivity
 
 
 @dataclass(frozen=True)
@@ -151,7 +159,7 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment")
         updated_at_ms: int = 0,
         triage_inflight: bool = False,
     ) -> MessageNotification:
-        from .message_notification import MessageNotification
+        from agent_comms.message_notification import MessageNotification
 
         return MessageNotification(
             recipient,
@@ -566,7 +574,7 @@ class FailedAssignment(Failed, Terminal, InterruptedAssignment):
 
     def rejected_triage_history(self, execution: TriageNativeExecution, **source) -> FailedTriageHistoricalNativeInput:
         """A proved rejected result is delivered source, never an IGNORE decision."""
-        from .historical_native_inputs import FailedTriageHistoricalNativeInput
+        from agent_comms.historical_native_inputs import FailedTriageHistoricalNativeInput
 
         return FailedTriageHistoricalNativeInput(execution=execution, **source)
 

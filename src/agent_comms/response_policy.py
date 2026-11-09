@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .class_fact import ClassFact
 from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -10,13 +9,14 @@ from functools import cache
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from .nominal.declared_family import DeclaredFamily
-from .input_key import BusInputKey, InputKey, OwnedBusInputKey
-from .projection_source import ProducedRow, ProjectionSource
+from agent_comms.class_fact import ClassFact
+from agent_comms.input_key import BusInputKey, InputKey, OwnedBusInputKey
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.projection_source import ProducedRow, ProjectionSource
 
 if TYPE_CHECKING:
-    from .messages import Message, MessageInput
-    from .registry.threads import Thread
+    from agent_comms.messages import Message, MessageInput
+    from agent_comms.registry.threads import Thread
 
 
 NO_ALIASES: Mapping[str, str] = MappingProxyType({})
@@ -28,7 +28,7 @@ class ResponsePolicy(DeclaredFamily, ProjectionSource, affix="Policy"):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_tables import AwaitingAnswerSource
+        from agent_comms.bus_tables import AwaitingAnswerSource
         return (AwaitingAnswerSource,)
 
     starts_turn = False
@@ -146,7 +146,7 @@ class ResponseEligibility(ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_tables import AwaitingAnswerSource
+        from agent_comms.bus_tables import AwaitingAnswerSource
         return (AwaitingAnswerSource,)
 
     policy: ResponsePolicy

@@ -11,12 +11,12 @@ from urllib.request import (
     urlopen,
 )
 
-from .cli_result import CliResult
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec
-from .registry.thread_identity import ThreadIncarnation
-from .execution.turn_context import ContextSpan
-from .working_memory_questions import OtherSpan, SpanAnswer, SpanQuestion
+from agent_comms.cli_result import CliResult
+from agent_comms.execution.turn_context import ContextSpan
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.working_memory_questions import OtherSpan, SpanAnswer, SpanQuestion
 
 
 class Classifier(DeclaredFamily, affix="Classifier"):
@@ -275,7 +275,7 @@ class JevClassifier(Classifier):
 
     @classmethod
     async def classify(cls, request, api_key: str):
-        from .coordination.coordinator import Coordination
+        from agent_comms.coordination.coordinator import Coordination
 
         def send():
             external = Request(cls.endpoint, data=json.dumps(request.payload()).encode(),

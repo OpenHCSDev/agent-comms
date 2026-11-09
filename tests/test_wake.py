@@ -1,6 +1,5 @@
 """Shadow-only wake and exact-route decisions; live compatibility stays unchanged."""
 
-from agent_comms.projects.checkouts import Checkout
 from dataclasses import replace
 from pathlib import Path
 from typing import Type
@@ -9,7 +8,6 @@ import pytest
 
 from agent_comms.audience_manifest import AudiencedMessage, freeze_audience
 from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import (
     AckKind,
@@ -21,13 +19,15 @@ from agent_comms.messages import (
     MessageKind,
     NoticeRole,
 )
-from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedPolicy
+from agent_comms.nominal.field_codec import ThreadLookup
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import (
     AgentThreadRole,
     ThreadRole,
     UserThreadRole,
 )
 from agent_comms.registry.threads import NativeThread
+from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedPolicy
 from agent_comms.wake import (
     MessageControl,
     OrdinaryControl,

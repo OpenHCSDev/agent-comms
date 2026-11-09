@@ -17,10 +17,7 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from .declared_family import (
-    DeclaredFamily,
-    FamilyMeta,
-)
+from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMeta
 
 
 class FamilyOptions(TypedDict, total=False):

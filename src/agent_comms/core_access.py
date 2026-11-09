@@ -11,11 +11,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import cast
 
-from .comms import Comms
-from .tool_caller import HumanCaller
-from .tool_request import ServedRequest
-from .transport.request import CoreAccess, ToolRequest
-from .tool_result import ToolResult
+from agent_comms.comms import Comms
+from agent_comms.tool_caller import HumanCaller
+from agent_comms.tool_request import ServedRequest
+from agent_comms.tool_result import ToolResult
+from agent_comms.transport.request import CoreAccess, ToolRequest
 
 
 @dataclass(frozen=True)

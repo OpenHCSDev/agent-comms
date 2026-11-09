@@ -1,22 +1,22 @@
 """Canonical page identity covers byte and annotation/source changes."""
 
-from agent_comms.projects.checkouts import Checkout
 import json
 import sqlite3
 from contextlib import closing
 
 import pytest
 
-from agent_comms.session_file import RegistrySessionLocation
-from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID
-from conftest import installed_comms
 from agent_comms.coordination.errors import StaleRevision
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_text import (
     ForkedParent,
     GivenThreadText,
 )
 from agent_comms.registry.threads import NativeThread
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.transcript_routes import NoDisplayText
+from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID
+from conftest import installed_comms
 
 
 @pytest.mark.parametrize("journal_mode", ["DELETE", "WAL"])
@@ -97,6 +97,7 @@ def test_native_rewrite_inside_captured_cut_revokes_the_read(tmp_path):
 
 def test_thread_activity_and_annotations_do_not_replay_saved_content(tmp_path):
     from dataclasses import replace
+
     from agent_comms.acp_extension import TranscriptSnapshotUpdate
 
     comms = installed_comms(tmp_path / "wire")

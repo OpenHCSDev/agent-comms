@@ -7,28 +7,21 @@ from dataclasses import (
     replace,
 )
 from typing import (
-    ClassVar,
     TYPE_CHECKING,
+    ClassVar,
 )
 
-from ..lifecycle import LifecycleState
-from ..lifecycle_capability import (
-    Active,
-    Complete,
-    Terminal,
-)
-from ..nominal.declared_family import DeclaredFamily
+from agent_comms.lifecycle import LifecycleState
+from agent_comms.lifecycle_capability import Active, Complete, Terminal
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from .goal_actions import (
-        GoalActionContext,
-        ProblemOrderGoalAction,
-    )
-    from .goal_management import GoalExecutionSource
-    from .goal_presentation import GoalExecution
-    from .goals import Goal
-    from ..registry.threads import Thread
-    from ..registry.thread_identity import ThreadIncarnation
+    from agent_comms.planning.goal_actions import GoalActionContext, ProblemOrderGoalAction
+    from agent_comms.planning.goal_management import GoalExecutionSource
+    from agent_comms.planning.goal_presentation import GoalExecution
+    from agent_comms.planning.goals import Goal
+    from agent_comms.registry.thread_identity import ThreadIncarnation
+    from agent_comms.registry.threads import Thread
 
 
 @dataclass(frozen=True)
@@ -51,7 +44,7 @@ class PauseSource(DeclaredFamily, affix="Pause"):
 
 class OwnerPause(PauseSource):
     def instruction(self) -> str:
-        from ..execution.turn_context import InstructionFile
+        from agent_comms.execution.turn_context import InstructionFile
         return InstructionFile.read("owner-pause.md").content
 
 
@@ -88,7 +81,7 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
         return action.continue_goal(goal, ctx)
 
     def require_work(self, actor: ThreadIncarnation, owner: Thread) -> None:
-        from .goals import GoalConsentRequired
+        from agent_comms.planning.goals import GoalConsentRequired
         if not actor.represents(owner.incarnation):
             raise GoalConsentRequired(owner, actor)
 
@@ -174,7 +167,7 @@ class PausedGoal(OpenGoal, FromOpenGoal):
     source: PauseSource = field(default_factory=OwnerPause)
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        from .goal_presentation import PausedExecution
+        from agent_comms.planning.goal_presentation import PausedExecution
         return PausedExecution(source.goal.id, self.source)
 
     @property
@@ -219,7 +212,7 @@ class BlockedState(GoalState, FromOpenGoal, declared_name=None):
         return "reason unavailable"
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        from .goal_presentation import RetryableBlockExecution
+        from agent_comms.planning.goal_presentation import RetryableBlockExecution
         return RetryableBlockExecution(source.goal.id, self.reason)
 
     def blocked_reasons(self) -> tuple[str, ...]:
@@ -269,7 +262,7 @@ class CompletedGoal(Complete, Terminal, GoalState, FromOpenGoal):
         return (thread,)
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        from .goal_presentation import CompletedExecution
+        from agent_comms.planning.goal_presentation import CompletedExecution
         return CompletedExecution(source.goal.id)
 
     def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:

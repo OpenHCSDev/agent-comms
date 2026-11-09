@@ -8,8 +8,33 @@ from collections.abc import Callable
 from contextlib import chdir, nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime
-from pathlib import Path
 from functools import partial
+from pathlib import Path
+
+import pytest
+
+from agent_comms.build_identity import RepositoryCommit
+from agent_comms.closed_pull_requests import ClosedPullRequestWatch
+from agent_comms.comms import Comms
+from agent_comms.connector_caller import DirectorCaller
+from agent_comms.errors import TodoError
+from agent_comms.head_review import (
+    DraftMergeArm,
+    HeadReview,
+    IntegrationInput,
+    LocalIntegrationSource,
+    MergedIntegrationSource,
+    MergeHeadReview,
+    OrdinaryInput,
+    PromotedHeadReview,
+    PullRequestHead,
+    ReadPullRequestHead,
+)
+from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
+from agent_comms.heartbeat_subjects import HeadSubject, TeamHistory, UnlandedHeadSubject
+from agent_comms.integration import IntegrationRun
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, MalformedRecord, RecordProblems
+from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from agent_comms.planning.order_words import (
     GrowthReason,
     StrikeReason,
@@ -45,6 +70,20 @@ from agent_comms.planning.pull_requests import (
     FailedCheckMergeBlock,
     PullRequestLink,
 )
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_status import StoppedThreadStatus
+from agent_comms.registry.threads import NativeThread
+from agent_comms.repository_name import RepositoryName
+from agent_comms.task_attachments.team_pings import (
+    RulePing,
+    TeamDecisions,
+    TeamUpdate,
+    TeamUpdateStore,
+)
+from agent_comms.team import judge, order
+from agent_comms.team.publication_rules import ClosedUnmergedPullRequest
 from agent_comms.team.standing_rules import (
     HeadReviewTimerUp,
     IdlePullRequest,
@@ -54,44 +93,21 @@ from agent_comms.team.standing_rules import (
     ReviewTimerUp,
     StuckMerge,
 )
-from agent_comms.transport.tools.orders import CommsHeadVerdictTool
-from cli_command import team as team_command
-
-import pytest
-
-
-from agent_comms.team import judge, order
-from agent_comms.comms import Comms
-from agent_comms.connector_caller import DirectorCaller
-from agent_comms.closed_pull_requests import ClosedPullRequestWatch
-from agent_comms.team.publication_rules import ClosedUnmergedPullRequest
-from agent_comms.planning.goal_actions import CreateProblemGoalAction
-from agent_comms.build_identity import RepositoryCommit
-from agent_comms.head_review import (
-    DraftMergeArm, HeadReview, IntegrationInput, LocalIntegrationSource, MergedIntegrationSource, MergeHeadReview, OrdinaryInput, PromotedHeadReview, PullRequestHead, ReadPullRequestHead,
-)
-from agent_comms.integration import IntegrationRun
-from team_heartbeat_fixture import capture_frame
-from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
-from agent_comms.heartbeat_subjects import TeamHistory, HeadSubject, UnlandedHeadSubject
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repository_name import RepositoryName
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, TeamUpdateStore, RulePing
-from agent_comms.registry.thread_status import StoppedThreadStatus
-from agent_comms.registry.threads import NativeThread
-from agent_comms.errors import TodoError
-from agent_comms.nominal.field_codec import FieldCodec, GoalId, MalformedRecord, RecordProblems
 from agent_comms.tool_caller import PeerCaller, ThreadCaller
-from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.transport.tools.orders import CommsHeadVerdictTool
 from agent_comms.work_branches import (
-    SourceGrowth, ThreadBranchCheckout, UnregisteredBranchCheckout, WorkBranches,
+    SourceGrowth,
+    ThreadBranchCheckout,
+    UnregisteredBranchCheckout,
+    WorkBranches,
 )
 from agent_comms_hooks import ToolRefusedError
+from cli_command import team as team_command
+from conftest import team_as
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
 from source_revision_fixture import SourceRepository
-from conftest import team_as
+from team_heartbeat_fixture import capture_frame
 
 pytest_plugins = ("test_holder_standing_rules", "github_fixture", "integration_source_fixture")
 
@@ -1509,8 +1525,8 @@ def test_a_request_still_red_a_day_after_it_opened_churns_however_often_it_moved
     reads its age from when it opened, and only a red required check counts."""
     import math
 
-    from agent_comms.team.standing_rules import ChurningPullRequest
     from agent_comms.planning.pull_requests import FailedCheckMergeBlock
+    from agent_comms.team.standing_rules import ChurningPullRequest
 
     now = time.time()
     pushed = datetime.fromtimestamp(now - 60, UTC).strftime('%Y-%m-%dT%H:%M:%SZ')

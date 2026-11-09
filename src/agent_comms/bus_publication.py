@@ -2,15 +2,6 @@
 
 from __future__ import annotations
 
-from .bus_tables import (
-    AwaitingAnswerSource,
-    MessageIdentitySource,
-    ReceivedSource,
-    SentSource,
-)
-
-from .class_fact import ClassFact
-from .projection_source import ProducedRow
 import json
 import sqlite3
 from abc import ABC, abstractmethod
@@ -18,28 +9,34 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.audience_manifest import AudiencedMessage
-from agent_comms.messages import BusRow, BusRecord, Message
+from agent_comms.bus_tables import (
+    AwaitingAnswerSource,
+    MessageIdentitySource,
+    ReceivedSource,
+    SentSource,
+)
+from agent_comms.channel_targets import ThreadTarget
+from agent_comms.class_fact import ClassFact
 from agent_comms.errors import (
     CommittedMessageError,
     HumanSendRefusedError,
     RelationViolationError,
 )
+from agent_comms.messages import BusRecord, BusRow, Message
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, ThreadLookup
+from agent_comms.projection_source import ProducedRow
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement,
 )
 from agent_comms.storage.typed_table import Column, Generated, sql_literal
-
-from .nominal.field_codec import FieldCodec, MessageId, ThreadLookup
-from .projects.checkouts import Checkout
-from .wake_policy import RecipientDecision
-from .channel_targets import ThreadTarget
+from agent_comms.wake_policy import RecipientDecision
 
 if TYPE_CHECKING:
     from agent_comms.bus import Bus, BusReader, RecordBuilder
-
-    from .planning.goal_management import Goals
-    from .registry.registry_document import RegistrySnapshot
-    from .registry.threads import Thread
+    from agent_comms.planning.goal_management import Goals
+    from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.registry.threads import Thread
 
 
 class Delivered(BusRecord, AudiencedMessage, declared_name=None):

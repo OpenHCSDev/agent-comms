@@ -1,9 +1,4 @@
 """SelectedExecution with pinned native Pi, local deterministic coding provider."""
-from agent_comms.lifecycle_capability import Complete
-from bus_history import read_history
-from agent_comms.pi_vocabulary import LowThinkingLevel
-from binding_reads import binding_rows
-
 import asyncio
 import json
 import os
@@ -16,26 +11,29 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.coordinated_runtime import SelectedExecution
-from agent_comms.coordination.errors import IdentityConflict
-from agent_comms.coordination.coordinator import Coordination
 from agent_comms.agent_activity import AgentActivity
-from agent_comms.historical_native_inputs import read_historical_native_inputs
-from agent_comms.execution.native_input_record import TriageNativeExecution, FullNativeExecution
-from agent_comms.execution.native_pi import CommittedInput, read_tracked_input_commitment
-from agent_comms.installer.native_package import VerifiedNativePackage
-
-from agent_comms.transport.native_tools import NativeToolDeclaration
+from agent_comms.coordinated_runtime import SelectedExecution
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.cursor_owner import CursorOwner
+from agent_comms.execution.native_input_record import FullNativeExecution, TriageNativeExecution
+from agent_comms.execution.native_pi import CommittedInput, read_tracked_input_commitment
 from agent_comms.execution.selected.actions import CodingSelectedAction
 from agent_comms.execution.selected.tool_broker import SelectedToolIntent
-from test_coordinated_runtime import _root
-from test_coordinated_runtime import tmp_path as private_root_fixture
-from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.execution.turn_phase import (
     ModelWaitPhase,
     ToolRunningPhase,
 )
+from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.lifecycle_capability import Complete
+from agent_comms.pi_vocabulary import LowThinkingLevel
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.transport.native_tools import NativeToolDeclaration
+from binding_reads import binding_rows
+from bus_history import read_history
+from test_coordinated_runtime import _root
+from test_coordinated_runtime import tmp_path as private_root_fixture
 
 tmp_path = private_root_fixture
 

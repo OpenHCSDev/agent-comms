@@ -21,8 +21,8 @@ from agent_comms.transport.tools.served import (
 )
 from agent_comms.transport.tools.sidebar import (
     ChannelOrderSet,
-    CommsSortChannelTool,
     CommsSortChannelsTool,
+    CommsSortChannelTool,
     CommsUserSendTool,
 )
 

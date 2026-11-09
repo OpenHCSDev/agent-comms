@@ -2,29 +2,40 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
 import re
 import typing
+from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Annotated, ClassVar, Literal, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Self
+
 from pydantic import JsonValue
-from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
-from .nominal.field_codec import ExternalField, FieldCodec, InputId, MalformedRecord, NullMember, RecordProblems, SingleFieldValue, ValidatedScalar, WireName, WireNullDefault, WireOmitDefault, boundary_decoder
-from .pi_counts import NonnegativePiCount, TotalPiCount, UnreportedCount
-from .execution.turn_item import (
-    PiRequestKey,
-    UsageChargeId,
+
+from agent_comms.execution.turn_item import PiRequestKey, UsageChargeId
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.field_codec import (
+    ExternalField,
+    FieldCodec,
+    InputId,
+    MalformedRecord,
+    NullMember,
+    RecordProblems,
+    SingleFieldValue,
+    ValidatedScalar,
+    WireName,
+    WireNullDefault,
+    WireOmitDefault,
+    boundary_decoder,
 )
-from typing import TYPE_CHECKING
+from agent_comms.pi_counts import NonnegativePiCount, TotalPiCount, UnreportedCount
 
 if TYPE_CHECKING:
-    from .pi_payloads import PiContent
-    from .pending_requests import PendingRequest, PendingRequests
-    from .pi_commands import PiCommand
-    from .pi_events import Response
-    from .execution.turn_phase import TurnPhase
+    from agent_comms.execution.turn_phase import TurnPhase
+    from agent_comms.pending_requests import PendingRequest, PendingRequests
+    from agent_comms.pi_commands import PiCommand
+    from agent_comms.pi_events import Response
+    from agent_comms.pi_payloads import PiContent
 
 
 class PiPayload(ExternalField):

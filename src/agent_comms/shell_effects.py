@@ -9,14 +9,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
+from agent_comms.installer.native_build_inputs import GitLaunch, GitOptions, NamedProgram
+from agent_comms.projects.checkouts import CheckoutStart
+from agent_comms.projects.repository_sources import RepositorySource
+from agent_comms.storage_admission import StorageAdmission
+from agent_comms.storage_room import AllocationRoomWork, BuildRoomWork, RoomWork, TestGateRoomWork
+from agent_comms.tool_denial import SelectedToolDenied, StorageDenied
 from agent_comms_hooks.shell_commands import ShellCommand
 
-from .installer.native_build_inputs import GitLaunch, GitOptions, NamedProgram
-from .projects.checkouts import CheckoutStart
-from .projects.repository_sources import RepositorySource
-from .storage_admission import StorageAdmission
-from .storage_room import AllocationRoomWork, BuildRoomWork, RoomWork, TestGateRoomWork
-from .tool_denial import SelectedToolDenied, StorageDenied
 
 class ShellProgram(NamedProgram):
     programs: ClassVar[dict[str, type[ShellProgram]]] = {}

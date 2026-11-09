@@ -4,8 +4,8 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import ClassVar
 
-from .annotation_disclosure import PublicInstructionDisclosure
-from .nominal.declared_family import DeclaredFamily
+from agent_comms.annotation_disclosure import PublicInstructionDisclosure
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 
 class SpanAnswer(DeclaredFamily, affix="Answer"):

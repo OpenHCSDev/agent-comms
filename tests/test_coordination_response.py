@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.projects.checkouts import Checkout
 import os
 from contextlib import closing
 from dataclasses import dataclass, replace
@@ -10,11 +9,11 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.assignment_states import CompletedAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
-from conftest import accept_initial, publish_initial, responder
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
     IdentityConflict,
@@ -27,24 +26,29 @@ from agent_comms.coordination.response import (
     prepare_fenced_response,
     publish_fenced_response,
 )
-from agent_comms.coordination.tables.executions import ExecutionRecord, NoPointedExecution, WireOrigin
+from agent_comms.coordination.results import AlreadyApplied
+from agent_comms.coordination.tables.executions import (
+    ExecutionRecord,
+    NoPointedExecution,
+    WireOrigin,
+)
 from agent_comms.coordination.tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination.tables.responses import ResponseObligation
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.nominal.field_codec import AssignmentId, InputId, RootId, ThreadLookup, TurnId
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.selected.source_batch import SelectedSource
+from agent_comms.execution_states import CompletedExecution
 from agent_comms.lifecycle_capability import Active, Complete
 from agent_comms.messaging.message_bus import MessageBus
-from agent_comms.assignment_states import CompletedAssignment
-from agent_comms.coordination.results import AlreadyApplied
-from agent_comms.execution_states import CompletedExecution
+from agent_comms.nominal.field_codec import AssignmentId, InputId, RootId, ThreadLookup, TurnId
 from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import OwnerFence, prepare_fence_token
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.publisher import ParticipantPublisher
 from agent_comms.registry.registration import Registration
-from agent_comms.execution.selected.source_batch import SelectedSource
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.typed_table import TypedTable
 from bus_record_fixture import prepare_native_comms
+from conftest import accept_initial, publish_initial, responder
 
 # Private bus publication requires POSIX owner/mode ancestry; Windows stat
 # emulation cannot attest this boundary or exercise its durability contract.

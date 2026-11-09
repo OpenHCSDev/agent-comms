@@ -2,44 +2,58 @@
 
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import WireExclude
-
 import time
-from functools import cached_property
 from dataclasses import dataclass, field, replace
+from functools import cached_property
 from pathlib import Path
 from typing import Annotated, Self
 
-from agent_comms.comms import Comms
 from agent_comms.build_identity import InstalledBuild
-from agent_comms.usage_reading import RateLimitReading
+from agent_comms.comms import Comms
+from agent_comms.disclosure_text import (
+    ViewFacts,
+    ViewSectionFacts,
+    ViewTable,
+)
+from agent_comms.nominal.field_codec import (
+    DisclosedRecord,
+    HudExclude,
+    PublicationExclude,
+    WireExclude,
+    WireTransient,
+    projected,
+)
+from agent_comms.planning.plan_phases import Plan, PlanPhase
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.service_passes import (
+    BoardUnavailable,
+    FailingPass,
+    ServicePassStore,
+    ServiceReading,
+)
+from agent_comms.storage.locked_store import JsonDocument
+from agent_comms.task_attachments.team_pings import (
+    AlarmGroup,
+    AlarmSection,
+    Ping,
+    TeamDelivery,
+    TeamUpdate,
+)
+from agent_comms.team.standing_rules import HeartbeatFrame
 from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.team_frame_file import TeamFrameFile, TeamPlanFile
 from agent_comms.team_hud_records import (
-    FinishedPhases, HudSection, ProblemCard, TeamOrder, TeamPhase, Teammate,
+    FinishedPhases,
+    HudSection,
+    ProblemCard,
+    Teammate,
+    TeamOrder,
+    TeamPhase,
 )
 from agent_comms.team_service import TeamService
-from agent_comms.disclosure_text import (
-    ViewFacts, ViewSectionFacts, ViewTable,
-)
-from agent_comms.nominal.field_codec import (
-    DisclosedRecord, HudExclude, PublicationExclude, WireTransient,
-    projected,
-)
-from agent_comms.storage.locked_store import JsonDocument
-from .planning.plan_phases import (
-    Plan,
-    PlanPhase,
-)
-from agent_comms.service_passes import BoardUnavailable, FailingPass, ServicePassStore, ServiceReading
-from .registry.thread_identity import ThreadIncarnation
 from agent_comms.ui_model.teammate_state import TeammateState
-from agent_comms.task_attachments.team_pings import (
-    AlarmGroup, AlarmSection, TeamDelivery, TeamUpdate, Ping,
-)
+from agent_comms.usage_reading import RateLimitReading
 from agent_comms_hooks.board import BoardEntry
-
-from .team.standing_rules import HeartbeatFrame
 
 
 @dataclass(frozen=True)

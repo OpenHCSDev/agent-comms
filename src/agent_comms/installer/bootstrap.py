@@ -15,13 +15,13 @@ import sys
 from dataclasses import dataclass
 from typing import ClassVar, Never
 
-from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import LaunchedPhaseTiming
 from agent_comms.installer.runtime_stack import RuntimeStack
 from agent_comms.installer.target_tree import ScratchTree
 from agent_comms.launch_runtime import LaunchRuntime
-from ..projects.checkouts import ScratchCheckout
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.projects.checkouts import ScratchCheckout
 
 
 def stopped(signum: int, frame: object) -> None:

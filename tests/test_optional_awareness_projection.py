@@ -2,41 +2,42 @@
 
 from __future__ import annotations
 
-
-
-from agent_comms.projects.checkouts import Checkout
-from bus_record_fixture import prepare_native_comms
-from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId
-from agent_comms.lifecycle_capability import Executing
-
-from conftest import accept_initial, publish_initial, without_mutation_guards
-from agent_comms.messages import NoticeRole
 import os
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from agent_comms.assignment_states import (
+    EngagedAssignment,
+    FullPendingAssignment,
+    TriagePendingAssignment,
+)
 from agent_comms.bus_publication import Delivered
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.cohort_schema import AwarenessClaimGenerations, ClaimBatchAcknowledgements
 from agent_comms.comms import Comms, wire
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.tables.assignments import WakeAssignment
-from agent_comms.assignment_states import EngagedAssignment, FullPendingAssignment, TriagePendingAssignment
-from agent_comms.wake_policy import FullWake
 from agent_comms.coordination.tables.executions import WireOrigin
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
-from agent_comms.registry.registration import Registration
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.selected.source_batch import SelectedSource
-from agent_comms.registry.threads import Thread, NativeThread
-from agent_comms.wake_candidate_index import (
-    WakeCandidateIndex,
-    ProjectionUnavailableError,
-)
+from agent_comms.lifecycle_capability import Executing
+from agent_comms.messages import NoticeRole
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId
+from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.wake_candidate_index import (
+    ProjectionUnavailableError,
+    WakeCandidateIndex,
+)
+from agent_comms.wake_policy import FullWake
+from bus_record_fixture import prepare_native_comms
+from conftest import accept_initial, publish_initial, without_mutation_guards
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="private cohort requires POSIX")
 

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.planning.goal_actions import (
     GoalPrecondition,
     OwnerInvocable,
@@ -15,12 +16,10 @@ from agent_comms.planning.goal_states import (
     PausedGoal,
 )
 from agent_comms.planning.goals import NoGoal
-from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
-
 
 OWNER, PEER = ThreadCaller("owner"), ThreadCaller("peer")
 

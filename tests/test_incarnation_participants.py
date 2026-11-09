@@ -1,4 +1,3 @@
-from agent_comms.projects.checkouts import Checkout
 from dataclasses import replace
 
 import pytest
@@ -9,6 +8,7 @@ from agent_comms.coordination.errors import IntegrityViolationError, Participant
 from agent_comms.coordination.session import CoordinationSession
 from agent_comms.coordination.tables.participants import Participants
 from agent_comms.participant_store import ParticipantStore
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import (
     AgentThreadRole,
     UserThreadRole,

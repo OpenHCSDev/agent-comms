@@ -8,34 +8,34 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Coro
 from contextlib import AbstractContextManager, AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar, NoReturn, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, NoReturn
 
-from .child_process import AttachedChild, ChildOutcome, join_retirement
-from .turn_context import Provenance
-from ..launch_runtime import INHERITED_ENVIRONMENT
-from .native_attestation import NativeAttestation, PendingAttestation
-from .native_failures import NativePiUnavailable, NativeRequestFailure
-from .native_pi import NativePiRpcLaunch
-from .native_prompt_send import send_fenced_prompt
-from .native_session_reopen import NativeSessionIdentity
-from ..nominal.declared_family import DeclaredFamily
-from ..pending_requests import PendingRequest
-from ..pi_events import PiEvent
-from ..pi_rpc import PiRpcChannel
-from ..publication_measurements import PublicationMeasurements
-from ..session_revision import SessionRevision
-from ..storage.private_path import PrivateSocketRole
+from agent_comms.execution.child_process import AttachedChild, ChildOutcome, join_retirement
+from agent_comms.execution.native_attestation import NativeAttestation, PendingAttestation
+from agent_comms.execution.native_failures import NativePiUnavailable, NativeRequestFailure
+from agent_comms.execution.native_pi import NativePiRpcLaunch
+from agent_comms.execution.native_prompt_send import send_fenced_prompt
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+from agent_comms.execution.turn_context import Provenance
+from agent_comms.launch_runtime import INHERITED_ENVIRONMENT
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.pending_requests import PendingRequest
+from agent_comms.pi_events import PiEvent
+from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.publication_measurements import PublicationMeasurements
+from agent_comms.session_revision import SessionRevision
+from agent_comms.storage.private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
     from typing import Self
 
-    from .turn_context import TurnContext
-    from ..installer.native_package import VerifiedNativePackage
-    from ..participant_identity import ParticipantIdentity
-    from ..pi_commands import ExtensionUiResponse, PiCommand
-    from ..pi_native_backend import PiNativeBackend
-    from ..pi_payloads import PiResponseData, StateData
-    from ..registry.threads import Thread
+    from agent_comms.execution.turn_context import TurnContext
+    from agent_comms.installer.native_package import VerifiedNativePackage
+    from agent_comms.participant_identity import ParticipantIdentity
+    from agent_comms.pi_commands import ExtensionUiResponse, PiCommand
+    from agent_comms.pi_native_backend import PiNativeBackend
+    from agent_comms.pi_payloads import PiResponseData, StateData
+    from agent_comms.registry.threads import Thread
 
 
 class RetirementState(DeclaredFamily):

@@ -7,8 +7,8 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 from contextlib import redirect_stdout
+from pathlib import Path
 
 import pytest
 

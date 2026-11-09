@@ -11,10 +11,13 @@ from urllib.parse import quote
 
 from pydantic import JsonValue
 
-from . import tool_declaration
-from .history_view import Dated
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import (
+from agent_comms import tool_declaration
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
+from agent_comms.history_view import Dated
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     ActivityExclude,
     FieldCodec,
     InputId,
@@ -25,18 +28,18 @@ from .nominal.field_codec import (
     WireOmitDefault,
     projected,
 )
-from .message_reference import MessageReference
-from .pi_wire import PiOmitted, ReportedInputId
-from .messages import Message
-from .recorded_time import EventTime, UnrecordedEventTime
-from .routing import MessageRoute, NoTurnRouting, Routing, TurnRouting
-from .tool_results import SENT_MESSAGE_MIME, NoSentMessage, NoToolDiff, ToolDiff, ToolText
-from .transcript_merge import EventMerge, StreamingMerge
-from .execution.turn_item import (
-    NativeItemId,
-    NativeTurnId,
+from agent_comms.pi_wire import PiOmitted, ReportedInputId
+from agent_comms.recorded_time import EventTime, UnrecordedEventTime
+from agent_comms.routing import MessageRoute, NoTurnRouting, Routing, TurnRouting
+from agent_comms.tool_results import (
+    SENT_MESSAGE_MIME,
+    NoSentMessage,
+    NoToolDiff,
+    ToolDiff,
+    ToolText,
 )
-from .ui_model.message_category import (
+from agent_comms.transcript_merge import EventMerge, StreamingMerge
+from agent_comms.ui_model.message_category import (
     AgentCategory,
     InboundCategory,
     MessageCategory,
@@ -48,8 +51,8 @@ from .ui_model.message_category import (
 )
 
 if TYPE_CHECKING:
-    from .importing import ImportBuffer, ImportLimits
-    from .transcript_sources import TranscriptSource
+    from agent_comms.importing import ImportBuffer, ImportLimits
+    from agent_comms.transcript_sources import TranscriptSource
 
 
 TRUNCATED = "\n[Import excerpt truncated]"

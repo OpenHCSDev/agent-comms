@@ -13,9 +13,10 @@ from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import JsonValue
 
-from .nominal.declared_family import DeclaredFamily
-from .frozen_recipient import FrozenRecipient
-from .nominal.field_codec import (
+from agent_comms.frozen_recipient import FrozenRecipient
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     MalformedRecord,
     MessageId,
@@ -26,9 +27,8 @@ from .nominal.field_codec import (
     ThreadLookup,
     boundary_decoder,
 )
-from .message_reference import MessageReference
-from .recorded_bus import RecordedBusIdentity
-from .registry.thread_identity import ThreadIncarnation
+from agent_comms.recorded_bus import RecordedBusIdentity
+from agent_comms.registry.thread_identity import ThreadIncarnation
 
 
 class ConsumptionEvidence(ABC):
@@ -39,14 +39,18 @@ class ConsumptionEvidence(ABC):
 
 
 if TYPE_CHECKING:
-    from agent_comms.notification_progress import AssignmentResponse, UnansweredResponse
-    from .bus_publication import Delivered
-    from .comms import Comms
-    from .coordination.tables.assignments import WakeAssignment
-    from .notification_assignment import AssignmentActivityEvidence
-    from .notification_progress import AssignmentProgress, DeliveryProgress
-    from .message_notification import MessageNotification
-    from .presentation import WireRevision
+    from agent_comms.bus_publication import Delivered
+    from agent_comms.comms import Comms
+    from agent_comms.coordination.tables.assignments import WakeAssignment
+    from agent_comms.message_notification import MessageNotification
+    from agent_comms.notification_assignment import AssignmentActivityEvidence
+    from agent_comms.notification_progress import (
+        AssignmentProgress,
+        AssignmentResponse,
+        DeliveryProgress,
+        UnansweredResponse,
+    )
+    from agent_comms.presentation import WireRevision
 
 
 @dataclass(frozen=True)

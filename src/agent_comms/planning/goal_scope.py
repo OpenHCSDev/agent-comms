@@ -7,15 +7,11 @@ from typing import (
     TypedDict,
 )
 
-from ..nominal.field_codec import (
-    GoalId,
-    NullMember,
-    SingleFieldValue,
-)
+from agent_comms.nominal.field_codec import GoalId, NullMember, SingleFieldValue
 
 if TYPE_CHECKING:
-    from .goal_history import RecordedGoalRevision
-    from .goals import GoalDeclaration
+    from agent_comms.planning.goal_history import RecordedGoalRevision
+    from agent_comms.planning.goals import GoalDeclaration
 
 
 class FailureKey(TypedDict, total=False):

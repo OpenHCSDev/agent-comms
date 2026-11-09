@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import ArtifactExclude
-
 import hashlib
 import json
 import os
 import time
-from contextlib import contextmanager
 from collections.abc import Mapping
+from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
 from traceback import TracebackException
@@ -20,23 +18,25 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-
-from .execution.child_process import (
-    Platform,
-    ProcessState,
+from agent_comms.execution.child_process import Platform, ProcessState
+from agent_comms.execution.native_failures import NativeRequestFailure
+from agent_comms.execution.turn_failure import TurnFailure
+from agent_comms.execution.turn_lease import TurnLeaseFence
+from agent_comms.nominal.field_codec import (
+    ArtifactExclude,
+    FieldCodec,
+    InputId,
+    ScratchName,
+    TurnId,
 )
-from .nominal.field_codec import FieldCodec, InputId, ScratchName, TurnId
-from .storage.locked_store import PatternFile, RuntimeFile
-from .execution.native_failures import NativeRequestFailure
-from .publication_measurements import PublicationMeasurements
-from .storage.store_files import AtomicFile
-from .execution.turn_failure import TurnFailure
-from .execution.turn_lease import TurnLeaseFence
+from agent_comms.publication_measurements import PublicationMeasurements
+from agent_comms.storage.locked_store import PatternFile, RuntimeFile
+from agent_comms.storage.store_files import AtomicFile
 
 if TYPE_CHECKING:
-    from .activity import DrainDiagnostic
-    from .pi_events import Response
-    from .registry.threads import Thread
+    from agent_comms.activity import DrainDiagnostic
+    from agent_comms.pi_events import Response
+    from agent_comms.registry.threads import Thread
 
 
 class OwnerProcessOutput(RuntimeFile, PatternFile):

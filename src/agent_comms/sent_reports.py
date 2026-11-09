@@ -4,8 +4,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
-from .sent_message import PublishedSentMessage
-from .transcript_events import SentTranscript
+from agent_comms.sent_message import PublishedSentMessage
+from agent_comms.transcript_events import SentTranscript
 
 
 @dataclass(frozen=True)

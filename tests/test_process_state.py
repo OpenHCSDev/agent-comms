@@ -6,12 +6,12 @@ import sqlite3
 
 import pytest
 
+from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
     ProcessState,
 )
-from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.owner_release import OwnerReleaseEvidence
 

@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.coordination.errors import DrainUnavailable, Refused
 from agent_comms_hooks import ToolRefusedError
 
-
 if TYPE_CHECKING:
     from agent_comms.messages import BusRecord
 

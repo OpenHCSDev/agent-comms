@@ -2,11 +2,11 @@
 
 import pytest
 
-from agent_comms.team.judge import Edit
+from agent_comms.execution.turn_digests import UnjudgedEdits
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.recorded_time import EventTime, RecordedEventTime
+from agent_comms.team.judge import Edit
 from agent_comms.tool_calls import CliToolArguments, ToolCall
-from agent_comms.execution.turn_digests import UnjudgedEdits
 
 
 def original_call():

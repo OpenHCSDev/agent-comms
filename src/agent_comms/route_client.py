@@ -11,12 +11,12 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Self
 
-from .active_route import CommsRoute
-from .agent_activity import AgentActivity
-from .launch_runtime import LaunchRuntime
-from .storage.locked_store import RegistryFile
-from .registry.registration import Registration
-from .root_runtime import RootRuntime
+from agent_comms.active_route import CommsRoute
+from agent_comms.agent_activity import AgentActivity
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.registry.registration import Registration
+from agent_comms.root_runtime import RootRuntime
+from agent_comms.storage.locked_store import RegistryFile
 
 
 class RouteClient:

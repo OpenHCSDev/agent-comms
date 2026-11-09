@@ -14,31 +14,12 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar, Self
 
-from ..execution.child_process import NoProcess
-from ..coordination.database import CoordinationStore, ReadableStore
-from ..coordination.errors import StaleFence
-from ..errors import RelationViolationError
-from ..nominal.field_codec import FieldCodec, NullMember, TurnId
-from ..storage.locked_store import DocumentBytes, LockedStore, PublishedProperty, RegistryFile
-from ..storage.maintenance_barrier import CarriedDocument
-from ..execution.native_input_owner import RegistryOwner
-from ..presence import PresenceStore
-from ..storage.private_path import FileObservation, FileRevision, MissingFile
-from ..private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
-from ..private_runtime_schema import PrivateCoordinatorTable
-from ..registration_change import InitialRegistration, NativeSourcePublication
-from .registry_document import (
-    HistoricalRootPurpose,
-    RegistryDocument,
-    RegistryEntry,
-    RegistrySnapshot,
-)
-from ..routing import Routing
-from ..session_file import RegistrySessionLocation
-from ..storage.store_files import RegistryLocking
-from .thread_identity import TurnIdentity
-from .threads import Thread
-from ..execution.turn_lease import (
+from agent_comms.coordination.database import CoordinationStore, ReadableStore
+from agent_comms.coordination.errors import StaleFence
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import NoProcess
+from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.turn_lease import (
     ActiveTurn,
     LockedTurn,
     NamedTurn,
@@ -48,6 +29,30 @@ from ..execution.turn_lease import (
     TurnDeclaration,
     TurnRecord,
 )
+from agent_comms.nominal.field_codec import FieldCodec, NullMember, TurnId
+from agent_comms.presence import PresenceStore
+from agent_comms.private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
+from agent_comms.registration_change import InitialRegistration, NativeSourcePublication
+from agent_comms.registry.registry_document import (
+    HistoricalRootPurpose,
+    RegistryDocument,
+    RegistryEntry,
+    RegistrySnapshot,
+)
+from agent_comms.registry.thread_identity import TurnIdentity
+from agent_comms.registry.threads import Thread
+from agent_comms.routing import Routing
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.storage.locked_store import (
+    DocumentBytes,
+    LockedStore,
+    PublishedProperty,
+    RegistryFile,
+)
+from agent_comms.storage.maintenance_barrier import CarriedDocument
+from agent_comms.storage.private_path import FileObservation, FileRevision, MissingFile
+from agent_comms.storage.store_files import RegistryLocking
 
 
 class CachedRegistry(ABC):

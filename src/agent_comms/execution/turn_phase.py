@@ -6,25 +6,21 @@ from dataclasses import (
     replace,
 )
 from typing import (
+    TYPE_CHECKING,
     ClassVar,
     Self,
-    TYPE_CHECKING,
 )
 
-from ..activity import (
-    Activity,
-    ActivityState,
-    ObservedActivity,
-)
-from ..agent_events import AgentEvent
-from .child_process import ProcessIdentity
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import ToolCallId
-from ..pi_payloads import ProviderDiagnosticError
+from agent_comms.activity import Activity, ActivityState, ObservedActivity
+from agent_comms.agent_events import AgentEvent
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import ToolCallId
+from agent_comms.pi_payloads import ProviderDiagnosticError
 
 if TYPE_CHECKING:
-    from .turn_lease import TurnLeaseFence
-    from ..agent_activity import AgentActivity
+    from agent_comms.agent_activity import AgentActivity
+    from agent_comms.execution.turn_lease import TurnLeaseFence
 
 
 @dataclass(frozen=True)

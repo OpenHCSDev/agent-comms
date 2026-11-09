@@ -12,7 +12,8 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.native_arguments import GivenBinary
 from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.ui_model.observation import (
-    LocalRouteObservation, ObservationProcess,
+    LocalRouteObservation,
+    ObservationProcess,
     ObserverDied,
     ReadNotifications,
     StopObserving,

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from agent_comms.reason_codes import GivenReasonCode, NoReasonCode
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.coordination.errors import (
     IdentityConflict,
@@ -28,6 +27,7 @@ from agent_comms.obligation_states import (
     FailedResponse,
     PendingResponse,
 )
+from agent_comms.reason_codes import GivenReasonCode, NoReasonCode
 from agent_comms.recovery_reader import RecoveryReader
 
 if TYPE_CHECKING:

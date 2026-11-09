@@ -16,23 +16,23 @@ from typing import TYPE_CHECKING
 
 from acp.schema import SessionInfoUpdate
 
-from .acp_extension import (
+from agent_comms.acp_extension import (
     CursorAdvancedUpdate,
     CursorEnvelope,
     CursorScope,
     UnavailableCursorObservation,
     encode_updates,
 )
-from .comms import Comms
-from .coordination.errors import DeferredRead
-from .coordination.coordinator import Coordination
-from .cursor_owner import CommittedCursorOwner, CursorOwner, CursorState
-from .publication_measurements import PublicationMeasurements
-from .nominal.field_codec import AcpSessionId, InputId
-from .messaging.message_bus import MessageBus
-from .execution.native_entries import NativeEvidenceScope
-from .publisher import ResponseWrites
-from .runtime_server import RuntimeServer
+from agent_comms.comms import Comms
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import DeferredRead
+from agent_comms.cursor_owner import CommittedCursorOwner, CursorOwner, CursorState
+from agent_comms.execution.native_entries import NativeEvidenceScope
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.nominal.field_codec import AcpSessionId, InputId
+from agent_comms.publication_measurements import PublicationMeasurements
+from agent_comms.publisher import ResponseWrites
+from agent_comms.runtime_server import RuntimeServer
 
 if TYPE_CHECKING:
     from agent_comms.execution.selected.participant import SelectedParticipant

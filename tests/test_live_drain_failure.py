@@ -13,9 +13,10 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp import CommsAgent
-
 from agent_comms.activity import (
-    NativeInputDrainDiagnostic, StoppedDrainDiagnostic, UnavailableDrainDiagnostic,
+    NativeInputDrainDiagnostic,
+    StoppedDrainDiagnostic,
+    UnavailableDrainDiagnostic,
 )
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.coordinator import Coordination

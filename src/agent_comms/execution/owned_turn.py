@@ -10,84 +10,61 @@ from collections.abc import (
 from contextlib import AsyncExitStack, ExitStack, aclosing
 from dataclasses import (
     dataclass,
+    field,
     replace,
 )
 from functools import partial
 from typing import TYPE_CHECKING, NoReturn
 
-from agent_comms.following_inputs import OwnerFollowingInputs
-from .goal_turn_permit import (
-    GoalTurnPermit,
-    NoLaunchPermit,
-)
-
-from .. import agent_events as events
-from ..controller import NO_CONTROLLER
-from ..agent_backend import InputStartListener
-from .turn_inbox import (
-    InputContent,
-    TurnInbox,
-)
-from ..channel_coding_tools import CodingToolMode
-from ..channel_input_batch import InputBatch
-from ..coordination.errors import CoordinationError, Refused
-from ..coordination.coordinator import Coordination
-from ..cursor_publication import CursorDelivery
-from ..nominal.field_codec import AcpSessionId, FieldCodec, GoalId, TurnId
-from ..planning.goals import Goal
-from ..image_input import ImageInput
-from ..input_attempt import ReservedInput
-from ..input_key import InputKey
-from ..input_origin import WireInputOrigin
-from ..messages import Message
-from .native_failures import NativeRequestFailure
-from .native_input_owner import RegistryOwner
-from ..transport.native_tool_transport import NativeToolMode
-from ..owned_send import OwnedSend
-from ..pi_events import (
-    DialogUiRequest,
-    ExtensionUiChoice,
-)
-from ..routing import MessageRoute, NoMessageRoute, ScheduledTurn, TurnRouting
-from ..send_outcome import SendBoundary
-from ..transcript_routes import DisplayText, NoDisplayText
-from .turn_failure import (
-    BackendFailed,
-    CoordinationRefused,
-    TurnFailure,
-)
-from .turn_goal_permission import (
-    OwnerGoalPermission,
-    TurnGoalPermission,
-)
-from .turn_input_source import (
+from agent_comms import agent_events as events
+from agent_comms.agent_backend import InputStartListener
+from agent_comms.channel_coding_tools import CodingToolMode
+from agent_comms.channel_input_batch import InputBatch
+from agent_comms.comms import Comms
+from agent_comms.controller import NO_CONTROLLER
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import CoordinationError, Refused
+from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.errors import GoalAttemptError
+from agent_comms.execution.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
+from agent_comms.execution.native_failures import NativeRequestFailure
+from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.turn_failure import BackendFailed, CoordinationRefused, TurnFailure
+from agent_comms.execution.turn_goal_permission import OwnerGoalPermission, TurnGoalPermission
+from agent_comms.execution.turn_inbox import InputContent, TurnInbox
+from agent_comms.execution.turn_input_source import (
     InputDependency,
     NoInputDependency,
     OwnerOriginalInput,
     ScheduledOriginalInput,
     TurnAcceptance,
 )
-from .turn_phase import (
-    CancellingPhase,
-    PromptAcceptancePhase,
-)
-from .turn_progress import TurnProgress
-from .turn_terminal import (
-    EndedWithoutResult,
-    TurnTerminal,
-)
-
-from agent_comms.errors import GoalAttemptError
-from dataclasses import field
-from .turn_item import UsageChargeId
-from ..transport.tools.goals import CommsSetGoalTool
-from .turn_lease import TurnLeaseFence
-from ..registry.threads import NativeThread, Thread
+from agent_comms.execution.turn_item import UsageChargeId
+from agent_comms.execution.turn_lease import TurnLeaseFence
+from agent_comms.execution.turn_phase import CancellingPhase, PromptAcceptancePhase
+from agent_comms.execution.turn_progress import TurnProgress
+from agent_comms.execution.turn_terminal import EndedWithoutResult, TurnTerminal
+from agent_comms.following_inputs import OwnerFollowingInputs
+from agent_comms.image_input import ImageInput
+from agent_comms.input_attempt import ReservedInput
+from agent_comms.input_key import InputKey
+from agent_comms.input_origin import WireInputOrigin
+from agent_comms.messages import Message
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, GoalId, TurnId
+from agent_comms.owned_send import OwnedSend
+from agent_comms.pi_events import DialogUiRequest, ExtensionUiChoice
 from agent_comms.pi_wire import PiUsage
-from ..comms import Comms
+from agent_comms.planning.goals import Goal
+from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.routing import MessageRoute, NoMessageRoute, ScheduledTurn, TurnRouting
+from agent_comms.send_outcome import SendBoundary
+from agent_comms.transcript_routes import DisplayText, NoDisplayText
+from agent_comms.transport.native_tool_transport import NativeToolMode
+from agent_comms.transport.tools.goals import CommsSetGoalTool
+
 if TYPE_CHECKING:
-    from .turn_runner import TurnRunner
-    from ..planning.goal_attempts import LaunchPermit
+    from agent_comms.execution.turn_runner import TurnRunner
+    from agent_comms.planning.goal_attempts import LaunchPermit
 
 
 @dataclass(kw_only=True)
@@ -375,13 +352,13 @@ class OwnedTurn:
         self.env_extra = self.runner.inputs.state(self.session_id).owned().configuration.native_environment(
             self.thread, self.runner.comms.registry.snapshot()
         )
-        from .turn_context import (
-    AutomaticTitleSegment,
-    RecordedContextTurn,
-    ReplyRouteSegment,
-    TurnContext,
-    TurnProvenance,
-)
+        from agent_comms.execution.turn_context import (
+            AutomaticTitleSegment,
+            RecordedContextTurn,
+            ReplyRouteSegment,
+            TurnContext,
+            TurnProvenance,
+        )
 
         self.relations = self.runner.comms.relationships.context_relations(self.thread.name)
         self.context = TurnContext.for_owner(

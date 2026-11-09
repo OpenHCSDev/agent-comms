@@ -1,6 +1,26 @@
 """Native stories retain their append-only events across a copied bus and resend."""
 
 
+import time
+from dataclasses import replace
+
+import pytest
+
+from agent_comms.change_report import FileLine
+from agent_comms.comms import wire
+from agent_comms.errors import MissingSourceLine, TodoError
+from agent_comms.installer.backup import StoreBackup
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    MessageId,
+    OrderId,
+    ToolCallId,
+)
+from agent_comms.order_story import OrderStory, TeamStory
+from agent_comms.planning.goal_actions import (
+    CreateProblemGoalAction,
+    OrderGoalAction,
+)
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     AcceptedVerdict,
@@ -16,39 +36,19 @@ from agent_comms.planning.orders import (
     WithdrawTodo,
 )
 from agent_comms.projects.checkouts import Checkout
-import time
-from dataclasses import replace
-
-import pytest
-
-from agent_comms.change_report import FileLine
-from agent_comms.comms import wire
-from agent_comms.errors import MissingSourceLine, TodoError
-from agent_comms.nominal.field_codec import (
-    FieldCodec,
-    MessageId,
-    OrderId,
-    ToolCallId,
-)
-from agent_comms.planning.goal_actions import (
-    CreateProblemGoalAction,
-    OrderGoalAction,
-)
-from agent_comms.installer.backup import StoreBackup
-from agent_comms.order_story import TeamStory, OrderStory
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.registry.registry_document import RegisteredTeamProject
-from agent_comms.repository_name import RepositoryName
 from agent_comms.registry.threads import NativeThread
-from agent_comms.tool_caller import PeerCaller, NoThreadCaller, ThreadCaller
+from agent_comms.repository_name import RepositoryName
+from agent_comms.tool_caller import NoThreadCaller, PeerCaller, ThreadCaller
 from agent_comms.transport.tools.orders import (
     CommsChangeProblemTool,
     CommsOrderStoryTool,
     CommsOrderTool,
     CommsTeamStoryTool,
     CommsTodoCreateTool,
-    CommsVerdictTool,
     CommsVerdictsTool,
+    CommsVerdictTool,
 )
 from source_revision_fixture import SourceRepository
 from test_todos import order

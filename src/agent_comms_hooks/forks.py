@@ -1,6 +1,6 @@
 """Subagent events use the parent's existing resident session owner."""
 
-from .watch import SessionHookProgram
+from agent_comms_hooks.watch import SessionHookProgram
 
 
 class SubagentStartProgram(SessionHookProgram):

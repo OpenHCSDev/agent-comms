@@ -9,13 +9,8 @@ from typing import (
     Self,
 )
 
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, WireValue
 from agent_comms_hooks import ToolRefusedError
-
-from ..nominal.field_codec import (
-    FieldCodec,
-    MalformedRecord,
-    WireValue,
-)
 
 
 @dataclass(frozen=True)

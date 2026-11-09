@@ -6,10 +6,10 @@ from dataclasses import (
     replace,
 )
 
-from .runtime_request import AttachedResultRuntimeRequest
-from ..nominal.field_codec import FieldCodec
-from ..owner_connection import socket_path
-from ..registry.thread_presentation import LiveThreadOwnerBinding
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.owner_connection import socket_path
+from agent_comms.registry.thread_presentation import LiveThreadOwnerBinding
+from agent_comms.transport.runtime_request import AttachedResultRuntimeRequest
 
 
 @dataclass(frozen=True, kw_only=True)

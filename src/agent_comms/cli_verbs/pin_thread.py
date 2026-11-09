@@ -1,20 +1,17 @@
 from __future__ import annotations
 
-from agent_comms.cli_command import TargetActionCommand
-from agent_comms.channel_targets import SurroundingChannel
+from dataclasses import dataclass
+from typing import Annotated, Self
 
 from agent_comms.catalog_document import CatalogAccess
-from agent_comms.cli_command import ChannelBound, MultipleTargets
+from agent_comms.channel_targets import SurroundingChannel
+from agent_comms.cli_command import ChannelBound, MultipleTargets, TargetActionCommand
 from agent_comms.cli_commands import ThreadPinnedResult
 from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.comms import Comms
-from agent_comms.nominal.field_codec import Argument
-from agent_comms.nominal.field_codec import TargetBound
-from ..registry.thread_status import ThreadStatus
+from agent_comms.nominal.field_codec import Argument, TargetBound
+from agent_comms.registry.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread
-from dataclasses import dataclass
-from typing import Annotated
-from typing import Self
 
 
 @dataclass(frozen=True, kw_only=True)

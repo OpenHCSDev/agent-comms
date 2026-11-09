@@ -11,12 +11,20 @@ import pytest
 from yarl import URL
 
 from agent_comms.connector_profile import (
-    BearerSecret, HttpsMcpEndpoint, UiConnectionProfile, UiCredential, UiGrantId,
+    BearerSecret,
+    HttpsMcpEndpoint,
+    UiConnectionProfile,
+    UiCredential,
+    UiGrantId,
 )
 from agent_comms.nominal.field_codec import FieldCodec, RootId
 from agent_comms.tailnet_buses import PeerHoldsBus, TailnetPeer
 from agent_comms.tailnet_profiles import (
-    HoldingPeerProfile, OfferedPeerProfile, PeerAnsweredNothing, PeerRefusedProfile, TailnetProfiles,
+    HoldingPeerProfile,
+    OfferedPeerProfile,
+    PeerAnsweredNothing,
+    PeerRefusedProfile,
+    TailnetProfiles,
 )
 
 GAMING = PeerHoldsBus(TailnetPeer("ts-gaming", "100.119.57.99", True), 43)

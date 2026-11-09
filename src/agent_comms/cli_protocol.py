@@ -20,18 +20,15 @@ from pydantic import (
 from pydantic_core import CoreSchema
 from typing_extensions import TypeForm
 
-from .coordination.errors import CoordinationReadUnavailable
-from .errors import RelationViolationError
-from .nominal.declared_family import UnknownFamilyMember
-from .external_transcript import RequestedEarlierPage
-from .nominal.field_codec import TimestampText
-from .storage.maintenance_barrier import MaintenanceHeldError
-from .recorded_time import UnrecordedTimeError
-from .execution.turn_item import (
-    NativeTurnId,
-    TurnItem,
-)
-from .wire_models import DeclaredWireFamily, WireModel
+from agent_comms.coordination.errors import CoordinationReadUnavailable
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.turn_item import NativeTurnId, TurnItem
+from agent_comms.external_transcript import RequestedEarlierPage
+from agent_comms.nominal.declared_family import UnknownFamilyMember
+from agent_comms.nominal.field_codec import TimestampText
+from agent_comms.recorded_time import UnrecordedTimeError
+from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
+from agent_comms.wire_models import DeclaredWireFamily, WireModel
 
 
 class TimestampedWire(WireModel):

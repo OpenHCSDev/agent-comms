@@ -19,31 +19,39 @@ from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
 from threading import local
-from weakref import finalize
 from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Self, TypeVar
+from weakref import finalize
 
 from pydantic import JsonValue
 
 import agent_comms
-
-from ..execution.child_process import Platform
-from ..coordination.errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import FieldCodec, MalformedRecord, PathText
-from ..errors import RelationViolationError
-from .private_path import FileObservation, FileRevision, MissingFile, PrivateDirectoryRole, PrivateFileRole
-from .store_files import (
-    AtomicFile,
+from agent_comms.coordination.errors import (
+    CoordinationBeginUnavailable,
+    CoordinationReadUnavailable,
+)
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import Platform
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText
+from agent_comms.storage.private_path import (
+    FileObservation,
+    FileRevision,
+    MissingFile,
+    PrivateDirectoryRole,
+    PrivateFileRole,
+)
+from agent_comms.storage.store_files import (
     DEFAULT_ISOLATION,
     DEFAULT_STORE_CONTENTION,
+    AtomicFile,
     DrainedWriters,
+    FileTransactions,
+    RankedStoreLock,
     SqliteStore,
     StoreContention,
     StoreLock,
     StoreLockFile,
     StoreLockOwner,
-    FileTransactions,
-    RankedStoreLock,
     StoreOwner,
     is_store_lock,
     store_lock_path,
@@ -763,7 +771,7 @@ class RegistryFile(RollbackRetained, GoalWakeFile):
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
         """The copy names no live process: a signal, stop or wake aimed through it would reach
         the source root's units."""
-        from ..registry.registry_store import RegistryStore
+        from agent_comms.registry.registry_store import RegistryStore
 
         registry = RegistryStore(source)
         with registry.guarded_read():

@@ -8,31 +8,23 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.channel_targets import CommandTarget
-
-from .bus_publication import AgentOrigin
-from .channel_targets import ChannelTarget, Tag
-from .channels import Channel, SavedView
-from .cli_result import TargetEditResult
-from .nominal.field_codec import RecordMember
-from .nominal.declared_family import DeclaredFamily
-from .display_order import ChannelSort, ThreadSort
-from .messaging.message_bus import MessageBus
-from .messages import InfoKind, MembershipConversationRole, Message
-from .registry.registration import Registration
-from .registry.thread_identity import ThreadIncarnation
-from .registry.thread_management import (
-    ChangedTags,
-    GivenTags,
-)
-from .registry.threads import Thread
+from agent_comms.bus_publication import AgentOrigin
+from agent_comms.channel_targets import ChannelTarget, CommandTarget, Tag
+from agent_comms.channels import Channel, SavedView
+from agent_comms.cli_result import TargetEditResult
+from agent_comms.display_order import ChannelSort, ThreadSort
+from agent_comms.messages import InfoKind, MembershipConversationRole, Message
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import RecordMember
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_management import ChangedTags, GivenTags
+from agent_comms.registry.threads import Thread
 
 if TYPE_CHECKING:
-    from .catalog_document import CatalogDocument
-    from .registry.thread_management import (
-    TagChoice,
-    ThreadManagement,
-)
+    from agent_comms.catalog_document import CatalogDocument
+    from agent_comms.registry.thread_management import TagChoice, ThreadManagement
 
 
 @dataclass(frozen=True)

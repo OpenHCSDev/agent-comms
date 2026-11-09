@@ -3,11 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar
 
-from ..errors import (
-    RejectedEnforcementError,
-    TodoError,
-)
-from ..registry.thread_identity import ThreadIncarnation
+from agent_comms.errors import RejectedEnforcementError, TodoError
+from agent_comms.registry.thread_identity import ThreadIncarnation
 
 
 class TodoRefusal(TodoError, RejectedEnforcementError):

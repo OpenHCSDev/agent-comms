@@ -1,6 +1,5 @@
 """Declared goal dependencies control scheduling."""
 
-from agent_comms.projects.checkouts import Checkout
 import os
 from dataclasses import replace
 
@@ -17,15 +16,15 @@ from agent_comms.planning.goal_actions import (
     StandbyGoalAction,
 )
 from agent_comms.planning.goal_presentation import (
+    GoalWaitTarget,
     RunnableExecution,
     StandbyExecution,
-    GoalWaitTarget,
 )
-from agent_comms.planning.goal_waits import GoalWaits
-from goal_owner_fixture import canonical_goal_wire
-from agent_comms.planning.goal_waits import RecordedGoalWait, NoGoalWait
-from agent_comms.registry.threads import NativeThread
 from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_waits import GoalWaits, NoGoalWait, RecordedGoalWait
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import NativeThread
+from goal_owner_fixture import canonical_goal_wire
 
 
 def live_wire(tmp_path, *names, working=()):

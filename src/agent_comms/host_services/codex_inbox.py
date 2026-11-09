@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
-from ..execution.child_process import ResidentManager
-from ..launch_runtime import LaunchRuntime
-from . import ServiceNotServingError, SystemdUserService
+from agent_comms.execution.child_process import ResidentManager
+from agent_comms.host_services import ServiceNotServingError, SystemdUserService
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @dataclass(frozen=True)

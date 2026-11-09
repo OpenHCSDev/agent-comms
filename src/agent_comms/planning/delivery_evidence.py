@@ -5,13 +5,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from subprocess import TimeoutExpired
 
-from ..errors import TodoError
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import RecordProblems
-from ..order_runs import OrderRun
-from ..projects.git_errors import SourceReadFailure
-from ..projects.repo import Repo
-from ..work_branches import WorkBranches
+from agent_comms.errors import TodoError
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import RecordProblems
+from agent_comms.order_runs import OrderRun
+from agent_comms.projects.git_errors import SourceReadFailure
+from agent_comms.projects.repo import Repo
+from agent_comms.work_branches import WorkBranches
 
 SOURCE_READ_FAILURES = (OSError, SourceReadFailure, TimeoutExpired)
 

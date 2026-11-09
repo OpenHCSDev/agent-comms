@@ -7,11 +7,6 @@ commands do not own coordination, backend or identity lifecycles.
 
 from __future__ import annotations
 
-from .comms import Comms
-from .controller import NO_CONTROLLER
-from .errors import RelationViolationError
-from .projects.checkouts import Checkout
-
 from abc import (
     ABC,
     abstractmethod,
@@ -33,27 +28,33 @@ from acp.schema import (
 )
 from pydantic import BaseModel, JsonValue
 
-from .acp_extension import (
-    GoalSnapshotReply,
+from agent_comms.acp_extension import GoalSnapshotReply
+from agent_comms.acp_request_consumer import AcpRequestConsumer
+from agent_comms.agent_event_updates import AcpEventConsumer
+from agent_comms.comms import Comms
+from agent_comms.controller import NO_CONTROLLER
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import Refused
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.turn_context import ContextManifest, ContextSourceText, TurnContext
+from agent_comms.manual_compaction_bridge import compact_context
+from agent_comms.messaging.bus_read import OwnerReadRuntimeRequest, OwnerScopedRead
+from agent_comms.nominal.field_codec import FieldCodec, WireValue
+from agent_comms.owner_protocol import ClientLine, OwnerAnnouncement, OwnerFailure, OwnerReady
+from agent_comms.pi_payloads import NativeContextData
+from agent_comms.planning.goal_history import RecordedGoalHistory
+from agent_comms.planning.goals import Goal
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.runtime_server import (
+    AttachedRuntimeRequestContext,
+    ServedAttachedResultRuntimeRequest,
+    ServedAttachedRuntimeRequest,
+    SubscriberClosed,
 )
-
-from .agent_event_updates import AcpEventConsumer
-from .acp_request_consumer import AcpRequestConsumer
-from .coordination.coordinator import Coordination
-from .nominal.field_codec import (
-    FieldCodec,
-    WireValue,
-)
-from .planning.goal_history import RecordedGoalHistory
-from .planning.goals import Goal
-from .manual_compaction_bridge import compact_context
-from .messaging.bus_read import (
-    OwnerReadRuntimeRequest,
-    OwnerScopedRead,
-)
-from .registry.thread_identity import ThreadIncarnation
-from .transport.project_request import ProjectRuntimeRequest
-from .transport.runtime_requests import (
+from agent_comms.tool_result import DeclaredReply, ToolResult
+from agent_comms.transport.project_request import ProjectRuntimeRequest
+from agent_comms.transport.runtime_requests import (
     CancelRuntimeRequest,
     ClearQueueRuntimeRequest,
     CompactRuntimeRequest,
@@ -81,32 +82,11 @@ from .transport.runtime_requests import (
     SubscribeRuntimeRequest,
     UpdateGoalRuntimeRequest,
 )
-from .transport.tools.reads import OwnerGoalRead
-from .transport.tools.sidebar import (
-    ClearQueueQueueAction,
-    SendNowQueueAction,
-)
-from .ui_model.observation import SubscribeTranscript
-from agent_comms.runtime_server import (
-    AttachedRuntimeRequestContext,
-    ServedAttachedResultRuntimeRequest,
-    ServedAttachedRuntimeRequest,
-    SubscriberClosed,
-)
-from .coordination.errors import Refused
-from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerFailure, OwnerReady
-from .pi_payloads import NativeContextData
-from .tool_result import (
-    DeclaredReply,
-    ToolResult,
-)
-from .execution.turn_context import (
-    ContextManifest,
-    ContextSourceText,
-    TurnContext,
-)
-from .working_memory_annotations import WorkingMemoryAnnotations
-from .working_memory_labels import ModelLabel
+from agent_comms.transport.tools.reads import OwnerGoalRead
+from agent_comms.transport.tools.sidebar import ClearQueueQueueAction, SendNowQueueAction
+from agent_comms.ui_model.observation import SubscribeTranscript
+from agent_comms.working_memory_annotations import WorkingMemoryAnnotations
+from agent_comms.working_memory_labels import ModelLabel
 
 
 class OwnedRead[Result: ToolResult = ToolResult](OwnerScopedRead[Result], ABC):
@@ -130,8 +110,8 @@ class ServedOwnerReadRuntimeRequest(
 
 
 if TYPE_CHECKING:
-    from .agent_backend import CompactionOutcome
-    from .input_disposition import DeliveryOverview
+    from agent_comms.agent_backend import CompactionOutcome
+    from agent_comms.input_disposition import DeliveryOverview
 
 
 @dataclass(frozen=True)

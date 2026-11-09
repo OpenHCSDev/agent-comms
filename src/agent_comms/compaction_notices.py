@@ -6,10 +6,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
-from .channel_targets import CommsTag
-from .messages import MessageRole, NoticeRole
-from .recorded_time import RecordedEventTime
-from .registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.channel_targets import CommsTag
+from agent_comms.messages import MessageRole, NoticeRole
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 
 
 @dataclass(frozen=True)

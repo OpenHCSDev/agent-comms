@@ -8,7 +8,7 @@ from typing import ClassVar, Never, Self
 
 from pydantic import JsonValue
 
-from ..nominal.field_codec import DeclaredError, FieldCodec, ReportedError
+from agent_comms.nominal.field_codec import DeclaredError, FieldCodec, ReportedError
 
 
 class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome

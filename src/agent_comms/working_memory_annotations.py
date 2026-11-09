@@ -2,11 +2,22 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from .coordination.database import CoordinationStore, ReadableStore
-from .errors import RelationViolationError
-from .coordination.tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
-from .working_memory_labels import CalibrationReport, ClassifierVersion, HumanLabel, ModelLabel, QuestionVersion
-from .working_memory_requests import CompletedAnnotationOutcome, DisclosureRequest, SubmittedAnnotationOutcome
+
+from agent_comms.coordination.database import CoordinationStore, ReadableStore
+from agent_comms.coordination.tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
+from agent_comms.errors import RelationViolationError
+from agent_comms.working_memory_labels import (
+    CalibrationReport,
+    ClassifierVersion,
+    HumanLabel,
+    ModelLabel,
+    QuestionVersion,
+)
+from agent_comms.working_memory_requests import (
+    CompletedAnnotationOutcome,
+    DisclosureRequest,
+    SubmittedAnnotationOutcome,
+)
 
 
 class PreviouslyRequestedAnnotation(ValueError):

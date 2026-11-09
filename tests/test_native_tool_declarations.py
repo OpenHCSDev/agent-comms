@@ -10,22 +10,15 @@ import pytest
 from acp.schema import ToolCallStart
 
 import agent_comms.agent_events as events
-from agent_comms.registry.thread_identity import UnobservedTools
 from agent_comms.acp import SdkSessionConnection
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.comms import wire
+from agent_comms.execution.turn_item import NativeItemId
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     ToolCallId,
 )
-from agent_comms.transport.native_tools import (
-    BashTool,
-    CodingTool,
-    EditTool,
-    NativeToolDeclaration,
-    ReadTool,
-    WriteTool,
-)
+from agent_comms.registry.thread_identity import UnobservedTools
 from agent_comms.tool_declaration import (
     EditAction,
     ExecuteAction,
@@ -36,7 +29,14 @@ from agent_comms.tool_declaration import (
     ToolDeclaration,
     UndeclaredTool,
 )
-from agent_comms.execution.turn_item import NativeItemId
+from agent_comms.transport.native_tools import (
+    BashTool,
+    CodingTool,
+    EditTool,
+    NativeToolDeclaration,
+    ReadTool,
+    WriteTool,
+)
 from conftest import transcript_records
 from delivery_owner_fixture import canonical_agent
 
@@ -136,9 +136,9 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
     from agent_comms.cli_bridges.codex_protocol import FileChange, UpdatedFile
     from agent_comms.cli_bridges.opencode_parts import ToolPart
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.transport.native_tools import FilePatchTool
     from agent_comms.tool_calls import ToolCall
     from agent_comms.transcript_events import TranscriptEvent
+    from agent_comms.transport.native_tools import FilePatchTool
 
     start, end = FileChange(path="codex.txt", diff="@@ -1 +1 @@\\n-old\\n+new\\n",
                             kind=UpdatedFile()).events(NativeItemId("codex"), ToolCallId("codex"), True, transcript_records.timestamp.at.timestamp())
@@ -159,9 +159,9 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
 
 
 def test_core_commands_share_native_identity_without_changing_external_decode():
-    from agent_comms.transport.native_tools import NativeExecutableTool
     from agent_comms.tool_declaration import NativeRequestTools
     from agent_comms.tool_request import NativeToolRequest
+    from agent_comms.transport.native_tools import NativeExecutableTool
     from agent_comms.transport.request import ToolRequest
     from agent_comms.transport.tools.send import CommsSendTool
 

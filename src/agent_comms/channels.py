@@ -9,22 +9,30 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .channel_targets import ChannelTarget, Tag
-from .cli_result import CliResult
-from .display_order import CreatedThreadSort, ThreadSort
-from .errors import RelationViolationError
-from .history_result import ChannelHistoryPageResult, EverythingHistoryPageResult, HistoryPageResult
-from .messages import MembershipTransition
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import CatalogExclude, FieldCodec
-from .projection_source import ProjectionSource
-from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope
-from .tool_result import ToolResult
+from agent_comms.channel_targets import ChannelTarget, Tag
+from agent_comms.cli_result import CliResult
+from agent_comms.display_order import CreatedThreadSort, ThreadSort
+from agent_comms.errors import RelationViolationError
+from agent_comms.history_result import (
+    ChannelHistoryPageResult,
+    EverythingHistoryPageResult,
+    HistoryPageResult,
+)
+from agent_comms.messages import MembershipTransition
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import CatalogExclude, FieldCodec
+from agent_comms.projection_source import ProjectionSource
+from agent_comms.read_basis import (
+    AllChannelDisplayScope,
+    ChannelDisplayScope,
+    MemberActivityDisplayScope,
+)
+from agent_comms.tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from .registry.registry_document import RosterVisibility
-    from .registry.threads import Thread
-    from .registry_provenance import RegistryProvenance
+    from agent_comms.registry.registry_document import RosterVisibility
+    from agent_comms.registry.threads import Thread
+    from agent_comms.registry_provenance import RegistryProvenance
 
 
 class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):

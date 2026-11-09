@@ -6,21 +6,25 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.nominal.field_codec import (
-    FieldCodec,
-    InputId,
-    MalformedRecord,
-    ToolCallId,
-)
 from agent_comms.execution.native_entries import (
     MessageEntry,
     NativeEntry,
     TranscriptProjection,
     UnknownEntry,
 )
-from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.execution.native_transcript import NativeTranscript
+from agent_comms.execution.turn_item import (
+    FreshNativeId,
+    NativeItemId,
+)
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    InputId,
+    MalformedRecord,
+    ToolCallId,
+)
 from agent_comms.pi_payloads import UserMessage
 from agent_comms.transcript_events import (
     AssistantTranscript,
@@ -30,10 +34,6 @@ from agent_comms.transcript_events import (
     ToolStartTranscript,
     TranscriptEvent,
     UserTranscript,
-)
-from agent_comms.execution.turn_item import (
-    FreshNativeId,
-    NativeItemId,
 )
 from conftest import transcript_records
 

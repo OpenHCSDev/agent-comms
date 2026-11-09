@@ -9,9 +9,9 @@ from collections.abc import (
 from dataclasses import dataclass
 from functools import partial
 from typing import (
+    TYPE_CHECKING,
     ClassVar,
     Literal,
-    TYPE_CHECKING,
 )
 
 from agent_comms.assignment_states import (
@@ -22,6 +22,7 @@ from agent_comms.assignment_states import (
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import WireOrigin
+from agent_comms.execution.selected.result import CoordinatedTurn
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -31,7 +32,6 @@ from agent_comms.nominal.field_codec import (
     MalformedRecord,
     TextRepresentation,
 )
-from agent_comms.execution.selected.result import CoordinatedTurn
 from agent_comms.storage.typed_table import TextStorage
 
 if TYPE_CHECKING:
@@ -39,12 +39,12 @@ if TYPE_CHECKING:
 
     from agent_comms.assignment_states import AssignmentState
     from agent_comms.coordinated_runtime import SelectedExecution
-    from agent_comms.execution.selected.participant import SelectedParticipant
-    from agent_comms.execution.selected.session import SelectedSession
-    from agent_comms.historical_native_inputs import HistoricalNativeInput
     from agent_comms.execution.native_input_proof import NativeContextProof
     from agent_comms.execution.native_input_record import TriageNativeExecution
     from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+    from agent_comms.execution.selected.participant import SelectedParticipant
+    from agent_comms.execution.selected.session import SelectedSession
+    from agent_comms.historical_native_inputs import HistoricalNativeInput
     from agent_comms.private_send_claim import PrivateSendClaim
     from agent_comms.private_send_stage import TriageNativeSend
 
@@ -281,7 +281,7 @@ class DecidedTriageRecord(TriageDecisionRecord):
         return RecordedTriageText.encode(self.decision)
 
     def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> HistoricalNativeInput:
-        from ...historical_native_inputs import TriageHistoricalNativeInput
+        from agent_comms.historical_native_inputs import TriageHistoricalNativeInput
 
         return TriageHistoricalNativeInput(execution=execution, decision=self.decision, **source)
 

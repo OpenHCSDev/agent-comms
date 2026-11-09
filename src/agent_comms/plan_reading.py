@@ -6,23 +6,23 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from itertools import chain
-from threading import Lock
 from subprocess import TimeoutExpired
+from threading import Lock
 from typing import ClassVar
+
 from agent_comms.phase_evidence import (
-    Census, EvidenceFound, EvidenceRead, EvidenceUnread, MainTree, PhaseEvidence,
+    Census,
+    EvidenceFound,
+    EvidenceRead,
+    EvidenceUnread,
+    MainTree,
+    PhaseEvidence,
     UnreadableEvidenceError,
 )
-from .projects.git_errors import GitCommandError
-from .projects.repo import Repo
-from .projects.checkouts import (
-    Checkout,
-    CheckoutHistory,
-)
-
-
-from .planning.orders import Todo
-
+from agent_comms.planning.orders import Todo
+from agent_comms.projects.checkouts import Checkout, CheckoutHistory
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
 
 
 @dataclass(frozen=True)

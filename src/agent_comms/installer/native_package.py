@@ -23,12 +23,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal
 
-from ..execution.child_process import Platform
-from .native_build_inputs import INPUTS_PREFIX, NativeBuildInputs, built_tree_pin
-from ..execution.native_failures import NativePiUnavailable
-from ..nominal.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
-from ..storage.private_path import PrivateDirectoryRole, TrustedAncestorRole
-from ..storage.store_files import AtomicFile
+from agent_comms.execution.child_process import Platform
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.installer.native_build_inputs import (
+    INPUTS_PREFIX,
+    NativeBuildInputs,
+    built_tree_pin,
+)
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    PathText,
+    Sha256Text,
+    WireName,
+)
+from agent_comms.storage.private_path import PrivateDirectoryRole, TrustedAncestorRole
+from agent_comms.storage.store_files import AtomicFile
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
 

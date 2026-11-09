@@ -8,40 +8,33 @@ from abc import (
 )
 from dataclasses import dataclass
 from typing import (
-    Annotated,
     TYPE_CHECKING,
+    Annotated,
 )
 
-from .goal_attempt_identity import GoalAttemptIdentity
-from ..nominal.field_codec import (
-    AttemptId,
-    GoalId,
-    TurnId,
-)
-from ..projects.checkouts import Checkout
-from ..storage.typed_table import (
-    Column,
-    DurableTables,
-    ForeignKey,
-    TextStorage,
-    TypedTable,
-)
-from ..registry.thread_identity import (
+from agent_comms.execution.turn_failure import TurnFailure
+from agent_comms.nominal.field_codec import AttemptId, GoalId, TurnId
+from agent_comms.planning.goal_attempt_identity import GoalAttemptIdentity
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import (
     ClaimedIdentity,
     RecordedThreadIncarnation,
     ThreadIncarnation,
     TurnFence,
     TurnIdentity,
 )
-from ..execution.turn_failure import TurnFailure
+from agent_comms.storage.typed_table import (
+    Column,
+    DurableTables,
+    ForeignKey,
+    TextStorage,
+    TypedTable,
+)
 
 if TYPE_CHECKING:
-    from .goal_attempts import (
-        FailedTurnObservation,
-        Reservation,
-    )
-    from .goal_presentation import GoalExecution
-    from ..registry.threads import Thread
+    from agent_comms.planning.goal_attempts import FailedTurnObservation, Reservation
+    from agent_comms.planning.goal_presentation import GoalExecution
+    from agent_comms.registry.threads import Thread
 
 
 class GoalLedgerTable(DurableTables):
@@ -56,7 +49,7 @@ class GoalFailureEvidence(ABC):
 @dataclass(frozen=True)
 class NoFailedTurnEvidence(GoalFailureEvidence):
     def execution(self, goal_id: GoalId) -> GoalExecution:
-        from .goal_presentation import AttemptUnresolvedExecution
+        from agent_comms.planning.goal_presentation import AttemptUnresolvedExecution
         return AttemptUnresolvedExecution(goal_id)
 
 
@@ -89,7 +82,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
             raise ValueError("Observation incarnation must be finite")
 
     def execution(self, goal_id: GoalId) -> GoalExecution:
-        from .goal_presentation import AttemptFailedExecution
+        from agent_comms.planning.goal_presentation import AttemptFailedExecution
         return AttemptFailedExecution(goal_id, self)
 
     @property
@@ -121,7 +114,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
 
     @classmethod
     def references(cls):
-        from .goal_attempts import AttemptRecord
+        from agent_comms.planning.goal_attempts import AttemptRecord
 
         return (ForeignKey(columns=("attempt_id",), target=AttemptRecord, target_columns=("attempt_id",)),)
 

@@ -14,24 +14,21 @@ from functools import partial
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, ClassVar, Self, cast
 
-from .coordination.coordinator import Coordination
-from .errors import RelationViolationError, UnregisteredThreadError
-from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
-from .jsonl_stream import JsonlStreamReader
-from .storage.maintenance_barrier import MaintenanceHolder
-from .owner_protocol import OwnerLine
-from .storage.private_path import PrivateSocketRole
-from .registry.thread_identity import (
-    OwnerIdentity,
-    ThreadIncarnation,
-)
-from .registry.threads import NativeThread, Thread
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.jsonl_stream import JsonlStreamReader
+from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.owner_protocol import OwnerLine
+from agent_comms.registry.thread_identity import OwnerIdentity, ThreadIncarnation
+from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.storage.maintenance_barrier import MaintenanceHolder
+from agent_comms.storage.private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
-    from .transport.runtime_request import RuntimeRequest
-    from .execution.child_process import ProcessIdentity
-    from .comms import Comms
-    from .registry.registry_document import RegistryEntry
+    from agent_comms.comms import Comms
+    from agent_comms.execution.child_process import ProcessIdentity
+    from agent_comms.registry.registry_document import RegistryEntry
+    from agent_comms.transport.runtime_request import RuntimeRequest
 
 
 def socket_path(root: Path, pid: int) -> Path:

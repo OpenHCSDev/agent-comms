@@ -10,13 +10,9 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms_hooks import ToolRefusedError
 
-
 if TYPE_CHECKING:
 
-    from .planning.orders import (
-        MergedProblemOrder,
-        Todo,
-    )
+    from agent_comms.planning.orders import MergedProblemOrder, Todo
 
 
 class OrderRun(DeclaredFamily, affix="OrderRun"):

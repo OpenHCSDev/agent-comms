@@ -27,25 +27,8 @@ from agent_comms.coordination.tables.executions import WireOrigin
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.durable_turn import DurableTurn
 from agent_comms.envelope_claim_transitions import WakeClaim
-from agent_comms.execution.turn_context import (
-    RecordedContextTurn,
-    RenderedInput,
-    TurnContext,
-)
-from agent_comms.execution.turn_goal_account import VerifiedGoalSettlement
-from agent_comms.execution.turn_phase import (
-    PreparingPhase,
-    PromptAcceptancePhase,
-    PublishingPhase,
-)
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_pi import NativeTurnResult
-from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
-from agent_comms.owner_fence import prepare_fence_token
-from agent_comms.private_send_stage import (
-    FullNativeSend,
-    TriageNativeSend,
-)
 from agent_comms.execution.selected.actions import (
     BatchSelectedAction,
     NoSelectedTools,
@@ -58,6 +41,23 @@ from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.execution.selected.triage import (
     RejectedTriageOutcome,
     SelectedTriageOutcome,
+)
+from agent_comms.execution.turn_context import (
+    RecordedContextTurn,
+    RenderedInput,
+    TurnContext,
+)
+from agent_comms.execution.turn_goal_account import VerifiedGoalSettlement
+from agent_comms.execution.turn_phase import (
+    PreparingPhase,
+    PromptAcceptancePhase,
+    PublishingPhase,
+)
+from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
+from agent_comms.owner_fence import prepare_fence_token
+from agent_comms.private_send_stage import (
+    FullNativeSend,
+    TriageNativeSend,
 )
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 

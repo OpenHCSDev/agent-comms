@@ -5,15 +5,15 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from .messaging.bus_read import UiRead
-from .comms import Comms
-from .historical_views import HistorySource
-from .page_traversal import HistorySourceKey
-from .message_reference import MessageReference
+from agent_comms.comms import Comms
+from agent_comms.historical_views import HistorySource
 from agent_comms.message_notification import NotificationPass, NotificationWindow
-from .notification_evidence import FirstRecipient, RecipientCursor, RecipientLimit
-from .notification_read import NotificationsRead
-from .read_basis import ReadAuthority
+from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.bus_read import UiRead
+from agent_comms.notification_evidence import FirstRecipient, RecipientCursor, RecipientLimit
+from agent_comms.notification_read import NotificationsRead
+from agent_comms.page_traversal import HistorySourceKey
+from agent_comms.read_basis import ReadAuthority
 
 
 @dataclass(frozen=True)

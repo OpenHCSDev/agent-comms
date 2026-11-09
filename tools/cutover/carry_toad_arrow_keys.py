@@ -8,16 +8,16 @@ import re
 from dataclasses import dataclass
 from typing import ClassVar
 
+from cutover.carry_toad_key_mode import ToadSettingsCarry
 from pydantic import JsonValue
 from textual.keys import DownKey, LeftKey, NavigationKey, RightKey, UpKey
-
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import FieldCodec, NominalSpelling, NominalText
-from cutover.carry_toad_key_mode import ToadSettingsCarry
 from toad.key_modes import KeyMode
 from toad.keymap import KeyInvocationId, Keymap, KeyRemap
 from toad.preferences import ToadSettings, UiSettings
+
+from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, NominalSpelling, NominalText
 
 
 class PreviousInvocationId(NominalText):

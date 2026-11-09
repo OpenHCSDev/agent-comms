@@ -2,12 +2,9 @@
 
 from dataclasses import dataclass
 
-from ..nominal.field_codec import FieldCodec
-from ..message_reference import MessageReference
-from ..execution.turn_context import (
-    InstructionSegment,
-    WireProvenance,
-)
+from agent_comms.execution.turn_context import InstructionSegment, WireProvenance
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.field_codec import FieldCodec
 
 
 @dataclass(frozen=True, kw_only=True)

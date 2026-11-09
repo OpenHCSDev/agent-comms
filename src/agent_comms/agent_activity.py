@@ -10,19 +10,19 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .execution.native_input_owner import RegistryOwner
-from .notification_progress import TakenProgress, WorkingTakenProgress
+from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.notification_progress import TakenProgress, WorkingTakenProgress
 
 if TYPE_CHECKING:
-    from .agent_backend import AgentBackend
-    from .agent_events import RuntimeInfoObservation
-    from .bus_publication import Delivered
-    from .notification_progress import AssignmentProgress, DeliveryProgress
-    from .message_notification import MessageNotification
-    from .registry.registration import Registration
-    from .registry.registry_document import RegistrySnapshot
-    from .registry.thread_status import ThreadStatus
-from .activity import (
+    from agent_comms.agent_backend import AgentBackend
+    from agent_comms.agent_events import RuntimeInfoObservation
+    from agent_comms.bus_publication import Delivered
+    from agent_comms.message_notification import MessageNotification
+    from agent_comms.notification_progress import AssignmentProgress, DeliveryProgress
+    from agent_comms.registry.registration import Registration
+    from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.registry.thread_status import ThreadStatus
+from agent_comms.activity import (
     Activity,
     ActivityCapture,
     ActivityState,
@@ -32,29 +32,22 @@ from .activity import (
     NoDrainDiagnostic,
     ObservedActivity,
 )
-from .coordination.coordinator import Coordination
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import ThreadLookup, TurnId
-from .frozen_recipient import FrozenRecipient
-from .routing import NoTurnRouting, Routing
-from .runtime_info import RuntimeInfo, RuntimeInfoStore
-from .registry.thread_identity import (
-    OwnerIdentity,
-    ThreadIncarnation,
-)
-from .registry.threads import Thread
-from .execution.turn_lease import (
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.turn_lease import (
     NoFinishedTurn,
     TurnCompletion,
     TurnLeaseFence,
     TurnState,
 )
-from .execution.turn_phase import (
-    IdlePhase,
-    PreparingPhase,
-    TurnPhase,
-)
+from agent_comms.execution.turn_phase import IdlePhase, PreparingPhase, TurnPhase
+from agent_comms.frozen_recipient import FrozenRecipient
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import ThreadLookup, TurnId
+from agent_comms.registry.thread_identity import OwnerIdentity, ThreadIncarnation
+from agent_comms.registry.threads import Thread
+from agent_comms.routing import NoTurnRouting, Routing
+from agent_comms.runtime_info import RuntimeInfo, RuntimeInfoStore
 
 _LOG = logging.getLogger(__name__)
 
@@ -226,7 +219,7 @@ class AgentActivity:
         if diagnostic.owner != owner:
             raise RelationViolationError("Drain diagnostic belongs to another owner.")
         if source_error is not None:
-            from .diagnostics import record_drain_failure
+            from agent_comms.diagnostics import record_drain_failure
 
             path = record_drain_failure(
                 self.registry.store.path.parent,

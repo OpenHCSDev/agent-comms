@@ -11,14 +11,24 @@ import aiohttp
 from aiohttp import ClientError
 from pydantic import JsonValue
 
+from agent_comms.cli_bridges.codex_protocol import (
+    RPC_RESPONSE,
+    Capabilities,
+    ClientInfo,
+    CodexRefused,
+    Initialize,
+    Initialized,
+    InitializeResponse,
+    RateLimitsResponse,
+    ReadRateLimits,
+    Request,
+    RequestParams,
+    RpcNotification,
+    RpcReply,
+)
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.team_hud import CodexUsage, UnreadableUsage
 from agent_comms.usage_reading import RateLimits
-
-from .codex_protocol import (
-    Capabilities, ClientInfo, CodexRefused, Initialize, InitializeResponse, Initialized, Request,
-    RPC_RESPONSE, RateLimitsResponse, ReadRateLimits, RequestParams, RpcNotification, RpcReply,
-)
 
 
 class CodexConnection:

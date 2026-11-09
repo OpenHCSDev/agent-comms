@@ -19,28 +19,22 @@ from typing import (
     Self,
 )
 
-from ..execution.child_process import Platform
-from .goal_failure_observation import FailedTurnEvidence
-from .goal_scope import GoalScope
-from .goals import (
-    GoalDeclaration,
-    NoGoal,
-)
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
+from agent_comms.execution.child_process import Platform
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     HistoryExclude,
     MalformedRecord,
     WireOmitDefault,
 )
-from ..owner_requests import (
-    NoRequestRevision,
-    RequestRevision,
-)
-from ..private_registry_guard import PrivateRegistryGuard
-from ..storage.locked_store import DurableFile
-from ..storage.store_files import AtomicFile
-from ..storage.typed_table import (
+from agent_comms.owner_requests import NoRequestRevision, RequestRevision
+from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
+from agent_comms.planning.goal_scope import GoalScope
+from agent_comms.planning.goals import GoalDeclaration, NoGoal
+from agent_comms.private_registry_guard import PrivateRegistryGuard
+from agent_comms.storage.locked_store import DurableFile
+from agent_comms.storage.store_files import AtomicFile
+from agent_comms.storage.typed_table import (
     Column,
     DurableTables,
     Index,
@@ -48,7 +42,7 @@ from ..storage.typed_table import (
     ReconciledFile,
     RowidSequenced,
 )
-from ..tool_result import ToolResult
+from agent_comms.tool_result import ToolResult
 
 
 class GoalHistoryError(RuntimeError):

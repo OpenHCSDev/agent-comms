@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from agent_comms.notification_assignment import NotificationSelection
 from abc import abstractmethod
 from collections.abc import Awaitable, Iterator, Sequence
 from contextlib import contextmanager
@@ -12,44 +11,66 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Callable, ClassVar, NoReturn
 
-from .history_view import HistoryView, OwnHistory
-from .agent_backend import RuntimeLocation
-from .bus import Bus
-from .bus_publication import Delivered
-from .coordination.database import CoordinationStore
-from .coordination.errors import CoordinationReadUnavailable, ReloadRequired, StaleRevision, TranscriptChanged
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .external_transcript import ExternalTranscript
-from .nominal.field_codec import ContentExclude, FieldCodec, MalformedRecord, WireName, projected
-from .historical_views import HistorySource
-from .page_traversal import HistorySourceKey
-from .messaging.message_bus import MessageBus
-from .message_reference import MessageReference
-from .execution.native_runtime_input import PublishedReplyRevision
-from .execution.native_entries import NativeEvidenceScope
-from .execution.native_input_owner import RegistryOwner
-from .execution.native_session_files import NativeSessionFiles
-from .execution.native_transcript import NativeTranscript, RecordsCut, SessionCut
-from .input_disposition import InputDispositions
-from .execution.native_output import NativeRecordLocation
-from .notification_assignment import NotificationAssignment
-from agent_comms.message_notification import NotificationWindow
-from .notification_evidence import OwnerOutcomes
-from .message_notification import MessageNotification
-from .registry.thread_presentation import ThreadPresentation
-from .storage.private_path import FileIdentity, FileObservation, FileRevision, MissingFile
-from .private_registry_guard import RegistryPrivacy
-from .recorded_bus import RecordedBusIdentity
-from .registry.registration import Registration
-from .registry.registry_store import RegistryStore
-from .routing import TurnRouting
-from .sent_message import AssignedSourceIdentity
-from .sent_reports import CapturedSentReports
-from .registry.threads import Thread, ThreadProvenance
-from .transcript_events import ForkOriginTranscript, ForkTaskTranscript, TranscriptEvent
-from .transcript_routes import TranscriptRoutes
-from .transcript_sources import (
+from agent_comms.agent_backend import RuntimeLocation
+from agent_comms.bus import Bus
+from agent_comms.bus_publication import Delivered
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import (
+    CoordinationReadUnavailable,
+    ReloadRequired,
+    StaleRevision,
+    TranscriptChanged,
+)
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.native_entries import NativeEvidenceScope
+from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.native_output import NativeRecordLocation
+from agent_comms.execution.native_runtime_input import PublishedReplyRevision
+from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.execution.native_transcript import NativeTranscript, RecordsCut, SessionCut
+from agent_comms.execution.turn_digests import (
+    InputAnswerRead,
+    ThreadTurns,
+    TurnBound,
+    TurnDigestRead,
+)
+from agent_comms.execution.turn_lease import TurnLeaseFence
+from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.historical_views import HistorySource
+from agent_comms.history_view import HistoryView, OwnHistory
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.message_notification import MessageNotification, NotificationWindow
+from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    ContentExclude,
+    FieldCodec,
+    MalformedRecord,
+    WireName,
+    projected,
+)
+from agent_comms.notification_assignment import NotificationAssignment, NotificationSelection
+from agent_comms.notification_evidence import OwnerOutcomes
+from agent_comms.page_traversal import HistorySourceKey
+from agent_comms.private_registry_guard import RegistryPrivacy
+from agent_comms.recorded_bus import RecordedBusIdentity
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.registry.thread_presentation import ThreadPresentation
+from agent_comms.registry.threads import Thread, ThreadProvenance
+from agent_comms.routing import TurnRouting
+from agent_comms.sent_message import AssignedSourceIdentity
+from agent_comms.sent_reports import CapturedSentReports
+from agent_comms.storage.private_path import (
+    FileIdentity,
+    FileObservation,
+    FileRevision,
+    MissingFile,
+)
+from agent_comms.transcript_events import ForkOriginTranscript, ForkTaskTranscript, TranscriptEvent
+from agent_comms.transcript_routes import TranscriptRoutes
+from agent_comms.transcript_sources import (
     AssignedSourceCursor,
     AssignedTranscriptSource,
     EarlierTranscript,
@@ -61,26 +82,16 @@ from .transcript_sources import (
     TranscriptTraversal,
     WireFrontier,
 )
-from .execution.turn_digests import (
-    InputAnswerRead,
-    ThreadTurns,
-    TurnBound,
-    TurnDigestRead,
-)
-from .execution.turn_lease import TurnLeaseFence
 
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
-    from .coordination.database import InvalidStore, MissingStore
-    from .registry.registry_document import RegistrySnapshot
-    from .registry_provenance import RegistryProvenance
-    from .registry.thread_identity import ThreadIncarnation
-    from .registry.thread_text import (
-    ThreadParent,
-    ThreadText,
-)
-    from .view_unread import TranscriptReadState
+    from agent_comms.coordination.database import InvalidStore, MissingStore
+    from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.registry.thread_identity import ThreadIncarnation
+    from agent_comms.registry.thread_text import ThreadParent, ThreadText
+    from agent_comms.registry_provenance import RegistryProvenance
+    from agent_comms.view_unread import TranscriptReadState
 
 _LOG = logging.getLogger(__name__)
 

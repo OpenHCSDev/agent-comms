@@ -1,16 +1,9 @@
 """Authored archived deliveries use recorded owners, not live availability."""
 
 
-from agent_comms.notification_progress import AssignmentResponse, AnsweredResponse, UnansweredResponse
-from agent_comms.notification_evidence import AllOutcomes
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.bus import Bus
-from bus_record_fixture import prepare_native_comms
-
-from conftest import publish_initial
+import sqlite3
 from dataclasses import replace
 from pathlib import Path
-import sqlite3
 
 import pytest
 
@@ -21,29 +14,41 @@ from agent_comms.assignment_states import (
     EngagedAssignment,
     IgnoredAssignment,
 )
+from agent_comms.bus import Bus
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.comms import wire
-from agent_comms.coordination.database import CoordinationStore
-from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.harness_delivery_states import DeliveredOutcome, ObservedMonitor
-from agent_comms.notification_progress import (
-    AnsweredProgress, ConsumedDelivery, DeliveryProgress, HarnessConsumedProgress,
-    QueuedProgress, WorkingTakenProgress,
-)
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import DMScopeChanged, SchemaVersionError
-from agent_comms.nominal.field_codec import InputId, MessageId, TurnId
-from transcript_record_fixture import transcript_record
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
+from agent_comms.harness_delivery_states import DeliveredOutcome, ObservedMonitor
 from agent_comms.historical_views import HistoricalDisplay
-from agent_comms.read_basis import ReadCursor
 from agent_comms.messaging.read_ledger import ReadLedger
+from agent_comms.nominal.field_codec import InputId, MessageId, TurnId
+from agent_comms.notification_evidence import AllOutcomes
+from agent_comms.notification_progress import (
+    AnsweredProgress,
+    AnsweredResponse,
+    AssignmentResponse,
+    ConsumedDelivery,
+    DeliveryProgress,
+    HarnessConsumedProgress,
+    QueuedProgress,
+    UnansweredResponse,
+    WorkingTakenProgress,
+)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.read_basis import ReadCursor
 from agent_comms.registry.thread_identity import (
     AgentThreadRole,
     UserThreadRole,
 )
-from agent_comms.wake_policy import FullWake
 from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.wake_policy import FullWake
+from bus_record_fixture import prepare_native_comms
+from conftest import publish_initial
+from transcript_record_fixture import transcript_record
 
 SENDER = "sender"  # the notification carries its sender's lookup; these tests read progress only
 
@@ -224,13 +229,18 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
 def test_sent_recipient_progresses_through_durable_consumption_and_answer(archived_notification):
     old, _live, _source, messages, root_id = archived_notification
     recipient, = old.bus.bus.delivery(messages[0].seq).recipients
-    from agent_comms.message_reference import MessageReference
-    from agent_comms.notification_assignment import AssignmentActivity
     from agent_comms.activity import ActivityState, ObservedActivity, ReadyDrainReadiness
     from agent_comms.agent_activity import LiveRecipientActivity
+    from agent_comms.message_reference import MessageReference
+    from agent_comms.notification_assignment import AssignmentActivity
     from agent_comms.notification_progress import (
-        IgnoredProgress, QueuedProgress, SelectedConsumedProgress, SentProgress, ShownToModelProgress,
-        TakenProgress, WorkingTakenProgress,
+        IgnoredProgress,
+        QueuedProgress,
+        SelectedConsumedProgress,
+        SentProgress,
+        ShownToModelProgress,
+        TakenProgress,
+        WorkingTakenProgress,
     )
 
     sent_activity = AssignmentActivity(
@@ -341,8 +351,8 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
 
 def test_delivered_assignment_uses_its_recorded_conversation_response(archived_notification):
     from agent_comms.assignment_states import DeferredAssignment
-    from conftest import accept_initial
     from agent_comms.coordination.coordinator import Coordination
+    from conftest import accept_initial
 
     old, _live, _source, messages, root_id = archived_notification
     original = messages[0]
@@ -370,6 +380,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
 
     import os
     from uuid import uuid4
+
     from agent_comms.execution.child_process import ProcessIdentity
     from agent_comms.input_disposition import InputDispositions
     from agent_comms.input_origin import WireInputOrigin
@@ -421,8 +432,8 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
     archived_notification,
 ):
     from agent_comms.assignment_states import DeferredAssignment
-    from conftest import accept_initial
     from agent_comms.coordination.coordinator import Coordination
+    from conftest import accept_initial
 
     old, _live, _source, _messages, root_id = archived_notification
     from conftest import declare_test_bus
@@ -461,8 +472,8 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
 
 
 def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
-    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.agent_activity import RecipientActivity
+    from agent_comms.nominal.field_codec import FieldCodec
 
     old, live, source, messages, _root_id = archived_notification
     old.registry.declare(old.registry.require("agent").as_member(ExternalThread))

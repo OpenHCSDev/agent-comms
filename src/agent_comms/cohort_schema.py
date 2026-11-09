@@ -7,22 +7,24 @@ import sqlite3
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
+from agent_comms.audience_manifest import MAX_AUDIENCE_BYTES
+from agent_comms.coordination.contracts import POLICY_VERSION, RESOLVER_VERSION
 from agent_comms.coordination.errors import IdentityConflict, SchemaVersionError
+from agent_comms.coordination.schema import CoordinatorTable
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.participants import OwnerGenerations, OwnerRecord, Participants
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
-
-from .audience_manifest import MAX_AUDIENCE_BYTES
-from .coordination.contracts import POLICY_VERSION, RESOLVER_VERSION
-from .coordination.schema import CoordinatorTable
-from .nominal.field_codec import AssignmentId, MessageId, RootId, SubclassUnion, ThreadLookup, WireName
-from .registry.thread_text import (
-    AbsentText,
-    GivenText,
-    TextChoice,
+from agent_comms.nominal.field_codec import (
+    AssignmentId,
+    MessageId,
+    RootId,
+    SubclassUnion,
+    ThreadLookup,
+    WireName,
 )
-from .response_acknowledgement import _canonical
-from .storage.typed_table import (
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
+from agent_comms.registry.thread_text import AbsentText, GivenText, TextChoice
+from agent_comms.response_acknowledgement import _canonical
+from agent_comms.storage.typed_table import (
     Column,
     ColumnGuard,
     ComposedSchemas,
@@ -43,12 +45,12 @@ from .storage.typed_table import (
     TypedTable,
     WithoutRowid,
 )
-from .wake_candidate_index import ProjectionUnavailableError
+from agent_comms.wake_candidate_index import ProjectionUnavailableError
 
 if TYPE_CHECKING:
-    from .bus_publication import Delivered
-    from .coordination.coordinator import Coordination
-    from .private_registry_guard import RegistryPrivacy
+    from agent_comms.bus_publication import Delivered
+    from agent_comms.coordination.coordinator import Coordination
+    from agent_comms.private_registry_guard import RegistryPrivacy
 
 class CohortTable(PrivateCoordinatorTable):
     """Mandatory sealed N/K acknowledgement declarations."""

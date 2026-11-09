@@ -24,20 +24,14 @@ from pydantic import (
     PlainValidator,
 )
 
-from .git_errors import (
+from agent_comms.installer.native_build_inputs import CloneShape, GitLaunch
+from agent_comms.nominal.field_codec import FieldCodec, WireValue
+from agent_comms.projects.git_errors import (
     FailedGitCommand,
     GitCommandError,
     UnavailableCommitError,
 )
-from ..installer.native_build_inputs import (
-    CloneShape,
-    GitLaunch,
-)
-from ..nominal.field_codec import (
-    FieldCodec,
-    WireValue,
-)
-from ..repository_name import RepositoryName
+from agent_comms.repository_name import RepositoryName
 
 
 class RepositorySelection(ABC):

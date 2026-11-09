@@ -11,17 +11,13 @@ from dataclasses import (
 )
 from typing import TYPE_CHECKING
 
-from .turn_failure import (
-    BackendFailed,
-    NoTurnFailure,
-    TurnFailure,
-)
+from agent_comms.execution.turn_failure import BackendFailed, NoTurnFailure, TurnFailure
 
 if TYPE_CHECKING:
-    from .owned_turn import TurnGoalAccount
-    from .turn_progress import TurnProgress
-    from ..agent_events import Done
-    from ..storage.maintenance_barrier import MaintenanceBarrier
+    from agent_comms.agent_events import Done
+    from agent_comms.execution.owned_turn import TurnGoalAccount
+    from agent_comms.execution.turn_progress import TurnProgress
+    from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 
 
 class TurnInterruption(ABC):

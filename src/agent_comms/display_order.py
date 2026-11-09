@@ -5,14 +5,14 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, ClassVar
 
-from .nominal.declared_family import DeclaredFamily
-from .declared_choice import DeclaredChoice, TitledChoice
+from agent_comms.declared_choice import DeclaredChoice, TitledChoice
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from .channel_management import ChannelManagement
-    from .history_views import HistoryViews
-    from .presentation import ChannelView
-    from .registry.registry_document import RegistrySnapshot
+    from agent_comms.channel_management import ChannelManagement
+    from agent_comms.history_views import HistoryViews
+    from agent_comms.presentation import ChannelView
+    from agent_comms.registry.registry_document import RegistrySnapshot
 
 
 class DisplayOrder(TitledChoice, DeclaredChoice, ABC):

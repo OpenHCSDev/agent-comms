@@ -14,9 +14,9 @@ from agent_comms.execution.turn_inbox import (
     InputRequest,
     SteerInputPolicy,
 )
+from agent_comms.execution.turn_watchdog import ModelWait
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.execution.turn_watchdog import ModelWait
 from pi_session_turn import one_turn_events
 
 

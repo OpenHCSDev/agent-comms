@@ -1,11 +1,10 @@
 """Inbound command contract; domain roots reuse DeclaredFamily and FieldCodec."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from typing import Self
 
-from collections.abc import Mapping
-
-from .nominal.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 
 
 class Command[Context, Result](ABC):

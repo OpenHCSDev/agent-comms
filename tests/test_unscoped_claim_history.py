@@ -1,6 +1,5 @@
 """Bus history holds tool acquisitions written before claims recorded a scope."""
 
-from agent_comms.projects.checkouts import Checkout
 import pytest
 
 from agent_comms.comms import wire
@@ -14,7 +13,15 @@ from agent_comms.envelope_claim_transitions import (
     UnscopedClaims,
     WakeClaims,
 )
-from agent_comms.nominal.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord, MessageId, TurnId
+from agent_comms.nominal.field_codec import (
+    ClaimId,
+    FieldCodec,
+    InputId,
+    MalformedRecord,
+    MessageId,
+    TurnId,
+)
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_status import RunningThreadStatus
 from agent_comms.registry.threads import NativeThread
 

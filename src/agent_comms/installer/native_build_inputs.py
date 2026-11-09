@@ -20,7 +20,7 @@ from functools import cache
 from pathlib import Path
 from tempfile import TemporaryFile
 from time import monotonic
-from typing import ClassVar, IO, TypedDict, Unpack, cast
+from typing import IO, ClassVar, TypedDict, Unpack, cast
 
 INPUTS_PREFIX = "# agent-comms-native-inputs-v1 "
 

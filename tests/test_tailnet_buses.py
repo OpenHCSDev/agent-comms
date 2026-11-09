@@ -9,7 +9,12 @@ from __future__ import annotations
 import json
 
 from agent_comms.tailnet_buses import (
-    PeerHoldsBus, PeerOffline, PeerUnreachable, PeerWithoutBus, TailnetBuses, TailnetPeer,
+    PeerHoldsBus,
+    PeerOffline,
+    PeerUnreachable,
+    PeerWithoutBus,
+    TailnetBuses,
+    TailnetPeer,
 )
 
 STATUS = {

@@ -6,29 +6,25 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
-
-from .controller import NO_CONTROLLER
-from .bus_publication import HumanOrigin
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import RootId
-from .planning.goals import GoalCheckpoint
-from .harness_install import HarnessSession
-from .input_key import InputKey, InputKeyText
-from .message_reference import MessageReference
-from .tool_result import ToolResult
-from .projects.checkouts import Checkout
-from .registry.thread_identity import (
-    ClaimScoped,
-    ClaimedIdentity,
-)
-from .execution.turn_context import Provenance
+from agent_comms.bus_publication import HumanOrigin
+from agent_comms.controller import NO_CONTROLLER
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.turn_context import Provenance
+from agent_comms.harness_install import HarnessSession
+from agent_comms.input_key import InputKey, InputKeyText
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import RootId
+from agent_comms.planning.goals import GoalCheckpoint
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import ClaimedIdentity, ClaimScoped
+from agent_comms.tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from .comms import Comms
-    from .input_attempt import StoredInput
-    from .registry.registry_document import RegistrySnapshot
-    from .registry.threads import Thread
+    from agent_comms.comms import Comms
+    from agent_comms.input_attempt import StoredInput
+    from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.registry.threads import Thread
 
 
 class InputDelivery:
@@ -59,7 +55,7 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
         pass
 
     def retained_fact(self, source: StoredInput):
-        from .retained_task_facts import InputTaskFact
+        from agent_comms.retained_task_facts import InputTaskFact
 
         return InputTaskFact(source)
 
@@ -92,7 +88,7 @@ class InputProvenance(Provenance):
         return f"Original input {self.key} · {self.origin.declared_name}"
 
     def public_text(self, comms) -> str:
-        from .input_disposition import InputDispositions
+        from agent_comms.input_disposition import InputDispositions
 
         return self.require_original(InputDispositions(comms.root)).source_text
 
@@ -191,7 +187,7 @@ class HumanInputOrigin(InputOrigin, ClaimScoped, ToolResult):
             raise RelationViolationError("User input scope changed before reservation")
 
     def retained_fact(self, source):
-        from .retained_task_facts import HumanInputTaskFact
+        from agent_comms.retained_task_facts import HumanInputTaskFact
 
         return HumanInputTaskFact(source)
 

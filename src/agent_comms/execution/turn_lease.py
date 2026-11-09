@@ -17,25 +17,20 @@ from dataclasses import (
 )
 from pathlib import Path
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     ClassVar,
-    TYPE_CHECKING,
 )
 
-from ..activity import ObservedActivity
-from .child_process import (
-    ProcessIdentity,
-    ProcessState,
-)
-from ..coordination.session import NativeCapture
-from ..errors import RelationViolationError
-from ..input_disposition import InputDispositions
-from ..lifecycle_capability import (
-    Executing,
-    LifecycleCapability,
-)
-from ..message_reference import MessageReference
-from ..nominal.field_codec import (
+from agent_comms.activity import ObservedActivity
+from agent_comms.coordination.session import NativeCapture
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity, ProcessState
+from agent_comms.execution.turn_phase import IdlePhase, PreparingPhase, TurnPhase
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.lifecycle_capability import Executing, LifecycleCapability
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.field_codec import (
     NullMember,
     RecordMember,
     SingleFieldValue,
@@ -44,17 +39,17 @@ from ..nominal.field_codec import (
     WireTransient,
     boundary_decoder,
 )
-from ..planning.goal_presentation import RunningExecution
-from ..reported_turn import (
-    NoReportedTurn,
-    ReportedTurn,
-    ReportedTurnState,
+from agent_comms.planning.goal_presentation import RunningExecution
+from agent_comms.registry.thread_identity import (
+    NoObservedTurn,
+    ObservedTurn,
+    ThreadIncarnation,
+    TurnFence,
+    TurnIdentity,
 )
-from ..routing import (
-    NoTurnRouting,
-    Routing,
-)
-from ..storage.locked_store import (
+from agent_comms.reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
+from agent_comms.routing import NoTurnRouting, Routing
+from agent_comms.storage.locked_store import (
     DocumentBytes,
     DocumentChange,
     DocumentTransactions,
@@ -62,30 +57,15 @@ from ..storage.locked_store import (
     LockedFile,
     PatternFile,
 )
-from ..storage.store_files import (
-    DependentStateTier,
-    SingleFileStore,
-)
-from ..registry.thread_identity import (
-    NoObservedTurn,
-    ObservedTurn,
-    ThreadIncarnation,
-    TurnFence,
-    TurnIdentity,
-)
-from .turn_phase import (
-    IdlePhase,
-    PreparingPhase,
-    TurnPhase,
-)
+from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 
 if TYPE_CHECKING:
-    from ..messaging.sending import Messaging
-    from ..planning.goal_management import GoalExecutionSource
-    from ..planning.goal_presentation import GoalExecution
-    from ..registry.registry_document import RegistrySnapshot
-    from ..registry.registry_store import RegistryStore
-    from ..registry.threads import Thread
+    from agent_comms.messaging.sending import Messaging
+    from agent_comms.planning.goal_management import GoalExecutionSource
+    from agent_comms.planning.goal_presentation import GoalExecution
+    from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.registry.registry_store import RegistryStore
+    from agent_comms.registry.threads import Thread
 
 
 class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
@@ -719,7 +699,7 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
     @property
     def registry(self) -> RegistryStore:
         """The registry owner this stored reference is bound to."""
-        from ..registry.registry_store import RegistryStore
+        from agent_comms.registry.registry_store import RegistryStore
 
         return RegistryStore(self.registry_path)
 

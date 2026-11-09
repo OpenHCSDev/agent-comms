@@ -1,23 +1,22 @@
 """One real Git source/remote owner for citation tests; no source checkout is required."""
 import ast
 import os
+import subprocess
 from collections.abc import Mapping
 from pathlib import Path
-import subprocess
-from typing import ClassVar, Self
-from types import MappingProxyType
 from tempfile import mkdtemp
+from types import MappingProxyType
+from typing import ClassVar, Self
 
 import tomli_w
 
+from agent_comms.change_report import FileLine, OrderRoots
 from agent_comms.planning.orders import FixScope
 from agent_comms.planning.problem_findings import FixShape
 from agent_comms.planning.pull_requests import PullRequestLink
-from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.projects.repo import Repo
+from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.repository_name import RepositoryName
-from agent_comms.change_report import OrderRoots
-from agent_comms.change_report import FileLine
 from fixture_git import IDENTITY
 
 

@@ -12,8 +12,12 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from .turn_failure import PromptSendFailed
-from .turn_inbox import (
+from agent_comms import agent_events as events
+from agent_comms import pi_commands as commands
+from agent_comms.acp_failure import UnrecordedFailureSource
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.turn_failure import PromptSendFailed
+from agent_comms.execution.turn_inbox import (
     ClearQueue,
     InputRequest,
     SendNow,
@@ -21,30 +25,15 @@ from .turn_inbox import (
     TurnInboxItem,
     UseSettings,
 )
-from .. import (
-    agent_events as events,
-    pi_commands as commands,
-)
-from ..acp_failure import UnrecordedFailureSource
-from .native_failures import NativePiUnavailable
-from ..nominal.field_codec import InputId
-from ..pending_requests import PendingRequest
-from ..prompt_state import (
-    PreparedSession,
-    UnwrittenPrompt,
-)
-from ..storage.locked_store import RegistryFile
-from ..storage.maintenance_barrier import MaintenanceBarrier
+from agent_comms.nominal.field_codec import InputId
+from agent_comms.pending_requests import PendingRequest
+from agent_comms.prompt_state import PreparedSession, UnwrittenPrompt
+from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 
 if TYPE_CHECKING:
-    from ..backend import (
-        NativeSession,
-        TurnSession,
-    )
-    from ..pi_events import (
-        MessageStart,
-        Response,
-    )
+    from agent_comms.backend import NativeSession, TurnSession
+    from agent_comms.pi_events import MessageStart, Response
 
 
 class NoCurrentItem(TurnInboxItem):

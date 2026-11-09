@@ -6,12 +6,12 @@ from abc import (
 )
 from typing import TYPE_CHECKING
 
-from ..input_key import InputKey
+from agent_comms.input_key import InputKey
 
 if TYPE_CHECKING:
-    from ..input_disposition import InputDispositions
-    from ..messages import Message
-    from ..registry.threads import Thread
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.messages import Message
+    from agent_comms.registry.threads import Thread
 
 
 class TurnOrigin(ABC):

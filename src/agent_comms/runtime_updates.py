@@ -12,41 +12,25 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from . import activity
-from .agent_activity import AgentActivity
-from .agent_events import RuntimeInfoObservation
-from .cli_protocol import EarlierItems
-from .external_transcript import ExternalPage, ExternalTranscript
-from .message_reference import MessageReference
-from .messaging.sending import Messaging
-from .recorded_time import EventTime, UnrecordedEventTime
-from .transcript_events import (
-    LiveTextTranscript,
-    ToolStartTranscript,
-    TranscriptEvent,
-)
-from .registry.thread_text import (
-    NoThreadText,
-    ThreadText,
-)
-from .registry.thread_identity import OfferedTools
-from .execution.turn_phase import (
-    IdlePhase,
-    ModelWaitPhase,
-    TurnPhase,
-)
-from .execution.turn_item import (
-    NativeItemId,
-    NativeTurnId,
-    NoSourceTurn,
-    TurnItem,
-)
+from agent_comms import activity
+from agent_comms.agent_activity import AgentActivity
+from agent_comms.agent_events import RuntimeInfoObservation
+from agent_comms.cli_protocol import EarlierItems
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId, NoSourceTurn, TurnItem
+from agent_comms.execution.turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
+from agent_comms.external_transcript import ExternalPage, ExternalTranscript
+from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.sending import Messaging
+from agent_comms.recorded_time import EventTime, UnrecordedEventTime
+from agent_comms.registry.thread_identity import OfferedTools
+from agent_comms.registry.thread_text import NoThreadText, ThreadText
+from agent_comms.transcript_events import LiveTextTranscript, ToolStartTranscript, TranscriptEvent
 
 if TYPE_CHECKING:
-    from .cli_bridges.shared import TranscriptBridge
-    from .importing import ImportBuffer
-    from .comms import Comms
-    from .registry.thread_status import ThreadStatus
+    from agent_comms.cli_bridges.shared import TranscriptBridge
+    from agent_comms.comms import Comms
+    from agent_comms.importing import ImportBuffer
+    from agent_comms.registry.thread_status import ThreadStatus
 
 
 @dataclass

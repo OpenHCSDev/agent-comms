@@ -2,16 +2,14 @@
 
 import re
 
+from acp.schema import PromptRequest, PromptResponse
 from metaclass_registry.mro_dispatch import (
     MroDispatch,
     handles,
 )
 
-from .coordination.errors import Refused
-from acp.schema import PromptRequest, PromptResponse
-
-from . import acp_extension
-from .acp_extension import (
+from agent_comms import acp_extension
+from agent_comms.acp_extension import (
     ClearQueueRequest,
     CompactRequest,
     SelectedWriteRequest,
@@ -19,7 +17,8 @@ from .acp_extension import (
     decode_request,
     encode_request,
 )
-from .nominal.field_codec import AcpSessionId, MalformedRecord
+from agent_comms.coordination.errors import Refused
+from agent_comms.nominal.field_codec import AcpSessionId, MalformedRecord
 
 
 class AcpRequestConsumer(MroDispatch):

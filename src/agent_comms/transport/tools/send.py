@@ -7,24 +7,22 @@ owner. Serving it for external callers stays in ``agent_comms.transport.tools.se
 from __future__ import annotations
 
 import threading
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Type
 
+from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.channel_targets import CommandTarget, NamedTarget
 from agent_comms.coordination.tables.refusals import SendRefusal
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, MessageKind, SendableMessageKind
-from ..native_tools import CommunicationCall
 from agent_comms.nominal.field_codec import WireChoices, WireName
 from agent_comms.send_result import MessagePublished
 from agent_comms.task_sources import NoTaskAttachment, TaskAttachment
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_request import PublishingTool, ThreadToolRequest
+from agent_comms.transport.native_tools import CommunicationCall
 from agent_comms.transport.request import tool_field
 from agent_comms_hooks import ToolRefusedError
-
-from dataclasses import dataclass
-
-from agent_comms.change_report import NoChangeReport, ReportEvidence
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms

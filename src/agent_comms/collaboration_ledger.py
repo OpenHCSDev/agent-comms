@@ -3,9 +3,9 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from .errors import UnregisteredThreadError
-from .registry.registration import Registration
-from .shared_ledger import SharedLedger
+from agent_comms.errors import UnregisteredThreadError
+from agent_comms.registry.registration import Registration
+from agent_comms.shared_ledger import SharedLedger
 
 
 @dataclass(frozen=True, slots=True)

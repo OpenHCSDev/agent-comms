@@ -1,7 +1,6 @@
 """A killed restore must be completed by the next install, before it reads the bus."""
 
 
-from agent_comms.projects.checkouts import Checkout
 import os
 import signal
 import subprocess
@@ -11,21 +10,22 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.comms import Comms, wire
 from agent_comms.active_route import active_route_path
+from agent_comms.comms import Comms, wire
 from agent_comms.install_choices import RehearsalMode
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.installer.launch import InstallReport
+from agent_comms.installer.probes.carry import Carried, Carry
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.upgrade import upgrade
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile
-from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_text import GivenThreadText
-from bus_record_fixture import prepare_native_comms
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile
+from bus_record_fixture import prepare_native_comms
 
 
 class RegistryTitleCarry(Carry):

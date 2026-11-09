@@ -1,22 +1,40 @@
 """Integration policy at real TOML/Git/gh boundaries; no patched Core methods."""
 
 import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tomllib
 from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import replace
-import json
-import os
 from pathlib import Path
-import subprocess
-import shutil
-import sys
-import tomllib
 
 import pytest
 import tomli_w
+from agent_comms_project import AgentCommsProject, ClientTypeErrors
+from local_checker import LocalCheckerVerb
+from module_layers import MaterializedClients, Package
+from nominal_refactor_advisor import audit
 
 from agent_comms import integration
 from agent_comms.errors import TodoError
+from agent_comms.head_review import (
+    BaseSide,
+    CombinedInput,
+    HeadReview,
+    HeadSide,
+    IntegrationInput,
+    MergeHeadReview,
+    PromotedHeadReview,
+    PullRequestHead,
+    ResolvedIntegrationSource,
+)
+from agent_comms.installer.runtime_resolution import PrivateUvProject, StackSources
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from agent_comms.planning.order_words import VerdictReason
 from agent_comms.planning.orders import (
     DraftListedPullRequest,
@@ -27,31 +45,23 @@ from agent_comms.planning.orders import (
     UnmergedListedPullRequest,
 )
 from agent_comms.planning.pull_requests import PullRequestCommit
-from agent_comms.team.order import Team
-from agent_comms.transport.tools.orders import CommsTodoCreateTool
-from agent_comms_hooks import ToolRefusedError
-from agent_comms.head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, MergeHeadReview, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource
-from agent_comms.repository_name import RepositoryName
 from agent_comms.projects.git_errors import (
     GitCommandError,
     UnavailableCommitError,
 )
 from agent_comms.projects.repo import Repo
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.planning.goal_actions import CreateProblemGoalAction
-from agent_comms.test_lease import TestLease
-from agent_comms.tool_denial import StorageDenied
-from agent_comms.tool_caller import PeerCaller
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.installer.runtime_resolution import PrivateUvProject, StackSources
+from agent_comms.repository_name import RepositoryName
+from agent_comms.team.order import Team
+from agent_comms.test_lease import TestLease
+from agent_comms.tool_caller import PeerCaller
+from agent_comms.tool_denial import StorageDenied
+from agent_comms.transport.tools.orders import CommsTodoCreateTool
+from agent_comms_hooks import ToolRefusedError
+from fixture_git import ENVIRONMENT, SETTINGS
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
 from source_revision_fixture import SourceRepository
-from fixture_git import ENVIRONMENT, SETTINGS
-from agent_comms_project import AgentCommsProject, ClientTypeErrors
-from nominal_refactor_advisor import audit
-from module_layers import MaterializedClients, Package
-from local_checker import LocalCheckerVerb
 
 pytest_plugins = ("github_fixture", "test_holder_standing_rules", "integration_source_fixture")
 

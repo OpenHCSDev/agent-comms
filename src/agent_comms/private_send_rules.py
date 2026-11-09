@@ -5,14 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-
-from .execution.child_process import ProcessIdentity
-from .coordination.tables.assignments import WakeAssignment
-from .reservation_rules import ReservationRule, RuleCheck
-from .execution.native_input_record import NativeInputIdentity, NativeInputRecord
-from .execution.native_runtime_input import NativeRuntimeInput
-from .execution.turn_goal_permission import GoalPermission
-from .registry.threads import Thread
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.native_input_record import NativeInputIdentity, NativeInputRecord
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.turn_goal_permission import GoalPermission
+from agent_comms.registry.threads import Thread
+from agent_comms.reservation_rules import ReservationRule, RuleCheck
 
 if TYPE_CHECKING:
     pass

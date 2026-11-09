@@ -1,7 +1,6 @@
 """The carry family: one chain of idempotent steps whose dry runs say what a bus still needs."""
 
 
-from agent_comms.projects.checkouts import Checkout
 import os
 import sqlite3
 import subprocess
@@ -11,22 +10,28 @@ from functools import partial
 from pathlib import Path
 
 import pytest
-
 from agent_comms_project import AgentCommsProject
 from nominal_refactor_advisor import audit
 
-from agent_comms.storage.locked_store import LiveFilesRequest
-from agent_comms.cli_verbs.stop import StopCliCommand
+import fixture_git
+from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.cli_command import TargetBatchResult
+from agent_comms.cli_verbs.stop import StopCliCommand
+from agent_comms.comms import wire
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.installer.backup import StoreBackup, bus_files
-from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
-from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.installer.carry import STEPS, CarryChain, FinishedCarryStore
-from agent_comms.installer.probes.carry import Carried, Carry, MigrateOperation
-from agent_comms.installer.probes.commands import CliOutput, CliUndecodableError
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstallClock, TargetProgram
+from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.practice import PracticeCopy
+from agent_comms.installer.probes.carry import Carried, Carry, MigrateOperation
+from agent_comms.installer.probes.commands import CliOutput, CliUndecodableError
+from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
+from agent_comms.installer.runtime_resolution import RuntimeResolution
+from agent_comms.installer.target_tree import TargetTree
 from agent_comms.installer.upgrade import (
     ExistingBusInstall,
     HeldOwnersStopped,
@@ -40,28 +45,21 @@ from agent_comms.installer.upgrade import (
     UnchangedRehearsal,
     carried,
 )
-from agent_comms.installer.launch import InstallReport
-from agent_comms.installer.target_tree import TargetTree
-from agent_comms.cli_bridges.shared import SessionBridgeResumes
+from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.registry.thread_status import RunningThreadStatus
+from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
+from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.storage.maintenance_barrier import (
     DrainingPhase,
     MaintenanceBarrier,
     MaintenanceOperator,
     ReadyPhase,
 )
-from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
-from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.registry.thread_status import RunningThreadStatus
 from conftest import ledger_one_failure_short
-import fixture_git
-
-from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.comms import wire
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.launch_root import LaunchRoot
-from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from native_backend_fixture import NativeBackendFixture, native_backend_fixture
 
 REPO = Path(__file__).resolve().parents[1]

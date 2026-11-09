@@ -11,6 +11,7 @@ from agent_comms.cli_failures import CLI_FAILURES
 from agent_comms.launch_root import LaunchRoot, started
 from agent_comms.team.order import Team
 
+
 def tool_name(module: str) -> str:
     """The tool a module of this package is: its name, with dashes."""
     return module.rsplit('.', 1)[1].replace('_', '-')

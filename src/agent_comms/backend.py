@@ -38,15 +38,24 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from agent_comms.participant_identity import ParticipantIdentity
-from agent_comms.pi_wire import RequestId
-
-from . import agent_events as events
-from . import pi_commands as commands
-from . import pi_events as pi
-from .acp_failure import UnrecordedFailureSource
-from .agent_backend import NO_INPUT_START_LISTENER, InputStartListener
-from .execution.turn_failure import (
+from agent_comms import agent_events as events
+from agent_comms import pi_commands as commands
+from agent_comms import pi_events as pi
+from agent_comms.acp_failure import UnrecordedFailureSource
+from agent_comms.agent_backend import NO_INPUT_START_LISTENER, InputStartListener
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.execution.native_attestation import AttestationError
+from agent_comms.execution.native_child import PiSessionChild
+from agent_comms.execution.native_entries import NativeEvidenceScope
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_input_proof import NativeContextProof, NativeInputCommit
+from agent_comms.execution.native_pi import NativePiRpcLaunch, read_tracked_input_commitment
+from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.execution.native_startup import NATIVE_STARTUP_POLICY, NativeStartup
+from agent_comms.execution.turn_context import InputContributionCoordinates
+from agent_comms.execution.turn_failure import (
     BackendDidNotExit,
     FollowupUnrecognized,
     IdentityUncertain,
@@ -57,55 +66,41 @@ from .execution.turn_failure import (
     NativePreflightExit,
     TurnFailure,
 )
-from .execution.turn_inbox import (
-    TurnInbox,
-    TurnInboxItem,
-)
-from .coordination.coordinator import Coordination
-from .cursor_publication import CursorDelivery
-from .extension_ui import ExtensionUiSession
-from .nominal.field_codec import InputId, MalformedRecord, boundary_decoder
-from .image_input import ImageInput
-from .execution.native_attestation import AttestationError
-from .execution.native_child import PiSessionChild
-from .execution.native_entries import NativeEvidenceScope
-from .execution.native_failures import NativePiUnavailable
-from .execution.native_input_proof import NativeContextProof, NativeInputCommit
-from .installer.native_package import VerifiedNativePackage
-from .execution.native_pi import NativePiRpcLaunch, read_tracked_input_commitment
-from .execution.native_session_files import NativeSessionFiles
-from .execution.native_session_reopen import PiSessionId
-from .execution.native_startup import NATIVE_STARTUP_POLICY, NativeStartup
-from .transport.native_tool_transport import NativeToolMode
-from .transport.native_tool_transport import ToolTransport, UnboundToolTransport
-from .pi_rpc import PiRpcChannel
-from .private_sidecar import native_request_digest
-from .prompt_state import PromptState, QueuedOperation, UnwrittenPrompt
-from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
-from .send_outcome import NO_SEND_BOUNDARY, SendBoundary
-from .tool_denial import SelectedToolDenied
-from .execution.turn_context import InputContributionCoordinates
-from .execution.turn_inputs import InputForwarding
-from .execution.turn_item import PiRequestKey
-from .execution.turn_output import TurnOutput
-from .execution.turn_phase import (
-    NativePhaseChanged,
-    SettlingStatsPhase,
-    TurnPhase,
-)
-from .execution.turn_stats import StatsRequest
-from .execution.turn_usage import UsageAccount
-from .execution.turn_watchdog import (
+from agent_comms.execution.turn_inbox import TurnInbox, TurnInboxItem
+from agent_comms.execution.turn_inputs import InputForwarding
+from agent_comms.execution.turn_item import PiRequestKey
+from agent_comms.execution.turn_output import TurnOutput
+from agent_comms.execution.turn_phase import NativePhaseChanged, SettlingStatsPhase, TurnPhase
+from agent_comms.execution.turn_stats import StatsRequest
+from agent_comms.execution.turn_usage import UsageAccount
+from agent_comms.execution.turn_watchdog import (
     DEFAULT_MODEL_WAIT,
     ProgressWatchdog,
     TurnWait,
     TurnWaitExpired,
 )
+from agent_comms.extension_ui import ExtensionUiSession
+from agent_comms.image_input import ImageInput
+from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.nominal.field_codec import InputId, MalformedRecord, boundary_decoder
+from agent_comms.participant_identity import ParticipantIdentity
+from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.pi_wire import RequestId
+from agent_comms.private_sidecar import native_request_digest
+from agent_comms.prompt_state import PromptState, QueuedOperation, UnwrittenPrompt
+from agent_comms.request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
+from agent_comms.send_outcome import NO_SEND_BOUNDARY, SendBoundary
+from agent_comms.tool_denial import SelectedToolDenied
+from agent_comms.transport.native_tool_transport import (
+    NativeToolMode,
+    ToolTransport,
+    UnboundToolTransport,
+)
 
 if TYPE_CHECKING:
-    from .acp_failure import ProviderRetryResult
-    from .pi_native_backend import PersistentPiSession
-    from .pi_payloads import AssistantMessage, UserMessage
+    from agent_comms.acp_failure import ProviderRetryResult
+    from agent_comms.pi_native_backend import PersistentPiSession
+    from agent_comms.pi_payloads import AssistantMessage, UserMessage
 
 
 # Pi 0.85.1 owns provider-idle detection and defaults it to 300 seconds. This

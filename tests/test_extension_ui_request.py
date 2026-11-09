@@ -1,8 +1,8 @@
 """Pi's extension UI requests dispatch on their declared method and share the dialog replies."""
 
 from agent_comms.pi_events import (
-    ConfirmUiRequest,
     ConfirmedUiChoice,
+    ConfirmUiRequest,
     ExtensionUiRequest,
     PiEvent,
     ValueUiChoice,

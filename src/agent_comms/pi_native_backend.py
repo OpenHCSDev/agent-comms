@@ -18,50 +18,56 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .execution.native_session_files import ForkedSession, NativeSessionFiles, NativeSessionLocks
-from agent_comms.pi_wire import PiOmitted
-from agent_comms.pi_payloads import PiResponseData
-
-from .agent_backend import CompactionOutcome, FailedCompaction, Forks, Interrupts, NewThreadBackend, NothingToCompaction, PlacedCompaction, RuntimeLocation
-from .registry.thread_model import (
-    ThreadModel,
-    UndeclaredModel,
+from agent_comms.agent_backend import (
+    CompactionOutcome,
+    FailedCompaction,
+    Forks,
+    Interrupts,
+    NewThreadBackend,
+    NothingToCompaction,
+    PlacedCompaction,
+    RuntimeLocation,
 )
-from .execution.turn_inbox import InputContent
-from .coordination.coordinator import Coordination
-from .nominal.field_codec import AcpSessionId
-from .fresh_private_session import create_fresh_private_session
-from .execution.native_arguments import NativeArguments
-from .execution.native_failures import NativePiUnavailable
-from .execution.native_fork import (
-    RuntimeForkHelper,
-    RuntimeForkRequest,
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.native_arguments import NativeArguments
+from agent_comms.execution.native_entries import NativeEvidenceScope
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_fork import RuntimeForkHelper, RuntimeForkRequest
+from agent_comms.execution.native_pi import NativePiRpcLaunch
+from agent_comms.execution.native_session_files import (
+    ForkedSession,
+    NativeSessionFiles,
+    NativeSessionLocks,
 )
-from .installer.native_package import SYSTEM_PROMPT
-from .execution.native_pi import NativePiRpcLaunch
-from .execution.native_entries import NativeEvidenceScope
-from .execution.native_session_reopen import NativeSessionIdentity
-from .execution.native_transcript import NativeTranscript
-from .pi_commands import Compact, NativeQuery
-from .rule_deal import SystemPromptDelivery
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.selected.session import SavedSelectedSession
-from .session_revision import (
+from agent_comms.execution.turn_inbox import InputContent
+from agent_comms.fresh_private_session import create_fresh_private_session
+from agent_comms.installer.native_package import SYSTEM_PROMPT
+from agent_comms.nominal.field_codec import AcpSessionId
+from agent_comms.pi_commands import Compact, NativeQuery
+from agent_comms.pi_payloads import PiResponseData
+from agent_comms.pi_wire import PiOmitted
+from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
+from agent_comms.rule_deal import SystemPromptDelivery
+from agent_comms.session_revision import (
     SessionObservation,
     SessionRevision,
     SessionRevisionUnavailable,
 )
 
 if TYPE_CHECKING:
-    from .agent_events import AgentEvent, AgentInfo
-    from .comms import Comms
-    from .config_options import ConfigOptions
-    from .launch_runtime import LaunchRuntime
-    from .execution.native_child import NativeChildState, PiSessionChild
-    from .execution.native_session_reopen import NativeSessionIdentity
-    from .execution.owned_turn import TurnDelivery
-    from .pi_payloads import StateData
-    from .registry.threads import Thread
-    from .execution.turn_runner import TurnRunner
+    from agent_comms.agent_events import AgentEvent, AgentInfo
+    from agent_comms.comms import Comms
+    from agent_comms.config_options import ConfigOptions
+    from agent_comms.execution.native_child import NativeChildState, PiSessionChild
+    from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+    from agent_comms.execution.owned_turn import TurnDelivery
+    from agent_comms.execution.turn_runner import TurnRunner
+    from agent_comms.launch_runtime import LaunchRuntime
+    from agent_comms.pi_payloads import StateData
+    from agent_comms.registry.threads import Thread
 
 
 # The event kinds Pi 0.85.1 writes to RPC stdout, as built for Core. Sources,
@@ -131,7 +137,7 @@ class PersistentPiSession:
     """Serialize borrowing and retirement of one native session's actual child."""
 
     def __init__(self) -> None:
-        from .execution.native_child import EmptyNative
+        from agent_comms.execution.native_child import EmptyNative
 
         self.lock = asyncio.Lock()
         self.child_state: NativeChildState = EmptyNative()
@@ -141,7 +147,7 @@ class PersistentPiSession:
         return self.child_state.available
 
     async def open(self, launch, *, reuse, startup, watchdog) -> PiSessionChild:
-        from .execution.native_child import BorrowedNative, EmptyNative, PiSessionChild
+        from agent_comms.execution.native_child import BorrowedNative, EmptyNative, PiSessionChild
 
         key = (launch, launch.configuration.auth_revision())
         child = self.child_state.reuse(key) if reuse else None
@@ -164,7 +170,7 @@ class PersistentPiSession:
             return await self.child_state.context_for_input(thread, context)
 
     def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:
-        from .execution.native_child import RetainedNative
+        from agent_comms.execution.native_child import RetainedNative
 
         if not child.proc.alive():
             return False
@@ -238,7 +244,7 @@ class PiNativeBackend(
 
     async def prepare(self, thread: Thread, *, open_native=None) -> StateData:
         """Launch (or reuse) and attest the idle child for ``thread``'s saved session."""
-        from .execution.native_session_prepare import NativeSessionPreparation
+        from agent_comms.execution.native_session_prepare import NativeSessionPreparation
 
         if open_native is None:
             open_native = NativeSessionPreparation.open
@@ -270,7 +276,7 @@ class PiNativeBackend(
     async def run_turn(
         self, thread: Thread, content: InputContent, delivery: TurnDelivery
     ) -> AsyncIterator[AgentEvent]:
-        from . import backend
+        from agent_comms import backend
 
         images = {"images": content.images} if content.images else {}
         package = self.comms.owners.require_private_launch().native_package
@@ -301,7 +307,7 @@ class PiNativeBackend(
             yield event
 
     async def abort[Result](self, owner: asyncio.Task[Result]) -> None:
-        from . import backend
+        from agent_comms import backend
 
         await backend.terminate_task_process(owner)
 

@@ -7,23 +7,23 @@ from collections.abc import Callable
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated
 
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import (
+from agent_comms.lifecycle_capability import Failed, LifecycleCapability, Successful
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     AcceptsNull,
     DefaultExternalName,
     ExternalName,
     FieldCodec,
     FieldRepresentation,
 )
-from .lifecycle_capability import Failed, LifecycleCapability, Successful
-from .pi_counts import PiCount, UnreportedCount
+from agent_comms.pi_counts import PiCount, UnreportedCount
 
 if TYPE_CHECKING:
     import sqlite3
 
-    from .attempt_states import UnsuccessfulTerminal
-    from .backend import TurnSession
-    from .coordination.tables.executions import ExecutionRecord
+    from agent_comms.attempt_states import UnsuccessfulTerminal
+    from agent_comms.backend import TurnSession
+    from agent_comms.coordination.tables.executions import ExecutionRecord
 
 
 class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
@@ -42,8 +42,8 @@ class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
 
     @classmethod
     def record_recovery(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> UnsuccessfulTerminal:
-        from .attempt_states import UnknownOutcomeAttempt
-        from .coordination.tables import executions
+        from agent_comms.attempt_states import UnknownOutcomeAttempt
+        from agent_comms.coordination.tables import executions
 
         outcome = UnknownOutcomeAttempt()
         executions.ReplayAssessments.accumulate(db, execution.execution_id, outcome.replay_contribution)
@@ -63,7 +63,7 @@ class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
 
     @classmethod
     def declared_failure(cls, message):
-        from .execution.turn_failure import ModelRequestFailed
+        from agent_comms.execution.turn_failure import ModelRequestFailed
 
         text = message.error_message.value_or("").strip() or cls.tracked_failure
         return ModelRequestFailed.from_diagnostics(text, message.diagnostics)
@@ -94,7 +94,7 @@ class FailedUnpublishedPiStop:
 
     @classmethod
     def record_recovery(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> UnsuccessfulTerminal:
-        from .attempt_states import AttemptFailedAttempt
+        from agent_comms.attempt_states import AttemptFailedAttempt
 
         return AttemptFailedAttempt()
 
@@ -102,7 +102,7 @@ class FailedUnpublishedPiStop:
 class FinishedPiStop(FailedUnpublishedPiStop):
     @classmethod
     def record_recovery(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> UnsuccessfulTerminal:
-        from .coordination.tables import attempts, executions
+        from agent_comms.coordination.tables import attempts, executions
 
         outcome = super().record_recovery(db, execution)
         # The native turn finished, but recovery cannot invent a delivered reply.

@@ -1,6 +1,4 @@
 """Ancestry checks never fetch, and a failed git command is never a negative answer."""
-from agent_comms.repository_name import RepositoryName
-
 import pytest
 
 from agent_comms.projects.git_errors import (
@@ -8,6 +6,7 @@ from agent_comms.projects.git_errors import (
     UnavailableCommitError,
 )
 from agent_comms.projects.repo import Repo
+from agent_comms.repository_name import RepositoryName
 from test_order_progress import git
 
 

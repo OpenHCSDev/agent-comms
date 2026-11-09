@@ -1,10 +1,11 @@
 """Portable thread mentions: textual addressees, independent of message delivery."""
 
-from .class_fact import ClassFact
-from .projection_source import ProducedRow, ProjectionSource
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+
+from agent_comms.class_fact import ClassFact
+from agent_comms.projection_source import ProducedRow, ProjectionSource
 
 _NAME = r"[A-Za-z0-9_-]"
 _MENTION = re.compile(r"(?<![\w@/\\])@(" + _NAME + r"+)")
@@ -23,7 +24,7 @@ class ThreadMention(ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .messaging.bus_display_index import BusDisplayIndex
+        from agent_comms.messaging.bus_display_index import BusDisplayIndex
         return (BusDisplayIndex,)
 
     thread: str

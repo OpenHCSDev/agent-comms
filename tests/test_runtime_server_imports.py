@@ -1,9 +1,9 @@
 """Declaring or sending a runtime request loads no ACP: #4170 measured 0.7 s of it."""
 
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 
 def cold_runtime(program: str) -> subprocess.CompletedProcess[str]:

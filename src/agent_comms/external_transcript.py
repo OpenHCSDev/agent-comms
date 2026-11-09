@@ -17,35 +17,23 @@ from pathlib import Path
 from sqlite3 import Connection
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .coordination.coordinator import Coordination
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import (
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.native_transcript import RecordsCut
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     InputId,
     PageRequestId,
     ThreadLookup,
     ToolCallId,
 )
-from .storage.locked_store import RegistryFile
-from .message_reference import MessageReference
-from .execution.native_runtime_input import NativeRuntimeInput
-from .transport.native_tools import MutatingPathTool
-from .execution.native_transcript import RecordsCut
-from .recorded_time import EventTime, GeneratedTimestamp
-from .registry.thread_identity import ThreadIncarnation
-from .tool_declaration import ToolDeclaration
-from .transcript_events import (
-    AssistantTranscript,
-    ToolStartTranscript,
-    TranscriptEvent,
-    TurnDigest,
-)
-from .transcript_sources import TranscriptDraft, TranscriptRecord, TranscriptSource
-from .execution.turn_item import (
-    NativeItemId,
-    NativeTurnId,
-)
-from .storage.typed_table import (
+from agent_comms.recorded_time import EventTime, GeneratedTimestamp
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.typed_table import (
     Column,
     DurableStore,
     ForeignKey,
@@ -57,10 +45,19 @@ from .storage.typed_table import (
     TypedRow,
     TypedTable,
 )
-from .watched import FileSource, Watched
+from agent_comms.tool_declaration import ToolDeclaration
+from agent_comms.transcript_events import (
+    AssistantTranscript,
+    ToolStartTranscript,
+    TranscriptEvent,
+    TurnDigest,
+)
+from agent_comms.transcript_sources import TranscriptDraft, TranscriptRecord, TranscriptSource
+from agent_comms.transport.native_tools import MutatingPathTool
+from agent_comms.watched import FileSource, Watched
 
 if TYPE_CHECKING:
-    from .execution.turn_digests import TurnBound
+    from agent_comms.execution.turn_digests import TurnBound
 
 
 class ReplyWindow(DeclaredFamily, affix="Replies"):
@@ -372,7 +369,7 @@ class ExternalEventRow(ExternalTranscriptRows, TypedTable):
 
     @classmethod
     def unjudged_query(cls, thread, todo, since):
-        from .transcript_events import ToolStartTranscript
+        from agent_comms.transcript_events import ToolStartTranscript
 
         tools = tuple(tool.declared_name for tool in ToolDeclaration.members_with(MutatingPathTool))
         judged = todo.judged_calls
@@ -398,13 +395,13 @@ class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_nam
     @classmethod
     @contextmanager
     def publication(cls, root: Path, input_id: InputId) -> Iterator[DraftPublication]:
-        from .transcripts import TranscriptRead
+        from agent_comms.transcripts import TranscriptRead
         with TranscriptRead.publication_source(root) as connection:
             original = NativeRuntimeInput.one(connection, input_id=input_id) if connection is not None else None
         if original is None:
             yield DraftPublication()
             return
-        from .registry.registration import Registration
+        from agent_comms.registry.registration import Registration
         thread = Registration(RegistryFile.path_in(root)).require_lookup(original.owner_lookup)
         original.owner_identity.require_recorded_owner(thread)
         transcript = ExternalTranscript(root, thread.incarnation)

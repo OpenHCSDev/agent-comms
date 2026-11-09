@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .agent_backend import AgentBackend, FailedCompaction, RuntimeLocation
-from .external_transcript import ExternalTranscript
-from .history_view import ForkOwnHistory
+from agent_comms.agent_backend import AgentBackend, FailedCompaction, RuntimeLocation
+from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.history_view import ForkOwnHistory
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ class UnstartedRuntime(RuntimeLocation):
         return ()
 
     def transcript_cursor(self, frontier, cut, *, source):
-        from .transcripts import NoNativeTranscriptCursor
+        from agent_comms.transcripts import NoNativeTranscriptCursor
         return NoNativeTranscriptCursor(source=source, offset=cut.offset, wire=frontier,
                                         file=cut.file_identity())
 

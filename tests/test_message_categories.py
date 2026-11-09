@@ -5,19 +5,36 @@ from types import SimpleNamespace
 import pytest
 
 from agent_comms.bus_publication import Delivered
+from agent_comms.messages import (
+    ConversationRole,
+    HistoricalConversationRole,
+    HistoricalNoticeRole,
+    InfoKind,
+    JoinedMembership,
+    MembershipConversationRole,
+    MembershipNoticeRole,
+    Message,
+    MessageRole,
+    NoticeRole,
+)
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.messages import Message, MessageRole, InfoKind, ConversationRole, NoticeRole, HistoricalConversationRole, HistoricalNoticeRole, MembershipConversationRole, MembershipNoticeRole, JoinedMembership
 from agent_comms.registry.thread_identity import (
     AgentThreadRole,
     UserThreadRole,
 )
 from agent_comms.transcript_events import IncomingTranscript
 from agent_comms.transcript_sources import AssignedTranscriptSource
-from bus_record_fixture import record_from
 from agent_comms.ui_model.message_category import (
-    InboundCategory, OtherCategory, all_categories, AgentActivityBoundary,
-    UserCategory, AgentCategory, ThinkingCategory, ToolCategory,
+    AgentActivityBoundary,
+    AgentCategory,
+    InboundCategory,
+    OtherCategory,
+    ThinkingCategory,
+    ToolCategory,
+    UserCategory,
+    all_categories,
 )
+from bus_record_fixture import record_from
 
 
 @pytest.mark.parametrize("role,category", [

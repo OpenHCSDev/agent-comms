@@ -8,11 +8,10 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from functools import partial
 
-from .child_process import AsyncWork
-from ..comms import Comms
-from ..nominal.declared_family import DeclaredFamily
-from ..watch_phase import WatchPhase
-
+from agent_comms.comms import Comms
+from agent_comms.execution.child_process import AsyncWork
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.watch_phase import WatchPhase
 
 
 class Watch(AsyncWork, WatchPhase, DeclaredFamily, ABC):

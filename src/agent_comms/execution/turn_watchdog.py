@@ -9,8 +9,8 @@ from collections.abc import (
 )
 from contextlib import contextmanager
 from typing import (
-    ClassVar,
     TYPE_CHECKING,
+    ClassVar,
 )
 
 from metaclass_registry.mro_dispatch import (
@@ -18,24 +18,16 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from .turn_failure import (
-    InputMissing,
-    ModelStalled,
-    NativePreflightTimeout,
-)
-from .turn_phase import (
-    AcceptsPrompt,
-    PromptAcceptancePhase,
-    TurnPhase,
-)
-from .. import agent_events as events
-from .native_startup import SessionLoad
-from ..nominal.declared_family import DeclaredFamily
+from agent_comms import agent_events as events
+from agent_comms.execution.native_startup import SessionLoad
+from agent_comms.execution.turn_failure import InputMissing, ModelStalled, NativePreflightTimeout
+from agent_comms.execution.turn_phase import AcceptsPrompt, PromptAcceptancePhase, TurnPhase
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from ..backend import TurnSession
-    from .native_startup import NativeStartupPolicy
-    from ..pi_events import PiEvent
+    from agent_comms.backend import TurnSession
+    from agent_comms.execution.native_startup import NativeStartupPolicy
+    from agent_comms.pi_events import PiEvent
 
 
 class TurnWaitExpired(TimeoutError):

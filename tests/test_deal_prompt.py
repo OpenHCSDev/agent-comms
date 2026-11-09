@@ -12,8 +12,16 @@ from agent_comms.deal_prompt import DealPrompt
 from agent_comms.installer.native_package import OWNER_INSTRUCTIONS
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.rule_deal import (
-    AuditDue, DealtRead, DealtRuleGate, OpenedReads, PromptReads, SessionRuleDeal,
-    StartedDeal, SystemPromptDelivery, Unaudited, Unread,
+    AuditDue,
+    DealtRead,
+    DealtRuleGate,
+    OpenedReads,
+    PromptReads,
+    SessionRuleDeal,
+    StartedDeal,
+    SystemPromptDelivery,
+    Unaudited,
+    Unread,
 )
 from agent_comms_hooks import LaunchedPrompt
 from agent_comms_hooks.skill import DeckReader, DeckStart

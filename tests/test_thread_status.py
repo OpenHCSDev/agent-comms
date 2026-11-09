@@ -1,6 +1,5 @@
 """Presence behavior across persisted lifecycle changes and current UI consumers."""
 
-from agent_comms.projects.checkouts import Checkout
 import json
 import os
 import subprocess
@@ -10,31 +9,32 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
-from conftest import installed_comms
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.presentation import CountedRead, ThreadView
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import DEFAULT_ROSTER
 from agent_comms.registry.thread_status import (
     ArchivedThreadStatus,
     ConnectedThreadStatus,
     DeletingThreadStatus,
-    NoBridgeThreadStatus,
     HeartbeatThreadStatus,
     IdleThreadStatus,
+    NoBridgeThreadStatus,
     ProcessThreadStatus,
     RunningThreadStatus,
     StoppedThreadStatus,
     ThreadStatus,
 )
 from agent_comms.registry.thread_text import GivenThreadText
+from agent_comms.registry.threads import NativeThread, OwnerLifecycleControl
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.registry.threads import OwnerLifecycleControl, NativeThread
+from conftest import installed_comms
 
 
 def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_path):
@@ -237,9 +237,9 @@ def test_tier_only_tool_changes_next_catalog_without_changing_active_request(tmp
 
 
 def test_roster_and_controls_keep_archived_threads_dormant():
-    from agent_comms.transport.tools.served import CommsStartTool
-    from agent_comms.transport.request import ToolRequest
     from agent_comms.execution.child_process import NoProcess
+    from agent_comms.transport.request import ToolRequest
+    from agent_comms.transport.tools.served import CommsStartTool
 
     archived = ArchivedThreadStatus()
     assert archived.restored() == archived

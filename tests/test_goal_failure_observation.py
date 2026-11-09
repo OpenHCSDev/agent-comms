@@ -7,24 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.errors import StaleAttemptError, UnresolvedAttemptError
-from agent_comms.planning.goal_attempts import (
-    AttemptRecord,
-    FailedTurnObservation,
-    Generation,
-    GoalAttemptStore,
-)
-from agent_comms.planning.goal_failure_observation import NoFailedTurnEvidence
-from agent_comms.planning.goal_generation import BlockedGeneration
-from agent_comms.planning.goals import Goal
-from agent_comms.nominal.field_codec import GoalId, TurnId
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_identity import (
-    RecordedThreadIncarnation,
-    TurnIdentity,
-)
-from agent_comms.registry.threads import NativeThread
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.turn_failure import (
     BackendFailed,
     FailedTurnResolution,
@@ -35,6 +19,22 @@ from agent_comms.execution.turn_lease import (
     StoredTurnRecord,
     TurnLeaseFence,
 )
+from agent_comms.nominal.field_codec import GoalId, TurnId
+from agent_comms.planning.goal_attempts import (
+    AttemptRecord,
+    FailedTurnObservation,
+    Generation,
+    GoalAttemptStore,
+)
+from agent_comms.planning.goal_failure_observation import NoFailedTurnEvidence
+from agent_comms.planning.goal_generation import BlockedGeneration
+from agent_comms.planning.goals import Goal
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import (
+    RecordedThreadIncarnation,
+    TurnIdentity,
+)
+from agent_comms.registry.threads import NativeThread
 
 
 @pytest.fixture

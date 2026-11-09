@@ -11,7 +11,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 
-from agent_comms.reason_codes import GivenReasonCode
 from metaclass_registry.mro_dispatch import (
     Handler,
     MroDispatch,
@@ -19,10 +18,9 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from . import pi_events as pi
-from .execution.turn_phase import NativePhaseChanged
-from .agent_events import PromptAccepted
-from .attempt_states import (
+from agent_comms import pi_events as pi
+from agent_comms.agent_events import PromptAccepted
+from agent_comms.attempt_states import (
     AttemptFailedAttempt,
     CompactionAttempt,
     ModelRunningAttempt,
@@ -30,20 +28,22 @@ from .attempt_states import (
     SettlingAttempt,
     ToolRunningAttempt,
 )
-from .attempt_store import AttemptStore
-from .coordination.errors import IdentityConflict
-from .coordination.session import NativeCapture
-from .coordination.tables.attempts import ReplayFact
-from .coordination.tables.executions import ReplayAssessments
-from .coordination.coordinator import Coordination
-from .nominal.field_codec import InputId
-from .owner_fence import OwnerFence
-from .execution.turn_failure import TurnFailure
-from .execution.turn_phase import (
+from agent_comms.attempt_store import AttemptStore
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.session import NativeCapture
+from agent_comms.coordination.tables.attempts import ReplayFact
+from agent_comms.coordination.tables.executions import ReplayAssessments
+from agent_comms.execution.turn_failure import TurnFailure
+from agent_comms.execution.turn_phase import (
     CompactionPhase,
     ModelWaitPhase,
+    NativePhaseChanged,
     ToolRunningPhase,
 )
+from agent_comms.nominal.field_codec import InputId
+from agent_comms.owner_fence import OwnerFence
+from agent_comms.reason_codes import GivenReasonCode
 
 
 @dataclass(eq=False, repr=False)

@@ -59,21 +59,16 @@ from io import BufferedReader
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import (
+    IO,
     Annotated,
     Any,
     ClassVar,
-    IO,
     NoReturn,
     Self,
 )
 
-from ..errors import RelationViolationError
-from ..launch_runtime import (
-    INHERITED_ENVIRONMENT,
-    LaunchRuntime,
-    RestoredRuntime,
-)
-from ..installer.native_build_inputs import (
+from agent_comms.errors import RelationViolationError
+from agent_comms.installer.native_build_inputs import (
     AsyncStdioOptions,
     ChildStdio,
     ConfiguredChildStdio,
@@ -83,8 +78,9 @@ from ..installer.native_build_inputs import (
     GitOpening,
     StdioOptions,
 )
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
+from agent_comms.launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     DisclosedRecord,
     FieldCodec,
     FieldDirective,
@@ -94,15 +90,9 @@ from ..nominal.field_codec import (
     SubclassUnion,
     WireRequired,
 )
-from ..nominal.sealed import Sealed
-from ..registry.thread_identity import (
-    ThreadIncarnation,
-    ThreadRole,
-)
-from ..systemd_unit import (
-    AgentsSlice,
-    SystemdUnit,
-)
+from agent_comms.nominal.sealed import Sealed
+from agent_comms.registry.thread_identity import ThreadIncarnation, ThreadRole
+from agent_comms.systemd_unit import AgentsSlice, SystemdUnit
 
 STOP_GRACE_SECONDS = 2.0
 

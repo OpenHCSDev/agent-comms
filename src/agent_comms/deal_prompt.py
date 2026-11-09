@@ -20,7 +20,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from .installer.native_package import OWNER_INSTRUCTIONS, SYSTEM_PROMPT
+from agent_comms.installer.native_package import OWNER_INSTRUCTIONS, SYSTEM_PROMPT
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.rule_deal import DealtRead, DealtSource, PromptReads, SystemPromptDelivery
 from agent_comms_hooks.skill import DeckReader

@@ -1,13 +1,13 @@
 """Real child execution, typed decoding, progress and joined shutdown."""
 
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 import os
-from pathlib import Path
 import socket
 import time
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from multiprocessing.connection import Connection
+from pathlib import Path
 
 import pytest
 from yarl import URL

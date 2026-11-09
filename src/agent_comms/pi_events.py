@@ -7,10 +7,20 @@ from collections.abc import AsyncIterator, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from . import agent_events as events
-from .acp_failure import UnrecordedFailureSource
-from .controller import ChoiceRequest, PermissionOptionId
-from .execution.turn_phase import (
+from agent_comms import agent_events as events
+from agent_comms.acp_failure import UnrecordedFailureSource
+from agent_comms.controller import ChoiceRequest, PermissionOptionId
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_input_proof import (
+    NativeContextRecord,
+    NativeInputCommit,
+    NativeInputLocation,
+)
+from agent_comms.execution.native_output import NativeOutputLocation, NativeRecordLocation
+from agent_comms.execution.native_pi import NativePiOperationFailed
+from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.execution.native_turn_context import ContextObserved, NativeContextManifestData
+from agent_comms.execution.turn_phase import (
     AcceptsPrompt,
     CompactionPhase,
     ModelWaitPhase,
@@ -19,8 +29,8 @@ from .execution.turn_phase import (
     ToolRunningPhase,
     TurnPhase,
 )
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import (
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     DeclaredWireType,
     FieldCodec,
     FieldPlan,
@@ -33,27 +43,39 @@ from .nominal.field_codec import (
     WireOmitDefault,
     boundary_decoder,
 )
-from .execution.native_failures import NativePiUnavailable
-from .execution.native_input_proof import (
-    NativeContextRecord,
-    NativeInputCommit,
-    NativeInputLocation,
+from agent_comms.pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
+from agent_comms.pi_payloads import (
+    AbsentMessage,
+    CompactionData,
+    MissingData,
+    MissingToolResult,
+    NoDelta,
+    PiDelta,
+    PiMessage,
+    PiResponseData,
+    PiToolResult,
+    ProviderRetryOutcome,
+    ReportedCompaction,
+    ReportedFlag,
+    ReportedText,
+    UnreportedUsage,
 )
-from .execution.native_output import NativeOutputLocation, NativeRecordLocation
-from .execution.native_pi import NativePiOperationFailed
-from .execution.native_session_reopen import PiSessionId
-from .execution.native_turn_context import ContextObserved, NativeContextManifestData
-from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
-from agent_comms.pi_wire import AnonymousRequest, OpenPayload, PiOmitted, PiRequestId, PiUsage
-from agent_comms.pi_wire import Opaque, UnknownPayload
-from .pi_payloads import AbsentMessage, CompactionData, MissingData, MissingToolResult, NoDelta, PiDelta, PiMessage, PiResponseData, PiToolResult, ProviderRetryOutcome, ReportedCompaction, ReportedFlag, ReportedText, UnreportedUsage
-from .pi_vocabulary import CompactionReason, UnknownCompactionReason
-from .request_progress import RequestProgress
-from .tool_declaration import ToolDeclaration
+from agent_comms.pi_vocabulary import CompactionReason, UnknownCompactionReason
+from agent_comms.pi_wire import (
+    AnonymousRequest,
+    Opaque,
+    OpenPayload,
+    PiOmitted,
+    PiRequestId,
+    PiUsage,
+    UnknownPayload,
+)
+from agent_comms.request_progress import RequestProgress
+from agent_comms.tool_declaration import ToolDeclaration
 
 if TYPE_CHECKING:
-    from .backend import TurnSession
-    from .execution.native_attestation import NativeAttestation
+    from agent_comms.backend import TurnSession
+    from agent_comms.execution.native_attestation import NativeAttestation
 
 
 @dataclass(frozen=True)
@@ -986,6 +1008,6 @@ class ToolExecutionUpdate(AcceptsPrompt, PiToolCallEvent, NativePiEvent, Durable
         )
 
 
-from .pi_native_backend import PiNativeBackend  # noqa: E402
+from agent_comms.pi_native_backend import PiNativeBackend  # noqa: E402
 
 PiNativeBackend.require_event_family(NativePiEvent)

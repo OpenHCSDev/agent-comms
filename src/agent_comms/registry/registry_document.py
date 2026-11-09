@@ -2,84 +2,69 @@
 
 from __future__ import annotations
 
-from ..tool_result import ToolResult
-
 import time
 from abc import ABC, abstractmethod
 from collections import ChainMap
 from collections.abc import (
-    Callable, Collection, Iterable, Iterator, Mapping, MutableMapping, Sequence,
+    Callable,
+    Collection,
+    Iterable,
+    Iterator,
+    Mapping,
+    MutableMapping,
+    Sequence,
 )
-from pathlib import Path
 from dataclasses import dataclass, field, replace
 from functools import cached_property
+from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, Literal, Self
 
 from pydantic import JsonValue
-from agent_comms_hooks import ToolRefusedError
 
-from ..activity import ActivityCapture, ObservedActivity
-from ..agent_activity import AgentActivity
-from ..catalog_document import CatalogAccess
-from ..change_report import CitationProject
-from ..channel_targets import TeammatesTag, ResolvedTarget, SurroundingChannel
-from ..channels import Channel, ChannelMemberIndex
-from ..execution.child_process import ProcessIdentity
-from ..nominal.declared_family import DeclaredFamily
-from ..errors import OutsideRegistrySlice, RelationViolationError, UnregisteredThreadError
-from ..nominal.field_codec import (
-    TaggedUnion,
+from agent_comms.activity import ActivityCapture, ObservedActivity
+from agent_comms.agent_activity import AgentActivity
+from agent_comms.catalog_document import CatalogAccess
+from agent_comms.change_report import CitationProject
+from agent_comms.channel_targets import ResolvedTarget, SurroundingChannel, TeammatesTag
+from agent_comms.channels import Channel, ChannelMemberIndex
+from agent_comms.errors import OutsideRegistrySlice, RelationViolationError, UnregisteredThreadError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.turn_lease import (
+    FinishedTurn,
+    FinishedTurnFence,
+    NoFinishedTurn,
+    StoredTurnRecord,
+    TurnCompletion,
+    TurnLeaseFence,
+    TurnRecord,
+)
+from agent_comms.frozen_recipient import FrozenRecipient
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     ExternalJsonShape,
     FieldCodec,
     FieldPlan,
     MalformedRecord,
     SlicePolicy,
     TaggedRecordMember,
+    TaggedUnion,
     ThreadLookup,
     WireOmitDefault,
     WireRequired,
     WireTransient,
     WireValue,
 )
-from ..frozen_recipient import FrozenRecipient
-from ..registration_change import (
+from agent_comms.projects.checkouts import Checkout, RepositoryReads
+from agent_comms.projects.repo import Repo, RepositorySelection
+from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.registration_change import (
     InitialRegistration,
     RegistrationChange,
     UpdatedRegistration,
 )
-from ..registry_provenance import (
-    DeletedThread,
-    RegisteredRecipient,
-    RegistryNames,
-    RegistryProvenance,
-    RetiredRecipient,
-)
-from ..projects.repo import (
-    Repo,
-    RepositorySelection,
-)
-from ..projects.checkouts import (
-    Checkout,
-    RepositoryReads,
-)
-from ..repository_name import RepositoryName
-from ..projects.storage_rules import StorageRule
-from ..snapshot_slices import (
-    MappingRowsSlice,
-    OwnRow,
-    SnapshotRestored,
-    SnapshotValue,
-    ThreadSlice,
-    WholeDocumentValue,
-)
-from ..restart_refusals import (
-    OwnerBusyRefusal,
-    OwnerChangedBeforeFenceRefusal,
-    OwnerGenerationChangedRefusal,
-)
-from .thread_creation import CreationTime
-from .thread_identity import (
+from agent_comms.registry.thread_creation import CreationTime
+from agent_comms.registry.thread_identity import (
     ClaimedIdentity,
     GenerationCounter,
     OfferedTools,
@@ -90,33 +75,44 @@ from .thread_identity import (
     ThreadIncarnationRecord,
     TurnIdentity,
 )
-from .thread_presentation import ThreadOwnerBinding
-from .thread_status import (
+from agent_comms.registry.thread_presentation import ThreadOwnerBinding
+from agent_comms.registry.thread_status import (
     ActiveThreadPresence,
     ArchivedThreadStatus,
     StoppedThreadStatus,
     StoppingThreadStatus,
     ThreadStatus,
 )
-from .thread_text import (
-    ForkedParent,
-    NoParent,
+from agent_comms.registry.thread_text import ForkedParent, NoParent
+from agent_comms.registry.threads import Thread, ThreadWorkState
+from agent_comms.registry_provenance import (
+    DeletedThread,
+    RegisteredRecipient,
+    RegistryNames,
+    RegistryProvenance,
+    RetiredRecipient,
 )
-from .threads import Thread, ThreadWorkState
-from ..execution.turn_lease import (
-    FinishedTurn,
-    FinishedTurnFence,
-    NoFinishedTurn,
-    StoredTurnRecord,
-    TurnCompletion,
-    TurnLeaseFence,
-    TurnRecord,
+from agent_comms.repository_name import RepositoryName
+from agent_comms.restart_refusals import (
+    OwnerBusyRefusal,
+    OwnerChangedBeforeFenceRefusal,
+    OwnerGenerationChangedRefusal,
 )
+from agent_comms.snapshot_slices import (
+    MappingRowsSlice,
+    OwnRow,
+    SnapshotRestored,
+    SnapshotValue,
+    ThreadSlice,
+    WholeDocumentValue,
+)
+from agent_comms.tool_result import ToolResult
+from agent_comms_hooks import ToolRefusedError
 
 if TYPE_CHECKING:
-    from ..bus_publication import Delivered
-    from ..cli_command import CliCommand
-    from ..comms import Comms
+    from agent_comms.bus_publication import Delivered
+    from agent_comms.cli_command import CliCommand
+    from agent_comms.comms import Comms
 
 
 @dataclass(frozen=True, slots=True)

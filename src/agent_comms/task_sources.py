@@ -6,50 +6,44 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
-from .channel_targets import CommandTarget
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import FieldCodec, ThreadLookup, TurnId, WireOmitDefault
-from .planning.goals import (
-    GoalDeclaration,
-    GoalRevision,
-)
-from .message_reference import MessageReference
-from .owner_requests import OwnerRequestId, RequestDirective
-from .projection_source import ProjectionSource
-from .projects.checkouts import Checkout
-from .registry.thread_identity import (
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.turn_context import Provenance, WireProvenance
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, TurnId, WireOmitDefault
+from agent_comms.owner_requests import OwnerRequestId, RequestDirective
+from agent_comms.planning.goals import GoalDeclaration, GoalRevision
+from agent_comms.projection_source import ProjectionSource
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import (
     RecordedThreadIncarnation,
     ThreadIncarnation,
     TurnIdentity,
     UserThreadRole,
 )
-from .execution.turn_context import (
-    Provenance,
-    WireProvenance,
-)
-from .ui_model.message_category import MessageCategory
-from .working_memory_requests import AnnotationBudgetExhausted
+from agent_comms.ui_model.message_category import MessageCategory
+from agent_comms.working_memory_requests import AnnotationBudgetExhausted
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from typing import Self
 
-    from .bus import BusReader
-    from .cli_bridges.shared import CliBridge
-    from .context_segments.wake import MessageDelivery
-    from .harness_delivery_states import Outcome
-    from .task_attachments.team_pings import TeamUpdate
-    from .planning.goal_management import Goals
-    from .input_attempt import StoredInput
-    from .input_disposition import InputDispositions
-    from .messages import Message
-    from .registry.registry_document import RegistrySnapshot
-    from .registry_provenance import RegistryProvenance
-    from .retained_task_facts import RetainedTaskFacts
-    from .registry.threads import Thread
-    from .execution.turn_context import ContextSegment
-    from .storage.typed_table import TypedTable
+    from agent_comms.bus import BusReader
+    from agent_comms.cli_bridges.shared import CliBridge
+    from agent_comms.context_segments.wake import MessageDelivery
+    from agent_comms.execution.turn_context import ContextSegment
+    from agent_comms.harness_delivery_states import Outcome
+    from agent_comms.input_attempt import StoredInput
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.messages import Message
+    from agent_comms.planning.goal_management import Goals
+    from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.registry.threads import Thread
+    from agent_comms.registry_provenance import RegistryProvenance
+    from agent_comms.retained_task_facts import RetainedTaskFacts
+    from agent_comms.storage.typed_table import TypedTable
+    from agent_comms.task_attachments.team_pings import TeamUpdate
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -308,7 +302,7 @@ class TaskAttachment(
         return ()
 
     def user_task_facts(self, message: Message):
-        from .retained_task_facts import UserSourceTaskFact
+        from agent_comms.retained_task_facts import UserSourceTaskFact
 
         return (UserSourceTaskFact(message),)
 
@@ -372,7 +366,7 @@ class UserTaskSupersession(TaskAttachment, declared_name="user_supersession"):
         previous.require_user_revision(sender, registry)
 
     def user_task_facts(self, message: Message):
-        from .retained_task_facts import UserTaskCorrectionFact
+        from agent_comms.retained_task_facts import UserTaskCorrectionFact
 
         return (UserTaskCorrectionFact(message),)
 
@@ -523,7 +517,7 @@ class Subtask(ModelTaskDeclaration):
         return super().applies(owner, registry) and self.turn_scope_matches(owner, registry)
 
     def retained_task_facts(self, message: Message):
-        from .retained_task_facts import SubtaskTaskFact
+        from agent_comms.retained_task_facts import SubtaskTaskFact
 
         return (SubtaskTaskFact(message),)
 
@@ -605,7 +599,7 @@ class HumanConstraintPin(ScopedTaskDeclaration):
             raise RelationViolationError("USER pin recipient did not receive its original message")
 
     def user_task_facts(self, message: Message):
-        from .retained_task_facts import HumanConstraintTaskFact
+        from agent_comms.retained_task_facts import HumanConstraintTaskFact
 
         return (HumanConstraintTaskFact(message),)
 
@@ -638,8 +632,8 @@ class NativeInputConstraintPin(HumanConstraintPin):
                     author=origin.author.sender, author_role=FieldCodec.encode(UserThreadRole))
 
     def require_wording_publication(self, registry: RegistrySnapshot, original_source: BusReader) -> None:
-        from .input_disposition import InputDispositions
-        from .registry.registry_store import RegistryStore
+        from agent_comms.input_disposition import InputDispositions
+        from agent_comms.registry.registry_store import RegistryStore
 
         privacy = RegistryStore.at(original_source.path.parent).privacy()
         row = self.subject.require_human_input().require_original(
@@ -668,7 +662,7 @@ class Decision(ModelTaskDeclaration, declared_name="choice"):
         return original.require_decision()
 
     def retained_task_facts(self, message: Message):
-        from .retained_task_facts import DecisionTaskFact
+        from agent_comms.retained_task_facts import DecisionTaskFact
 
         return (DecisionTaskFact(message),)
 
@@ -698,13 +692,13 @@ class Constraint(ModelTaskDeclaration):
         return original.task.require_constraint()
 
     def retained_task_facts(self, message: Message):
-        from .retained_task_facts import ConstraintTaskFact
+        from agent_comms.retained_task_facts import ConstraintTaskFact
 
         return (ConstraintTaskFact(message),)
 
 
-from .execution.turn_context import ContextSegment
-from .working_memory_labels import ClassifierVersion, JevClassifier
+from agent_comms.execution.turn_context import ContextSegment
+from agent_comms.working_memory_labels import ClassifierVersion, JevClassifier
 
 
 @dataclass(frozen=True, kw_only=True)

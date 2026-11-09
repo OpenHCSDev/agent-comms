@@ -8,38 +8,22 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..bus_publication import (
-    AgentOrigin,
-    AutomatedOrigin,
-    HumanOrigin,
-    InitialOrigin,
-)
-from ..change_report import (
-    NoChangeReport,
-    ReportEvidence,
-)
-from ..channel_targets import (
-    CommandTarget,
-    IncarnationThreadTarget,
-    NamedTarget,
-)
-from ..coordination.session import NativeCapture
-from ..errors import (
+from agent_comms.bus_publication import AgentOrigin, AutomatedOrigin, HumanOrigin, InitialOrigin
+from agent_comms.change_report import NoChangeReport, ReportEvidence
+from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
+from agent_comms.coordination.session import NativeCapture
+from agent_comms.errors import (
     CommittedMessageError,
     RelationViolationError,
     TodoError,
     UnreceivedAnswerError,
     UnregisteredThreadError,
 )
-from ..execution.turn_context import ContextSegment
-from ..execution.turn_item import (
-    NoSourceTurn,
-    SourceTurn,
-)
-from ..external_transcript import ExternalTranscript
-from .message_bus import MessageBus
-from ..message_reference import MessageReference
-from ..messages import (
+from agent_comms.execution.turn_context import ContextSegment
+from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
+from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import (
     ConversationRole,
     InfoKind,
     Message,
@@ -47,19 +31,21 @@ from ..messages import (
     MessageRole,
     NoticeRole,
 )
-from ..nominal.field_codec import ThreadLookup
-from ..planning.goal_management import Goals
-from ..planning.orders import TodoStore
-from ..projects.checkouts import Checkout
-from ..registry.registration import Registration
-from ..registry.threads import Thread
-from ..send_result import (
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.nominal.field_codec import ThreadLookup
+from agent_comms.planning.goal_management import Goals
+from agent_comms.planning.orders import TodoStore
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.threads import Thread
+from agent_comms.send_result import (
     CorrectionComplete,
     CorrectionFailed,
     CorrectionResult,
     SendResult,
 )
-from ..task_sources import (
+from agent_comms.task_sources import (
     CurrentTaskScopeSelection,
     HumanConstraintPin,
     NativeInputConstraintPin,
@@ -69,9 +55,7 @@ from ..task_sources import (
     TaskChange,
     TaskScopeSelection,
 )
-from ..registry.thread_identity import ThreadIncarnation
-from ..working_memory_policy import AnnotationDisclosureGrant
-
+from agent_comms.working_memory_policy import AnnotationDisclosureGrant
 
 
 class AnswerAuthority(ABC):

@@ -8,7 +8,9 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 
 from pydantic import Field, JsonValue
 
+from agent_comms.cli_bridges.opencode_parts import MessageInfo, Part, SavedMessage, UserMessage
 from agent_comms.cli_protocol import Declared, TaggedWire
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.nominal.declared_family import UnknownFamilyMember
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.runtime_updates import (
@@ -18,16 +20,10 @@ from agent_comms.runtime_updates import (
     TurnEnded,
     TurnStarted,
 )
-from ..execution.turn_item import (
-    NativeItemId,
-    NativeTurnId,
-)
-
-from ..wire_models import DeclaredWireFamily, WireModel
-from .opencode_parts import MessageInfo, Part, SavedMessage, UserMessage
+from agent_comms.wire_models import DeclaredWireFamily, WireModel
 
 if TYPE_CHECKING:
-    from .opencode import OpenCodeConnection
+    from agent_comms.cli_bridges.opencode import OpenCodeConnection
 
 
 class TextInput(WireModel):

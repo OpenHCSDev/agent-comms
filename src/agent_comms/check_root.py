@@ -11,27 +11,27 @@ from itertools import islice
 from pathlib import Path
 from typing import ClassVar
 
-from .attempt_recovery import RecoveryMonitorCapability
-from .bus import Bus
-from .cli_result import CliResult
-from .comms import Comms, wire
-from .cohort_schema import AcceptanceFrontier
-from .coordination.coordinator import Coordination
-from .coordination.database import CoordinationStore
-from .fresh_private_session import create_fresh_private_session
-from .planning.goals import NoGoal
-from .launch_root import LaunchRoot
-from .launch_runtime import ThreadLaunch
-from .execution.native_entries import ImportedSessionWriter, NativeEntry
-from .execution.native_session_files import CheckSession
-from .read_basis import MemberActivityDisplayScope
-from .registry.registry_document import RosterVisibility
-from .session_file import RegistrySessionLocation
-from .registry.thread_text import NoThreadText
-from .projects.checkouts import Checkout
-from .registry.threads import Thread
-from .transcript_routes import TranscriptRoutes
-from .execution.turn_lease import NoTurnRecord
+from agent_comms.attempt_recovery import RecoveryMonitorCapability
+from agent_comms.bus import Bus
+from agent_comms.cli_result import CliResult
+from agent_comms.cohort_schema import AcceptanceFrontier
+from agent_comms.comms import Comms, wire
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.execution.native_entries import ImportedSessionWriter, NativeEntry
+from agent_comms.execution.native_session_files import CheckSession
+from agent_comms.execution.turn_lease import NoTurnRecord
+from agent_comms.fresh_private_session import create_fresh_private_session
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.launch_runtime import ThreadLaunch
+from agent_comms.planning.goals import NoGoal
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.read_basis import MemberActivityDisplayScope
+from agent_comms.registry.registry_document import RosterVisibility
+from agent_comms.registry.thread_text import NoThreadText
+from agent_comms.registry.threads import Thread
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.transcript_routes import TranscriptRoutes
 
 
 @dataclass(frozen=True)

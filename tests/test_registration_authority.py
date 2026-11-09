@@ -1,6 +1,5 @@
 """Actual persisted claim boundaries distinguish declaration from claim_scope drift."""
 
-from agent_comms.projects.checkouts import Checkout
 import os
 import threading
 import time
@@ -9,18 +8,19 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.execution.child_process import ProcessIdentity
-from test_locked_store import RegistryWithConcurrentDecoder, _hold_lock, event, process
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import TurnId, GoalId
-from agent_comms.planning.goals import Goal
-from agent_comms.storage.store_files import SharedLock, store_lock_path
-from agent_comms.registry.thread_identity import UserThreadRole
-from agent_comms.registry.thread_text import GivenThreadText
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.turn_lease import RecordedGeneration
 from agent_comms.execution.turn_phase import PreparingPhase
+from agent_comms.nominal.field_codec import GoalId, TurnId
+from agent_comms.planning.goals import Goal
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import UserThreadRole
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.store_files import SharedLock, store_lock_path
+from test_locked_store import RegistryWithConcurrentDecoder, _hold_lock, event, process
 
 
 def registered(root):
@@ -171,6 +171,7 @@ def test_a_claim_drop_waiting_on_a_turn_retired_under_it_finds_the_retirement(tm
 @pytest.mark.parametrize('operation', ['read', 'phase', 'claim', 'sidebar'])
 def test_turn_access_waits_for_private_registry_commit(tmp_path, operation):
     from concurrent.futures import ThreadPoolExecutor
+
     from agent_comms.private_registry_guard import registry_digest
     from agent_comms.storage.store_files import AtomicFile
 

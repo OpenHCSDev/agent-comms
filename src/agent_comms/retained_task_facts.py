@@ -11,20 +11,20 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .errors import RelationViolationError
-from .input_attempt import StoredInput
-from .message_reference import MessageReference
-from .messages import ClaimMessage, Message
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec
-from .text_digest import TextDigest
+from agent_comms.errors import RelationViolationError
+from agent_comms.input_attempt import StoredInput
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import ClaimMessage, Message
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.text_digest import TextDigest
 
 if TYPE_CHECKING:
-    from .bus import BusReader
-    from .input_disposition import InputDispositions
-    from .registry.registry_document import RegistrySnapshot
-    from .registry.threads import Thread
-    from .registry.thread_identity import ThreadIncarnation
+    from agent_comms.bus import BusReader
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.registry.thread_identity import ThreadIncarnation
+    from agent_comms.registry.threads import Thread
 
 
 class ExactTaskFact(DeclaredFamily, affix="TaskFact"):

@@ -6,9 +6,9 @@ from dataclasses import (
 )
 from typing import Annotated
 
-from ..activity_clocks import ChannelActivity
-from ..bus_activity_index import ActivityMaximum
-from ..storage.typed_table import Column
+from agent_comms.activity_clocks import ChannelActivity
+from agent_comms.bus_activity_index import ActivityMaximum
+from agent_comms.storage.typed_table import Column
 
 
 @dataclass(frozen=True)
