@@ -14,7 +14,9 @@ from typing import (
 )
 
 from ..child_process import (
+    ProcessFence,
     ProcessIdentity,
+    ProcessSighting,
     ProcessState,
 )
 from ..errors import (
@@ -105,7 +107,9 @@ class Visible(PublishingPresence):
 
 
 @dataclass(frozen=True)
-class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
+class ThreadStatus(
+    LifecycleCapability, DeclaredFamily, ProcessFence["ThreadStatus"], affix="ThreadStatus",
+):
     may_be_active: ClassVar[bool] = False
     running: ClassVar[bool] = False
     stopped: ClassVar[bool] = False
@@ -137,6 +141,9 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
         return self
 
     def declaration(self) -> ThreadStatus:
+        return self
+
+    def unbound(self) -> ThreadStatus:
         return self
 
     def fenced(self) -> ThreadStatus:
@@ -263,7 +270,8 @@ class HostBoundPresence:
 
 
 class ActiveThreadPresence(
-    HostBoundPresence, AlwaysListed, Visible, ThreadStatus, declared_name=None,
+    HostBoundPresence, AlwaysListed, Visible, ThreadStatus, ProcessSighting[ThreadStatus],
+    declared_name=None,
 ):
     """Shared semantics of running and idle owners; not a second state family."""
 
