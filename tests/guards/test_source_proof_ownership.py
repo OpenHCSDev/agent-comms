@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms import history_views
 from agent_comms.execution.transcript_sources import TranscriptCursor
-from agent_comms.messaging.sending import historical_views
+from agent_comms.messaging import historical_views
 from agent_comms.transcript.transcripts import TranscriptPage
 
 pytestmark = pytest.mark.refactor_guard

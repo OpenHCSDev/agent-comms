@@ -7,7 +7,7 @@ from p23_revision_owner_plan import SRC, patch, stage
 
 boundaries = (
     ("bus.py", '''if TYPE_CHECKING:
-    from agent_comms.messaging.read_selection import DisplayUnreadSelection
+    from agent_comms.messaging.display_unread_selection import DisplayUnreadSelection
     from agent_comms.registry.registry_document import RegistrySnapshot
 ''', {"DisplayUnreadSelection": "read_selection.DisplayUnreadSelection",
         "RegistrySnapshot": "registry_document.RegistrySnapshot"},
