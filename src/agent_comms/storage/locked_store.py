@@ -756,36 +756,6 @@ class GoalWakeFile(WireWakeFile):
         )
 
 
-class RegistryFile(RollbackRetained, GoalWakeFile):
-    """Registry location usable by record types without importing their decoder."""
-
-    __slots__ = ()
-    filename = "registry.sqlite3"
-
-    @classmethod
-    def execution_paths(cls, root: Path) -> tuple[Path, ...]:
-        # Its captured owner declaration selects the session; a phase edit does not.
-        return ()
-
-    @classmethod
-    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
-        """The copy names no live process: a signal, stop or wake aimed through it would reach
-        the source root's units."""
-        from agent_comms.registry.registry_store import RegistryStore
-
-        registry = RegistryStore(source)
-        with registry.guarded_read():
-            copied = frozenset(path for path in registry.cut_paths if path.exists())
-            for path in copied:
-                destination = target.parent / path.relative_to(source.parent)
-                destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-                cls.copy_file(path, destination)
-        RegistryStore(target).retire_processes()
-        return copied
-
-
-
-
 class SQLiteReadConnection:
     """A thread's read handle, retired with its store or when the file is replaced."""
 
@@ -1122,6 +1092,38 @@ class PublishedSQLiteFile(SQLiteFile):
             raise StoreCommittedError(
                 f"Committed {path}, but change notification failed: {error}"
             ) from error
+
+
+
+
+class RegistryFile(RollbackRetained, PublishedSQLiteFile, GoalWakeFile):
+    """Registry location usable by record types without importing their decoder. Its rows signal
+    each commit through the published change file, so every waker watches that, never the
+    database a WAL commit leaves untouched."""
+
+    __slots__ = ()
+    filename = "registry.sqlite3"
+
+    @classmethod
+    def execution_paths(cls, root: Path) -> tuple[Path, ...]:
+        # Its captured owner declaration selects the session; a phase edit does not.
+        return ()
+
+    @classmethod
+    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
+        """The copy names no live process: a signal, stop or wake aimed through it would reach
+        the source root's units."""
+        from agent_comms.registry.registry_store import RegistryStore
+
+        registry = RegistryStore(source)
+        with registry.guarded_read():
+            copied = frozenset(path for path in registry.cut_paths if path.exists())
+            for path in copied:
+                destination = target.parent / path.relative_to(source.parent)
+                destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                cls.copy_file(path, destination)
+        RegistryStore(target).retire_processes()
+        return copied
 
 
 @dataclass(frozen=True, slots=True)
