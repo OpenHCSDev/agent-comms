@@ -39,7 +39,13 @@ Readers do not read the file; they read revisions of it. `RegistryCut`, `Registr
 ## Steps, each a commit on one PR
 
 1. Table declarations for the five row families beside their current types; nothing reads them yet.
-2. The revision and cut owners on the table: one counter, read transactions, pair cuts.
+2. The revision and cut owners on the table. Every cut consumer goes through
+   `RegistrySelection.matches_current()`/`current()`, which compare `revision` under the registry
+   lock, so the lock protocol (`RegistryLocking`, pair cuts, `_capturing_sources`) stays and only
+   the revision's value changes: the header row's counter, bumped in each write transaction,
+   paired with the guard file as today. Each row carries `changed_at` (the revision that last wrote
+   it); a reader holding revision r refreshes with `WHERE changed_at > r`, so a read costs the
+   changes since it last read, not the whole registry (today's capture rereads all 5.6 MB).
 3. Move the 35 direct readers onto table queries, by NRA where the shape allows.
 4. `save_unlocked` writes changed rows only; delete `ThreadRows`' raw/decoded cache and the JSON path.
 5. Carry: `tools/cutover/registry_rows.py` reads `registry.json` once into the table and is deleted
