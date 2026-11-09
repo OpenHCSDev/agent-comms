@@ -24,6 +24,7 @@ from pydantic import JsonValue
 
 from agent_comms.errors import OutsideRegistrySlice, RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.native_input_owner import NativeOwnerRegistry
 from agent_comms.execution.restart_refusals import (
     OwnerBusyRefusal,
     OwnerChangedBeforeFenceRefusal,
@@ -190,7 +191,10 @@ class SeveralProjectThreads(TaggedRecordMember, ProjectThreadSelection):
     threads: tuple[Thread, ...]
 
 
-class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thread]):
+class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](
+    RegistryNames[Thread],
+    NativeOwnerRegistry,
+):
     """Presence reads shared by the acquired document and its detached cut."""
 
     __slots__ = ()
