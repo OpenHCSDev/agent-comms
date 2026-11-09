@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.execution.pi_durable_backend import DurableDatabase, Inspect, PiDurableBackend
 from agent_comms.execution.session_file import NoSessionFile, RegistrySessionLocation
-from agent_comms.execution.turn_digests import LastTurns
+from agent_comms.execution.turn_bound import LastTurns
 from agent_comms.execution.turn_runner import TurnRunner
 from agent_comms.execution.unstarted_runtime import UnstartedRuntime
 from agent_comms.nominal.field_codec import FieldCodec

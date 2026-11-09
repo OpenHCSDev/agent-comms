@@ -21,9 +21,9 @@ from agent_comms.cli_bridges.runtime_updates import (
 )
 from agent_comms.cli_bridges.shared import Binding, Options, StoredBinding, Watch
 from agent_comms.comms import Comms
+from agent_comms.execution.turn_bound import LastTurns
 from agent_comms.transport.connector import ConnectorSendTool
 from agent_comms.coordination.errors import CoordinationBeginUnavailable
-from agent_comms.execution.turn_digests import LastTurns
 from agent_comms.execution.turn_item import (
     NamedSourceTurn,
     NativeTurnId,

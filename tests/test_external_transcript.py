@@ -5,7 +5,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.transcript_sources import NoDraft
-from agent_comms.execution.turn_digests import LastTurns
+from agent_comms.execution.turn_bound import LastTurns
 from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,

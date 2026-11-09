@@ -35,10 +35,12 @@ from agent_comms.coordination.service_passes import FailingPass, ServicePasses, 
 from agent_comms.errors import RejectedEnforcementError, RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, ResidentMemory
 from agent_comms.execution.root_runtime import RootRuntimeStore
-from agent_comms.execution.turn_digests import (
+from agent_comms.execution.turn_bound import (
     LastTurns,
-    OrderEditCountRead,
     RecentTurnsSince,
+)
+from agent_comms.execution.turn_digests import (
+    OrderEditCountRead,
     TurnDigestRead,
 )
 from agent_comms.heartbeat_subjects import (

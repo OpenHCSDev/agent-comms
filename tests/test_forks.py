@@ -33,10 +33,10 @@ from agent_comms.errors import (
 )
 from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.turn_bound import TurnsSince
 from agent_comms.execution.turn_digests import (
     OrderEditCountRead,
     OrderEditsRead,
-    TurnsSince,
 )
 from agent_comms.execution.turn_item import (
     NativeItemId,

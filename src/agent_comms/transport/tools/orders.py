@@ -16,13 +16,15 @@ from agent_comms.acp_extension import GoalSnapshotReply, TurnChangedUpdate, Upda
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.service_passes import ServicePassStore
-from agent_comms.execution.turn_digests import (
-    ActivityTurnView,
+from agent_comms.execution.turn_bound import (
     LastTurns,
-    OrderEditsRead,
-    ThreadTurns,
     TurnBound,
     TurnsSince,
+)
+from agent_comms.execution.turn_digests import (
+    ActivityTurnView,
+    OrderEditsRead,
+    ThreadTurns,
     TurnView,
     UnavailableOrderEdits,
     UnjudgedEdits,
