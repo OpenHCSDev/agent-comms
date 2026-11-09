@@ -52,7 +52,7 @@ from agent_comms.goal_work import GoalFailureOwner, GoalOwner, GoalWorkSource
 from agent_comms.harness_delivery_states import Outcome
 from agent_comms.harness_install import HarnessSession
 from agent_comms.importing import ImportBuffer, ImportSnapshot
-from agent_comms.input_attempt import StoredInput
+from agent_comms.input_attempt import InputAttempt, StoredInput
 from agent_comms.input_key import InputKey
 from agent_comms.input_origin import InputProvenance
 from agent_comms.messages import ClaimNoticeKind, Message, MessageInput
@@ -477,6 +477,16 @@ def test_routing_presence_contract_keeps_original_sent_value_identity() -> None:
     assert issubclass(NoSentInputText, NullMember)
     for routing in (Routing, TurnRouting):
         assert get_type_hints(routing.validate_input)["sent_text"] == PresentMember | NullMember
+
+
+def test_input_observation_callbacks_use_original_evidence_contracts() -> None:
+    for state in (InputAttempt, *InputAttempt.members_with(InputAttempt)):
+        for callback in (state.context_committed, state.started_for_native, state.delivered_in):
+            hints = get_type_hints(callback)
+            if "lease" in hints:
+                assert hints["lease"] is TurnFence
+                assert get_origin(hints["snapshot"]) is RegistryNames
+                assert get_args(hints["snapshot"]) == (ThreadIdentitySource,)
 
 
 def test_declared_policy_keys_keep_their_original_message_and_identity_sources() -> None:

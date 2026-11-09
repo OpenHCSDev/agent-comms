@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import Annotated, ClassVar, Self
 
 from agent_comms.context_provenance_source import ContextProvenanceSource
 from agent_comms.errors import RelationViolationError
@@ -35,13 +35,11 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.notification_evidence import ConsumptionEvidence
 from agent_comms.notification_progress import DeliveryProgress, ShownToModelProgress
-from agent_comms.registry.thread_identity import GenerationCounter, ThreadIncarnation
+from agent_comms.registry.thread_identity import GenerationCounter, ThreadIncarnation, TurnFence
+from agent_comms.registry_names import RegistryNames
 from agent_comms.reported_turn import ReportedTurnState
 from agent_comms.text_digest import TextDigest
-
-if TYPE_CHECKING:
-    from agent_comms.execution.turn_lease import TurnLeaseFence
-    from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.thread_identity_source import ThreadIdentitySource
 
 
 class InputAlreadyCleared(RelationViolationError):
@@ -163,11 +161,11 @@ class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, aff
 
     def context_committed(
         self,
-        lease: TurnLeaseFence,
+        lease: TurnFence,
         sent_text: str,
         context: NativeContextProof,
         *,
-        snapshot: RegistrySnapshot,
+        snapshot: RegistryNames[ThreadIdentitySource],
     ) -> InputTransition:
         raise RelationViolationError("Context acknowledgement lacks its started input")
 
@@ -197,11 +195,11 @@ class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, aff
 
     def started_for_native(
         self,
-        lease: TurnLeaseFence,
+        lease: TurnFence,
         native_id: InputId,
         sent_text: str,
         *,
-        snapshot: RegistrySnapshot,
+        snapshot: RegistryNames[ThreadIdentitySource],
     ) -> bool:
         return False
 
@@ -210,7 +208,7 @@ class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, aff
         return UndeliveredInput()
 
     def delivered_in(
-        self, lease: TurnLeaseFence, root_id: RootId, snapshot: RegistrySnapshot
+        self, lease: TurnFence, root_id: RootId, snapshot: RegistryNames[ThreadIdentitySource]
     ) -> InputDelivery:
         """The bus message this input delivered into the lease's turn."""
         return UndeliveredInput()
@@ -489,11 +487,11 @@ class StartedInput(KnownInputState, SentInput):
 
     def started_for_native(
         self,
-        lease: TurnLeaseFence,
+        lease: TurnFence,
         native_id: InputId,
         sent_text: str,
         *,
-        snapshot: RegistrySnapshot,
+        snapshot: RegistryNames[ThreadIdentitySource],
     ) -> bool:
         """Whether this original row's recorded lease/input evidence is this native start.
 
@@ -506,11 +504,11 @@ class StartedInput(KnownInputState, SentInput):
 
     def context_committed(
         self,
-        lease: TurnLeaseFence,
+        lease: TurnFence,
         sent_text: str,
         context: NativeContextProof,
         *,
-        snapshot: RegistrySnapshot,
+        snapshot: RegistryNames[ThreadIdentitySource],
     ) -> InputTransition:
         if not self.started_for_native(lease, context.input_id, sent_text, snapshot=snapshot):
             raise RelationViolationError(
