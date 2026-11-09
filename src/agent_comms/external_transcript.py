@@ -52,12 +52,13 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     TurnDigest,
 )
-from agent_comms.transcript_sources import TranscriptDraft, TranscriptRecord, TranscriptSource
+from agent_comms.execution.native_records import TranscriptRecord
+from agent_comms.transcript_sources import TranscriptDraft, TranscriptSource
 from agent_comms.transport.native_tools import MutatingPathTool
 from agent_comms.watched import FileSource, Watched
 
 if TYPE_CHECKING:
-    from agent_comms.execution.turn_digests import TurnBound
+    from agent_comms.execution.turn_bound import TurnBound
 
 
 class ReplyWindow(DeclaredFamily, affix="Replies"):

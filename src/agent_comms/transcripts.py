@@ -28,10 +28,10 @@ from agent_comms.execution.native_output import NativeRecordLocation
 from agent_comms.execution.native_runtime_input import PublishedReplyRevision
 from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.native_transcript import NativeTranscript, RecordsCut, SessionCut
+from agent_comms.execution.turn_bound import TurnBound
 from agent_comms.execution.turn_digests import (
     InputAnswerRead,
     ThreadTurns,
-    TurnBound,
     TurnDigestRead,
 )
 from agent_comms.execution.turn_lease import TurnLeaseFence

@@ -45,7 +45,7 @@ from agent_comms.execution.child_process import (
     ProcessIdentity,
     SpawnedProcess,
 )
-from agent_comms.execution.turn_digests import LastTurns
+from agent_comms.execution.turn_bound import LastTurns
 from agent_comms.fd_readiness import ready
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.installer.refusals import UpgradeRefused

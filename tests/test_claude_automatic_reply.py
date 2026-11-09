@@ -19,7 +19,7 @@ from agent_comms.comms import Comms
 from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.coordination.errors import CoordinationBeginUnavailable
-from agent_comms.execution.turn_digests import LastTurns
+from agent_comms.execution.turn_bound import LastTurns
 from agent_comms.execution.turn_item import (
     NamedSourceTurn,
     NativeTurnId,

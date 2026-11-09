@@ -30,7 +30,7 @@ from agent_comms.execution.turn_context import (
     UserInputSegment,
     WireProvenance,
 )
-from agent_comms.execution.turn_digests import (
+from agent_comms.execution.turn_bound import (
     LastTurns,
     TurnBound,
     TurnsBefore,

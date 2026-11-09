@@ -62,7 +62,8 @@ from agent_comms.team_service import TeamService
 from agent_comms.text_digest import TextDigest
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.transcript_events import TurnDigest
-from agent_comms.execution.turn_digests import LastTurns, OrderEditCountRead, RecentTurnsSince, TurnDigestRead
+from agent_comms.execution.turn_bound import LastTurns, RecentTurnsSince
+from agent_comms.execution.turn_digests import OrderEditCountRead, TurnDigestRead
 from agent_comms.work_branches import BranchDifference, SourceGrowth, UnparsedSource, WorkBranchError
 
 class TeammateEvidence(ABC):

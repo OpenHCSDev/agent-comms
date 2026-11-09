@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.execution.turn_digests import LastTurns
+from agent_comms.execution.turn_bound import LastTurns
 from agent_comms.execution.turn_runner import TurnRunner
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_durable_backend import DurableDatabase, Inspect, PiDurableBackend

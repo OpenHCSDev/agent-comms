@@ -11,13 +11,11 @@ from pydantic import JsonValue
 from agent_comms.acp_extension import GoalSnapshotReply, TurnChangedUpdate, UpdateMetadata
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.turn_bound import LastTurns, TurnBound, TurnsSince
 from agent_comms.execution.turn_digests import (
     ActivityTurnView,
-    LastTurns,
     OrderEditsRead,
     ThreadTurns,
-    TurnBound,
-    TurnsSince,
     TurnView,
     UnavailableOrderEdits,
     UnjudgedEdits,

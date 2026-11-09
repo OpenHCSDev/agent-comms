@@ -20,7 +20,8 @@ from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
 from agent_comms.cli_bridges.session_watch import DeafWatch
 from agent_comms.cli_bridges.shared import Serve
 from agent_comms.comms import Comms
-from agent_comms.execution.turn_digests import TurnDigestRead, TurnsSince
+from agent_comms.execution.turn_bound import TurnsSince
+from agent_comms.execution.turn_digests import TurnDigestRead
 from agent_comms.execution.watch_passes import WatchPass
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_subjects import (

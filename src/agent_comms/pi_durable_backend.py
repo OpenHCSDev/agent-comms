@@ -15,7 +15,7 @@ from agent_comms.agent_events import Error
 from agent_comms.execution.native_child import PiChild
 from agent_comms.execution.native_entries import StoredEntry
 from agent_comms.execution.native_session_files import SessionFiles
-from agent_comms.execution.native_transcript import StoredRecord
+from agent_comms.execution.native_records import StoredRecord
 from agent_comms.external_transcript import ExternalCut
 from agent_comms.nominal import field_codec
 from agent_comms.pi_commands import Compact, ExactResponse, PiCommand, SetModel

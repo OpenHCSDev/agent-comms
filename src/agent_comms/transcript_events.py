@@ -6,7 +6,7 @@ import json
 from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 from urllib.parse import quote
 
 from agent_comms.imported_messages import (
@@ -54,8 +54,7 @@ from agent_comms.ui_model.message_category import (
     UserCategory,
 )
 
-if TYPE_CHECKING:
-    from agent_comms.transcript_sources import TranscriptSource
+from agent_comms.published_messages import ReadsPublishedMessages
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -102,7 +101,7 @@ class TranscriptEvent(EventMerge, Dated, DeclaredFamily, affix="Transcript"):
     def with_publications(self, publications: tuple[MessageReference, ...]) -> TranscriptEvent:
         return self
 
-    def for_external_source(self, source: TranscriptSource) -> tuple[TranscriptEvent, ...]:
+    def for_external_source(self, source: ReadsPublishedMessages) -> tuple[TranscriptEvent, ...]:
         return (self,)
 
     def as_context(self) -> TranscriptEvent:
@@ -351,7 +350,7 @@ class AssistantTranscript(ModelOutput, AgentTextTranscript):
     def with_publications(self, publications: tuple[MessageReference, ...]) -> AssistantTranscript:
         return replace(self, routing=TurnRouting(publications=publications))
 
-    def for_external_source(self, source: TranscriptSource) -> tuple[TranscriptEvent, ...]:
+    def for_external_source(self, source: ReadsPublishedMessages) -> tuple[TranscriptEvent, ...]:
         references = self.routing.publications
         published = bool(references) and source.sent_messages(references).keys() >= set(references)
         return self.for_assigned_source(source, published)
