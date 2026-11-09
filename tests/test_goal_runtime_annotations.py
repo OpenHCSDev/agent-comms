@@ -16,12 +16,21 @@ from agent_comms.acp_extension import AgentCommsUpdate, LiveQueueScope, PromptRe
 from agent_comms.agent_event_updates import AcpEventConsumer, AcpToolAction
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOption, ConfigOptions
+from agent_comms.context_assembly import ContextAssembly
+from agent_comms.context_owner import ContextOwner
+from agent_comms.context_provenance_source import ContextProvenanceSource
 from agent_comms.context_segments.wake_values import WakeWorkContext
 from agent_comms.display_order import ChannelSort, ThreadSort
 from agent_comms.execution.goal_scheduler import GoalScheduler
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit
 from agent_comms.execution.input_drain import InputDrain
 from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
+from agent_comms.execution.turn_context import (
+    CoordinationSegment,
+    PeerState,
+    Provenance,
+    TurnContext,
+)
 from agent_comms.execution.turn_failure import (
     NativePiTerminalFailure,
     RetryableProviderFailure,
@@ -36,8 +45,11 @@ from agent_comms.goal_ledger import FailedTurnEvidence, FailedTurnObservation, G
 from agent_comms.goal_mutation import GoalTurnProjection
 from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.goal_work import GoalFailureOwner, GoalOwner, GoalWorkSource
+from agent_comms.input_attempt import StoredInput
+from agent_comms.input_origin import InputProvenance
 from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.field_codec import ThreadLookup
+from agent_comms.peer_relation import PeerRelation
 from agent_comms.planning.goal_actions import GoalAction, SetGoalAction, StandbyGoalAction
 from agent_comms.planning.goal_attempt_phase import GoalAttemptPhase
 from agent_comms.planning.goal_attempts import LaunchPermit
@@ -357,3 +369,29 @@ def test_task_publication_validation_and_original_lease_contracts_resolve() -> N
     assert get_type_hints(TaskOwner.require_publication_turn)["claim_generation"] == Callable[[], int]
     fence = get_type_hints(TaskOwner.require_turn_lease)["return"]
     assert issubclass(get_type_hints(Thread.require_turn_lease)["return"], fence)
+
+
+def test_context_provenance_comes_from_the_original_stored_input() -> None:
+    assert issubclass(StoredInput, ContextProvenanceSource)
+    hints = get_type_hints(TurnContext.for_owner)
+    assert hints["peer_owners"] == tuple[ContextOwner, ...]
+    source = get_args(hints["inputs"])[0]
+    assert get_origin(source) is ContextProvenanceSource
+    assert get_args(source) == (Provenance,)
+    assert get_type_hints(StoredInput.context_provenance)["return"] is InputProvenance
+    assert get_type_hints(PeerState.from_owner)["owner"] is ContextOwner
+    assert get_type_hints(CoordinationSegment.capture)["peer_owners"] == tuple[ContextOwner, ...]
+
+
+def test_context_assembly_is_inherited_by_the_original_comms_owner() -> None:
+    assert issubclass(Comms, ContextAssembly)
+    assert Comms.context_for is ContextAssembly.context_for
+    assert Comms.context_with_awareness is ContextAssembly.context_with_awareness
+    hints = get_type_hints(Comms.context_for)
+    assert hints["owner"] is ContextOwner
+    assert hints["return"] is TurnContext
+    awareness = get_type_hints(Comms.context_with_awareness)
+    assert awareness["context"] is TurnContext
+    assert awareness["owner"] is ContextOwner
+    assert awareness["relations"] == tuple[PeerRelation, ...]
+    assert awareness["return"] is TurnContext

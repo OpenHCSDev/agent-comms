@@ -365,7 +365,7 @@ class OwnedTurn:
             self.thread,
             RecordedContextTurn(self.turn_id, self.turn_lease.identity),
             self.task,
-            self.runner.comms.views.thread_views(),
+            tuple(view.thread for view in self.runner.comms.views.thread_views()),
             self.relations,
             self.runner.comms.goals,
             tuple(origin.reference for origin in self.origins),
@@ -465,7 +465,7 @@ class OwnedTurn:
         await self.runner.inputs.drain_owned_inbox(self.session_id)
 
         self.context = await Coordination.run_worker(partial(
-            self.context.with_awareness, self.runner.comms, self.thread, self.relations,
+            self.runner.comms.context_with_awareness, self.context, self.thread, self.relations,
         ))
 
     async def stream(self):

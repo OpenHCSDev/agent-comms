@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
+from agent_comms.context_provenance_source import ContextProvenanceSource
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.input_key import InputKey, InputKeyText, PublicInputKeyText
@@ -306,7 +307,7 @@ class HistoricalInput(UnresolvedInput):
 
 
 @dataclass(frozen=True)
-class StoredInput(InputAttempt):
+class StoredInput(InputAttempt, ContextProvenanceSource[InputProvenance]):
     """The recorded owner name and input generation, without inventing a thread identity."""
 
     exists = True

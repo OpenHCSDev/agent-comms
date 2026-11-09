@@ -17,6 +17,7 @@ from agent_comms.agent_inbox import TakenInputStart
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channel_management import ChannelManagement
 from agent_comms.collaboration_ledger import CollaborationLedger
+from agent_comms.context_assembly import ContextAssembly
 from agent_comms.context_store import ContextStore
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
@@ -91,7 +92,7 @@ class UntakenCut:
         return self.registry is snapshot and self.key == key
 
 
-class Comms(ActivityClient):
+class Comms(ActivityClient, ContextAssembly):
     def __init__(self, root: CommsRoute) -> None:
         super().__init__(root)
         self.goals = Goals(self.root, self.registry, self.bus, self.agents)

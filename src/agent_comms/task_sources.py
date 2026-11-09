@@ -95,7 +95,6 @@ class TaskAttachment(
     the registry acquires before any name is decoded.
     """
 
-    retains_authored_task = False
     permits_agent_revision = False
     observes_subtask = False
 
@@ -277,7 +276,6 @@ class ScopedTaskDeclaration(TaskAttachment):
     change: Annotated[TaskChange, WireOmitDefault()] = field(
         default_factory=OriginalTaskChange
     )
-    retains_authored_task = True
 
     def require_scoped_task(self) -> ScopedTaskDeclaration:
         return self

@@ -27,7 +27,10 @@ from agent_comms.controller import NO_CONTROLLER
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import Refused
 from agent_comms.errors import RelationViolationError
-from agent_comms.execution.turn_context import ContextManifest, ContextSourceText, TurnContext
+from agent_comms.execution.turn_context import (
+    ContextManifest,
+    ContextSourceText,
+)
 from agent_comms.manual_compaction_bridge import compact_context
 from agent_comms.messaging.bus_read import OwnerReadRuntimeRequest, OwnerScopedRead
 from agent_comms.nominal.field_codec import FieldCodec, WireValue
@@ -444,7 +447,7 @@ class ServedContextCoreRuntimeRequest(
     def read_context(self, ctx: AttachedRuntimeRequestContext):
         comms = ctx.server.agent._comms
         owner = self.require_owner(comms.registry.entry(ctx.name).entry)
-        return TurnContext.for_inspection(comms, owner)
+        return comms.context_for(owner)
 
     async def inspect(self, ctx: AttachedRuntimeRequestContext):
         return await Coordination.run_worker(partial(self.read_context, ctx))

@@ -1041,10 +1041,6 @@ class Message(MessageInput, TurnOrigin):
         """The filter category this message files under, answered by what it carries."""
         return self.task.category(self.role.category)
 
-    @property
-    def retains_authored_task(self) -> bool:
-        return self.task.retains_authored_task
-
     def require_task_publication(self, sender, snapshot, original_source) -> None:
         self.task.require_target(self.target, snapshot)
         self.task.require_publication(sender, snapshot, original_source)

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import Annotated, Self
 
 from pydantic import JsonValue
 
@@ -17,6 +17,7 @@ from agent_comms import instructions
 from agent_comms.annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
 from agent_comms.cli_result import CliResult
 from agent_comms.context_owner import ContextOwner
+from agent_comms.context_provenance_source import ContextProvenanceSource
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.turn_item import NativeItemId, PiRequestKey
@@ -34,17 +35,12 @@ from agent_comms.nominal.field_codec import (
     WireOmitDefault,
 )
 from agent_comms.peer_relation import PeerRelation
-from agent_comms.peer_relevance import AlwaysListed, GoalShown, PeerRelevance
+from agent_comms.peer_relevance import AlwaysListed, PeerRelevance
 from agent_comms.planning.goals import Goal, NoGoal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ThreadIncarnation, TurnIdentity
 from agent_comms.tool_result import DeclaredReply, ToolResult
 from agent_comms.wake_policy import WakePolicy
-
-if TYPE_CHECKING:
-    from agent_comms.input_attempt import StoredInput
-    from agent_comms.presentation import ThreadView
-
 
 
 @dataclass(frozen=True)
@@ -1037,13 +1033,13 @@ class PeerState:
     goal: tuple[str, ...]
 
     @classmethod
-    def from_view(cls, view: ThreadView, relation: PeerRelation, goals) -> PeerState:
-        goal = view.thread.goal.active() if relation.relevance.grants(GoalShown) else NoGoal()
+    def from_owner(cls, owner: ContextOwner, relation: PeerRelation, goals) -> PeerState:
+        goal = relation.relevance.context_goal(owner.goal.active, NoGoal)
         return cls(
-            view.thread.name,
+            owner.name,
             relation.relevance,
             relation.note,
-            goal.instructions_for(goals, view.thread.incarnation),
+            goal.instructions_for(goals, owner.incarnation),
         )
 
 
@@ -1064,12 +1060,12 @@ class CoordinationSegment(InstructionSegment):
 
     @classmethod
     def capture(
-        cls, owner: ContextOwner, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...], goals
+        cls, owner: ContextOwner, peer_owners: tuple[ContextOwner, ...], relations: tuple[PeerRelation, ...], goals
     ) -> CoordinationSegment:
         response_instruction = WakePolicy.relevance_instruction()
-        viewed = {view.thread.incarnation: view for view in views}
-        peers = tuple(PeerState.from_view(viewed[r.peer], r, goals)
-                      for r in relations if r.peer in viewed and r.relevance.grants(AlwaysListed))
+        by_incarnation = {peer.incarnation: peer for peer in peer_owners}
+        peers = tuple(PeerState.from_owner(by_incarnation[r.peer], r, goals)
+                      for r in relations if r.peer in by_incarnation and r.relevance.grants(AlwaysListed))
         revision = hashlib.sha256(json.dumps(FieldCodec.encode(peers)).encode()).hexdigest()
         return super().capture(
             (OwnerProvenance(owner.incarnation, revision), response_instruction.source),
@@ -1331,17 +1327,6 @@ class TurnContext(DeclaredReply):
     turn: ContextTurn
     segments: tuple[ContextSegment, ...]
 
-    @classmethod
-    def for_inspection(cls, comms, owner: ContextOwner) -> TurnContext:
-        """Preview the Core context that would be added before the next input.
-
-        Use the same context builders as turn preparation. This preview is not
-        a recorded SDK request and does not grant permission to submit input.
-        """
-        relations = comms.relationships.context_relations(owner.name)
-        context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations, comms.goals)
-        return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations)
-
     def with_goal(self, owner: ContextOwner, goals) -> TurnContext:
         return owner.goal.active().add_context(
             self, partial(self.prepend_goal, owner, goals=goals),
@@ -1349,25 +1334,6 @@ class TurnContext(DeclaredReply):
 
     def prepend_goal(self, owner: ContextOwner, goal: Goal, goals) -> TurnContext:
         return self.prepend(GoalSegment.capture(owner, goal, goals))
-
-    def with_awareness(
-        self, comms, owner: ContextOwner, relations: tuple[PeerRelation, ...]
-    ) -> TurnContext:
-        """Append what the owner should know without being asked.
-
-        Its relationships, the messages addressed to it and its partners' goal changes.
-        """
-        from agent_comms.context_segments.partner_activity import PartnerActivitySegment
-        from agent_comms.context_segments.relationships import RelationshipsSegment
-
-        context = self
-        for segment in (
-            *RelationshipsSegment.capture(owner, relations),
-            *comms.bus.awareness_segments(owner, relations),
-            *PartnerActivitySegment.capture(owner, relations, comms.goals),
-        ):
-            context = context.append(segment)
-        return context
 
     def require_source(self, source: Provenance) -> Provenance:
         for segment in self.segments:
@@ -1394,11 +1360,11 @@ class TurnContext(DeclaredReply):
         owner: ContextOwner,
         turn: ContextTurn,
         task: str,
-        views: tuple[ThreadView, ...],
+        peer_owners: tuple[ContextOwner, ...],
         relations: tuple[PeerRelation, ...],
         goals,
         origins: tuple[MessageReference, ...] = (),
-        inputs: tuple[StoredInput, ...] = (),
+        inputs: tuple[ContextProvenanceSource[Provenance], ...] = (),
     ) -> TurnContext:
         source = tuple(WireProvenance(ref) for ref in origins) or (turn.provenance(owner),)
         source += tuple(row.context_provenance() for row in inputs)
@@ -1406,7 +1372,7 @@ class TurnContext(DeclaredReply):
             owner.incarnation,
             turn,
             (
-                CoordinationSegment.capture(owner, views, relations, goals),
+                CoordinationSegment.capture(owner, peer_owners, relations, goals),
                 UserInputSegment(provenance=source, content=task),
             ),
         )

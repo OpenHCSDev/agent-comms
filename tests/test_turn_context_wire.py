@@ -79,7 +79,7 @@ def test_awareness_inspection_reads_the_committed_source_beside_a_held_writer(tm
         finally:
             release.set()
         writer.result(timeout=2)
-    inspection = TurnContext.for_inspection(comms, owner)
+    inspection = comms.context_for(owner)
     assert original[0] in inspection.segments
     assert comms.bus.bus.revision() == before
 
