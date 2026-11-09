@@ -6,6 +6,9 @@ from typing import get_type_hints
 
 importlib.import_module(sys.argv[1])
 
+from agent_comms.planning.goals import GoalUnavailable
+from agent_comms.registry.threads import Thread
+
 from agent_comms import agent_events
 from agent_comms.context_segments.wake_values import WakeGoalContext
 from agent_comms.acp_extension import AgentCommsUpdate, LiveQueueScope, PromptRequest, QueueScope
@@ -33,6 +36,8 @@ from agent_comms.planning.goal_presentation import GoalSnapshot
 from agent_comms.planning.goal_presentation import RunnableExecution
 from agent_comms.nominal.field_codec import FieldCodec
 
+assert get_type_hints(GoalUnavailable.heading)["execution"]
+assert get_type_hints(Thread.wake_context)["goals"]
 assert get_type_hints(RunnableExecution.apply_toggle)["change"]
 assert get_type_hints(agent_events.InputStarted.captured)["inputs"]
 assert get_type_hints(agent_events.AgentEventConsumer.__init__)["comms"]
