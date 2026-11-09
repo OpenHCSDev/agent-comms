@@ -68,6 +68,7 @@ from agent_comms.head_review import (
 )
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
+from agent_comms.message_directions import DirectiveWriter
 from agent_comms.messaging.channel_targets import (
     CommandTarget,
     CommsTag,
@@ -5796,7 +5797,7 @@ class RecordMergedTodo(RecordsAssignmentHistory, TodoCommand, declared_name=None
 
 
 @dataclass(frozen=True, slots=True)
-class TodoStore(OwnerRequestStore, TodoHistory, GoalAssignments):
+class TodoStore(OwnerRequestStore, TodoHistory, GoalAssignments, DirectiveWriter):
     """One SQLite row owns both todo state and its exclusive assignment.
 
     Assignment identity and revision deduplicate known operations. An uncertain

@@ -45,6 +45,7 @@ from agent_comms.input_attempt import (
     UnresolvedInputReference,
 )
 from agent_comms.input_disposition import DeliveryOverview
+from agent_comms.message_directions import MessageDirections
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.owner_requests import NewestOpenRequest, RequestDirective
@@ -227,8 +228,14 @@ class BornGoalTarget(GoalTarget):
 
 
 class Goals(
-    GoalRecords, ProblemGoals, WakeWorkSource[Thread], GoalFork[Thread, GoalDeclaration],
-    GoalStoreSource[GoalAttemptStore], GoalReadyGrantSource[NativeThread, Generation], GoalSnapshots[Thread, GoalSnapshot],
+    GoalRecords,
+    ProblemGoals,
+    WakeWorkSource[Thread],
+    GoalFork[Thread, GoalDeclaration],
+    MessageDirections[Message],
+    GoalStoreSource[GoalAttemptStore],
+    GoalReadyGrantSource[NativeThread, Generation],
+    GoalSnapshots[Thread, GoalSnapshot],
 ):
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
         """Create a teammate's child goal from its parent's active work."""

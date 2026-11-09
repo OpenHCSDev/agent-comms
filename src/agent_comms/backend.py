@@ -15,6 +15,8 @@ message also fail the turn, carrying ``errorMessage`` and typed diagnostics.
 
 from __future__ import annotations
 
+from agent_comms.execution.native_session_callbacks import NativeSessionCallbacks, PromptSessionCallbacks
+
 import asyncio
 import json
 from abc import ABC, abstractmethod
@@ -46,13 +48,13 @@ from agent_comms.agent_backend import NO_INPUT_START_LISTENER, InputStartListene
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.execution.native_attestation import AttestationError
-from agent_comms.execution.native_child import PiSessionChild
+from agent_comms.execution.native_child import NativeChildState, PiSessionChild
 from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_input_proof import NativeContextProof, NativeInputCommit
 from agent_comms.execution.native_pi import NativePiRpcLaunch, read_tracked_input_commitment
 from agent_comms.execution.native_session_files import NativeSessionFiles
-from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
 from agent_comms.execution.native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from agent_comms.execution.turn_context import InputContributionCoordinates
 from agent_comms.execution.turn_failure import (
@@ -98,10 +100,9 @@ from agent_comms.transport.native_tool_transport import (
 )
 from agent_comms.turn_failure_reads import TerminalSessionRead
 
-if TYPE_CHECKING:
-    from agent_comms.acp_failure import ProviderRetryResult
-    from agent_comms.pi_native_backend import PersistentPiSession
-    from agent_comms.pi_payloads import AssistantMessage, UserMessage
+from agent_comms.acp_failure import ProviderRetryResult
+from agent_comms.execution.session_retention import NativeSessionRetention
+from agent_comms.pi_payloads import AssistantMessage, UserMessage
 
 
 # Pi 0.85.1 owns provider-idle detection and defaults it to 300 seconds. This
@@ -139,7 +140,7 @@ async def stream_agent_events(
     *,
     cursor_delivery: CursorDelivery,
     input_start: InputStartListener,
-    persistent_session: PersistentPiSession,
+    persistent_session: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity],
     package: VerifiedNativePackage,
     root: Path,
     owner: ParticipantIdentity,
@@ -241,7 +242,7 @@ class EventFinishSignal(FinishSignal):
 NO_FINISH_SIGNAL = NoFinishSignal()
 
 
-class NativeSession(MroDispatch, TerminalSessionRead):
+class NativeSession(MroDispatch, NativeSessionCallbacks):
     """Shared child acquisition, attestation, observation and retirement."""
 
     active: ClassVar[dict[asyncio.Task[Any], NativeSession]] = {}
@@ -262,7 +263,7 @@ class NativeSession(MroDispatch, TerminalSessionRead):
         input_start: InputStartListener = NO_INPUT_START_LISTENER,
         ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
         request_observer: RequestObserver = NO_REQUEST_OBSERVER,
-        *, startup: NativeStartup, native_session: PersistentPiSession,
+        *, startup: NativeStartup, native_session: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity],
     ):
         self.launch = launch
         self.tool_socket: ToolTransport
@@ -711,7 +712,7 @@ class TrackedInputContext:
             await self.command.context_committed(turn, proof, source_reads)
 
 
-class TurnSession(NativeSession):
+class TurnSession(NativeSession, PromptSessionCallbacks):
     """A native input adds its declared tools and constructs its connected command."""
 
     prompt_type = UnwrittenPrompt

@@ -36,6 +36,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import Platform
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from agent_comms.input_ingress import InputRootAuthority
 from agent_comms.nominal.field_codec import RootId, ThreadLookup
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch, SharedRootLaunch
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
@@ -120,7 +121,7 @@ def _decode(data: bytes, root_id: bytes) -> tuple[int, int, bytes]:
     return seq, phase, digest
 
 
-class RegistryPrivacy(ABC):
+class RegistryPrivacy(InputRootAuthority):
     """What a registry root's protocol marker decides, selected by the registry store."""
 
     def guard_evidence(self, guard: FileObservation, coordinator: FileObservation,
@@ -146,11 +147,6 @@ class RegistryPrivacy(ABC):
         self, publication: CursorPublication, thread_name: str, session_id: str,
     ) -> tuple[CursorAdvancedUpdate, ...]: ...
 
-    @property
-    @abstractmethod
-    def namespace(self) -> RootId:
-        """Require the original native namespace; a public registry has none."""
-
     @abstractmethod
     def write(self, registry_path: Path, text: str) -> None: ...
 
@@ -159,9 +155,6 @@ class RegistryPrivacy(ABC):
 
     @abstractmethod
     def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard: ...
-
-    @abstractmethod
-    def require_root(self, root_id: RootId, error: Exception) -> None: ...
 
     @abstractmethod
     def notification_context_sql(self, connection: sqlite3.Connection) -> str:

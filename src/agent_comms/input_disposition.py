@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-from agent_comms.bus import Bus, BusReader
+import agent_comms.bus as bus
 from agent_comms.channel_input_batch import SingleInputBatch
 from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
@@ -29,6 +29,7 @@ from agent_comms.input_attempt import (
     UnresolvedInput,
 )
 from agent_comms.input_key import InputKey, InputKeyText, TurnInputKey
+from agent_comms.input_lookup import InputLookup
 from agent_comms.input_origin import HarnessAttemptOrigin, InputOrigin, UnattributedInputOrigin
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.messaging.channel_targets import CommandTarget
@@ -73,7 +74,7 @@ class DeliveryOverview(ToolResult):
 
 
 @dataclass(frozen=True, slots=True)
-class InputDocument(OriginalInputs):
+class InputDocument(OriginalInputs, InputLookup[InputAttempt]):
     """The stored rows one query selected; never the whole store."""
 
     rows: dict[InputKey, StoredInput] = field(default_factory=dict)
@@ -151,7 +152,7 @@ class InputDocument(OriginalInputs):
 
 
     def answered_by(
-        self, lease: TurnLeaseFence, source: BusReader, snapshot: RegistrySnapshot,
+        self, lease: TurnLeaseFence, source: bus.BusReader, snapshot: RegistrySnapshot,
         target: str, *, privacy: RegistryPrivacy,
     ) -> tuple[MessageReference, ...]:
         """The bus messages the lease's turn took in that a message to target answers."""
@@ -241,7 +242,7 @@ def _members(column: str, values) -> tuple[str, tuple]:
 
 
 @dataclass(frozen=True, slots=True)
-class InputDispositions(DurableStore, CompleteInputReader):
+class InputDispositions(DurableStore, CompleteInputReader, InputLookup[InputAttempt]):
     """Indexed durable input rows; each operation reads only the rows it names."""
 
     root: Path
@@ -289,7 +290,7 @@ class InputDispositions(DurableStore, CompleteInputReader):
         they are. Derived on every read and never stored by reading."""
         owners = {entry.thread.incarnation.require_recorded().lookup: entry for entry in entries}
         attempts = self._harness_deliveries(tuple(owners))
-        messages = Bus(Bus.path_in(self.root)).input_messages_for_references(
+        messages = bus.Bus(bus.Bus.path_in(self.root)).input_messages_for_references(
             attempt.reference for attempt in attempts)
         return tuple(
             ReservedInput(

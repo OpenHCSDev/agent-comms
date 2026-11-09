@@ -1,0 +1,94 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-declare-low-original-clock-reads",
+          "reason": "P23 guarded-import closure at Core b47c7c0ded5005be39bfcf9e129297fabc4f127d: relocate the original roster policy and its default together below their consumers. Move channel target selection to Channel/Channels; preserve ChannelActivity aggregation, concrete Message/Thread types, original member filtering and all service bodies. Bind the original callback types normally; no surrogate records, new provider family or namespace injection. This sequence is a source/preflight proposal, not executed import, codec or consumer evidence. Deferred ClassFact writes are unchanged.",
+          "operations": [
+            {
+              "operation": "create_file",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/message_clock_source.py",
+              "source": "\"\"\"Original recorded message clocks, below destination and persistence initialization.\"\"\"\n\nfrom abc import ABC, abstractmethod\n\nfrom agent_comms.recorded_time import Timestamped\n\n\nclass SenderClockSource(ABC):\n    __slots__ = ()\n\n    @classmethod\n    @abstractmethod\n    def last_user_input(cls, previous: float, timestamp: float) -> float: ...\n\n\nclass MessageClockSource(Timestamped):\n    __slots__ = ()\n\n    sender_role: type[SenderClockSource]\n"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-bind-clock-read-parents",
+          "reason": "P23 guarded-import closure at Core b47c7c0ded5005be39bfcf9e129297fabc4f127d: relocate the original roster policy and its default together below their consumers. Move channel target selection to Channel/Channels; preserve ChannelActivity aggregation, concrete Message/Thread types, original member filtering and all service bodies. Bind the original callback types normally; no surrogate records, new provider family or namespace injection. This sequence is a source/preflight proposal, not executed import, codec or consumer evidence. Deferred ClassFact writes are unchanged.",
+          "operations": [
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/messages.py",
+              "import_source": "from agent_comms.message_clock_source import MessageClockSource"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_identity.py",
+              "import_source": "from agent_comms.message_clock_source import SenderClockSource"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-remove-eager-message-clock-dependency",
+          "reason": "P23 guarded-import closure at Core b47c7c0ded5005be39bfcf9e129297fabc4f127d: relocate the original roster policy and its default together below their consumers. Move channel target selection to Channel/Channels; preserve ChannelActivity aggregation, concrete Message/Thread types, original member filtering and all service bodies. Bind the original callback types normally; no surrogate records, new provider family or namespace injection. This sequence is a source/preflight proposal, not executed import, codec or consumer evidence. Deferred ClassFact writes are unchanged.",
+          "operations": [
+            {
+              "operation": "replace_class_base",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/messages.py",
+              "qualname": "MessageInput",
+              "base_name": "Timestamped",
+              "replacement_base_name": "MessageClockSource"
+            },
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_identity.py",
+              "qualname": "ThreadRole",
+              "base_name": "SenderClockSource"
+            },
+            {
+              "operation": "delete_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_identity.py",
+              "qualname": "ThreadRole.last_user_input"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.messaging.messages import Message\n",
+                  "new_source": "from agent_comms.message_clock_source import MessageClockSource\n"
+                },
+                {
+                  "old_source": "def observe(self, message: Message)",
+                  "new_source": "def observe(self, message: MessageClockSource)"
+                },
+                {
+                  "old_source": "def from_message(cls, message: Message,",
+                  "new_source": "def from_message(cls, message: MessageClockSource,"
+                }
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

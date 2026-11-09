@@ -11,6 +11,8 @@ implementation modules (``backend``, ``pi_commands``, ``pi_events``,
 
 from __future__ import annotations
 
+from agent_comms.execution.session_retention import NativeSessionRetention
+
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
@@ -134,7 +136,9 @@ class PiSessionFile(RuntimeLocation):
                      for model in entry.saved_models), UndeclaredModel())
 
 
-class PersistentPiSession:
+class PersistentPiSession(
+    NativeSessionRetention["PiSessionChild", "NativeChildState", NativeSessionIdentity],
+):
     """Serialize borrowing and retirement of one native session's actual child."""
 
     def __init__(self) -> None:

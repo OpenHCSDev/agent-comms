@@ -1,0 +1,25 @@
+Reading current source through NRA; no apply path exists in this runner.
+Simulating 28 operations on 49 indexed source files.
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-friction--P17/.verification/p23-message-contract-trace/provider_plan.py", line 343, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/home/ts/wt/comms-friction--P17/.verification/p23-message-contract-trace/provider_plan.py", line 319, in main
+    simulation = sequence.simulate(snapshot)
+  File "/home/ts/.cache/toad/test-env/ace79f6007097c3e/lib/python3.14/site-packages/nominal_refactor_advisor/codemod_runtime.py", line 1553, in simulate
+    stage = document.simulate(
+        before_snapshot,
+        backend=backend,
+    )
+  File "/home/ts/.cache/toad/test-env/ace79f6007097c3e/lib/python3.14/site-packages/nominal_refactor_advisor/codemod_runtime.py", line 1288, in simulate
+    return self.preflight(snapshot).simulate(backend=backend)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ts/.cache/toad/test-env/ace79f6007097c3e/lib/python3.14/site-packages/nominal_refactor_advisor/codemod_runtime.py", line 1345, in simulate
+    edit_batch = self.required_edit_batch
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.cache/toad/test-env/ace79f6007097c3e/lib/python3.14/site-packages/nominal_refactor_advisor/codemod_runtime.py", line 1309, in required_edit_batch
+    self.report.require_clean()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/ts/.cache/toad/test-env/ace79f6007097c3e/lib/python3.14/site-packages/nominal_refactor_advisor/codemod_preflight.py", line 53, in require_clean
+    raise CodemodOperationPreflightError(report)
+nominal_refactor_advisor.codemod_preflight.CodemodOperationPreflightError: '/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py' rebinds 'relationships', which binds the source module 'agent_comms.relationships'

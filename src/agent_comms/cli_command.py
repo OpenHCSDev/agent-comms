@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agent_comms.target_command_bindings import TargetCommandBindings
+
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
@@ -55,10 +57,9 @@ from agent_comms.target_fields import TargetField
 from agent_comms.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 
-if TYPE_CHECKING:
-    from agent_comms.active_route import CommsRoute
-    from agent_comms.registry.thread_status import ThreadStatus
-    from agent_comms.registry.threads import Thread
+from agent_comms.active_route import CommsRoute
+from agent_comms.registry.thread_status import ThreadStatus
+from agent_comms.registry.threads import Thread
 
 
 class ChannelBound(TargetBound):
@@ -93,9 +94,10 @@ class CliCommand(
     ModuleMembers,
     DeclaredCommand,
     CliExecution[Answer],
+    TargetCommandBindings[Comms, Thread, ThreadStatus, SurroundingChannel, Checkout, RegistrySnapshot, CatalogAccess, ResolvedChannel],
     Generic[Answer],
-    affix="CliCommand",
-    discovery_package="agent_comms.cli_verbs",
+    affix='CliCommand',
+    discovery_package='agent_comms.cli_verbs',
 ):
     def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
         result = TargetCompleted(batch.target, self, self.apply(comms))

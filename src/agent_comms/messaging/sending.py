@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from agent_comms.message_send_reads import PresenceMessageSender
+
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.bus_publication import AgentOrigin, AutomatedOrigin, HumanOrigin, InitialOrigin
+from agent_comms.bus_publication import AgentOrigin, AutomatedOrigin
 from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.errors import (
@@ -18,7 +20,9 @@ from agent_comms.errors import (
 from agent_comms.execution.turn_context import ContextSegment
 from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.initial_origin import HumanOrigin, InitialOrigin
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_ingress import InputUserIdentity
 from agent_comms.messaging.channel_targets import (
     CommandTarget,
     IncarnationThreadTarget,
@@ -85,7 +89,7 @@ class TeamReceipts(AnswerAuthority):
         return self.actor.answerable(self.teammates)
 
 
-class Messaging:
+class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
     def __init__(self, root: Path, registry: Registration, bus: MessageBus, goals: Goals):
         self.root = root
         self.registry = registry

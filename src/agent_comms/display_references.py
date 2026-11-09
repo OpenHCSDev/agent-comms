@@ -10,7 +10,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Annotated, Generic, Self, TypeVar
+from typing import Annotated, Generic, Self, TypeVar
 
 from agent_comms.messaging.channel_targets import IncarnationThreadTarget, ThreadTarget
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -19,10 +19,10 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.snapshot_slices import MappingRowsSlice, SnapshotRestored, WholeDocumentValue
 from agent_comms.tool_result import ToolResult
 
-if TYPE_CHECKING:
-    from agent_comms.historical_views import HistorySource
-    from agent_comms.messaging.messages import MessageHistory
-    from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.page_traversal import HistorySourceKey
+from agent_comms.registry_names import RegistryNames
+from agent_comms.storage.private_path import FileObservation
+from agent_comms.thread_identity_source import ThreadIdentitySource
 
 
 @dataclass(frozen=True)
@@ -138,6 +138,21 @@ class DisplayReferenceMatch:
     end: int
 
 
+class HistoryReferenceSource(ABC):
+    """The original recorded identity and names needed to link a history body."""
+
+    __slots__ = ()
+    provenance: RegistryNames[ThreadIdentitySource]
+
+    @property
+    @abstractmethod
+    def key(self) -> HistorySourceKey: ...
+
+    @property
+    @abstractmethod
+    def snapshot_identity(self) -> tuple[HistorySourceKey, int, FileObservation]: ...
+
+
 class RegistryReferenceSource(ABC):
     """A UI observation that can read a root's names from Core's registry and channel catalog."""
 
@@ -174,8 +189,27 @@ class ReferenceContext(ABC):
         return source.references_from(self)
 
     @abstractmethod
-    def for_history(self, source: HistorySource) -> ReferenceContext:
+    def for_history(self, source: HistoryReferenceSource) -> ReferenceContext:
         """The names a body recorded by an attached history links through."""
+
+
+class MessageHistory:
+    """Where a displayed message was recorded: an attached history snapshot, or nowhere (live)."""
+
+    __slots__ = ()
+
+    def references_from(self, context: ReferenceContext) -> ReferenceContext:
+        """The names a body recorded here links through; a live message uses the current ones."""
+        return context
+
+
+class NoHistorySource(MessageHistory):
+    """A live message: no snapshot recorded it."""
+
+    __slots__ = ()
+
+
+NO_HISTORY_SOURCE = NoHistorySource()
 
 
 @dataclass(frozen=True)
@@ -186,7 +220,7 @@ class RootedReferences(ReferenceContext):
     async def acquire_from(self, read):
         return await read(self.root)
 
-    def for_history(self, source: HistorySource) -> DisplayReferences:
+    def for_history(self, source: HistoryReferenceSource) -> DisplayReferences:
         return DisplayReferences.recorded(self.root, source)
 
 
@@ -195,7 +229,7 @@ class ProjectReferences(ReferenceContext):
     """An ordinary project view has no coordination identity to recognize."""
     description = ""
 
-    def for_history(self, source: HistorySource) -> ReferenceContext:
+    def for_history(self, source: HistoryReferenceSource) -> ReferenceContext:
         raise ValueError("Recorded references require their original coordination root")
 
 
@@ -244,7 +278,7 @@ class DisplayReferences(RootedReferences):
                    for name, thread in registry.named_members()}
         return DisplayReferences(str(root), targets)
 
-    def for_history(self, source: HistorySource) -> DisplayReferences:
+    def for_history(self, source: HistoryReferenceSource) -> DisplayReferences:
         try:
             return self.sourced[source.snapshot_identity]
         except KeyError:
@@ -336,7 +370,7 @@ class CurrentDisplayReferences(SnapshotRestored, DisplayReferences, ThreadNames)
     channels: Annotated[tuple[str, ...], SlicePolicy(WholeDocumentValue)] = ()
 
     @classmethod
-    def from_registry(cls, root: str, registry: RegistrySnapshot, channels: tuple[str, ...] = ()) -> CurrentDisplayReferences:
+    def from_registry(cls, root: str, registry: RegistryNames[ThreadIdentitySource], channels: tuple[str, ...] = ()) -> CurrentDisplayReferences:
         return ReferenceNames.of(registry, channels).references(root)
 
     def __post_init__(self) -> None:
@@ -370,7 +404,7 @@ class ReferenceNames(ToolResult):
     channels: tuple[str, ...]
 
     @classmethod
-    def of(cls, registry: RegistrySnapshot, channels: tuple[str, ...] = ()) -> ReferenceNames:
+    def of(cls, registry: RegistryNames[ThreadIdentitySource], channels: tuple[str, ...] = ()) -> ReferenceNames:
         """The one construction of the linkable names; the registry decodes no row for it."""
         return cls(dict(registry.named_incarnations()), channels)
 

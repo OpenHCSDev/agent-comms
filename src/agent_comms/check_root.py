@@ -27,7 +27,7 @@ from agent_comms.launch_runtime import ThreadLaunch
 from agent_comms.planning.goals import NoGoal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.messaging.read_basis import MemberActivityDisplayScope
-from agent_comms.registry.registry_document import RosterVisibility
+from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_text import NoThreadText
 from agent_comms.registry.threads import Thread
 from agent_comms.session_file import RegistrySessionLocation

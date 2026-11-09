@@ -14,8 +14,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 
-from agent_comms.harness_delivery_states import Outcome
-from agent_comms.messaging.messages import Message
 from agent_comms.runtime_updates import RuntimeUpdate
 
 
@@ -44,11 +42,3 @@ class PublishesTranscript(ABC):
     @abstractmethod
     def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         """Observe the runtime's output without submitting inputs or executing tools."""
-
-
-class DeliversInput(ABC):
-    """Places a bus message in front of the runtime's model."""
-
-    @abstractmethod
-    async def deliver(self, message: Message) -> type[Outcome]:
-        """Return the runtime's evidence of delivery; the caller owns completion."""

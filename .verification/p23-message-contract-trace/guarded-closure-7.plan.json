@@ -1,0 +1,505 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-lower-original-roster-policy",
+          "reason": "P23 guarded-import closure at Core b47c7c0ded5005be39bfcf9e129297fabc4f127d: relocate the original roster policy and its default together below their consumers. Move channel target selection to Channel/Channels; preserve ChannelActivity aggregation, concrete wire field types, original member filtering and all service bodies. The appended cold-check correction puts the original clock read contract below destination/persistence initialization on MessageInput and ThreadRole through native parent operations. Bind the original callback types normally; no surrogate records, new provider family or namespace injection. This sequence is a source/preflight proposal, not executed import, codec or consumer evidence. Deferred ClassFact writes are unchanged.",
+          "operations": [
+            {
+              "operation": "relocate_symbols_to_new_module",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_document.py",
+              "symbol_qualnames": [
+                "RosterVisibility",
+                "DEFAULT_ROSTER"
+              ],
+              "destination_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/roster_visibility.py"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-close-channel-clock-callback-dependencies",
+          "reason": "P23 guarded-import closure at Core b47c7c0ded5005be39bfcf9e129297fabc4f127d: relocate the original roster policy and its default together below their consumers. Move channel target selection to Channel/Channels; preserve ChannelActivity aggregation, concrete wire field types, original member filtering and all service bodies. The appended cold-check correction puts the original clock read contract below destination/persistence initialization on MessageInput and ThreadRole through native parent operations. Bind the original callback types normally; no surrogate records, new provider family or namespace injection. This sequence is a source/preflight proposal, not executed import, codec or consumer evidence. Deferred ClassFact writes are unchanged.",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+              "replacements": [
+                {
+                  "old_source": "from typing import TYPE_CHECKING, Self",
+                  "new_source": "from typing import Self"
+                },
+                {
+                  "old_source": "if TYPE_CHECKING:\n    from agent_comms.messaging.channels import Channel\n    from agent_comms.messaging.messages import Message\n",
+                  "new_source": "from agent_comms.messaging.messages import Message\n"
+                },
+                {
+                  "old_source": "    @classmethod\n    def for_views(cls, channels: Mapping[str, Channel],\n                  by_target: Mapping[str, ChannelActivity]) -> Mapping[str, ChannelActivity]:\n        return {name: cls.combine(channel.history_scope().target_values(by_target))\n                for name, channel in channels.items()}\n",
+                  "new_source": ""
+                },
+                {
+                  "old_source": "from collections.abc import Iterable, Mapping",
+                  "new_source": "from collections.abc import Iterable"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+              "replacements": [
+                {
+                  "old_source": "from collections.abc import Iterable, Iterator",
+                  "new_source": "from collections.abc import Iterable, Iterator, Mapping"
+                },
+                {
+                  "old_source": "from typing import Annotated, ClassVar, TYPE_CHECKING",
+                  "new_source": "from typing import Annotated, ClassVar"
+                },
+                {
+                  "old_source": "if TYPE_CHECKING:\n    from agent_comms.registry.roster_visibility import RosterVisibility\n    from agent_comms.registry.threads import Thread\n    from agent_comms.registry_provenance import RegistryProvenance\n",
+                  "new_source": "from agent_comms.registry.roster_visibility import RosterVisibility\nfrom agent_comms.registry.threads import Thread\nfrom agent_comms.registry_provenance import RegistryProvenance\nfrom agent_comms.activity_clocks import ChannelActivity\n"
+                },
+                {
+                  "old_source": "    def pending_count(self, counts: dict[str, int]) -> int:\n",
+                  "new_source": "    def history_activity(self, by_target: Mapping[str, ChannelActivity]) -> ChannelActivity:\n        return ChannelActivity.combine(self.history_scope().target_values(by_target))\n\n    def pending_count(self, counts: dict[str, int]) -> int:\n"
+                },
+                {
+                  "old_source": "class Channels(dict[str, Channel]):\n    \"\"\"The captured declarations select the channels shown by a roster.\"\"\"\n",
+                  "new_source": "class Channels(dict[str, Channel]):\n    \"\"\"The captured declarations select the channels shown by a roster.\"\"\"\n\n    def history_activity(self, by_target: Mapping[str, ChannelActivity]) -> Mapping[str, ChannelActivity]:\n        return {name: channel.history_activity(by_target) for name, channel in self.items()}\n"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+              "replacements": [
+                {
+                  "old_source": "ChannelActivity.for_views(channels, clocks.channels)",
+                  "new_source": "channels.history_activity(clocks.channels)"
+                },
+                {
+                  "old_source": "ChannelActivity.for_views(\n                {channel.name: channel}, clocks.channels)[channel.name]",
+                  "new_source": "channel.history_activity(clocks.channels)"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_status.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.registry.thread_reads import ThreadOwnerStatus\n",
+                  "new_source": "from agent_comms.registry.thread_reads import ThreadOwnerStatus\nfrom agent_comms.registry.roster_visibility import RosterVisibility\n"
+                },
+                {
+                  "old_source": "    from agent_comms.registry.roster_visibility import RosterVisibility\n",
+                  "new_source": ""
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/tests/test_thread_status.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.registry.roster_visibility import DEFAULT_ROSTER\n",
+                  "new_source": "from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility\n"
+                },
+                {
+                  "old_source": "        else:\n            from agent_comms.registry.roster_visibility import RosterVisibility\n            if expected.in_view(",
+                  "new_source": "        else:\n            if expected.in_view("
+                },
+                {
+                  "old_source": "    from agent_comms.registry.roster_visibility import RosterVisibility\n\n    assert status.in_view",
+                  "new_source": "    assert status.in_view"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+              "replacements": [
+                {
+                  "old_source": "from typing import TYPE_CHECKING, ClassVar",
+                  "new_source": "from typing import ClassVar"
+                },
+                {
+                  "old_source": "from agent_comms.registry.thread_management import ChangedTags, GivenTags",
+                  "new_source": "from agent_comms.registry.thread_management import ChangedTags, GivenTags, TagChoice, ThreadManagement"
+                },
+                {
+                  "old_source": "if TYPE_CHECKING:\n    from agent_comms.catalog_document import CatalogDocument\n    from agent_comms.registry.thread_management import TagChoice, ThreadManagement\n",
+                  "new_source": "from agent_comms.catalog_document import CatalogDocument\n"
+                }
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-declare-low-original-clock-reads",
+          "reason": "P23 guarded-import closure at Core b47c7c0ded5005be39bfcf9e129297fabc4f127d: relocate the original roster policy and its default together below their consumers. Move channel target selection to Channel/Channels; preserve ChannelActivity aggregation, concrete wire field types, original member filtering and all service bodies. The appended cold-check correction puts the original clock read contract below destination/persistence initialization on MessageInput and ThreadRole through native parent operations. Bind the original callback types normally; no surrogate records, new provider family or namespace injection. This sequence is a source/preflight proposal, not executed import, codec or consumer evidence. Deferred ClassFact writes are unchanged.",
+          "operations": [
+            {
+              "operation": "create_file",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/message_clock_source.py",
+              "source": "\"\"\"Original recorded message clocks, below destination and persistence initialization.\"\"\"\n\nfrom abc import ABC, abstractmethod\n\nfrom agent_comms.recorded_time import Timestamped\n\n\nclass SenderClockSource(ABC):\n    __slots__ = ()\n\n    @classmethod\n    @abstractmethod\n    def last_user_input(cls, previous: float, timestamp: float) -> float: ...\n\n\nclass MessageClockSource(Timestamped):\n    __slots__ = ()\n\n    sender_role: type[SenderClockSource]\n"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-bind-clock-read-parents",
+          "reason": "P23 guarded-import closure at Core b47c7c0ded5005be39bfcf9e129297fabc4f127d: relocate the original roster policy and its default together below their consumers. Move channel target selection to Channel/Channels; preserve ChannelActivity aggregation, concrete wire field types, original member filtering and all service bodies. The appended cold-check correction puts the original clock read contract below destination/persistence initialization on MessageInput and ThreadRole through native parent operations. Bind the original callback types normally; no surrogate records, new provider family or namespace injection. This sequence is a source/preflight proposal, not executed import, codec or consumer evidence. Deferred ClassFact writes are unchanged.",
+          "operations": [
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/messages.py",
+              "import_source": "from agent_comms.message_clock_source import MessageClockSource"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_identity.py",
+              "import_source": "from agent_comms.message_clock_source import SenderClockSource"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-remove-eager-message-clock-dependency",
+          "reason": "P23 guarded-import closure at Core b47c7c0ded5005be39bfcf9e129297fabc4f127d: relocate the original roster policy and its default together below their consumers. Move channel target selection to Channel/Channels; preserve ChannelActivity aggregation, concrete wire field types, original member filtering and all service bodies. The appended cold-check correction puts the original clock read contract below destination/persistence initialization on MessageInput and ThreadRole through native parent operations. Bind the original callback types normally; no surrogate records, new provider family or namespace injection. This sequence is a source/preflight proposal, not executed import, codec or consumer evidence. Deferred ClassFact writes are unchanged.",
+          "operations": [
+            {
+              "operation": "replace_class_base",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/messages.py",
+              "target_qualname": "MessageInput",
+              "base_name": "Timestamped",
+              "replacement_base_name": "MessageClockSource"
+            },
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_identity.py",
+              "target_qualname": "ThreadRole",
+              "base_name": "SenderClockSource"
+            },
+            {
+              "operation": "delete_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_identity.py",
+              "target_qualname": "ThreadRole.last_user_input"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/messages.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.recorded_time import Timestamped\n",
+                  "new_source": ""
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.messaging.messages import Message\n",
+                  "new_source": "from agent_comms.message_clock_source import MessageClockSource\n"
+                },
+                {
+                  "old_source": "def observe(self, message: Message)",
+                  "new_source": "def observe(self, message: MessageClockSource)"
+                },
+                {
+                  "old_source": "def from_message(cls, message: Message,",
+                  "new_source": "def from_message(cls, message: MessageClockSource,"
+                }
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-lower-original-channel-read-owners",
+          "reason": "P23 guarded-import closure at Core b47c7c0ded5005be39bfcf9e129297fabc4f127d: relocate the original roster policy and its default together below their consumers. Move channel target selection to Channel/Channels; preserve ChannelActivity aggregation, concrete wire field types, original member filtering and all service bodies. The appended cold-check correction puts the original clock read contract below destination/persistence initialization on MessageInput and ThreadRole through native parent operations. Bind the original callback types normally; no surrogate records, new provider family or namespace injection. This sequence is a source/preflight proposal, not executed import, codec or consumer evidence. Deferred ClassFact writes are unchanged.",
+          "operations": [
+            {
+              "operation": "create_file",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/thread_role_source.py",
+              "source": "\"\"\"Original authorship role, independent of thread runtime assembly.\"\"\"\n\nfrom abc import ABC\nfrom agent_comms.registry.thread_identity import ThreadRole\n\n\nclass ThreadRoleSource(ABC):\n    __slots__ = ()\n\n    role: type[ThreadRole]\n"
+            },
+            {
+              "operation": "create_file",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_sources.py",
+              "source": "\"\"\"Original channel membership and history reads, without live thread assembly.\"\"\"\n\nfrom abc import ABC, abstractmethod\nfrom agent_comms.tagged_thread_source import TaggedThreadSource\nfrom agent_comms.thread_role_source import ThreadRoleSource\n\n\nclass ChannelMemberSource(TaggedThreadSource, ThreadRoleSource):\n    __slots__ = ()\n\n\nclass ChannelHistorySource(ABC):\n    __slots__ = ()\n\n    name: str\n    tags: frozenset[str]\n\n    @property\n    @abstractmethod\n    def history_targets(self) -> frozenset[str]: ...\n"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-bind-channel-read-parents",
+          "reason": "P23 guarded-import closure at Core b47c7c0ded5005be39bfcf9e129297fabc4f127d: relocate the original roster policy and its default together below their consumers. Move channel target selection to Channel/Channels; preserve ChannelActivity aggregation, concrete wire field types, original member filtering and all service bodies. The appended cold-check correction puts the original clock read contract below destination/persistence initialization on MessageInput and ThreadRole through native parent operations. Bind the original callback types normally; no surrogate records, new provider family or namespace injection. This sequence is a source/preflight proposal, not executed import, codec or consumer evidence. Deferred ClassFact writes are unchanged.",
+          "operations": [
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/task_owner.py",
+              "import_source": "from agent_comms.thread_role_source import ThreadRoleSource"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+              "import_source": "from agent_comms.channel_sources import ChannelMemberSource"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+              "import_source": "from agent_comms.channel_sources import ChannelMemberSource, ChannelHistorySource"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+              "import_source": "from agent_comms.registry_names import RegistryNames"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+              "import_source": "from agent_comms.tagged_thread_source import TaggedThreadSource"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/read_basis.py",
+              "import_source": "from agent_comms.channel_sources import ChannelHistorySource"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/read_basis.py",
+              "import_source": "from agent_comms.registry_names import RegistryNames"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/read_basis.py",
+              "import_source": "from agent_comms.tagged_thread_source import TaggedThreadSource"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-remove-channel-thread-bootstrap",
+          "reason": "P23 guarded-import closure at Core b47c7c0ded5005be39bfcf9e129297fabc4f127d: relocate the original roster policy and its default together below their consumers. Move channel target selection to Channel/Channels; preserve ChannelActivity aggregation, concrete wire field types, original member filtering and all service bodies. The appended cold-check correction puts the original clock read contract below destination/persistence initialization on MessageInput and ThreadRole through native parent operations. Bind the original callback types normally; no surrogate records, new provider family or namespace injection. This sequence is a source/preflight proposal, not executed import, codec or consumer evidence. Deferred ClassFact writes are unchanged.",
+          "operations": [
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+              "target_qualname": "Thread",
+              "base_name": "ChannelMemberSource"
+            },
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/task_owner.py",
+              "target_qualname": "TaskOwner",
+              "base_name": "ThreadRoleSource"
+            },
+            {
+              "operation": "add_class_base",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+              "target_qualname": "GroupedChannel",
+              "base_name": "ChannelHistorySource"
+            },
+            {
+              "operation": "delete_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+              "target_qualname": "GroupedChannel.history_targets"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/task_owner.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.registry.thread_identity import ThreadRole, TurnFence, TurnIdentity",
+                  "new_source": "from agent_comms.registry.thread_identity import TurnFence, TurnIdentity"
+                },
+                {
+                  "old_source": "    role: type[ThreadRole]\n\n",
+                  "new_source": ""
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.registry.threads import Thread\n",
+                  "new_source": ""
+                },
+                {
+                  "old_source": "from agent_comms.registry_provenance import RegistryProvenance\n",
+                  "new_source": ""
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+              "replacements": [
+                {
+                  "old_source": "class ChannelMemberIndex(dict[str, tuple[\"Thread\", ...]]):",
+                  "new_source": "class ChannelMemberIndex[Member: ChannelMemberSource](dict[str, tuple[Member, ...]]):"
+                },
+                {
+                  "old_source": "threads: Iterable[Thread]",
+                  "new_source": "threads: Iterable[Member]"
+                },
+                {
+                  "old_source": "by_tag: dict[str, list[Thread]]",
+                  "new_source": "by_tag: dict[str, list[Member]]"
+                },
+                {
+                  "old_source": "def __missing__(self, tag: str) -> tuple[Thread, ...]",
+                  "new_source": "def __missing__(self, tag: str) -> tuple[Member, ...]"
+                }
+              ],
+              "target_qualname": "ChannelMemberIndex"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/read_basis.py",
+              "replacements": [
+                {
+                  "old_source": "    from agent_comms.messaging.channels import TagChannel\n",
+                  "new_source": ""
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/read_basis.py",
+              "replacements": [
+                {
+                  "old_source": "channel: TagChannel",
+                  "new_source": "channel: ChannelHistorySource"
+                },
+                {
+                  "old_source": "snapshot: RegistryProvenance",
+                  "new_source": "snapshot: RegistryNames[TaggedThreadSource]"
+                }
+              ],
+              "target_qualname": "MemberActivityDisplayScope.capture"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+              "replacements": [
+                {
+                  "old_source": "def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]",
+                  "new_source": "def members[Member: ChannelMemberSource](self, index: ChannelMemberIndex[Member]) -> tuple[Member, ...]"
+                }
+              ],
+              "target_qualname": "Channel.members"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+              "replacements": [
+                {
+                  "old_source": "snapshot: RegistryProvenance",
+                  "new_source": "snapshot: RegistryNames[TaggedThreadSource]"
+                }
+              ],
+              "target_qualname": "Channel.display_scope"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+              "replacements": [
+                {
+                  "old_source": "def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]",
+                  "new_source": "def members[Member: ChannelMemberSource](self, index: ChannelMemberIndex[Member]) -> tuple[Member, ...]"
+                }
+              ],
+              "target_qualname": "PredicateChannel.members"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+              "replacements": [
+                {
+                  "old_source": "snapshot: RegistryProvenance",
+                  "new_source": "snapshot: RegistryNames[TaggedThreadSource]"
+                }
+              ],
+              "target_qualname": "TagChannel.display_scope"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+              "replacements": [
+                {
+                  "old_source": "def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]",
+                  "new_source": "def members[Member: ChannelMemberSource](self, index: ChannelMemberIndex[Member]) -> tuple[Member, ...]"
+                }
+              ],
+              "target_qualname": "TagChannel.members"
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+              "replacements": [
+                {
+                  "old_source": "def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]",
+                  "new_source": "def members[Member: ChannelMemberSource](self, index: ChannelMemberIndex[Member]) -> tuple[Member, ...]"
+                }
+              ],
+              "target_qualname": "RetiredTagChannel.members"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

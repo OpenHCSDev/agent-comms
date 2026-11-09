@@ -56,7 +56,8 @@ from agent_comms.planning.orders import (
 from agent_comms.planning.plan_phases import PlanPhase
 from agent_comms.projects.repo import Repo
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.registry.threads import Thread
 from agent_comms.projects.repository_name import RepositoryName

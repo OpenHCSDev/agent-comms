@@ -18,12 +18,12 @@ from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.messaging.channel_targets import NamedTarget, ThreadTarget
 from agent_comms.messaging.channels import Channel
 from agent_comms.coordination.errors import DMScopeChanged, HistoricalSourceChanged
-from agent_comms.display_references import ReferenceContext
+from agent_comms.display_references import HistoryReferenceSource, MessageHistory, ReferenceContext
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.child_process import Platform
 from agent_comms.message_notification import MessageNotification, NotificationWindow
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.messaging.messages import CarriesEnvelope, Message, MessageHistory
+from agent_comms.messaging.messages import CarriesEnvelope, Message
 from agent_comms.messaging.message_page import (
     NEWEST_PAGE,
     ConversationMessagePageRequest,
@@ -328,7 +328,7 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
 
 
 @dataclass(frozen=True, slots=True)
-class HistorySource(MessageHistory):
+class HistorySource(MessageHistory, HistoryReferenceSource):
     """An immutable bus/registry snapshot attached by the destination MessageBus."""
 
     root: str

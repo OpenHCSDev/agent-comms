@@ -21,7 +21,7 @@ from agent_comms.bus import (
     PrivateRecord,
     PublicRecord,
 )
-from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
+from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.bus_tables import AnsweredSource, AuthoredAnswers, BusSchema, MessageIdentitySource
 from agent_comms.coordination.tables.publications import PublicationIntents
 from agent_comms.errors import (
@@ -30,6 +30,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
+from agent_comms.initial_origin import HumanOrigin
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import (
     BusProjectionTables,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.registry.presence_reads import PresenceThread
+
 import os
 import time
 from abc import ABC, abstractmethod
@@ -13,6 +15,7 @@ from typing import Annotated, ClassVar
 
 from agent_comms.activity import ObservedActivity
 from agent_comms.agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
+from agent_comms.channel_sources import ChannelMemberSource
 from agent_comms.context_segments.wake_values import WakeWorkContext, WakeWorkSource
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity, ProcessState
@@ -325,7 +328,16 @@ class ThreadCatalogFile(DurableFile, PatternFile):
 
 
 @dataclass(frozen=True, slots=True)
-class Thread(ThreadProvenance, CatalogSelection, DeclaredFamily, TaskOwner, GoalFailureOwner, affix="Thread"):
+class Thread(
+    ThreadProvenance,
+    CatalogSelection,
+    DeclaredFamily,
+    TaskOwner,
+    GoalFailureOwner,
+    ChannelMemberSource,
+    PresenceThread,
+    affix='Thread',
+):
     """Declares one agent thread's identity and provenance; each member is how it executes.
 
     The registration owns transport intent; presence does not imply an RPC.

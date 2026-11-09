@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.activity_registry_reads import RegistryPathRead
+
 import json
 import os
 import threading
@@ -29,6 +31,7 @@ from agent_comms.execution.turn_lease import (
     TurnDeclaration,
     TurnRecord,
 )
+from agent_comms.input_ingress import InputAuthorityCut, InputRegistryStore
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, TurnId
 from agent_comms.presence import PresenceStore
 from agent_comms.private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
@@ -163,7 +166,7 @@ class RegistrySelection:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryCut(RegistrySelection):
+class RegistryCut(RegistrySelection, InputAuthorityCut[Thread]):
     """The complete decoded registry and its original namespace authority."""
 
     snapshot: RegistrySnapshot
@@ -325,8 +328,14 @@ class RegistryEdit:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocument],
-                    TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]):
+class RegistryStore(
+    RegistryLocking,
+    RegistryFile,
+    CarriedDocument[RegistryDocument],
+    TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn],
+    InputRegistryStore[Thread],
+    RegistryPathRead,
+):
     json_indent = 2
     cache: RegistryCache = field(init=False, compare=False, repr=False)
     presence: PresenceStore = field(init=False, compare=False, repr=False)

@@ -28,6 +28,7 @@ from typing import (
 from agent_comms.class_fact import ClassFact
 from agent_comms.cli_options import JsonFlagRecord
 from agent_comms.errors import RelationViolationError
+from agent_comms.message_clock_source import SenderClockSource
 from agent_comms.nominal.declared_family import (
     DeclaredFamily,
     UniqueExternalSelector,
@@ -631,7 +632,12 @@ class GenerationCounter(ProjectionSource):
         self.generations[new] = self.generations.pop(old)
 
 
-class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
+class ThreadRole(
+    DeclaredFamily,
+    ProjectionSource,
+    SenderClockSource,
+    affix='ThreadRole',
+):
     """Whether a thread executes turns is the member's type; its wire name is its spelling."""
 
     @ClassFact
@@ -723,10 +729,6 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
     @abstractmethod
     def reply_target(cls, message: Message) -> str | None:
         """An external sender may receive an automatic live reply."""
-
-    @classmethod
-    @abstractmethod
-    def last_user_input(cls, previous: float, timestamp: float) -> float: ...
 
     @classmethod
     @abstractmethod

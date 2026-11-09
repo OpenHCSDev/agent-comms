@@ -1,0 +1,300 @@
+usage: python -m nominal_refactor_advisor [-h] [--json]
+                                          [--json-payload JSON_PAYLOAD]
+                                          [--raw-findings]
+                                          [--parse-workers PARSE_WORKERS]
+                                          [--analysis-workers ANALYSIS_WORKERS]
+                                          [--include-tests]
+                                          [--cache-dir CACHE_DIR]
+                                          [--context-root CONTEXT_ROOTS]
+                                          [--no-auto-context-root]
+                                          [--no-cache] [--include-plans]
+                                          [--include-execution-plan]
+                                          [--plans-only] [--include-economics]
+                                          [--include-change-budget]
+                                          [--include-structural-overlap]
+                                          [--no-structural-overlap]
+                                          [--prove-economics] [--predict-scan]
+                                          [--count-member-awareness]
+                                          [--introspection-trace INTROSPECTION_TRACE]
+                                          [--search-refactors]
+                                          [--search-depth SEARCH_DEPTH]
+                                          [--search-width SEARCH_WIDTH]
+                                          [--search-max-targets SEARCH_MAX_TARGETS]
+                                          [--detector-capabilities]
+                                          [--fail-on-proof-regression]
+                                          [--calibrate CALIBRATE]
+                                          [--fail-on-calibration-regression]
+                                          [--scan-budget-seconds SCAN_BUDGET_SECONDS]
+                                          [--compare-ref COMPARE_REF]
+                                          [--structural-overlap-max-groups STRUCTURAL_OVERLAP_MAX_GROUPS]
+                                          [--structural-overlap-min-findings STRUCTURAL_OVERLAP_MIN_FINDINGS]
+                                          [--import-lean-export IMPORT_LEAN_EXPORT]
+                                          [--codemod-plan CODEMOD_PLAN]
+                                          [--codemod-validate-plan]
+                                          [--codemod-compose-plans CODEMOD_COMPOSE_PLANS [CODEMOD_COMPOSE_PLANS ...]]
+                                          [--codemod-compose-sequence CODEMOD_COMPOSE_SEQUENCE [CODEMOD_COMPOSE_SEQUENCE ...]]
+                                          [--codemod-synthesize-plan]
+                                          [--codemod-synthesize-class-plan]
+                                          [--codemod-plan-out CODEMOD_PLAN_OUT]
+                                          [--codemod-source-index]
+                                          [--codemod-resolve-selector CODEMOD_RESOLVE_SELECTOR]
+                                          [--codemod-target-source CODEMOD_TARGET_SOURCE]
+                                          [--codemod-preflight]
+                                          [--codemod-simulate]
+                                          [--codemod-project-findings]
+                                          [--codemod-project-source-index]
+                                          [--codemod-continuation-plan-out CODEMOD_CONTINUATION_PLAN_OUT]
+                                          [--codemod-apply]
+                                          [--codemod-refactor-goal CODEMOD_REFACTOR_GOAL]
+                                          [--codemod-goal-detector CODEMOD_GOAL_DETECTORS]
+                                          [--codemod-owner-picks CODEMOD_OWNER_PICKS]
+                                          [--codemod-goal-max-stages CODEMOD_GOAL_MAX_STAGES]
+                                          [--codemod-goal-max-states CODEMOD_GOAL_MAX_STATES]
+                                          [--codemod-goal-max-branches CODEMOD_GOAL_MAX_BRANCHES]
+                                          [--min-duplicate-statements MIN_DUPLICATE_STATEMENTS]
+                                          [--min-string-cases MIN_STRING_CASES]
+                                          [--min-builder-keywords MIN_BUILDER_KEYWORDS]
+                                          [--min-registration-sites MIN_REGISTRATION_SITES]
+                                          [--min-repeated-module-expression-sites MIN_REPEATED_MODULE_EXPRESSION_SITES]
+                                          [--min-foreign-type-switch-sites MIN_FOREIGN_TYPE_SWITCH_SITES]
+                                          [--min-repeated-local-regex-literals MIN_REPEATED_LOCAL_REGEX_LITERALS]
+                                          [--package-destination-table PACKAGE_DESTINATION_TABLES]
+                                          [--exclude-pattern EXCLUDED_PATTERN_IDS]
+                                          [paths ...]
+
+AST-driven refactoring advisor for nominal architecture.
+
+positional arguments:
+  paths                 File or directory paths to analyze (defaults to
+                        nominal_refactor_advisor).
+
+options:
+  -h, --help            show this help message and exit
+  --json                Emit JSON instead of Markdown.
+  --json-payload JSON_PAYLOAD
+                        JSON payload profile: agent, full, summary, or loop.
+                        The agent profile is the default and skips source
+                        index and observation graph payloads; loop emits
+                        compact findings for fast edit cycles.
+  --raw-findings        Show full raw finding details even when semantic
+                        refactor gate is active. Raw findings are supporting
+                        evidence, not the default evidence surface.
+  --parse-workers PARSE_WORKERS
+                        Number of concurrent parser workers for Python source
+                        loading. Use 0 to choose automatically.
+  --analysis-workers ANALYSIS_WORKERS
+                        Number of detector-analysis worker processes. Use 0 to
+                        choose automatically for package scans, or 1 for
+                        sequential analysis.
+  --include-tests       Include test files and test directories in source
+                        discovery. By default repo scans analyze production
+                        source only.
+  --cache-dir CACHE_DIR
+                        AST parse cache directory. Defaults to an NRA cache-
+                        home entry keyed by the analysis root.
+  --context-root CONTEXT_ROOTS
+                        Parse and analyze this root for global source context
+                        while limiting reported findings to the positional
+                        paths.
+  --no-auto-context-root
+                        Do not infer package-level context roots for file-only
+                        scans.
+  --no-cache            Disable the AST parse cache for this run.
+  --include-plans       Also emit non-actionable subsystem structural
+                        hypotheses.
+  --include-execution-plan
+                        Also emit graph-grounded classes derived from shared
+                        structural evidence.
+  --plans-only          Emit only subsystem-level structural hypotheses.
+  --include-economics   Emit portfolio-level payoff economics.
+  --include-change-budget
+                        Also split working-tree LOC changes by
+                        backend/detector/test role.
+  --include-structural-overlap
+                        Report non-actionable structural-overlap evidence for
+                        groups of findings and source targets.
+  --no-structural-overlap
+                        Skip the non-actionable structural-overlap evidence
+                        report.
+  --prove-economics     Run the standard long-term economics proof report.
+  --predict-scan        Predict scan impact from Python files changed relative
+                        to --compare-ref.
+  --count-member-awareness
+                        Count which consumer functions name the members of a
+                        foreign module, declared family or enum, grouped by
+                        exact member set, and which of them also call an owner
+                        of that set.
+  --introspection-trace INTROSPECTION_TRACE
+                        With --count-member-awareness: a trace written by
+                        `pytest -p nra_introspection_trace`, for the field
+                        uses generic introspection derives.
+  --search-refactors    Play every refactor concept's goal search in memory,
+                        score each end state on slop removed per token of its
+                        diff, add-member edits removed and members made
+                        derived, and keep the moves no other move beats,
+                        looking --search-depth moves ahead.
+  --search-depth SEARCH_DEPTH
+                        With --search-refactors: how many moves ahead to look
+                        (default 2).
+  --search-width SEARCH_WIDTH
+                        With --search-refactors: how many best moves to look
+                        past (default 2).
+  --search-max-targets SEARCH_MAX_TARGETS
+                        With --search-refactors: skip a concept with more
+                        targets than this (default 100).
+  --detector-capabilities
+                        Emit the declaration-derived detector required-
+                        relation, MRO, and recipe capability inventory as JSON
+                        without scanning.
+  --fail-on-proof-regression
+                        Return exit code 1 when --prove-economics fails its
+                        gate.
+  --calibrate CALIBRATE
+                        Run a detector calibration manifest instead of a path
+                        scan.
+  --fail-on-calibration-regression
+                        Return exit code 1 when --calibrate fails its manifest
+                        gate.
+  --scan-budget-seconds SCAN_BUDGET_SECONDS
+                        Stop the scan after this many seconds and report it
+                        incomplete. Without it a scan runs to completion;
+                        --prove-economics judges its scans against its own
+                        budget.
+  --compare-ref COMPARE_REF
+                        Git ref used for --include-change-budget.
+  --structural-overlap-max-groups STRUCTURAL_OVERLAP_MAX_GROUPS
+                        Maximum structural-overlap evidence groups to report.
+  --structural-overlap-min-findings STRUCTURAL_OVERLAP_MIN_FINDINGS
+                        Minimum findings a structural-overlap group must
+                        contain.
+  --import-lean-export IMPORT_LEAN_EXPORT
+                        Load findings from a Lean advisor export JSON file.
+  --codemod-plan CODEMOD_PLAN
+                        Load caller-supplied authority boundary codemod plan
+                        JSON. Use '-' to read the plan from stdin. Plans
+                        enable simulatable rewrites for semantic agent-
+                        required candidates.
+  --codemod-validate-plan
+                        Load --codemod-plan, validate codemod DSL JSON
+                        structure, emit the normalized plan, and exit without
+                        scanning.
+  --codemod-compose-plans CODEMOD_COMPOSE_PLANS [CODEMOD_COMPOSE_PLANS ...]
+                        Load one or more codemod plan JSON documents; use '-'
+                        for one stdin document. Compose them in argument
+                        order, emit a normalized CodemodPlanDocument, and exit
+                        without scanning.
+  --codemod-compose-sequence CODEMOD_COMPOSE_SEQUENCE [CODEMOD_COMPOSE_SEQUENCE ...]
+                        Load one or more codemod plan document or sequence
+                        JSON files; use '-' for one stdin document. Compose
+                        them in argument order as an ordered
+                        CodemodPlanSequence, and exit without scanning.
+  --codemod-synthesize-plan
+                        Scan paths, synthesize executable finding-backed
+                        codemod DSL recipes, emit the synthesis report, and
+                        exit. Combine with --codemod-simulate or --codemod-
+                        apply to execute the synthesized batch in the same
+                        scan.
+  --codemod-synthesize-class-plan
+                        Scan paths, cluster findings into graph-derived
+                        refactor classes, and emit the executable typed DSL
+                        plan for each class.
+  --codemod-plan-out CODEMOD_PLAN_OUT
+                        With a plan-producing codemod command, write the
+                        reusable CodemodPlanDocument or CodemodPlanSequence
+                        JSON to this path.
+  --codemod-source-index
+                        Scan paths, emit JSON source-index target rows for
+                        codemod DSL authoring, and exit.
+  --codemod-resolve-selector CODEMOD_RESOLVE_SELECTOR
+                        Load one codemod target selector JSON object, resolve
+                        it against scanned paths, emit selected target rows,
+                        and exit. Use '-' to read the selector from stdin.
+  --codemod-target-source CODEMOD_TARGET_SOURCE
+                        Load one codemod target selector JSON object, resolve
+                        it against scanned paths, emit exact selected target
+                        source spans, and exit. Use '-' to read the selector
+                        from stdin.
+  --codemod-preflight   Run operation-specific codemod preflight checks and
+                        emit machine-readable reports without simulating or
+                        applying rewrites.
+  --codemod-simulate    Simulate all currently planned codemod rewrites, emit
+                        a structured JSON report with parse validation and
+                        unified diff, and exit without applying changes.
+  --codemod-project-findings
+                        With --codemod-simulate, rescan the simulated source
+                        state in memory and include before/after finding
+                        deltas.
+  --codemod-project-source-index
+                        With --codemod-project-findings, include the simulated
+                        source-index payload in JSON output.
+  --codemod-continuation-plan-out CODEMOD_CONTINUATION_PLAN_OUT
+                        With --codemod-project-findings, write the synthesized
+                        next-stage CodemodPlanSequence JSON to this path.
+  --codemod-apply       Write all simulated codemod rewrites to disk after
+                        validation.
+  --codemod-refactor-goal CODEMOD_REFACTOR_GOAL
+                        Prove dependent DSL stages in memory and, with
+                        --codemod-apply, commit the completed sequence as one
+                        revision-checked transaction. Supported goals:
+                        auto_register, auto_register_class_registry,
+                        auto_register_mro_ordering,
+                        auto_register_strategy_family, call_mapping_authority,
+                        class_body_composition, class_family_authority,
+                        constructor_kwarg_carrier_projection,
+                        constructor_kwarg_collapse,
+                        dataclass_payload_projection, declaration_reference,
+                        derived_projection, false_distinction_erasure,
+                        foreign_adapter_bind_chain, foreign_family_routing,
+                        legacy_path_erasure, nominal_boundary,
+                        optional_ast_field_decoder, package_move, refactor,
+                        semantic_carrier, static_projection_adapter,
+                        tuple_dict_return_nominalization.
+  --codemod-goal-detector CODEMOD_GOAL_DETECTORS
+                        Restrict one-shot plan synthesis to findings from this
+                        detector (can be repeated).
+  --codemod-owner-picks CODEMOD_OWNER_PICKS
+                        A picks file choosing, for --codemod-refactor-goal,
+                        the owner of each extract-mixin finding among its
+                        ranked owner candidates; each pick cites the receipt
+                        it rests on (#67).
+  --codemod-goal-max-stages CODEMOD_GOAL_MAX_STAGES
+                        Trajectory depth proved for --codemod-refactor-goal; a
+                        concept that knows its stage count raises it
+                        (package_move: two per module). A run that reaches it
+                        along one clean path writes the proved prefix as a
+                        plan.
+  --codemod-goal-max-states CODEMOD_GOAL_MAX_STATES
+                        Maximum exact source states exhaustively explored for
+                        --codemod-refactor-goal.
+  --codemod-goal-max-branches CODEMOD_GOAL_MAX_BRANCHES
+                        Maximum compatible recipe batches enumerated at each
+                        exact source state for --codemod-refactor-goal.
+  --min-duplicate-statements MIN_DUPLICATE_STATEMENTS
+                        Minimum statement count for repeated-method detection.
+  --min-string-cases MIN_STRING_CASES
+                        Minimum string cases for closed-family dispatch
+                        detection.
+  --min-builder-keywords MIN_BUILDER_KEYWORDS
+                        Minimum keyword count for repeated record-builder
+                        detection.
+  --min-registration-sites MIN_REGISTRATION_SITES
+                        Minimum manual registration sites before surfacing a
+                        class-registration finding.
+  --min-repeated-module-expression-sites MIN_REPEATED_MODULE_EXPRESSION_SITES
+                        Minimum sites of one pure module-attribute expression
+                        before surfacing a value-owner lead.
+  --min-foreign-type-switch-sites MIN_FOREIGN_TYPE_SWITCH_SITES
+                        Minimum type tests (isinstance/issubclass, class
+                        patterns, type(x) is C) on one foreign module's
+                        classes before surfacing a type-switch lead.
+  --min-repeated-local-regex-literals MIN_REPEATED_LOCAL_REGEX_LITERALS
+                        Minimum shared substantial regex literals before
+                        surfacing a local syntax-authority finding.
+  --package-destination-table PACKAGE_DESTINATION_TABLES
+                        A Markdown destination table (a row per package:
+                        `package` | its owners and modules | ...) that
+                        --codemod-refactor-goal package_move moves flat
+                        modules by (can be repeated).
+  --exclude-pattern EXCLUDED_PATTERN_IDS
+                        Pattern ID to exclude from findings (can be specified
+                        multiple times).

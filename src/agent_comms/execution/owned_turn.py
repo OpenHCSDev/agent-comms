@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+from agent_comms.execution.owned_turn_runner import OwnedTurnRunner
+from agent_comms.execution.turn_context import (
+    AutomaticTitleSegment,
+    RecordedContextTurn,
+    ReplyRouteSegment,
+    TurnContext,
+    TurnProvenance,
+)
+
 import asyncio
 from collections.abc import (
     Awaitable,
@@ -63,9 +72,8 @@ from agent_comms.transport.native_tool_transport import NativeToolMode
 from agent_comms.transport.tools.goals import CommsSetGoalTool
 from agent_comms.turn_progress_reads import ProgressGoalAccount, ProgressTurn
 
-if TYPE_CHECKING:
-    from agent_comms.execution.turn_runner import TurnRunner
-    from agent_comms.planning.goal_attempts import LaunchPermit
+from agent_comms.execution.owned_turn_runner import OwnedTurnRunner
+from agent_comms.planning.goal_attempts import LaunchPermit
 
 
 @dataclass(kw_only=True)
@@ -221,7 +229,7 @@ class OwnedTurn(ProgressTurn):
 
     def __init__(
         self,
-        runner: TurnRunner,
+        runner: OwnedTurnRunner,
         session_id: AcpSessionId,
         thread_name: str,
         task: str,
@@ -353,13 +361,7 @@ class OwnedTurn(ProgressTurn):
         self.env_extra = self.runner.inputs.state(self.session_id).owned().configuration.native_environment(
             self.thread, self.runner.comms.registry.snapshot()
         )
-        from agent_comms.execution.turn_context import (
-            AutomaticTitleSegment,
-            RecordedContextTurn,
-            ReplyRouteSegment,
-            TurnContext,
-            TurnProvenance,
-        )
+
 
         self.relations = self.runner.comms.relationships.context_relations(self.thread.name)
         self.context = TurnContext.for_owner(

@@ -74,9 +74,9 @@ from agent_comms.presentation import (
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry.registration import Registration
-from agent_comms.registry.registry_document import (
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.roster_visibility import (
     DEFAULT_ROSTER,
-    RegistrySnapshot,
     RosterVisibility,
 )
 from agent_comms.registry.thread_identity import ThreadIncarnation
@@ -373,7 +373,7 @@ class HistoryViews(RelationshipSource):
                     snapshot.visible_threads(visibility), snapshot=snapshot,
                 ),
                 self.last_sent_timestamps(clocks.sent.items(), registry=snapshot),
-                ChannelActivity.for_views(channels, clocks.channels),
+                channels.history_activity(clocks.channels),
                 visibility,
             )
 
@@ -387,8 +387,7 @@ class HistoryViews(RelationshipSource):
             rows = ((alias, clocks.sent[alias]) for thread in registered
                     for alias in snapshot.names_for(thread.name) if alias in clocks.sent)
             sent = self.last_sent_timestamps(rows, registry=snapshot)
-            history = ChannelActivity.for_views(
-                {channel.name: channel}, clocks.channels)[channel.name]
+            history = channel.history_activity(clocks.channels)
             return ChannelView.capture(
                 channel, registered, snapshot, catalog.pinned_threads(channel.name),
                 self.agents.all_activity(registered, snapshot=snapshot), sent, history, visibility,

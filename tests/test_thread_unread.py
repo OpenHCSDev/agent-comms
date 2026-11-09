@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.registry_document import DEFAULT_ROSTER
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
 from agent_comms.registry.threads import NativeThread
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.storage.private_path import FileRevision

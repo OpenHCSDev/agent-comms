@@ -21,7 +21,7 @@ from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.execution.native_entries import NativeEntry
 from agent_comms.execution.native_transcript import SessionCut, record_end, reverse_records
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
-from agent_comms.registry.registry_document import RosterVisibility
+from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
 from agent_comms.storage.locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile

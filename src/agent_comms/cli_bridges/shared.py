@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, T
 
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
-from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
+from agent_comms.agent_runtime import ExternalRuntime, PublishesTranscript
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.cli_arguments import CliArguments
@@ -71,6 +71,7 @@ from agent_comms.coordination.errors import (
 )
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.declared_verb import DeclaredOptions
+from agent_comms.delivers_input import DeliversInput
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import (
     OutlivesLauncherLifetime,
@@ -1248,7 +1249,14 @@ class HarnessDeliveryRecords(WaitsOnBusyStore, ABC):
 
 
 @dataclass(eq=False, repr=False)
-class CliBridge(HarnessDeliveryRecords, ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOptions], declared_name=None):
+class CliBridge(
+    HarnessDeliveryRecords,
+    ExternalRuntime,
+    DeliversInput[Message],
+    HarnessSession,
+    Generic[BridgeOptions],
+    declared_name=None,
+):
     """Core delivery and lifetime shared by CLI-specific transports."""
 
     state_directory: ClassVar[Path]

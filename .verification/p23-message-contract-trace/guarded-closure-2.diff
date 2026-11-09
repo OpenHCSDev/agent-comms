@@ -1,0 +1,397 @@
+--- src/agent_comms/activity_clocks.py
++++ src/agent_comms/activity_clocks.py
+@@ -1,9 +1,9 @@
+ """Message-derived activity clocks, independent of bus storage and routing."""
+ from __future__ import annotations
+ 
+-from collections.abc import Iterable, Mapping
++from collections.abc import Iterable
+ from dataclasses import dataclass, field, fields
+-from typing import TYPE_CHECKING, Self
++from typing import Self
+ 
+ from agent_comms.class_fact import ClassFact
+ from agent_comms.display_sources import SentClocks
+@@ -11,9 +11,7 @@
+ from agent_comms.projection_source import ProducedRow, ProjectionSource
+ from agent_comms.storage.typed_table import TypedRow
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.messaging.channels import Channel
+-    from agent_comms.messaging.messages import Message
++from agent_comms.messaging.messages import Message
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+@@ -51,11 +49,6 @@
+         return cls(max((item.last_message for item in clocks), default=0),
+                    max((item.last_user_input for item in clocks), default=0))
+ 
+-    @classmethod
+-    def for_views(cls, channels: Mapping[str, Channel],
+-                  by_target: Mapping[str, ChannelActivity]) -> Mapping[str, ChannelActivity]:
+-        return {name: cls.combine(channel.history_scope().target_values(by_target))
+-                for name, channel in channels.items()}
+ 
+ 
+ @dataclass(frozen=True)
+--- src/agent_comms/channel_management.py
++++ src/agent_comms/channel_management.py
+@@ -6,7 +6,7 @@
+ from collections.abc import Sequence
+ from dataclasses import dataclass, replace
+ from pathlib import Path
+-from typing import TYPE_CHECKING, ClassVar
++from typing import ClassVar
+ 
+ from agent_comms.bus_publication import AgentOrigin
+ from agent_comms.display_sources import ChannelOrderSource
+@@ -20,12 +20,10 @@
+ from agent_comms.nominal.field_codec import RecordMember
+ from agent_comms.registry.registration import Registration
+ from agent_comms.registry.thread_identity import ThreadIncarnation
+-from agent_comms.registry.thread_management import ChangedTags, GivenTags
++from agent_comms.registry.thread_management import ChangedTags, GivenTags, TagChoice, ThreadManagement
+ from agent_comms.registry.threads import Thread
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.catalog_document import CatalogDocument
+-    from agent_comms.registry.thread_management import TagChoice, ThreadManagement
++from agent_comms.catalog_document import CatalogDocument
+ 
+ 
+ @dataclass(frozen=True)
+--- src/agent_comms/check_root.py
++++ src/agent_comms/check_root.py
+@@ -27,7 +27,7 @@
+ from agent_comms.planning.goals import NoGoal
+ from agent_comms.projects.checkouts import Checkout
+ from agent_comms.messaging.read_basis import MemberActivityDisplayScope
+-from agent_comms.registry.registry_document import RosterVisibility
++from agent_comms.registry.roster_visibility import RosterVisibility
+ from agent_comms.registry.thread_text import NoThreadText
+ from agent_comms.registry.threads import Thread
+ from agent_comms.session_file import RegistrySessionLocation
+--- src/agent_comms/history_views.py
++++ src/agent_comms/history_views.py
+@@ -74,11 +74,11 @@
+ from agent_comms.projects.checkouts import Checkout
+ from agent_comms.recorded_bus import RecordedBusIdentity
+ from agent_comms.registry.registration import Registration
+-from agent_comms.registry.registry_document import (
++from agent_comms.registry.roster_visibility import (
+     DEFAULT_ROSTER,
+-    RegistrySnapshot,
+     RosterVisibility,
+ )
++from agent_comms.registry.registry_document import RegistrySnapshot
+ from agent_comms.registry.thread_identity import ThreadIncarnation
+ from agent_comms.registry.thread_presentation import NoThreadPresentation, ThreadPresentation
+ from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
+@@ -373,7 +373,7 @@
+                     snapshot.visible_threads(visibility), snapshot=snapshot,
+                 ),
+                 self.last_sent_timestamps(clocks.sent.items(), registry=snapshot),
+-                ChannelActivity.for_views(channels, clocks.channels),
++                channels.history_activity(clocks.channels),
+                 visibility,
+             )
+ 
+@@ -387,8 +387,7 @@
+             rows = ((alias, clocks.sent[alias]) for thread in registered
+                     for alias in snapshot.names_for(thread.name) if alias in clocks.sent)
+             sent = self.last_sent_timestamps(rows, registry=snapshot)
+-            history = ChannelActivity.for_views(
+-                {channel.name: channel}, clocks.channels)[channel.name]
++            history = channel.history_activity(clocks.channels)
+             return ChannelView.capture(
+                 channel, registered, snapshot, catalog.pinned_threads(channel.name),
+                 self.agents.all_activity(registered, snapshot=snapshot), sent, history, visibility,
+--- src/agent_comms/messaging/channels.py
++++ src/agent_comms/messaging/channels.py
+@@ -5,9 +5,9 @@
+ import time
+ from abc import abstractmethod
+ from collections import defaultdict
+-from collections.abc import Iterable, Iterator
++from collections.abc import Iterable, Iterator, Mapping
+ from dataclasses import dataclass, field
+-from typing import Annotated, ClassVar, TYPE_CHECKING
++from typing import Annotated, ClassVar
+ 
+ from agent_comms.display_sources import ChannelSortView, SortedChannel, StoredThreadOrder
+ from agent_comms.messaging.channel_targets import ChannelTarget, Tag
+@@ -30,10 +30,10 @@
+ )
+ from agent_comms.tool_result import ToolResult
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.registry.registry_document import RosterVisibility
+-    from agent_comms.registry.threads import Thread
+-    from agent_comms.registry_provenance import RegistryProvenance
++from agent_comms.registry.roster_visibility import RosterVisibility
++from agent_comms.registry.threads import Thread
++from agent_comms.registry_provenance import RegistryProvenance
++from agent_comms.activity_clocks import ChannelActivity
+ 
+ 
+ class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):
+@@ -138,6 +138,9 @@
+     @abstractmethod
+     def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[type[MembershipTransition], ...]: ...
+ 
++    def history_activity(self, by_target: Mapping[str, ChannelActivity]) -> ChannelActivity:
++        return ChannelActivity.combine(self.history_scope().target_values(by_target))
++
+     def pending_count(self, counts: dict[str, int]) -> int:
+         return sum(self.history_scope().target_values(counts))
+ 
+@@ -147,6 +150,9 @@
+ 
+ class Channels(dict[str, Channel]):
+     """The captured declarations select the channels shown by a roster."""
++
++    def history_activity(self, by_target: Mapping[str, ChannelActivity]) -> Mapping[str, ChannelActivity]:
++        return {name: channel.history_activity(by_target) for name, channel in self.items()}
+ 
+     def visible(self, visibility: RosterVisibility) -> Iterator[Channel]:
+         return (channel for channel in self.values() if visibility.archived or not channel.archived)
+--- src/agent_comms/presentation.py
++++ src/agent_comms/presentation.py
+@@ -69,11 +69,11 @@
+ from agent_comms.planning.orders import TodoStore
+ from agent_comms.recorded_bus import NoRecordedBus, RecordedBusIdentity
+ from agent_comms.registry.registration import Registration
+-from agent_comms.registry.registry_document import (
++from agent_comms.registry.roster_visibility import (
+     DEFAULT_ROSTER,
+-    RegistrySnapshot,
+     RosterVisibility,
+ )
++from agent_comms.registry.registry_document import RegistrySnapshot
+ from agent_comms.registry.thread_presentation import (
+     ThreadOwnerBinding,
+     ThreadPresentation,
+--- src/agent_comms/publisher.py
++++ src/agent_comms/publisher.py
+@@ -41,7 +41,8 @@
+ from agent_comms.messaging.messages import BusRecord, ClaimNoticeKind, Message
+ from agent_comms.nominal.field_codec import ClaimId
+ from agent_comms.registry.registration import Registration
+-from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
++from agent_comms.registry.registry_document import RegistrySnapshot
+ from agent_comms.response_acknowledgement import canonical_publication_key
+ from agent_comms.storage.private_path import FileRevision
+ from agent_comms.wake import OrdinaryControl, resolve_wake_cohort
+--- src/agent_comms/registry/registry_document.py
++++ src/agent_comms/registry/registry_document.py
+@@ -19,6 +19,7 @@
+ from types import MappingProxyType
+ from typing import TYPE_CHECKING, Annotated, Literal, Self
+ 
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER as DEFAULT_ROSTER, RosterVisibility as RosterVisibility
+ from pydantic import JsonValue
+ 
+ from agent_comms.activity import ActivityCapture, ObservedActivity
+@@ -115,17 +116,6 @@
+     from agent_comms.comms import Comms
+ 
+ 
+-@dataclass(frozen=True, slots=True)
+-class RosterVisibility:
+-    """Which threads a roster shows: the one declaration of its defaults."""
+-
+-    stopped: bool = True
+-    archived: bool = False
+-
+-
+-DEFAULT_ROSTER = RosterVisibility()
+-
+-
+ @dataclass(frozen=True)
+ class ResolvedThread(ResolvedTarget):
+     thread: Thread
+--- src/agent_comms/registry/roster_visibility.py
++++ src/agent_comms/registry/roster_visibility.py
+@@ -0,0 +1,12 @@
++from dataclasses import dataclass
++
++
++@dataclass(frozen=True, slots=True)
++class RosterVisibility:
++    """Which threads a roster shows: the one declaration of its defaults."""
++
++    stopped: bool = True
++    archived: bool = False
++
++
++DEFAULT_ROSTER = RosterVisibility()
+--- src/agent_comms/registry/thread_status.py
++++ src/agent_comms/registry/thread_status.py
+@@ -39,10 +39,10 @@
+     from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
+     from agent_comms.messaging.message_reference import MessageReference
+     from agent_comms.messaging.sending import Messaging
++    from agent_comms.registry.roster_visibility import RosterVisibility
+     from agent_comms.registry.registry_document import (
+         RegistryEntry,
+         RegistrySnapshot,
+-        RosterVisibility,
+     )
+     from agent_comms.registry.thread_identity import GenerationCounter, OwnerIdentity
+     from agent_comms.registry.threads import Thread
+--- src/agent_comms/relationships.py
++++ src/agent_comms/relationships.py
+@@ -37,7 +37,8 @@
+ )
+ from agent_comms.planning.goals import Goal, GoalMentionBinding
+ from agent_comms.registry.registration import Registration
+-from agent_comms.registry.registry_document import RegistrySnapshot, RosterVisibility
++from agent_comms.registry.roster_visibility import RosterVisibility
++from agent_comms.registry.registry_document import RegistrySnapshot
+ from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+ from agent_comms.registry.thread_owned_state import ThreadOwnedState
+ from agent_comms.registry.threads import Thread
+--- src/agent_comms/team/standing.py
++++ src/agent_comms/team/standing.py
+@@ -55,7 +55,8 @@
+ from agent_comms.planning.plan_phases import PlanPhase
+ from agent_comms.projects.repo import Repo
+ from agent_comms.recorded_time import RecordedEventTime
+-from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
++from agent_comms.registry.registry_document import RegistrySnapshot
+ from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+ from agent_comms.registry.threads import Thread
+ from agent_comms.projects.repository_name import RepositoryName
+--- src/agent_comms/ui_model/observation.py
++++ src/agent_comms/ui_model/observation.py
+@@ -87,9 +87,9 @@
+ from agent_comms.notification_reads import NotificationRead
+ from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState, WireRevision
+ from agent_comms.projects.checkouts import Checkout
++from agent_comms.registry.roster_visibility import RosterVisibility
+ from agent_comms.registry.registry_document import (
+     RegistrySnapshot,
+-    RosterVisibility,
+     UnreadRegistry,
+ )
+ from agent_comms.registry.thread_identity import ThreadIncarnation
+--- src/agent_comms/view_unread.py
++++ src/agent_comms/view_unread.py
+@@ -21,7 +21,7 @@
+ from agent_comms.execution.native_entries import NativeEntry
+ from agent_comms.execution.native_transcript import SessionCut, record_end, reverse_records
+ from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
+-from agent_comms.registry.registry_document import RosterVisibility
++from agent_comms.registry.roster_visibility import RosterVisibility
+ from agent_comms.registry.thread_identity import ThreadIncarnation
+ from agent_comms.registry.thread_owned_state import ThreadOwnedState
+ from agent_comms.storage.locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
+--- tests/native_unread_fixture.py
++++ tests/native_unread_fixture.py
+@@ -1,7 +1,7 @@
+ """Await actual native index preparation; tests declare their own registry threads."""
+ 
+ from agent_comms.comms import wire
+-from agent_comms.registry.registry_document import DEFAULT_ROSTER
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
+ from agent_comms.view_unread import TranscriptReadState
+ 
+ 
+--- tests/test_channels.py
++++ tests/test_channels.py
+@@ -40,7 +40,7 @@
+     Checkout,
+     LaunchCheckout,
+ )
+-from agent_comms.registry.registry_document import RosterVisibility
++from agent_comms.registry.roster_visibility import RosterVisibility
+ from agent_comms.registry.thread_management import (
+     ForkSpec,
+     GivenTags,
+--- tests/test_deleted_thread_observation.py
++++ tests/test_deleted_thread_observation.py
+@@ -9,7 +9,7 @@
+ from agent_comms.activity import ActivityState, ObservedActivity
+ from agent_comms.notification_reads import LiveNotificationRead
+ from agent_comms.projects.checkouts import Checkout
+-from agent_comms.registry.registry_document import DEFAULT_ROSTER
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
+ from agent_comms.registry.thread_presentation import NoThreadPresentation, ThreadRetired
+ from agent_comms.registry.thread_text import GivenThreadText
+ from agent_comms.registry.threads import ExternalThread, NativeThread
+--- tests/test_relationships.py
++++ tests/test_relationships.py
+@@ -8,7 +8,7 @@
+ from agent_comms.comms import wire
+ from agent_comms.display_order import LastActivityThreadSort
+ from agent_comms.projects.checkouts import Checkout
+-from agent_comms.registry.registry_document import RosterVisibility
++from agent_comms.registry.roster_visibility import RosterVisibility
+ from agent_comms.registry.thread_text import (
+     ForkedParent,
+     NoParent,
+--- tests/test_thread_status.py
++++ tests/test_thread_status.py
+@@ -17,7 +17,7 @@
+ from agent_comms.presentation import CountedRead, ThreadView
+ from agent_comms.projects.checkouts import Checkout
+ from agent_comms.registry.registration import Registration
+-from agent_comms.registry.registry_document import DEFAULT_ROSTER
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
+ from agent_comms.registry.thread_status import (
+     ArchivedThreadStatus,
+     ConnectedThreadStatus,
+@@ -98,7 +98,7 @@
+             assert individual.read_identity.thread.incarnation == thread.incarnation
+             assert individual.same_status(visible[0].presentation)
+         else:
+-            from agent_comms.registry.registry_document import RosterVisibility
++            from agent_comms.registry.roster_visibility import RosterVisibility
+             if expected.in_view(RosterVisibility(archived=True)):
+                 assert individual.require("owner") is individual
+             else:
+@@ -191,7 +191,7 @@
+     (DeletingThreadStatus(), False, False),
+ ])
+ def test_presence_owns_roster_membership_and_self_rename(status, listed, rename):
+-    from agent_comms.registry.registry_document import RosterVisibility
++    from agent_comms.registry.roster_visibility import RosterVisibility
+ 
+     assert status.in_view(RosterVisibility(stopped=False)) == listed
+     if rename:
+--- tests/test_thread_unread.py
++++ tests/test_thread_unread.py
+@@ -8,7 +8,7 @@
+ 
+ from agent_comms.comms import wire
+ from agent_comms.projects.checkouts import Checkout
+-from agent_comms.registry.registry_document import DEFAULT_ROSTER
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
+ from agent_comms.registry.threads import NativeThread
+ from agent_comms.session_file import RegistrySessionLocation
+ from agent_comms.storage.private_path import FileRevision
+--- tests/test_transcript_read_lifetime.py
++++ tests/test_transcript_read_lifetime.py
+@@ -12,7 +12,7 @@
+ 
+ from agent_comms.comms import wire
+ from agent_comms.projects.checkouts import Checkout
+-from agent_comms.registry.registry_document import DEFAULT_ROSTER
++from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
+ from agent_comms.registry.threads import NativeThread
+ from agent_comms.session_file import RegistrySessionLocation
+ from agent_comms.ui_model.unread import IndexingUnread
+--- tests/test_visibility_views.py
++++ tests/test_visibility_views.py
+@@ -5,7 +5,7 @@
+ 
+ from agent_comms.comms import wire
+ from agent_comms.projects.checkouts import Checkout
+-from agent_comms.registry.registry_document import RosterVisibility
++from agent_comms.registry.roster_visibility import RosterVisibility
+ from agent_comms.registry.thread_identity import UserThreadRole
+ from agent_comms.registry.thread_status import (
+     ArchivedThreadStatus,

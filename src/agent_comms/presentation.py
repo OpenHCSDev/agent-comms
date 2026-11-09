@@ -69,9 +69,9 @@ from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.planning.orders import TodoStore
 from agent_comms.recorded_bus import NoRecordedBus, RecordedBusIdentity
 from agent_comms.registry.registration import Registration
-from agent_comms.registry.registry_document import (
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.roster_visibility import (
     DEFAULT_ROSTER,
-    RegistrySnapshot,
     RosterVisibility,
 )
 from agent_comms.registry.thread_presentation import (

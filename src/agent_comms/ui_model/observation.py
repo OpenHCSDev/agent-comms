@@ -89,9 +89,9 @@ from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import (
     RegistrySnapshot,
-    RosterVisibility,
     UnreadRegistry,
 )
+from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_presentation import ThreadPresentation
 from agent_comms.registry_names import DeletedThread

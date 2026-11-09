@@ -1,3 +1,4 @@
+from agent_comms.runtime_info_projection import RuntimeInfoProjection
 """Nominal, in-process backend events and the reactions shared by consumers.
 
 These values are never decoded from a transport. Pi JSON is parsed by backend;
@@ -343,7 +344,7 @@ class Error(AgentEvent):
     source: FailureSource = UnrecordedFailureSource()
 
 
-class RuntimeInfoObservation(AgentEvent):
+class RuntimeInfoObservation(AgentEvent, RuntimeInfoProjection[AgentRuntimeInfo]):
     """Record one producer observation through the existing runtime-info owner."""
 
     def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:

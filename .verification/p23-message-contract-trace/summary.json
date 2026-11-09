@@ -1,0 +1,49 @@
+{
+  "head": "3edfb8c6ed2b2d01c85c85d2f379dc71e19aa4d8",
+  "applied": false,
+  "is_clean": true,
+  "operation_count": 26,
+  "indexed_source_files": 49,
+  "changed_source_files": [
+    "src/agent_comms/activity_clocks.py",
+    "src/agent_comms/channel_management.py",
+    "src/agent_comms/display_sources.py",
+    "src/agent_comms/goal_ledger.py",
+    "src/agent_comms/goal_work.py",
+    "src/agent_comms/history_views.py",
+    "src/agent_comms/messaging/channels.py",
+    "src/agent_comms/messaging/published_bus.py",
+    "src/agent_comms/planning/goal_attempt_phase.py",
+    "src/agent_comms/planning/goal_failure_observation.py",
+    "src/agent_comms/planning/goals.py",
+    "src/agent_comms/planning/orders.py",
+    "src/agent_comms/presentation.py",
+    "src/agent_comms/registry/threads.py",
+    "src/agent_comms/relationships.py"
+  ],
+  "concurrent_source_changes": [],
+  "original_provider_fields_and_methods_unchanged": true,
+  "protected_source_bytes_unchanged": {
+    "goal_mutation.py": true,
+    "execution/turn_context.py": true
+  },
+  "deferred": "RelationshipCatalogSource move/provider pair: retained native extraction refusal",
+  "input_hashes": {
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py": "ecd288bc852c9127ad2b772bc9582a0f7f0574ae0c59c6a2ba465884e624d9b9",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py": "e9b22e19f167e290028ff729b8049daf5733c78c0c2edabe4c6ac586edbcc3ab",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/display_sources.py": "b33d010f99492ea6c168d35cfc5b214eee5e64d25ae63690a632aff7284c4ca4",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py": "d4c1f0e34cf6d1a768d87b018ab50828bf5bd2cc736536b4f7ff331aaa28f21f",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_work.py": "093409d7f57ee5da8516786d4fdf8895b9847f49271a58152d5f5f9a2bfca800",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py": "83100a5ff4d6cabf5df76ee49c5f1587bd13a3bafde6de1c68a7a5cc918508b4",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py": "8c2ba06deacc176f3ad6640048ca5c49442ae07989a3e631b6bdfdb0c352a920",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py": "81efb9082f9047d4b693a20122e76252f12fe6eb6878af3135ccafb4ce11c3e4",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempt_phase.py": "b55e87f270fe88576ccfb9ebb95baa566096b75c8f29b14ff4653a0e49fc06f2",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_failure_observation.py": "c3dccb2cf4a90e9d1287b41b2c44a66dc05ce26e3fc2d6b561d669e588c3acd6",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goals.py": "8de12e9e3b2501b97c91aaef10e3fb973ec4b4735de577cda39f9d33dc3e62ce",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py": "86e48437f0cb3b47b082041fbd4a279f0eea4f4e81d21bf15ddbc05a9f8daf96",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py": "ded52e768cf90e4eadb44f77ca0aa929be1fec3afb9b595f7bc0b23952421743",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py": "aed508c354c122e2f168bff9fcf2e960335eb62856f0b6d011fdd6e75db178e2",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py": "7f099877ac915a45ec218da2841e1049d2c846b0f5f5cf2e87971b3609b747cf"
+  },
+  "proof_limit": "NRA source/preflight simulation only; no cold imports, C3/concreteness, wire decoding or consumer execution."
+}

@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.display_sources import ChannelOrderSource
@@ -20,12 +20,11 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import RecordMember
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.registry.thread_management import ChangedTags, GivenTags
+from agent_comms.registry.thread_management import ChangedTags, GivenTags, TagChoice, ThreadManagement
 from agent_comms.registry.threads import Thread
 
-if TYPE_CHECKING:
-    from agent_comms.catalog_document import CatalogDocument
-    from agent_comms.registry.thread_management import TagChoice, ThreadManagement
+from agent_comms.catalog_document import CatalogDocument
+from agent_comms.relationship_catalog_source import RelationshipCatalogSource
 
 
 @dataclass(frozen=True)
@@ -155,7 +154,7 @@ class DeleteTagEdit(NamedTagEdit):
         channels.delete_tag(self.name, disposition=self.disposition, confirmed=self.confirmed)
 
 
-class ChannelManagement(ChannelOrderSource[type[ThreadSort], type[ChannelSort]]):
+class ChannelManagement(ChannelOrderSource[type[ThreadSort], type[ChannelSort]], RelationshipCatalogSource):
     def __init__(self, root: Path, registry: Registration, bus: MessageBus, threads: ThreadManagement):
         self.root = root
         self.registry = registry

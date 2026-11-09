@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agent_comms.execution.owned_turn_runner import OwnedTurnRunner
+
 import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
@@ -144,7 +146,7 @@ class CompactionObservation(MroDispatch):
         await self.publish(self.phase.compaction_ended())
 
 
-class TurnRunner:
+class TurnRunner(OwnedTurnRunner):
     """Own session turn locks/tasks and each session's agent backend."""
 
     def __init__(

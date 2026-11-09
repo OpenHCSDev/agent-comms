@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from agent_comms.display_references import NO_HISTORY_SOURCE, MessageHistory
+from agent_comms.message_reads import MessageDeliveryRead
+
+from agent_comms.message_send_reads import MessageReferenceRead
+
 import builtins
 import re
 import sqlite3
@@ -14,7 +19,6 @@ from functools import cache
 from inspect import get_annotations
 from itertools import accumulate, batched
 from typing import (
-    TYPE_CHECKING,
     Annotated,
     ClassVar,
     Self,
@@ -40,6 +44,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.turn_origin import TurnOrigin
 from agent_comms.input_key import InputKey
 from agent_comms.mentions import ThreadMention
+from agent_comms.message_clock_source import MessageClockSource
 from agent_comms.message_sender import PublicSender
 from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.messaging.message_reference import MessageReference
@@ -61,7 +66,6 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.page_traversal import LiveCursor, PageCursor
 from agent_comms.projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
-from agent_comms.recorded_time import Timestamped
 from agent_comms.registry.thread_creation import ThreadCreationSource
 from agent_comms.registry.thread_identity import AgentThreadRole, ThreadRole
 from agent_comms.response_message_source import ResponseMessageSource
@@ -95,10 +99,6 @@ from agent_comms.transport.progress import InterruptibleRead
 from agent_comms.ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
 from agent_comms.wake_policy import BoundedTriageWake, PassiveWake
 
-if TYPE_CHECKING:
-    from agent_comms.bus_publication import Delivered
-    from agent_comms.display_references import ReferenceContext
-    from agent_comms.retained_task_facts import ExactTaskFact
 
 
 class BusTables(TypedTable, AppendOnlyTables, SharedFileTables, DurableTables, declared_name=None):
@@ -422,7 +422,7 @@ class BusCapability(TypedRow, ProjectionSource):
 
     table = _CapabilityTable()
 
-    def deliveries(self) -> tuple[Delivered, ...]:
+    def deliveries(self) -> tuple[MessageDeliveryRead[Message], ...]:
         return ()
 
     @classmethod
@@ -926,7 +926,7 @@ class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole, decla
 
 
 @dataclass(frozen=True, slots=True)
-class MessageInput(Timestamped, Addressed, BusCapability, ResponseMessageSource):
+class MessageInput(MessageClockSource, Addressed, BusCapability, ResponseMessageSource):
     """The facts an input is keyed and written from: who, where, what text, which role.
 
     Attachments, reports and answers belong to Message; this is never a whole message
@@ -964,7 +964,7 @@ class MessageInput(Timestamped, Addressed, BusCapability, ResponseMessageSource)
 
 
 @dataclass(frozen=True, slots=True)
-class Message(MessageInput, TurnOrigin["Message"]):
+class Message(MessageInput, TurnOrigin['Message'], MessageReferenceRead):
     """Declares one inter-thread message.
 
     The bus assigns ``seq`` (a monotonically increasing log position) at send
@@ -1355,26 +1355,8 @@ class ClaimMessage(Claimed, Message):
         """A copied history keeps the envelope's display facts and drops its claim."""
         return Message.from_message(self, type=ClaimHistoryKind)
 
-    def retained_task_facts(self) -> Iterator[ExactTaskFact]:
-        from agent_comms.retained_task_facts import ClaimTaskFact
+    def retained_task_facts(self) -> Iterator[task_facts.ExactTaskFact]:
         yield from super().retained_task_facts()
-        yield ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))
+        yield task_facts.ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))
 
-
-class MessageHistory:
-    """Where a displayed message was recorded: an attached history snapshot, or nowhere (live)."""
-
-    __slots__ = ()
-
-    def references_from(self, context: ReferenceContext) -> ReferenceContext:
-        """The names a body recorded here links through; a live message uses the current ones."""
-        return context
-
-
-class NoHistorySource(MessageHistory):
-    """A live message: no snapshot recorded it."""
-
-    __slots__ = ()
-
-
-NO_HISTORY_SOURCE = NoHistorySource()
+from agent_comms import retained_task_facts as task_facts

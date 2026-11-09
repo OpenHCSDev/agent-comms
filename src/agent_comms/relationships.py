@@ -13,10 +13,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from functools import cmp_to_key
 from pathlib import Path
-from typing import Annotated, ClassVar, Literal, Protocol
+from typing import Annotated, ClassVar, Literal
 
 from agent_comms import presentation
-from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.command import Command
 from agent_comms.display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
 from agent_comms.display_sources import SentHistorySource
@@ -37,10 +36,12 @@ from agent_comms.peer_relevance import (
 )
 from agent_comms.planning.goals import Goal, GoalMentionBinding
 from agent_comms.registry.registration import Registration
-from agent_comms.registry.registry_document import RegistrySnapshot, RosterVisibility
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
 from agent_comms.registry.threads import Thread
+from agent_comms.relationship_catalog_source import RelationshipCatalogSource
 from agent_comms.routing import DeliveryScope
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.storage.maintenance_barrier import CarriedDocument
@@ -716,11 +717,6 @@ class RelationshipStore(SingleFileStore, ThreadOwnedState, CarriedDocument[Relat
             return DocumentChange.to(replace(document, collaborations=collaborations, orders=orders))
 
         self.update(remove)
-
-
-class RelationshipCatalogSource(Protocol):
-    @property
-    def catalog(self) -> ChannelCatalog: ...
 
 
 class RelationshipSource(SentHistorySource[RegistrySnapshot]):

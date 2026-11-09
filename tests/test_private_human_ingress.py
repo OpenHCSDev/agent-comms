@@ -13,7 +13,7 @@ from typing import Annotated, NoReturn
 
 import pytest
 
-from agent_comms.bus_publication import HumanOrigin
+from agent_comms.initial_origin import HumanOrigin
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.coordinator import Coordination

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from abc import ABC, abstractmethod
 from collections.abc import (
     Iterable,
     Mapping,
@@ -17,25 +16,9 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.message_sender import PublicSender
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
+from agent_comms.recipient_selection import RecipientSelection
 from agent_comms.registry.threads import Thread, ThreadProvenance
 from agent_comms.registry_names import RegistryNames as RegistryNames
-
-
-class RecipientSelection(ABC):
-    """One registry selection owns live, archived and retired recipient behavior."""
-
-    def activity_threads(self) -> tuple[Thread, ...]:
-        return ()
-
-    @abstractmethod
-    def activity(self, observations, snapshot): ...
-
-    @abstractmethod
-    def read_effect(self, reads, message, snapshot, *, document=None): ...
-
-    def input_owners(self) -> tuple[Thread, ...]:
-        """The live thread whose stored inputs this recipient's deliveries are keyed by."""
-        return ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,13 +5,12 @@ from collections.abc import Callable
 
 from agent_comms.context_owner import ContextOwner
 from agent_comms.nominal.field_codec import TurnId
-from agent_comms.registry.thread_identity import ThreadRole, TurnFence, TurnIdentity
+from agent_comms.registry.thread_identity import TurnFence, TurnIdentity
+from agent_comms.thread_role_source import ThreadRoleSource
 
 
-class TaskOwner(ContextOwner):
+class TaskOwner(ContextOwner, ThreadRoleSource):
     __slots__ = ()
-
-    role: type[ThreadRole]
 
     @abstractmethod
     def require_publication_turn(self, claim_generation: Callable[[], int], turn_id: TurnId) -> None: ...

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agent_comms.execution.native_session_callbacks import SessionInputsCallbacks
+
 import asyncio
 from dataclasses import (
     dataclass,
@@ -32,9 +34,8 @@ from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.turn_failure_reads import TerminalInputsRead
 
-if TYPE_CHECKING:
-    from agent_comms.backend import NativeSession, TurnSession
-    from agent_comms.pi_events import MessageStart, Response
+from agent_comms.execution.native_session_callbacks import NativeSessionCallbacks, PromptSessionCallbacks
+from agent_comms.pi_events import MessageStart, Response
 
 
 class NoCurrentItem(TurnInboxItem):
@@ -45,7 +46,7 @@ class NoCurrentItem(TurnInboxItem):
 
 
 @dataclass
-class InputForwarding(MroDispatch, TerminalInputsRead):
+class InputForwarding(MroDispatch, SessionInputsCallbacks):
     queue: TurnInbox = field(default_factory=TurnInbox)
     pending: dict[InputId, PendingRequest[commands.FollowingPrompt]] = field(default_factory=dict)
     current: TurnInboxItem = field(default_factory=NoCurrentItem)
@@ -75,7 +76,7 @@ class InputForwarding(MroDispatch, TerminalInputsRead):
         return self.pending.pop(native_id).request.input
 
     def rejected(
-        self, native_id: InputId, response: Response, session: TurnSession,
+        self, native_id: InputId, response: Response, session: PromptSessionCallbacks,
     ) -> tuple[events.AgentEvent, ...]:
         """Retire the live write, preserve its durable UNKNOWN, and report the actual refusal."""
         item = self.retire(native_id)
@@ -87,7 +88,7 @@ class InputForwarding(MroDispatch, TerminalInputsRead):
         session.rejected_signal.set()
         return (session.output.error(failure.text, source=UnrecordedFailureSource()),)
 
-    async def forward(self, session: NativeSession) -> None:
+    async def forward(self, session: NativeSessionCallbacks) -> None:
         # Inputs that wait through one tool batch reach the model together,
         # not one model call apiece.
         await self.write(session, commands.SetSteeringMode(mode="all"))
@@ -109,11 +110,11 @@ class InputForwarding(MroDispatch, TerminalInputsRead):
         self.current = NoCurrentItem()
 
     @handles(TurnInboxItem)
-    async def unhandled(self, item: TurnInboxItem, session: NativeSession) -> bool:
+    async def unhandled(self, item: TurnInboxItem, session: NativeSessionCallbacks) -> bool:
         raise TypeError(f"No input handler declared for {type(item).__name__}")
 
     @handles(UnwrittenPrompt)
-    async def original_prompt(self, item: UnwrittenPrompt, session: TurnSession) -> bool:
+    async def original_prompt(self, item: UnwrittenPrompt, session: PromptSessionCallbacks) -> bool:
         def write():
             session.grant_prompt()
             session.native.send(session.command)
@@ -127,7 +128,7 @@ class InputForwarding(MroDispatch, TerminalInputsRead):
         return await completion
 
     @handles(PreparedSession)
-    async def prepare_session(self, item: PreparedSession, session: NativeSession) -> bool:
+    async def prepare_session(self, item: PreparedSession, session: NativeSessionCallbacks) -> bool:
         session.native.forget_context()
         state = session.native.attestation.require_state()
         identity = session.native.attestation.require_identity()
@@ -140,7 +141,7 @@ class InputForwarding(MroDispatch, TerminalInputsRead):
         await session.stats.request(session)
         return True
 
-    async def write(self, session: NativeSession, *written: commands.PiCommand) -> None:
+    async def write(self, session: NativeSessionCallbacks, *written: commands.PiCommand) -> None:
         for command in written:
             session.native.send(command)
         self.release_current()
@@ -157,7 +158,7 @@ class InputForwarding(MroDispatch, TerminalInputsRead):
         return tuple(key for key in candidates if key in self.pending)
 
     @handles(ClearQueue)
-    async def clear_queue(self, item: ClearQueue, session: TurnSession) -> bool:
+    async def clear_queue(self, item: ClearQueue, session: PromptSessionCallbacks) -> bool:
         command = commands.ClearQueue(input_ids=await self.queued(item.input_ids))
         if not command.input_ids:
             return True
@@ -165,7 +166,7 @@ class InputForwarding(MroDispatch, TerminalInputsRead):
         return True
 
     def cleared(
-        self, requested: tuple[InputId, ...], response: Response, session: TurnSession,
+        self, requested: tuple[InputId, ...], response: Response, session: PromptSessionCallbacks,
     ) -> None:
         """The native reply owns removal, even after the forwarding task retires."""
         for native_id in response.data.require_payload().cleared_inputs(requested):
@@ -176,7 +177,7 @@ class InputForwarding(MroDispatch, TerminalInputsRead):
         session.rejected_signal.set()
 
     @handles(UseSettings)
-    async def use_settings(self, item: UseSettings, session: TurnSession) -> bool:
+    async def use_settings(self, item: UseSettings, session: PromptSessionCallbacks) -> bool:
         # Pi resets thinking to the new model's default, so the level follows the model.
         await self.write(
             session,
@@ -188,7 +189,7 @@ class InputForwarding(MroDispatch, TerminalInputsRead):
         return True
 
     @handles(SendNow)
-    async def send_now(self, item: SendNow, session: TurnSession) -> bool:
+    async def send_now(self, item: SendNow, session: PromptSessionCallbacks) -> bool:
         candidates = await self.queued(item.input_ids)
         if not candidates:
             return True
@@ -204,7 +205,7 @@ class InputForwarding(MroDispatch, TerminalInputsRead):
         return await completion
 
     @handles(InputRequest)
-    async def place(self, item: InputRequest, session: TurnSession) -> bool:
+    async def place(self, item: InputRequest, session: PromptSessionCallbacks) -> bool:
         public_id = item.input_id
         native_id = InputId.mint()
         text = item.content.text
@@ -230,7 +231,7 @@ class InputForwarding(MroDispatch, TerminalInputsRead):
         return await completion
 
     def mark_started(
-        self, session: TurnSession, payload: MessageStart,
+        self, session: PromptSessionCallbacks, payload: MessageStart,
     ) -> tuple[InputId] | tuple[()]:
         message = payload.message
         for native_id in message.input_id.present():

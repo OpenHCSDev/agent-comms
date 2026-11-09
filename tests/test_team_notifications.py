@@ -12,7 +12,8 @@ from multiprocessing import Pipe
 
 import pytest
 
-from agent_comms.bus_publication import AgentOrigin, HumanOrigin
+from agent_comms.bus_publication import AgentOrigin
+from agent_comms.initial_origin import HumanOrigin
 from agent_comms.messaging.channel_targets import TeammatesTag, ThreadTarget
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.cli_bridges.session_watch import WatchClaim

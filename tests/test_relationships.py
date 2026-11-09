@@ -8,7 +8,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.registry_document import RosterVisibility
+from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_text import (
     ForkedParent,
     NoParent,

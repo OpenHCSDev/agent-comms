@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import AsyncGenerator, Mapping
+from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import AbstractContextManager, aclosing
 from dataclasses import dataclass
 from functools import cached_property, partial
@@ -24,6 +24,10 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.owner_lifecycle import OwnerLifecycle
 from agent_comms.history_views import HistoryViews
+from agent_comms.input_attempt import InputAttempt
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_ingress import InputIngressContext, InputTextContext
+from agent_comms.input_lookup import InputLookup
 from agent_comms.messaging.message_reference import InboxStart
 from agent_comms.messaging.messages import Message
 from agent_comms.messaging.message_bus import MessageBus
@@ -36,6 +40,7 @@ from agent_comms.registry.registry_document import RegistrySnapshot, UnreadRegis
 from agent_comms.registry.thread_configuration import ThreadConfiguration
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_management import ThreadManagement
+from agent_comms.registry.threads import Thread
 from agent_comms.relationships import ThreadRelationships
 from agent_comms.route_client import ActivityClient
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
@@ -92,7 +97,10 @@ class UntakenCut:
         return self.registry is snapshot and self.key == key
 
 
-class Comms(ActivityClient, ContextAssembly):
+class Comms(ActivityClient, ContextAssembly, InputIngressContext[Thread],
+            InputTextContext[InputAttempt]):
+    input_dispositions: ClassVar[Callable[[Path], InputLookup[InputAttempt]]] = InputDispositions
+
     def __init__(self, root: CommsRoute) -> None:
         super().__init__(root)
         self.goals = Goals(self.root, self.registry, self.bus, self.agents)

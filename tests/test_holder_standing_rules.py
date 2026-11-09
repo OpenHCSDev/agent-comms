@@ -13,7 +13,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms import agent_events as events
-from agent_comms.bus_publication import AgentOrigin, HumanOrigin
+from agent_comms.bus_publication import AgentOrigin
+from agent_comms.initial_origin import HumanOrigin
 from agent_comms.messaging.channel_targets import (
     CommandTarget,
     CommsTag,

@@ -10,13 +10,13 @@ from dataclasses import dataclass, replace
 from functools import partial
 from itertools import groupby
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms.activity_clocks import ActivityClocks
 from agent_comms.audience_manifest import freeze_audience
-from agent_comms.bus import Bus, BusReader, BusSnapshot, ClaimRecord, PrivateRecord, RecordBuilder
-from agent_comms.bus_publication import InitialOrigin
+from agent_comms.bus import Bus, BusReader, BusSnapshot, ClaimRecord, PrivateRecord
+from agent_comms.bus_record_builder import RecordBuilder
 from agent_comms.change_report import OrderRoots
+from agent_comms.initial_origin import InitialOrigin
 from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
@@ -41,14 +41,12 @@ from agent_comms.mentions import ThreadMention
 from agent_comms.messaging.messages import BusRecord, ClaimNoticeKind, Message
 from agent_comms.nominal.field_codec import ClaimId
 from agent_comms.registry.registration import Registration
-from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
 from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.storage.private_path import FileRevision
 from agent_comms.wake import OrdinaryControl, resolve_wake_cohort
 
-if TYPE_CHECKING:
-    from agent_comms.coordination.session import NativeCapture
-    from agent_comms.registry.threads import Thread
 
 from agent_comms.catalog_document import CatalogDocument
 from agent_comms.catalog_store import ChannelCatalog
@@ -112,7 +110,7 @@ class ClaimWrites(Publisher):
     """Publishes claim envelopes."""
 
     def release_resources(
-        self, boundary: NativeCapture, claims: Sequence[ClaimOwner], wording: str,
+        self, boundary: coordination_session.NativeCapture, claims: Sequence[ClaimOwner], wording: str,
     ) -> None:
         """Release only still-current acquisitions, in bounded whole-set envelopes.
 
@@ -167,7 +165,7 @@ class ClaimWrites(Publisher):
             ) from error
 
     def _publish_acquisition_unlocked(
-        self, snapshot: RegistrySnapshot, owner: Thread,
+        self, snapshot: RegistrySnapshot, owner: threads.Thread,
         resource: str, claim: RecordedScope, *, activity: ActivityClocks,
     ) -> ClaimOwner:
         build = self._claim_builder(
@@ -286,3 +284,6 @@ class OwnerPublisher(InitialWrites, ClaimWrites):
 
 class ParticipantPublisher(ResponseWrites, ClaimWrites):
     """A selected participant's bus: its keyed responses and its claims."""
+
+from agent_comms.coordination import session as coordination_session
+from agent_comms.registry import threads

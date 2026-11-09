@@ -14,7 +14,7 @@ from agent_comms import agent_events
 from agent_comms.acp import AcpSelectedWriteAuthority, CommsAgent, SdkSessionConnection
 from agent_comms.acp_extension import AgentCommsUpdate, LiveQueueScope, PromptRequest, QueueScope
 from agent_comms.agent_event_updates import AcpEventConsumer, AcpToolAction
-from agent_comms.agent_runtime import DeliversInput, PublishesTranscript, ReadsHistory
+from agent_comms.agent_runtime import PublishesTranscript, ReadsHistory
 from agent_comms.channel_input_batch import InputBatch
 from agent_comms.cli_bridges.history import History
 from agent_comms.comms import Comms
@@ -23,6 +23,7 @@ from agent_comms.context_assembly import ContextAssembly
 from agent_comms.context_owner import ContextOwner
 from agent_comms.context_provenance_source import ContextProvenanceSource
 from agent_comms.context_segments.wake_values import WakeWorkContext
+from agent_comms.delivers_input import DeliversInput
 from agent_comms.display_order import ChannelSort, ThreadSort
 from agent_comms.execution.goal_scheduler import GoalScheduler
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit

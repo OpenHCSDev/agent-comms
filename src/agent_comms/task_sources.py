@@ -6,11 +6,16 @@ from abc import abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import Annotated, Self
 
+from agent_comms.delivers_input import DeliversInput
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.turn_context import ContextSegment, Provenance, WireProvenance
 from agent_comms.harness_delivery_states import Outcome
+from agent_comms.input_lookup import InputLookup
+from agent_comms.input_publication_read import InputPublicationRead
+from agent_comms.message_directions import MessageDirections
+from agent_comms.message_reads import MessageReferencesRead
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -25,6 +30,7 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.registry_names import RegistryNames
 from agent_comms.storage.typed_table import TypedTable
+from agent_comms.task_callbacks import DeliveredContext, TeamObservation
 from agent_comms.task_owner import TaskOwner
 from agent_comms.task_registry import TaskRegistry
 from agent_comms.task_scope import TaskScope, TaskScopeSelection
@@ -32,34 +38,24 @@ from agent_comms.thread_identity_source import ThreadIdentitySource
 from agent_comms.ui_model.message_category import MessageCategory
 from agent_comms.working_memory_requests import AnnotationBudgetExhausted
 
-if TYPE_CHECKING:
-    from agent_comms.bus import BusReader
-    from agent_comms.cli_bridges.shared import CliBridge
-    from agent_comms.context_segments.wake import MessageDelivery
-    from agent_comms.input_attempt import StoredInput
-    from agent_comms.input_disposition import InputDispositions
-    from agent_comms.messaging.messages import Message
-    from agent_comms.planning.goal_management import Goals
-    from agent_comms.retained_task_facts import RetainedTaskFacts
-    from agent_comms.task_attachments.team_pings import TeamUpdate
 
 
 class TaskChange(DeclaredFamily, affix="TaskChange"):
     @abstractmethod
     def require_publication(self, declaration: ScopedTaskDeclaration, registry: TaskRegistry[TaskOwner],
-                            original_source: BusReader) -> None: ...
+                            original_source: MessageReferencesRead[messages.Message]) -> None: ...
 
     @abstractmethod
-    def root_source(self, message: Message,
-                    originals: dict[MessageReference, Message]) -> Message: ...
+    def root_source(self, message: messages.Message,
+                    originals: dict[MessageReference, messages.Message]) -> messages.Message: ...
 
 
 @dataclass(frozen=True)
 class OriginalTaskChange(TaskChange, declared_name="original"):
-    def require_publication(self, declaration: ScopedTaskDeclaration, registry: TaskRegistry[TaskOwner], original_source: BusReader) -> None:
+    def require_publication(self, declaration: ScopedTaskDeclaration, registry: TaskRegistry[TaskOwner], original_source: MessageReferencesRead[messages.Message]) -> None:
         pass
 
-    def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
+    def root_source(self, message: messages.Message, originals: dict[MessageReference, messages.Message]) -> messages.Message:
         return message
 
 
@@ -67,18 +63,18 @@ class OriginalTaskChange(TaskChange, declared_name="original"):
 class CorrectionTaskChange(TaskChange, declared_name="correction"):
     original: MessageReference
 
-    def require_original(self, original_source: BusReader) -> Message:
+    def require_original(self, original_source: MessageReferencesRead[messages.Message]) -> messages.Message:
         delivery, = original_source.messages_for_references((self.original,))
         original = delivery.message
         if original.reference != self.original:
             raise RelationViolationError("Decision correction requires its original wire reference")
         return original
 
-    def require_publication(self, declaration: ScopedTaskDeclaration, registry: TaskRegistry[TaskOwner], original_source: BusReader) -> None:
+    def require_publication(self, declaration: ScopedTaskDeclaration, registry: TaskRegistry[TaskOwner], original_source: MessageReferencesRead[messages.Message]) -> None:
         original = self.require_original(original_source)
         declaration.require_correction(original, registry)
 
-    def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
+    def root_source(self, message: messages.Message, originals: dict[MessageReference, messages.Message]) -> messages.Message:
         try:
             return originals[self.original]
         except KeyError as error:
@@ -119,11 +115,11 @@ class TaskAttachment(
     def require_annotation_grant(self):
         raise RelationViolationError("Original wire message has no human disclosure grant")
 
-    def projections(self, message: Message) -> Iterator[TypedTable]:
+    def projections(self, message: messages.Message) -> Iterator[TypedTable]:
         """Search rows this attachment adds beside its original message: none."""
         return iter(())
 
-    def team_update(self, recipient: ThreadLookup) -> tuple[TeamUpdate, ...]:
+    def team_update(self, recipient: ThreadLookup) -> tuple[TeamObservation, ...]:
         """The observations this attachment carries for that teammate birth: none."""
         return ()
 
@@ -131,51 +127,51 @@ class TaskAttachment(
         """Which category the message carrying this attachment files under: its sender's."""
         return spoken
 
-    async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
+    async def delivered_by(self, bridge: DeliversInput[messages.Message], message: messages.Message) -> type[Outcome]:
         """How a harness bridge hands the message carrying this attachment to its session."""
         return await bridge.deliver(message)
 
-    def message_segment(self, delivery: MessageDelivery) -> ContextSegment:
+    def message_segment(self, delivery: DeliveredContext) -> ContextSegment:
         """The same message contract for selected and following input."""
         return delivery.delivered()
 
-    def annotation_rules(self, message: Message, facts: RetainedTaskFacts) -> tuple[str, ...]:
+    def annotation_rules(self, message: messages.Message, facts: task_facts.RetainedTaskFacts) -> tuple[str, ...]:
         return ()
 
-    def direct(self, goals: Goals, message: Message) -> None:
+    def direct(self, goals: MessageDirections[messages.Message], message: messages.Message) -> None:
         """An owner message carrying a task is acted on by that task's declaration, not
         recorded as a request."""
 
-    def original_text_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
+    def original_text_source(self, message: messages.Message, originals: dict[MessageReference, messages.Message]) -> messages.Message:
         return message
 
-    def original_wording(self, original: Message) -> str:
+    def original_wording(self, original: messages.Message) -> str:
         return original.body
 
-    def original_wording_context_source(self, original: Message) -> Provenance:
+    def original_wording_context_source(self, original: messages.Message) -> Provenance:
         return WireProvenance(original.reference)
 
-    def original_input_sources(self, inputs: InputDispositions) -> tuple[StoredInput, ...]:
+    def original_input_sources(self, inputs: InputLookup[input_attempt.InputAttempt]) -> tuple[input_attempt.StoredInput, ...]:
         return ()
 
-    def original_wording_provenance(self, original: Message) -> dict[str, object]:
+    def original_wording_provenance(self, original: messages.Message) -> dict[str, object]:
         return dict(wording=FieldCodec.encode(original.reference),
                     author=original.sender, author_role=FieldCodec.encode(original.sender_role))
 
-    def selected_sources(self, message: Message) -> tuple[Message, ...]:
+    def selected_sources(self, message: messages.Message) -> tuple[messages.Message, ...]:
         return (message,)
 
-    def lineage_reference(self, root: Message) -> MessageReference:
+    def lineage_reference(self, root: messages.Message) -> MessageReference:
         return root.reference
 
-    def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
+    def root_source(self, message: messages.Message, originals: dict[MessageReference, messages.Message]) -> messages.Message:
         raise RelationViolationError("Ordinary message is not a decision lineage event")
 
-    def current_roots(self, message: Message, originals: dict[MessageReference, Message],
-                      owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> tuple[Message, ...]:
+    def current_roots(self, message: messages.Message, originals: dict[MessageReference, messages.Message],
+                      owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> tuple[messages.Message, ...]:
         return ()
 
-    def revises_after(self, previous: Message) -> bool:
+    def revises_after(self, previous: messages.Message) -> bool:
         raise RelationViolationError("Ordinary message cannot revise a declared choice")
 
     def require_sender(self, sender: str) -> None:
@@ -184,21 +180,19 @@ class TaskAttachment(
     def require_target(self, target: str, registry: TaskRegistry[TaskOwner]) -> None:
         pass
 
-    def require_publication(self, sender: str, registry: TaskRegistry[TaskOwner], original_source: BusReader) -> None:
+    def require_publication(self, sender: str, registry: TaskRegistry[TaskOwner], original_source: MessageReferencesRead[messages.Message]) -> None:
         pass
 
-    def retained_task_facts(self, message: Message):
+    def retained_task_facts(self, message: messages.Message):
         return ()
 
-    def user_task_facts(self, message: Message):
-        from agent_comms.retained_task_facts import UserSourceTaskFact
-
-        return (UserSourceTaskFact(message),)
+    def user_task_facts(self, message: messages.Message):
+        return (task_facts.UserSourceTaskFact(message),)
 
 
 @dataclass(frozen=True)
 class NoTaskAttachment(TaskAttachment, declared_name="absent"):
-    def direct(self, goals: Goals, message: Message) -> None:
+    def direct(self, goals: MessageDirections[messages.Message], message: messages.Message) -> None:
         """A plain owner message is a request wherever its destination holds them."""
         CommandTarget.named(message.target).direct(goals, message)
 
@@ -209,7 +203,7 @@ class OwnerRequestAttachment(TaskAttachment):
 
     requests: tuple[OwnerRequestId, ...]
 
-    def direct(self, goals: Goals, message: Message) -> None:
+    def direct(self, goals: MessageDirections[messages.Message], message: messages.Message) -> None:
         directive = RequestDirective.from_message(message)
         for request in self.requests:
             goals.todos.record_directive(request, directive)
@@ -217,7 +211,7 @@ class OwnerRequestAttachment(TaskAttachment):
 
 @dataclass(frozen=True)
 class UserTaskSupersession(TaskAttachment, declared_name="user_supersession"):
-    """The human's exact correction stays on its original enclosing Message.
+    """The human's exact correction stays on its original enclosing messages.Message.
 
     This event retires a declared choice; it does not infer replacement valid
     alternatives, mint a model turn, or rewrite the original author's record.
@@ -228,13 +222,13 @@ class UserTaskSupersession(TaskAttachment, declared_name="user_supersession"):
     def require_user_supersession(self) -> UserTaskSupersession:
         return self
 
-    def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
+    def root_source(self, message: messages.Message, originals: dict[MessageReference, messages.Message]) -> messages.Message:
         return self.change.root_source(message, originals)
 
     def current_roots(
         self,
-        message: Message,
-        originals: dict[MessageReference, Message],
+        message: messages.Message,
+        originals: dict[MessageReference, messages.Message],
         owner: TaskOwner,
         registry: TaskRegistry[TaskOwner],
     ):
@@ -244,27 +238,25 @@ class UserTaskSupersession(TaskAttachment, declared_name="user_supersession"):
             return ()
         return (self.root_source(message, originals),)
 
-    def revises_after(self, previous: Message) -> bool:
+    def revises_after(self, previous: messages.Message) -> bool:
         return True
 
-    def require_publication(self, sender: str, registry: TaskRegistry[TaskOwner], original_source: BusReader) -> None:
+    def require_publication(self, sender: str, registry: TaskRegistry[TaskOwner], original_source: MessageReferencesRead[messages.Message]) -> None:
         registry.require(sender).role.require_user(
             RelationViolationError("A task revision requires the original human sender")
         )
         previous = self.change.require_original(original_source).task.require_scoped_task()
         previous.require_user_revision(sender, registry)
 
-    def user_task_facts(self, message: Message):
-        from agent_comms.retained_task_facts import UserTaskCorrectionFact
-
-        return (UserTaskCorrectionFact(message),)
+    def user_task_facts(self, message: messages.Message):
+        return (task_facts.UserTaskCorrectionFact(message),)
 
 
 @dataclass(frozen=True)
 class UserTaskDrop(UserTaskSupersession):
     """A human explicitly retires the original declaration without a new wording."""
 
-    def selected_sources(self, message: Message) -> tuple[Message, ...]:
+    def selected_sources(self, message: messages.Message) -> tuple[messages.Message, ...]:
         return ()
 
 
@@ -281,10 +273,10 @@ class ScopedTaskDeclaration(TaskAttachment):
         return self
 
     @abstractmethod
-    def require_previous(self, original: Message) -> ScopedTaskDeclaration: ...
+    def require_previous(self, original: messages.Message) -> ScopedTaskDeclaration: ...
 
     @abstractmethod
-    def retained_task_facts(self, message: Message): ...
+    def retained_task_facts(self, message: messages.Message): ...
 
     @abstractmethod
     def applies(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> bool: ...
@@ -305,22 +297,22 @@ class ScopedTaskDeclaration(TaskAttachment):
     def require_user_revision(self, sender: str, registry: RegistryNames[ThreadIdentitySource]) -> None:
         pass
 
-    def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
+    def root_source(self, message: messages.Message, originals: dict[MessageReference, messages.Message]) -> messages.Message:
         return self.change.root_source(message, originals)
 
-    def current_roots(self, message: Message, originals: dict[MessageReference, Message], owner: TaskOwner, registry: TaskRegistry[TaskOwner]):
+    def current_roots(self, message: messages.Message, originals: dict[MessageReference, messages.Message], owner: TaskOwner, registry: TaskRegistry[TaskOwner]):
         if not self.applies(owner, registry):
             return ()
         return (self.root_source(message, originals),)
 
-    def revises_after(self, previous: Message) -> bool:
+    def revises_after(self, previous: messages.Message) -> bool:
         return previous.task.permits_agent_revision
 
     def require_sender(self, sender: str):
         if self.author.name != sender:
             raise RelationViolationError("Task declaration does not belong to this message author")
 
-    def require_correction(self, original: Message, registry: TaskRegistry[TaskOwner]) -> None:
+    def require_correction(self, original: messages.Message, registry: TaskRegistry[TaskOwner]) -> None:
         previous = self.require_previous(original)
         if previous.author.resolved(registry) != self.author.resolved(registry):
             raise RelationViolationError("An agent cannot correct another author's task declaration")
@@ -373,7 +365,7 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
             raise RelationViolationError("Task declaration's original turn is no longer authorized")
         self.scope.require_current(owner)
 
-    def require_publication(self, sender: str, registry: TaskRegistry[TaskOwner], original_source: BusReader):
+    def require_publication(self, sender: str, registry: TaskRegistry[TaskOwner], original_source: MessageReferencesRead[messages.Message]):
         author = registry.require(sender)
         author.require_publication_turn(partial(registry.claim_generation, sender), self.source_turn_id)
         self.require_emission(author)
@@ -394,7 +386,7 @@ class Subtask(ModelTaskDeclaration):
     def require_subtask(self):
         return self
 
-    def require_previous(self, original: Message) -> Subtask:
+    def require_previous(self, original: messages.Message) -> Subtask:
         return original.task.require_subtask()
 
     def turn_scope_matches(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> bool:
@@ -403,10 +395,8 @@ class Subtask(ModelTaskDeclaration):
     def applies(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> bool:
         return super().applies(owner, registry) and self.turn_scope_matches(owner, registry)
 
-    def retained_task_facts(self, message: Message):
-        from agent_comms.retained_task_facts import SubtaskTaskFact
-
-        return (SubtaskTaskFact(message),)
+    def retained_task_facts(self, message: messages.Message):
+        return (task_facts.SubtaskTaskFact(message),)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -427,13 +417,13 @@ class HumanConstraintPin(ScopedTaskDeclaration):
     def require_human_constraint(self):
         return self
 
-    def annotation_rules(self, message: Message, facts: RetainedTaskFacts) -> tuple[str, ...]:
+    def annotation_rules(self, message: messages.Message, facts: task_facts.RetainedTaskFacts) -> tuple[str, ...]:
         return (self.original_wording(facts.original_text_source(message.reference)),)
 
-    def require_previous(self, original: Message) -> HumanConstraintPin:
+    def require_previous(self, original: messages.Message) -> HumanConstraintPin:
         return original.task.require_human_constraint()
 
-    def require_correction(self, original: Message, registry: TaskRegistry[TaskOwner]) -> None:
+    def require_correction(self, original: messages.Message, registry: TaskRegistry[TaskOwner]) -> None:
         super().require_correction(original, registry)
         if self.require_previous(original).recipient.resolved(registry) != self.recipient.resolved(registry):
             raise RelationViolationError("USER pin correction must preserve its recipient")
@@ -442,10 +432,10 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         if self.author.resolved(registry) != registry.require(sender).incarnation:
             raise RelationViolationError("A USER cannot revise another human's constraint")
 
-    def revises_after(self, previous: Message) -> bool:
+    def revises_after(self, previous: messages.Message) -> bool:
         return True
 
-    def lineage_reference(self, root: Message) -> MessageReference:
+    def lineage_reference(self, root: messages.Message) -> MessageReference:
         return self.subject
 
     def applies(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> bool:
@@ -453,7 +443,7 @@ class HumanConstraintPin(ScopedTaskDeclaration):
                 and self.recipient.resolved(registry) == owner.incarnation
                 and self.scope.applies(owner, partial(self.turn_scope_matches, owner, registry)))
 
-    def original_text_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
+    def original_text_source(self, message: messages.Message, originals: dict[MessageReference, messages.Message]) -> messages.Message:
         try:
             return originals[self.subject]
         except KeyError as error:
@@ -463,7 +453,7 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         if not self.recipient.matches_recorded_name(target, registry):
             raise RelationViolationError("USER pin must address its original recipient")
 
-    def require_publication(self, sender: str, registry: TaskRegistry[TaskOwner], original_source: BusReader):
+    def require_publication(self, sender: str, registry: TaskRegistry[TaskOwner], original_source: MessageReferencesRead[messages.Message]):
         registry.require(sender).role.require_user(
             RelationViolationError("A USER pin requires the original human sender")
         )
@@ -475,7 +465,7 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         self.scope.require_human_context(owner)
         self.change.require_publication(self, registry, original_source)
 
-    def require_wording_publication(self, registry: TaskRegistry[TaskOwner], original_source: BusReader) -> None:
+    def require_wording_publication(self, registry: TaskRegistry[TaskOwner], original_source: MessageReferencesRead[messages.Message]) -> None:
         delivery, = original_source.deliveries_for_references((self.subject,))
         delivery.message.sender_role.require_user(
             RelationViolationError("Original wording must come from a human sender")
@@ -485,12 +475,10 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         if not delivery.includes_lookup(self.recipient.lookup):
             raise RelationViolationError("USER pin recipient did not receive its original message")
 
-    def user_task_facts(self, message: Message):
-        from agent_comms.retained_task_facts import HumanConstraintTaskFact
+    def user_task_facts(self, message: messages.Message):
+        return (task_facts.HumanConstraintTaskFact(message),)
 
-        return (HumanConstraintTaskFact(message),)
-
-    def retained_task_facts(self, message: Message):
+    def retained_task_facts(self, message: messages.Message):
         return ()
 
 
@@ -504,27 +492,22 @@ class NativeInputConstraintPin(HumanConstraintPin):
         super().__post_init__()
         self.subject.require_human_input()
 
-    def original_wording(self, original: StoredInput) -> str:
+    def original_wording(self, original: input_attempt.StoredInput) -> str:
         return original.source_text
 
-    def original_wording_context_source(self, original: StoredInput) -> Provenance:
+    def original_wording_context_source(self, original: input_attempt.StoredInput) -> Provenance:
         return original.context_provenance()
 
-    def original_input_sources(self, inputs: InputDispositions) -> tuple[StoredInput, ...]:
+    def original_input_sources(self, inputs: InputLookup[input_attempt.InputAttempt]) -> tuple[input_attempt.StoredInput, ...]:
         return (self.subject.require_human_input().require_original(inputs),)
 
-    def original_wording_provenance(self, original: StoredInput) -> dict[str, object]:
+    def original_wording_provenance(self, original: input_attempt.StoredInput) -> dict[str, object]:
         origin = original.origin.require_human()
         return dict(wording=FieldCodec.encode(original.context_provenance()),
                     author=origin.author.sender, author_role=FieldCodec.encode(UserThreadRole))
 
-    def require_wording_publication(self, registry: TaskRegistry[TaskOwner], original_source: BusReader) -> None:
-        from agent_comms.input_disposition import InputDispositions
-        from agent_comms.registry.registry_store import RegistryStore
-
-        privacy = RegistryStore.at(original_source.path.parent).privacy()
-        row = self.subject.require_human_input().require_original(
-            InputDispositions(original_source.path.parent))
+    def require_wording_publication(self, registry: TaskRegistry[TaskOwner], original_source: InputPublicationRead[Provenance, input_attempt.StoredInput]) -> None:
+        privacy, row = original_source.input_publication(self.subject)
         origin = row.origin.require_human()
         if origin.root_id != privacy.namespace:
             raise RelationViolationError("USER input pin belongs to another wire root")
@@ -545,13 +528,11 @@ class Decision(ModelTaskDeclaration, declared_name="choice"):
     def require_decision(self):
         return self
 
-    def require_previous(self, original: Message) -> Decision:
+    def require_previous(self, original: messages.Message) -> Decision:
         return original.task.require_decision()
 
-    def retained_task_facts(self, message: Message):
-        from agent_comms.retained_task_facts import DecisionTaskFact
-
-        return (DecisionTaskFact(message),)
+    def retained_task_facts(self, message: messages.Message):
+        return (task_facts.DecisionTaskFact(message),)
 
     def __post_init__(self):
         super().__post_init__()
@@ -570,18 +551,16 @@ class Decision(ModelTaskDeclaration, declared_name="choice"):
 
 @dataclass(frozen=True, kw_only=True)
 class Constraint(ModelTaskDeclaration):
-    """Explicit constraint membership; exact wording belongs to Message.body only."""
+    """Explicit constraint membership; exact wording belongs to messages.Message.body only."""
 
     def require_constraint(self):
         return self
 
-    def require_previous(self, original: Message) -> Constraint:
+    def require_previous(self, original: messages.Message) -> Constraint:
         return original.task.require_constraint()
 
-    def retained_task_facts(self, message: Message):
-        from agent_comms.retained_task_facts import ConstraintTaskFact
-
-        return (ConstraintTaskFact(message),)
+    def retained_task_facts(self, message: messages.Message):
+        return (task_facts.ConstraintTaskFact(message),)
 
 
 from agent_comms.execution.turn_context import ContextSegment
@@ -605,7 +584,7 @@ class AnnotationDisclosureGrant(HumanConstraintPin):
     def require_annotation_grant(self):
         return self
 
-    def annotation_rules(self, message: Message, facts: RetainedTaskFacts) -> tuple[str, ...]:
+    def annotation_rules(self, message: messages.Message, facts: task_facts.RetainedTaskFacts) -> tuple[str, ...]:
         # Permission to spend/disclose is not a rule to classify as instructions.
         return ()
 
@@ -620,3 +599,6 @@ class AnnotationDisclosureGrant(HumanConstraintPin):
     def require_budget(self, submitted: int) -> None:
         if submitted >= self.per_hour:
             raise AnnotationBudgetExhausted("Original disclosure grant's hourly request budget is exhausted")
+
+from agent_comms import input_attempt, retained_task_facts as task_facts
+from agent_comms.messaging import messages

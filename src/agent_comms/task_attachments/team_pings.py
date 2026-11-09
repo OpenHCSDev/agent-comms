@@ -39,6 +39,7 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.locked_store import DocumentChange, DurableFile, LockedStore, PatternFile
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 from agent_comms.task_attachments.owner_notices import OwnerNotice
+from agent_comms.task_callbacks import TeamObservation
 from agent_comms.team.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.text_digest import TextDigest
 from agent_comms.ui_model.message_category import HeartbeatCategory, MessageCategory
@@ -242,7 +243,7 @@ class PublishedFacts(PublicationFacts):
 
 
 @dataclass(frozen=True)
-class TeamUpdate(OwnerNotice, declared_name=None):
+class TeamUpdate(OwnerNotice, TeamObservation, declared_name=None):
     teammate: ThreadIncarnation
     handled: tuple[Ping, ...]
     not_applied: tuple[str, ...] = field(default=(), kw_only=True)
