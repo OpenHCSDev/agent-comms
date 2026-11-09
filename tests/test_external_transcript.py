@@ -4,7 +4,6 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.execution.transcript_sources import NoDraft
 from agent_comms.execution.turn_bound import LastTurns
 from agent_comms.execution.turn_item import (
     NativeItemId,
@@ -14,6 +13,7 @@ from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transcript.transcript_drafts import NoDraft
 from agent_comms.transcript.transcript_events import AssistantTranscript, NoticeTranscript
 from agent_comms.transcript.transcripts import (
     LatestPage,

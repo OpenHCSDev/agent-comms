@@ -34,7 +34,7 @@ from agent_comms.messaging.published_messages import ReadsPublishedMessages
 from agent_comms.messaging.sent_message import AssignedSourceIdentity, PublishedSentMessage
 from agent_comms.messaging.sent_reports import ResolvesSentReports
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, NullMember
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.registry.thread_identity import (
     RecordedThreadIncarnation,
     ThreadIdentitySource,
@@ -42,9 +42,9 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.storage.private_path import FileIdentity, MissingFile
 from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
-from agent_comms.storage.typed_table import StoreWriter
 from agent_comms.team.rule_deal import Mute, Speaking, Voice
 from agent_comms.transcript.external_transcript_rows import ExternalPageRow
+from agent_comms.transcript.transcript_drafts import NoDraft, TranscriptDraft
 from agent_comms.transcript.transcript_events import (
     IncomingTranscript,
     SentTranscript,
@@ -343,19 +343,6 @@ class LaterTranscript(TranscriptTraversal):
         self, initial: TranscriptCursor, consumed: TranscriptCursor,
     ) -> tuple[TranscriptCursor, TranscriptCursor]:
         return initial, consumed
-
-
-class TranscriptDraft:
-    def end_turn(self, transcript: StoreWriter) -> None:
-        """An absent draft needs no write."""
-
-    def publish(self, transcript: StoreWriter) -> None:
-        """An absent draft needs no publication."""
-
-
-@dataclass(frozen=True, slots=True)
-class NoDraft(NullMember, TranscriptDraft):
-    """No external draft: the ACP draft field is absent on the wire."""
 
 
 class TranscriptSource(ReadsPublishedMessages, ResolvesSentReports):

@@ -19,10 +19,7 @@ from typing import Annotated, ClassVar
 
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
-from agent_comms.execution.transcript_sources import (
-    TranscriptDraft,
-    TranscriptSource,
-)
+from agent_comms.execution.transcript_sources import TranscriptSource
 from agent_comms.execution.turn_bound import TurnBound
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.messaging.message_reference import MessageReference
@@ -57,6 +54,7 @@ from agent_comms.transcript.external_transcript_rows import (
     NoItems,
     ReplyWindow,
 )
+from agent_comms.transcript.transcript_drafts import TranscriptDraft
 from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     ToolStartTranscript,
