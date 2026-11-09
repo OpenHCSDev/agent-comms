@@ -6,14 +6,12 @@ from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .errors import RelationViolationError
-from .goals import (
-    GoalDeclaration,
-    GoalRevision,
-)
-from .nominal.declared_family import DeclaredFamily
-from .projects.checkouts import Checkout
-from .task_scope_owner import TaskScopeOwner
+from agent_comms.errors import RelationViolationError
+from agent_comms.planning.goals import GoalDeclaration
+from agent_comms.planning.goals import GoalRevision
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.task_scope_owner import TaskScopeOwner
 
 
 @dataclass(frozen=True, kw_only=True)

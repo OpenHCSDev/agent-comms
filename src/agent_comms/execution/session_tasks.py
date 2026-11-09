@@ -9,9 +9,9 @@ from collections.abc import (
 )
 from dataclasses import dataclass
 
-from ..agent_backend import AgentBackend
-from ..child_process import join_retirement
-from ..watched import ChangeSignal
+from agent_comms.agent_backend import AgentBackend
+from agent_comms.execution.child_process import join_retirement
+from agent_comms.watched import ChangeSignal
 
 
 class BackgroundTask:

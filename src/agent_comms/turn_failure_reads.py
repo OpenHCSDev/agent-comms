@@ -4,7 +4,7 @@ from collections.abc import Collection
 from sqlite3 import Connection
 from typing import Protocol
 
-from .attempt_resolution import RecordedResolution
+from agent_comms.attempt_resolution import RecordedResolution
 
 
 class ModelFailureDiagnostic[Failure](Protocol):

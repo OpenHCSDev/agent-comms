@@ -11,29 +11,52 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from typing import Annotated, ClassVar, Self
 
-from . import errors
-from .attempt_resolution import AttemptResolution, GoalCleared, NoResolution, WorkDecision
-from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
-from .goal_attempt_phase import FailedAttempt, GoalAttemptPhase, ResolvedAttempt
-from .goal_failure_observation import GoalFailureEvidence, NoFailedTurnEvidence
-from .goal_generation import BlockedGeneration, GenerationState, ReadyGeneration, ReservedGeneration
-from .goal_mutation import GoalFailureProjection
-from .goal_turn_permit import GoalTurnPermit
-from .goal_work import GoalFailureOwner
-from .goals import Goal
-from .lifecycle_capability import Failed
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import AttemptId, AttemptToken, GoalId, MalformedRecord, NoAttemptId, TurnId
-from .projects.checkouts import Checkout
-from .storage.typed_table import (
-    LOCAL_TABLE_SOURCE, Column, DurableTables, Generated, RowNotFoundError,
-    ForeignKey, TableReference, TableSource, TextStorage, TypedTable,
-)
-from .thread_identity import (
-    ClaimedIdentity, RecordedThreadIncarnation, ThreadIncarnation, TurnFence, TurnIdentity,
-)
-from .turn_failure import TurnFailure
-from .turn_item import UsageChargeId
+from agent_comms import errors
+from agent_comms.attempt_resolution import AttemptResolution
+from agent_comms.attempt_resolution import GoalCleared
+from agent_comms.attempt_resolution import NoResolution
+from agent_comms.attempt_resolution import WorkDecision
+from agent_comms.planning.goal_attempt_identity import FailureNotObserved
+from agent_comms.planning.goal_attempt_identity import GoalAttemptIdentity
+from agent_comms.planning.goal_attempt_phase import FailedAttempt
+from agent_comms.planning.goal_attempt_phase import GoalAttemptPhase
+from agent_comms.planning.goal_attempt_phase import ResolvedAttempt
+from agent_comms.planning.goal_failure_observation import GoalFailureEvidence
+from agent_comms.planning.goal_failure_observation import NoFailedTurnEvidence
+from agent_comms.planning.goal_generation import BlockedGeneration
+from agent_comms.planning.goal_generation import GenerationState
+from agent_comms.planning.goal_generation import ReadyGeneration
+from agent_comms.planning.goal_generation import ReservedGeneration
+from agent_comms.goal_mutation import GoalFailureProjection
+from agent_comms.execution.goal_turn_permit import GoalTurnPermit
+from agent_comms.goal_work import GoalFailureOwner
+from agent_comms.planning.goals import Goal
+from agent_comms.lifecycle_capability import Failed
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import AttemptId
+from agent_comms.nominal.field_codec import AttemptToken
+from agent_comms.nominal.field_codec import GoalId
+from agent_comms.nominal.field_codec import MalformedRecord
+from agent_comms.nominal.field_codec import NoAttemptId
+from agent_comms.nominal.field_codec import TurnId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.storage.typed_table import LOCAL_TABLE_SOURCE
+from agent_comms.storage.typed_table import Column
+from agent_comms.storage.typed_table import DurableTables
+from agent_comms.storage.typed_table import Generated
+from agent_comms.storage.typed_table import RowNotFoundError
+from agent_comms.storage.typed_table import ForeignKey
+from agent_comms.storage.typed_table import TableReference
+from agent_comms.storage.typed_table import TableSource
+from agent_comms.storage.typed_table import TextStorage
+from agent_comms.storage.typed_table import TypedTable
+from agent_comms.registry.thread_identity import ClaimedIdentity
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_identity import TurnFence
+from agent_comms.registry.thread_identity import TurnIdentity
+from agent_comms.execution.turn_failure import TurnFailure
+from agent_comms.execution.turn_item import UsageChargeId
 
 
 class GoalLedgerTable(DurableTables):

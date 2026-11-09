@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from agent_comms.order_phase import UnplannedPhase
-from agent_comms.plan_phases import RetainedStorePhase
+from agent_comms.planning.plan_phases import RetainedStorePhase
 
 
 def test_stored_order_schema_and_phase_decode_acquire_their_declarations() -> None:

@@ -3,8 +3,8 @@
 from pathlib import Path
 from typing import Protocol, Self
 
-from ..projects.checkouts import RepositoryReads
-from ..thread_presentation import ThreadOwnerBinding
+from agent_comms.projects.checkouts import RepositoryReads
+from agent_comms.registry.thread_presentation import ThreadOwnerBinding
 
 
 class ThreadCheckoutSource[Owner](Protocol):

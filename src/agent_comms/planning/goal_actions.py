@@ -1,6 +1,5 @@
 """Goal commands own behavior; one parent owns CAS, publication and actor checks."""
 
-from __future__ import annotations
 
 import time
 from abc import abstractmethod
@@ -45,7 +44,7 @@ from agent_comms.planning.goal_states import (
     RuntimePause,
 )
 from agent_comms.planning.goal_wait_recovery import GoalInputReview
-from agent_comms.planning.goal_waits import GoalInputReview, GoalWaits, RecordedGoalWait
+from agent_comms.planning.goal_waits import GoalWaits, RecordedGoalWait
 from agent_comms.planning.goals import (
     Goal,
     GoalChangedError,

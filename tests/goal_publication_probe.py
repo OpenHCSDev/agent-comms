@@ -14,7 +14,7 @@ from agent_comms.execution.session_lifecycle import SessionLifecycle
 from agent_comms.acp import SdkSessionConnection
 from agent_comms.session_owner_reads import OwnedSessionLifetime, SessionTaskOwner
 from agent_comms.session_reads import SessionClient
-from agent_comms.turn_runner import TurnRunner
+from agent_comms.execution.turn_runner import TurnRunner
 from agent_comms.following_input_contracts import FollowingInputRetirement, FollowingPromptBoundary, FollowingTurnSource
 from agent_comms.following_inputs import OwnerFollowingInputs
 from agent_comms.native_execution import NativeExecution
@@ -22,10 +22,11 @@ from agent_comms.private_send_claim import PrivateSendClaim
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.queue_publication import QueuePublication
 from agent_comms.planning.goal_waits import GoalWait
-from agent_comms.goal_records import GoalRecords
+from agent_comms.planning.goal_records import GoalRecords
 from agent_comms.transport.tools.goals import CommsGoalTool
-from agent_comms.goal_management import Goals
-from agent_comms.goal_presentation import GoalSnapshot, RunnableExecution
+from agent_comms.planning.goal_management import Goals
+from agent_comms.planning.goal_presentation import GoalSnapshot
+from agent_comms.planning.goal_presentation import RunnableExecution
 from agent_comms.nominal.field_codec import FieldCodec
 
 assert get_type_hints(RunnableExecution.apply_toggle)["change"]

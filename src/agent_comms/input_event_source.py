@@ -3,8 +3,9 @@
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 
-from .nominal.field_codec import AcpSessionId, InputId
-from .started_input import StartedInput
+from agent_comms.nominal.field_codec import AcpSessionId
+from agent_comms.nominal.field_codec import InputId
+from agent_comms.started_input import StartedInput
 
 
 class InputEventState(ABC):

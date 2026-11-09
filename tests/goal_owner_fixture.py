@@ -11,10 +11,10 @@ import pytest
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms, wire
 from agent_comms.execution.owned_turn import OwnedTurn
-from agent_comms.native_arguments import GivenBinary
-from agent_comms.native_package import VerifiedNativePackage
+from agent_comms.execution.native_arguments import GivenBinary
+from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import AcpSessionId
-from agent_comms.turn_input_source import NoTurnAcceptance
+from agent_comms.execution.turn_input_source import NoTurnAcceptance
 from agent_comms.projects.storage_rules import StorageRule
 
 

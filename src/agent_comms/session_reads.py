@@ -6,9 +6,10 @@ from collections.abc import Awaitable, Callable
 from acp.schema import PermissionOption, RequestPermissionResponse, ToolCallUpdate
 from pydantic import JsonValue
 
-from .controller import Controller, SessionUpdateSink
+from agent_comms.controller import Controller
+from agent_comms.controller import SessionUpdateSink
 
-from .nominal.field_codec import AcpSessionId
+from agent_comms.nominal.field_codec import AcpSessionId
 
 
 class SessionConfigurationSource[Proxy](ABC):

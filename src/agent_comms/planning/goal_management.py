@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from functools import cached_property
 
-from agent_comms.agent_events import GoalChange, GoalChanged, GoalUnchanged
+from agent_comms.agent_activity import AgentActivity
 from agent_comms.context_segments.wake_values import (
     NoWakeGoalContext,
     WakeGoalContext,

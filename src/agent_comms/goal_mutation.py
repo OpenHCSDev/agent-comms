@@ -4,10 +4,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Protocol
 
-from .attempt_resolution import WorkDecision
-from .goal_attempt_identity import GoalAttemptIdentity
-from .goal_turn_permit import GoalTurnPermit
-from .nominal.field_codec import AttemptId, GoalId
+from agent_comms.attempt_resolution import WorkDecision
+from agent_comms.planning.goal_attempt_identity import GoalAttemptIdentity
+from agent_comms.execution.goal_turn_permit import GoalTurnPermit
+from agent_comms.nominal.field_codec import AttemptId
+from agent_comms.nominal.field_codec import GoalId
 
 
 class GoalMutation[Subject, Context, Result](ABC):

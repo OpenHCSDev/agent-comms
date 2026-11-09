@@ -2,10 +2,10 @@
 
 from abc import ABC, abstractmethod
 
-from .native_prompt_send import PromptBoundary
-from .nominal.field_codec import AcpSessionId
-from .pi_commands import Prompt
-from .turn_inbox import TurnInbox
+from agent_comms.execution.native_prompt_send import PromptBoundary
+from agent_comms.nominal.field_codec import AcpSessionId
+from agent_comms.pi_commands import Prompt
+from agent_comms.execution.turn_inbox import TurnInbox
 
 
 class FollowingInputRetirement(ABC):

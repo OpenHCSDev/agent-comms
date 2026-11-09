@@ -2,7 +2,8 @@
 
 from abc import ABC, abstractmethod
 
-from .goals import Goal, GoalDeclaration
+from agent_comms.planning.goals import Goal
+from agent_comms.planning.goals import GoalDeclaration
 
 
 class GoalControlSource[Authority, Action](ABC):

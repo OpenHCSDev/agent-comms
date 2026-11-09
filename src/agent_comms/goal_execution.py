@@ -6,18 +6,16 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
-from .goals import (
-    Goal,
-    GoalCheckpoint,
-)
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import GoalId
-from .thread_presentation import ThreadPresentation
-from .ui_model.goal import GoalExecutionDisplay
+from agent_comms.planning.goals import Goal
+from agent_comms.planning.goals import GoalCheckpoint
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import GoalId
+from agent_comms.registry.thread_presentation import ThreadPresentation
+from agent_comms.ui_model.goal import GoalExecutionDisplay
 
 
 class GoalExecution(DeclaredFamily, GoalExecutionDisplay[Goal], affix="Execution",
-                    discovery_package="agent_comms.goal_presentation"):
+                    discovery_package='agent_comms.planning.goal_presentation'):
     """The complete execution family consumed by commands, views and the teammate."""
 
     def details_heading(self, heading: str) -> str:

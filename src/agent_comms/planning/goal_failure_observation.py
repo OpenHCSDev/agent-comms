@@ -1,6 +1,5 @@
 """Failure readings used by goal execution; stored rows live in goal_ledger."""
 
-from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass

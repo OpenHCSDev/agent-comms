@@ -3,10 +3,11 @@
 from abc import ABC, abstractmethod
 from typing import Protocol, Self
 
-from .child_process import ProcessState
-from .nominal.field_codec import GoalId
-from .projects.checkouts import Checkout
-from .thread_identity import ObservedTurn, ThreadIncarnation
+from agent_comms.execution.child_process import ProcessState
+from agent_comms.nominal.field_codec import GoalId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import ObservedTurn
+from agent_comms.registry.thread_identity import ThreadIncarnation
 
 
 class GoalObservation(Protocol):

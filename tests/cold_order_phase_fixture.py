@@ -8,7 +8,7 @@ from agent_comms.planning.orders import PendingProblemOrder
 
 
 def main() -> None:
-    print("Plan definitions loaded before schema:", "agent_comms.plan_phases" in sys.modules, flush=True)
+    print("Plan definitions loaded before schema:", 'agent_comms.planning.plan_phases' in sys.modules, flush=True)
     # The real stored order schema must acquire its phase declarations too.
     FieldCodec.record_schema(PendingProblemOrder)
     schema = FieldCodec.value_schema(type[OrderPhase])

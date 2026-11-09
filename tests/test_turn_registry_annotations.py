@@ -4,12 +4,10 @@ from typing import get_type_hints
 
 import pytest
 
-from agent_comms.turn_lease import (
-    FinishedTurnFence,
-    NoFinishedTurn,
-    StoredTurnRecord,
-    TurnCompletion,
-)
+from agent_comms.execution.turn_lease import FinishedTurnFence
+from agent_comms.execution.turn_lease import NoFinishedTurn
+from agent_comms.execution.turn_lease import StoredTurnRecord
+from agent_comms.execution.turn_lease import TurnCompletion
 
 
 @pytest.mark.parametrize("callback", (

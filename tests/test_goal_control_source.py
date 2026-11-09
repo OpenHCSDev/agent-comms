@@ -2,12 +2,17 @@
 
 import pytest
 
-from agent_comms.goal_actions import (
-    ActiveGoalAction, ClearGoalAction, CompletedGoalAction, GoalAction,
-    PausedGoalAction, RetryGoalAction, SetGoalAction,
-)
+from agent_comms.planning.goal_actions import ActiveGoalAction
+from agent_comms.planning.goal_actions import ClearGoalAction
+from agent_comms.planning.goal_actions import CompletedGoalAction
+from agent_comms.planning.goal_actions import GoalAction
+from agent_comms.planning.goal_actions import PausedGoalAction
+from agent_comms.planning.goal_actions import RetryGoalAction
+from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.goal_control import GoalControlSource
-from agent_comms.goals import Goal, GoalDeclaration, NoGoal
+from agent_comms.planning.goals import Goal
+from agent_comms.planning.goals import GoalDeclaration
+from agent_comms.planning.goals import NoGoal
 from agent_comms.nominal.field_codec import GoalId
 
 

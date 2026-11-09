@@ -4,10 +4,11 @@ import asyncio
 from abc import abstractmethod
 from contextlib import AbstractAsyncContextManager
 
-from .config_options import ConfigOptions
-from .execution.session_tasks import TurnTask
-from .session_reads import OwnedObservation, SessionIdentity
-from .thread_identity import OwnerIdentity
+from agent_comms.config_options import ConfigOptions
+from agent_comms.execution.session_tasks import TurnTask
+from agent_comms.session_reads import OwnedObservation
+from agent_comms.session_reads import SessionIdentity
+from agent_comms.registry.thread_identity import OwnerIdentity
 
 
 class SessionTaskOwner(SessionIdentity):

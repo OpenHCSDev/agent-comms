@@ -2,8 +2,8 @@
 
 from abc import ABC, abstractmethod
 
-from .controller import SessionUpdateSink
-from .nominal.field_codec import AcpSessionId
+from agent_comms.controller import SessionUpdateSink
+from agent_comms.nominal.field_codec import AcpSessionId
 
 
 class QueuePublication(ABC):

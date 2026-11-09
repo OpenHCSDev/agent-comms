@@ -2,8 +2,8 @@
 
 from abc import ABC, abstractmethod
 
-from .goal_turn_permit import GoalTurnPermit
-from .nominal.field_codec import GoalId
+from agent_comms.execution.goal_turn_permit import GoalTurnPermit
+from agent_comms.nominal.field_codec import GoalId
 
 
 class GoalPermitSource(ABC):

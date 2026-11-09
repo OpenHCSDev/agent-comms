@@ -10,19 +10,17 @@ from typing import ClassVar
 
 from pydantic import JsonValue
 
-from ..annotation_disclosure import PublicInstructionAnnotations
-from ..pi_payloads import PiMessage
-from ..turn_context import (
-    ContextEntryManifest,
-    ContextEntryReference,
-    ContextSpan,
-    ContributionCoordinates,
-    MeasuredNativeSegment,
-    RecordedSegmentManifest,
-    SegmentManifest,
-    SegmentRecording,
-    UnrecordedSegment,
-)
+from agent_comms.annotation_disclosure import PublicInstructionAnnotations
+from agent_comms.pi_payloads import PiMessage
+from agent_comms.execution.turn_context import ContextEntryManifest
+from agent_comms.execution.turn_context import ContextEntryReference
+from agent_comms.execution.turn_context import ContextSpan
+from agent_comms.execution.turn_context import ContributionCoordinates
+from agent_comms.execution.turn_context import MeasuredNativeSegment
+from agent_comms.execution.turn_context import RecordedSegmentManifest
+from agent_comms.execution.turn_context import SegmentManifest
+from agent_comms.execution.turn_context import SegmentRecording
+from agent_comms.execution.turn_context import UnrecordedSegment
 
 
 @dataclass(frozen=True, kw_only=True)

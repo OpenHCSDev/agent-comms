@@ -2,8 +2,8 @@
 
 from abc import ABC, abstractmethod
 
-from .goals import GoalDeclaration
-from .projects.checkouts import Checkout
+from agent_comms.planning.goals import GoalDeclaration
+from agent_comms.projects.checkouts import Checkout
 
 
 class TaskScopeOwner[Scope](ABC):

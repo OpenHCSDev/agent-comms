@@ -2,8 +2,9 @@
 
 from dataclasses import dataclass
 
-from .nominal.field_codec import ThreadLookup, WireValue
-from .thread_identity import RecordedThreadIncarnation
+from agent_comms.nominal.field_codec import ThreadLookup
+from agent_comms.nominal.field_codec import WireValue
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 
 
 @dataclass(frozen=True, slots=True)

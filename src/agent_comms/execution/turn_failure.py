@@ -1,6 +1,5 @@
 """Turn failure precedence, presentation and uncertain delivery in one owner."""
 
-from __future__ import annotations
 
 import re
 import signal

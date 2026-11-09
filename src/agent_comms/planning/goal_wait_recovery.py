@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import (
-    dataclass,
-    replace,
-)
+from dataclasses import dataclass, replace
 
+from agent_comms.agent_activity import AgentActivity
+from agent_comms.errors import UnregisteredThreadError
+from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.turn_lease import TurnCompletion, TurnLease
+from agent_comms.goal_wait_target import GoalWaitTarget
+from agent_comms.input_attempt import StoredInput, UnresolvedInput
+from agent_comms.input_key import InputKey
+from agent_comms.message_reference import MessageReference
 from agent_comms.messaging.published_bus import PublishedBus
-
-from .goal_waits import (
+from agent_comms.nominal.field_codec import GoalId
+from agent_comms.planning.goal_waits import (
     ExcludedInput,
     GoalWait,
     GoalWaits,
@@ -18,26 +23,11 @@ from .goal_waits import (
     OwnerInputWithoutBusSequenceExclusion,
     StandbyReview,
 )
-from ..agent_activity import AgentActivity
-from ..errors import UnregisteredThreadError
-from ..goal_wait_target import GoalWaitTarget
-from ..input_attempt import (
-    StoredInput,
-    UnresolvedInput,
-)
-from ..input_key import InputKey
-from ..message_reference import MessageReference
-from ..native_input_owner import RegistryOwner
-from ..nominal.field_codec import GoalId
-from ..registry.registration import Registration
-from ..registry.registry_document import RegistrySnapshot
-from ..registry.registry_store import RegistryEdit
-from ..registry.threads import Thread
-from ..thread_identity import RecordedThreadIncarnation
-from ..turn_lease import (
-    TurnCompletion,
-    TurnLease,
-)
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_store import RegistryEdit
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.threads import Thread
 
 
 @dataclass(frozen=True, slots=True)
