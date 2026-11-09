@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.execution.native_pi import NativePiRpcLaunch
 from agent_comms.pi_native_backend import PersistentPiSession

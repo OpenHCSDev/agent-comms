@@ -1,4 +1,5 @@
-from agent_comms.input_key import BusInputKey, OwnedBusInputKey
+from agent_comms.execution.input_key import BusInputKey
+from agent_comms.execution.input_key import OwnedBusInputKey
 from agent_comms.messaging.messages import ConversationRole, InfoKind, Message
 from agent_comms.messaging.response_policy import ResponseEligibility, ResponsePolicy
 from agent_comms.messaging.routing import ScheduledTurn

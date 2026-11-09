@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from agent_comms.harness_delivery_states import Outcome
+from agent_comms.cli_bridges.harness_delivery_states import Outcome
 
 
 class DeliversInput[Message](ABC):

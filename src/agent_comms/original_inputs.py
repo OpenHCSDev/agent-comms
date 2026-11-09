@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 
 from agent_comms.input_attempt import StoredInput
-from agent_comms.input_key import InputKey
+from agent_comms.execution.input_key import InputKey
 
 
 class OriginalInputs(ABC):

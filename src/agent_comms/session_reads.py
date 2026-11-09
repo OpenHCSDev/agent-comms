@@ -6,8 +6,8 @@ from collections.abc import Awaitable, Callable
 from acp.schema import PermissionOption, RequestPermissionResponse, ToolCallUpdate
 from pydantic import JsonValue
 
-from agent_comms.controller import Controller
-from agent_comms.controller import SessionUpdateSink
+from agent_comms.execution.controller import Controller
+from agent_comms.execution.controller import SessionUpdateSink
 
 from agent_comms.nominal.field_codec import AcpSessionId
 

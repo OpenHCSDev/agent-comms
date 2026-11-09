@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from agent_comms.controller import SessionUpdateSink
+from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.nominal.field_codec import AcpSessionId
 
 

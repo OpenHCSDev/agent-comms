@@ -8,7 +8,7 @@ importlib.import_module(sys.argv[1])
 
 from agent_comms.transport.project_request import ProjectRuntimeRequest
 from agent_comms.transport.runtime_request import RuntimeRequest
-from agent_comms.runtime_requests import ServedProjectRuntimeRequest
+from agent_comms.transport.serving.served_requests import ServedProjectRuntimeRequest
 
 request = RuntimeRequest.member_named(ProjectRuntimeRequest.declared_name)
 assert request is ProjectRuntimeRequest

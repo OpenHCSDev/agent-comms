@@ -5,7 +5,7 @@ from collections.abc import Mapping
 
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.nominal.field_codec import InputId
-from agent_comms.started_input import StartedInput
+from agent_comms.execution.started_input import StartedInput
 
 
 class InputEventState(ABC):

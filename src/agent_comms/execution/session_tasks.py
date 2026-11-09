@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from agent_comms.agent_backend import AgentBackend
 from agent_comms.execution.child_process import join_retirement
-from agent_comms.watched import ChangeSignal
+from agent_comms.messaging.watched import ChangeSignal
 
 
 class BackgroundTask:

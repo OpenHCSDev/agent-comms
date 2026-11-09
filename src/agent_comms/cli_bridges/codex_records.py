@@ -21,24 +21,23 @@ from pydantic import (
     model_validator,
 )
 
-from agent_comms.cli_protocol import Declared, OpenWire, TimestampedWire, WireHeader
+from agent_comms.cli_bridges.cli_protocol import Declared
+from agent_comms.cli_bridges.cli_protocol import OpenWire
+from agent_comms.cli_bridges.cli_protocol import TimestampedWire
+from agent_comms.cli_bridges.cli_protocol import WireHeader
 from agent_comms.execution.turn_context import HistoricalInstructionProvenance
 from agent_comms.nominal.field_codec import ToolCallId
-from agent_comms.runtime_updates import (
-    HiddenItem,
-    HistoryNotice,
-    RuntimeUpdate,
-    SessionFacts,
-    Summarized,
-)
-from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.transcript_events import (
-    AssistantTranscript,
-    ToolEndTranscript,
-    ToolStartTranscript,
-    UserTranscript,
-)
-from agent_comms.wire_models import WireModel
+from agent_comms.cli_bridges.runtime_updates import HiddenItem
+from agent_comms.cli_bridges.runtime_updates import HistoryNotice
+from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate
+from agent_comms.cli_bridges.runtime_updates import SessionFacts
+from agent_comms.cli_bridges.runtime_updates import Summarized
+from agent_comms.transport.tool_declaration import ToolDeclaration
+from agent_comms.transcript.transcript_events import AssistantTranscript
+from agent_comms.transcript.transcript_events import ToolEndTranscript
+from agent_comms.transcript.transcript_events import ToolStartTranscript
+from agent_comms.transcript.transcript_events import UserTranscript
+from agent_comms.cli_bridges.wire_models import WireModel
 
 
 @dataclass(frozen=True)

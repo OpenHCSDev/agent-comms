@@ -11,7 +11,9 @@ from typing import get_args, get_origin, get_type_hints
 import pytest
 
 from agent_comms import agent_events
-from agent_comms.acp import AcpSelectedWriteAuthority, CommsAgent, SdkSessionConnection
+from agent_comms.execution.acp import AcpSelectedWriteAuthority
+from agent_comms.execution.acp import CommsAgent
+from agent_comms.execution.acp import SdkSessionConnection
 from agent_comms.acp_extension import AgentCommsUpdate, LiveQueueScope, PromptRequest, QueueScope
 from agent_comms.agent_event_updates import AcpEventConsumer, AcpToolAction
 from agent_comms.agent_runtime import PublishesTranscript, ReadsHistory
@@ -51,13 +53,13 @@ from agent_comms.goal_ledger import FailedTurnEvidence, FailedTurnObservation, G
 from agent_comms.goal_mutation import GoalTurnProjection
 from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.goal_work import GoalFailureOwner, GoalOwner, GoalWorkSource
-from agent_comms.harness_delivery_states import Outcome
-from agent_comms.harness_install import HarnessSession
+from agent_comms.cli_bridges.harness_delivery_states import Outcome
+from agent_comms.installer.harness_install import HarnessSession
 from agent_comms.importing import ImportBuffer, ImportSnapshot
 from agent_comms.input_attempt import InputAttempt, StoredInput
 from agent_comms.input_disposition import InputDispositions, InputDocument
-from agent_comms.input_key import InputKey
-from agent_comms.input_origin import InputProvenance
+from agent_comms.execution.input_key import InputKey
+from agent_comms.execution.input_origin import InputProvenance
 from agent_comms.messaging.messages import ClaimNoticeKind, Message, MessageInput
 from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.field_codec import NullMember, PresentMember, ThreadLookup
@@ -90,20 +92,27 @@ from agent_comms.registry.threads import (
     ThreadProvenance,
 )
 from agent_comms.registry_names import RegistryNames
-from agent_comms.relationships import RelationshipSource, ThreadRelationships
+from agent_comms.registry.relationships import RelationshipSource
+from agent_comms.registry.relationships import ThreadRelationships
 from agent_comms.response_message_source import ResponseMessageSource
-from agent_comms.response_policy import ResponsePolicy
-from agent_comms.route_client import ActivityClient
-from agent_comms.routing import DeliveryScope, NoTurnOrigin, Routing, ScheduledTurn, TurnRouting
-from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
-from agent_comms.session_config_options import SessionConfigOptions
+from agent_comms.messaging.response_policy import ResponsePolicy
+from agent_comms.registry.route_client import ActivityClient
+from agent_comms.messaging.routing import DeliveryScope
+from agent_comms.messaging.routing import NoTurnOrigin
+from agent_comms.messaging.routing import Routing
+from agent_comms.messaging.routing import ScheduledTurn
+from agent_comms.messaging.routing import TurnRouting
+from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate
+from agent_comms.cli_bridges.runtime_updates import SessionFacts
+from agent_comms.execution.session_config_options import SessionConfigOptions
 from agent_comms.task_owner import TaskOwner
 from agent_comms.task_registry import TaskRegistry
-from agent_comms.task_sources import ScopedTaskDeclaration
+from agent_comms.messaging.task_sources import ScopedTaskDeclaration
 from agent_comms.thread_identity_source import ThreadIdentitySource
-from agent_comms.tracked_turn import TrackedTurnSession
-from agent_comms.transcript_events import TranscriptEvent
-from agent_comms.transcript_routes import NoSentInputText, SentInputText
+from agent_comms.execution.tracked_turn import TrackedTurnSession
+from agent_comms.transcript.transcript_events import TranscriptEvent
+from agent_comms.execution.transcript_routes import NoSentInputText
+from agent_comms.execution.transcript_routes import SentInputText
 from agent_comms.transport.tools.goals import CommsGoalHistoryTool, CommsGoalTool, GoalChangeTool
 
 

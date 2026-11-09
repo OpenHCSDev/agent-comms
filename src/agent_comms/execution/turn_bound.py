@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from agent_comms.execution.turn_item import NativeTurnId
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.transcript_events import TurnDigest
+from agent_comms.transcript.transcript_events import TurnDigest
 from agent_comms_hooks import ToolRefusedError
 
 

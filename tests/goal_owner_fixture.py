@@ -8,7 +8,7 @@ from functools import partial
 
 import pytest
 
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.comms import Comms, wire
 from agent_comms.execution.owned_turn import OwnedTurn
 from agent_comms.execution.native_arguments import GivenBinary

@@ -12,10 +12,10 @@ from dataclasses import dataclass, field
 from typing import Annotated, ClassVar, Self
 
 from agent_comms import errors
-from agent_comms.attempt_resolution import AttemptResolution
-from agent_comms.attempt_resolution import GoalCleared
-from agent_comms.attempt_resolution import NoResolution
-from agent_comms.attempt_resolution import WorkDecision
+from agent_comms.planning.attempt_resolution import AttemptResolution
+from agent_comms.planning.attempt_resolution import GoalCleared
+from agent_comms.planning.attempt_resolution import NoResolution
+from agent_comms.planning.attempt_resolution import WorkDecision
 from agent_comms.planning.goal_attempt_identity import FailureNotObserved
 from agent_comms.planning.goal_attempt_identity import GoalAttemptIdentity
 from agent_comms.planning.goal_attempt_phase import FailedAttempt, GoalAttemptTransition
@@ -34,7 +34,7 @@ from agent_comms.goal_mutation import GoalFailureProjection, GoalGenerationRead,
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit
 from agent_comms.goal_work import GoalFailureOwner
 from agent_comms.planning.goals import Goal
-from agent_comms.lifecycle_capability import Failed
+from agent_comms.nominal.lifecycle_capability import Failed
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AttemptId
 from agent_comms.nominal.field_codec import AttemptToken

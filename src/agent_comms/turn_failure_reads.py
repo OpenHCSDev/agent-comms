@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Collection
 from sqlite3 import Connection
 
-from agent_comms.attempt_resolution import RecordedResolution
+from agent_comms.planning.attempt_resolution import RecordedResolution
 
 
 class ModelFailureDiagnostic[Failure](ABC):

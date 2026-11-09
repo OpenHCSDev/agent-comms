@@ -2,7 +2,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Self
-from agent_comms.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.frozen_recipient import FrozenRecipient
 
 
 class AssignmentNotice[State](ABC):

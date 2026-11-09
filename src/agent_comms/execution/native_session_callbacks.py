@@ -5,8 +5,8 @@ from asyncio import Event
 from pathlib import Path
 
 from agent_comms import agent_events as events
-from agent_comms import pi_commands as commands
-from agent_comms.acp_failure import FailureSource
+from agent_comms.execution import pi_commands as commands
+from agent_comms.execution.acp_failure import FailureSource
 from agent_comms.agent_backend import InputStartListener
 from agent_comms.execution.native_child import NativeChildState, PiSessionChild
 from agent_comms.execution.native_pi import NativePiRpcLaunch
@@ -14,8 +14,8 @@ from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.native_startup import NativeStartup
 from agent_comms.execution.session_retention import NativeSessionRetention
 from agent_comms.execution.turn_failure import TurnFailure
-from agent_comms.pi_wire import PiDiagnostic
-from agent_comms.send_outcome import SendBoundary
+from agent_comms.execution.pi_wire import PiDiagnostic
+from agent_comms.execution.send_outcome import SendBoundary
 from agent_comms.transport.native_tool_transport import ToolTransport
 from agent_comms.turn_failure_reads import (
     TerminalInputsRead, TerminalOutputRead, TerminalPromptRead, TerminalSessionRead,

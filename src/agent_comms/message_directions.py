@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Container
-from agent_comms.owner_requests import OwnerRequestId, RequestDirective
+from agent_comms.planning.owner_requests import OwnerRequestId
+from agent_comms.planning.owner_requests import RequestDirective
 
 
 class DirectiveWriter(ABC):

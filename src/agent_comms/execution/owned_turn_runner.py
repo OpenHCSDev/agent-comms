@@ -5,7 +5,7 @@ from contextlib import AsyncExitStack
 
 from agent_comms.agent_backend import AgentBackend
 from agent_comms.comms import Comms
-from agent_comms.controller import Controller
+from agent_comms.execution.controller import Controller
 from agent_comms.execution.goal_scheduler import GoalScheduler
 from agent_comms.execution.input_drain import InputDrain
 from agent_comms.execution.native_input_owner import RegistryOwner
@@ -14,11 +14,13 @@ from agent_comms.execution.turn_effects import TurnEffects
 from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.execution.turn_phase import TurnPhase
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
-from agent_comms.pi_events import DialogUiRequest, ExtensionUiChoice
+from agent_comms.execution.pi_events import DialogUiRequest
+from agent_comms.execution.pi_events import ExtensionUiChoice
 from agent_comms.registry.threads import Thread
-from agent_comms.routing import NoTurnRouting, Routing
-from agent_comms.runtime_server import RuntimeServer
-from agent_comms.transcript_updates import TurnTranscriptUpdate
+from agent_comms.messaging.routing import NoTurnRouting
+from agent_comms.messaging.routing import Routing
+from agent_comms.transport.runtime_server import RuntimeServer
+from agent_comms.transcript.transcript_updates import TurnTranscriptUpdate
 
 
 class OwnedTurnRunner(ABC):

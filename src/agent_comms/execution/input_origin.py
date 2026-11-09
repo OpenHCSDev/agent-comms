@@ -204,5 +204,5 @@ class HumanInputOrigin(InputOrigin, ClaimScoped, ToolResult):
 
 
 import agent_comms.input_attempt as input_attempt
-import agent_comms.retained_task_facts as task_facts
+import agent_comms.messaging.retained_task_facts as task_facts
 from agent_comms import initial_origin

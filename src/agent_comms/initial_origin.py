@@ -107,4 +107,4 @@ class HumanOrigin(OwnerVoiceOrigin):
 
 import agent_comms.bus_record_builder as bus_record_builder
 import agent_comms.message_writer as message_writer
-from agent_comms.messaging import messages
+from agent_comms.messaging.sending import messages

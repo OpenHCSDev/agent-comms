@@ -5,13 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
-from agent_comms.agent_activity import AgentActivity
+from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.turn_lease import TurnCompletion, TurnLease
 from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.input_attempt import StoredInput, UnresolvedInput
-from agent_comms.input_key import InputKey
+from agent_comms.execution.input_key import InputKey
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.published_bus import PublishedBus
 from agent_comms.nominal.field_codec import GoalId

@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from agent_comms.recorded_time import Timestamped
+from agent_comms.storage.recorded_time import Timestamped
 
 
 class SenderClockSource(ABC):

@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 from agent_comms.execution.native_prompt_send import PromptBoundary
 from agent_comms.nominal.field_codec import AcpSessionId
-from agent_comms.pi_commands import Prompt
+from agent_comms.execution.pi_commands import Prompt
 from agent_comms.execution.turn_inbox import TurnInbox
 
 

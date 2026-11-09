@@ -14,4 +14,4 @@ class MessageWriter(ABC):
     def append_original(self, build: bus_record_builder.RecordBuilder) -> messages.BusRecord: ...
 
 import agent_comms.bus_record_builder as bus_record_builder
-from agent_comms.messaging import messages
+from agent_comms.messaging.sending import messages

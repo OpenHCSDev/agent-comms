@@ -5,10 +5,10 @@ from typing import get_type_hints
 
 import pytest
 
-from agent_comms.activity_clocks import ActivityClocks
-from agent_comms.agent_activity import AgentActivity
-from agent_comms.backend import NativeSession
-from agent_comms.channel_management import ChannelManagement
+from agent_comms.messaging.activity_clocks import ActivityClocks
+from agent_comms.registry.agent_activity import AgentActivity
+from agent_comms.execution.backend import NativeSession
+from agent_comms.messaging.channel_management import ChannelManagement
 from agent_comms.coordination.tables.executions import ReplayAssessments
 from agent_comms.display_sources import (
     ActivitySource, ChannelOrderSource, ChannelSortView, SentClocks, SentHistorySource,
@@ -29,9 +29,11 @@ from agent_comms.messaging.published_bus import BusResources
 from agent_comms.native_failure_reads import (
     NativeOperationFailureRead, NativeResponseErrorRead, NativeResponseFailureRead,
 )
-from agent_comms.pi_events import NativeOperationError, Response
+from agent_comms.execution.pi_events import NativeOperationError
+from agent_comms.execution.pi_events import Response
 from agent_comms.pi_payloads import ReportedText
-from agent_comms.pi_wire import PiDiagnostic, PiOmitted
+from agent_comms.execution.pi_wire import PiDiagnostic
+from agent_comms.execution.pi_wire import PiOmitted
 from agent_comms.planning.goal_attempt_phase import GoalAttemptTransition
 from agent_comms.planning.goal_attempts import LaunchPermit
 from agent_comms.planning.goal_failure_observation import GenerationFailureSource
@@ -39,12 +41,12 @@ from agent_comms.planning.goals import GoalDeclaration
 from agent_comms.planning.orders import ProblemOrder, Todo, TodoStore
 from agent_comms.presentation import ChannelView
 from agent_comms.projects.storage_rules import StorageRule
-from agent_comms.prompt_state import PromptState
+from agent_comms.execution.prompt_state import PromptState
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_reads import ThreadCheckoutSource, ThreadOwnerSource, ThreadOwnerStatus
 from agent_comms.registry.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread
-from agent_comms.relationships import RelationshipSource
+from agent_comms.registry.relationships import RelationshipSource
 from agent_comms.runtime_info_source import RuntimeInfoWrites
 from agent_comms.turn_failure_reads import (
     GoalFailurePermit, GoalFailureReservation, ModelFailureDiagnostic, ReplayPreparation,

@@ -6,4 +6,4 @@ from collections.abc import Callable
 
 type RecordBuilder = Callable[[int, sqlite3.Connection], messages.BusRecord]
 
-from agent_comms.messaging import messages
+from agent_comms.messaging.sending import messages

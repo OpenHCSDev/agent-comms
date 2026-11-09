@@ -10,7 +10,7 @@ from typing import ClassVar
 
 from pydantic import JsonValue
 
-from agent_comms.annotation_disclosure import PublicInstructionAnnotations
+from agent_comms.execution.annotation_disclosure import PublicInstructionAnnotations
 from agent_comms.pi_payloads import PiMessage
 from agent_comms.execution.turn_context import ContextEntryManifest
 from agent_comms.execution.turn_context import ContextEntryReference

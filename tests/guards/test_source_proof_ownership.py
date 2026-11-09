@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import history_views
-from agent_comms.messaging import historical_views
+from agent_comms.messaging.sending import historical_views
 from agent_comms.transcript import transcripts
 
 pytestmark = pytest.mark.refactor_guard

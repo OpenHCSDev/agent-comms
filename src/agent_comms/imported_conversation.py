@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.execution.turn_context import HistoricalInstructionProvenance
-from agent_comms.harness_install import Harness
+from agent_comms.installer.harness_install import Harness
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
 
 

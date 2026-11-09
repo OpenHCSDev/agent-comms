@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 from agent_comms.agent_events import ProviderUsage
 from agent_comms.agent_events import ToolEnd
 from agent_comms.registry.threads import Thread
-from agent_comms.routing import TurnRouting
-from agent_comms.transcripts import TranscriptCursor
+from agent_comms.messaging.routing import TurnRouting
+from agent_comms.transcript.transcripts import TranscriptCursor
 from agent_comms.execution.turn_input_source import OriginalTurnInput
 from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.execution.turn_terminal import TurnTerminal

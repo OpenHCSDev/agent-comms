@@ -8,7 +8,7 @@ from agent_comms.history_views import HistoryViews
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.peer_relation import PeerRelation
 from agent_comms.planning.goal_management import Goals
-from agent_comms.relationships import ThreadRelationships
+from agent_comms.registry.relationships import ThreadRelationships
 
 
 class ContextAssembly:

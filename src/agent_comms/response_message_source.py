@@ -2,7 +2,7 @@
 
 from abc import ABC
 
-from agent_comms.mentions import ThreadMention
+from agent_comms.messaging.mentions import ThreadMention
 
 
 class ResponseMessageSource(ABC):

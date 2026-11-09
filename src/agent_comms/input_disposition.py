@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-import agent_comms.bus as bus
+import agent_comms.messaging.bus as bus
 from agent_comms.channel_input_batch import SingleInputBatch
 from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
