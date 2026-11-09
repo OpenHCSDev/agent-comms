@@ -66,8 +66,7 @@ def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
     registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     raw = RegistryStore(path).stored()
     for field in ("owners", "claims"):
-        incomplete = dict(raw)
-        incomplete.pop(field)
+        incomplete = {**raw, field: {**raw[field], "generations": {}}}
         RegistryStore(path).rewrite_stored(lambda _, stored=incomplete: stored)
         with pytest.raises(RelationViolationError):
             Registration(path).live_owner_with_claim("owner")

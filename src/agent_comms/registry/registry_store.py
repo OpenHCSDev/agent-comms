@@ -47,7 +47,7 @@ from agent_comms.registry.registry_document import (
 )
 from agent_comms.registry.registry_tables import (
     RegistryCapture,
-    RegistryRevisionMark,
+    RegistryRowRevision,
     RegistryRowStore,
 )
 from agent_comms.registry.thread_identity import TurnIdentity
@@ -67,7 +67,7 @@ class CachedRegistry(ABC):
 
     @abstractmethod
     def at[Answer](
-        self, revision: RegistryRevisionMark, reuse: Callable[[RegistryRevision], Answer],
+        self, revision: RegistryRowRevision, reuse: Callable[[RegistryRevision], Answer],
         read: Callable[[CachedRegistry], Answer],
     ) -> Answer:
         """Reuse this revision's answer, or read its replacement."""
@@ -88,7 +88,7 @@ class CachedRegistry(ABC):
 @dataclass(frozen=True)
 class UncachedRegistry(NullMember, CachedRegistry):
     def at[Answer](
-        self, revision: RegistryRevisionMark, reuse: Callable[[RegistryRevision], Answer],
+        self, revision: RegistryRowRevision, reuse: Callable[[RegistryRevision], Answer],
         read: Callable[[CachedRegistry], Answer],
     ) -> Answer:
         return read(self)
@@ -132,7 +132,7 @@ class RegistryRevision(CachedRegistry):
         return revision
 
     def at[Answer](
-        self, revision: RegistryRevisionMark, reuse: Callable[[RegistryRevision], Answer],
+        self, revision: RegistryRowRevision, reuse: Callable[[RegistryRevision], Answer],
         read: Callable[[CachedRegistry], Answer],
     ) -> Answer:
         return reuse(self) if self.source.revision == revision else read(self)
@@ -158,7 +158,7 @@ class RegistrySelection:
     """A decoded registry selection whose source stays current during dependent writes."""
 
     store: RegistryStore = field(repr=False, compare=False)
-    revision: tuple[RegistryRevisionMark, FileObservation]
+    revision: tuple[RegistryRowRevision, FileObservation]
 
     def matches_current(self) -> bool:
         return self.store.revision_unlocked() == self.revision
@@ -389,7 +389,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         copied.mark_historical()
         return copied.read_revision()
 
-    def has_revision(self, revision: RegistryRevisionMark) -> bool:
+    def has_revision(self, revision: RegistryRowRevision) -> bool:
         """Check a retained content revision under the same guard used to capture it."""
         with self.guarded_read():
             return self._capture_unlocked().revision == revision
@@ -545,9 +545,9 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         return (self.presence.path, self.guard_path,
                 *sorted(StoredTurnRecord.matching_in(self.path.parent)))
 
-    def revision_unlocked(self) -> tuple[RegistryRevisionMark, FileObservation]:
-        """The committed row revision and the owner guard that brackets every commit."""
-        return self.rows.mark(), FileRevision.capture(self.guard_path)
+    def revision_unlocked(self) -> tuple[RegistryRowRevision, FileObservation]:
+        """The database instance, committed counter and guard that brackets every commit."""
+        return self.rows.revision(), FileRevision.capture(self.guard_path)
 
     def read_entry(self, name: str) -> RegistryEntryRevision:
         """Read an entry from the same retained revision as snapshots and edits.
@@ -607,9 +607,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             write()
 
     def retire_processes(self) -> None:
-        """A copied registry's turns and processes belong to the root it was copied from, never to
-        the copy. An install copies the registry before its carries run, so the copy can hold a
-        form the current decoder refuses: this edits the stored rows' process and turn keys only."""
+        """Withdraw the source's process and turn references from a runtime copy.
+
+        This changes those owned fields without decoding unrelated thread state.
+        """
         threads = FieldCodec.record_key(RegistryDocument, "threads")
         self.rewrite_stored(lambda raw: {
             **raw, threads: {name: self.retired_row(row) for name, row in raw[threads].items()}})
@@ -620,10 +621,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             return FieldCodec.parse(FieldCodec.compact(self._capture_unlocked().raw))
 
     def rewrite_stored(self, change: Callable[[dict], dict]) -> None:
-        """Rewrite the stored rows without decoding them (a copy's retired processes, or a form
-        the current decoder may refuse), under the exclusive lock and through the guard; ``change``
-        gets its own copy, and nothing is committed when no row changes, so an idle copy keeps
-        the source's revision."""
+        """Change the stored rows under the exclusive guard without decoding thread state.
+
+        ``change`` gets its own copy. An unchanged result keeps the committed revision.
+        """
         with self.guarded_write():
             entry = self.cache.entry
             original = self._capture_unlocked()
@@ -639,11 +640,8 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
     def retired_row(row: dict) -> dict:
         process = FieldCodec.record_key(Thread, "process_identity")
         turn = FieldCodec.record_key(Thread, "turn_record")
-        retired = {**row, process: FieldCodec.encode(NoProcess())}
-        # An absent key is the field's default, NoTurnRecord, which has no turn to release.
-        if turn in row:
-            retired[turn] = FieldCodec.encode(FieldCodec.decode(TurnRecord, row[turn]).released())
-        return retired
+        return {**row, process: FieldCodec.encode(NoProcess()),
+                turn: FieldCodec.encode(FieldCodec.decode(TurnRecord, row[turn]).released())}
 
     def mark_historical(self) -> None:
         """Explicit archive creation/carry seals this declaration, idempotently."""
@@ -669,7 +667,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         mark = previous.mark.successor()
         self.cache.entry = UncachedRegistry()
         self.private_guard_unlocked().write(self.path, mark, lambda: self.rows.commit(raw, previous))
-        return RegistryCapture(mark, raw)
+        return RegistryCapture(self.rows.revision(), raw)
 
     def private_guard_unlocked(self) -> RegistryPrivacy:
         """Validate registry authority before even a cached document read.
@@ -684,13 +682,14 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         # Each answer keys on the files it was decided from: the coordinator commits on every
         # coordination write, and a private root never reads it, so keying a private answer
         # on it re-hashed the whole registry on every coordination write.
-        root = _link_revision(self.path.parent).file_identity()
+        revision = self.rows.revision()
+        root = (_link_revision(self.path.parent).file_identity(), revision.identity)
         observed = (
             _link_revision(self.guard_path),
             _link_revision(CoordinationStore.path_in(self.path.parent)),
             # The committed row revision, never the database's stat: a WAL commit leaves the
             # file untouched, so a stat key would keep a verdict across a commit.
-            self.rows.mark(),
+            revision.mark,
         )
         if (checked := self.cache.guard) is not None:
             key, guard = checked

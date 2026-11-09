@@ -24,7 +24,7 @@ def main(root: Path, turn: TurnId) -> None:
     steps = []
 
     def capture() -> None:
-        row = json.loads(registry.store.path.read_text().replace(str(root), "<root>"))
+        row = registry.store.stored()
         row["turns"] = {name: FieldCodec.encode(thread.turn_record.read())
                         for name, thread in registry.snapshot().threads.items()}
         assert Registration(registry.store.path).snapshot() == registry.snapshot()

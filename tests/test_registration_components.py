@@ -21,7 +21,6 @@ from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
 from agent_comms.storage.locked_store import DocumentChange, RegistryFile
-from agent_comms.storage.store_files import AtomicFile
 
 
 def owner(path):
@@ -49,12 +48,12 @@ def test_store_owns_document_and_failed_edit_cannot_leak_into_cache(tmp_path):
     registration = Registration(RegistryFile.path_in(tmp_path))
     registration.register(owner(tmp_path))
     prior = registration.snapshot()
-    raw = registration.store.path.read_bytes()
+    revision = registration.store.rows.mark()
     with pytest.raises(RuntimeError), registration.store.editing() as edit:
         edit.document.unregister("owner")
         raise RuntimeError("aborted")
     assert registration.snapshot() == prior
-    assert registration.store.path.read_bytes() == raw
+    assert registration.store.rows.mark() == revision
 
 
 def test_one_thread_entry_decodes_only_that_thread_and_matches_the_document(tmp_path):
@@ -63,11 +62,12 @@ def test_one_thread_entry_decodes_only_that_thread_and_matches_the_document(tmp_
     registration.register(replace(owner(tmp_path), name="other", created_at=11.0))
     registration.rename("owner", "renamed")
     document = registration.store.read()
-    raw = json.loads(registration.store.path.read_text())
     for name in ("renamed", "owner", "other"):
         assert registration.entry(name).entry == document.entry(name)
-    # An external replacement, not a patched cache, starts another revision.
-    AtomicFile(registration.store.path).write_text(json.dumps(raw))
+    # A separate writer changes another row, without touching this reader's cache.
+    external = Registration(registration.store.path)
+    external.register(replace(external.require("other"), title=GivenThreadText("external revision")))
+    raw = external.store.stored()
     read = registration.entry("owner")
     assert read.entry == document.entry("renamed") and read.entry.thread.name == "renamed"
     assert read.revision == registration.store.revision_unlocked()
@@ -78,7 +78,7 @@ def test_one_thread_entry_decodes_only_that_thread_and_matches_the_document(tmp_
     assert reopened.snapshot() is snapshot
     # Another thread's malformed declaration is not this thread's entry.
     raw["threads"]["other"]["created_at"] = "not a time"
-    AtomicFile(registration.store.path).write_text(json.dumps(raw))
+    external.store.rewrite_stored(lambda _: raw)
     assert registration.entry("renamed").entry == document.entry("renamed")
     with pytest.raises(RelationViolationError):
         registration.entry("other")

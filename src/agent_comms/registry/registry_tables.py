@@ -22,6 +22,7 @@ from agent_comms.coordination.errors import StaleFence
 from agent_comms.nominal.field_codec import FieldCodec, WireValue
 from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.private_path import FileIdentity, FileRevision, MissingFile
 from agent_comms.storage.typed_table import (
     Column,
     DurableStore,
@@ -128,10 +129,9 @@ class RegistryNamedRow(RevisionStamped, declared_name=None):
 
     @classmethod
     def mapping_in(cls, raw: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
-        """An absent section is one with no rows, as an older stored form may lack it."""
         value: JsonValue = raw
         for key in cls.section():
-            value = value.get(key, {})
+            value = value[key]
         return value
 
     @classmethod
@@ -142,7 +142,7 @@ class RegistryNamedRow(RevisionStamped, declared_name=None):
     @staticmethod
     def _placed(raw: RawDocument, path: tuple[str, ...], mapping: dict[str, JsonValue]) -> RawDocument:
         head, *rest = path
-        return {**raw, head: RegistryNamedRow._placed(raw.get(head, {}), tuple(rest), mapping)
+        return {**raw, head: RegistryNamedRow._placed(raw[head], tuple(rest), mapping)
                 if rest else mapping}
 
 
@@ -233,19 +233,39 @@ class RegistryRevisionMark:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryCapture:
-    """One committed revision of the registry document, in its wire form."""
+class RegistryRowRevision:
+    """One database instance and its committed counter; copies have distinct identities."""
 
+    identity: FileIdentity | MissingFile
     mark: RegistryRevisionMark
-    raw: RawDocument
-
-    @property
-    def revision(self) -> RegistryRevisionMark:
-        return self.mark
 
     @classmethod
     def empty(cls) -> Self:
-        return cls(RegistryRevisionMark(0), FieldCodec.encode(RegistryDocument()))
+        return cls(MissingFile(), RegistryRevisionMark(0))
+
+    def extends(self, earlier: RegistryRowRevision) -> bool:
+        """Only the same database at a nondecreasing counter can supply an incremental read."""
+        return self.identity == earlier.identity and self.mark.revision >= earlier.mark.revision
+
+    def accepts_write(self, earlier: RegistryRowRevision) -> bool:
+        """A writer may create the empty schema it read as absent, or update that same source."""
+        return self == earlier or (earlier == self.empty() and self.mark == earlier.mark)
+
+
+@dataclass(frozen=True, slots=True)
+class RegistryCapture:
+    """One committed revision of the registry document, in its wire form."""
+
+    revision: RegistryRowRevision
+    raw: RawDocument
+
+    @property
+    def mark(self) -> RegistryRevisionMark:
+        return self.revision.mark
+
+    @classmethod
+    def empty(cls) -> Self:
+        return cls(RegistryRowRevision.empty(), FieldCodec.encode(RegistryDocument()))
 
     def encoded(self, document: RegistryDocument, earlier: RegistryDocument) -> RawDocument:
         """``document``'s wire form, given that ``earlier`` was decoded from this capture: only
@@ -262,7 +282,7 @@ class RegistryCapture:
     def changed(self, changes: RegistryChanges) -> RegistryCapture:
         """This revision with ``changes`` applied: removals first, then rows, so a name removed
         and declared again after this revision ends declared. Unchanged sections stay shared."""
-        if changes.mark == self.mark:
+        if changes.revision == self.revision:
             return self
         raw = changes.header.scalars.wire
         for family in RegistryNamedRow.families():
@@ -273,14 +293,14 @@ class RegistryCapture:
                 mapping = {name: value for name, value in mapping.items() if name not in removed}
                 mapping.update(written)
             raw = family.placed(raw, mapping)
-        return RegistryCapture(changes.mark, raw)
+        return RegistryCapture(changes.revision, raw)
 
 
 @dataclass(frozen=True)
 class RegistryChanges:
     """What changed after a revision: the header, the rows written and the rows removed."""
 
-    mark: RegistryRevisionMark
+    revision: RegistryRowRevision
     header: RegistryHeader
     rows: Mapping[type[RegistryNamedRow], tuple[RegistryNamedRow, ...]]
     removals: tuple[RegistryRemovals, ...]
@@ -310,18 +330,25 @@ class RegistryRowStore(DurableStore, RegistryFile):
         return RegistryRevisionMark(
             max((header.revision for header in RegistryHeader.select(db)), default=0))
 
-    def captured(self, earlier: RegistryCapture) -> RegistryCapture:
-        """The committed revision, read as the rows changed after ``earlier``: a reader pays for
-        the change, never for the registry's size."""
+    def revision(self) -> RegistryRowRevision:
         with self.snapshot() as db:
-            mark = self.mark_in(db)
-            if mark == earlier.mark:
+            return self.revision_in(db)
+
+    def revision_in(self, db) -> RegistryRowRevision:
+        return RegistryRowRevision(FileRevision.capture(self.path).file_identity(), self.mark_in(db))
+
+    def captured(self, earlier: RegistryCapture) -> RegistryCapture:
+        """Refresh only changed rows from the same database; a replacement starts a new read."""
+        with self.snapshot() as db:
+            revision = self.revision_in(db)
+            if revision == earlier.revision:
                 return earlier
-            if mark.revision == 0:
-                return RegistryCapture.empty()
-            since = (earlier.mark.revision,)
-            return earlier.changed(RegistryChanges(
-                mark=mark,
+            if revision.mark.revision == 0:
+                return replace(RegistryCapture.empty(), revision=revision)
+            base = earlier if revision.extends(earlier.revision) else RegistryCapture.empty()
+            since = (base.mark.revision,)
+            return base.changed(RegistryChanges(
+                revision=revision,
                 header=RegistryHeader.select(db)[0],
                 rows={family: tuple(family.select(db, where="changed_at > ?", parameters=since))
                       for family in RegistryNamedRow.families()},
@@ -333,7 +360,7 @@ class RegistryRowStore(DurableStore, RegistryFile):
         """Write the rows of ``raw`` that differ from ``previous`` as its successor, in one
         transaction; refused if another revision committed since ``previous``."""
         with self.writing() as db:
-            if self.mark_in(db) != previous.mark:
+            if not self.revision_in(db).accepts_write(previous.revision):
                 raise StaleFence("registry rows changed after this write read them")
             mark = previous.mark.successor()
             scalars = raw

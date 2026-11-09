@@ -72,7 +72,7 @@ from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_provenance import RegistryProvenance
-from agent_comms.registry.registry_tables import RegistryRevisionMark
+from agent_comms.registry.registry_tables import RegistryRowRevision
 from agent_comms.registry.thread_identity import UnrecordedThreadIncarnation
 from agent_comms.registry.threads import Thread, ThreadProvenance
 from agent_comms.storage.locked_store import DocumentChange, RegistryFile, RootFile
@@ -337,7 +337,7 @@ class HistorySource(MessageHistory):
     bus_identity: RecordedBusIdentity
     snapshot_bus_identity: RecordedBusIdentity
     snapshot_bus_revision: int
-    snapshot_registry_revision: RegistryRevisionMark
+    snapshot_registry_revision: RegistryRowRevision
     provenance: RegistryProvenance
 
     def references_from(self, context: ReferenceContext) -> ReferenceContext:
@@ -355,7 +355,7 @@ class HistorySource(MessageHistory):
         return HistorySourceKey(self.root)
 
     @property
-    def snapshot_identity(self) -> tuple[HistorySourceKey, int, RegistryRevisionMark]:
+    def snapshot_identity(self) -> tuple[HistorySourceKey, int, RegistryRowRevision]:
         """One root is captured again at later revisions, and those captures record other names."""
         return self.key, self.snapshot_bus_revision, self.snapshot_registry_revision
 

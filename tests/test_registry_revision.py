@@ -12,6 +12,24 @@ from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.store_files import AtomicFile
+
+
+def test_replacing_a_database_at_the_same_counter_does_not_reuse_its_cached_rows(tmp_path):
+    first = Registration(RegistryFile.path_in(tmp_path / "first"))
+    second = Registration(RegistryFile.path_in(tmp_path / "second"))
+    first.register(NativeThread("original", frozenset(), Checkout(tmp_path)))
+    second.register(NativeThread("replacement", frozenset(), Checkout(tmp_path)))
+    before = first.store.read_revision()
+    assert before.source.mark == second.store.rows.mark()
+    staged = RegistryFile.path_in(tmp_path / "staged")
+    staged.parent.mkdir()
+    RegistryFile.copy_file(second.store.path, staged)
+    # Publish a complete replacement, as rollback does; this is not a row update.
+    AtomicFile(first.store.path).replace(staged)
+    first.store.presence.replace(second.store.presence.read())
+    assert set(first.all_threads()) == {"replacement"}
+    assert not first.store.has_revision(before.source.revision)
 
 
 def test_retained_registry_keeps_wal_rows_and_revision_ignores_checkpoints(tmp_path):

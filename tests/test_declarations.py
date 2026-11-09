@@ -1,6 +1,5 @@
 
 
-import json
 import os
 import sys
 from dataclasses import replace
@@ -94,20 +93,6 @@ class TestGoalRevision:
         goal_id = GoalId.mint()
         with pytest.raises(ValueError):
             Goal(text="work", id=goal_id, published_seq=0, revision=revision)
-
-    def test_old_registry_goal_without_revision_reopens_at_zero(self, tmp_path: Path):
-        old_goal_id = GoalId.mint()
-        path = RegistryFile.path_in(tmp_path)
-        registry = Registration(path)
-        registry.register(
-            NativeThread(name='owner', tags=frozenset(), worktree=Checkout(Path('/wt')), goal=Goal('work',
-                old_goal_id, published_seq=0))
-        )
-        raw = json.loads(path.read_text())
-        del raw["threads"]["owner"]["goal"]["revision"]
-        path.write_text(json.dumps(raw))
-        restored = Registration(path).require("owner").goal
-        assert restored == Goal("work", old_goal_id, published_seq=0, revision=0)
 
 
 class TestThreadDeclaration:
@@ -300,10 +285,9 @@ class TestRegistration:
         comms = wire(root)
         comms.registry.declare(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt')), process_identity=ProcessIdentity.capture(os.getpid())))
         prepare_native_comms(comms)
-        registry_path = RegistryFile.path_in(root)
         data = comms.registry.store.stored()
         for field in ("owners", "claims"):
-            data.pop(FieldCodec.record_key(RegistryDocument, field))
+            data[FieldCodec.record_key(RegistryDocument, field)]["generations"].clear()
         comms.registry.store.rewrite_stored(lambda _: data)
         with pytest.raises(RelationViolationError):
             comms.agents.begin_turn("a", TurnId('18e37571ddd8a9cd1f2b7ffa63493bb6'))
@@ -362,11 +346,12 @@ class TestRegistration:
         elif damage == "truncated":
             guard.write_bytes(guard.read_bytes()[:-1])
         else:
-            path = RegistryFile.path_in(root)
-            data = json.loads(path.read_text())
+            source = comms.registry.store.read_revision().source
+            data = comms.registry.store.stored()
             for field in ("owners", "claims"):
-                data.pop(FieldCodec.record_key(RegistryDocument, field))
-            path.write_text(json.dumps(data))  # simulated old writer ignores marker
+                data[FieldCodec.record_key(RegistryDocument, field)]["generations"].clear()
+            # A writer outside the guard removes required generation rows.
+            comms.registry.store.rows.commit(data, source)
         with pytest.raises(RelationViolationError):
             cold.require("a")
         with pytest.raises(RelationViolationError):
