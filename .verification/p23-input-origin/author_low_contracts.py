@@ -18,8 +18,8 @@ reason = (
     'module imports all of those eagerly, making low publication readers and private '
     'root authority depend on task/context assembly. Move the original declarations '
     'and all consumers through native relocation, keeping fields, slots, methods, '
-    'actual provider inheritance and original binding identities. Remove the imports '
-    'read only by the moved contracts, through the native unread-binding proof. '
+    'actual provider inheritance and original binding identities. Native relocation '
+    'already removes imports read only by the moved contracts; add no cleanup stage. '
     'No acquisition body changes: both snapshot_with_authority calls and every '
     'intervening root/claim recheck stay exactly where they are. No forwarding '
     'facade, surrogate record, Protocol, guard/local-import lift or custom engine work. '
@@ -38,10 +38,6 @@ operations = [
         'operation': 'relocate_symbols_to_new_module', 'file_path': source,
         'symbol_qualnames': ['InputTextContext'],
         'destination_path': str(root / 'execution/input_text_context.py'),
-    }),
-    ('p23-remove-moved-contract-only-imports', {
-        'operation': 'remove_import_bindings', 'file_path': source,
-        'bound_names': ['Callable', 'Path', 'InputLookup', 'RootId'],
     }),
 ]
 plan = {'stages': [
