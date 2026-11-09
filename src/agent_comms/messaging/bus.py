@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Self
 
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
-from agent_comms.execution.input_publication_source import InputPublicationSource
 from agent_comms.messaging.activity_clocks import ActivityClocks, ChannelActivity
 from agent_comms.messaging.bus_activity_index import BusActivityIndex
 from agent_comms.messaging.bus_display_index import BusDisplayIndex
@@ -170,7 +169,6 @@ class BusReader(
     ConversationRead[Delivered],
     MessageReferencesRead[Message],
     MessageIdentityRead,
-    InputPublicationSource,
 ):
     """One query implementation for individual reads and a held read snapshot."""
 

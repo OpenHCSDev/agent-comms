@@ -27,7 +27,6 @@ from pathlib import Path
 from typing import NoReturn
 
 from agent_comms.coordination.cohort_schema import AcceptanceFrontier, PrivateCoordinatorSchema
-from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import PublicationActivationBlocked
 from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTable
@@ -264,7 +263,7 @@ class PublicRegistry(RegistryPrivacy):
         # still owns opening this file, before publishing the private guard.
         # Participants registered while public declared no acceptance; the new
         # root declares it for each, as registration does for later ones.
-        with Coordination(str(CoordinationStore.path_in(registry_path.parent))) as store:
+        with coordinator.Coordination(str(CoordinationStore.path_in(registry_path.parent))) as store:
             PrivateCoordinatorSchema.install(store)
             with store.session.writing() as db:
                 for participant in Participants.select(db):
@@ -310,7 +309,7 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
 
     def prepare_runtime(self) -> None:
         PrivateCoordinatorTable.declarations()
-        with Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
+        with coordinator.Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
             PrivateCoordinatorSchema.install(store)
 
     def notification_context_sql(self, connection: sqlite3.Connection) -> str:
@@ -542,3 +541,6 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
             self._write(fd, 1, _record(self.root_id, 1, _COMMITTED, first[2]))
         finally:
             os.close(fd)
+
+
+import agent_comms.coordination.coordinator as coordinator

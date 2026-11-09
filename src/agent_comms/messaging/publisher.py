@@ -12,6 +12,7 @@ from itertools import groupby
 from pathlib import Path
 
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.input_publication_source import InputPublicationSource
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.tables.publications import PublicationIntents
@@ -22,7 +23,7 @@ from agent_comms.errors import (
 )
 from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.messaging.audience_manifest import freeze_audience
-from agent_comms.messaging.bus import Bus, BusReader, BusSnapshot, ClaimRecord, PrivateRecord
+from agent_comms.messaging.bus import Bus, BusSnapshot, ClaimRecord, PrivateRecord
 from agent_comms.messaging.bus_record_builder import RecordBuilder
 from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
 from agent_comms.messaging.channels import Channel
@@ -47,6 +48,10 @@ from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
 from agent_comms.storage.private_path import FileRevision
+
+
+class PublicationSnapshot(InputPublicationSource, BusSnapshot):
+    """The original held bus cut with input-publication acquisition."""
 
 
 @dataclass(eq=False, repr=False)
@@ -84,7 +89,7 @@ class Publisher:
         target: NamedTarget,
         sequence: int,
         snapshot: RegistrySnapshot,
-        original_source: BusReader,
+        original_source: PublicationSnapshot,
     ) -> Message:
         message.require_task_publication(sender, snapshot, original_source)
 
@@ -144,7 +149,7 @@ class ClaimWrites(Publisher):
         def build(seq: int, db: sqlite3.Connection) -> ClaimRecord:
             stored = self._prepare_message_unlocked(
                 message, sender=sender, target=target, sequence=seq, snapshot=snapshot,
-                original_source=BusSnapshot.from_connection(db),
+                original_source=PublicationSnapshot.from_connection(db),
             )
             transition = make_transition(owner=stored.sender, seq=seq,
                                          message_id=stored.message_id)
@@ -207,7 +212,7 @@ class InitialWrites(Publisher):
             lookups = [thread.incarnation.lookup for thread in selected]
             sender_lookup = snapshot.threads[sender].incarnation.lookup
             def build(seq: int, db: sqlite3.Connection) -> PrivateRecord:
-                source = BusSnapshot.from_connection(db)
+                source = PublicationSnapshot.from_connection(db)
                 stored = self._prepare_message_unlocked(
                     message, sender=sender, target=target, sequence=seq,
                     snapshot=snapshot, original_source=source,
@@ -265,7 +270,7 @@ class ResponseWrites(Publisher):
         def build(seq: int, db: sqlite3.Connection):
             stored = self._prepare_message_unlocked(
                 message, sender=sender, target=target, sequence=seq, snapshot=registry_snapshot,
-                original_source=BusSnapshot.from_connection(db),
+                original_source=PublicationSnapshot.from_connection(db),
             )
             if not intent.matches_publication(stored):
                 raise RelationViolationError("Stored response does not match publication intent.")
