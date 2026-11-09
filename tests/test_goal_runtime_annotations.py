@@ -3,7 +3,7 @@
 import subprocess
 import sys
 from collections.abc import AsyncIterator, Callable
-from inspect import isfunction
+from inspect import isabstract, isfunction
 from pathlib import Path
 from types import NoneType
 from typing import get_args, get_origin, get_type_hints
@@ -15,6 +15,7 @@ from agent_comms.acp import AcpSelectedWriteAuthority, CommsAgent, SdkSessionCon
 from agent_comms.acp_extension import AgentCommsUpdate, LiveQueueScope, PromptRequest, QueueScope
 from agent_comms.agent_event_updates import AcpEventConsumer, AcpToolAction
 from agent_comms.agent_runtime import DeliversInput, PublishesTranscript, ReadsHistory
+from agent_comms.channel_input_batch import InputBatch
 from agent_comms.cli_bridges.history import History
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOption, ConfigOptions
@@ -53,6 +54,7 @@ from agent_comms.harness_delivery_states import Outcome
 from agent_comms.harness_install import HarnessSession
 from agent_comms.importing import ImportBuffer, ImportSnapshot
 from agent_comms.input_attempt import InputAttempt, StoredInput
+from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.input_key import InputKey
 from agent_comms.input_origin import InputProvenance
 from agent_comms.messaging.messages import ClaimNoticeKind, Message, MessageInput
@@ -477,6 +479,20 @@ def test_routing_presence_contract_keeps_original_sent_value_identity() -> None:
     assert issubclass(NoSentInputText, NullMember)
     for routing in (Routing, TurnRouting):
         assert get_type_hints(routing.validate_input)["sent_text"] == PresentMember | NullMember
+
+
+def test_original_input_capture_and_store_callbacks_resolve() -> None:
+    capture = get_type_hints(InputBatch.capture)
+    originals = capture["document"]
+    assert originals in InputDocument.__bases__
+    assert not isabstract(InputDocument)
+    assert get_type_hints(originals.originals) == get_type_hints(InputDocument.originals)
+    assert capture["owner"] is ThreadCreationSource
+    assert get_args(capture["origins"]) == (Message, Ellipsis)
+    for callback in (InputDocument.started_for_native, InputDocument.answered_by,
+                     InputDispositions.context_committed, InputDispositions.reserve_turn,
+                     InputDispositions.harness_attempts):
+        get_type_hints(callback)
 
 
 def test_input_observation_callbacks_use_original_evidence_contracts() -> None:

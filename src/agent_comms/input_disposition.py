@@ -7,14 +7,15 @@ from collections.abc import Callable
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
-from agent_comms.bus import Bus
-from agent_comms.bus_tables import MessageIdentitySource
+from agent_comms.bus import Bus, BusReader
+from agent_comms.channel_input_batch import SingleInputBatch
 from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     GoalInputDecision,
@@ -34,6 +35,9 @@ from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.field_codec import GoalId, InputId, RootId, ThreadLookup, TurnId
+from agent_comms.original_inputs import OriginalInputs
+from agent_comms.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registry_document import RegistryEntry, RegistrySnapshot
 from agent_comms.reported_turn import ReportedTurnState
 from agent_comms.storage.locked_store import CompleteInputReader, DocumentChange, PublishedProperty
 from agent_comms.storage.typed_table import (
@@ -48,13 +52,6 @@ from agent_comms.storage.typed_table import (
     sql_literal,
 )
 from agent_comms.tool_result import ToolResult
-
-if TYPE_CHECKING:
-    from agent_comms.bus import BusReader
-    from agent_comms.channel_input_batch import SingleInputBatch
-    from agent_comms.execution.turn_lease import TurnLeaseFence
-    from agent_comms.private_registry_guard import RegistryPrivacy
-    from agent_comms.registry.registry_document import RegistryEntry, RegistrySnapshot
 
 
 @dataclass(frozen=True)
@@ -76,7 +73,7 @@ class DeliveryOverview(ToolResult):
 
 
 @dataclass(frozen=True, slots=True)
-class InputDocument:
+class InputDocument(OriginalInputs):
     """The stored rows one query selected; never the whole store."""
 
     rows: dict[InputKey, StoredInput] = field(default_factory=dict)
@@ -163,8 +160,7 @@ class InputDocument:
             for row in sorted(self.rows.values(), key=lambda item: item.order)
             for reference in row.delivered_in(lease, privacy.namespace, snapshot).references()
         )
-        with source.observing() as db:
-            return MessageIdentitySource.answering(db, delivered, CommandTarget.named(target), snapshot)
+        return source.answering(delivered, CommandTarget.named(target), snapshot)
 
     def unbound_wire_inputs(self, root_id: RootId) -> dict[MessageReference, StoredInput]:
         """Original bus deliveries with positive evidence that Pi never received them."""
@@ -365,8 +361,6 @@ class InputDispositions(DurableStore, CompleteInputReader):
         *, ownership: ExitStack,
     ) -> SingleInputBatch:
         """Enlist rollback before publication; caller retains the original wire scope."""
-        from agent_comms.channel_input_batch import SingleInputBatch
-
         row = ReservedInput(TurnInputKey(turn), None, owner, claim_scope, owner, text)
 
         document = self.reserve_originals(row, ownership=ownership)

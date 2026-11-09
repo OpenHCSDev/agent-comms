@@ -4,16 +4,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.input_attempt import StoredInput
 from agent_comms.input_key import InputKey
-
-if TYPE_CHECKING:
-    from agent_comms.input_disposition import InputDocument
-    from agent_comms.messaging.messages import Message
-    from agent_comms.registry.threads import Thread
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.messages import Message
+from agent_comms.original_inputs import OriginalInputs
+from agent_comms.registry.thread_creation import ThreadCreationSource
 
 
 @dataclass(frozen=True)
@@ -43,8 +40,8 @@ class InputBatch(ABC):
         origins: tuple[Message, ...],
         keys: tuple[InputKey, ...],
         prompt: str,
-        owner: Thread,
-        document: InputDocument,
+        owner: ThreadCreationSource,
+        document: OriginalInputs,
     ) -> InputBatch:
         originals = document.originals(keys)
         single = SingleInputBatch(originals)
