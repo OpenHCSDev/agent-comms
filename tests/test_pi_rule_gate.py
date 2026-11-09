@@ -25,7 +25,10 @@ from agent_comms.native_tool_call import CodingCall
 from agent_comms.native_tools import McpToolCall, ReadTool
 from agent_comms.pi_rule_gate import PiRedeal, RulesUnread
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.selected_tool_broker import SelectedToolRequest, SelectedWriteArguments
+from agent_comms.execution.selected.tool_broker import (
+    SelectedToolRequest,
+    SelectedWriteArguments,
+)
 from agent_comms.task_attachments.owner_notices import MeantNotice, RestartNotice
 from agent_comms.registry.threads import NativeThread
 from agent_comms.fresh_private_session import create_fresh_private_session

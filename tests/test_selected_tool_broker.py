@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import agent_comms.selected_tool_broker as broker
+import agent_comms.execution.selected.tool_broker as broker
 from agent_comms.native_tool_call import SelectedToolBusy
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordination.database import CoordinationStore

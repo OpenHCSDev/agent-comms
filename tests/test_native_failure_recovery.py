@@ -24,14 +24,14 @@ from agent_comms.private_send_claim import PrivateSendClaim
 from agent_comms.private_send_stage import TriageNativeSend
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.execution.selected.request import SelectedRequest
-from agent_comms.selected_actions import CodingSelectedAction
+from agent_comms.execution.selected.actions import CodingSelectedAction
 from agent_comms.execution.selected.participant import SelectedParticipant
 from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.execution.selected.turn import (
     SelectedAttempt,
     SelectedPrompt,
 )
-from agent_comms.selected_write_authority import NoSelectedWritePlans
+from agent_comms.execution.selected.actions import NoSelectedWritePlans
 from agent_comms.text_digest import TextDigest
 from native_proof_cases import append_input_entry, recorded_context, write_proof_rows
 from conftest import accept_initial, publish_initial

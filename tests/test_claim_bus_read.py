@@ -34,7 +34,7 @@ from agent_comms.messages import ClaimMessage, ClaimNoticeKind
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.read_basis import AllChannelDisplayScope, DMDisplayScope
 from agent_comms.reason_codes import NoReasonCode
-from agent_comms.selected_claim import (
+from agent_comms.execution.selected.claim import (
     publish_selected_resource_claim,
     write_selected_claimed_file,
 )

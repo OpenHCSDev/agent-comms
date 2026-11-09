@@ -27,8 +27,8 @@ from agent_comms.native_package import VerifiedNativePackage
 
 from agent_comms.native_tools import NativeToolDeclaration
 from agent_comms.cursor_owner import CursorOwner
-from agent_comms.selected_actions import CodingSelectedAction
-from agent_comms.selected_tool_broker import SelectedToolIntent
+from agent_comms.execution.selected.actions import CodingSelectedAction
+from agent_comms.execution.selected.tool_broker import SelectedToolIntent
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.registry.thread_model import DeclaredModel

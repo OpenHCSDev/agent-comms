@@ -317,7 +317,7 @@ class CodingCall(NativeToolCall):
     def commit_terminal(
         self, is_error: bool, coordination_path: Path, input_id: InputId, round_number: int
     ) -> None:
-        from .selected_tool_broker import record_selected_terminal
+        from agent_comms.execution.selected.tool_broker import record_selected_terminal
 
         slot = self.slot(input_id, round_number)
         record_selected_terminal(coordination_path, slot, self.call_id)

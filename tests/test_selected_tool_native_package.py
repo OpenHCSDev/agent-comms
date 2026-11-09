@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from agent_comms.selected_tool_broker import selected_extension
+from agent_comms.execution.selected.tool_broker import selected_extension
 
 
 @pytest.mark.parametrize("packaged", [True, False])

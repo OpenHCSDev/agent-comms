@@ -27,7 +27,7 @@ from agent_comms.native_session_reopen import NativeSessionIdentity, PiSessionId
 from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.native_startup import NATIVE_STARTUP_POLICY
 from agent_comms.native_transcript import NativeTranscript
-from agent_comms.selected_actions import NoSelectedTools
+from agent_comms.execution.selected.actions import NoSelectedTools
 from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.tracked_turn import TrackedTurnSession

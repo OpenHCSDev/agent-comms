@@ -33,7 +33,10 @@ from .native_pi import NativePiRpcLaunch
 from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
 from .pi_native_backend import PersistentPiSession
-from .selected_actions import CodingSelectedAction, SelectedAction
+from agent_comms.execution.selected.actions import (
+    CodingSelectedAction,
+    SelectedAction,
+)
 from agent_comms.execution.selected.participant import (
     NoLivePublication,
     SelectedParticipant,
@@ -44,7 +47,10 @@ from agent_comms.execution.selected.turn import (
     SelectedAttempt,
     SelectedConsideration,
 )
-from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthority
+from agent_comms.execution.selected.actions import (
+    NoSelectedWritePlans,
+    SelectedWriteAuthority,
+)
 from .execution.turn_failure import RetryableProviderFailure
 
 

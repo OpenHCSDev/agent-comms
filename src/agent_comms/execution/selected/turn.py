@@ -46,7 +46,7 @@ from agent_comms.private_send_stage import (
     FullNativeSend,
     TriageNativeSend,
 )
-from agent_comms.selected_actions import (
+from agent_comms.execution.selected.actions import (
     BatchSelectedAction,
     NoSelectedTools,
     SelectedAction,

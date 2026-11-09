@@ -11,7 +11,7 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.native_tool_call import SelectedToolBusy
 from agent_comms.tool_denial import SelectedToolDenied
-from agent_comms.selected_tool_broker import verify_sent_full_input
+from agent_comms.execution.selected.tool_broker import verify_sent_full_input
 
 
 def reply(error: Exception) -> str:

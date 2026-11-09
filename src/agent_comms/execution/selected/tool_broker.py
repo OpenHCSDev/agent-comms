@@ -12,47 +12,71 @@ import logging
 import sqlite3
 import stat
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+)
 from functools import partial
 from pathlib import Path
 from typing import ClassVar
 
-from .comms import Comms
-from .coordination.errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
-from .coordination.session import ReadNativeCoordinationSession
-from .coordination.tables.participants import OwnerGenerations
-from .coordination.coordinator import Coordination
-from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
-from .nominal.field_codec import (
+from agent_comms.comms import Comms
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import (
+    CoordinationBeginUnavailable,
+    CoordinationReadUnavailable,
+)
+from agent_comms.coordination.session import ReadNativeCoordinationSession
+from agent_comms.coordination.tables.participants import OwnerGenerations
+from agent_comms.envelope_claim_transitions import (
+    ExistingFileClaim,
+    WakeClaim,
+)
+from agent_comms.execution.turn_context import InstructionFile
+from agent_comms.native_input_record import (
+    FullNativeExecution,
+    NativeInputIdentity,
+)
+from agent_comms.native_runtime_input import (
+    NativeRuntimeInput,
+    NativeRuntimeTable,
+    SelectedToolSlot,
+)
+from agent_comms.native_tool_call import (
+    NativeToolCall,
+    NativeToolMode,
+    SelectedToolBusy,
+)
+from agent_comms.native_tool_transport import (
+    GatedToolTransport,
+    NativeToolRound,
+    ToolListener,
+    UnboundToolTransport,
+)
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,
     SlotId,
     ToolCallId,
 )
-from .native_input_record import FullNativeExecution, NativeInputIdentity
-from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable, SelectedToolSlot
-from .native_tool_call import (
-    NativeToolCall,
-    NativeToolMode,
-    SelectedToolBusy,
+from agent_comms.pi_rule_gate import PiRuleGate
+from agent_comms.execution.selected.actions import SelectedAction
+from agent_comms.execution.selected.claim import (
+    publish_selected_resource_claim,
+    write_selected_claimed_file,
 )
-from .native_tool_transport import (
-    GatedToolTransport,
-    NativeToolRound,
-    ToolListener,
-    UnboundToolTransport,
-)
-from .pi_rule_gate import PiRuleGate
-from .selected_actions import SelectedAction
-from .selected_claim import publish_selected_resource_claim, write_selected_claimed_file
-from .tool_denial import SelectedToolDenied
-from .execution.turn_context import InstructionFile
+from agent_comms.tool_denial import SelectedToolDenied
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
 _MAX_CONTENT = 128 * 1024
+
+
 _MAX_REQUEST = _MAX_CONTENT + 8192
+
+
 _TOOL_SOURCE = Path(__file__).with_name("selected_claimed_write.mjs")
+
 
 _LOG = logging.getLogger(__name__)
 

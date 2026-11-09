@@ -89,7 +89,7 @@ from .queued_input import DeliveredInput
 from .runtime_server import RuntimeServer
 from .owner_connection import socket_path
 from .runtime import RuntimeProxy
-from .selected_write_plan import SelectedWritePlans
+from agent_comms.execution.selected.write_plan import SelectedWritePlans
 from .session_effects import SessionEffects
 from .execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from .registry.threads import Thread
@@ -105,7 +105,7 @@ from .activity import FailedWakeDiagnostic
 from agent_comms.execution.input_drain import SchedulesWake, WakeDue, WakeHeld, WakeOutcome
 from .registry.thread_identity import OwnerIdentity
 
-from agent_comms.selected_write_authority import BoundSelectedWriteAuthority
+from agent_comms.execution.selected.actions import BoundSelectedWriteAuthority
 if TYPE_CHECKING:
     from .coordination.tables.assignments import WakeAssignment
 

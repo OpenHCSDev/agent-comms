@@ -8,32 +8,46 @@ from __future__ import annotations
 
 import os
 import stat
-from collections.abc import Callable, Iterator
-from contextlib import AbstractContextManager, ExitStack, contextmanager
+from collections.abc import (
+    Callable,
+    Iterator,
+)
+from contextlib import (
+    AbstractContextManager,
+    ExitStack,
+    contextmanager,
+)
 from pathlib import Path
 
-from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.bus import (
+    BusReader,
+    BusSnapshot,
+)
+from agent_comms.bus_publication import Delivered
+from agent_comms.cohort_schema import CohortTable
+from agent_comms.comms import Comms
+from agent_comms.coordination.cohort import _claim_record
 from agent_comms.coordination.coordinator import Coordination
-
-from .cohort_schema import CohortTable
-from .bus import BusReader, BusSnapshot
-from .bus_publication import Delivered
-from .comms import Comms
-from .coordination.cohort import _claim_record
-from .coordination.database import CoordinationStore
-from .coordination.errors import StaleFence
-from .coordination.tables.participants import OwnerGenerations
-from .envelope_claim_transitions import (
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import (
+    IdentityConflict,
+    StaleFence,
+)
+from agent_comms.coordination.tables.participants import OwnerGenerations
+from agent_comms.envelope_claim_transitions import (
     ClaimOwner,
     ExistingFileClaim,
     FileClaimPath,
     WakeClaim,
 )
-from .errors import RelationViolationError
-from .native_input_owner import RegistryOwner
-from .private_registry_guard import RegistryPrivacy
-from .registry.registry_document import RegistrySnapshot
-from .registry.threads import NativeThread, Thread
+from agent_comms.errors import RelationViolationError
+from agent_comms.native_input_owner import RegistryOwner
+from agent_comms.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.threads import (
+    NativeThread,
+    Thread,
+)
 
 
 def verify_selected_wake(
@@ -174,7 +188,6 @@ def publish_selected_resource_claim(
             claim_scope,
             activity=activity,
         )
-
 
 
 @contextmanager
