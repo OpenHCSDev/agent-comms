@@ -1,0 +1,116 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-bind-original-message-module-owners",
+          "reason": "sending.py imports individual declarations from messaging.messages, but binds neither messages nor retained_task_facts as a module. Seven provider imports incorrectly require those absent attributes from sending, which also pulls Registration/Messaging/task assembly into their bootstrap. Bind the actual original messaging.messages and messaging.retained_task_facts modules directly. Keep each existing local module name, concrete record annotation, dataclass field, default, method body, constructor and acquisition/refusal/I/O sequence. No declaration movement, replacement record, re-export shim, guarded promotion or local import. Normal native reproof checks the integrated source; no runtime success or SCC reduction is claimed from this artifact.",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus_record_builder.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.messaging.sending import messages",
+                  "new_source": "import agent_comms.messaging.messages as messages"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/initial_origin.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.messaging.sending import messages",
+                  "new_source": "import agent_comms.messaging.messages as messages"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/message_writer.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.messaging.sending import messages",
+                  "new_source": "import agent_comms.messaging.messages as messages"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/retained_task_facts.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.messaging.sending import messages",
+                  "new_source": "import agent_comms.messaging.messages as messages"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/messages.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.messaging.sending import retained_task_facts as task_facts",
+                  "new_source": "import agent_comms.messaging.retained_task_facts as task_facts"
+                }
+              ]
+            },
+            {
+              "operation": "patch_target",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/task_sources.py",
+              "replacements": [
+                {
+                  "old_source": "from agent_comms.messaging.sending import retained_task_facts as task_facts\nfrom agent_comms.messaging.sending import messages",
+                  "new_source": "import agent_comms.messaging.retained_task_facts as task_facts\nimport agent_comms.messaging.messages as messages"
+                }
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-place-original-record-builder-alias",
+          "reason": "On packaged 356d83cc0, bus_record_builder.py remains flat and contains only the original RecordBuilder type alias plus its imports. After the message-module-owner prefix binds the actual messaging.messages module, relocate that original alias into messaging/bus_record_builder.py and migrate all selected Core/owned-Toad consumers. No class, callable implementation, wire field, default or runtime query changes. The alias is not a replacement record or forwarding facade.",
+          "operations": [
+            {
+              "operation": "relocate_symbols_to_new_module",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus_record_builder.py",
+              "symbol_qualnames": [
+                "RecordBuilder"
+              ],
+              "destination_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/bus_record_builder.py"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-dissolve-old-record-builder-module",
+          "reason": "Delete the now-declaration-free root module through the native consumer/identity proof, with its actual packaged successor. Do not retain a compatibility re-export. This suffix follows the message-module-owner prefix; a refusal does not hold that usable prefix or authorize bypassing the native proof.",
+          "operations": [
+            {
+              "operation": "dissolve_module",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus_record_builder.py",
+              "successor_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/bus_record_builder.py"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

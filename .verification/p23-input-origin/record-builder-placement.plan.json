@@ -1,0 +1,41 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-place-original-record-builder-alias",
+          "reason": "On packaged 356d83cc0, bus_record_builder.py remains flat and contains only the original RecordBuilder type alias plus its imports. After the message-module-owner prefix binds the actual messaging.messages module, relocate that original alias into messaging/bus_record_builder.py and migrate all selected Core/owned-Toad consumers. No class, callable implementation, wire field, default or runtime query changes. The alias is not a replacement record or forwarding facade.",
+          "operations": [
+            {
+              "operation": "relocate_symbols_to_new_module",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus_record_builder.py",
+              "symbol_qualnames": ["RecordBuilder"],
+              "destination_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/bus_record_builder.py"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-dissolve-old-record-builder-module",
+          "reason": "Delete the now-declaration-free root module through the native consumer/identity proof, with its actual packaged successor. Do not retain a compatibility re-export. This suffix follows the message-module-owner prefix; a refusal does not hold that usable prefix or authorize bypassing the native proof.",
+          "operations": [
+            {
+              "operation": "dissolve_module",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus_record_builder.py",
+              "successor_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/bus_record_builder.py"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

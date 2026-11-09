@@ -1,0 +1,21 @@
+{
+  "revisions": {
+    "/home/ts/wt/comms-friction--P17": "356d83cc039ce74469a30a2817c8275fe90bf527",
+    "/home/ts/wt/comms-friction--P23--toad": "77c300b0c1de4cd400747c95eb95120575fff3a6"
+  },
+  "source_modules": 2306,
+  "is_clean": true,
+  "stage_count": 1,
+  "changed_file_paths": [
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/bus_record_builder.py",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/initial_origin.py",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/message_writer.py",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/messages.py",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/retained_task_facts.py",
+    "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/task_sources.py"
+  ],
+  "proof": "/home/ts/.cache/agent-scratch/comms-toad-selector/p23-native-batches/message-module-owners.plan.simulation.json",
+  "proof_sha256": "81e33d4582e5199dcc34d8d643e5ecaff35c4ba4805f54776bcfb83bb812b368",
+  "plan_sha256": "36868780cf397479d96ff90c714df105c5120aa1a6fa983c905e79688249a49e",
+  "scope": "Native simulation only; no product writes"
+}
