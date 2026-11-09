@@ -2,28 +2,31 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .coordination.errors import IdentityConflict
-from .coordination.tables.assignments import WakeAssignment
-from .envelope_claim_transitions import ExistingFileClaim
-from .nominal.field_codec import ClaimId
-from .native_tool_call import NativeToolMode
-from .native_tool_transport import ToolTransport
-from .selected_claim import (
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.envelope_claim_transitions import ExistingFileClaim
+from agent_comms.execution.turn_context import InstructionFile
+from agent_comms.native_tool_call import NativeToolMode
+from agent_comms.native_tool_transport import ToolTransport
+from agent_comms.nominal.field_codec import ClaimId
+from agent_comms.registry.threads import Thread
+from agent_comms.execution.selected.claim import (
     publish_selected_resource_claim,
     write_selected_claimed_file,
 )
-from .selected_write_authority import BoundSelectedWriteAuthority
-from .selected_write_plan import PlannedWrite
-from .registry.threads import Thread
-from .execution.turn_context import InstructionFile
+from agent_comms.execution.selected.write_plan import PlannedWrite
 
 if TYPE_CHECKING:
-    from .channel_coding_tools import CodingToolOwner
+    from agent_comms.channel_coding_tools import CodingToolOwner
 
 
 class SelectedAction(ABC):
@@ -52,6 +55,31 @@ class SelectedAction(ABC):
         thread: Thread,
     ) -> SelectedAction:
         return PlannedSelectedWrite(authority, plan, assignment, thread)
+
+
+class SelectedWriteAuthority(ABC):
+    @abstractmethod
+    def select(
+        self, assignment: WakeAssignment, owner: Thread, generation: int, action: SelectedAction
+    ) -> SelectedAction: ...
+
+
+class NoSelectedWritePlans(SelectedWriteAuthority):
+    def select(self, assignment, owner, generation, action):
+        return action
+
+
+class BoundSelectedWriteAuthority(SelectedWriteAuthority):
+    @abstractmethod
+    def require_current(
+        self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId
+    ) -> None: ...
+
+    @abstractmethod
+    def writing(
+        self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId
+    ) -> AbstractContextManager[None]:
+        """The write's whole span: current on entry, applied on success, unbound on every end."""
 
 
 class NoSelectedTools(SelectedAction, NativeToolMode):
@@ -114,7 +142,7 @@ class CodingSelectedAction(SelectedAction):
         return (InstructionFile.read("selected-coding.md"),)
 
     def mode(self, owner: CodingToolOwner) -> NativeToolMode:
-        from .channel_coding_tools import CodingToolMode
+        from ...channel_coding_tools import CodingToolMode
 
         return CodingToolMode(owner)
 

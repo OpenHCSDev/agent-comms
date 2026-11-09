@@ -15,13 +15,13 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-import agent_comms.selected_claim as selected_claim
+import agent_comms.execution.selected.claim as selected_claim
 from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import ClaimId, TurnId
-from agent_comms.selected_claim import (
+from agent_comms.execution.selected.claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
     write_selected_claimed_file,

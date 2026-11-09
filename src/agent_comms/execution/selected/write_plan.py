@@ -12,36 +12,53 @@ import base64
 import hashlib
 import os
 from contextlib import suppress
-from dataclasses import dataclass, fields
+from dataclasses import (
+    dataclass,
+    fields,
+)
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import (
+    Literal,
+    TYPE_CHECKING,
+)
 
-from .coordination.database import CoordinationStore
-from .storage.locked_store import DurableFile, PatternFile
-from .storage.store_files import AtomicFile
-
-if TYPE_CHECKING:
-    from .acp_extension import SelectedWriteAcceptedUpdate
-    from .comms import Comms
-    from .coordination.tables.assignments import WakeAssignment
-    from .registry.threads import Thread
-
-from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.child_process import Platform
+from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.coordination.coordinator import Coordination
-
-from .child_process import Platform
-from .coordination.cohort import sealed_cohort_assignments
-from .nominal.declared_family import DeclaredFamily
-from .envelope_claim_transitions import ExistingFileClaim
-from .nominal.field_codec import AssignmentId, ClaimId, FieldCodec, MalformedRecord, MessageId, RootId
-from .projects.checkouts import Checkout
-from .message_reference import MessageReference
-from .storage.private_path import PrivateDirectoryRole, PrivateFileRole
-from .registry.thread_identity import (
-    ClaimedIdentity,
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.envelope_claim_transitions import ExistingFileClaim
+from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    AssignmentId,
+    ClaimId,
+    FieldCodec,
+    MalformedRecord,
+    MessageId,
+    RootId,
+)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import (
     ClaimScoped,
+    ClaimedIdentity,
     RecordedThreadIncarnation,
 )
+from agent_comms.storage.locked_store import (
+    DurableFile,
+    PatternFile,
+)
+from agent_comms.storage.private_path import (
+    PrivateDirectoryRole,
+    PrivateFileRole,
+)
+from agent_comms.storage.store_files import AtomicFile
+
+if TYPE_CHECKING:
+    from agent_comms.acp_extension import SelectedWriteAcceptedUpdate
+    from agent_comms.comms import Comms
+    from agent_comms.coordination.tables.assignments import WakeAssignment
+    from agent_comms.registry.threads import Thread
 
 _MAX_BYTES = 1024 * 1024
 
@@ -88,6 +105,7 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
 
     def require_accepted(self):
         raise IdentityConflict("Selected write intent is already applied or uncertain")
+
 
 class AcceptedWriteIntent(SelectedWriteIntent, declared_name="accepted"):
     def require_accepted(self):
@@ -230,7 +248,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
                 # The visible file may have committed despite the error. Keep
                 # it as an UNKNOWN barrier; never unlink/retry the operation.
                 raise
-            from .acp_extension import SelectedWriteAcceptedUpdate
+            from ...acp_extension import SelectedWriteAcceptedUpdate
 
             return SelectedWriteAcceptedUpdate(operation_id, source_seq, selected[0].assignment_id)
 

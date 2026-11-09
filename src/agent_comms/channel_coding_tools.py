@@ -31,11 +31,11 @@ from .native_tool_transport import GatedToolTransport, ToolListener, UnboundTool
 from .native_tools import NativeToolDeclaration
 from .pi_payloads import StorageDenialToolDetails
 from .pi_rule_gate import PiRuleGate
-from .selected_claim import (
+from agent_comms.execution.selected.claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
 )
-from .selected_tool_broker import (
+from agent_comms.execution.selected.tool_broker import (
     consume_selected_slot,
     verify_sent_full_input,
 )
