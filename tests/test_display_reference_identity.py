@@ -1,5 +1,4 @@
 """A UI builds its display references on every registry revision, so they decode no thread row."""
-import shutil
 from pathlib import Path
 
 import pytest
@@ -22,8 +21,7 @@ def test_references_name_every_identity_without_decoding_a_row(
     expected = {name: thread.incarnation for name, thread in written.snapshot().named_members()}
 
     copied = RegistryFile.path_in(tmp_path / "copied")
-    copied.parent.mkdir()
-    shutil.copy(written.store.path, copied)
+    written.store.retain(copied.parent)
 
     def decoded(_rows: ThreadRows, _row: object) -> None:
         raise AssertionError("building display references decoded a thread row")

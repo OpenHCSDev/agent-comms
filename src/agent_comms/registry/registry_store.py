@@ -17,7 +17,7 @@ from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.errors import RelationViolationError
-from agent_comms.execution.child_process import NoProcess
+from agent_comms.execution.child_process import NoProcess, Platform
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_lease import (
@@ -369,10 +369,30 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
     record_type = RegistryDocument
 
     def stored_files(self) -> tuple[Path, ...]:
-        """The files that together are this registry: its rows (a SQLite backup carries their
-        WAL), and the presence rows every declared thread must have. A copy that leaves one
-        behind cannot be read."""
+        """The registry and presence files selected together by installer backups."""
         return self.path, self.presence.path
+
+    def retain(self, destination: Path) -> RegistryRevision:
+        """Retain a consistent registry for history, then seal the copy against live writes.
+
+        SQLite backup includes committed WAL rows. Presence is copied with its own file owner;
+        neither operation retires the source's participants or copies live execution grants.
+        """
+        copied = type(self).at(destination)
+        destination.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with self.guarded_read():
+            self.copy_file(self.path, copied.path)
+            Platform.current().sync_file(copied.path)
+            if self.presence.path.exists():
+                self.presence.copy_file(self.presence.path, copied.presence.path)
+                Platform.current().sync_file(copied.presence.path)
+        copied.mark_historical()
+        return copied.read_revision()
+
+    def has_revision(self, revision: RegistryRevisionMark) -> bool:
+        """Check a retained content revision under the same guard used to capture it."""
+        with self.guarded_read():
+            return self._capture_unlocked().revision == revision
 
     def empty(self) -> RegistryDocument:
         return RegistryDocument()
@@ -521,8 +541,9 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
 
     @property
     def companion_paths(self) -> tuple[Path, ...]:
-        """The plain files a cut keeps consistent with the rows: the guard and the turn files."""
-        return (self.guard_path, *sorted(StoredTurnRecord.matching_in(self.path.parent)))
+        """The plain files retained with the rows: presence, the guard and turn records."""
+        return (self.presence.path, self.guard_path,
+                *sorted(StoredTurnRecord.matching_in(self.path.parent)))
 
     def revision_unlocked(self) -> tuple[RegistryRevisionMark, FileObservation]:
         """The committed row revision and the owner guard that brackets every commit."""

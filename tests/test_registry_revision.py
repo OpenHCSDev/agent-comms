@@ -1,6 +1,8 @@
 """Registry reads reuse unchanged declarations but follow external wire writes."""
 
 
+from contextlib import closing
+
 import pytest
 
 from agent_comms.projects.checkouts import Checkout
@@ -10,6 +12,24 @@ from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.locked_store import RegistryFile
+
+
+def test_retained_registry_keeps_wal_rows_and_revision_ignores_checkpoints(tmp_path):
+    registry = Registration(RegistryFile.path_in(tmp_path / "source"))
+    registry.register(NativeThread("first", frozenset(), Checkout(tmp_path)))
+    # Keep an older SQLite read open so the second declaration remains in the WAL.
+    with closing(RegistryFile.read_snapshot(registry.store.path)):
+        registry.register(NativeThread("second", frozenset(), Checkout(tmp_path)))
+        captured = registry.store.read_revision()
+        retained = registry.store.retain(tmp_path / "retained")
+        assert set(retained.document.threads) == {"first", "second"}
+        assert registry.store.has_revision(captured.source.revision)
+    with closing(RegistryFile.writer(registry.store.path)) as db:
+        db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    assert registry.store.has_revision(captured.source.revision)
+    registry.unregister("second")
+    assert not registry.store.has_revision(captured.source.revision)
+    assert set(RegistryStore.at(tmp_path / "retained").read().threads) == {"first", "second"}
 
 
 @pytest.mark.parametrize("select", [

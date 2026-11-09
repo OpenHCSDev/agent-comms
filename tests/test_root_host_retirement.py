@@ -2,7 +2,6 @@
 on 2026-11-04 that read stopped the live install, after the outgoing runtime had already retired
 the host. Only a running host needs its owners read."""
 
-import json
 import os
 from pathlib import Path
 
@@ -25,8 +24,8 @@ from agent_comms.storage.private_path import FileIdentity
 
 def older_registry(root: Path) -> None:
     """A stored form this decoder refuses, as an install finds it before its carries."""
-    RegistryStore(RegistryFile.path_in(root)).carry_text(json.dumps({
-        "version": 1, "commander_project": "retired", "threads": {}}))
+    RegistryStore(RegistryFile.path_in(root)).rewrite_stored(lambda _: {
+        "version": 1, "commander_project": "retired", "threads": {}})
 
 
 def store_with(root: Path, process: ProcessIdentity) -> RootRuntimeStore:

@@ -15,7 +15,6 @@ from agent_comms.execution.child_process import (
 )
 from agent_comms.installer.active_route import ActiveRoute, read_active_route, route_new_bus
 from agent_comms.installer.backup import bus_files
-from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
@@ -107,11 +106,14 @@ def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(p
     practice.include(tuple(RootFile.existing_in(root)))
     copy = practice.path
     measurement = practice.measurement
-    copied = {str(path.relative_to(copy)) for path in copy.rglob("*") if path.is_file()}
-    # The copy's own registry writer takes its own lock.
-    own_lock = {str(path.relative_to(copy))
-                for path in RegistryFile.transient_paths(RegistryFile.path_in(copy))}
-    assert copied - own_lock == declared - witnesses
+    observed = {path: path.stat() for path in copy.rglob("*") if path.is_file()}
+    # Each file owner distinguishes retained content from locks and SQLite read artifacts.
+    noncontent = set()
+    for path, owner in files.items():
+        retained = copy / path.relative_to(root)
+        noncontent.update(owner.member_paths(retained) - owner.snapshot_members(retained, observed))
+    copied = {str(path.relative_to(copy)) for path in observed.keys() - noncontent}
+    assert copied == declared - witnesses
     assert measurement.bytes > 0
     for name in databases:
         query = "SELECT name FROM sqlite_schema ORDER BY name"

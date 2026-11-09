@@ -1110,13 +1110,6 @@ class RegistryFile(RollbackRetained, PublishedSQLiteFile, GoalWakeFile):
         return ()
 
     @classmethod
-    def committed_revision(cls, root: Path) -> FileObservation:
-        """The registry's committed revision as a file observation: its commit signal's, since a
-        WAL commit leaves the database file itself untouched until a checkpoint."""
-        (signal,) = cls.source_paths(root)
-        return FileRevision.capture(signal)
-
-    @classmethod
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
         """The copy names no live process: a signal, stop or wake aimed through it would reach
         the source root's units."""

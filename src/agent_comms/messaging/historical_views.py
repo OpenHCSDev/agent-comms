@@ -72,6 +72,7 @@ from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_provenance import RegistryProvenance
+from agent_comms.registry.registry_tables import RegistryRevisionMark
 from agent_comms.registry.thread_identity import UnrecordedThreadIncarnation
 from agent_comms.registry.threads import Thread, ThreadProvenance
 from agent_comms.storage.locked_store import DocumentChange, RegistryFile, RootFile
@@ -336,7 +337,7 @@ class HistorySource(MessageHistory):
     bus_identity: RecordedBusIdentity
     snapshot_bus_identity: RecordedBusIdentity
     snapshot_bus_revision: int
-    snapshot_registry_revision: FileObservation
+    snapshot_registry_revision: RegistryRevisionMark
     provenance: RegistryProvenance
 
     def references_from(self, context: ReferenceContext) -> ReferenceContext:
@@ -354,7 +355,7 @@ class HistorySource(MessageHistory):
         return HistorySourceKey(self.root)
 
     @property
-    def snapshot_identity(self) -> tuple[HistorySourceKey, int, FileObservation]:
+    def snapshot_identity(self) -> tuple[HistorySourceKey, int, RegistryRevisionMark]:
         """One root is captured again at later revisions, and those captures record other names."""
         return self.key, self.snapshot_bus_revision, self.snapshot_registry_revision
 
@@ -381,13 +382,12 @@ class HistorySource(MessageHistory):
         catalog_revision = FileRevision.capture(catalog_path)
         archived = Bus(Bus.path_in(destination))
         Bus(Bus.path_in(root)).backup(archived.path)
-        for path in (*Registration(RegistryFile.path_in(root)).store.stored_files(), catalog_path):
-            if path.exists():
-                target = destination / path.name
-                shutil.copy2(path, target)
-                Platform.current().sync_file(target)
+        registry = Registration(RegistryFile.path_in(root)).store.retain(destination)
+        if catalog_path.exists():
+            target = destination / catalog_path.name
+            shutil.copy2(catalog_path, target)
+            Platform.current().sync_file(target)
         TranscriptRoutes(root).retain(destination)
-        Registration(RegistryFile.path_in(destination)).store.mark_historical()
         self.require_original(root)
         if FileRevision.capture(catalog_path) != catalog_revision:
             raise ValueError("Historical catalog changed during snapshot; retry")
@@ -399,7 +399,7 @@ class HistorySource(MessageHistory):
         return HistorySource(
             str(destination.resolve()), self.original_root, self.bus_identity,
             RecordedBusIdentity.capture(archived.path), self.snapshot_bus_revision,
-            RegistryFile.committed_revision(destination), self.provenance,
+            registry.source.revision, self.provenance,
         )
 
     def validate(self) -> None:
@@ -407,12 +407,9 @@ class HistorySource(MessageHistory):
         error = ValueError("Historical snapshot changed; restore it before browsing")
         if not self.snapshot_bus_identity.matches(ObservedPath.at(Bus.path_in(root))):
             raise error
-        current = replace(
-            self,
-            snapshot_bus_revision=Bus(Bus.path_in(root)).revision(),
-            snapshot_registry_revision=RegistryFile.committed_revision(root),
-        )
-        if current != self:
+        if Bus(Bus.path_in(root)).revision() != self.snapshot_bus_revision:
+            raise error
+        if not Registration(RegistryFile.path_in(root)).store.has_revision(self.snapshot_registry_revision):
             raise error
 
     def acknowledge(self, displayed: DisplayBasis) -> None:
