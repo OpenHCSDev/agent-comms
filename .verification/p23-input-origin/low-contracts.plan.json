@@ -1,0 +1,69 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-isolate-original-input-root-authority",
+          "reason": "InputRootAuthority is the original namespace/root contract inherited by actual RegistryPrivacy; InputTextContext is the independent original input lookup construction contract inherited by Comms. Neither reads TaskOwner, TaskRegistry, Checkout, UserThreadLookup or the acquisition interfaces. Their current shared module imports all of those eagerly, making low publication readers and private root authority depend on task/context assembly. Move the original declarations and all consumers through native relocation, keeping fields, slots, methods, actual provider inheritance and original binding identities. Remove the imports read only by the moved contracts, through the native unread-binding proof. No acquisition body changes: both snapshot_with_authority calls and every intervening root/claim recheck stay exactly where they are. No forwarding facade, surrogate record, Protocol, guard/local-import lift or custom engine work. This is an ingress declaration cut for the shared component batch, not runtime qualification. The two namespace repairs are already carried by 622c26d425 and are deliberately excluded. If the 66-module placement has applied, regenerate with --source-module execution/input_ingress.py; new destinations are already packaged.",
+          "operations": [
+            {
+              "operation": "relocate_symbols_to_new_module",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_ingress.py",
+              "symbol_qualnames": [
+                "InputRootAuthority"
+              ],
+              "destination_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/execution/input_root_authority.py"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-isolate-original-input-text-context",
+          "reason": "InputRootAuthority is the original namespace/root contract inherited by actual RegistryPrivacy; InputTextContext is the independent original input lookup construction contract inherited by Comms. Neither reads TaskOwner, TaskRegistry, Checkout, UserThreadLookup or the acquisition interfaces. Their current shared module imports all of those eagerly, making low publication readers and private root authority depend on task/context assembly. Move the original declarations and all consumers through native relocation, keeping fields, slots, methods, actual provider inheritance and original binding identities. Remove the imports read only by the moved contracts, through the native unread-binding proof. No acquisition body changes: both snapshot_with_authority calls and every intervening root/claim recheck stay exactly where they are. No forwarding facade, surrogate record, Protocol, guard/local-import lift or custom engine work. This is an ingress declaration cut for the shared component batch, not runtime qualification. The two namespace repairs are already carried by 622c26d425 and are deliberately excluded. If the 66-module placement has applied, regenerate with --source-module execution/input_ingress.py; new destinations are already packaged.",
+          "operations": [
+            {
+              "operation": "relocate_symbols_to_new_module",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_ingress.py",
+              "symbol_qualnames": [
+                "InputTextContext"
+              ],
+              "destination_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/execution/input_text_context.py"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "p23-remove-moved-contract-only-imports",
+          "reason": "InputRootAuthority is the original namespace/root contract inherited by actual RegistryPrivacy; InputTextContext is the independent original input lookup construction contract inherited by Comms. Neither reads TaskOwner, TaskRegistry, Checkout, UserThreadLookup or the acquisition interfaces. Their current shared module imports all of those eagerly, making low publication readers and private root authority depend on task/context assembly. Move the original declarations and all consumers through native relocation, keeping fields, slots, methods, actual provider inheritance and original binding identities. Remove the imports read only by the moved contracts, through the native unread-binding proof. No acquisition body changes: both snapshot_with_authority calls and every intervening root/claim recheck stay exactly where they are. No forwarding facade, surrogate record, Protocol, guard/local-import lift or custom engine work. This is an ingress declaration cut for the shared component batch, not runtime qualification. The two namespace repairs are already carried by 622c26d425 and are deliberately excluded. If the 66-module placement has applied, regenerate with --source-module execution/input_ingress.py; new destinations are already packaged.",
+          "operations": [
+            {
+              "operation": "remove_import_bindings",
+              "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_ingress.py",
+              "bound_names": [
+                "Callable",
+                "Path",
+                "InputLookup",
+                "RootId"
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}
