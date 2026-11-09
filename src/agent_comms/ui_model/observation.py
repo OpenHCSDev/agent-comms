@@ -84,7 +84,7 @@ from agent_comms.messaging.revision_views import (
 )
 from agent_comms.messaging.watched import FileSource
 from agent_comms.transport.tool_caller import HumanCaller
-from agent_comms.transport.tool_request import ServedRequest
+from agent_comms.transport.tool_request import CoreRead, ServedRequest
 from agent_comms.nominal.field_codec import (
     DeclaredError,
     FieldCodec,
@@ -561,7 +561,9 @@ class CoreReadOperation(ReadRequest):
         return (*super().refusal_errors, ToolRefusedError, WorkBranchError)
 
     def read(self, comms: Comms) -> object:
-        return ServedRequest.serving(self.operation).apply_without_thread(comms, HumanCaller())
+        # CoreRead admits only the reads it declares, so a mutating request never decodes or
+        # runs here; LocalCoreAccess keeps every other request on its own path.
+        return CoreRead.serving(self.operation).apply_without_thread(comms, HumanCaller())
 
     def answered_value(self, value: object) -> ReadOutcome:
         return CoreReadAnswered(self.request_id, FieldCodec.encode(value))
@@ -1345,12 +1347,20 @@ class CoreReadAnswered(ReadOutcome):
     async def received(
         self, process: ObservationProcess, observed: Callable[[Observed], None],
     ) -> None:
-        pending = process.reads.pop(self.request_id, None)
+        pending = process.reads.get(self.request_id)
         if pending is None or pending.waiter.done():
             return  # Cancelled, retired, or already answered: the same ignored reply as ever.
-        asked = pending.asked
-        pending.waiter.set_result(
-            FieldCodec.decode(asked.operation.result_type(), self.wire))
+        # The waiter stays owned until it is settled. Popping first and then decoding leaves a
+        # thread waiting on a future nobody holds any more: a malformed reply ends the reader,
+        # and retirement cannot settle a waiter it can no longer find.
+        try:
+            value = FieldCodec.decode(pending.asked.operation.result_type(), self.wire)
+        except Exception as undecodable:
+            process.reads.pop(self.request_id, None)
+            pending.waiter.set_exception(undecodable)
+            raise
+        process.reads.pop(self.request_id, None)
+        pending.waiter.set_result(value)
 
     async def settled(self, request: ReadRequest, comms: Comms) -> object:
         return FieldCodec.decode(request.operation.result_type(), self.wire)
