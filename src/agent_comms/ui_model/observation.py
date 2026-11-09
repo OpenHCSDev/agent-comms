@@ -34,7 +34,7 @@ from functools import cached_property, partial
 from multiprocessing.connection import Connection
 from multiprocessing.process import BaseProcess
 from pathlib import Path
-from typing import ClassVar, Self, cast, final
+from typing import ClassVar, Self, cast, final, get_type_hints
 
 from aiohttp import ClientWebSocketResponse, WSMsgType, web
 from metaclass_registry.mro_dispatch import MroDispatch, handles
@@ -1182,21 +1182,42 @@ class ReadAnswered(ReadOutcome, declared_name=None):
     """A read's answer. Each member carries one declared answer type, so a remote UI decodes
     the answer as itself."""
 
-    answers: ClassVar[dict[type, type[ReadAnswered]]] = {}
+    members: ClassVar[list[type[ReadAnswered]]] = []
+    _answers: ClassVar[dict[type, type[ReadAnswered]]] = {}
 
     request_id: int
     value: object
 
-    def __init_subclass__(cls, *, answers: type, **kwargs: object) -> None:
+    def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
-        ReadAnswered.answers[answers] = cls
+        ReadAnswered.members.append(cls)
+        ReadAnswered._answers = {}
+
+    @staticmethod
+    def answers() -> dict[type, type[ReadAnswered]]:
+        """Each member answers the type its own ``value`` declares.
+
+        The annotations are resolved here rather than while the class body runs, because this
+        module declares its names after the members and a string is not a type.
+        """
+        if not ReadAnswered._answers:
+            declared = {}
+            for member in ReadAnswered.members:
+                answered = get_type_hints(member)["value"]
+                if answered is object:
+                    raise TypeError(
+                        f"{member.__qualname__} must declare the answer its value carries")
+                declared[answered] = member
+            ReadAnswered._answers = declared
+        return ReadAnswered._answers
 
     @staticmethod
     def of(request_id: int, value: object) -> ReadAnswered:
         """The boundary: a read's result reaches the wire through its declared answer member."""
+        answers = ReadAnswered.answers()
         for kind in type(value).__mro__:
-            if kind in ReadAnswered.answers:
-                return ReadAnswered.answers[kind](request_id, value)
+            if kind in answers:
+                return answers[kind](request_id, value)
         raise TypeError(f"No read answer is declared for {type(value).__qualname__}")
 
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
@@ -1208,37 +1229,37 @@ class ReadAnswered(ReadOutcome, declared_name=None):
 
 
 @dataclass(frozen=True)
-class NothingAnswered(ReadAnswered, answers=type(None)):
+class NothingAnswered(ReadAnswered):
     value: None = None
 
 
 @dataclass(frozen=True)
-class TranscriptAnswered(ReadAnswered, answers=TranscriptSnapshotUpdate):
+class TranscriptAnswered(ReadAnswered):
     value: TranscriptSnapshotUpdate
 
 
 @dataclass(frozen=True)
-class DraftAnswered(ReadAnswered, answers=TranscriptDraftUpdate):
+class DraftAnswered(ReadAnswered):
     value: TranscriptDraftUpdate
 
 
 @dataclass(frozen=True)
-class NotificationsAnswered(ReadAnswered, answers=NotificationWindow):
+class NotificationsAnswered(ReadAnswered):
     value: NotificationWindow
 
 
 @dataclass(frozen=True)
-class TeammateAnswered(ReadAnswered, answers=TeammateDetail):
+class TeammateAnswered(ReadAnswered):
     value: TeammateDetail
 
 
 @dataclass(frozen=True)
-class GoalAnswered(ReadAnswered, answers=GoalSnapshotReply):
+class GoalAnswered(ReadAnswered):
     value: GoalSnapshotReply
 
 
 @dataclass(frozen=True)
-class DeliveryAnswered(ReadAnswered, answers=DeliveryOverview):
+class DeliveryAnswered(ReadAnswered):
     value: DeliveryOverview
 
 
