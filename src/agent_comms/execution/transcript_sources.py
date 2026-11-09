@@ -15,38 +15,45 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.coordination.errors import StaleRevision, TranscriptChanged
+from agent_comms.execution.context_entry_reader import ReadsContextEntries
 from agent_comms.execution.history_view import HistoryView
 from agent_comms.execution.native_entries import TranscriptProjection
-from agent_comms.execution.native_records import TranscriptRecord
+from agent_comms.execution.native_output import NativeRecordLocation
+from agent_comms.execution.native_record_file import ReadsNativeInputs, SessionCut
+from agent_comms.execution.native_records import NativeRecord, TranscriptRecord
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
-from agent_comms.execution.turn_item import NativeTurnId
+from agent_comms.execution.transcript_routes import TranscriptRoutes, _SessionRoutes
+from agent_comms.execution.turn_bound import TurnBound
+from agent_comms.execution.turn_context import SegmentManifest
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.messaging.published_messages import ReadsPublishedMessages
 from agent_comms.messaging.sent_message import AssignedSourceIdentity, PublishedSentMessage
 from agent_comms.messaging.sent_reports import ResolvesSentReports
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, NullMember
-from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from agent_comms.registry.thread_identity import (
+    RecordedThreadIncarnation,
+    ThreadIdentitySource,
+    ThreadIncarnation,
+)
 from agent_comms.storage.private_path import FileIdentity, MissingFile
 from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.storage.typed_table import StoreWriter
 from agent_comms.team.rule_deal import Mute, Speaking, Voice
-from agent_comms.transcript.transcript_events import IncomingTranscript, SentTranscript, TurnDigest
+from agent_comms.transcript.transcript_events import (
+    IncomingTranscript,
+    SentTranscript,
+    TextTranscript,
+    TranscriptEvent,
+    TurnDigest,
+)
 
 if TYPE_CHECKING:
-    from agent_comms.context_store import ContextStore
-    from agent_comms.execution.native_output import NativeRecordLocation
-    from agent_comms.execution.native_records import NativeRecord
-    from agent_comms.execution.native_transcript import NativeTranscript, SessionCut
-    from agent_comms.execution.transcript_routes import TranscriptRoutes, _SessionRoutes
-    from agent_comms.execution.turn_bound import TurnBound
-    from agent_comms.execution.turn_context import SegmentManifest
-    from agent_comms.messaging.message_reference import MessageReference
-    from agent_comms.registry.threads import Thread, ThreadProvenance
     from agent_comms.transcript.external_transcript import ExternalPageRow
-    from agent_comms.transcript.transcript_events import TextTranscript, TranscriptEvent
     from agent_comms.transcript.transcripts import NativeTranscriptCursor, TranscriptCursor
 
 
@@ -384,8 +391,8 @@ class TranscriptSource(ReadsPublishedMessages, ResolvesSentReports):
         """Sources without a harness continuation have no bridge requests."""
 
     def recorded_contexts(
-        self, contexts: ContextStore, entry_ids: tuple[str, ...],
-    ) -> dict[str, SegmentManifest]:
+        self, contexts: ReadsContextEntries, entry_ids: tuple[str, ...],
+    ) -> dict[NativeItemId, SegmentManifest]:
         """Only a native journal records a context manifest per input entry."""
         return {}
 
@@ -471,7 +478,7 @@ class TranscriptSource(ReadsPublishedMessages, ResolvesSentReports):
         self,
         fragments: Iterator[tuple[NativeRecord, ...]],
         routes: _SessionRoutes,
-        reader: NativeTranscript,
+        reader: ReadsNativeInputs,
     ) -> Iterator[tuple[NativeRecord, tuple[TranscriptEvent, ...]]]:
         for fragment in fragments:
             for record in fragment:
@@ -497,7 +504,7 @@ class AssignedTranscriptSource(TranscriptSource):
     bus: Bus
 
     @classmethod
-    def for_thread(cls, root: Path, thread: Thread, bus: Bus) -> Self:
+    def for_thread(cls, root: Path, thread: ThreadIdentitySource, bus: Bus) -> Self:
         return cls(root, thread.incarnation.require_recorded(), bus)
 
     @classmethod
@@ -543,7 +550,7 @@ class AssignedTranscriptSource(TranscriptSource):
         cursor.wire.require_source(AssignedSourceIdentity(str(self.root), self.recipient))
 
     @classmethod
-    def for_recorded(cls, root: Path, thread: ThreadProvenance, bus: Bus, records: TranscriptSource):
+    def for_recorded(cls, root: Path, thread: ThreadIdentitySource, bus: Bus, records: TranscriptSource):
         """Only the original recorded birth can select frozen assignments."""
         return thread.incarnation.recorded_or(
             lambda recorded: cls(root, recorded, bus), lambda: records
@@ -626,7 +633,7 @@ class LiveAssignedTranscriptSource(AssignedTranscriptSource):
         self,
         fragments: Iterator[tuple[NativeRecord, ...]],
         routes: _SessionRoutes,
-        reader: NativeTranscript,
+        reader: ReadsNativeInputs,
     ) -> Iterator[tuple[NativeRecord, tuple[TranscriptEvent, ...]]]:
         """Native ancestry precedes one atomic SQL read per bounded fragment."""
         from agent_comms.transcript.transcripts import TranscriptRead

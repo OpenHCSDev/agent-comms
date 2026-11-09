@@ -83,7 +83,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     from agent_comms.acp_extension import NativeOutputCommittedUpdate, NativeRoundCommittedUpdate
     from agent_comms.execution.native_output import AssistantOutput, NativeRecordLocation
     from agent_comms.execution.native_session_reopen import PiSessionId
-    from agent_comms.execution.native_transcript import PresentSessionCut
+    from agent_comms.execution.native_record_file import PresentSessionCut
     from agent_comms.execution.turn_item import NativeItemId
     from agent_comms.messaging.sent_message import AssignedSourceIdentity
     from agent_comms.storage.private_path import FileRevision

@@ -489,6 +489,14 @@ class ThreadIncarnationRecord:
         return FieldCodec.decode(cls, {"name": name, "created_at": birth}).incarnation()
 
 
+class ThreadIdentitySource(ABC):
+    """Provide a recorded or birthless identity without granting live ownership."""
+
+    @property
+    @abstractmethod
+    def incarnation(self) -> ThreadIncarnation: ...
+
+
 @dataclass(frozen=True, slots=True)
 class OwnerIdentity:
     """An allocation from RegistryDocument.owners, used with process proof."""

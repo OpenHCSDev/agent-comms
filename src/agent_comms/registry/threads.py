@@ -66,6 +66,7 @@ from agent_comms.registry.thread_identity import (
     AgentThreadRole,
     ObservedTurn,
     OfferedTools,
+    ThreadIdentitySource,
     ThreadIncarnation,
     ThreadIncarnationRecord,
     ThreadRole,
@@ -255,7 +256,7 @@ class NextTurnConfiguration:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadProvenance:
+class ThreadProvenance(ThreadIdentitySource):
     """Recorded thread identity, without permission to own a process or start a turn."""
 
     name: str = field(kw_only=False)
