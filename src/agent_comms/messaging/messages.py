@@ -964,7 +964,7 @@ class MessageInput(Timestamped, Addressed, BusCapability, ResponseMessageSource)
 
 
 @dataclass(frozen=True, slots=True)
-class Message(MessageInput, TurnOrigin):
+class Message(MessageInput, TurnOrigin["Message"]):
     """Declares one inter-thread message.
 
     The bus assigns ``seq`` (a monotonically increasing log position) at send

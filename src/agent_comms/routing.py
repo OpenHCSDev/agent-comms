@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
+from agent_comms.bus_publication import Delivered
+from agent_comms.catalog_document import CatalogDocument
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.turn_origin import TurnOrigin
 from agent_comms.input_key import InputKey
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
 from agent_comms.messaging.read_basis import DMDisplayScope, MessageDisplayScope
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -24,17 +27,12 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.planning.goal_scope import AllGoals, GoalScope
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_creation import ThreadCreationSource
+from agent_comms.registry_names import RegistryNames
 from agent_comms.response_policy import NO_ALIASES
-
-if TYPE_CHECKING:
-    from agent_comms.bus_publication import Delivered
-    from agent_comms.catalog_document import CatalogDocument
-    from agent_comms.messaging.messages import Message
-    from agent_comms.registry_provenance import RegistryProvenance
-    from agent_comms.transcript_routes import NoSentInputText, SentInputText
+from agent_comms.tagged_thread_source import TaggedThreadSource
 
 
-class NoTurnOrigin(NullMember, TurnOrigin):
+class NoTurnOrigin(NullMember, TurnOrigin[Message]):
     """An autonomous turn has no message, delivery key or reply destination."""
 
     separate_turn = False
@@ -110,7 +108,7 @@ class Routing(SubclassUnion, affix="Routing"):
     def outgoing(self) -> bool:
         return False
 
-    def validate_input(self, sent_text: SentInputText | NoSentInputText) -> None:
+    def validate_input(self, sent_text: PresentMember | NullMember) -> None:
         pass
 
     def with_requests(self, requests: tuple[MessageReference, ...]) -> Routing:
@@ -138,7 +136,7 @@ class TurnRouting(RecordMember, Routing):
     def outgoing(self) -> bool:
         return bool(self.reply.present())
 
-    def validate_input(self, sent_text: SentInputText | NoSentInputText) -> None:
+    def validate_input(self, sent_text: PresentMember | NullMember) -> None:
         sent_text.require_present()
         self.reply.require_absent("Input routing requires exact sent text and no outgoing reply claim.")
 
@@ -162,7 +160,7 @@ class TurnRouting(RecordMember, Routing):
 @dataclass(frozen=True, slots=True)
 class ScheduledTurn:
     prompt: str
-    origin: TurnOrigin = NO_TURN_ORIGIN
+    origin: TurnOrigin[Message] = NO_TURN_ORIGIN
     goal_id: GoalScope = AllGoals()
 
     @property
@@ -217,7 +215,7 @@ class DeliveryScope(MessageDisplayScope):
 
     @classmethod
     def capture(
-        cls, name: str, snapshot: RegistryProvenance, catalog: CatalogDocument
+        cls, name: str, snapshot: RegistryNames[TaggedThreadSource], catalog: CatalogDocument
     ) -> DeliveryScope:
         thread = snapshot.require(name)
         return cls(thread.name, snapshot.aliases, catalog.targets_for(thread.tags))

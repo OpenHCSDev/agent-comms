@@ -57,7 +57,7 @@ from agent_comms.input_key import InputKey
 from agent_comms.input_origin import InputProvenance
 from agent_comms.messages import ClaimNoticeKind, Message, MessageInput
 from agent_comms.messaging.sending import Messaging
-from agent_comms.nominal.field_codec import ThreadLookup
+from agent_comms.nominal.field_codec import NullMember, PresentMember, ThreadLookup
 from agent_comms.peer_relation import PeerRelation
 from agent_comms.planning.goal_actions import GoalAction, SetGoalAction, StandbyGoalAction
 from agent_comms.planning.goal_attempt_phase import GoalAttemptPhase
@@ -86,11 +86,12 @@ from agent_comms.registry.threads import (
     Thread,
     ThreadProvenance,
 )
+from agent_comms.registry_names import RegistryNames
 from agent_comms.relationships import RelationshipSource, ThreadRelationships
 from agent_comms.response_message_source import ResponseMessageSource
 from agent_comms.response_policy import ResponsePolicy
 from agent_comms.route_client import ActivityClient
-from agent_comms.routing import NoTurnOrigin
+from agent_comms.routing import DeliveryScope, NoTurnOrigin, Routing, ScheduledTurn, TurnRouting
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.session_config_options import SessionConfigOptions
 from agent_comms.task_owner import TaskOwner
@@ -99,6 +100,7 @@ from agent_comms.task_sources import ScopedTaskDeclaration
 from agent_comms.thread_identity_source import ThreadIdentitySource
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.transcript_events import TranscriptEvent
+from agent_comms.transcript_routes import NoSentInputText, SentInputText
 from agent_comms.transport.tools.goals import CommsGoalHistoryTool, CommsGoalTool, GoalChangeTool
 
 
@@ -447,6 +449,34 @@ def test_original_import_factory_callbacks_use_actual_source_capabilities() -> N
     delivery = get_type_hints(DeliversInput.deliver)
     assert delivery["message"] is Message
     assert delivery["return"] == type[Outcome]
+
+
+def test_origin_message_result_contract_preserves_original_providers() -> None:
+    result = get_type_hints(TurnOrigin.messages)["return"]
+    assert get_args(result)[0] is TurnOrigin.__type_params__[0]
+    origin = get_type_hints(ScheduledTurn)["origin"]
+    assert get_origin(origin) is TurnOrigin
+    assert get_args(origin) == (Message,)
+    assert issubclass(Message, TurnOrigin)
+    assert issubclass(NoTurnOrigin, TurnOrigin)
+    assert get_type_hints(NoTurnOrigin.messages)["return"] == tuple[Message, ...]
+
+
+def test_routing_capture_reads_original_tagged_namespace() -> None:
+    source = get_type_hints(DeliveryScope.capture)["snapshot"]
+    assert get_origin(source) is RegistryNames
+    owner, = get_args(source)
+    assert issubclass(ThreadProvenance, owner)
+    assert issubclass(Thread, owner)
+    assert get_type_hints(owner)["tags"] == get_type_hints(ThreadProvenance)["tags"]
+    assert get_type_hints(owner)["name"] is get_type_hints(ThreadProvenance)["name"]
+
+
+def test_routing_presence_contract_keeps_original_sent_value_identity() -> None:
+    assert issubclass(SentInputText, PresentMember)
+    assert issubclass(NoSentInputText, NullMember)
+    for routing in (Routing, TurnRouting):
+        assert get_type_hints(routing.validate_input)["sent_text"] == PresentMember | NullMember
 
 
 def test_declared_policy_keys_keep_their_original_message_and_identity_sources() -> None:

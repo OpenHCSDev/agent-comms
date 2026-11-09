@@ -92,9 +92,9 @@ from agent_comms.registry.thread_storage import (
 from agent_comms.registry.thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from agent_comms.session_file import NoSessionFile, SessionFile
 from agent_comms.storage.locked_store import DurableFile, PatternFile
+from agent_comms.tagged_thread_source import TaggedThreadSource
 from agent_comms.task_owner import TaskOwner
 from agent_comms.task_scope import TaskScope
-from agent_comms.thread_identity_source import ThreadIdentitySource
 
 
 class ThreadCommandAvailability:
@@ -250,7 +250,7 @@ class NextTurnConfiguration:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadProvenance(ThreadIdentitySource):
+class ThreadProvenance(TaggedThreadSource):
     """Recorded thread identity, without permission to own a process or start a turn."""
 
     name: str = field(kw_only=False)
