@@ -148,7 +148,7 @@ ban-relative-imports = "all"
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = [
     "agent_comms.storage.store_files.ExclusiveLock",
-    "agent_comms.importing.ImportLimits",
+    "agent_comms.imported_messages.ImportLimits",
     "agent_comms.transcripts.LatestPage",
     "agent_comms.transcripts.AtFrontier",
     "agent_comms.transcripts.LivePageSource",

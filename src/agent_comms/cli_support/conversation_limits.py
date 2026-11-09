@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from agent_comms.cli_command import CliCommand
-from agent_comms.importing import ImportLimits
+from agent_comms.imported_messages import ImportLimits
 from agent_comms.nominal.field_codec import Argument
 
 

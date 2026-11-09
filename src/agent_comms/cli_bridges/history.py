@@ -33,10 +33,8 @@ from agent_comms.harness_install import (
 )
 from agent_comms.import_history_source import ImportHistorySource
 from agent_comms.imported_conversation import ImportedConversation
-from agent_comms.importing import (
-    ImportLimits,
-    ImportSnapshot,
-)
+from agent_comms.imported_messages import ImportLimits
+from agent_comms.importing import ImportSnapshot
 from agent_comms.nominal.field_codec import SubclassUnion
 from agent_comms.registry.thread_text import (
     AbsentText,

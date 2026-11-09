@@ -19,28 +19,20 @@ from agent_comms.execution.turn_item import NativeItemId
 from agent_comms.harness_install import Harness
 from agent_comms.import_history_source import ImportHistorySource
 from agent_comms.imported_conversation import ImportedConversation
+from agent_comms.imported_messages import (
+    ImportedInput,
+    ImportedMessage,
+    ImportLimits,
+    NoRetainedRequest,
+)
 from agent_comms.imported_session_metadata import ImportedSessionMetadata
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
 from agent_comms.runtime_updates import SessionFacts
 from agent_comms.tool_result import ToolResult
-from agent_comms.transcript_events import (
-    ImportedInput,
-    ImportedMessage,
-    NoRetainedRequest,
-    TranscriptEvent,
-)
+from agent_comms.transcript_events import TranscriptEvent
 
 
-@dataclass(frozen=True, slots=True)
-class ImportLimits:
-    messages: int = 200
-    characters: int = 120_000
-    per_message: int = 12_000
-
-    def __post_init__(self) -> None:
-        if min(self.messages, self.characters, self.per_message) <= 0:
-            raise ValueError("Import budgets must be positive.")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -128,7 +120,8 @@ class ImportBuffer:
 
     def append(self, message: ImportedMessage) -> None:
         self.seen += 1
-        message.remember(self)
+        for request in message.retained_request().present():
+            self.latest_request = request.body[: self.limits.per_message]
         message = message.bounded(self.limits)
         self.truncated += int(message.truncated)
         self.messages.append(message)

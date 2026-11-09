@@ -14,7 +14,7 @@ from agent_comms.cli_verbs.restore_owner import RestoreOwnerCliCommand
 from agent_comms.errors import RelationViolationError
 from agent_comms.harness_install import Harness, PiHarness
 from agent_comms.imported_conversation import KeptPiSession
-from agent_comms.importing import ImportLimits
+from agent_comms.imported_messages import ImportLimits
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.thread_text import AnySession

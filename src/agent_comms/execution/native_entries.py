@@ -61,7 +61,8 @@ from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.routing import NoTurnRouting, Routing
 from agent_comms.storage.locked_store import DurableFile
 from agent_comms.storage.store_files import AtomicFile
-from agent_comms.transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
+from agent_comms.imported_messages import ImportedMessage
+from agent_comms.transcript_events import NoticeTranscript, TranscriptEvent
 from agent_comms.transcript_routes import InputPresentation, NoInputDisplay, _SessionRoutes
 
 

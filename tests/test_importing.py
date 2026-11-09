@@ -50,10 +50,15 @@ from agent_comms.harness_install import (
     OpenCodeHarness,
     PiHarness,
 )
+from agent_comms.imported_messages import (
+    ImportedMessage,
+    ImportedReply,
+    ImportedRequest,
+    ImportLimits,
+)
 from agent_comms.imported_session_metadata import ImportedSessionMetadata
 from agent_comms.importing import (
     ImportBuffer,
-    ImportLimits,
     ImportSnapshot,
     ThreadImported,
 )
@@ -73,12 +78,7 @@ from agent_comms.registry.thread_text import (
 from agent_comms.registry.threads import ExternalThread, NativeThread, ThreadProvenance
 from agent_comms.runtime_updates import FinishedItem, TurnEnded
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.transcript_events import (
-    ImportedMessage,
-    ImportedReply,
-    ImportedRequest,
-    TextTranscript,
-)
+from agent_comms.transcript_events import TextTranscript
 from agent_comms.transport.tools.sidebar import CommsImportedSourceTool
 from agent_comms.ui_model.message_category import AgentCategory, ThinkingCategory, UserCategory
 from transcript_record_fixture import transcript_record

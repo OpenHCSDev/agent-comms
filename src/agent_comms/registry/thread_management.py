@@ -26,7 +26,8 @@ from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
 from agent_comms.heartbeat_delivery import HeartbeatDelivery
 from agent_comms.imported_conversation import ImportedConversation
-from agent_comms.importing import ImportLimits, ThreadImported
+from agent_comms.imported_messages import ImportLimits
+from agent_comms.importing import ThreadImported
 from agent_comms.launch_runtime import LaunchRuntime, TagListText
 from agent_comms.messaging.channel_targets import DeclaredTag
 from agent_comms.messaging.message_bus import MessageBus
