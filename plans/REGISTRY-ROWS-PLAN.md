@@ -48,6 +48,14 @@ Readers do not read the file; they read revisions of it. `RegistryCut`, `Registr
    changes since it last read, not the whole registry (today's capture rereads all 5.6 MB).
 3. Move the 35 direct readers onto table queries, by NRA where the shape allows.
 4. `save_unlocked` writes changed rows only; delete `ThreadRows`' raw/decoded cache and the JSON path.
+   The seam (traced): each process caches its last `RegistryRevision` (`RegistryCache`); today a
+   write anywhere makes every reader re-parse the whole file (`_cache_revision`:
+   `FieldCodec.parse(source.content)`, ~31 ms at 5.6 MB) before reusing decoded threads, so a change
+   costs O(registry) in every reader process too. With rows, `RegistryRevision` holds the row
+   revision; a stale entry applies `RegistryRowStore.changes_since(stale.revision)` to a copy of its
+   document. `save_unlocked` commits `ThreadRows.differing(original)` plus the changed statuses,
+   aliases and generations. Precedent: presence already left registry.json for `PresenceStore`
+   because every heartbeat rewrote the whole file.
 5. Carry: `tools/cutover/registry_rows.py` reads `registry.json` once into the table and is deleted
    after the install that runs it. Rehearsed on a copy of the live registry before any install.
 
