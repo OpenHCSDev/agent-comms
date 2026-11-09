@@ -34,7 +34,7 @@ from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.runtime_resolution import CorePackage, TextualPackage, ToadPackage
 from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
-from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.goal_actions import ClearGoalAction, SetGoalAction
 from agent_comms.planning.goals import (
     GoalChangedError,
     NoGoal,
@@ -168,6 +168,47 @@ def test_phase_checks_keep_folded_declarations_and_exact_creator_birth(
     assert store.phases_checked(frozenset({colleague.incarnation})) == {
         RetainedStorePhase: 20, UnplannedPhase: 30,
     }
+
+
+@pytest.mark.parametrize('retire_goal', (
+    ClearGoalAction(), SetGoalAction(text='A different task after the handoff'),
+))
+def test_retired_goal_does_not_keep_assignment_consent(comms, source_repository, retire_goal):
+    for name in ('holder', 'replacement'):
+        comms.registry.declare(ExternalThread(name, frozenset(), Checkout(comms.root)))
+    holder = comms.registry.require('holder')
+    replacement = comms.registry.require('replacement')
+    original_goal = comms.goals.update_goal('holder', SetGoalAction(text='Original work'))
+    new_goal = comms.goals.update_goal('replacement', SetGoalAction(text='Take over the work'))
+    store = comms.goals.todos
+    request = store.add_request(holder.incarnation, 'Repair the held assignment').id
+    handoff_request = store.add_request(replacement.incarnation, 'Take over the held work').id
+    todo = store.create(
+        'P1', source_repository.github, 'Fix the held assignment',
+        creator=holder, owner=holder, assigner=holder.incarnation,
+        generation=original_goal.id, review_at=RecordedEventTime(1000),
+        order=order(source_repository), request=request,
+    )
+
+    def take_over():
+        return store.assign(
+            (ExpectedProblem(todo.id, todo.revision),), owner=replacement,
+            assigner=replacement.incarnation, generation=new_goal.id, request=handoff_request,
+            review_at=RecordedEventTime(1000), order=order(source_repository),
+        )[0]
+
+    with pytest.raises(TodoError, match='cannot release or replace'):
+        take_over()
+    with pytest.raises(NotWorkMaintainer):
+        store.assign(
+            (ExpectedProblem(todo.id, todo.revision),), owner=holder,
+            assigner=replacement.incarnation, generation=original_goal.id, request=handoff_request,
+            review_at=RecordedEventTime(1000), order=order(source_repository),
+        )
+    comms.goals.update_goal('holder', retire_goal)
+    assigned = take_over()
+    assert assigned.held().owner_identity == replacement.incarnation
+    assert assigned.held().generation == new_goal.id
 
 
 def _assign_process(root: str, checkout: str, name: str, created: float, gate) -> tuple[str, str]:

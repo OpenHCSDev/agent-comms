@@ -3157,12 +3157,14 @@ class Assignment(TodoHolder):
 
     def require_release(self, actor: ThreadIncarnation, current: Todo,
                         snapshot: RegistrySnapshot) -> None:
-        """A registered holder's own status decides whether its consent is owed; a holder
-        no longer registered under this birth leaves an orphaned hold anyone may clear."""
+        """Only the recorded holder's still-current goal and status can require consent.
+        Clearing or replacing that goal leaves its old assignment free to take over.
+        """
         current.require_assignment(self)
         for holder in self.holder_in(snapshot):
-            snapshot.status(holder.name).require_hold_consent(
-                partial(self.require_consent, actor, current))
+            holder.goal.matching(self.generation).require_hold_consent(
+                partial(snapshot.status(holder.name).require_hold_consent,
+                        partial(self.require_consent, actor, current)))
 
     def require_consent(self, actor: ThreadIncarnation, current: Todo) -> None:
         if not self.represented_by(actor):
@@ -3440,9 +3442,13 @@ class AssignTodo(ReleasesHold, TodoOperation):
         return not current.current_holder.owned_by(proposed.owner_identity, proposed.generation)
 
     def require_hold_release(self, current: Todo, snapshot: RegistrySnapshot) -> None:
-        """Only an assignment that moves the hold asks its current holder."""
+        """Moving work uses its current hold's consent; correcting the same hold keeps
+        the original maintainer check. An orphaned hold needs no retired creator's approval.
+        """
         if self.moves_hold(current, current.proposed_assignment(self.proposed)):
             super().require_hold_release(current, snapshot)
+        else:
+            current.require_maintainer(self.actor)
 
     def require_receiving_work(
         self, current: Todo, proposed: Assignment, snapshot: RegistrySnapshot,
@@ -3482,7 +3488,6 @@ class AssignTodo(ReleasesHold, TodoOperation):
         return super(AssignTodo, replace(self, proposed=proposed)).apply(current)
 
     def changed(self, current: Todo) -> Todo:
-        current.require_maintainer(self.actor)
         if self.order != current.order:
             self.order.require_wording()
             self.order.require_writable()

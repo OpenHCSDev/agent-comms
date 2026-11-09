@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 from abc import abstractmethod
 from collections.abc import (
+    Callable,
     Iterator,
     Sequence,
 )
@@ -636,6 +637,10 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def work_candidates(self, thread: Thread) -> tuple[Thread, ...]:
         return (thread,)
 
+    def require_hold_consent(self, require_consent: Callable[[], None]) -> None:
+        """A current or unavailable goal preserves its holder's assignment consent."""
+        require_consent()
+
     @property
     def snapshot(self) -> GoalDeclaration:
         return self
@@ -699,6 +704,9 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
 @dataclass(frozen=True)
 class NoGoal(NullMember, GoalDeclaration):
+    def require_hold_consent(self, require_consent: Callable[[], None]) -> None:
+        """A cleared or replaced goal cannot keep its old assignments occupied."""
+
     def stopped_permit(self, store: GoalAttemptStore) -> GoalTurnPermit:
         return NoLaunchPermit()
 
