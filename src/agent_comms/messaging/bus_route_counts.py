@@ -80,6 +80,7 @@ class BusRouteKeys(BusProjectionTables):
     first_seq: int
     indexes: ClassVar = (
         ExpressionIndex(("{target}", "{sender}", "coalesce({sender_lookup}, '')"), unique=True),
+        Index(("target", "sender", "sender_lookup", "first_seq")),
     )
     """A public sender has no lookup and stores NULL, which no primary key holds and every
     NULL-distinct UNIQUE admits twice; the expression makes it one route like any other."""
@@ -95,13 +96,21 @@ class BusRouteKeys(BusProjectionTables):
         return statement + " ON CONFLICT DO NOTHING", values
 
     @classmethod
-    def senders_reaching(cls, db: sqlite3.Connection, targets: list[str], through: int) -> list[str]:
-        """The senders with a route to any of ``targets`` by ``through``: the only registry
-        members a read of those targets can join."""
+    def senders_reaching(
+        cls, db: sqlite3.Connection, targets: list[str], through: int, *,
+        senders: Mapping[str, str],
+    ) -> list[str]:
+        """Probe only captured sender identities, never retired route names or births."""
         return [row[0] for row in db.execute(
-            f'SELECT DISTINCT sender FROM "{cls.declared_name}" '
-            'WHERE target IN (SELECT value FROM json_each(?)) AND first_seq<=?',
-            (json.dumps(targets), through))]
+            f'''SELECT DISTINCT route.sender
+            FROM json_each(?) AS sender
+            CROSS JOIN json_each(sender.value) AS lookup
+            CROSS JOIN json_each(?) AS target
+            CROSS JOIN "{cls.declared_name}" AS route
+                ON route.target=target.value AND route.sender=sender.key
+                    AND route.sender_lookup IS lookup.value
+            WHERE route.first_seq<=?''',
+            (json.dumps(dict(senders)), json.dumps(targets), through))]
 
 
 @dataclass(frozen=True)
@@ -190,11 +199,11 @@ class RouteCounts(ABC):
         FROM request_targets AS target,arguments,json_each(arguments.unrecorded) AS source
     ), route_keys AS MATERIALIZED (
         SELECT route.target,route.sender,route.sender_lookup,sender.since
-        FROM arguments,request_targets AS target
-        JOIN "{BusRouteKeys.declared_name}" AS route ON route.target=target.target
+        FROM arguments CROSS JOIN sender_keys AS sender
+        CROSS JOIN request_targets AS target
+        CROSS JOIN "{BusRouteKeys.declared_name}" AS route ON route.target=target.target
+            AND route.sender=sender.sender AND route.sender_lookup IS sender.sender_lookup
             AND route.first_seq<=arguments.through
-        JOIN sender_keys AS sender ON sender.sender=route.sender
-            AND sender.sender_lookup IS route.sender_lookup
         WHERE arguments.after=0 OR EXISTS (SELECT 1 FROM "{BusRouteCounts.declared_name}" AS row
             WHERE row.target=route.target AND row.sender=route.sender
                 AND row.sender_lookup IS route.sender_lookup
@@ -215,16 +224,15 @@ class RouteCounts(ABC):
         WHERE {DeliveryScope.delivers_sql("target.actor", "route.sender", "alias.canonical")}
     ), requests AS NOT MATERIALIZED (
         SELECT recipient.key AS actor,row.seq,row.target,row.sender
-        FROM recipients AS recipient
+        FROM route_keys AS route
+        CROSS JOIN actor_targets AS target ON target.target=route.target
+        CROSS JOIN recipients AS recipient ON recipient.key=target.actor
+        CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.target=route.target
+            AND row.sender=route.sender AND row.sender_lookup IS route.sender_lookup
+            AND row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
         CROSS JOIN "{ReceivedSource.declared_name}" AS addressed
-            ON addressed.lookup=recipient.value
-                AND addressed.seq>(SELECT after FROM arguments)
-                AND addressed.seq<=(SELECT through FROM arguments)
+            ON addressed.lookup=recipient.value AND addressed.seq=row.seq
                 AND {ReadCursor.above_floor("addressed.seq", "recipient.key", "''")}
-        CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.seq=addressed.seq
-        CROSS JOIN actor_targets AS target ON target.actor=recipient.key AND target.target=row.target
-        CROSS JOIN route_keys AS route ON route.target=row.target AND route.sender=row.sender
-            AND route.sender_lookup IS row.sender_lookup
         CROSS JOIN addressed_since AS viewer ON viewer.name=recipient.key
         LEFT JOIN aliases AS alias ON alias.name=row.sender
         WHERE row.timestamp>=max(route.since,viewer.since)
@@ -248,8 +256,9 @@ class RouteCounts(ABC):
                       seen: Mapping[str, ReadCursor], through: int) -> RouteInputs:
         targets = sorted({target for delivery in deliveries.values()
                           for target in delivery.index_targets})
-        senders, unrecorded, births = registry.sender_bindings.bound(
-            BusRouteKeys.senders_reaching(db, targets, through))
+        bindings = registry.sender_bindings
+        senders, unrecorded, births = bindings.bound(
+            BusRouteKeys.senders_reaching(db, targets, through, senders=bindings.senders))
         return RouteInputs((
             *ReadCursor.sql_bindings(registry,
                 {actor: seen[actor].counted(delivery, registry)
