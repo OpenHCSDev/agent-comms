@@ -46,6 +46,7 @@ from agent_comms.execution.private_nk_entrypoint import (
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import AcpSessionId, RootId, ThreadLookup
 from agent_comms.registry.registry_tables import RegistryRevisionMark, RegistryRowStore
+from agent_comms.registry.notification_selection_read import NotificationSelectionRead
 from agent_comms.registry.privacy_reads import CursorMetadataRead, NativeAnswerRead
 from agent_comms.registry.thread_identity import ClaimedIdentity
 from agent_comms.storage.locked_store import RollbackRetained, WireWakeFile
@@ -54,10 +55,6 @@ from agent_comms.storage.typed_table import TableSchema
 from agent_comms.transport.attachment_scope import CursorScope, LiveCursorScope, NoCursorScope
 
 if TYPE_CHECKING:
-    from agent_comms.notification_assignment import (
-        NotificationAssignmentRead,
-        NotificationSelection,
-    )
     from agent_comms.registry.registry_document import RegistrySnapshot
 
 _MAGIC = b"ACRG"
@@ -180,9 +177,9 @@ class RegistryPrivacy(ABC):
         """Whether a native input committed ``assignment``'s message to its session context."""
 
     @abstractmethod
-    def missing_notification_assignments(
-        self, selection: NotificationSelection,
-    ) -> NotificationAssignmentRead: ...
+    def missing_notification_assignments[Reply](
+        self, selection: NotificationSelectionRead[Reply],
+    ) -> Reply: ...
 
     @classmethod
     @abstractmethod
@@ -235,9 +232,9 @@ class PublicRegistry(RegistryPrivacy):
         """A public root has no native inputs, so no native context entry."""
         return "0"
 
-    def missing_notification_assignments(
-        self, selection: NotificationSelection,
-    ) -> NotificationAssignmentRead:
+    def missing_notification_assignments[Reply](
+        self, selection: NotificationSelectionRead[Reply],
+    ) -> Reply:
         return selection.read_without_assignments()
 
     def cursor_scope(
@@ -333,9 +330,9 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         members = f"({NativeRuntimeInput.source_membership_sql()})"
         return f"EXISTS (SELECT 1 {NativeRuntimeInput.context_entered_from(members, assignment)})"
 
-    def missing_notification_assignments(
-        self, selection: NotificationSelection,
-    ) -> NotificationAssignmentRead:
+    def missing_notification_assignments[Reply](
+        self, selection: NotificationSelectionRead[Reply],
+    ) -> Reply:
         raise PublicationActivationBlocked("Private notification coordinator is missing")
 
     def __init__(self, registry_path: Path, wire_root_id: RootId):
