@@ -327,7 +327,7 @@ def test_review_scope_requires_the_actual_registered_birth(board_review):
 
 def test_unreviewed_head_line_names_each_verb_once_and_every_argument() -> None:
     from agent_comms.head_review import PullRequestHead
-    from agent_comms.repository_name import RepositoryName
+    from agent_comms.projects.repository_name import RepositoryName
     from agent_comms.team.standing_rules import OrderlessUnreviewedHead
 
     head = "a" * 40

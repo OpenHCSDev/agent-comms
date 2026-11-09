@@ -57,7 +57,7 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.registry.thread_text import ForkedParent
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.team.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.team.spinning import SpinningTeammate, StaleUncommittedEdits
 from agent_comms.team.standing_rules import (

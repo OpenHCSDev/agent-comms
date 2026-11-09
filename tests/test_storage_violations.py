@@ -29,7 +29,7 @@ from agent_comms.projects.storage_rules import (
 )
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.threads import NativeThread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.team.standing_rules import (
     StorageHomeMissing,
     StorageViolation,

@@ -25,7 +25,7 @@ from agent_comms.planning.pull_requests import PullRequestHeadRevision
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from source_revision_fixture import SourceRepository
 from test_todos import order
 

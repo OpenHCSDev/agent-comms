@@ -69,7 +69,7 @@ from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.checkouts import RepositoryReads
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.team_hud import TeamPlanDocument
 from agent_comms.slop import Slop
 from agent_comms.registry.thread_identity import ThreadIncarnation

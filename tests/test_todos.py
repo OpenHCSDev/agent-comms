@@ -92,7 +92,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import CoreWatcherIncarnation
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.task_attachments.team_pings import RulePing
 from agent_comms.team.order import PullRequestVerb, SayVerb, Team

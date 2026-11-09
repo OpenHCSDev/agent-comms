@@ -53,7 +53,7 @@ from agent_comms.registry.registry_document import RegisteredTeamProject, Regist
 from agent_comms.registry.threads import Thread
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.service_passes import FailingPass, ServicePassStore, ServicePasses
 from agent_comms.projects.storage_rules import MemoryUse, StorageRule, UnitStorage

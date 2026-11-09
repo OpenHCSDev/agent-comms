@@ -24,7 +24,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.read_basis import NamedViewer
 from agent_comms.registry.registry_document import NoTeamProject
 from agent_comms.registry.threads import NativeThread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from source_revision_fixture import SourceRepository
 
 

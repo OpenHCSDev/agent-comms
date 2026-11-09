@@ -53,7 +53,7 @@ from agent_comms.registry.thread_storage import (
     UnassignedThreadStorage,
 )
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.shell_effects import (
     CreateCheckoutStorageEffect,
     RemoveCheckoutStorageEffect,

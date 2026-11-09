@@ -28,7 +28,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.work_branches import WorkBranches
 from agent_comms_hooks import ToolRefusedError
 
