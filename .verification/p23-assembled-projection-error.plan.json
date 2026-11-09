@@ -1,0 +1,16 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "p23-original-projection-error-below-bus-readers",
+      "reason": "Both assembled Core and owned Toad fail before collecting tests because ExecutionRecord imports the original ProjectionUnavailableError through wake_candidate_index, which imports the partially initialized Bus. Move the whole original RuntimeError declaration into the existing waking domain's low errors module and migrate every Core/Toad src/tests/tools caller. Preserve its identity as the one original class, message, inheritance and every raise/catch body; no re-export, duplicate exception, guard, local import or fallback. This removes the error-only dependency on the Bus-backed projection reader.",
+      "operations": [
+        {
+          "operation": "relocate_symbols_to_new_module",
+          "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/waking/wake_candidate_index.py",
+          "destination_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/waking/errors.py",
+          "symbol_qualnames": ["ProjectionUnavailableError"]
+        }
+      ]
+    }
+  ]
+}

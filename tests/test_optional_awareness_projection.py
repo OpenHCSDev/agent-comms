@@ -35,10 +35,8 @@ from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.waking.wake_candidate_index import (
-    ProjectionUnavailableError,
-    WakeCandidateIndex,
-)
+from agent_comms.waking.errors import ProjectionUnavailableError
+from agent_comms.waking.wake_candidate_index import WakeCandidateIndex
 from agent_comms.waking.wake_policy import FullWake
 from bus_record_fixture import prepare_native_comms
 from conftest import accept_initial, publish_initial, without_mutation_guards

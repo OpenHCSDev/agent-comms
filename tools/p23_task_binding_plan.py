@@ -104,7 +104,7 @@ publication = SRC / "bus_publication.py"
 pb = publication.read_text()
 publication_guard = '''if TYPE_CHECKING:
     from agent_comms.bus import Bus, BusReader
-    from agent_comms.bus_record_builder import RecordBuilder
+    from agent_comms.messaging.bus_record_builder import RecordBuilder
     from agent_comms.planning.goal_management import Goals
     from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.registry.threads import Thread
@@ -177,7 +177,7 @@ imports = [
     imported(publication, "from agent_comms.messaging.message_reads import MessageDeliveryRead, MessageIdentityRead"),
     imported(publication, "from agent_comms.messaging.message_writer import MessageWriter"),
     imported(publication, "from agent_comms.messaging.message_directions import MessageDirections"),
-    imported(publication, "from agent_comms.bus_record_builder import RecordBuilder"),
+    imported(publication, "from agent_comms.messaging.bus_record_builder import RecordBuilder"),
     imported(publication, "from agent_comms.registry.task_owner import TaskOwner"),
     imported(publication, "from agent_comms.registry.task_registry import TaskRegistry"),
     {"operation": "remove_import_names", "file_path": str(publication),

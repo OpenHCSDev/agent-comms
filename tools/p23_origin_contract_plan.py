@@ -8,7 +8,7 @@ writer = '''"""The original bus append operations used by initial publication.""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from agent_comms.bus_record_builder import RecordBuilder
+from agent_comms.messaging.bus_record_builder import RecordBuilder
 from agent_comms.messaging import messages
 
 
@@ -54,7 +54,7 @@ after = before.replace("from typing import TYPE_CHECKING\n", "").replace(
 )
 guard = '''if TYPE_CHECKING:
     from agent_comms.bus import Bus, BusReader
-    from agent_comms.bus_record_builder import RecordBuilder
+    from agent_comms.messaging.bus_record_builder import RecordBuilder
     from agent_comms.planning.goal_management import Goals
     from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.registry.threads import Thread
@@ -108,7 +108,7 @@ changes = [
     ]),
 ]
 imports = [
-    imported(origin, "from agent_comms.bus_record_builder import RecordBuilder"),
+    imported(origin, "from agent_comms.messaging.bus_record_builder import RecordBuilder"),
     imported(origin, "from agent_comms.messaging.message_directions import MessageDirections"),
     imported(origin, "from agent_comms.messaging.message_reads import MessageIdentityRead"),
     imported(origin, "from agent_comms.messaging.message_writer import MessageWriter"),

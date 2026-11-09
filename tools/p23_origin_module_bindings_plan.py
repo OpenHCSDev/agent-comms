@@ -15,19 +15,19 @@ operations.append(patch(path, [(before, after)]))
 
 path = SRC / "message_writer.py"
 before = path.read_text()
-after = before.replace("from agent_comms.bus_record_builder import RecordBuilder\n", "")
+after = before.replace("from agent_comms.messaging.bus_record_builder import RecordBuilder", "")
 after = after.replace(statement, "")
 after = after.replace("build: RecordBuilder", "build: bus_record_builder.RecordBuilder")
 after = after.rstrip() + '''
 
-import agent_comms.bus_record_builder as bus_record_builder
+import agent_comms.messaging.bus_record_builder as bus_record_builder
 from agent_comms.messaging import messages
 '''
 operations.append(patch(path, [(before, after)]))
 
 path = SRC / "initial_origin.py"
 before = path.read_text()
-after = before.replace("from agent_comms.bus_record_builder import RecordBuilder\n", "")
+after = before.replace("from agent_comms.messaging.bus_record_builder import RecordBuilder", "")
 after = after.replace("from agent_comms.messaging.message_writer import MessageWriter", "")
 after = after.replace(statement, "")
 after = after.replace("build: RecordBuilder", "build: bus_record_builder.RecordBuilder")
@@ -35,7 +35,7 @@ after = after.replace("bus: MessageWriter", "bus: message_writer.MessageWriter")
 after = after.replace(": MessageDirections", ": MessageDirections[messages.Message]")
 after = after.rstrip() + '''
 
-import agent_comms.bus_record_builder as bus_record_builder
+import agent_comms.messaging.bus_record_builder as bus_record_builder
 import agent_comms.message_writer as message_writer
 from agent_comms.messaging import messages
 '''

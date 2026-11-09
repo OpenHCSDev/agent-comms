@@ -10,11 +10,8 @@ from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.bus_source_page import CandidateQuery
 from agent_comms.nominal.field_codec import MalformedRecord, MessageId, ThreadLookup
+from agent_comms.waking.errors import ProjectionUnavailableError
 from agent_comms.waking.wake_policy import WakePolicy
-
-
-class ProjectionUnavailableError(RuntimeError):
-    """Original delivery remains available when the optional projection fails."""
 
 
 @dataclass(frozen=True, slots=True)

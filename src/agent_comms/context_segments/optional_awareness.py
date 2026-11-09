@@ -31,7 +31,7 @@ from agent_comms.execution.turn_context import (
 )
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 from agent_comms.nominal.lifecycle_capability import Complete
-from agent_comms.waking.wake_candidate_index import ProjectionUnavailableError
+from agent_comms.waking.errors import ProjectionUnavailableError
 
 
 @dataclass(frozen=True)
