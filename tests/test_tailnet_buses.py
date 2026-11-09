@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from agent_comms.tailnet_buses import (
+from agent_comms.transport.tailnet_buses import (
     PeerHoldsBus,
     PeerOffline,
     PeerUnreachable,

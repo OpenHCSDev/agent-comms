@@ -4,11 +4,12 @@ import time
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import _duration_seconds
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_commands import _duration_seconds
+from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.cli_verbs.target_fields import ChoiceTargetField
 from agent_comms.comms import Comms
-from agent_comms.exporting import (
+from agent_comms.messaging.exporting import (
     EverythingScope,
     FullLimit,
     JsonlFormat,
@@ -19,7 +20,6 @@ from agent_comms.exporting import (
     UnsetScopeFlag,
 )
 from agent_comms.nominal.field_codec import Argument, Editor, NamedArgumentGroup
-from agent_comms.target_fields import ChoiceTargetField
 
 
 @dataclass(frozen=True, kw_only=True)

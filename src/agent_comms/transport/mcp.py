@@ -19,8 +19,7 @@ from typing import Annotated, ClassVar, Literal, Self
 from aiohttp import web
 from pydantic import JsonValue
 
-from agent_comms.cli_protocol import CoreError
-from agent_comms.connector_caller import ConnectorCaller, ConnectorTool
+from agent_comms.cli_bridges.cli_protocol import CoreError
 from agent_comms.coordination.errors import CommandFailure, Refused
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -35,7 +34,7 @@ from agent_comms.nominal.field_codec import (
     boundary_decoder,
     projected,
 )
-from agent_comms.tool_request import ServedRequest
+from agent_comms.transport.connector_caller import ConnectorCaller, ConnectorTool
 from agent_comms.transport.progress import (
     CancellableWireExport,
     WireExportCancelled,
@@ -43,6 +42,7 @@ from agent_comms.transport.progress import (
     WireExportProgress,
 )
 from agent_comms.transport.request import ToolCall, ToolRequest
+from agent_comms.transport.tool_request import ServedRequest
 from agent_comms_hooks import ToolRefusedError
 
 JsonRpcId = int | str

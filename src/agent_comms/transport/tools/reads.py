@@ -10,8 +10,8 @@ from agent_comms.acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdat
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.nominal.field_codec import OrderId
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.team_hud_records import TeammateDetail
-from agent_comms.transcripts import (
+from agent_comms.team.team_hud_records import TeammateDetail
+from agent_comms.transcript.transcripts import (
     AtFrontier,
     LatestPage,
     LivePageSource,

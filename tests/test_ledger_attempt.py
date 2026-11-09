@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.attempt_resolution import GoalCleared
 from agent_comms.errors import StaleAttemptError
 from agent_comms.nominal.field_codec import AttemptId, GoalId, NoAttemptId
+from agent_comms.planning.attempt_resolution import GoalCleared
 from agent_comms.planning.goal_attempt_identity import GoalAttemptIdentity
 from agent_comms.planning.goal_attempt_phase import (
     ReservedAttempt,

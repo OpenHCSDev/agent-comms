@@ -18,14 +18,14 @@ from pathlib import Path
 from string import Formatter
 from typing import Annotated, ClassVar, Iterator, Self
 
-from agent_comms.active_route import (
+from agent_comms.execution.child_process import Platform
+from agent_comms.installer.active_route import (
     ActiveRoute,
     ActiveRouteFile,
     RouteFile,
     RouteFileSelection,
     active_route_path,
 )
-from agent_comms.execution.child_process import Platform
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.registry.registry_store import RegistryStore

@@ -26,6 +26,7 @@ from metaclass_registry.mro_dispatch import (
 
 import agent_comms.installer
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (
     FailureReportPublicationPhase,
@@ -61,7 +62,6 @@ from agent_comms.installer.upgrade import (
     TargetTree,
     upgrade,
 )
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import FieldCodec, PathText
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.storage_rules import StorageRule

@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import RootId
-from agent_comms.private_registry_guard import PrivateRegistryGuard
+from agent_comms.registry.private_registry_guard import PrivateRegistryGuard
 from agent_comms.storage.private_path import TrustedAncestorRole
 
 

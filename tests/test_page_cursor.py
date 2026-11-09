@@ -4,8 +4,7 @@ import json
 import pytest
 
 from agent_comms.cli import build_parser
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.page_traversal import (
+from agent_comms.messaging.page_traversal import (
     HistoryCursor,
     HistorySourceKey,
     LiveCursor,
@@ -13,6 +12,7 @@ from agent_comms.page_traversal import (
     OlderTraversal,
     PageCursor,
 )
+from agent_comms.nominal.field_codec import FieldCodec
 
 
 @pytest.mark.parametrize('cursor,wire,source', [

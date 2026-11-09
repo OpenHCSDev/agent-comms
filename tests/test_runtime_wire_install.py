@@ -9,10 +9,10 @@ from module_layers import OutgoingWire
 
 import fixture_git
 from agent_comms.cli_bridges.monitor import PauseSession
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import RuntimeWireChanged
 from agent_comms.installer.upgrade import Stack
-from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.fixture

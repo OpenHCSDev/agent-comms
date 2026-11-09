@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
-from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import NameArgument, ThreadConfiguredResult
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_commands import NameArgument, ThreadConfiguredResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
 from agent_comms.registry.threads import NextTurnConfiguration

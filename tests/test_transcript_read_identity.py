@@ -7,14 +7,14 @@ from contextlib import closing
 import pytest
 
 from agent_comms.coordination.errors import StaleRevision
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.transcript_routes import NoDisplayText
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_text import (
     ForkedParent,
     GivenThreadText,
 )
 from agent_comms.registry.threads import NativeThread
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.transcript_routes import NoDisplayText
 from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID
 from conftest import installed_comms
 

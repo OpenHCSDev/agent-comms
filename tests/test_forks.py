@@ -17,9 +17,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.activity import ActivityState
-from agent_comms.change_report import FileLine, NamedRepository
-from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.hook_forks import SessionSubagents
 from agent_comms.cli_bridges.hook_requests import (
@@ -35,6 +32,7 @@ from agent_comms.errors import (
     TodoError,
 )
 from agent_comms.execution.native_transcript import NativeTranscript
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_digests import (
     OrderEditCountRead,
     OrderEditsRead,
@@ -44,16 +42,14 @@ from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
-from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.held_orders import HeldOrders
 from agent_comms.installer.backup import StoreBackup
+from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     GoalId,
     OrderId,
     ToolCallId,
 )
-from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.planning.goal_actions import (
     OrderGoalAction,
     ReissuedOrderGoalAction,
@@ -64,6 +60,8 @@ from agent_comms.planning.goals import (
     GoalConsentRequired,
     OrderCheck,
 )
+from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.order_runs import MechanicalOrderRun
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     Assignment,
@@ -88,11 +86,14 @@ from agent_comms.planning.problem_findings import (
     LocatedProblemFinding,
     UnlocatedProblemFinding,
 )
+from agent_comms.planning.problem_number import ProblemNumber
 from agent_comms.planning.pull_requests import PullRequestLink
-from agent_comms.problem_number import ProblemNumber
+from agent_comms.projects.change_report import FileLine, NamedRepository
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.slop import DeclarationDerivation, ExistingLine, Slop
 from agent_comms.projects.storage_rules import StorageRule
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registry.activity import ActivityState
 from agent_comms.registry.thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.thread_status import (
@@ -104,20 +105,19 @@ from agent_comms.registry.thread_text import (
     SubagentRole,
 )
 from agent_comms.registry.threads import ExternalThread, ForkThread, NativeThread
-from agent_comms.projects.repository_name import RepositoryName
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop
 from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
 )
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.storage.typed_table import HeldBusFile
 from agent_comms.team.order import MessageNotification, OrderFile, Team, TeamContext
 from agent_comms.team.standing import Unjudged
-from agent_comms.team_heartbeat import TeamObservation
-from agent_comms.tool_caller import ForkCaller, SubagentCaller
-from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.transcript_events import ToolStartTranscript
+from agent_comms.team.team_heartbeat import TeamObservation
+from agent_comms.transcript.external_transcript import ExternalTranscript
+from agent_comms.transcript.transcript_events import ToolStartTranscript
+from agent_comms.transport.tool_caller import ForkCaller, SubagentCaller
+from agent_comms.transport.tool_declaration import ToolDeclaration
 from agent_comms.transport.tools.orders import (
     CommsHudTool,
     CommsTeamLoadTool,

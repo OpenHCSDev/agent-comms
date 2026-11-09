@@ -4,6 +4,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.coordination.database import ReadableStore
+from agent_comms.coordination.working_memory_annotations import WorkingMemoryAnnotations
 from agent_comms.execution.turn_context import (
     ContextSpan,
     ContributionCoordinates,
@@ -11,10 +12,7 @@ from agent_comms.execution.turn_context import (
     SystemLayerSegment,
     UnattributedProvenance,
 )
-from agent_comms.working_memory_annotations import WorkingMemoryAnnotations
-from agent_comms.working_memory_labels import (
-    JevClassifier,
-)
+from agent_comms.working_memory.working_memory_labels import JevClassifier
 from working_memory_fixture import local_system
 
 

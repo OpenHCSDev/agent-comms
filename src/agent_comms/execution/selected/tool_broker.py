@@ -28,10 +28,6 @@ from agent_comms.coordination.errors import (
 )
 from agent_comms.coordination.session import ReadNativeCoordinationSession
 from agent_comms.coordination.tables.participants import OwnerGenerations
-from agent_comms.envelope_claim_transitions import (
-    ExistingFileClaim,
-    WakeClaim,
-)
 from agent_comms.execution.native_input_record import (
     FullNativeExecution,
     NativeInputIdentity,
@@ -47,6 +43,10 @@ from agent_comms.execution.selected.claim import (
     write_selected_claimed_file,
 )
 from agent_comms.execution.turn_context import InstructionFile
+from agent_comms.messaging.envelope_claim_transitions import (
+    ExistingFileClaim,
+    WakeClaim,
+)
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     InputId,
@@ -54,8 +54,7 @@ from agent_comms.nominal.field_codec import (
     SlotId,
     ToolCallId,
 )
-from agent_comms.pi_rule_gate import PiRuleGate
-from agent_comms.tool_denial import SelectedToolDenied
+from agent_comms.team.pi_rule_gate import PiRuleGate
 from agent_comms.transport.native_tool_call import (
     NativeToolCall,
     SelectedToolBusy,
@@ -67,6 +66,7 @@ from agent_comms.transport.native_tool_transport import (
     ToolListener,
     UnboundToolTransport,
 )
+from agent_comms.transport.tool_denial import SelectedToolDenied
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
 _MAX_CONTENT = 128 * 1024

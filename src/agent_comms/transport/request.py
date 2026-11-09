@@ -1,5 +1,5 @@
 """Tool requests as the wire declares them: fields, names, schemas, results and how a remote
-caller posts them. Nothing here serves a request; agent_comms.tool_request composes this
+caller posts them. Nothing here serves a request; agent_comms.transport.tool_request composes this
 declaration with ServedRequest for the Core that runs it, so a client imports no Core."""
 
 from __future__ import annotations
@@ -27,9 +27,9 @@ from agent_comms.nominal.field_codec import (
     WireTransient,
 )
 from agent_comms.storage.maintenance_barrier import FreshIngress
-from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.tool_result import ToolResult
 from agent_comms.transport.progress import WireExportObserver
+from agent_comms.transport.tool_declaration import ToolDeclaration
+from agent_comms.transport.tool_result import ToolResult
 
 
 class ArgumentTool:
@@ -90,7 +90,7 @@ class ToolRequest[Result: ToolResult = ToolResult](
     FreshIngress, ArgumentTool, ToolDeclaration, declared_name=None
 ):
     """A tool request as the wire declares it: its fields, name, schema and result. Serving it
-    (decoding a call, running apply under a caller) is ServedRequest's, in agent_comms.tool_request."""
+    (decoding a call, running apply under a caller) is ServedRequest's, in agent_comms.transport.tool_request."""
 
     description: ClassVar[str]
     read_only_hint: ClassVar[bool] = False

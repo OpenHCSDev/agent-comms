@@ -12,13 +12,13 @@ import pytest
 from agent_comms.cli_bridges.history import History, OfflineHistory
 from agent_comms.cli_verbs.restore_owner import RestoreOwnerCliCommand
 from agent_comms.errors import RelationViolationError
-from agent_comms.harness_install import Harness, PiHarness
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.importing import ImportLimits, KeptPiSession
+from agent_comms.installer.harness_install import Harness, PiHarness
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.thread_text import AnySession
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.session_file import RegistrySessionLocation
 from conftest import installed_comms
 
 

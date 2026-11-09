@@ -11,7 +11,10 @@ from threading import Event
 
 import pytest
 
-from agent_comms.active_route import (
+from agent_comms.comms import Comms, wire
+from agent_comms.execution.child_process import SpawnedProcess
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.installer.active_route import (
     ActiveRoute,
     ActiveRouteFile,
     NoRouteSelection,
@@ -21,18 +24,15 @@ from agent_comms.active_route import (
     read_active_route,
     route_new_bus,
 )
-from agent_comms.bus import Bus
-from agent_comms.comms import Comms, wire
-from agent_comms.execution.child_process import SpawnedProcess
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.installer.probes.publication import SelectedRouteProbe
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry.threads import ExternalThread
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError, MaintenanceOperator
 from bus_record_fixture import prepare_native_comms
@@ -310,9 +310,9 @@ def test_preparation_lends_no_route_lock_and_commits_only_its_current_directory(
                 child = subprocess.run([
                     sys.executable, "-c",
                     "from pathlib import Path; import sys; "
-                    "from agent_comms.active_route import ActiveRoute, route_new_bus; "
-                    "from agent_comms.bus import Bus; "
-                    "from agent_comms.recorded_bus import RecordedBusIdentity; "
+                    "from agent_comms.installer.active_route import ActiveRoute, route_new_bus; "
+                    "from agent_comms.messaging.bus import Bus; "
+                    "from agent_comms.messaging.recorded_bus import RecordedBusIdentity; "
                     "root=Path(sys.argv[1]); "
                     "print(route_new_bus(ActiveRoute(root, "
                     "RecordedBusIdentity.capture(Bus.path_in(root))), Path(sys.argv[2])))",

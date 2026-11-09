@@ -7,32 +7,32 @@ from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
-from typing import Annotated, ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from agent_comms.messaging.channel_targets import ChannelTarget, Tag
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.display_order import CreatedThreadSort, ThreadSort
 from agent_comms.errors import RelationViolationError
-from agent_comms.history_result import (
+from agent_comms.messaging.channel_targets import ChannelTarget, Tag
+from agent_comms.messaging.history_result import (
     ChannelHistoryPageResult,
     EverythingHistoryPageResult,
     HistoryPageResult,
 )
 from agent_comms.messaging.messages import MembershipTransition
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import CatalogExclude, FieldCodec
-from agent_comms.projection_source import ProjectionSource
+from agent_comms.messaging.projection_source import ProjectionSource
 from agent_comms.messaging.read_basis import (
     AllChannelDisplayScope,
     ChannelDisplayScope,
     MemberActivityDisplayScope,
 )
-from agent_comms.tool_result import ToolResult
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import CatalogExclude, FieldCodec
+from agent_comms.transport.tool_result import ToolResult
 
 if TYPE_CHECKING:
     from agent_comms.registry.registry_document import RosterVisibility
+    from agent_comms.registry.registry_provenance import RegistryProvenance
     from agent_comms.registry.threads import Thread
-    from agent_comms.registry_provenance import RegistryProvenance
 
 
 class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):

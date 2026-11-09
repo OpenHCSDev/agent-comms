@@ -9,21 +9,22 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms import agent_events as events
-from agent_comms import backend, prompt_state
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.backend import NativeSession
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_startup import NativeStartup
+from agent_comms.execution.participant_identity import ParticipantIdentity
+from agent_comms.execution.prompt_state import PreparedSession
 from agent_comms.installer.native_package import VerifiedNativePackage
-from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.pi_payloads import StateData
 
 if TYPE_CHECKING:
     from agent_comms.pi_native_backend import PersistentPiSession
 
 
-class NativeSessionPreparation(backend.NativeSession):
+class NativeSessionPreparation(NativeSession):
     """Share native launch/attestation with turns; retain an idle child, send no prompt."""
-    prompt_type = prompt_state.PreparedSession
+    prompt_type = PreparedSession
 
     def finish_result(self) -> Iterable[events.AgentEvent]:
         if not self.native_session.child_state.retained:

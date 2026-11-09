@@ -6,8 +6,8 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent_comms.messaging.served_bus import IdentifiedBus, ServedBus, UnidentifiedBus
 from agent_comms.nominal.field_codec import NullMember, TaggedRecordMember, TaggedUnion
-from agent_comms.served_bus import IdentifiedBus, ServedBus, UnidentifiedBus
 from agent_comms.storage.locked_store import DocumentChange, LockedStore, RollbackRetained
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 

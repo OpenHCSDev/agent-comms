@@ -9,27 +9,27 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.change_report import FileLine
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.order_runs import MechanicalOrderRun
 from agent_comms.planning.orders import (
     PendingProblemOrder,
     PresentCheckout,
     ProgressRead,
 )
+from agent_comms.projects.change_report import FileLine
 from agent_comms.projects.checkouts import (
     Checkout,
     RepositoryReads,
 )
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import (
     StorageRule,
     UnitStorage,
 )
-from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.threads import NativeThread
-from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.standing_rules import (
     StorageHomeMissing,
     StorageViolation,

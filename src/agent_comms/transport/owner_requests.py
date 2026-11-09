@@ -8,8 +8,8 @@ from dataclasses import (
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms import launch_runtime
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution import launch_runtime
 from agent_comms.execution.child_process import Platform, ProcessIdentity
 from agent_comms.execution.native_arguments import (
     ConfiguredBinary,
@@ -19,11 +19,11 @@ from agent_comms.execution.native_arguments import (
     NativeArguments,
 )
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.owner_connection import OwnerConnection
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ClaimedIdentity, OwnerIdentity
-from agent_comms.tool_result import DeclaredReply
+from agent_comms.transport.owner_connection import OwnerConnection
 from agent_comms.transport.runtime_request import AttachedResultRuntimeRequest, ResultRuntimeRequest
+from agent_comms.transport.tool_result import DeclaredReply
 
 if TYPE_CHECKING:
     from agent_comms.execution.input_drain import OwnerSession

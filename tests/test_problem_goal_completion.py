@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.cli_commands import ReconciledStoresResult
+from agent_comms.cli_verbs.cli_commands import ReconciledStoresResult
 from agent_comms.comms import Comms
 from agent_comms.errors import GoalRefused
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
@@ -32,9 +32,9 @@ from agent_comms.planning.orders import (
     TodoStore,
 )
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.storage.recorded_time import RecordedEventTime
 from conftest import installed_comms, maintenance_held
 from source_revision_fixture import SourceRepository
 from test_reconcile_stores import reconcile

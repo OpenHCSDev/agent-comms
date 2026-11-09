@@ -14,21 +14,28 @@ from pathlib import Path
 import pytest
 
 import fixture_git
-from agent_comms.bus import (
-    Bus,
-    BusRecord,
-    KeyedPrivateRecord,
-    PrivateRecord,
-    PublicRecord,
-)
-from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
-from agent_comms.bus_tables import AnsweredSource, AuthoredAnswers, BusSchema, MessageIdentitySource
+from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.tables.publications import PublicationIntents
 from agent_comms.errors import (
     CommittedMessageError,
     HumanSendRefusedError,
     RelationViolationError,
     UnclaimedError,
+)
+from agent_comms.messaging.bus import (
+    Bus,
+    BusRecord,
+    KeyedPrivateRecord,
+    PrivateRecord,
+    PublicRecord,
+)
+from agent_comms.messaging.bus_publication import Delivered, HumanOrigin, KeyedPublication
+from agent_comms.messaging.bus_route_counts import BusRouteCounts
+from agent_comms.messaging.bus_tables import (
+    AnsweredSource,
+    AuthoredAnswers,
+    BusSchema,
+    MessageIdentitySource,
 )
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import (
@@ -49,14 +56,10 @@ from agent_comms.messaging.messages import (
     NoticeRole,
     TeamUpdatePosition,
 )
-from agent_comms.messaging.bus_route_counts import BusRouteCounts
+from agent_comms.messaging.read_basis import RepliesDisplayScope
 from agent_comms.nominal.field_codec import GitCommitText, MessageId, MessageIdText
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.read_basis import RepliesDisplayScope
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-from agent_comms.response_acknowledgement import (
-    canonical_publication_key,
-)
 from agent_comms.storage.typed_table import (
     ProducedTable,
     ProjectionProducer,
@@ -174,7 +177,7 @@ if startup != "table-first":
 from agent_comms.messaging.messages import TeamUpdatePosition
 if startup == "table-first":
     # The cold direct call: nothing has completed the writer family yet.
-    from agent_comms.projection_source import ProjectionSource
+    from agent_comms.messaging.projection_source import ProjectionSource
     ProjectionSource.writers_for(TeamUpdatePosition)
 if startup == "agent_comms.cli_verbs.reconcile_stores":
     from agent_comms.producer_stamp import stamped_digests
@@ -182,7 +185,7 @@ if startup == "agent_comms.cli_verbs.reconcile_stores":
 else:
     first = TeamUpdatePosition.producer_digest()
 from agent_comms.messaging.messages import BusRecord
-from agent_comms.projection_source import ProjectionSource
+from agent_comms.messaging.projection_source import ProjectionSource
 writers = ProjectionSource.writers_for(TeamUpdatePosition)
 print(json.dumps(dict(
     first=first, source=inspect.getfile(TeamUpdatePosition),
@@ -311,7 +314,7 @@ def test_display_import_does_not_add_projection_producers(
     before = pristine_projection.digest
     path = projection_source / "producer_stamp.py"
     original = path.read_text()
-    declaration = "from agent_comms.bus import Bus as Bus"
+    declaration = "from agent_comms.messaging.bus import Bus as Bus"
     assert original.count(declaration) == 1
     path.write_text(original.replace(declaration, declaration + "\nfrom agent_comms import cli"))
     assert projection_source_digest(projection_source) == before

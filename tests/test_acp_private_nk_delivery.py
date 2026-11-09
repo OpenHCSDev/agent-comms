@@ -16,7 +16,7 @@ from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tool_caller import ThreadCaller
 from bus_record_fixture import prepare_native_comms
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -54,10 +54,10 @@ def cursor_envelope(metadata):
 
 @pytest.mark.parametrize("managed", [False, True])
 def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, managed):
-    from agent_comms.attempt_start import AttemptStart
-    from agent_comms.attempt_states import SucceededAttempt
+    from agent_comms.coordination.attempt_start import AttemptStart
+    from agent_comms.coordination.attempt_states import SucceededAttempt
+    from agent_comms.coordination.owner_fence import prepare_fence_token
     from agent_comms.coordination.tables.executions import AcpOrigin
-    from agent_comms.owner_fence import prepare_fence_token
     from test_coordination_store import final_evidence
 
     comms, _ = _private_comms(tmp_path)

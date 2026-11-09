@@ -1,0 +1,591 @@
+"""Bounded, atomic exports of the durable IRC-style message wire."""
+
+from __future__ import annotations
+
+import hashlib
+import math
+import os
+from abc import abstractmethod
+from collections import deque
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import asdict, dataclass, replace
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import BinaryIO, ClassVar
+
+from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.errors import ExportDestinationExists
+from agent_comms.messaging.bus_tables import MessageIdentitySource
+from agent_comms.messaging.channels import Channel
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message, StoredWireHistory
+from agent_comms.messaging.read_basis import DMDisplayScope
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.registry.registration import Registration
+from agent_comms.storage.store_files import AtomicFile, ExclusiveAtomicFile
+from agent_comms.transport.progress import WireExportObserver, WireExportProgress
+from agent_comms.transport.tool_result import ToolResult
+
+
+class WireExportFormat(DeclaredFamily, affix="Format"):
+    """A representation owns both header and row rendering."""
+
+    importable: ClassVar[bool] = False
+
+    def __str__(self) -> str:
+        return FieldCodec.encode(type(self))
+
+    @abstractmethod
+    def header(self, metadata: Mapping[str, object]) -> bytes:
+        """Render the durable metadata record."""
+
+    @abstractmethod
+    def row(self, message: Message) -> bytes:
+        """Render the message's public projection."""
+
+    @staticmethod
+    def json_record(record: Mapping[str, object]) -> str:
+        return FieldCodec.compact(record, ensure_ascii=False)
+
+    def rows(self, messages: Iterable[Message]) -> Iterator[WireExportRow]:
+        return (WireExportRow(message.seq, message.timestamp, self.row(message))
+                for message in messages)
+
+    def stored_rows(self, source: StoredWireHistory) -> Iterable[WireExportRow]:
+        """Messages decoded once from their capability tables, rendered by this format."""
+        return self.rows(source.messages())
+
+
+class SelectableWireExportFormat(WireExportFormat):
+    """Formats whose complete input is the ordinary wire export selection."""
+
+
+@dataclass(frozen=True)
+class JsonlFormat(SelectableWireExportFormat):
+    importable: ClassVar[bool] = True
+    row_prefix: ClassVar[bytes] = b'{"record":"message","message":'
+    row_suffix: ClassVar[bytes] = b'}\n'
+
+    def header(self, metadata: Mapping[str, object]) -> bytes:
+        return (self.json_record(metadata) + "\n").encode()
+
+    def row(self, message: Message) -> bytes:
+        return self.row_prefix + self.json_record(Message.from_message(message).to_wire()).encode() + self.row_suffix
+
+    def stored_rows(self, source: StoredWireHistory) -> Iterable[WireExportRow]:
+        """The stored wire text is already this format's row; nothing is decoded."""
+        return (WireExportRow(message.seq, message.timestamp,
+                              self.row_prefix + message.wire.encode() + self.row_suffix)
+                for message in source.rows())
+
+
+@dataclass(frozen=True)
+class TextFormat(SelectableWireExportFormat):
+    def header(self, metadata: Mapping[str, object]) -> bytes:
+        return (
+            f"# agent-comms wire export v{metadata['version']} (non-importable text view)\n"
+            f"# metadata: {self.json_record(metadata)}\n"
+        ).encode()
+
+    def row(self, message: Message) -> bytes:
+        timestamp = (
+            datetime.fromtimestamp(message.timestamp, UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            if math.isfinite(message.timestamp) and message.timestamp > 0
+            else "invalid-time"
+        )
+        attributes = [
+            f"seq={message.seq}",
+            f"id={message.message_id}",
+            f"type={message.type.declared_name}",
+            f"role={FieldCodec.encode(message.sender_role)}",
+        ]
+        attributes.extend(message.role.export_attributes())
+        if message.mentions:
+            attributes.append("mentions=" + ",".join(f"@{m.thread}" for m in message.mentions))
+        body = "\n".join(f"  | {line}" for line in message.body.split("\n"))
+        return (
+            f"[{timestamp}] [{' '.join(attributes)}] "
+            f"<{message.sender} -> {message.target}>\n{body}\n"
+        ).encode()
+
+
+@dataclass(frozen=True)
+class ResolvedExportScope:
+    """One canonical scope and its required alias/catalog-resolved SQL predicate."""
+
+    scope: WireExportScope
+    predicate: str
+    parameters: tuple[object, ...]
+
+
+class WireExportScope(DeclaredFamily, affix="Scope"):
+    """The authoritative conversation, resolved under the wire snapshot lock."""
+
+    def to_wire(self) -> dict[str, object]:
+        return FieldCodec.encode(self)
+
+    @abstractmethod
+    def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
+        """Capture canonical names and a predicate without mutating read state."""
+
+
+@dataclass(frozen=True, slots=True)
+class EverythingScope(WireExportScope):
+    def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
+        return ResolvedExportScope(self, "1", ())
+
+
+@dataclass(frozen=True, slots=True)
+class AuthoredSourceScope(WireExportScope):
+    """Immutable artifact selection, resolved by the original retained family."""
+
+    sources: tuple[MessageReference, ...]
+
+    def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
+        predicate, parameters = MessageIdentitySource.reference_predicate(self.sources)
+        return ResolvedExportScope(self, predicate, parameters)
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelScope(WireExportScope):
+    channel: str
+
+    def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
+        channel = require_channel(self.channel)
+        channel.require_routable()
+        history = channel.history_scope()
+        predicate, parameters = history.index_predicate
+        return ResolvedExportScope(self, predicate, parameters)
+
+
+@dataclass(frozen=True, slots=True)
+class DmScope(WireExportScope):
+    participants: tuple[str, str]
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.participants, tuple)
+            or len(self.participants) != 2
+            or any(not isinstance(name, str) or not name for name in self.participants)
+            or self.participants[0] == self.participants[1]
+        ):
+            raise ValueError("A DM wire-export scope requires two distinct participants.")
+
+    def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
+        snapshot = registry.snapshot()
+        first = snapshot.entry(self.participants[0])
+        second = snapshot.entry(self.participants[1])
+        canonical = DmScope((first.thread.name, second.thread.name))
+        first_names, second_names = first.names, second.names
+
+        predicate, parameters = DMDisplayScope(first_names, second_names).index_predicate
+        return ResolvedExportScope(canonical, predicate, parameters)
+
+
+class ScopeFlag(SubclassUnion, affix="ScopeFlag"):
+    """One export-scope flag of the command line: the scope it names, or not given."""
+
+    @abstractmethod
+    def chosen_or(self, other: WireExportScope) -> WireExportScope: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelScopeFlag(SingleFieldValue, ScopeFlag):
+    channel: str
+
+    def chosen_or(self, other: WireExportScope) -> ChannelScope:
+        return ChannelScope(self.channel)
+
+
+@dataclass(frozen=True, slots=True)
+class DmScopeFlag(SingleFieldValue, ScopeFlag):
+    participants: tuple[str, str]
+
+    def chosen_or(self, other: WireExportScope) -> DmScope:
+        return DmScope(self.participants)
+
+
+@dataclass(frozen=True, slots=True)
+class UnsetScopeFlag(NullMember, ScopeFlag):
+    def chosen_or(self, other: WireExportScope) -> WireExportScope:
+        return other
+
+
+@dataclass
+class ExportSelectionStats:
+    """Selection counters shared by the traversal and limit hooks."""
+
+    source_messages: int = 0
+    time_filtered: int = 0
+    invalid_time: int = 0
+    oversized: int = 0
+
+
+class WireExportLimit(DeclaredFamily, affix="Limit"):
+    """Shared filtering algorithm with declaration-owned retention hooks."""
+
+    def to_wire(self) -> dict[str, object]:
+        return FieldCodec.encode(self)
+
+    def byte_ceiling(self) -> int | None:
+        return None
+
+    def time_cutoff(self) -> float | None:
+        return None
+
+    def validate_header(self, size: int) -> None:
+        ceiling = self.byte_ceiling()
+        if ceiling is not None and size > ceiling:
+            raise ValueError("The wire-export byte ceiling is too small for required metadata.")
+
+    def select(
+        self,
+        rows: Iterable[WireExportRow],
+        header_size: int,
+        started_at: float,
+        stats: ExportSelectionStats,
+    ) -> Iterable[WireExportRow]:
+        cutoff = self.time_cutoff()
+
+        def filtered() -> Iterable[WireExportRow]:
+            for row in rows:
+                stats.source_messages += 1
+                if cutoff is not None:
+                    timestamp = row.timestamp
+                    if not math.isfinite(timestamp) or timestamp <= 0:
+                        stats.invalid_time += 1
+                        continue
+                    if not cutoff <= timestamp <= started_at:
+                        stats.time_filtered += 1
+                        continue
+                yield row
+
+        return self.retain(filtered(), header_size, stats)
+
+    @abstractmethod
+    def retain(
+        self,
+        rows: Iterable[WireExportRow],
+        header_size: int,
+        stats: ExportSelectionStats,
+    ) -> Iterable[WireExportRow]:
+        """Select an ascending stream; buffering is owned by the bound's declaration."""
+
+
+@dataclass(frozen=True, slots=True)
+class FullLimit(WireExportLimit):
+    def retain(
+        self,
+        rows: Iterable[WireExportRow],
+        header_size: int,
+        stats: ExportSelectionStats,
+    ) -> Iterable[WireExportRow]:
+        return rows
+
+
+@dataclass(frozen=True, slots=True)
+class MaxBytesLimit(WireExportLimit):
+    value: int
+
+    def __post_init__(self) -> None:
+        if isinstance(self.value, bool) or not isinstance(self.value, int) or self.value <= 0:
+            raise ValueError("The wire-export byte ceiling must be a positive integer.")
+
+    def byte_ceiling(self) -> int:
+        return self.value
+
+    def retain(
+        self,
+        rows: Iterable[WireExportRow],
+        header_size: int,
+        stats: ExportSelectionStats,
+    ) -> Iterable[WireExportRow]:
+        retained: deque[WireExportRow] = deque()
+        retained_bytes = 0
+        for row in rows:
+            row_size = len(row.data)
+            if header_size + row_size > self.value:
+                retained.clear()
+                retained_bytes = 0
+                stats.oversized += 1
+                continue
+            retained.append(row)
+            retained_bytes += row_size
+            while header_size + retained_bytes > self.value:
+                retained_bytes -= len(retained.popleft().data)
+        return retained
+
+
+@dataclass(frozen=True, slots=True)
+class RecentLimit(FullLimit):
+    value: float
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.value, bool)
+            or not isinstance(self.value, (int, float))
+            or not math.isfinite(self.value)
+            or self.value < 0
+        ):
+            raise ValueError(
+                "The recent wire-export cutoff must be a finite non-negative timestamp."
+            )
+
+    def time_cutoff(self) -> float:
+        return self.value
+
+
+class LimitFlag(SubclassUnion, affix="LimitFlag"):
+    """One export-limit flag of the command line: the limit it names, or not given."""
+
+    @abstractmethod
+    def chosen_or(self, other: WireExportLimit, started_at: float) -> WireExportLimit: ...
+
+
+@dataclass(frozen=True, slots=True)
+class BytesLimitFlag(SingleFieldValue, LimitFlag):
+    value: int
+
+    def chosen_or(self, other: WireExportLimit, started_at: float) -> MaxBytesLimit:
+        return MaxBytesLimit(self.value)
+
+
+@dataclass(frozen=True, slots=True)
+class RecentLimitFlag(SingleFieldValue, LimitFlag):
+    seconds: float
+
+    def chosen_or(self, other: WireExportLimit, started_at: float) -> RecentLimit:
+        return RecentLimit(started_at - self.seconds)
+
+
+@dataclass(frozen=True, slots=True)
+class UnsetLimitFlag(NullMember, LimitFlag):
+    def chosen_or(self, other: WireExportLimit, started_at: float) -> WireExportLimit:
+        return other
+
+
+@dataclass(frozen=True, slots=True)
+class WireExportBoundary:
+    """One fixed wire snapshot boundary captured before export iteration."""
+
+    through_seq: int
+    export_started_at: float
+
+    def __post_init__(self) -> None:
+        if self.through_seq < 0:
+            raise ValueError("The wire-export sequence boundary cannot be negative.")
+        if not math.isfinite(self.export_started_at) or self.export_started_at < 0:
+            raise ValueError("The wire-export start time must be finite and non-negative.")
+
+    def to_wire(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class WireExportProvenance(CliResult, ToolResult):
+    """Artifact provenance, never a delivery or source-session acknowledgement."""
+
+    destination: str
+    format: WireExportFormat
+    scope: WireExportScope
+    limit: WireExportLimit
+    boundary: WireExportBoundary
+    source_messages: int
+    exported_messages: int
+    omitted_messages: int
+    time_filtered_messages: int
+    invalid_time_messages: int
+    oversized_messages: int
+    bytes_written: int
+    output_sha256: str
+    truncated: bool
+    redacted_messages: int
+    first_sequence: int | None = None
+    last_sequence: int | None = None
+    first_timestamp: float | None = None
+    last_timestamp: float | None = None
+
+    def to_wire(self) -> dict[str, object]:
+        return {
+            **asdict(self),
+            "format": self.format.declared_name,
+            "scope": self.scope.to_wire(),
+            "limit": self.limit.to_wire(),
+            "boundary": self.boundary.to_wire(),
+        }
+
+
+class WireExportSelection:
+    __slots__ = ()
+
+    def select_first(self, row: WireExportRow) -> WireExportSelection:
+        return self
+
+    def describe_first(self, metadata: WireExportProvenance) -> WireExportProvenance:
+        return metadata
+
+    def describe_last(self, metadata: WireExportProvenance) -> WireExportProvenance:
+        return metadata
+
+
+class NoSelection(WireExportSelection):
+    __slots__ = ()
+
+    def select_first(self, row: WireExportRow) -> WireExportRow:
+        return row
+
+
+@dataclass(frozen=True, slots=True)
+class WireExportRow(WireExportSelection):
+    seq: int
+    timestamp: float
+    data: bytes
+
+    def describe_first(self, metadata: WireExportProvenance) -> WireExportProvenance:
+        return replace(metadata, first_sequence=self.seq, first_timestamp=self.timestamp)
+
+    def describe_last(self, metadata: WireExportProvenance) -> WireExportProvenance:
+        return replace(metadata, last_sequence=self.seq, last_timestamp=self.timestamp)
+
+
+class _ArtifactWriter:
+    """Hashing byte writer over one private temporary file."""
+
+    def __init__(self, output: BinaryIO, observer: WireExportObserver) -> None:
+        self.output = output
+        self.observer = observer
+        self.digest = hashlib.sha256()
+        self.size = 0
+        self.messages = 0
+
+    def write(self, data: bytes) -> None:
+        self.observer.check()
+        self.output.write(data)
+        self.digest.update(data)
+        self.size += len(data)
+
+    def report(self) -> None:
+        self.output.flush()
+        self.observer.advanced(WireExportProgress(self.size, self.messages))
+
+
+@dataclass(eq=False, repr=False, kw_only=True)
+class WireTranscriptExporter:
+    """Stream a fixed wire boundary into one private atomic artifact."""
+
+    SCHEMA: ClassVar[str] = "agent-comms/wire-export"
+    VERSION: ClassVar[int] = 1
+
+    format: WireExportFormat
+    scope: WireExportScope
+    limit: WireExportLimit
+    boundary: WireExportBoundary
+
+    def export(
+        self,
+        messages: Iterable[Message],
+        destination: Path,
+        *,
+        overwrite: bool = False,
+        observer: WireExportObserver = WireExportObserver(),
+    ) -> WireExportProvenance:
+        """Export authored in-memory context through the same atomic stream writer."""
+        return self._export(destination, lambda stats, header: self.limit.select(
+            self.format.rows(self._bounded(messages)), header,
+            self.boundary.export_started_at, stats),
+            overwrite=overwrite, observer=observer)
+
+    def export_stored(
+        self, source: StoredWireHistory, destination: Path, *, overwrite: bool = False,
+        observer: WireExportObserver = WireExportObserver(),
+    ) -> WireExportProvenance:
+        """Write the format's stored rows through the same limit selection as in-memory export."""
+        with observer.reading(source):
+            return self._export(destination, lambda stats, header: self.limit.select(
+                self.format.stored_rows(source), header, self.boundary.export_started_at, stats),
+                overwrite=overwrite, observer=observer)
+
+    def _export(
+        self, destination: Path,
+        rows: Callable[[ExportSelectionStats, int], Iterable[WireExportRow]],
+        *, overwrite: bool, observer: WireExportObserver,
+    ) -> WireExportProvenance:
+        header = self._header()
+        self.limit.validate_header(len(header))
+
+        destination = Path(destination)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if not overwrite and os.path.lexists(destination):
+            raise ExportDestinationExists(f"Wire-export destination {str(destination)!r} already exists.")
+
+        artifact = AtomicFile(destination) if overwrite else ExclusiveAtomicFile(destination)
+        stats = ExportSelectionStats()
+        first_selected: WireExportSelection = NoSelection()
+        last_selected: WireExportSelection = NoSelection()
+        with artifact.staged() as output:
+            writer = _ArtifactWriter(output, observer)
+            writer.write(header)
+            writer.report()
+            reported = 0
+            for row in rows(stats, len(header)):
+                writer.write(row.data)
+                writer.messages += 1
+                if writer.size - reported >= 65536:
+                    writer.report()
+                    reported = writer.size
+                first_selected = first_selected.select_first(row)
+                last_selected = row
+            writer.report()
+            observer.check()
+            bytes_written = writer.size
+            output_sha256 = writer.digest.hexdigest()
+
+        exported = writer.messages
+        omitted = stats.source_messages - exported
+        metadata = WireExportProvenance(
+            destination=str(destination),
+            format=self.format,
+            scope=self.scope,
+            limit=self.limit,
+            boundary=self.boundary,
+            source_messages=stats.source_messages,
+            exported_messages=exported,
+            omitted_messages=omitted,
+            time_filtered_messages=stats.time_filtered,
+            invalid_time_messages=stats.invalid_time,
+            oversized_messages=stats.oversized,
+            bytes_written=bytes_written,
+            output_sha256=output_sha256,
+            truncated=omitted > 0,
+            redacted_messages=0,
+        )
+        return last_selected.describe_last(first_selected.describe_first(metadata))
+
+    def _header(self) -> bytes:
+        metadata = {
+            "record": "header",
+            "schema": self.SCHEMA,
+            "version": self.VERSION,
+            "source": "agent-comms-wire",
+            "format": self.format.declared_name,
+            "importable": self.format.importable,
+            "scope": self.scope.to_wire(),
+            "limit": self.limit.to_wire(),
+            "boundary": self.boundary.to_wire(),
+        }
+        return self.format.header(metadata)
+
+    def _bounded(self, messages: Iterable[Message]) -> Iterator[Message]:
+        previous_sequence = -1
+        for message in messages:
+            previous_sequence = self._validate_sequence(message, previous_sequence)
+            if message.seq > self.boundary.through_seq:
+                return
+            yield message
+
+    @staticmethod
+    def _validate_sequence(message: Message, previous: int) -> int:
+        if message.seq <= previous:
+            raise ValueError("Wire-export envelopes must have unique ascending sequences.")
+        return message.seq

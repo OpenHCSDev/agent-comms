@@ -16,7 +16,7 @@ from module_layers import MaterializedClients
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
-from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.installer.runtime_resolution import (
@@ -29,7 +29,7 @@ from agent_comms.installer.runtime_resolution import (
 )
 from agent_comms.installer.upgrade import Stack
 from agent_comms.integration import CiRunner
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.projects.head_review import BaseSide, HeadSide, IntegrationInput, Side
 from agent_comms.projects.repo import Repo
 
 

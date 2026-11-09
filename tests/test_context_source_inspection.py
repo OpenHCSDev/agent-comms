@@ -9,6 +9,7 @@ import pytest
 from agent_comms.context_store import UNREAD_CONTEXT
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
 from agent_comms.execution.native_turn_context import NativeContextManifestData
+from agent_comms.execution.session_file import NoSessionFile
 from agent_comms.execution.turn_context import (
     ContextManifest,
     ContextSourceText,
@@ -35,7 +36,6 @@ from agent_comms.registry.thread_identity import (
     ReportedTools,
     TurnIdentity,
 )
-from agent_comms.session_file import NoSessionFile
 from agent_comms.transport.runtime_request import RuntimeRequest
 from agent_comms.transport.runtime_requests import (
     ContextCoreRuntimeRequest,
@@ -125,8 +125,8 @@ def test_current_core_context_is_independent_and_source_selection_is_current(tmp
 @pytest.mark.asyncio
 async def test_core_context_socket_reads_without_native_session_or_preview(
         tmp_path, qualified_owner_launch):
-    from agent_comms.owner_connection import socket_path
-    from agent_comms.runtime import RuntimeConnection
+    from agent_comms.execution.runtime import RuntimeConnection
+    from agent_comms.transport.owner_connection import socket_path
     from delivery_owner_fixture import canonical_delivery_owner, start_headless_owner
 
     async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):
@@ -298,7 +298,7 @@ async def test_mixed_recorded_root_merges_capture_and_verified_parts_once(tmp_pa
     assert await root.public_text(read_reference) == (
         "Original transformed message\nOriginal journal message")
     assert reads == [root]
-    from agent_comms.pi_commands import AgentCommsInspectContextSegment
+    from agent_comms.execution.pi_commands import AgentCommsInspectContextSegment
 
     request = AgentCommsInspectContextSegment.for_manifest(root)
     assert request.parts == (value.measured_manifest(),)

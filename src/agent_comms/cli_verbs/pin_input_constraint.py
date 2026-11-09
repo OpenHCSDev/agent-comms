@@ -3,12 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.cli_commands import ConstraintPinnedResult
-from agent_comms.cli_result import CliResult
 from agent_comms.cli_support.constraint_pin import OriginalConstraintPin
+from agent_comms.cli_verbs.cli_commands import ConstraintPinnedResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.comms import Comms
+from agent_comms.execution.input_key import InputKey, InputKeyText
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_key import InputKey, InputKeyText
 from agent_comms.nominal.field_codec import Argument
 
 

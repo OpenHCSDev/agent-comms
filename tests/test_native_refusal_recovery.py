@@ -2,7 +2,7 @@
 import pytest
 
 import agent_comms.execution.native_pi as native_pi
-import agent_comms.pi_events as pi_events
+import agent_comms.execution.pi_events as pi_events
 from agent_comms.execution.native_arguments import SelectedModel
 
 

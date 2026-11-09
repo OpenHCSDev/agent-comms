@@ -8,19 +8,19 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
-from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
-from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
 )
+from agent_comms.installer.active_route import ActiveRoute, read_active_route, route_new_bus
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.practice import PracticeCopy
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry.registry_document import NoTeamProject, RegisteredTeamProject
 from agent_comms.registry.threads import NativeThread, ParkedThreadWorkState
 from agent_comms.storage.locked_store import (

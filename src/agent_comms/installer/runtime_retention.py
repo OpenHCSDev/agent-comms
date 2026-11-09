@@ -26,14 +26,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.root_runtime import RootRuntimeStore
+from agent_comms.execution.runtime_processes import RuntimeProcesses
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.building_runtime import BuildingRuntime
 from agent_comms.installer.runtime_resolution import RuntimeResolution
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import MalformedRecord
-from agent_comms.root_runtime import RootRuntimeStore
-from agent_comms.runtime_processes import RuntimeProcesses
 
 
 class RecordedPointer(DeclaredFamily, ABC, affix="Pointer"):

@@ -11,8 +11,8 @@ from typing import ClassVar
 
 from cutover.carry_team_update_lines import TeamUpdateLines
 
-from agent_comms.bus import Bus
 from agent_comms.installer.probes.carry import Carried, Carry
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.storage.locked_store import RootFile

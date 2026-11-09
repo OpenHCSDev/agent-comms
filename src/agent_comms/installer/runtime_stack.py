@@ -12,8 +12,9 @@ import tempfile
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
-from agent_comms.build_artifact import BuildArtifact
 from agent_comms.execution.child_process import ResidentManager
+from agent_comms.execution.launch_runtime import LaunchRuntime, RestartEnvironment
+from agent_comms.installer.build_artifact import BuildArtifact
 from agent_comms.installer.building_runtime import BuildingRuntime
 from agent_comms.installer.carry import STEPS
 from agent_comms.installer.commands import InstallCommands
@@ -39,7 +40,6 @@ from agent_comms.installer.runtime_resolution import (
     RuntimePackage,
     RuntimeResolution,
 )
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.storage_rules import StorageRule
 

@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from agent_comms.envelope_claim_transitions import (
+from agent_comms.execution.pi_wire import PiReported
+from agent_comms.messaging.envelope_claim_transitions import (
     ExistingFileClaim,
     FileClaimPath,
     WritableFileClaim,
@@ -22,17 +23,18 @@ from agent_comms.nominal.field_codec import (
     WireContext,
     WireOmitDefault,
 )
-from agent_comms.pi_wire import PiReported
-from agent_comms.recorded_time import EventTime
-from agent_comms.registry.thread_identity import OfferedTools, UnobservedTools
-from agent_comms.rule_deal import ReadSpan
-from agent_comms.shell_effects import (
+from agent_comms.projects.shell_effects import (
     ShellOutput,
     WriteStorageEffect,
     physical_path,
     shell_storage_effects,
 )
-from agent_comms.tool_declaration import (
+from agent_comms.registry.thread_identity import OfferedTools, UnobservedTools
+from agent_comms.storage.recorded_time import EventTime
+from agent_comms.team.rule_deal import ReadSpan
+from agent_comms.transport.native_tool_call import CodingCall, RefusedCodingCall
+from agent_comms.transport.request import ArgumentTool
+from agent_comms.transport.tool_declaration import (
     ContextRows,
     EditAction,
     EditCall,
@@ -45,14 +47,12 @@ from agent_comms.tool_declaration import (
     ToolDeclaration,
     one_line,
 )
-from agent_comms.tool_denial import SelectedToolDenied
-from agent_comms.transport.native_tool_call import CodingCall, RefusedCodingCall
-from agent_comms.transport.request import ArgumentTool
+from agent_comms.transport.tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from agent_comms.execution.turn_goal_permission import TurnGoalPermission
     from agent_comms.pi_payloads import PiToolResult
-    from agent_comms.pi_rule_gate import PiRuleGate
+    from agent_comms.team.pi_rule_gate import PiRuleGate
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,23 +8,28 @@ from pathlib import Path
 import pytest
 from aiohttp import web
 
-from agent_comms.bus_tables import AuthoredAnswers
-from agent_comms.messaging.channel_targets import TeammatesTag, ThreadTarget
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_protocol import ClaudeRecord, ClaudeSession
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
 from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
+from agent_comms.cli_bridges.harness_delivery_states import DeliveredOutcome
+from agent_comms.cli_bridges.runtime_updates import (
+    AllTurnsCancelled,
+    AllTurnsEnded,
+    RuntimeUpdate,
+    ThreadOutput,
+)
 from agent_comms.cli_bridges.shared import Binding, Options, StoredBinding, Watch
 from agent_comms.comms import Comms
 from agent_comms.connector import ConnectorSendTool
-from agent_comms.connector_caller import DirectorCaller
 from agent_comms.coordination.errors import CoordinationBeginUnavailable
 from agent_comms.execution.turn_digests import LastTurns
 from agent_comms.execution.turn_item import (
     NamedSourceTurn,
     NativeTurnId,
 )
-from agent_comms.harness_delivery_states import DeliveredOutcome
+from agent_comms.messaging.bus_tables import AuthoredAnswers
+from agent_comms.messaging.channel_targets import TeammatesTag, ThreadTarget
 from agent_comms.messaging.messages import (
     AckKind,
     AlertKind,
@@ -40,13 +45,8 @@ from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread
-from agent_comms.runtime_updates import (
-    AllTurnsCancelled,
-    AllTurnsEnded,
-    RuntimeUpdate,
-    ThreadOutput,
-)
 from agent_comms.team.standing_rules import DirectiveUnacted
+from agent_comms.transport.connector_caller import DirectorCaller
 from test_monitor_delivery import attached_monitor, bridge, decoded_record, event_from, notification
 from transcript_record_fixture import transcript_record
 

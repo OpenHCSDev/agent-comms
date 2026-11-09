@@ -7,12 +7,12 @@ import time
 
 from agent_comms.execution.native_entries import NativeEntry
 from agent_comms.execution.selected.triage import SelectedTriage
-from agent_comms.lifecycle_capability import Successful
+from agent_comms.nominal.lifecycle_capability import Successful
 from agent_comms.pi_payloads import PiMessage, StorageDenialToolDetails
 from agent_comms.registry.registration import Registration
 from agent_comms.team.order import Team
-from agent_comms.tool_declaration import one_line
 from agent_comms.transport.native_tools import NativeToolDeclaration
+from agent_comms.transport.tool_declaration import one_line
 
 
 def thread_names(registry: Registration) -> dict[str, str]:

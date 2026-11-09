@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp import CommsAgent
-from agent_comms.attempt_recovery import RecoveryMonitorCapability
-from agent_comms.attempt_states import UnknownOutcomeAttempt
+from agent_comms.coordination.attempt_recovery import RecoveryMonitorCapability
+from agent_comms.coordination.attempt_states import UnknownOutcomeAttempt
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import RecoveryBlocked, StaleFence
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput

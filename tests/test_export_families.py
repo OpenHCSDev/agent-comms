@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.exporting import (
+from agent_comms.messaging.exporting import (
     ChannelScope,
     DmScope,
     EverythingScope,

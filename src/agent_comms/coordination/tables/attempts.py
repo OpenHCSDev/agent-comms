@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import IntFlag
 from typing import TYPE_CHECKING, Annotated, ClassVar, Final
 
-from agent_comms.attempt_states import AttemptState
+from agent_comms.coordination.attempt_states import AttemptState
 from agent_comms.coordination.contracts import (
     MAX_IDENTIFIER_CHARS,
     require_bounded,
@@ -15,6 +15,8 @@ from agent_comms.coordination.contracts import (
     validate_execution_id,
 )
 from agent_comms.coordination.errors import RecoveryBlocked, StaleFence
+from agent_comms.coordination.owner_fence import AttemptAuthority
+from agent_comms.coordination.reason_codes import ReasonCode
 from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.coordination.tables.participants import (
     OwnerGenerations,
@@ -22,8 +24,6 @@ from agent_comms.coordination.tables.participants import (
     Participants,
 )
 from agent_comms.nominal.field_codec import SnapshotExclude, ThreadLookup, projected
-from agent_comms.owner_fence import AttemptAuthority
-from agent_comms.reason_codes import ReasonCode
 from agent_comms.storage.typed_table import (
     Column,
     CounterDependent,

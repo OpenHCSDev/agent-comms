@@ -2,9 +2,9 @@
 
 import pytest
 
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.comms import wire
-from agent_comms.historical_views import (
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.historical_views import (
     ChannelDisplayHistory,
     DMDisplayHistory,
     UnobservedConversation,

@@ -12,15 +12,15 @@ from pathlib import Path
 import pytest
 
 import agent_comms.installer.native_package as native_package
-from agent_comms.bus import Bus
-from agent_comms.core_stamp import WheelStamp
 from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.installer.core_stamp import WheelStamp
 from agent_comms.installer.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from agent_comms.installer.native_package import (
     NativePackageError,
     NativePackageStore,
     package_tree_digest,
 )
+from agent_comms.messaging.bus import Bus
 from agent_comms.package_stamp import STAMP
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX native package filesystem")

@@ -15,10 +15,10 @@ from agent_comms.nominal.field_codec import GoalId, TurnId
 
 if TYPE_CHECKING:
     from agent_comms.execution.owned_turn import TurnGoalAccount
+    from agent_comms.execution.pi_wire import PiUsage
     from agent_comms.execution.turn_context import TurnContext
     from agent_comms.execution.turn_goal_account import VerifiedGoalSettlement
     from agent_comms.execution.turn_terminal import TurnTerminal
-    from agent_comms.pi_wire import PiUsage
     from agent_comms.planning.goal_attempts import GoalAttemptStore, LaunchPermit
     from agent_comms.planning.goal_management import Goals
     from agent_comms.planning.goals import GoalDeclaration

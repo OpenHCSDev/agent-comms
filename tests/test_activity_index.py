@@ -6,7 +6,7 @@ from threading import Barrier
 
 import pytest
 
-from agent_comms.activity import Activity, ActivityRow, ActivityState, ActivityStore
+from agent_comms.registry.activity import Activity, ActivityRow, ActivityState, ActivityStore
 
 
 @pytest.fixture

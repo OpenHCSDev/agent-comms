@@ -12,7 +12,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.cli_bridges.hook_deferral import StopHook
 from agent_comms.cli_bridges.hook_forks import SubagentHook
 from agent_comms.cli_bridges.hook_read_gate import GatedCall, MonitorInput
@@ -30,8 +29,9 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.session import CoordinationSession
 from agent_comms.coordination.tables.board_delivery import ReaderBoardDelivery
 from agent_comms.heartbeat_subjects import TeammateSubject
+from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.nominal.field_codec import FieldCodec, OrderId
-from agent_comms.pattern_sources import PostmortemFailure
+from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from agent_comms.planning.orders import (
     ProgressRead,
@@ -40,13 +40,17 @@ from agent_comms.planning.orders import (
 from agent_comms.planning.plan_phases import BusWriterPhase
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.rule_probes import Probe
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import ForkThread, NativeThread
-from agent_comms.projects.repository_name import RepositoryName
-from agent_comms.rule_deal import (
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.task_attachments.team_pings import RulePing, TeamDecisions, TeamUpdate
+from agent_comms.team.package import TeamPackage
+from agent_comms.team.pattern_sources import PostmortemFailure
+from agent_comms.team.rule_deal import (
     AuditDue,
     CompactedDeal,
     OffDealMode,
@@ -59,9 +63,6 @@ from agent_comms.rule_deal import (
     Unread,
     UnstampedCompactionDeal,
 )
-from agent_comms.rule_probes import Probe
-from agent_comms.task_attachments.team_pings import RulePing, TeamDecisions, TeamUpdate
-from agent_comms.team.package import TeamPackage
 from agent_comms.team.rule_file import RuleFile
 from agent_comms.team.spinning import SpinningTeammate
 from agent_comms.team.standing import PlanIdle
@@ -71,7 +72,6 @@ from agent_comms.team.standing_rules import (
     RetiredStandingRule,
     ReviewTimerUp,
 )
-from agent_comms.text_digest import TextDigest
 from agent_comms.transport.mcp import AnsweredCall
 from agent_comms.ui_model.teammate_state import AwaitingTeam
 from agent_comms_hooks.board import (
@@ -422,7 +422,7 @@ def test_rules_carrying_his_words_flag_their_board_lines():
 def test_a_tool_call_prints_only_new_rows_naming_its_session(
         notification_bus, tmp_path, monkeypatch):
     """Retained observations and the one Core delivery owner; publication stays muted."""
-    from agent_comms.heartbeat_delivery import OffHeartbeatDelivery
+    from agent_comms.registry.heartbeat_delivery import OffHeartbeatDelivery
     from agent_comms.task_attachments.team_pings import TeamUpdateStore
 
     comms = notification_bus
@@ -476,7 +476,7 @@ def test_a_verb_reply_carries_the_new_rows_naming_its_caller(notification_bus):
     own verbs carry its rows, beside the reply and never inside it: the structured reply stays
     the declared result remote cores decode. A row prints once; a read carries no board."""
     from agent_comms.task_attachments.team_pings import TeamUpdateStore
-    from agent_comms.tool_caller import ThreadCaller
+    from agent_comms.transport.tool_caller import ThreadCaller
     from agent_comms.transport.tools.orders import CommsTodoListTool
     from agent_comms.transport.tools.send import CommsSendTool
 
@@ -516,7 +516,7 @@ def test_a_busy_core_writer_never_fails_a_verb_that_landed(notification_bus):
 
     from agent_comms.coordination.database import CoordinationStore
     from agent_comms.task_attachments.team_pings import TeamUpdateStore
-    from agent_comms.tool_caller import ThreadCaller
+    from agent_comms.transport.tool_caller import ThreadCaller
     from agent_comms.transport.tools.send import CommsSendTool
 
     comms = notification_bus

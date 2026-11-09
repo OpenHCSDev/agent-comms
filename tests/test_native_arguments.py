@@ -12,7 +12,11 @@ from agent_comms.execution.native_arguments import (
     SelectedModel,
     ValueArgument,
 )
-from agent_comms.pi_vocabulary import HighThinkingLevel, NoThinkingOverride, OffThinkingLevel
+from agent_comms.execution.pi_vocabulary import (
+    HighThinkingLevel,
+    NoThinkingOverride,
+    OffThinkingLevel,
+)
 from agent_comms.registry.thread_model import (
     DeclaredModel,
     ThreadModel,

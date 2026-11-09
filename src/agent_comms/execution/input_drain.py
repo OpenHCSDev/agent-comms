@@ -21,30 +21,38 @@ from agent_comms.acp_extension import (
     QueueScope,
     encode_updates,
 )
-from agent_comms.activity import FailedWakeDiagnostic, StoppedDrainDiagnostic
 from agent_comms.agent_backend import AgentBackend
-from agent_comms.bus import Bus
-from agent_comms.cohort_schema import AcceptanceFrontier
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
-from agent_comms.controller import SessionUpdateSink
 from agent_comms.coordination.cohort import next_sealed_assignment
+from agent_comms.coordination.cohort_schema import AcceptanceFrontier
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.cursor_owner import CursorOwner
-from agent_comms.drain_failures import (
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.execution.child_process import join_retirement
+from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.cursor_owner import CursorOwner
+from agent_comms.execution.drain_failures import (
     DEFERRED_DRAIN_ERRORS,
     UNAVAILABLE_DRAIN_ERRORS,
     drain_failures,
     record_drain_failure,
 )
-from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.execution.child_process import join_retirement
+from agent_comms.execution.image_input import ImageInput
+from agent_comms.execution.input_effects import InputEffects
+from agent_comms.execution.input_key import InputKey
 from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.proven_source_coverage import SourcePrefix
+from agent_comms.execution.queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
+from agent_comms.execution.reservation_rules import (
+    ReservationRule,
+    ReservationViolationError,
+    RuleCheck,
+)
 from agent_comms.execution.session_lifecycle import SessionLifecycle
 from agent_comms.execution.turn_context import TurnContext, UserFollowupSegment
 from agent_comms.execution.turn_inbox import (
-    ClearQueue,
+    ClearQueuedInputs,
     InputContent,
     SendNow,
     TurnInbox,
@@ -57,31 +65,27 @@ from agent_comms.execution.turn_input_source import (
 )
 from agent_comms.execution.turn_outcome import TurnOutcome
 from agent_comms.execution.turn_terminal import OwnerStop
-from agent_comms.image_input import ImageInput
 from agent_comms.input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     InputDeliveryScope,
     OwnerQueueInputDeliveryScope,
 )
 from agent_comms.input_disposition import InputDispositions, InputDocument
-from agent_comms.input_effects import InputEffects
-from agent_comms.input_key import InputKey
-from agent_comms.lifecycle_capability import Executing
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.routing import ScheduledTurn
+from agent_comms.messaging.watched import ChangeSignal, FileLifetimeSource, FileSource
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId, ThreadLookup
-from agent_comms.proven_source_coverage import SourcePrefix
-from agent_comms.queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
+from agent_comms.nominal.lifecycle_capability import Executing
+from agent_comms.registry.activity import FailedWakeDiagnostic, StoppedDrainDiagnostic
 from agent_comms.registry.registry_document import RegistryDocument, RegistryEntry
 from agent_comms.registry.registry_store import RegistryEntryRevision
 from agent_comms.registry.thread_identity import ClaimedIdentity, OwnerIdentity
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.reservation_rules import ReservationRule, ReservationViolationError, RuleCheck
-from agent_comms.routing import ScheduledTurn
-from agent_comms.runtime_server import RuntimeServer
 from agent_comms.storage.locked_store import GoalWakeFile
 from agent_comms.storage.maintenance_barrier import MaintenanceIngress, MaintenanceStatus
 from agent_comms.transport.owner_requests import OwnerRetiredReply, StopOwnerRuntimeRequest
-from agent_comms.watched import ChangeSignal, FileLifetimeSource, FileSource
+from agent_comms.transport.runtime_server import RuntimeServer
 
 if TYPE_CHECKING:
     from agent_comms.following_inputs import OwnerFollowingInputs
@@ -1028,7 +1032,7 @@ class InputDrain(InputObservation):
                 ))
             state.queued = retained
             if cleared:
-                state.to_turn(ClearQueue(tuple(item.input_id for item in cleared)))
+                state.to_turn(ClearQueuedInputs(tuple(item.input_id for item in cleared)))
             state.restored = {}
         await self.emit_queue_state(session_id)
 

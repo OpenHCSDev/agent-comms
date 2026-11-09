@@ -33,26 +33,27 @@ from agent_comms.cli_bridges.history import DefaultAddress, OfflineHistory, Onli
 from agent_comms.cli_bridges.opencode import OpenCodeConnection, OpenCodeServer
 from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Session
+from agent_comms.cli_bridges.runtime_updates import FinishedItem, TurnEnded
 from agent_comms.comms import Comms
-from agent_comms.core_access import LocalCoreAccess
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NO_PROCESS
 from agent_comms.execution.native_entries import ImportedMetadataEntry, NativeEntry
 from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_context import CodexRolloutProvenance
-from agent_comms.harness_install import (
-    ClaudeCodeHarness,
-    CodexHarness,
-    Harness,
-    OpenCodeHarness,
-    PiHarness,
-)
 from agent_comms.importing import (
     ImportBuffer,
     ImportedSessionMetadata,
     ImportLimits,
     ImportSnapshot,
     ThreadImported,
+)
+from agent_comms.installer.harness_install import (
+    ClaudeCodeHarness,
+    CodexHarness,
+    Harness,
+    OpenCodeHarness,
+    PiHarness,
 )
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 from agent_comms.projects.checkouts import Checkout
@@ -68,14 +69,13 @@ from agent_comms.registry.thread_text import (
     ThreadText,
 )
 from agent_comms.registry.threads import ExternalThread, NativeThread, ThreadProvenance
-from agent_comms.runtime_updates import FinishedItem, TurnEnded
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.transcript_events import (
+from agent_comms.transcript.transcript_events import (
     ImportedMessage,
     ImportedReply,
     ImportedRequest,
     TextTranscript,
 )
+from agent_comms.transport.core_access import LocalCoreAccess
 from agent_comms.transport.tools.sidebar import CommsImportedSourceTool
 from agent_comms.ui_model.message_category import AgentCategory, ThinkingCategory, UserCategory
 from transcript_record_fixture import transcript_record
@@ -758,7 +758,7 @@ class FakeOpenCode(OpenCodeConnection):
         return self.saved
 
     async def status(self) -> TurnEnded:
-        from agent_comms.runtime_updates import TurnEnded
+        from agent_comms.cli_bridges.runtime_updates import TurnEnded
 
         return TurnEnded()
 

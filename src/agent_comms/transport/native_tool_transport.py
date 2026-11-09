@@ -19,23 +19,23 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import join_retirement
-from agent_comms.lifecycle_capability import Complete
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord, Token256Text
+from agent_comms.nominal.lifecycle_capability import Complete
 from agent_comms.pi_payloads import AssistantMessage
 from agent_comms.storage.private_path import PrivateDirectoryRole, PrivateSocketRole
-from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.transport.native_tool_call import (
     DuplicateToolCallIdentity,
     NativeToolCall,
     SelectedToolBusy,
     ToolOutcomeUnknown,
 )
+from agent_comms.transport.tool_denial import SelectedToolDenied
 from agent_comms_hooks import ToolRefusedError
 
 if TYPE_CHECKING:
-    from agent_comms.backend import TurnSession
-    from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
-    from agent_comms.pi_rule_gate import PiRuleGate
+    from agent_comms.execution.backend import TurnSession
+    from agent_comms.execution.pi_events import ToolExecutionEnd, ToolExecutionStart
+    from agent_comms.team.pi_rule_gate import PiRuleGate
 
 _LOG = logging.getLogger(__name__)
 

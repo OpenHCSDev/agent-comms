@@ -11,9 +11,9 @@ from typing import (
     ClassVar,
 )
 
-from agent_comms.lifecycle import LifecycleState
-from agent_comms.lifecycle_capability import Active, Complete, Terminal
 from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.lifecycle import LifecycleState
+from agent_comms.nominal.lifecycle_capability import Active, Complete, Terminal
 
 if TYPE_CHECKING:
     from agent_comms.planning.goal_actions import GoalActionContext, ProblemOrderGoalAction

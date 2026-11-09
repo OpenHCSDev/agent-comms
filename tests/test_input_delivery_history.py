@@ -21,19 +21,19 @@ from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
 )
+from agent_comms.execution.input_key import AcpInputKey, BusInputKey
+from agent_comms.execution.reported_turn import ReportedTurn
 from agent_comms.input_attempt import (
     OwnerQueueInputDeliveryScope,
     UnobservedInputDeliveryScope,
     UnresolvedInputReference,
 )
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_key import AcpInputKey, BusInputKey
 from agent_comms.messaging.bus_read import (
     BusRead,
     OwnerScopedRead,
 )
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, TurnId
-from agent_comms.owner_connection import OwnerIdentityChangedError
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.goals import NoGoal
 from agent_comms.projects.checkouts import Checkout
@@ -43,8 +43,8 @@ from agent_comms.registry.thread_status import (
     ThreadStatus,
 )
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
-from agent_comms.reported_turn import ReportedTurn
-from agent_comms.tool_caller import ToolCaller
+from agent_comms.transport.owner_connection import OwnerIdentityChangedError
+from agent_comms.transport.tool_caller import ToolCaller
 from agent_comms.transport.tools.orders import (
     ServedInputDeliveryRead,
     ServedOwnerGoalRead,

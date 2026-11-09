@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from itertools import takewhile
 
-from agent_comms.cli_commands import RecordedContextManifests
 from agent_comms.cli_support.context_option import SelectedContextCliCommand
+from agent_comms.cli_verbs.cli_commands import RecordedContextManifests
 from agent_comms.comms import Comms
 
 

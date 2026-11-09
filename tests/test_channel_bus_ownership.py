@@ -3,13 +3,13 @@
 from contextlib import AsyncExitStack
 from dataclasses import replace
 
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.turn_input_source import NoTurnAcceptance
-from agent_comms.notification_evidence import AllOutcomes
-from agent_comms.notification_progress import SentProgress
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.notification_evidence import AllOutcomes
+from agent_comms.messaging.notification_progress import SentProgress
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.wake_policy import BoundedTriageWake
+from agent_comms.waking.wake_policy import BoundedTriageWake
 from bus_history import read_history
 from conftest import accept_initial
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import ClaimRecord
-from agent_comms.envelope_claim_transitions import (
+from agent_comms.messaging.bus import ClaimRecord
+from agent_comms.messaging.envelope_claim_transitions import (
     ClaimConflict,
     ClaimProjection,
     ClaimRelease,

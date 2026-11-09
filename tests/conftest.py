@@ -23,20 +23,22 @@ from pydantic import JsonValue
 # First: importing it removes the caller's repository from the environment before any git runs.
 import fixture_git  # noqa: F401
 import goal_owner_fixture
-from agent_comms.bus import Bus, BusRecord
-from agent_comms.bus_publication import AgentOrigin
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import Comms, wire
-from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.execution.cursor_publication import CursorDelivery
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_entries import NativeEvidenceScope, SessionEntry
+from agent_comms.execution.pi_durable_backend import PiDurableBackend
 from agent_comms.installer.native_package import (
     VerifiedNativePackage,
     pinned_location,
     pinned_native_package,
 )
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.messaging.bus import Bus, BusRecord
+from agent_comms.messaging.bus_publication import AgentOrigin
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.messages import (
     ConversationRole,
     InfoKind,
@@ -44,14 +46,11 @@ from agent_comms.messaging.messages import (
     MessageKind,
     MessageRole,
 )
-from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.publisher import InitialWrites, ParticipantPublisher
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.pi_durable_backend import PiDurableBackend
 from agent_comms.pi_payloads import PiMessage
-from agent_comms.pi_rule_gate import PiRedeal, PiRuleGate
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
-from agent_comms.publisher import InitialWrites, ParticipantPublisher
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_model import DeclaredModel
@@ -60,7 +59,6 @@ from agent_comms.registry.thread_text import (
     GivenThreadText,
 )
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.rule_deal import ReadSpan, RuleDeal, SessionAudit, StartedDeal
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier,
@@ -70,9 +68,11 @@ from agent_comms.storage.maintenance_barrier import (
 )
 from agent_comms.storage.typed_table import TypedTable
 from agent_comms.team.order import Team
-from agent_comms.tool_caller import PeerCaller
-from agent_comms.tool_declaration import NoToolRecord, ToolDeclaration
+from agent_comms.team.pi_rule_gate import PiRedeal, PiRuleGate
+from agent_comms.team.rule_deal import ReadSpan, RuleDeal, SessionAudit, StartedDeal
 from agent_comms.transport.native_tool_transport import ToolListener
+from agent_comms.transport.tool_caller import PeerCaller
+from agent_comms.transport.tool_declaration import NoToolRecord, ToolDeclaration
 from agent_comms_hooks.watch import WatchRecord
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
@@ -191,8 +191,8 @@ def accept_initial(bus: MessageBus, root_id: str, seq: int, store) -> tuple:
     """
     from concurrent.futures import ThreadPoolExecutor
 
-    from agent_comms.cohort_foreground import _accept_visible_deliveries
     from agent_comms.coordination.cohort import sealed_cohort_assignments
+    from agent_comms.coordination.cohort_foreground import _accept_visible_deliveries
 
     recipients = bus.bus.delivery(seq).recipients
     if recipients:
@@ -293,7 +293,7 @@ def source_reads() -> Iterator[NativeEvidenceScope]:
 
 @pytest.fixture
 def cursor_delivery(source_reads: NativeEvidenceScope) -> CursorDelivery:
-    from agent_comms.cursor_publication import CursorDelivery
+    from agent_comms.execution.cursor_publication import CursorDelivery
 
     return CursorDelivery(source_reads=source_reads)
 
@@ -357,7 +357,7 @@ def test_uv(monkeypatch: pytest.MonkeyPatch) -> Path:
 @pytest.fixture(scope="session")
 def native_runtime_package(pinned_native: Path) -> VerifiedNativePackage:
     """The running interpreter's artifact, qualified by the real installer before tests."""
-    from agent_comms.deal_prompt import DealPrompt
+    from agent_comms.installer.deal_prompt import DealPrompt
     from agent_comms.installer.native_package import VerifiedNativePackage
 
     package = VerifiedNativePackage.qualify(pinned_native)
@@ -381,7 +381,7 @@ def _test_worker_hosts_stop_with_the_test(request: pytest.FixtureRequest) -> Ite
 @pytest.fixture(autouse=True)
 def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """A developer's live managed process is not a test wire or native child."""
-    from agent_comms.launch_root import LaunchRoot
+    from agent_comms.execution.launch_root import LaunchRoot
 
     with LaunchRoot.unstarted().selected():
         for name in _MANAGED_RUNTIME_ENVIRONMENT:
@@ -433,8 +433,8 @@ def private_comms(private_directory: Path) -> Iterator[Comms]:
 
     root = private_directory / "wire"
     comms = prepare_native_comms(wire(root))
+    from agent_comms.execution.launch_root import LaunchRoot
     from agent_comms.installer.logs import InstallLogs
-    from agent_comms.launch_root import LaunchRoot
 
     try:
         with LaunchRoot.from_path(root).selected():
@@ -505,7 +505,7 @@ def record_installed_runtime(runtime: Path, resolution: RuntimeResolution) -> La
     A later record re-points the pointer, as a reinstall does, so fixtures that each install
     a build can share one HOME.
     """
-    from agent_comms.launch_runtime import LaunchRuntime
+    from agent_comms.execution.launch_runtime import LaunchRuntime
 
     (runtime / 'bin').mkdir(parents=True)
     (runtime / 'bin/python').symlink_to(sys.executable)
@@ -631,7 +631,7 @@ def probe_answers(owner_words: tuple[str, ...] = ()) -> list[dict[str, str]]:
          "at": "src/agent_comms/team/package.py:15", "derive": "declaration",
          "by": "src/agent_comms/team/package.py:15"},
         {"probe": "flinch", "answer": "No: a fixture session resists nothing; the gate it runs is"
-                                      " src/agent_comms/rule_deal.py:1"},
+                                      " src/agent_comms/team/rule_deal.py:1"},
     ]
     if owner_words:
         answers.append({"probe": "prior", "words": owner_words[0],

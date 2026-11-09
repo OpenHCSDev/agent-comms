@@ -11,15 +11,15 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.coordination.errors import TranscriptChanged
 from agent_comms.execution.native_output import AssistantOutput, ToolOutput
+from agent_comms.execution.pi_events import NativeOutputCommitted, PiEvent
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     ToolCallId,
 )
-from agent_comms.pi_events import NativeOutputCommitted, PiEvent
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.transcripts import Through
+from agent_comms.transcript.transcripts import Through
 from conftest import installed_comms
 
 

@@ -6,11 +6,11 @@ from functools import partial
 import pytest
 
 from agent_comms.acp import CommsAgent
-from agent_comms.controller import SessionUpdateSink
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.native_arguments import GivenBinary
 from agent_comms.installer.native_package import VerifiedNativePackage
-from agent_comms.launch_root import LaunchRoot
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from bus_record_fixture import prepare_native_comms

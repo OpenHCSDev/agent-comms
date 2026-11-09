@@ -10,16 +10,16 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.active_route import active_route_path
 from agent_comms.comms import Comms, wire
-from agent_comms.install_choices import RehearsalMode
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.installer.active_route import active_route_path
 from agent_comms.installer.backup import StoreBackup
+from agent_comms.installer.install_choices import RehearsalMode
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.upgrade import upgrade
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_text import GivenThreadText

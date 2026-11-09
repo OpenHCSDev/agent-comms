@@ -4,6 +4,15 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.cli_verbs.archive import ArchiveCliCommand
+from agent_comms.cli_verbs.cli_command import (
+    PreparedTargetAction,
+    TargetAction,
+    TargetEdit,
+    TargetSelection,
+)
+from agent_comms.cli_verbs.stop import StopCliCommand
+from agent_comms.config_options import CatalogChoice
 from agent_comms.messaging.channel_targets import (
     ChannelSelection,
     CommandTarget,
@@ -12,10 +21,6 @@ from agent_comms.messaging.channel_targets import (
     PerTargetChannels,
     SurroundingChannel,
 )
-from agent_comms.cli_command import PreparedTargetAction, TargetAction, TargetEdit, TargetSelection
-from agent_comms.cli_verbs.archive import ArchiveCliCommand
-from agent_comms.cli_verbs.stop import StopCliCommand
-from agent_comms.config_options import CatalogChoice
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.projects.checkouts import Checkout
 
@@ -51,10 +56,8 @@ def test_a_prepared_action_offers_the_choices_it_was_prepared_with():
 
 
 def test_every_action_result_crosses_by_shape_and_keeps_its_cli_form():
-    from agent_comms.channel_management import TagChangeResult
-    from agent_comms.messaging.channels import Channel
-    from agent_comms.cli_command import TargetBatchResult
-    from agent_comms.cli_commands import (
+    from agent_comms.cli_verbs.cli_command import TargetBatchResult
+    from agent_comms.cli_verbs.cli_commands import (
         TagRenamedResult,
         TargetReadResult,
         ThreadArchivedResult,
@@ -63,8 +66,10 @@ def test_every_action_result_crosses_by_shape_and_keeps_its_cli_form():
         ThreadTagsResult,
         ViewDeletedResult,
     )
-    from agent_comms.cli_result import TargetEditResult
+    from agent_comms.cli_verbs.cli_result import TargetEditResult
     from agent_comms.execution.owner_lifecycle import OwnerStartResult
+    from agent_comms.messaging.channel_management import TagChangeResult
+    from agent_comms.messaging.channels import Channel
 
     answer = TargetEditResult | Channel
     for result in (ThreadStoppedResult("w"), ThreadArchivedResult("w"),
@@ -79,16 +84,16 @@ def test_every_action_result_crosses_by_shape_and_keeps_its_cli_form():
 def test_a_ui_lists_and_applies_a_menu_action_through_core(tmp_path):
     """A channel's menu and its edit go through the same core.call a remote UI sends, and both
     answers arrive as themselves."""
-    from agent_comms.messaging.channels import Channel
-    from agent_comms.cli_result import TargetEditResult
+    from agent_comms.cli_verbs.cli_result import TargetEditResult
     from agent_comms.cli_verbs.read_target import ReadTargetCliCommand
     from agent_comms.comms import wire
-    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.messaging.channels import Channel
+    from agent_comms.transport.core_access import LocalCoreAccess
     from agent_comms.transport.tools.sidebar import (
-    CommsTargetActionsTool,
-    CommsTargetEditTool,
-    TargetActionsRead,
-)
+        CommsTargetActionsTool,
+        CommsTargetEditTool,
+        TargetActionsRead,
+    )
 
     comms = wire(tmp_path / "wire")
     project = Checkout(tmp_path)
@@ -108,7 +113,7 @@ def test_a_ui_lists_and_applies_a_menu_action_through_core(tmp_path):
 def test_an_opened_action_is_prepared_through_core(tmp_path):
     """Opening an action, or editing it, asks Core for the choices it offers."""
     from agent_comms.comms import wire
-    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.transport.core_access import LocalCoreAccess
     from agent_comms.transport.tools.sidebar import (
     CommsPrepareTargetActionTool,
     CommsTargetActionsTool,

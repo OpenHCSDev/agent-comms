@@ -1,5 +1,6 @@
 """Ledger readiness fences scheduling without rewriting the declared goal."""
 
+from agent_comms.messaging.routing import ScheduledTurn
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.goal_generation import (
@@ -8,7 +9,6 @@ from agent_comms.planning.goal_generation import (
 )
 from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.planning.goal_states import ActiveGoal
-from agent_comms.routing import ScheduledTurn
 from delivery_owner_fixture import canonical_agent
 
 

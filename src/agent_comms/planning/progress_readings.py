@@ -13,7 +13,7 @@ from typing import (
 from agent_comms.execution.child_process import CheckPrinted, NoIntegerPrinted
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import DisclosedRecord, DisclosureIdentity
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.storage.recorded_time import RecordedEventTime
 
 
 @dataclass(frozen=True)

@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.cli_commands import CheckoutGrant, OrderCheckoutGrant
 from agent_comms.cli_support.prepared_checkout import PreparedCheckoutCliCommand
+from agent_comms.cli_verbs.cli_commands import CheckoutGrant, OrderCheckoutGrant
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.projects.repository_sources import LocalRepositorySource, RepositorySource

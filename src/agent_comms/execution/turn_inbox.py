@@ -9,11 +9,11 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from agent_comms.execution.image_input import ImageInput
+from agent_comms.execution.pi_vocabulary import ThinkingLevelField
 from agent_comms.execution.turn_context import InputContributionCoordinates
-from agent_comms.image_input import ImageInput
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import InputId
-from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.registry.thread_model import ThreadModel
 
 
@@ -148,7 +148,7 @@ class UseSettings(TurnInboxItem):
 
 
 @dataclass(frozen=True)
-class ClearQueue(TurnInboxItem):
+class ClearQueuedInputs(TurnInboxItem):
     """Clear only these queued user inputs, never delivered bus inputs."""
 
     input_ids: tuple[InputId, ...]

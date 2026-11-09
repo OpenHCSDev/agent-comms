@@ -7,14 +7,22 @@ from uuid import uuid4
 
 import pytest
 
-from agent_comms.assignment_states import FullPendingAssignment, TriagePendingAssignment
-from agent_comms.attempt_start import AttemptStart
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.codex import CodexBridge
+from agent_comms.cli_bridges.harness_delivery_states import EmittedOutcome, ReceivingMonitor
 from agent_comms.comms import wire
+from agent_comms.coordination.assignment_states import (
+    FullPendingAssignment,
+    TriagePendingAssignment,
+)
+from agent_comms.coordination.attempt_start import AttemptStart
 from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import IdentityConflict, ParticipantNotRegistered
+from agent_comms.coordination.owner_fence import prepare_fence_token
+from agent_comms.coordination.participant_store import ParticipantRows, ParticipantStore
+from agent_comms.coordination.reason_codes import GivenReasonCode, NoDetail
+from agent_comms.coordination.recovery_states import ModelStalledRecovery
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import (
     AcpOrigin,
@@ -26,7 +34,7 @@ from agent_comms.coordination.tables.participants import OwnerGenerations, Parti
 from agent_comms.coordination.tables.recovery import RecoveryAudit
 from agent_comms.execution.native_input_record import FullNativeExecution, TriageNativeExecution
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
-from agent_comms.harness_delivery_states import EmittedOutcome, ReceivingMonitor
+from agent_comms.execution.triage_native_sources import TriageNativeSource
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import (
     AssignmentId,
@@ -34,18 +42,13 @@ from agent_comms.nominal.field_codec import (
     ThreadLookup,
     TranscriptRecordIdText,
 )
-from agent_comms.owner_fence import prepare_fence_token
-from agent_comms.participant_store import ParticipantRows, ParticipantStore
-from agent_comms.reason_codes import GivenReasonCode, NoDetail
-from agent_comms.recovery_states import ModelStalledRecovery
 from agent_comms.storage.typed_table import (
     AttachedPracticeRebuild,
     NoDelete,
     TypedTable,
     UnallocatedRowId,
 )
-from agent_comms.triage_native_sources import TriageNativeSource
-from agent_comms.wake_policy import FullWake, MessageAudience
+from agent_comms.waking.wake_policy import FullWake, MessageAudience
 from bus_record_fixture import (
     FIRST_INPUT_ID,
     RECIPIENT_LOOKUP,

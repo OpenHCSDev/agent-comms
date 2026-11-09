@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_comms.channel_coding_tools import CodingToolSocket
-from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
+from agent_comms.execution.channel_coding_tools import CodingToolSocket
+from agent_comms.execution.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import (
     AssistantMessage,
     ReportedFlag,
@@ -16,9 +16,9 @@ from agent_comms.pi_payloads import (
     ReportedText,
     ToolCallContent,
 )
-from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.transport.native_tool_call import ArgumentRefusal
 from agent_comms.transport.native_tools import NativeToolDeclaration
+from agent_comms.transport.tool_denial import SelectedToolDenied
 from coding_owner_fixture import OwnerDouble
 
 

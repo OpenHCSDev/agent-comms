@@ -1,0 +1,47 @@
+"""Shared start notification behavior on the existing turn input sources."""
+
+from __future__ import annotations
+
+from functools import partial
+from typing import TYPE_CHECKING, ClassVar
+
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.nominal.field_codec import AcpSessionId
+from agent_comms.nominal.lifecycle_capability import Unresolved
+
+if TYPE_CHECKING:
+    from agent_comms.acp_extension import InputStartedUpdate, QueueScope
+    from agent_comms.execution.input_drain import InputDrain
+    from agent_comms.execution.turn_input_source import TurnInputSource
+    from agent_comms.input_attempt import StartedInput as StartedRow
+
+
+class StartedInput:
+    notice_text: ClassVar[str | None] = None
+
+    def started_update_of(self, row: StartedRow, update: InputStartedUpdate) -> InputStartedUpdate:
+        return update
+
+    def failure_state(self, document):
+        return None
+
+    def failed_input_text(self, document) -> str | None:
+        return None
+
+    async def started(self: TurnInputSource, inputs: InputDrain, session_id: str, scope: QueueScope) -> None:
+        document = await Coordination.run_worker(partial(
+            inputs.dispositions.read, self.keys,
+        ))
+        key = next(iter(self.keys), None)
+        row = document.lookup(key).require_started(scope.claimed_generation)
+        if any(stored is not None and not stored.items_with(Unresolved, stored)
+               for stored in map(document.rows.get, self.keys)):
+            await inputs.emit_input_delivery_changed(session_id)
+        session = AcpSessionId(session_id)
+        await inputs.runtime.publish_update(
+            session_id=session_id, update=(await self.acceptance.started_update(
+                self, inputs, session, row, scope,
+            )).acp_chunk(),
+        )
+        self.acceptance.release(inputs, session)
+        await inputs.emit_queue_state(session_id)

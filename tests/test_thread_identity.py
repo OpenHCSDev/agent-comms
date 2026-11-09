@@ -6,22 +6,23 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
 )
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_lease import (
     FinishedTurnFence,
     NoFinishedTurn,
     NoTurnLease,
 )
+from agent_comms.messaging.channel_targets import ThreadTarget
+from agent_comms.messaging.read_basis import Conversation
 from agent_comms.messaging.read_ledger import ReadDocument
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, RootId, TurnId
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.read_basis import Conversation
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import (
     ClaimedIdentity,
@@ -42,7 +43,6 @@ from agent_comms.registry.thread_text import (
     NoThreadText,
 )
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.session_file import RegistrySessionLocation
 from bus_record_fixture import OWNER_LOOKUP
 from conftest import installed_comms
 
@@ -199,7 +199,7 @@ def test_identity_codec_and_counter_domain_are_not_parallel_registries():
 
 def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
     from agent_comms.acp_extension import LiveCursorScope, LiveQueueScope
-    from agent_comms.queued_input import QueuedInputContext
+    from agent_comms.execution.queued_input import QueuedInputContext
 
     registry = registry_with_owner(tmp_path)
     snapshot = registry.snapshot()

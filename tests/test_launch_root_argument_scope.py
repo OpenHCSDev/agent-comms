@@ -1,6 +1,6 @@
 """LaunchRoot reads this process's own arguments, never a command it will run."""
 
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.execution.launch_root import LaunchRoot
 
 
 def test_a_child_command_flag_does_not_select_the_parents_root(tmp_path):

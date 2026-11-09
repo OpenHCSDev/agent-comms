@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.cli_commands import PlannedStoresResult
 from agent_comms.cli_support.store_reconcile import StoreReconcileCliCommand
+from agent_comms.cli_verbs.cli_commands import PlannedStoresResult
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.storage.locked_store import LiveFilesRequest

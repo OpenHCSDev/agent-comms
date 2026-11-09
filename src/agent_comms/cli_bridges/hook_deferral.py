@@ -21,7 +21,7 @@ from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.cli_bridges.shared import Binding
 from agent_comms.comms import Comms
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.rule_deal import MeantStore, RuleDeal, SessionAudit
+from agent_comms.team.rule_deal import MeantStore, RuleDeal, SessionAudit
 from agent_comms.team.standing import UnownedWheelSpin
 from agent_comms_hooks import ClaudeTranscriptHook, HookRecord
 

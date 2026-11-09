@@ -11,22 +11,22 @@ from pathlib import Path
 import pytest
 
 from agent_comms.cli_bridges.codex_connection import CodexConnection
+from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
 )
+from agent_comms.messaging.revision_views import TeamBoardView
 from agent_comms.planning.orders import (
     ProgressRead,
     TodoStore,
 )
 from agent_comms.presentation import WireRevision
-from agent_comms.revision_views import TeamBoardView
-from agent_comms.service_passes import ServicePassStore
 from agent_comms.task_attachments.team_pings import TeamUpdateStore
 from agent_comms.team.standing_rules import StandingRule
-from agent_comms.team_frame_file import TeamPlanFile
-from agent_comms.team_heartbeat import TeamBoardRead, TeamHeartbeat, TeamObservation
-from agent_comms.team_hud import CodexUsage, TeamFrame, TeamPlan, UnreadableUsage
+from agent_comms.team.team_frame_file import TeamPlanFile
+from agent_comms.team.team_heartbeat import TeamBoardRead, TeamHeartbeat, TeamObservation
+from agent_comms.team.team_hud import CodexUsage, TeamFrame, TeamPlan, UnreadableUsage
 from agent_comms.ui_model.observation import (
     ObservationService,
     ObserveTeamHud,

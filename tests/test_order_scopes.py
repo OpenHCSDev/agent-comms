@@ -5,13 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.change_report import FileLine
-from agent_comms.check_root import CheckRoot
 from agent_comms.errors import MissingSourceLine
-from agent_comms.held_orders import HeldOrders
+from agent_comms.execution.check_root import CheckRoot
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.planning.orders import (
     CommitDelivery,
     DoneTodoState,
@@ -24,14 +23,15 @@ from agent_comms.planning.orders import (
 )
 from agent_comms.planning.problem_findings import FixShape
 from agent_comms.planning.pull_requests import PullRequestHeadRevision
+from agent_comms.projects.change_report import FileLine
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.registry.registry_document import NoTeamProject, RegisteredTeamProject
 from agent_comms.registry.threads import NativeThread
-from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.order import OrderFile
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.orders import (
     CommsOrderDoneTool,
     CommsProblemNumberTool,

@@ -14,8 +14,8 @@ from typing import ClassVar, Self
 
 from cutover.carry_team_observations import TeamObservations
 
-from agent_comms.bus import Bus
 from agent_comms.installer.probes.carry import Carried, Carry
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec

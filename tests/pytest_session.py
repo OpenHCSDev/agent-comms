@@ -10,12 +10,12 @@ from pathlib import Path
 import pytest
 from xdist import is_xdist_worker
 
-from agent_comms.projects.storage_rules import StorageRule
-from agent_comms.test_lease import (
+from agent_comms.execution.test_lease import (
     InheritedTestRun,
     LeaseStart,
     TestLease,
 )
+from agent_comms.projects.storage_rules import StorageRule
 
 
 class TestSession(ExitStack):

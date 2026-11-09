@@ -175,7 +175,7 @@ def test_independent_families_and_inherited_names_are_derived():
 
 
 def test_ordered_family_views_have_one_declaration_module():
-    from agent_comms.acp_failure import ACPFailure
+    from agent_comms.execution.acp_failure import ACPFailure
     from agent_comms.execution.native_input_record import NativeInputExecution
     from agent_comms.execution.turn_failure import TurnFailure
     from agent_comms.planning.orders import FoundProgress
@@ -210,7 +210,7 @@ def test_attachment_names_decode_in_a_process_that_never_imported_their_module()
     """A heartbeat on the bus decodes before anything imports its member module."""
     probe = (
         "import sys\n"
-        "from agent_comms.task_sources import TaskAttachment\n"
+        "from agent_comms.messaging.task_sources import TaskAttachment\n"
         "assert 'agent_comms.task_attachments.team_pings' not in sys.modules\n"
         "print(TaskAttachment.member_named('team_decisions').__module__)\n"
     )

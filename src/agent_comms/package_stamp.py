@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.core_stamp import CoreStamp
+from agent_comms.installer.core_stamp import CoreStamp
 from agent_comms.projects.repo import Repo
 
 

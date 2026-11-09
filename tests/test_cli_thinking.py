@@ -7,7 +7,7 @@ from agent_comms.execution.native_arguments import (
     InheritedArguments,
     NativeArguments,
 )
-from agent_comms.pi_vocabulary import OffThinkingLevel
+from agent_comms.execution.pi_vocabulary import OffThinkingLevel
 from agent_comms.registry.thread_model import (
     DeclaredModel,
     ThreadModel,

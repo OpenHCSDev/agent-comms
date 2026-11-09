@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 
 from agent_comms.messaging.messages import Message
-from agent_comms.routing import ScheduledTurn
+from agent_comms.messaging.routing import ScheduledTurn
 
 
 def timestamp_seconds(value: str | int | float) -> float:

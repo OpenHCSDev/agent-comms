@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.cli_commands import (
+from agent_comms.cli_verbs.checkpoint import CheckpointCliCommand
+from agent_comms.cli_verbs.cli_commands import (
     CleanCheckpoint,
     PushedCheckpoint,
     PushUnknownCheckpoint,
     RefusedCheckpoint,
 )
-from agent_comms.cli_verbs.checkpoint import CheckpointCliCommand
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from bus_record_fixture import context_comms

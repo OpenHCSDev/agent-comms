@@ -24,7 +24,7 @@ from agent_comms.coordination.errors import (
     RetryScheduled,
 )
 from agent_comms.coordination.snapshot import RecoverySnapshot
-from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_pi import NativePiRpcLaunch
 from agent_comms.execution.native_session_files import NativeSessionFiles

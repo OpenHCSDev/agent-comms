@@ -3,8 +3,8 @@
 from dataclasses import dataclass
 from typing import ClassVar
 
-from agent_comms.cli_options import JsonFlagRecord
-from agent_comms.pi_vocabulary import HighThinkingLevel, ThinkingLevelField
+from agent_comms.execution.pi_vocabulary import HighThinkingLevel, ThinkingLevelField
+from agent_comms.registry.cli_options import JsonFlagRecord
 from agent_comms.registry.thread_model import DeclaredModel
 
 

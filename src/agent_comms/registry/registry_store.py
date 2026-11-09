@@ -16,9 +16,11 @@ from typing import ClassVar, Self
 
 from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.errors import StaleFence
+from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess
 from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_lease import (
     ActiveTurn,
     LockedTurn,
@@ -29,11 +31,15 @@ from agent_comms.execution.turn_lease import (
     TurnDeclaration,
     TurnRecord,
 )
+from agent_comms.messaging.routing import Routing
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, TurnId
-from agent_comms.presence import PresenceStore
-from agent_comms.private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
-from agent_comms.registration_change import InitialRegistration, NativeSourcePublication
+from agent_comms.registry.presence import PresenceStore
+from agent_comms.registry.private_registry_guard import (
+    PrivateRegistryGuard,
+    PublicRegistry,
+    RegistryPrivacy,
+)
+from agent_comms.registry.registration_change import InitialRegistration, NativeSourcePublication
 from agent_comms.registry.registry_document import (
     HistoricalRootPurpose,
     RegistryDocument,
@@ -42,8 +48,6 @@ from agent_comms.registry.registry_document import (
 )
 from agent_comms.registry.thread_identity import TurnIdentity
 from agent_comms.registry.threads import Thread
-from agent_comms.routing import Routing
-from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.storage.locked_store import (
     DocumentBytes,
     LockedStore,

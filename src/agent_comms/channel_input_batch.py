@@ -6,10 +6,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.execution.input_key import InputKey
 from agent_comms.input_attempt import StoredInput
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_key import InputKey
+from agent_comms.messaging.channel_targets import CommandTarget
 
 if TYPE_CHECKING:
     from agent_comms.input_disposition import InputDocument

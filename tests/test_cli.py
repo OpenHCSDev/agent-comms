@@ -7,20 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.activity import ActivityState
-from agent_comms.bus import Bus
-from agent_comms.catalog_document import NoCatalog
-from agent_comms.channel_management import ArchiveThreadsTagDisposition, TagDisposition
-from agent_comms.messaging.channel_targets import (
-    ChannelTarget,
-    CommandTarget,
-    NoChannel,
-    PerTargetChannels,
-    ProjectTarget,
-)
 from agent_comms.cli import CliInvocation, build_parser
 from agent_comms.cli_bridges.shared import Send
-from agent_comms.cli_command import (
+from agent_comms.cli_verbs.archive import ArchiveCliCommand
+from agent_comms.cli_verbs.cli_command import (
     CliCommand,
     CommandSelectionChanged,
     TargetBatchResult,
@@ -28,8 +18,7 @@ from agent_comms.cli_command import (
     TargetEdit,
     TargetFailed,
 )
-from agent_comms.cli_commands import ThreadCreatedResult, ThreadStoppedResult
-from agent_comms.cli_verbs.archive import ArchiveCliCommand
+from agent_comms.cli_verbs.cli_commands import ThreadCreatedResult, ThreadStoppedResult
 from agent_comms.cli_verbs.delete_tag import DeleteTagCliCommand
 from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.cli_verbs.new import NewThreadCliCommand
@@ -47,19 +36,32 @@ from agent_comms.execution.child_process import (
 )
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.execution.owner_lifecycle import OwnerStartResult
+from agent_comms.execution.pi_vocabulary import ServiceTier
+from agent_comms.execution.restart_scope import OneOwner
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_lease import (
     ActiveTurn,
     RecordedGeneration,
     StoredTurnRecord,
 )
-from agent_comms.lifecycle_capability import Successful
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.channel_management import ArchiveThreadsTagDisposition, TagDisposition
+from agent_comms.messaging.channel_targets import (
+    ChannelTarget,
+    CommandTarget,
+    NoChannel,
+    PerTargetChannels,
+    ProjectTarget,
+)
 from agent_comms.messaging.messages import NoticeRole, SendableRole
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId, compile_decoder
-from agent_comms.pi_vocabulary import ServiceTier
+from agent_comms.nominal.lifecycle_capability import Successful
 from agent_comms.projects.checkouts import (
     Checkout,
     LaunchCheckout,
 )
+from agent_comms.registry.activity import ActivityState
+from agent_comms.registry.catalog_document import NoCatalog
 from agent_comms.registry.thread_identity import (
     TurnIdentity,
     UserThreadRole,
@@ -76,10 +78,8 @@ from agent_comms.registry.threads import (
     NativeThread,
     NextTurnConfiguration,
 )
-from agent_comms.restart_scope import OneOwner
-from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.ui_model.unread import ReplyUnread
-from agent_comms.wake_policy import BoundedTriageWake, PassiveWake
+from agent_comms.waking.wake_policy import BoundedTriageWake, PassiveWake
 from conftest import installed_comms
 from native_unread_fixture import completed_snapshot
 

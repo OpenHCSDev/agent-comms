@@ -8,11 +8,11 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import DMPaintedBoundChanged
-from agent_comms.projects.checkouts import Checkout
 from agent_comms.messaging.read_basis import NamedViewer
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.registry.view_unread import Counted, ReplyIndex
 from agent_comms.storage.private_path import FileRevision
-from agent_comms.view_unread import Counted, ReplyIndex
 from conftest import installed_comms
 
 

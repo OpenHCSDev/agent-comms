@@ -26,7 +26,7 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
 )
 from agent_comms.pi_payloads import UserMessage
-from agent_comms.transcript_events import (
+from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
     ThinkingTranscript,

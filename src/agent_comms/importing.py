@@ -14,19 +14,23 @@ from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.execution.turn_context import CodexRolloutProvenance
 from agent_comms.execution.turn_item import NativeItemId
-from agent_comms.harness_install import Harness
+from agent_comms.installer.harness_install import Harness
 from agent_comms.nominal.field_codec import FieldCodec, WireName
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
-from agent_comms.tool_result import ToolResult
-from agent_comms.transcript_events import ImportedInput, ImportedMessage, NoRetainedRequest
+from agent_comms.transcript.transcript_events import (
+    ImportedInput,
+    ImportedMessage,
+    NoRetainedRequest,
+)
+from agent_comms.transport.tool_result import ToolResult
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.history import History
-    from agent_comms.runtime_updates import SessionFacts
-    from agent_comms.transcript_events import TranscriptEvent
+    from agent_comms.cli_bridges.runtime_updates import SessionFacts
+    from agent_comms.transcript.transcript_events import TranscriptEvent
 
 
 @dataclass(frozen=True, slots=True)

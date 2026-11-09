@@ -9,8 +9,8 @@ from agent_comms.planning.goals import (
     CountCheckResult,
     OrderCheck,
 )
+from agent_comms.projects.work_branches import WorkBranches
 from agent_comms.team.order import CheckRequest
-from agent_comms.work_branches import WorkBranches
 from agent_comms_hooks.shell_commands import ShellCommand
 
 

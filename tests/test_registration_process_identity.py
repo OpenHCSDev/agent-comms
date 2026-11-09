@@ -12,13 +12,13 @@ from agent_comms.execution.child_process import (
     ProcessIdentity,
     SpawnedProcess,
 )
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import ExternalThread, ForkThread, NativeThread
-from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.storage.maintenance_barrier import (
     InstallingPhase,
     MaintenanceHeldError,
@@ -33,7 +33,7 @@ def test_cli_worktree_edit_preserves_live_external_owner(tmp_path):
     import subprocess
     import sys
 
-    from agent_comms.bus import Bus
+    from agent_comms.messaging.bus import Bus
 
     comms = wire(tmp_path / 'wire')
     Bus.install(Bus.path_in(comms.root))

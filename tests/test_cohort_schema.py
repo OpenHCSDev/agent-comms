@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.cohort_schema import CohortDeliveries, CohortTable
+from agent_comms.coordination.cohort_schema import CohortDeliveries, CohortTable
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.tables.participants import Participants

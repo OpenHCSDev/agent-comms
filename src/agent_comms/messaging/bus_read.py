@@ -14,24 +14,24 @@ from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.errors import UnregisteredThreadError
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.owner_connection import (
-    OwnerConnection,
-    OwnerIdentityChangedError,
-    OwnerReading,
-    OwnerReplyConnection,
-)
 from agent_comms.messaging.read_basis import NoDisplaySelection, ReadAuthority
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_store import RegistryCut
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.private_path import FileRevision, ObservedPath
-from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.tool_request import ThreadReadTool
-from agent_comms.tool_result import ToolResult
-from agent_comms.transcripts import TranscriptRead
+from agent_comms.transcript.transcripts import TranscriptRead
+from agent_comms.transport.owner_connection import (
+    OwnerConnection,
+    OwnerIdentityChangedError,
+    OwnerReading,
+    OwnerReplyConnection,
+)
 from agent_comms.transport.runtime_request import AttachedResultRuntimeRequest
+from agent_comms.transport.tool_declaration import ToolDeclaration
+from agent_comms.transport.tool_request import ThreadReadTool
+from agent_comms.transport.tool_result import ToolResult
 
 
 class BusRead[Result](ToolDeclaration, ABC):

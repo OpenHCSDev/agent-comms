@@ -26,8 +26,6 @@ from aiohttp import ClientSession, CookieJar, web
 from aiohttp.test_utils import TestClient, TestServer
 from yarl import URL
 
-from agent_comms.bus import Bus
-from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import Comms, wire
 from agent_comms.connector import (
     ApprovalLink,
@@ -42,7 +40,38 @@ from agent_comms.connector import (
     RunningRequest,
     ServeVerb,
 )
-from agent_comms.connector_caller import (
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import TranscriptChanged
+from agent_comms.coordination.service_passes import ServicePassStore
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.native_transcript import NativeTranscript
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.watch_passes import WatchPass
+from agent_comms.host_services.connector import ConnectorService
+from agent_comms.installer.backup import StoreBackup
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.bus_identity import BusIdentityStore
+from agent_comms.messaging.bus_read import UiRead
+from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.messaging.send_result import MessagePublished
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RecordProblems, RootId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_errors import FailedGitCommand
+from agent_comms.registry.thread_identity import UserThreadRole
+from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.storage.maintenance_barrier import (
+    InstallingPhase,
+    MaintenanceBarrier,
+    MaintenanceHeldError,
+    MaintenanceOperator,
+    PausedPhase,
+    ReadyPhase,
+)
+from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lock
+from agent_comms.team.standing_rules import ServicePassFailing
+from agent_comms.transcript.transcripts import EarlierThan
+from agent_comms.transport.connector_caller import (
     CALLER,
     GrantRefusedError,
     ReadOnlyConnectorCaller,
@@ -50,14 +79,14 @@ from agent_comms.connector_caller import (
     UiCaller,
     UiReadCaller,
 )
-from agent_comms.connector_profile import (
+from agent_comms.transport.connector_profile import (
     OBSERVE_PATH,
     HttpsMcpEndpoint,
     UiConnectionProfile,
     UiGrantId,
     UiGrantSummary,
 )
-from agent_comms.connector_store import (
+from agent_comms.transport.connector_store import (
     CALLBACK,
     CODE_SECONDS,
     AuthorizationQuery,
@@ -76,37 +105,6 @@ from agent_comms.connector_store import (
     UnreadableProfile,
     digest,
 )
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.coordination.errors import TranscriptChanged
-from agent_comms.execution.native_transcript import NativeTranscript
-from agent_comms.execution.watch_passes import WatchPass
-from agent_comms.host_services.connector import ConnectorService
-from agent_comms.installer.backup import StoreBackup
-from agent_comms.launch_root import LaunchRoot
-from agent_comms.messaging.bus_identity import BusIdentityStore
-from agent_comms.messaging.bus_read import UiRead
-from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RecordProblems, RootId
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.projects.git_errors import FailedGitCommand
-from agent_comms.registry.thread_identity import UserThreadRole
-from agent_comms.registry.threads import NativeThread
-from agent_comms.send_result import MessagePublished
-from agent_comms.service_passes import ServicePassStore
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.storage.locked_store import DocumentChange
-from agent_comms.storage.maintenance_barrier import (
-    InstallingPhase,
-    MaintenanceBarrier,
-    MaintenanceHeldError,
-    MaintenanceOperator,
-    PausedPhase,
-    ReadyPhase,
-)
-from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lock
-from agent_comms.team.standing_rules import ServicePassFailing
-from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
-from agent_comms.tool_request import ReadTool
-from agent_comms.transcripts import EarlierThan
 from agent_comms.transport.mcp import (
     PROTOCOL_VERSION,
     SESSION_HEADER,
@@ -122,6 +120,8 @@ from agent_comms.transport.mcp import (
 )
 from agent_comms.transport.progress import WireExportObserver
 from agent_comms.transport.request import ToolCall, ToolRequest
+from agent_comms.transport.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
+from agent_comms.transport.tool_request import ReadTool
 from agent_comms.transport.tools.channels import ChannelListing, CommsChannelsTool
 from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.transport.tools.send import CommsSendTool
@@ -1255,7 +1255,7 @@ async def remote_answer(client: TestClient, token: str, request):
 
 async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(client, comms):
     """The UI's page request answers in process and through tools/call with one record."""
-    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.transport.core_access import LocalCoreAccess
     from agent_comms.transport.tools.sidebar import CommsConversationPageTool
 
     comms.registry.declare(NativeThread(CALLER.name, frozenset(), Checkout(comms.root)))
@@ -1281,7 +1281,7 @@ async def test_a_ui_checks_a_conversation_for_changes_the_same_locally_and_remot
     """A revision is what the UI keeps and sends back with its next check, so it must come
     back from the connector as the same record, channel or DM, and settle once nothing
     changed. The latest-sequence bound travels the same way."""
-    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.transport.core_access import LocalCoreAccess
     from agent_comms.transport.tools.sidebar import (
     CommsConversationRevisionTool,
     CommsLatestSequenceTool,
@@ -1312,8 +1312,8 @@ async def test_an_inbox_read_after_its_place_the_same_locally_and_remotely(
 ):
     """An inbox read crosses the connector with its place and its wait, and
     answers what a local read answers."""
-    from agent_comms.agent_inbox import SecondsWait, TakenInputAfter
-    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.messaging.agent_inbox import SecondsWait, TakenInputAfter
+    from agent_comms.transport.core_access import LocalCoreAccess
     from agent_comms.transport.tools.inbox import CommsInboxTool
 
     comms.registry.declare(NativeThread(CALLER.name, frozenset(), Checkout(comms.root)))
@@ -1330,7 +1330,7 @@ async def test_an_inbox_read_after_its_place_the_same_locally_and_remotely(
 
 def test_every_session_is_told_how_to_take_its_own_name() -> None:
     """The fork argument's description survives its union type, so each session sees it."""
-    from agent_comms.connector_caller import ActingFork
+    from agent_comms.transport.connector_caller import ActingFork
     from agent_comms.transport.tools.send import CommsSendTool
 
     fork = FieldCodec.record_schema(CommsSendTool, ActingFork)["properties"]["fork"]
@@ -1405,7 +1405,7 @@ async def test_a_connector_names_its_bus_at_the_handshake(client, comms):
 async def test_a_call_that_asks_for_progress_streams_it_then_its_reply(client, store, comms, tmp_path):
     """MCP progress: a tools/call carrying a progress token is answered as server-sent events,
     the export's progress notices first and its reply last."""
-    from agent_comms.exporting import EverythingScope, FullLimit, JsonlFormat
+    from agent_comms.messaging.exporting import EverythingScope, FullLimit, JsonlFormat
     from agent_comms.transport.tools.sidebar import CommsExportWireTool
 
     prepare_native_comms(comms)

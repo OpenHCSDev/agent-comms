@@ -13,14 +13,14 @@ from typing import (
     ClassVar,
 )
 
-from agent_comms.attempt_resolution import RecordedResolution
 from agent_comms.errors import StaleAttemptError
 from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.planning.attempt_resolution import RecordedResolution
 
 if TYPE_CHECKING:
-    from agent_comms.backend import NativeSession
+    from agent_comms.execution.backend import NativeSession
     from agent_comms.execution.turn_inputs import InputForwarding
     from agent_comms.execution.turn_output import TurnOutput
     from agent_comms.planning.goal_attempts import (

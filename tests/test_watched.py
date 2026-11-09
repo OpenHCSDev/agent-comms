@@ -10,10 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus, PublicRecord
 from agent_comms.comms import wire
 from agent_comms.errors import UnresolvedAttemptError
+from agent_comms.messaging.bus import Bus, PublicRecord
 from agent_comms.messaging.messages import InfoKind, Message
+from agent_comms.messaging.watched import ChangeSignal, FileLifetimeSource, FileSource
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, GoalWaitId, WatchPaths
 from agent_comms.planning.goal_attempts import (
     Generation,
@@ -25,9 +26,7 @@ from agent_comms.planning.goal_waits import GoalWaits, RecordedGoalWait
 from agent_comms.presentation import WireRevision
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.storage.locked_store import SQLiteStorage
-from agent_comms.storage.private_path import FileRevision
-from agent_comms.view_unread import (
+from agent_comms.registry.view_unread import (
     NativeReplyPreparation,
     ReplyIndex,
     ReplyIndexUpdate,
@@ -35,7 +34,8 @@ from agent_comms.view_unread import (
     ReplyReading,
     TranscriptReadState,
 )
-from agent_comms.watched import ChangeSignal, FileLifetimeSource, FileSource
+from agent_comms.storage.locked_store import SQLiteStorage
+from agent_comms.storage.private_path import FileRevision
 
 
 @pytest.fixture

@@ -9,12 +9,12 @@ from cutover.carry_rule_ping_types import RulePingTypes
 from cutover.carry_team_observations import TeamObservations
 from cutover.carry_team_update_lines import TeamUpdateLines
 
-from agent_comms.bus import Bus
 from agent_comms.comms import Comms
-from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.installer.carry import CarryChain
+from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.locked_store import LiveFilesRequest
@@ -24,8 +24,8 @@ from agent_comms.task_attachments.team_pings import (
     TeamUpdateStore,
 )
 from agent_comms.team.standing_rules import ServicePassFailing
+from agent_comms.team.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, UnreadableUsage
 from agent_comms.team.vibe_check import OverloadDegradation
-from agent_comms.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, UnreadableUsage
 
 
 @pytest.fixture

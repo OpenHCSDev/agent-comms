@@ -9,13 +9,14 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.presentation import CountedRead, ThreadView
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import Activity, ActivityState
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import DEFAULT_ROSTER
 from agent_comms.registry.thread_status import (
@@ -32,8 +33,7 @@ from agent_comms.registry.thread_status import (
 )
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread, OwnerLifecycleControl
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tool_caller import ThreadCaller
 from conftest import installed_comms
 
 
@@ -204,7 +204,7 @@ def test_presence_owns_roster_membership_and_self_rename(status, listed, rename)
 @pytest.mark.parametrize("status", [RunningThreadStatus(), IdleThreadStatus()])
 def test_tier_only_tool_changes_next_catalog_without_changing_active_request(tmp_path, status):
     from agent_comms.cli_verbs.tools import ToolsCliCommand
-    from agent_comms.pi_vocabulary import ServiceTier
+    from agent_comms.execution.pi_vocabulary import ServiceTier
     from agent_comms.registry.thread_model import DeclaredModel
     from agent_comms.transport.tools.served import invoke_tool
 

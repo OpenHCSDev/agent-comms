@@ -5,10 +5,11 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
-from agent_comms.cli_command import CreatesThread, TargetActionCommand
-from agent_comms.cli_commands import NameArgument, ThreadCreatedResult, _tag_choice_text
+from agent_comms.cli_verbs.cli_command import CreatesThread, TargetActionCommand
+from agent_comms.cli_verbs.cli_commands import NameArgument, ThreadCreatedResult, _tag_choice_text
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions, ModelConfigOption, ThinkingLevelConfigOption
+from agent_comms.execution.pi_vocabulary import ThinkingLevelField
 from agent_comms.nominal.field_codec import (
     Argument,
     Catalog,
@@ -17,7 +18,6 @@ from agent_comms.nominal.field_codec import (
     Multiline,
     Normalize,
 )
-from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.projects.checkouts import Checkout, LaunchCheckout
 from agent_comms.registry.native_settings import NativeThreadDefaults
 from agent_comms.registry.thread_management import InheritedTags, NewThreadSpec, TagChoice

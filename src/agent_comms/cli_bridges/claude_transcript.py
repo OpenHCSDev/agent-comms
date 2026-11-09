@@ -15,6 +15,8 @@ from agent_comms.cli_bridges.claude_protocol import (
     ClaudeSession,
     SubagentProgress,
 )
+from agent_comms.cli_bridges.cli_protocol import TaggedWire
+from agent_comms.cli_bridges.harness_delivery_states import PrintLedgerId, TakingLedger
 from agent_comms.cli_bridges.history import (
     ClaudeHistory,
     HarnessAddress,
@@ -23,15 +25,13 @@ from agent_comms.cli_bridges.history import (
     OfflineHistory,
     OnlineHistory,
 )
+from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate, SessionFacts
+from agent_comms.cli_bridges.session_receipts import SessionReceipts
 from agent_comms.cli_bridges.shared import WireReference
-from agent_comms.cli_protocol import TaggedWire
-from agent_comms.harness_delivery_states import PrintLedgerId, TakingLedger
+from agent_comms.cli_bridges.wire_models import WireModel
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import StoredSessionId
 from agent_comms.registry.thread_text import NamedSession, NoThreadText, ThreadText
-from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
-from agent_comms.session_receipts import SessionReceipts
-from agent_comms.wire_models import WireModel
 
 
 class SubagentMeta(WireModel):

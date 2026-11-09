@@ -8,11 +8,11 @@ from pathlib import Path
 from agent_comms.comms import Comms
 from agent_comms.projects.checkouts import Checkout, RepositoryReads
 from agent_comms.projects.repository_sources import RepositorySource
+from agent_comms.projects.shell_effects import StorageEffect
+from agent_comms.projects.storage_admission import StorageAdmission
 from agent_comms.projects.storage_rules import CheckoutAllocation, StorageRule, UnitStorage
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
-from agent_comms.shell_effects import StorageEffect
-from agent_comms.storage_admission import StorageAdmission
 from agent_comms.transport.native_tool_call import CodingCall
 
 

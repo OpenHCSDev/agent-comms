@@ -9,9 +9,9 @@ from metaclass_registry.mro_dispatch import (
 )
 
 import agent_comms.agent_events as events
+from agent_comms.execution.pending_requests import PendingRequests
+from agent_comms.execution.pi_wire import RequestId
 from agent_comms.execution.turn_item import PiRequestKey
-from agent_comms.pending_requests import PendingRequests
-from agent_comms.pi_wire import RequestId
 
 
 async def test_mro_specific_before_shared_and_consumer_override():
@@ -176,8 +176,8 @@ def test_done_reports_its_failure_reason_code():
 
 
 async def test_request_correlation_separates_families_and_ignores_late_results():
-    from agent_comms.pi_commands import SetModel, SetThinkingLevel
-    from agent_comms.pi_events import Response
+    from agent_comms.execution.pi_commands import SetModel, SetThinkingLevel
+    from agent_comms.execution.pi_events import Response
 
     pending = PendingRequests()
     wire_id = "same"

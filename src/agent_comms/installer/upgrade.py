@@ -31,17 +31,10 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TextIO
 
-from agent_comms.active_route import (
-    ActiveRoute,
-    RouteFile,
-    RouteFileSelection,
-    active_route_path,
-)
-from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
-from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import BusReadBack, StoreDifference
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_commands import BusReadBack, StoreDifference
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.cli_verbs.planned_reconcile import PlannedReconcileCliCommand
 from agent_comms.cli_verbs.read_back import ReadBackCliCommand
 from agent_comms.cli_verbs.reconcile_stores import ReconcileStoresCliCommand
@@ -49,8 +42,16 @@ from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.cli_verbs.target_action import TargetActionCliCommand
 from agent_comms.coordination.errors import CoordinationReadUnavailable
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.root_runtime import RootRuntime, RootRuntimeStore
+from agent_comms.execution.runtime_processes import RuntimeProcesses
 from agent_comms.host_services import HostService, RestartedService
-from agent_comms.install_choices import InstallerChoice
+from agent_comms.installer.active_route import (
+    ActiveRoute,
+    RouteFile,
+    RouteFileSelection,
+    active_route_path,
+)
 from agent_comms.installer.backup import (
     BackupReport,
     RestoreSpace,
@@ -63,6 +64,7 @@ from agent_comms.installer.backup import (
 )
 from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.install_choices import InstallerChoice
 from agent_comms.installer.interpreter_operation import (
     AbortMaintenancePhase,
     AfterMigrationFileScanPhase,
@@ -147,16 +149,14 @@ from agent_comms.installer.runtime_retention import (
 from agent_comms.installer.runtime_stack import Extendable, RuntimeStack, TargetRuntime
 from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.installer.target_tree import TargetTree
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import PathText
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.storage_rules import StorageRule
-from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
-from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.storage.locked_store import (
     BusFile,
     DeclaredFile,

@@ -22,21 +22,7 @@ from pydantic import (
 )
 
 from agent_comms.agent_events import TranscriptModelUsage
-from agent_comms.cli_bridges.shared import (
-    MONITOR_FRAME,
-    ConfirmedDelivery,
-    ForeignMonitorFrame,
-    MonitorFrame,
-    MonitorIncomingFrame,
-    MonitorObservation,
-    MonitorPart,
-    MonitorProtocolFrame,
-    MonitorReadFile,
-    ObservedMonitor,
-    TranscriptConfirmsDelivery,
-    WireReference,
-)
-from agent_comms.cli_protocol import (
+from agent_comms.cli_bridges.cli_protocol import (
     Declared,
     OpenWire,
     TaggedWire,
@@ -44,26 +30,7 @@ from agent_comms.cli_protocol import (
     TimestampedWire,
     WireHeader,
 )
-from agent_comms.execution.turn_item import (
-    NamedSourceTurn,
-    NativeItemId,
-    NativeTurnId,
-    NoSourceTurn,
-    SourceTurn,
-)
-from agent_comms.execution.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
-from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.nominal.field_codec import (
-    MalformedRecord,
-    ToolCallId,
-    TranscriptRecordId,
-)
-from agent_comms.pi_counts import PiCount, PiCountWire
-from agent_comms.recorded_time import EventTime
-from agent_comms.registry.thread_identity import OfferedTools, ToolName, UnobservedTools
-from agent_comms.registry.thread_model import ThreadModel
-from agent_comms.registry.thread_text import ThreadText
-from agent_comms.runtime_updates import (
+from agent_comms.cli_bridges.runtime_updates import (
     ActiveItem,
     AllTurnsCancelled,
     AllTurnsEnded,
@@ -82,10 +49,43 @@ from agent_comms.runtime_updates import (
     TurnEnded,
     TurnStarted,
 )
-from agent_comms.session_receipts import SessionReceipts
-from agent_comms.tool_calls import CliToolArguments, ToolCall
-from agent_comms.tool_declaration import ContextRows, one_line
-from agent_comms.transcript_events import (
+from agent_comms.cli_bridges.session_receipts import SessionReceipts
+from agent_comms.cli_bridges.shared import (
+    MONITOR_FRAME,
+    ConfirmedDelivery,
+    ForeignMonitorFrame,
+    MonitorFrame,
+    MonitorIncomingFrame,
+    MonitorObservation,
+    MonitorPart,
+    MonitorProtocolFrame,
+    MonitorReadFile,
+    ObservedMonitor,
+    TranscriptConfirmsDelivery,
+    WireReference,
+)
+from agent_comms.cli_bridges.tool_calls import CliToolArguments, ToolCall
+from agent_comms.cli_bridges.wire_models import WireModel
+from agent_comms.execution.turn_item import (
+    NamedSourceTurn,
+    NativeItemId,
+    NativeTurnId,
+    NoSourceTurn,
+    SourceTurn,
+)
+from agent_comms.execution.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.nominal.field_codec import (
+    MalformedRecord,
+    ToolCallId,
+    TranscriptRecordId,
+)
+from agent_comms.pi_counts import PiCount, PiCountWire
+from agent_comms.registry.thread_identity import OfferedTools, ToolName, UnobservedTools
+from agent_comms.registry.thread_model import ThreadModel
+from agent_comms.registry.thread_text import ThreadText
+from agent_comms.storage.recorded_time import EventTime
+from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     NarrationTranscript,
     NoticeTranscript,
@@ -93,7 +93,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.wire_models import WireModel
+from agent_comms.transport.tool_declaration import ContextRows, one_line
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.shared import MonitorAttachment

@@ -5,8 +5,8 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.channel_input_batch import InputBatch
+from agent_comms.execution.input_key import AcpInputKey
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_key import AcpInputKey
 from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.projects.checkouts import Checkout

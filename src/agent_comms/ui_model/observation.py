@@ -44,8 +44,6 @@ from agent_comms.acp_extension import (
     TranscriptDraftUpdate,
     TranscriptSnapshotUpdate,
 )
-from agent_comms.active_route import CommsRoute
-from agent_comms.activity import ObservedActivity
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (
@@ -59,16 +57,30 @@ from agent_comms.coordination.errors import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import HelperStart, SpawnedHelper, join_retirement
+from agent_comms.execution.launch_root import started
 from agent_comms.history_views import RetiredViews
 from agent_comms.input_disposition import DeliveryOverview
-from agent_comms.launch_root import started
-from agent_comms.message_notification import (
+from agent_comms.installer.active_route import CommsRoute
+from agent_comms.messaging.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
+from agent_comms.messaging.message_notification import (
     MessageNotification,
     NotificationPass,
     NotificationWindow,
 )
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.messaging.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
+from agent_comms.messaging.notification_reads import NotificationRead
+from agent_comms.messaging.read_basis import DisplayCut, NoDisplaySelection
+from agent_comms.messaging.revision_views import (
+    NotificationsView,
+    RegistrationsView,
+    RevisionView,
+    SidebarView,
+    StatusView,
+    StoresView,
+    TeamBoardView,
+    TeamFramesView,
+)
+from agent_comms.messaging.watched import FileSource
 from agent_comms.nominal.field_codec import (
     DeclaredError,
     FieldCodec,
@@ -82,38 +94,29 @@ from agent_comms.notification_read import (
     StaleNotificationsRead,
     UnreadableNotificationsRead,
 )
-from agent_comms.notification_reads import NotificationRead
 from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState, WireRevision
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.read_basis import DisplayCut, NoDisplaySelection
+from agent_comms.projects.work_branches import WorkBranchError
+from agent_comms.registry.activity import ObservedActivity
 from agent_comms.registry.registry_document import (
     RegistrySnapshot,
     RosterVisibility,
     UnreadRegistry,
 )
+from agent_comms.registry.registry_provenance import DeletedThread
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_presentation import ThreadPresentation
-from agent_comms.registry_provenance import DeletedThread
-from agent_comms.revision_views import (
-    NotificationsView,
-    RegistrationsView,
-    RevisionView,
-    SidebarView,
-    StatusView,
-    StoresView,
-    TeamBoardView,
-    TeamFramesView,
-)
-from agent_comms.team_heartbeat import TeamBoardRead
-from agent_comms.team_hud import TeamFrame, TeamHud, TeamPlan
-from agent_comms.team_hud_records import TeammateDetail
-from agent_comms.tool_result import ToolResult
-from agent_comms.transcripts import (
+from agent_comms.registry.view_unread import ReplyIndexResult
+from agent_comms.team.team_heartbeat import TeamBoardRead
+from agent_comms.team.team_hud import TeamFrame, TeamHud, TeamPlan
+from agent_comms.team.team_hud_records import TeammateDetail
+from agent_comms.transcript.transcripts import (
     AcquiredThreadPresentation,
     TranscriptRead,
     TranscriptReadIdentity,
 )
 from agent_comms.transport.request import ToolRequest
+from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.ui_model.sidebar import (
     ChannelRowModel,
@@ -122,9 +125,6 @@ from agent_comms.ui_model.sidebar import (
     WaitingSidebar,
 )
 from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
-from agent_comms.view_unread import ReplyIndexResult
-from agent_comms.watched import FileSource
-from agent_comms.work_branches import WorkBranchError
 from agent_comms_hooks import ToolRefusedError
 
 type WebSocketFrames = ClientWebSocketResponse | web.WebSocketResponse

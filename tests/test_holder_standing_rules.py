@@ -13,17 +13,10 @@ from pathlib import Path
 import pytest
 
 from agent_comms import agent_events as events
-from agent_comms.bus_publication import AgentOrigin, HumanOrigin
-from agent_comms.messaging.channel_targets import (
-    CommandTarget,
-    CommsTag,
-    TeammatesTag,
-    ThreadTarget,
-)
 from agent_comms.comms import wire
 from agent_comms.connector import ConnectorSendTool
-from agent_comms.connector_caller import DirectorCaller
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.errors import (
     CommittedMessageError,
     HumanSendRefusedError,
@@ -31,14 +24,20 @@ from agent_comms.errors import (
     TodoError,
 )
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_key import AcpInputKey
+from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.native_arguments import GivenBinary
 from agent_comms.execution.turn_digests import OrderEditCountRead
-from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
-from agent_comms.held_orders import HeldOrders
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_key import AcpInputKey
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.messaging.bus_publication import AgentOrigin, HumanOrigin
+from agent_comms.messaging.channel_targets import (
+    CommandTarget,
+    CommsTag,
+    TeammatesTag,
+    ThreadTarget,
+)
+from agent_comms.messaging.message_page import MessagePageRequest
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import (
     ConversationRole,
@@ -47,7 +46,7 @@ from agent_comms.messaging.messages import (
     NoticeRole,
     QuestionKind,
 )
-from agent_comms.messaging.message_page import MessagePageRequest
+from agent_comms.messaging.read_basis import DMDisplayScope, RepliesDisplayScope
 from agent_comms.messaging.sending import TeamReceipts
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -58,9 +57,6 @@ from agent_comms.nominal.field_codec import (
     RecordProblems,
     TurnId,
 )
-from agent_comms.order_runs import MechanicalOrderRun
-from agent_comms.order_story import TeamStory
-from agent_comms.owner_requests import NewestOpenRequest, RequestDirective
 from agent_comms.planning.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,
@@ -73,6 +69,9 @@ from agent_comms.planning.goals import (
     OrderCheck,
     ProblemGoalOrder,
 )
+from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.order_runs import MechanicalOrderRun
+from agent_comms.planning.order_story import TeamStory
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     ClaimOrder,
@@ -88,19 +87,19 @@ from agent_comms.planning.orders import (
     ResumeClaimOrder,
     TodoConflict,
 )
+from agent_comms.planning.owner_requests import NewestOpenRequest, RequestDirective
 from agent_comms.planning.problem_findings import ExpectedProblem
 from agent_comms.planning.pull_requests import (
     MergedLink,
     PullRequestLink,
 )
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.read_basis import DMDisplayScope, RepliesDisplayScope
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.registry.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread
-from agent_comms.projects.repository_name import RepositoryName
-from agent_comms.service_passes import ServicePassStore
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice, VibeCheckNotice
 from agent_comms.task_attachments.team_pings import TeamUpdate
@@ -117,10 +116,11 @@ from agent_comms.team.standing_rules import (
     OwedAnswer,
     StandingRule,
 )
+from agent_comms.team.team_heartbeat import TeamHeartbeat
+from agent_comms.team.team_hud import TeamFrame
 from agent_comms.team.vibe_check import ChokeholdUnanswered, VibeCheckUnanswered
-from agent_comms.team_heartbeat import TeamHeartbeat
-from agent_comms.team_hud import TeamFrame
-from agent_comms.tool_caller import ForkCaller, NoThreadCaller, PeerCaller, ThreadCaller
+from agent_comms.transport.connector_caller import DirectorCaller
+from agent_comms.transport.tool_caller import ForkCaller, NoThreadCaller, PeerCaller, ThreadCaller
 from agent_comms.transport.tools.orders import (
     CommsTeamStoryTool,
     CommsTodoListTool,

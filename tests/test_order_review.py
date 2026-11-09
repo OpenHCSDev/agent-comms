@@ -8,7 +8,7 @@ from agent_comms.planning.orders import (
     MeasuredReview,
     TodoStore,
 )
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.storage.recorded_time import RecordedEventTime
 from test_team_problem_orders import order
 
 

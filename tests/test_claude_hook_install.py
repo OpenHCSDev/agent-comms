@@ -3,7 +3,7 @@
 import json
 from importlib.metadata import entry_points
 
-from agent_comms.harness_install import ClaudeCodeHarness
+from agent_comms.installer.harness_install import ClaudeCodeHarness
 
 FOREIGN = {"matcher": "Bash", "hooks": [{"type": "command", "command": "python3 -I guard.py"}]}
 

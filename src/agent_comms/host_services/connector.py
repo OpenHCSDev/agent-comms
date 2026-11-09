@@ -9,16 +9,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Self
 
-from agent_comms.active_route import ActiveRoute
-from agent_comms.bus import Bus
 from agent_comms.connector import LOOPBACK, PORT, ConnectorOptions, ConnectorVerb, ServeVerb
-from agent_comms.connector_store import ConnectorStore, ReadServiceAccess
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ResidentManager
+from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.host_services import ServiceNotServingError, SystemdUserService
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.installer.active_route import ActiveRoute
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.field_codec import Argument, FieldCodec, MalformedRecord, PathText
-from agent_comms.recorded_bus import RecordedBusIdentity
+from agent_comms.transport.connector_store import ConnectorStore, ReadServiceAccess
 from agent_comms.transport.mcp import ToolsCallMessage, ToolsCallReply
 from agent_comms.transport.tools.channels import CommsChannelsTool
 from agent_comms_hooks import ToolRefusedError

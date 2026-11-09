@@ -9,7 +9,7 @@ import sys
 
 import pytest
 
-import agent_comms.private_sidecar as sidecar
+import agent_comms.execution.private_sidecar as sidecar
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.execution.native_input_record import TriageNativeExecution, UnrecordedNativeColumn
 from agent_comms.execution.native_prompt_binding import PromptBinding, PromptBindings
@@ -245,7 +245,7 @@ def test_mode_drift_and_connection_attachment_are_not_admitted(path):
 _WORKER = r"""
 import os, signal, sys
 from pathlib import Path
-import agent_comms.private_sidecar as s
+import agent_comms.execution.private_sidecar as s
 from agent_comms.execution.native_input_record import TriageNativeExecution, UnrecordedNativeColumn
 from agent_comms.execution.native_prompt_binding import PromptBinding, PromptBindings
 from agent_comms.nominal.field_codec import FieldCodec, InputId, RootId, ThreadLookup

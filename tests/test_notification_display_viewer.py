@@ -5,22 +5,26 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus
-from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.comms import Comms, wire
-from agent_comms.historical_views import HistoricalDisplay, HistoricalSelection, HistorySource
-from agent_comms.message_notification import (
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.channel_targets import ThreadTarget
+from agent_comms.messaging.historical_views import (
+    HistoricalDisplay,
+    HistoricalSelection,
+    HistorySource,
+)
+from agent_comms.messaging.message_notification import (
     CapturedNotificationEvidence,
     MessageNotification,
     NotificationWindow,
 )
-from agent_comms.messaging.messages import Message
 from agent_comms.messaging.message_page import MessagePage
-from agent_comms.messaging.read_ledger import ReadLedger
-from agent_comms.notification_evidence import AllOutcomes, OutcomeViewer, OwnerOutcomes
-from agent_comms.notification_progress import DeliveryProgress
-from agent_comms.projects.checkouts import Checkout
+from agent_comms.messaging.messages import Message
+from agent_comms.messaging.notification_evidence import AllOutcomes, OutcomeViewer, OwnerOutcomes
+from agent_comms.messaging.notification_progress import DeliveryProgress
 from agent_comms.messaging.read_basis import NamedViewer
+from agent_comms.messaging.read_ledger import ReadLedger
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import (
     AgentThreadRole,

@@ -5,24 +5,30 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.build_identity import RecordedBuildIdentity
-from agent_comms.change_report import FileLine
 from agent_comms.errors import TodoError
+from agent_comms.installer.build_identity import RecordedBuildIdentity
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.planning.orders import (
     CommitDelivery,
     MergedListedPullRequest,
 )
+from agent_comms.planning.progress_claims import MergedClaim
 from agent_comms.planning.pull_requests import (
     PullRequestCommit,
     PullRequestLink,
 )
-from agent_comms.progress_claims import MergedClaim
+from agent_comms.projects.change_report import FileLine
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.slop import (
+    CreatedLine,
+    DeclarationDerivation,
+    ExistingLine,
+    OwnerLine,
+    Slop,
+)
+from agent_comms.projects.work_branches import WorkBranches
 from agent_comms.registry.threads import ForkThread, NativeThread
-from agent_comms.slop import CreatedLine, DeclarationDerivation, ExistingLine, OwnerLine, Slop
 from agent_comms.team.order import OrderFile
-from agent_comms.work_branches import WorkBranches
 from github_fixture import GitHubFixture
 from test_order_scopes import assigned
 from test_todos import order

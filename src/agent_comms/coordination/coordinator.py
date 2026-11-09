@@ -13,8 +13,10 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, Self, TypeVar
 
-from agent_comms.assignment_store import AssignmentStore
 from agent_comms.attempt_store import AttemptStore
+from agent_comms.coordination.assignment_store import AssignmentStore
+from agent_comms.coordination.execution_store import ExecutionStore
+from agent_comms.coordination.participant_store import ParticipantStore
 from agent_comms.coordination.session import (
     CoordinationSession,
     NativeCoordinationSession,
@@ -22,16 +24,14 @@ from agent_comms.coordination.session import (
     system_clock,
 )
 from agent_comms.coordination.work import CoordinationWork
+from agent_comms.coordination.working_memory_annotations import WorkingMemoryAnnotations
 from agent_comms.execution.child_process import join_retirement
-from agent_comms.execution_store import ExecutionStore
-from agent_comms.participant_store import ParticipantStore
 from agent_comms.storage.store_files import DEFAULT_STORE_CONTENTION, StoreContention
-from agent_comms.working_memory_annotations import WorkingMemoryAnnotations
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
+    from agent_comms.coordination.service_passes import ServicePassStore
     from agent_comms.execution.watch_passes import Watch
-    from agent_comms.service_passes import ServicePassStore
 
 Result = TypeVar("Result")
 

@@ -11,15 +11,19 @@ from tempfile import TemporaryDirectory
 import pytest
 
 import agent_comms.execution.selected.claim as selected_claim
-from agent_comms.assignment_states import FullPendingAssignment
-from agent_comms.attempt_start import AttemptStart
-from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.comms import wire
+from agent_comms.coordination.assignment_states import FullPendingAssignment
+from agent_comms.coordination.attempt_start import AttemptStart
+from agent_comms.coordination.attempt_states import (
+    ModelRunningAttempt,
+    PromptAcceptedAttempt,
+    SettlingAttempt,
+)
 from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.owner_fence import prepare_fence_token
 from agent_comms.coordination.tables.executions import WireOrigin
-from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.selected.claim import (
     publish_selected_resource_claim,
@@ -27,8 +31,8 @@ from agent_comms.execution.selected.claim import (
     write_selected_claimed_file,
 )
 from agent_comms.execution.selected.source_batch import SelectedSource
+from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim, WakeClaim
 from agent_comms.nominal.field_codec import ClaimId, TurnId
-from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from bus_record_fixture import prepare_native_comms

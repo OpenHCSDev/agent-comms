@@ -3,7 +3,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.channel_coding_tools import OrdinaryGoalRule
+from agent_comms.execution.channel_coding_tools import OrdinaryGoalRule
 from agent_comms.execution.turn_goal_permission import (
     OwnerGoalPermission,
     TurnGoalPermission,
@@ -20,8 +20,8 @@ from agent_comms.planning.goals import (
     NoGoal,
     ProblemGoalOrder,
 )
-from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.transport.native_tools import CoordinationCall, ReadTool
+from agent_comms.transport.tool_denial import SelectedToolDenied
 from agent_comms.transport.tools.goals import GoalSet
 
 

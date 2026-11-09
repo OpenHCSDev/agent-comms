@@ -25,9 +25,9 @@ from agent_comms.execution.turn_phase import AcceptsPrompt, PromptAcceptancePhas
 from agent_comms.nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from agent_comms.backend import TurnSession
+    from agent_comms.execution.backend import TurnSession
     from agent_comms.execution.native_startup import NativeStartupPolicy
-    from agent_comms.pi_events import PiEvent
+    from agent_comms.execution.pi_events import PiEvent
 
 
 class TurnWaitExpired(TimeoutError):

@@ -10,10 +10,10 @@ from typing import (
 
 from agent_comms.errors import GoalRefused, UnresolvedAttemptError
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
-from agent_comms.lifecycle import LifecycleState
-from agent_comms.lifecycle_capability import Complete, Failed, Terminal
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AttemptId, NoAttemptId
+from agent_comms.nominal.lifecycle import LifecycleState
+from agent_comms.nominal.lifecycle_capability import Complete, Failed, Terminal
 from agent_comms.planning.goal_attempt_phase import FailedAttempt, GoalAttemptPhase
 from agent_comms.planning.goal_failure_observation import NoFailedTurnEvidence
 from agent_comms.planning.goal_presentation import (
@@ -23,7 +23,7 @@ from agent_comms.planning.goal_presentation import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.attempt_resolution import WorkDecision
+    from agent_comms.planning.attempt_resolution import WorkDecision
     from agent_comms.planning.goal_actions import GoalActionContext
     from agent_comms.planning.goal_attempts import Generation, GoalAttemptStore
     from agent_comms.planning.goal_failure_observation import GoalFailureEvidence

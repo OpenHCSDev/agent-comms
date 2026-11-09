@@ -21,7 +21,7 @@ from agent_comms.team.standing_rules import FamilyScan, HolderLine, UndatedStand
 from agent_comms.ui_model.teammate_state import TeammateObservation
 
 if TYPE_CHECKING:
-    from agent_comms.bus_publication import Delivered
+    from agent_comms.messaging.bus_publication import Delivered
     from agent_comms.team.standing_rules import HeartbeatFrame
     from agent_comms.ui_model.teammate_state import TeammateState
 

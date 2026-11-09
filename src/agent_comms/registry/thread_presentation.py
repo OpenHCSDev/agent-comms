@@ -28,14 +28,14 @@ from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.thread_identity import OwnerIdentity
-from agent_comms.tool_result import ToolResult
+from agent_comms.transport.tool_result import ToolResult
 
 if TYPE_CHECKING:
     from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle
     from agent_comms.presentation import MessageNotification
     from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.registry.threads import Thread
-    from agent_comms.transcripts import (
+    from agent_comms.transcript.transcripts import (
         AcquiredThreadPresentation,
         TranscriptReadIdentity,
         Transcripts,
@@ -269,7 +269,7 @@ class ThreadOwnerBinding(
         """An unavailable owner cannot supply a new existing-session load."""
 
     def recipient_activity(self, activity, snapshot, thread):
-        from agent_comms.agent_activity import UnavailableRecipientActivity
+        from agent_comms.registry.agent_activity import UnavailableRecipientActivity
 
         return UnavailableRecipientActivity()
 
@@ -298,7 +298,7 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
         return ordinary
 
     def recipient_activity(self, activity, snapshot, thread):
-        from agent_comms.agent_activity import LiveRecipientActivity
+        from agent_comms.registry.agent_activity import LiveRecipientActivity
 
         return LiveRecipientActivity(thread, activity[thread.name])
 

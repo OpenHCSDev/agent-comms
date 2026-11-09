@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 
+from agent_comms.execution.launch_runtime import ImportPath, NoImportPath, SpecifiedImportPath
 from agent_comms.execution.native_claim_epoch import (
     NativeClaimEpoch,
     RecordedNativeClaim,
@@ -17,7 +18,6 @@ from agent_comms.execution.selected.triage import (
     IgnoreSelectedTriage,
     TriageDecisionRecord,
 )
-from agent_comms.launch_runtime import ImportPath, NoImportPath, SpecifiedImportPath
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     Argument,

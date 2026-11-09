@@ -9,11 +9,22 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus, ClaimRecord, KeyedPrivateRecord, PublicRecord, RecordBuilder
-from agent_comms.bus_publication import HumanOrigin
-from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.coordination.errors import IdentityConflict
-from agent_comms.envelope_claim_transitions import (
+from agent_comms.errors import CommittedMessageError
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
+from agent_comms.messaging.bus import (
+    Bus,
+    ClaimRecord,
+    KeyedPrivateRecord,
+    PublicRecord,
+    RecordBuilder,
+)
+from agent_comms.messaging.bus_publication import HumanOrigin
+from agent_comms.messaging.bus_tables import MessageIdentitySource
+from agent_comms.messaging.envelope_claim_transitions import (
     ClaimConflict,
     ClaimOwner,
     ClaimRelease,
@@ -22,11 +33,6 @@ from agent_comms.envelope_claim_transitions import (
     ReleasedClaims,
     UnclaimedResource,
     WakeClaims,
-)
-from agent_comms.errors import CommittedMessageError
-from agent_comms.execution.child_process import (
-    NoProcess,
-    ProcessIdentity,
 )
 from agent_comms.messaging.messages import (
     BusCapability,
@@ -134,8 +140,8 @@ def test_existing_owner_allocates_nothing_and_never_invokes_builder(claims: Clai
     with claims.bus.reading() as reader:
         assert reader.resource_owner(resource) == owner
         assert dict(reader.claim_projection()) == {resource: owner}
+    from agent_comms.messaging.retained_task_facts import ClaimTaskFact
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.retained_task_facts import ClaimTaskFact
 
     record = claims.bus.lookup(owner.seq)
     fact, = record.retained_task_facts()

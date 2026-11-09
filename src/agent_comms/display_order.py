@@ -5,12 +5,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.declared_choice import DeclaredChoice, TitledChoice
+from agent_comms.nominal.declared_choice import DeclaredChoice, TitledChoice
 from agent_comms.nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from agent_comms.channel_management import ChannelManagement
     from agent_comms.history_views import HistoryViews
+    from agent_comms.messaging.channel_management import ChannelManagement
     from agent_comms.presentation import ChannelView
     from agent_comms.registry.registry_document import RegistrySnapshot
 

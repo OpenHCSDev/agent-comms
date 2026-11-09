@@ -32,18 +32,18 @@ from agent_comms.execution.native_input_proof import (
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+from agent_comms.execution.transcript_sources import TranscriptRecord, TranscriptSource
 from agent_comms.execution.turn_item import FreshNativeId, NativeItemId
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import MalformedRecord
-from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.storage.private_path import FileIdentity, FileRevision, MissingFile
-from agent_comms.transcript_sources import TranscriptRecord, TranscriptSource
+from agent_comms.storage.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 
 if TYPE_CHECKING:
     from agent_comms.execution.native_output import NativeRecordLocation
     from agent_comms.messaging.read_ledger import ReadLedger
     from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-    from agent_comms.rule_deal import Speaking, Voice
+    from agent_comms.team.rule_deal import Speaking, Voice
 
 
 def reverse_records(

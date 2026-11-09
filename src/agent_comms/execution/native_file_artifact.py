@@ -5,7 +5,7 @@ from pathlib import Path
 
 from agent_comms.execution.native_integer import NativeIntegerBounds
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.text_digest import TextDigest
+from agent_comms.nominal.text_digest import TextDigest
 
 
 class NativeFileArtifact(DeclaredFamily, affix="FileArtifact"):

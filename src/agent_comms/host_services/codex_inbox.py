@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Self
 
 from agent_comms.execution.child_process import ResidentManager
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.host_services import ServiceNotServingError, SystemdUserService
-from agent_comms.launch_runtime import LaunchRuntime
 
 
 @dataclass(frozen=True)

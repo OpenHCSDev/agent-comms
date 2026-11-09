@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.build_identity import RecordedBuildIdentity, RepositoryCommit
 from agent_comms.cli_bridges.claude_protocol import (
     AnsweredSubagent,
     CallingSubagent,
     PromptedSubagent,
 )
 from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
+from agent_comms.installer.build_identity import RecordedBuildIdentity, RepositoryCommit
 from agent_comms.installer.interpreter_operation import (
     PhaseTiming,
     StopServicesPhase,

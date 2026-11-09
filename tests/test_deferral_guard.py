@@ -25,7 +25,7 @@ from agent_comms.execution.turn_item import (
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread
-from agent_comms.transcript_events import AssistantTranscript
+from agent_comms.transcript.transcript_events import AssistantTranscript
 from agent_comms_hooks import deferral
 from agent_comms_hooks.watch import WatchRecord
 from hook_session_fixture import resident_hook, resident_session

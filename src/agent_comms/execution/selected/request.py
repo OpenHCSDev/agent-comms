@@ -7,7 +7,7 @@ from functools import partial
 
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import StaleFence
-from agent_comms.drain_failures import UNAVAILABLE_DRAIN_ERRORS
+from agent_comms.execution.drain_failures import UNAVAILABLE_DRAIN_ERRORS
 from agent_comms.execution.native_failures import NativeRequestFailure
 from agent_comms.execution.native_pi import NativePiTerminalFailure
 from agent_comms.execution.selected.participant import SelectedParticipant

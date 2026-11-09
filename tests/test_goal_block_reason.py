@@ -21,8 +21,8 @@ from agent_comms.planning.goal_states import UnrecordedBlockGoal
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.tool_caller import ThreadCaller
 from agent_comms.transport.request import ToolRequest
+from agent_comms.transport.tool_caller import ThreadCaller
 from conftest import installed_comms
 
 

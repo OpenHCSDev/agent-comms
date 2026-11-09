@@ -12,12 +12,12 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.class_fact import ClassFact
 from agent_comms.coordination.errors import (
     IdentityConflict,
     PublicationActivationBlocked,
     StaleFence,
 )
+from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.participants import OwnerGenerations, Participants
 from agent_comms.coordination.tables.responses import ResponseObligation
@@ -47,6 +47,7 @@ from agent_comms.execution.selected.triage import (
     TriageDecisionRecord,
 )
 from agent_comms.execution.turn_item import FreshNativeId
+from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -58,7 +59,6 @@ from agent_comms.nominal.field_codec import (
     ThreadLookup,
     ToolCallId,
 )
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.storage.typed_table import (
     LOCAL_TABLE_SOURCE,
     AttachedPracticeRebuild,
@@ -80,7 +80,7 @@ from agent_comms.storage.typed_table import (
     WriteOnceColumns,
     sql_literal,
 )
-from agent_comms.tool_denial import SelectedToolDenied
+from agent_comms.transport.tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from agent_comms.execution.native_input_proof import NativeContextProof
@@ -294,7 +294,7 @@ class NativeRuntimeInput(
         projection is persisted, and the read closes before presentation work.
         """
         from agent_comms.coordination.tables.executions import ExecutionRecord
-        from agent_comms.transcripts import TranscriptRead
+        from agent_comms.transcript.transcripts import TranscriptRead
 
         with TranscriptRead.publication_source(root) as db:
             if db is None:

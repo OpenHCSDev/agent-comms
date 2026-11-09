@@ -14,14 +14,15 @@ from typing import (
 from pydantic import JsonValue
 
 from agent_comms.acp_extension import CoordinationChangedUpdate
-from agent_comms.channel_management import ListTagEdit, TagEdit
-from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget
-from agent_comms.messaging.channels import Channel, SavedView, ViewMatch, ViewPredicate
 from agent_comms.cli_bridges.history import OfflineHistory
-from agent_comms.cli_command import PreparedTargetAction, TargetActionCommand
-from agent_comms.cli_commands import ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult
-from agent_comms.cli_result import CliResult, TargetEditResult
 from agent_comms.cli_verbs.archive import ArchiveCliCommand
+from agent_comms.cli_verbs.cli_command import PreparedTargetAction, TargetActionCommand
+from agent_comms.cli_verbs.cli_commands import (
+    ThreadArchivedResult,
+    ThreadCreatedResult,
+    ThreadStoppedResult,
+)
+from agent_comms.cli_verbs.cli_result import CliResult, TargetEditResult
 from agent_comms.cli_verbs.delete_view import DeleteViewCliCommand
 from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.cli_verbs.history import HistoryCliCommand
@@ -34,22 +35,56 @@ from agent_comms.cli_verbs.threads import ThreadsCliCommand
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
 from agent_comms.coordination.tables.refusals import SendRefusal
-from agent_comms.display_references import ReferenceNames
+from agent_comms.coordination.working_memory_annotations import WorkingMemoryAnnotations
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_origin import HumanInputOrigin
 from agent_comms.execution.owner_lifecycle import OwnerStartResult
+from agent_comms.execution.pi_vocabulary import ServiceTier, ThinkingLevelField
+from agent_comms.execution.restart_queue import QueuedRestart, RestartQueue, RestartQueued
 from agent_comms.execution.turn_context import ContextManifest, ContextSourceText, SegmentManifest
-from agent_comms.exporting import WireExportProvenance
-from agent_comms.historical_views import ConversationRevision
-from agent_comms.history_result import HistoryPageResult
 from agent_comms.history_views import RetiredViews
-from agent_comms.host_logs import HostLog, HostLogRead
 from agent_comms.importing import ImportedSessionMetadata, ThreadImported
-from agent_comms.input_origin import HumanInputOrigin
-from agent_comms.message_notification import MessageNotification
+from agent_comms.messaging.bus_identity import BusIdentityStore
+from agent_comms.messaging.channel_management import ListTagEdit, TagEdit
+from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget
+from agent_comms.messaging.channels import Channel, SavedView, ViewMatch, ViewPredicate
+from agent_comms.messaging.display_references import ReferenceNames
+from agent_comms.messaging.exporting import WireExportProvenance
+from agent_comms.messaging.historical_views import ConversationRevision
+from agent_comms.messaging.history_result import HistoryPageResult
+from agent_comms.messaging.message_notification import MessageNotification
+from agent_comms.messaging.message_page import MessagePage
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message, NoticeRole
-from agent_comms.messaging.bus_identity import BusIdentityStore
-from agent_comms.messaging.message_page import MessagePage
+from agent_comms.messaging.notification_evidence import (
+    AfterRecipient,
+    FirstRecipient,
+    RecipientCursor,
+    RecipientLimit,
+)
+from agent_comms.messaging.notification_reads import LiveNotificationRead
+from agent_comms.messaging.page_traversal import (
+    LatestSequence,
+    LiveCursor,
+    NewestCursor,
+    PageCursor,
+)
+from agent_comms.messaging.send_result import (
+    CorrectionComplete,
+    CorrectionResult,
+    MessagePublished,
+    SendResult,
+)
+from agent_comms.messaging.task_sources import (
+    Constraint,
+    CurrentTaskScopeSelection,
+    Decision,
+    OriginalTaskChange,
+    Subtask,
+    TaskAttachment,
+    TaskChange,
+    TaskScopeSelection,
+)
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     ContextSource,
@@ -61,23 +96,20 @@ from agent_comms.nominal.field_codec import (
     WireName,
     WireOmitDefault,
 )
-from agent_comms.notification_evidence import (
-    AfterRecipient,
-    FirstRecipient,
-    RecipientCursor,
-    RecipientLimit,
-)
-from agent_comms.notification_reads import LiveNotificationRead
-from agent_comms.owner_connection import OwnerConnection
-from agent_comms.owner_launch import HostResources
-from agent_comms.page_traversal import LatestSequence, LiveCursor, NewestCursor, PageCursor
-from agent_comms.pi_vocabulary import ServiceTier, ThinkingLevelField
 from agent_comms.presentation import ChannelView, WireRevision
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.work_branches import WorkBranch, WorkBranches
 from agent_comms.registry.registry_document import (
     ProjectThreadSelection,
     RegistrySlice,
     RegistrySnapshot,
+)
+from agent_comms.registry.relationships import (
+    Collaboration,
+    GoalDerivedContact,
+    GoalMentionDiagnostic,
+    RelationshipEdit,
+    ThreadCommsSnapshot,
 )
 from agent_comms.registry.thread_identity import ThreadIncarnation, ToolName
 from agent_comms.registry.thread_management import (
@@ -96,34 +128,16 @@ from agent_comms.registry.threads import (
     OwnerLifecycleControl,
     StartOwnerControl,
 )
-from agent_comms.relationships import (
-    Collaboration,
-    GoalDerivedContact,
-    GoalMentionDiagnostic,
-    RelationshipEdit,
-    ThreadCommsSnapshot,
-)
-from agent_comms.restart_queue import QueuedRestart, RestartQueue, RestartQueued
-from agent_comms.send_result import (
-    CorrectionComplete,
-    CorrectionResult,
-    MessagePublished,
-    SendResult,
-)
-from agent_comms.task_sources import (
-    Constraint,
-    CurrentTaskScopeSelection,
-    Decision,
-    OriginalTaskChange,
-    Subtask,
-    TaskAttachment,
-    TaskChange,
-    TaskScopeSelection,
-)
 from agent_comms.team.standing import InstallDue
-from agent_comms.tool_caller import ThreadCaller, ThreadListing, ToolCaller
-from agent_comms.tool_declaration import NativeRequestTools
-from agent_comms.tool_request import (
+from agent_comms.transport.host_logs import HostLog, HostLogRead
+from agent_comms.transport.native_tools import CommunicationCall
+from agent_comms.transport.owner_connection import OwnerConnection
+from agent_comms.transport.request import SubjectBinding, tool_field
+from agent_comms.transport.runtime_requests import QueueActionRuntimeRequest
+from agent_comms.transport.serving.owner_launch import HostResources
+from agent_comms.transport.tool_caller import ThreadCaller, ThreadListing, ToolCaller
+from agent_comms.transport.tool_declaration import NativeRequestTools
+from agent_comms.transport.tool_request import (
     CoreRead,
     HumanToolRequest,
     LiveOwnerTool,
@@ -136,10 +150,7 @@ from agent_comms.tool_request import (
     ThreadReadTool,
     ThreadToolRequest,
 )
-from agent_comms.tool_result import ToolResult
-from agent_comms.transport.native_tools import CommunicationCall
-from agent_comms.transport.request import SubjectBinding, tool_field
-from agent_comms.transport.runtime_requests import QueueActionRuntimeRequest
+from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools import channels
 from agent_comms.transport.tools.channels import ChannelListing
 from agent_comms.transport.tools.sidebar import (
@@ -190,9 +201,7 @@ from agent_comms.transport.tools.sidebar import (
     TargetActionsRead,
     ThreadViewMarked,
 )
-from agent_comms.work_branches import WorkBranch, WorkBranches
-from agent_comms.working_memory_annotations import WorkingMemoryAnnotations
-from agent_comms.working_memory_labels import JevClassifier
+from agent_comms.working_memory.working_memory_labels import JevClassifier
 from agent_comms_hooks import ToolRefusedError
 
 

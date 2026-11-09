@@ -1,10 +1,16 @@
 
 import pytest
 
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.comms import wire
-from agent_comms.mentions import MentionCandidate, MentionQuery, ThreadMention
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.mentions import MentionCandidate, MentionQuery, ThreadMention
 from agent_comms.messaging.messages import AlertKind, InfoKind, Message, NoticeRole
+from agent_comms.messaging.response_policy import (
+    CollectivePolicy,
+    InformationalPolicy,
+    MentionedPolicy,
+)
+from agent_comms.messaging.routing import ScheduledTurn
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import (
     AgentThreadRole,
@@ -12,9 +18,7 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
-from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedPolicy
-from agent_comms.routing import ScheduledTurn
-from agent_comms.tool_caller import NoThreadCaller
+from agent_comms.transport.tool_caller import NoThreadCaller
 from bus_history import read_history
 from conftest import installed_comms
 
@@ -180,7 +184,7 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
 def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch):
     from functools import partial
 
-    from agent_comms.tool_caller import ThreadCaller
+    from agent_comms.transport.tool_caller import ThreadCaller
     from agent_comms.transport.tools.served import invoke_tool
 
     invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))

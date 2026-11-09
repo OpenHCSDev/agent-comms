@@ -5,54 +5,58 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.activity_clocks import ActivityClocks
-from agent_comms.class_fact import ClassFact
-from agent_comms.cli_result import CliResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.errors import (
     HumanSendRefusedError,
     RelationViolationError,
     UnregisteredThreadError,
 )
-from agent_comms.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.activity_clocks import ActivityClocks
+from agent_comms.messaging.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
+from agent_comms.messaging.response_policy import DirectPolicy, MentionedPolicy
+from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion
-from agent_comms.projection_source import ProducedRow, ProjectionSource
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.response_policy import DirectPolicy, MentionedPolicy
 from agent_comms.storage.typed_table import sql_literal
-from agent_comms.wake_policy import BoundedTriageWake, FullWake, MessageAudience, WakePolicy
+from agent_comms.waking.wake_policy import BoundedTriageWake, FullWake, MessageAudience, WakePolicy
 
 if TYPE_CHECKING:
-    from agent_comms.audience_manifest import AudiencedMessage
-    from agent_comms.catalog_document import CatalogAccess, CatalogDocument
-    from agent_comms.cli_command import CliCommand
+    from agent_comms.cli_verbs.cli_command import CliCommand
     from agent_comms.comms import Comms
-    from agent_comms.historical_views import (
+    from agent_comms.history_views import HistoryViews
+    from agent_comms.messaging.audience_manifest import AudiencedMessage
+    from agent_comms.messaging.channels import Channel
+    from agent_comms.messaging.historical_views import (
         ChannelHistory,
         ConversationHistoryView,
         DMHistory,
         HistoryView,
     )
-    from agent_comms.history_result import HistoryPageResult
-    from agent_comms.history_views import HistoryViews
-    from agent_comms.messaging.channels import Channel
+    from agent_comms.messaging.history_result import HistoryPageResult
     from agent_comms.messaging.messages import Message, MessageInput
     from agent_comms.messaging.read_basis import (
         ChannelConversation,
         Conversation,
+        DisplayViewer,
         DMConversation,
         DMDisplayScope,
-        DisplayViewer,
         MessageDisplayScope,
     )
+    from agent_comms.messaging.response_policy import ResponsePolicy
     from agent_comms.planning.goal_management import Goals
-    from agent_comms.registry.registry_document import RegistrySnapshot, ResolvedChannel, ResolvedThread
+    from agent_comms.registry.catalog_document import CatalogAccess, CatalogDocument
+    from agent_comms.registry.registry_document import (
+        RegistrySnapshot,
+        ResolvedChannel,
+        ResolvedThread,
+    )
+    from agent_comms.registry.registry_provenance import RegistryProvenance
     from agent_comms.registry.threads import Thread
-    from agent_comms.registry_provenance import RegistryProvenance
-    from agent_comms.response_policy import ResponsePolicy
 
 
 class ChannelSelection(SubclassUnion, affix="Channel"):
@@ -144,8 +148,8 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from agent_comms.bus_tables import AwaitingAnswerSource
         from agent_comms.messaging.bus_display_index import BusDisplayIndex
+        from agent_comms.messaging.bus_tables import AwaitingAnswerSource
         return (BusDisplayIndex, AwaitingAnswerSource)
 
     needs_channel_state: ClassVar[bool] = False

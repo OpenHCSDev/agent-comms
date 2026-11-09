@@ -9,12 +9,12 @@ from agent_comms.acp_extension import CoordinationChangedUpdate, TextRouteUpdate
 from agent_comms.agent_event_updates import AcpEventConsumer, Routed, RoutedTurnEventConsumer
 from agent_comms.agent_events import Chunk
 from agent_comms.comms import wire
-from agent_comms.controller import SessionUpdateSink
+from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenBinary
+from agent_comms.messaging.routing import MessageRoute
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.routing import MessageRoute
 
 
 @pytest.mark.asyncio

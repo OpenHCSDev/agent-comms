@@ -13,13 +13,13 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.tables.assignments import WakeAssignment
-from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.execution.selected.claim import (
     publish_selected_resource_claim,
     write_selected_claimed_file,
 )
 from agent_comms.execution.selected.write_plan import PlannedWrite
 from agent_comms.execution.turn_context import InstructionFile
+from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.nominal.field_codec import ClaimId
 from agent_comms.registry.threads import Thread
 from agent_comms.transport.native_tool_transport import (
@@ -28,7 +28,7 @@ from agent_comms.transport.native_tool_transport import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.channel_coding_tools import CodingToolOwner
+    from agent_comms.execution.channel_coding_tools import CodingToolOwner
 
 
 class SelectedAction(ABC):
@@ -144,7 +144,7 @@ class CodingSelectedAction(SelectedAction):
         return (InstructionFile.read("selected-coding.md"),)
 
     def mode(self, owner: CodingToolOwner) -> NativeToolMode:
-        from agent_comms.channel_coding_tools import CodingToolMode
+        from agent_comms.execution.channel_coding_tools import CodingToolMode
 
         return CodingToolMode(owner)
 

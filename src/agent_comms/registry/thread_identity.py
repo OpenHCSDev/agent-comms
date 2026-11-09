@@ -25,9 +25,15 @@ from typing import (
     TypeVar,
 )
 
-from agent_comms.class_fact import ClassFact
-from agent_comms.cli_options import JsonFlagRecord
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.participant_identity import ParticipantIdentity
+from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
+from agent_comms.messaging.response_policy import (
+    CollectivePolicy,
+    InformationalPolicy,
+    ResponsePolicy,
+)
+from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import (
     DeclaredFamily,
     UniqueExternalSelector,
@@ -43,16 +49,14 @@ from agent_comms.nominal.field_codec import (
     WireName,
     WireValue,
 )
-from agent_comms.participant_identity import ParticipantIdentity
-from agent_comms.projection_source import ProducedRow, ProjectionSource
-from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
+from agent_comms.registry.cli_options import JsonFlagRecord
 
 if TYPE_CHECKING:
     from agent_comms.execution.child_process import ProcessIdentity
     from agent_comms.messaging.messages import Message
     from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
+    from agent_comms.registry.registry_provenance import RegistryProvenance
     from agent_comms.registry.threads import Thread
-    from agent_comms.registry_provenance import RegistryProvenance
 
 T = TypeVar("T")
 
@@ -636,7 +640,7 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from agent_comms.bus_activity_index import BusActivityIndex
+        from agent_comms.messaging.bus_activity_index import BusActivityIndex
         from agent_comms.messaging.bus_display_index import BusDisplayIndex
         return (BusActivityIndex, BusDisplayIndex)
 

@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.messaging.revision_views import StatusView
 from agent_comms.presentation import WireRevision
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.revision_views import StatusView
 from agent_comms.storage.private_path import FileRevision
 from agent_comms.ui_model.observation import (
     NotificationReading,

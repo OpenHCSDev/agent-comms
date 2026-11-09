@@ -17,9 +17,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.activity import ActivityStore
 from agent_comms.cli_bridges import claude, hook_session
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
+from agent_comms.cli_bridges.fd_readiness import ready
 from agent_comms.cli_bridges.monitor import (
     ClaimedReplacement,
     InspectSession,
@@ -45,16 +45,16 @@ from agent_comms.execution.child_process import (
     ProcessIdentity,
     SpawnedProcess,
 )
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.root_runtime import RootRuntime
 from agent_comms.execution.turn_digests import LastTurns
-from agent_comms.fd_readiness import ready
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import ActivityStore
 from agent_comms.registry.threads import ExternalThread
-from agent_comms.root_runtime import RootRuntime
-from agent_comms.transcript_events import AssistantTranscript
+from agent_comms.transcript.transcript_events import AssistantTranscript
 from agent_comms_hooks.watch import NoSessionBridge, WatchRecord
 from conftest import installed_comms
 from source_programs import SourcePrograms

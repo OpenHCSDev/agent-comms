@@ -2,10 +2,10 @@
 
 import json
 
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.transcripts import LaterThan, Through
+from agent_comms.transcript.transcripts import LaterThan, Through
 
 
 def line(record):

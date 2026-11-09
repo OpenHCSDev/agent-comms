@@ -1,8 +1,7 @@
 import hashlib
 from dataclasses import dataclass
 
-from agent_comms.assignment_store import AssignmentStore
-from agent_comms.bus_publication import Delivered
+from agent_comms.coordination.assignment_store import AssignmentStore
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.execution.native_failures import NativePiUnavailable
@@ -10,6 +9,7 @@ from agent_comms.execution.turn_context import (
     ReplyRouteSegment,
     WireProvenance,
 )
+from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.messages import (
     InfoKind,
     Message,

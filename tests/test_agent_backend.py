@@ -13,21 +13,21 @@ import pytest
 
 import agent_comms.agent_backend as ab
 from agent_comms.execution.native_arguments import NativeArguments
+from agent_comms.execution.pi_durable_backend import PiDurableBackend
+from agent_comms.execution.session_file import NoSessionFile, RegistrySessionLocation
 from agent_comms.execution.turn_inbox import (
     InputContent,
     InputRequest,
     SendNow,
     SteerInputPolicy,
 )
+from agent_comms.execution.unstarted_runtime import UnstartedRuntime
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, InputId
-from agent_comms.pi_durable_backend import PiDurableBackend
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.session_file import NoSessionFile, RegistrySessionLocation
-from agent_comms.unstarted_runtime import UnstartedRuntime
 
 # -- registry ---------------------------------------------------------------
 
@@ -199,7 +199,7 @@ def test_pi_event_family_matches_pi_0_85_1_when_imported_fresh():
 
     result = subprocess.run(
         [sys.executable, "-c", (
-            "import agent_comms.pi_events as p\n"
+            "import agent_comms.execution.pi_events as p\n"
             "from agent_comms.pi_native_backend import PiNativeBackend as B\n"
             "kinds = {k for m in p.NativePiEvent.members_with(p.NativePiEvent) for k in m.known_kinds()}\n"
             "assert kinds == B.event_kinds, kinds ^ B.event_kinds\n"
@@ -236,8 +236,8 @@ def test_cli_registry_reads_do_not_load_the_pi_runtime(tmp_path):
             "from pathlib import Path\n"
             "from agent_comms.registry.threads import NativeThread\n"
             "NativeThread('a', frozenset(), '/tmp').backend\n"
-            "assert 'agent_comms.backend' not in sys.modules\n"
-            "assert 'agent_comms.tracked_turn' not in sys.modules\n"
+            "assert 'agent_comms.execution.backend' not in sys.modules\n"
+            "assert 'agent_comms.execution.tracked_turn' not in sys.modules\n"
             "assert 'agent_comms.execution.turn_watchdog' not in sys.modules\n"
         ), str(tmp_path)],
         capture_output=True, text=True, timeout=60,

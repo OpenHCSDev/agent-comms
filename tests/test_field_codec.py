@@ -60,7 +60,7 @@ from agent_comms.nominal.field_codec import (
     compile_decoder,
     projected,
 )
-from agent_comms.transcript_events import ToolStartTranscript
+from agent_comms.transcript.transcript_events import ToolStartTranscript
 from conftest import transcript_records
 
 
@@ -845,8 +845,8 @@ def test_member_cannot_write_a_second_family_discriminator() -> None:
 
 
 def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments() -> None:
-    from agent_comms.tool_declaration import ToolDeclaration
-    from agent_comms.transcript_events import ToolStartTranscript
+    from agent_comms.transcript.transcript_events import ToolStartTranscript
+    from agent_comms.transport.tool_declaration import ToolDeclaration
 
     arguments: dict[str, JsonValue] = {"to": "receiver", "body": "hello"}
     event = transcript_records.event(
@@ -1035,8 +1035,8 @@ def test_declaration_bug_passes_through_a_data_boundary_as_type_error() -> None:
 
 def test_identity_and_digest_text_is_one_rule_at_every_reader(tmp_path: Path) -> None:
     from agent_comms.messaging.bus_source_page import AddressedPage
-    from agent_comms.private_registry_guard import PrivateRegistryGuard
-    from agent_comms.text_digest import TextDigest
+    from agent_comms.nominal.text_digest import TextDigest
+    from agent_comms.registry.private_registry_guard import PrivateRegistryGuard
 
     minted = ThreadLookup.mint()
     root_id = RootId.mint()

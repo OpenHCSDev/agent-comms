@@ -6,7 +6,7 @@ import pytest
 from acp import RequestError
 
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates, encode_updates
-from agent_comms.acp_failure import (
+from agent_comms.execution.acp_failure import (
     ProviderConnectionFailure,
     ProviderQuotaFailure,
     RequestACPFailure,
@@ -107,7 +107,7 @@ def test_provider_array_order_and_unknown_json_text_survive():
 
 
 def test_declared_provider_retry_exhaustion_owns_execution_retry_classification():
-    from agent_comms.acp_failure import ExhaustedRetry
+    from agent_comms.execution.acp_failure import ExhaustedRetry
     from agent_comms.execution.turn_failure import (
     ModelRequestFailed,
     ProviderRetryExhausted,
@@ -123,8 +123,8 @@ def test_declared_provider_retry_exhaustion_owns_execution_retry_classification(
     )
     assert type(transient.declared_failure) is ProviderRetryExhausted
 
+    from agent_comms.execution.pi_wire import PiDiagnostic
     from agent_comms.execution.turn_failure import ProviderTransportFailed
-    from agent_comms.pi_wire import PiDiagnostic
 
     transport = PiDiagnostic.from_wire({
         "type": "provider_transport_failure",
@@ -144,8 +144,8 @@ def test_declared_provider_retry_exhaustion_owns_execution_retry_classification(
 
 @pytest.mark.parametrize("failure_type", [RequestACPFailure, ProviderConnectionFailure, ProviderQuotaFailure])
 def test_every_failure_action_uses_native_retry_end_not_text_claims(failure_type):
+    from agent_comms.execution.pi_events import NativeRetryEnd
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.pi_events import NativeRetryEnd
     event = NativeRetryEnd.from_wire({
         "type": "native_retry_end",
         "success": False,

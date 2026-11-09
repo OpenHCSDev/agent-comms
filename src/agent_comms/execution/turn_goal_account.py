@@ -8,12 +8,12 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from agent_comms.attempt_resolution import VerifiedTurnDecision
+from agent_comms.execution.reported_turn import ReportedTurn
 from agent_comms.nominal.field_codec import TurnId
+from agent_comms.planning.attempt_resolution import VerifiedTurnDecision
 from agent_comms.planning.goal_attempts import GoalAttemptStore, LaunchPermit
 from agent_comms.planning.goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from agent_comms.planning.goals import Goal
-from agent_comms.reported_turn import ReportedTurn
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms

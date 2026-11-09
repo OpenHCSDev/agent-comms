@@ -35,13 +35,15 @@ from agent_comms.acp_extension import (
     TextRouteUpdate,
     encode_updates,
 )
-from agent_comms.context_reading import ContextUsage, UnsizedContext
-from agent_comms.controller import SessionUpdateSink
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.context_reading import ContextUsage, UnsizedContext
+from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.tool_results import tool_result_content
 from agent_comms.execution.turn_effects import TurnEffects
+from agent_comms.messaging.routing import MessageRoute, NoMessageRoute
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
-from agent_comms.routing import MessageRoute, NoMessageRoute
-from agent_comms.tool_declaration import (
+from agent_comms.transcript.transcript_updates import TranscriptUpdate
+from agent_comms.transport.tool_declaration import (
     EditAction,
     ExecuteAction,
     OtherAction,
@@ -49,13 +51,11 @@ from agent_comms.tool_declaration import (
     SearchAction,
     ToolAction,
 )
-from agent_comms.tool_results import tool_result_content
-from agent_comms.transcript_updates import TranscriptUpdate
 
 if TYPE_CHECKING:
     from agent_comms.acp_extension import AgentCommsUpdate
     from agent_comms.execution.native_output import NativeRecordLocation
-    from agent_comms.transcripts import NativeCommittedPrefix
+    from agent_comms.transcript.transcripts import NativeCommittedPrefix
 
 
 class AcpToolAction(MroDispatch):

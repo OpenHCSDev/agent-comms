@@ -1,0 +1,261 @@
+"""Execution lifecycle: attempt ownership, transitions and coupled claim state."""
+
+from __future__ import annotations
+
+from abc import abstractmethod
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, ClassVar
+
+from agent_comms.coordination.assignment_states import (
+    AssignmentState,
+    CompletedAssignment,
+    DeferredAssignment,
+    EngagedAssignment,
+    FailedAssignment,
+)
+from agent_comms.coordination.errors import (
+    IdentityConflict,
+    IntegrityViolationError,
+    ResponseClaimBlocked,
+)
+from agent_comms.coordination.vocabulary import CoordinatorVocabulary
+from agent_comms.nominal.lifecycle import LifecycleState
+from agent_comms.nominal.lifecycle_capability import Active, Complete, Failed, Successful, Terminal
+
+if TYPE_CHECKING:
+    from agent_comms.coordination.snapshot import RecoverySnapshot
+
+
+class OrdinalRule:
+    increment: int = 0
+    predecessors: type = LifecycleState
+
+    def next_ordinal(self, previous: ExecutionState) -> int:
+        return (previous.current_attempt_ordinal or 0) + self.increment
+
+    def accepts(self, following: ExecutionState, previous: ExecutionState) -> bool:
+        return (isinstance(previous, self.predecessors)
+                and following.current_attempt_ordinal == (self.next_ordinal(previous) or None))
+
+
+class PreservedOrdinal(OrdinalRule):
+    """Keep the previous attempt, including its absence before the first start."""
+
+
+@dataclass(frozen=True)
+class AdvancedOrdinal(OrdinalRule):
+    predecessors: type
+    increment: int = 1
+
+
+@dataclass(frozen=True)
+class ExecutionState(CoordinatorVocabulary, LifecycleState, affix="Execution"):
+    retry: ClassVar[bool] = False
+    queued: ClassVar[bool] = False
+    unstarted: ClassVar[bool] = False
+
+    @classmethod
+    def sql_vocabulary(cls) -> dict[str, str]:
+        return dict(
+            execution_names=cls.sql_values(cls.names()),
+            engaged_execution_names=cls.sql_members(cls.members_with(EngagedExecution)),
+            unstarted_execution_names=cls.sql_members(
+                member for member in cls.members_with(cls) if member.unstarted
+            ),
+            required_attempt_execution_names=cls.sql_members(cls.members_with(AttemptExecution)),
+            optional_attempt_execution_names=cls.sql_members(
+                cls.members_with(InterruptedExecution)
+            ),
+        )
+
+    @property
+    def current_attempt_ordinal(self) -> int | None:
+        return None
+
+    @property
+    def next_attempt_ordinal(self) -> int:
+        return ActiveExecution.ordinal_rule.next_ordinal(self)
+
+    def require_attempt_start(self) -> None:
+        raise IdentityConflict("execution cannot start an attempt")
+
+    def require_retry_start(self, snapshot: RecoverySnapshot) -> None:
+        pass
+
+    @classmethod
+    @abstractmethod
+    def load(cls, ordinal: int | None) -> ExecutionState: ...
+
+    @classmethod
+    @abstractmethod
+    def assignment_state(cls) -> type[AssignmentState]: ...
+
+    def require_final_response(self) -> None:
+        raise ResponseClaimBlocked()
+
+    def validate_budget(self, maximum: int) -> None:
+        ordinal = self.current_attempt_ordinal
+        if ordinal is not None and not 1 <= ordinal <= maximum:
+            raise ValueError("current ordinal exceeds budget")
+
+    def has_retry_budget(self, maximum: int) -> bool:
+        ordinal = self.current_attempt_ordinal
+        return ordinal is not None and ordinal < maximum
+
+    def can_retry(self, *, authorized: bool, attempt, is_current: bool) -> bool:
+        return False
+
+    def accepts_attempt(self, phase) -> bool:
+        return False
+
+    ordinal_rule: ClassVar[OrdinalRule] = PreservedOrdinal()
+
+    def accepts_previous(self, previous: ExecutionState) -> bool:
+        return self.ordinal_rule.accepts(self, previous)
+
+    def validate_snapshot(self, snapshot, authorized: bool) -> None:
+        """State-specific cross-lifecycle rules, after common identities agree."""
+
+
+class EngagedExecution:
+    @classmethod
+    def assignment_state(cls) -> type[AssignmentState]:
+        return EngagedAssignment
+
+
+class UnstartedExecution(EngagedExecution, ExecutionState):
+    unstarted = True
+
+    @classmethod
+    def load(cls, ordinal: int | None) -> ExecutionState:
+        if ordinal is not None:
+            raise IntegrityViolationError("unstarted execution cannot reference an attempt")
+        return cls()
+
+
+class QueuedExecution(UnstartedExecution):
+    queued = True
+
+    @classmethod
+    def successors(cls):
+        return PendingExecution, FailedExecution
+
+
+class StartsAttempt:
+    def require_attempt_start(self) -> None:
+        pass
+
+
+class PendingExecution(StartsAttempt, UnstartedExecution):
+
+    @classmethod
+    def successors(cls):
+        return ActiveExecution, DeferredExecution, FailedExecution
+
+
+class AttemptReference:
+    """Shared ordinal projection for required and optional attempt references."""
+
+    ordinal: int | None
+
+    @property
+    def current_attempt_ordinal(self) -> int | None:
+        return self.ordinal
+
+    @classmethod
+    def load(cls, ordinal: int | None) -> ExecutionState:
+        return cls(ordinal)
+
+
+@dataclass(frozen=True)
+class AttemptExecution(AttemptReference, ExecutionState):
+    ordinal: int
+
+    def __post_init__(self):
+        if type(self.ordinal) is not int or self.ordinal < 1:
+            raise IntegrityViolationError("active/completed execution requires an attempt")
+
+
+class ActiveExecution(Active, EngagedExecution, AttemptExecution):
+    ordinal_rule = AdvancedOrdinal(StartsAttempt)
+
+    def require_final_response(self) -> None:
+        pass
+
+    @classmethod
+    def successors(cls):
+        return DeferredExecution, CompletedExecution, FailedExecution
+
+    def accepts_attempt(self, phase):
+        return phase.accepts_active_execution()
+
+    def validate_snapshot(self, snapshot, authorized):
+        if not snapshot.is_current:
+            raise IntegrityViolationError("active snapshot must carry exact owner pointer")
+
+
+class CompletedExecution(Complete, Terminal, AttemptExecution):
+
+    @classmethod
+    def assignment_state(cls) -> type[AssignmentState]:
+        return CompletedAssignment
+
+    def accepts_attempt(self, phase):
+        return phase.succeeded
+
+    def validate_snapshot(self, snapshot, authorized):
+        for row in snapshot.obligations:
+            row.lifecycle.require(Successful,
+                IntegrityViolationError("completed wire execution requires terminal obligation")
+            )
+
+
+@dataclass(frozen=True)
+class InterruptedExecution(AttemptReference, ExecutionState):
+    ordinal: int | None = None
+
+    def accepts_attempt(self, phase):
+        return bool(phase.items_with(Failed, phase))
+
+
+class DeferredExecution(StartsAttempt, InterruptedExecution):
+    retry = True
+
+    def require_retry_start(self, snapshot: RecoverySnapshot) -> None:
+        snapshot.previous_attempt.require_retry(snapshot)
+
+    @classmethod
+    def assignment_state(cls) -> type[AssignmentState]:
+        return DeferredAssignment
+
+    @classmethod
+    def successors(cls):
+        return ActiveExecution, FailedExecution
+
+    def validate_budget(self, maximum: int) -> None:
+        super().validate_budget(maximum)
+        if self.ordinal is not None and self.ordinal >= maximum:
+            raise IntegrityViolationError("post-attempt deferral requires retry budget")
+
+    def validate_snapshot(self, snapshot, authorized):
+        if snapshot.attempt is not None and not authorized:
+            raise IntegrityViolationError("post-attempt deferral requires authorized retry")
+
+    def can_retry(self, *, authorized: bool, attempt, is_current: bool) -> bool:
+        if self.ordinal is None or attempt is None:
+            return False
+        # Outcome-owned permission is separate from final done/death evidence.
+        return authorized and attempt.permits_retry() and not is_current
+
+
+class FailedExecution(Failed, Terminal, InterruptedExecution):
+
+    @classmethod
+    def assignment_state(cls) -> type[AssignmentState]:
+        return FailedAssignment
+
+    def validate_snapshot(self, snapshot, authorized):
+        if bool(snapshot.publication_evidence):
+            raise IntegrityViolationError("failed execution cannot erase a publication acknowledgement")
+        if snapshot.attempt is not None and authorized:
+            raise IntegrityViolationError("authorized retry cannot settle failed")

@@ -5,9 +5,9 @@ from yarl import URL
 
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.errors import RelationViolationError
-from agent_comms.remote_core import ConnectorObserverClosed, ServiceFailed
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from agent_comms.transport.mcp import ToolsCallReply, ToolsCallResult
+from agent_comms.transport.remote_core import ConnectorObserverClosed, ServiceFailed
 from agent_comms.ui_model.observation import PeerClosed
 
 

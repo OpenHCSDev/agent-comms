@@ -21,9 +21,9 @@ from agent_comms.execution.child_process import (
     ProcessState,
 )
 from agent_comms.execution.turn_lease import FinishedTurnFence, NoFinishedTurn
-from agent_comms.lifecycle_capability import LifecycleCapability
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, TextRepresentation
+from agent_comms.nominal.lifecycle_capability import LifecycleCapability
 from agent_comms.registry.thread_presentation import (
     InactiveThreadPresentationStatus,
     LiveThreadOwnerBinding,
@@ -33,11 +33,11 @@ from agent_comms.registry.thread_presentation import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.activity import ObservedActivity
     from agent_comms.execution.turn_item import SourceTurn
     from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
     from agent_comms.messaging.message_reference import MessageReference
     from agent_comms.messaging.sending import Messaging
+    from agent_comms.registry.activity import ObservedActivity
     from agent_comms.registry.registry_document import (
         RegistryEntry,
         RegistrySnapshot,

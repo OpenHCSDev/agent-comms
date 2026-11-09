@@ -14,8 +14,8 @@ import tomli_w
 from agent_comms_project import AgentCommsProject, ClientTypeErrors
 from module_layers import MaterializedClients, OutgoingWire, Package, StackClient
 
-from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
 from agent_comms.planning.orders import DraftListedPullRequest
+from agent_comms.projects.head_review import BaseSide, HeadSide, IntegrationInput, Side
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
 

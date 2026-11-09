@@ -3,7 +3,7 @@
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.envelope_claim_transitions import (
+from agent_comms.messaging.envelope_claim_transitions import (
     ClaimProjection,
     ClaimRelease,
     ClaimTransition,

@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 from typing import NoReturn
 
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
-from agent_comms.display_references import (
+from agent_comms.messaging.display_references import (
     PendingReferences,
     RetiredThreadReference,
     ThreadDisplayReference,

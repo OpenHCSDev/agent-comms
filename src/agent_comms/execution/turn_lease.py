@@ -22,14 +22,14 @@ from typing import (
     ClassVar,
 )
 
-from agent_comms.activity import ObservedActivity
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, ProcessState
+from agent_comms.execution.reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
 from agent_comms.execution.turn_phase import IdlePhase, PreparingPhase, TurnPhase
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.lifecycle_capability import Executing, LifecycleCapability
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.routing import NoTurnRouting, Routing
 from agent_comms.nominal.field_codec import (
     NullMember,
     RecordMember,
@@ -39,7 +39,9 @@ from agent_comms.nominal.field_codec import (
     WireTransient,
     boundary_decoder,
 )
+from agent_comms.nominal.lifecycle_capability import Executing, LifecycleCapability
 from agent_comms.planning.goal_presentation import RunningExecution
+from agent_comms.registry.activity import ObservedActivity
 from agent_comms.registry.thread_identity import (
     NoObservedTurn,
     ObservedTurn,
@@ -47,8 +49,6 @@ from agent_comms.registry.thread_identity import (
     TurnFence,
     TurnIdentity,
 )
-from agent_comms.reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
-from agent_comms.routing import NoTurnRouting, Routing
 from agent_comms.storage.locked_store import (
     DocumentBytes,
     DocumentChange,

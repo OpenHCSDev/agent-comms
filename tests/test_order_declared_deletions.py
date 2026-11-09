@@ -1,6 +1,6 @@
 """A cited file line keeps its absolute path."""
 
-from agent_comms.change_report import FileLine
+from agent_comms.projects.change_report import FileLine
 from agent_comms.registry.registry_document import NoTeamProject
 
 

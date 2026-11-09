@@ -16,9 +16,9 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agent_comms.harness_delivery_states import Outcome
+    from agent_comms.cli_bridges.harness_delivery_states import Outcome
+    from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate
     from agent_comms.messaging.messages import Message
-    from agent_comms.runtime_updates import RuntimeUpdate
 
 
 class AgentRuntime:

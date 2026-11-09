@@ -27,13 +27,13 @@ from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.native_startup import NATIVE_STARTUP_POLICY
 from agent_comms.execution.native_transcript import NativeTranscript
+from agent_comms.execution.pi_events import ContextCommitted, InputCommitted
 from agent_comms.execution.selected.actions import NoSelectedTools
 from agent_comms.execution.selected.session import SelectedSession
+from agent_comms.execution.tracked_turn import TrackedTurnSession
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, InputId
-from agent_comms.pi_events import ContextCommitted, InputCommitted
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-from agent_comms.tracked_turn import TrackedTurnSession
 from native_proof_cases import read_context_proof, read_proof_rows, write_proof_rows
 
 INPUT_ID = InputId('a' * 32)
@@ -212,6 +212,7 @@ def test_missing_native_model_fails_before_any_session_side_effect(tmp_path, pro
     ('error','provider failed'),('length','Model output limit reached'),('aborted','provider failed'),
 ])
 async def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detail):
+    from agent_comms.execution.pi_events import PiEvent
     from agent_comms.execution.turn_failure import ModelRequestFailed
     from agent_comms.execution.turn_output import TurnOutput
     from agent_comms.execution.turn_usage import UsageAccount
@@ -219,7 +220,6 @@ async def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason,
         DEFAULT_MODEL_WAIT,
         ProgressWatchdog,
     )
-    from agent_comms.pi_events import PiEvent
 
     event = PiEvent.from_wire({'type':'message_end','message':{
         'role':'assistant','content':[],'stopReason':stop_reason,
@@ -312,7 +312,7 @@ def test_a_rejected_prompt_carries_the_providers_own_words():
     could not resume after install because summarisation hit "The usage limit has been
     reached", and the turn reported only that something had been rejected."""
     from agent_comms.execution.native_pi import NativePiPromptRejected
-    from agent_comms.pi_events import FailedResponseOutcome, Response
+    from agent_comms.execution.pi_events import FailedResponseOutcome, Response
     from agent_comms.pi_payloads import ReportedText
 
     response = Response(

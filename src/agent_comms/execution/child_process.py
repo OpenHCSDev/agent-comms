@@ -68,6 +68,12 @@ from typing import (
 )
 
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.launch_runtime import (
+    INHERITED_ENVIRONMENT,
+    LaunchRuntime,
+    RestoredRuntime,
+)
+from agent_comms.execution.systemd_unit import AgentsSlice, SystemdUnit
 from agent_comms.installer.native_build_inputs import (
     AsyncStdioOptions,
     ChildStdio,
@@ -78,7 +84,6 @@ from agent_comms.installer.native_build_inputs import (
     GitOpening,
     StdioOptions,
 )
-from agent_comms.launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     DisclosedRecord,
@@ -92,7 +97,6 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.nominal.sealed import Sealed
 from agent_comms.registry.thread_identity import ThreadIncarnation, ThreadRole
-from agent_comms.systemd_unit import AgentsSlice, SystemdUnit
 
 STOP_GRACE_SECONDS = 2.0
 

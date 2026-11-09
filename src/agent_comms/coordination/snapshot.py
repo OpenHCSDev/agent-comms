@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.attempt_states import SucceededAttempt
+from agent_comms.coordination.attempt_states import SucceededAttempt
 from agent_comms.coordination.errors import (
     IdentityConflict,
     IntegrityViolationError,
@@ -13,6 +13,8 @@ from agent_comms.coordination.errors import (
     RecoveryBlocked,
     StaleFence,
 )
+from agent_comms.coordination.execution_states import CompletedExecution
+from agent_comms.coordination.reason_codes import ReasonCode
 from agent_comms.coordination.schema import COORDINATION_SNAPSHOT_VERSION
 from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination.tables.attempts import (
@@ -33,8 +35,6 @@ from agent_comms.coordination.tables.executions import (
 from agent_comms.coordination.tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination.tables.recovery import RecoveryAudit
 from agent_comms.coordination.tables.responses import ResponseObligation
-from agent_comms.execution_states import CompletedExecution
-from agent_comms.lifecycle_capability import Active, Complete
 from agent_comms.nominal.field_codec import (
     SnapshotExclude,
     SnapshotName,
@@ -43,10 +43,10 @@ from agent_comms.nominal.field_codec import (
     boundary_decoder,
     projected,
 )
-from agent_comms.reason_codes import ReasonCode
+from agent_comms.nominal.lifecycle_capability import Active, Complete
 
 if TYPE_CHECKING:
-    from agent_comms.attempt_states import TerminalAttempt
+    from agent_comms.coordination.attempt_states import TerminalAttempt
     from agent_comms.coordination.session import CoordinationCapture, NativeCapture
 
 

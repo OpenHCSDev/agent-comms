@@ -14,7 +14,7 @@ from typing import (
     Literal,
 )
 
-from agent_comms.assignment_states import (
+from agent_comms.coordination.assignment_states import (
     FailedAssignment,
     IgnoredAssignment,
     TriagePendingAssignment,
@@ -37,16 +37,16 @@ from agent_comms.storage.typed_table import TextStorage
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
-    from agent_comms.assignment_states import AssignmentState
     from agent_comms.coordinated_runtime import SelectedExecution
+    from agent_comms.coordination.assignment_states import AssignmentState
+    from agent_comms.execution.historical_native_inputs import HistoricalNativeInput
     from agent_comms.execution.native_input_proof import NativeContextProof
     from agent_comms.execution.native_input_record import TriageNativeExecution
     from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+    from agent_comms.execution.private_send_stage import TriageNativeSend
     from agent_comms.execution.selected.participant import SelectedParticipant
     from agent_comms.execution.selected.session import SelectedSession
-    from agent_comms.historical_native_inputs import HistoricalNativeInput
     from agent_comms.private_send_claim import PrivateSendClaim
-    from agent_comms.private_send_stage import TriageNativeSend
 
 
 class InvalidTriageDecision(ValueError):
@@ -281,7 +281,7 @@ class DecidedTriageRecord(TriageDecisionRecord):
         return RecordedTriageText.encode(self.decision)
 
     def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> HistoricalNativeInput:
-        from agent_comms.historical_native_inputs import TriageHistoricalNativeInput
+        from agent_comms.execution.historical_native_inputs import TriageHistoricalNativeInput
 
         return TriageHistoricalNativeInput(execution=execution, decision=self.decision, **source)
 

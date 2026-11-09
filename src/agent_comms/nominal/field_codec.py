@@ -58,7 +58,7 @@ from agent_comms.nominal.sealed import Sealed
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
-    from agent_comms.registration_inheritance import RegistrationInheritance
+    from agent_comms.nominal.registration_inheritance import RegistrationInheritance
 
 T = TypeVar("T")
 

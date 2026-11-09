@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.context_store import (
     UNREAD_CONTEXT,
@@ -16,6 +15,11 @@ from agent_comms.context_store import (
 from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
+from agent_comms.coordination.working_memory_annotations import (
+    PreviouslyRequestedAnnotation,
+    WorkingMemoryAnnotations,
+)
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.turn_context import (
     ContextManifest,
     ContextSpan,
@@ -27,13 +31,15 @@ from agent_comms.execution.turn_context import (
     UnattributedProvenance,
 )
 from agent_comms.execution.turn_item import PiRequestKey
+from agent_comms.execution.working_memory_disclosure import DisclosureState
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.practice import PracticeCopy, PracticeMeasurement
 from agent_comms.installer.probes.inputs import SelectedInputsProbe
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.task_sources import AnnotationDisclosureGrant, ProjectTaskScope
 from agent_comms.nominal.field_codec import MessageId, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import (
@@ -41,13 +47,7 @@ from agent_comms.registry.thread_identity import (
     TurnIdentity,
 )
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
-from agent_comms.task_sources import AnnotationDisclosureGrant, ProjectTaskScope
-from agent_comms.working_memory_annotations import (
-    PreviouslyRequestedAnnotation,
-    WorkingMemoryAnnotations,
-)
-from agent_comms.working_memory_disclosure import DisclosureState
-from agent_comms.working_memory_labels import (
+from agent_comms.working_memory.working_memory_labels import (
     HumanLabel,
     JevChoice,
     JevClassifier,
@@ -56,8 +56,8 @@ from agent_comms.working_memory_labels import (
     ModelLabel,
     QuestionVersion,
 )
-from agent_comms.working_memory_questions import KindQuestion, OtherSpan, SpanAnswer
-from agent_comms.working_memory_requests import (
+from agent_comms.working_memory.working_memory_questions import KindQuestion, OtherSpan, SpanAnswer
+from agent_comms.working_memory.working_memory_requests import (
     AnnotationBudgetExhausted,
     DisclosureRequest,
     FailedAnnotationOutcome,

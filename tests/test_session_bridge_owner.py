@@ -23,10 +23,10 @@ from agent_comms.execution.child_process import (
     IdentityMismatchError,
     ProcessIdentity,
 )
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.root_runtime import RootRuntime
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread
-from agent_comms.root_runtime import RootRuntime
 from agent_comms_hooks.queue_bypass import QueueBypassGuard
 from agent_comms_hooks.read_gate import ReadGateProgram
 from agent_comms_hooks.shell_commands import ConnectCommand

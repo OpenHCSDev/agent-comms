@@ -22,32 +22,39 @@ from agent_comms import input_attempt
 from agent_comms.acp_extension import InputStartedUpdate, NoQueueScope, UnidentifiedInputStarted
 from agent_comms.channel_input_batch import InputBatch, SingleInputBatch
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.input_key import InputKey
+from agent_comms.execution.ordinary_turn_rules import (
+    UnboundOrdinaryInputRule,
+    UnconsumedDependencyRule,
+)
+from agent_comms.execution.reservation_rules import (
+    ReservationRule,
+    ReservationViolationError,
+    RuleCheck,
+)
+from agent_comms.execution.send_outcome import DeferredSend, GrantedSend, RefusedSend, SendOutcome
+from agent_comms.execution.started_input import StartedInput
+from agent_comms.execution.transcript_routes import DisplayText, NoDisplayText, SentInputText
 from agent_comms.execution.turn_goal_permission import TurnGoalPermission
 from agent_comms.execution.turn_inbox import BusyInputPolicy, SteerInputPolicy
 from agent_comms.input_attempt import InputAlreadyCleared, MissingInput
-from agent_comms.input_key import InputKey
 from agent_comms.messaging.messages import Message
+from agent_comms.messaging.routing import NoTurnRouting, TurnRouting
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, TurnId
-from agent_comms.ordinary_turn_rules import UnboundOrdinaryInputRule, UnconsumedDependencyRule
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
-from agent_comms.reservation_rules import ReservationRule, ReservationViolationError, RuleCheck
-from agent_comms.routing import NoTurnRouting, TurnRouting
-from agent_comms.send_outcome import DeferredSend, GrantedSend, RefusedSend, SendOutcome
-from agent_comms.started_input import StartedInput
-from agent_comms.transcript_routes import DisplayText, NoDisplayText, SentInputText
 
 if TYPE_CHECKING:
     from agent_comms.acp_extension import QueueScope
     from agent_comms.comms import Comms
-    from agent_comms.controller import Controller
+    from agent_comms.execution.controller import Controller
     from agent_comms.execution.input_drain import DrainedSession, InputDrain
+    from agent_comms.execution.owned_send import OwnedSend
     from agent_comms.input_disposition import InputDispositions
-    from agent_comms.owned_send import OwnedSend
     from agent_comms.planning.goal_waits import GoalWait
     from agent_comms.planning.goals import GoalDeclaration
     from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-    from agent_comms.runtime_server import RuntimeServer
+    from agent_comms.transport.runtime_server import RuntimeServer
 
 
 @dataclass(frozen=True, kw_only=True)

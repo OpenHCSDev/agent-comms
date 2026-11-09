@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict, RetryScheduled
-from agent_comms.diagnostics import record_acquisition_progress, record_request_progress
+from agent_comms.execution.diagnostics import record_acquisition_progress, record_request_progress
 from agent_comms.execution.goal_turn_permit import NoLaunchPermit
 from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.native_entries import NativeEvidenceScope
@@ -29,30 +29,30 @@ from agent_comms.execution.native_prompt_send import PromptBoundary
 from agent_comms.execution.native_runtime_input import NativeRuntimeTable
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.native_startup import NativeStartup
-from agent_comms.execution.turn_context import RenderedInput
-from agent_comms.execution.turn_input_source import SelectedOriginalInput
-from agent_comms.following_inputs import FollowingInputs
-from agent_comms.messaging.message_bus import MessageBus
-from agent_comms.nominal.field_codec import AcpSessionId, InputId
-from agent_comms.owned_send import OwnedSend
-from agent_comms.publication_measurements import PublicationMeasurements
-from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
-from agent_comms.text_digest import TextDigest
-from agent_comms.tracked_turn import (
+from agent_comms.execution.owned_send import OwnedSend
+from agent_comms.execution.publication_measurements import PublicationMeasurements
+from agent_comms.execution.tracked_turn import (
     NO_FOLLOWING_INPUTS,
     NO_NATIVE_OBSERVER,
     NativeObserver,
     TrackedTurnSession,
 )
+from agent_comms.execution.turn_context import RenderedInput
+from agent_comms.execution.turn_input_source import SelectedOriginalInput
+from agent_comms.following_inputs import FollowingInputs
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.nominal.field_codec import AcpSessionId, InputId
+from agent_comms.nominal.text_digest import TextDigest
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.transport.native_tool_transport import NativeToolMode
 
 if TYPE_CHECKING:
     from agent_comms.coordinated_runtime import SelectedExecution
     from agent_comms.execution.input_drain import InputDrain
+from agent_comms.execution.private_send_stage import NativeSendStage
 from agent_comms.execution.selected.participant import SelectedParticipant
 from agent_comms.execution.selected.session import SelectedSession
-from agent_comms.private_send_stage import NativeSendStage
 from agent_comms.transport.project_request import ProjectRuntimeRequest
 
 

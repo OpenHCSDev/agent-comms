@@ -8,12 +8,17 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.recorded_bus import RecordedBus
+from agent_comms.execution.root_runtime import (
+    NoRootHost,
+    RecordedRootHost,
+    RootRuntime,
+    RootRuntimeStore,
+)
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.recorded_bus import RecordedBus
 from agent_comms.registry.registry_document import InvalidRegistryDocument
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.root_runtime import NoRootHost, RecordedRootHost, RootRuntime, RootRuntimeStore
 from agent_comms.storage.private_path import FileIdentity
 
 

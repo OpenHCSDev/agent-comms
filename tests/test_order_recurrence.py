@@ -2,8 +2,8 @@
 
 import pytest
 
-from agent_comms.change_report import FileLine
-from agent_comms.slop import DeclarationDerivation, Derivation
+from agent_comms.projects.change_report import FileLine
+from agent_comms.projects.slop import DeclarationDerivation, Derivation
 
 
 @pytest.fixture

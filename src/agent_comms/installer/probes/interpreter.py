@@ -9,8 +9,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from agent_comms.build_artifact import BuildArtifact
 from agent_comms.execution.child_process import Platform
+from agent_comms.installer.build_artifact import BuildArtifact
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 
 

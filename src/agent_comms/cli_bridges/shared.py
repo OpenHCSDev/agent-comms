@@ -33,9 +33,19 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, T
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
-from agent_comms.bus import Bus
-from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.cli_arguments import CliArguments
+from agent_comms.cli_bridges.cli_arguments import CliArguments
+from agent_comms.cli_bridges.cli_protocol import CoreError, EarlierItems, TaggedWire
+from agent_comms.cli_bridges.harness_delivery_states import (
+    DeliveredOutcome,
+    EmittedOutcome,
+    FilteredOutcome,
+    MismatchedMonitor,
+    MonitorEvidence,
+    ObservedMonitor,
+    Outcome,
+    TakingLedger,
+    UnconfirmedOutcome,
+)
 from agent_comms.cli_bridges.monitor import (
     BRIDGE_FAILURES,
     BridgeExit,
@@ -52,6 +62,12 @@ from agent_comms.cli_bridges.monitor import (
     VerifySession,
     read_monitor,
 )
+from agent_comms.cli_bridges.runtime_updates import (
+    HiddenItem,
+    ReplyingThreadOutput,
+    RuntimeUpdate,
+    ThreadOutput,
+)
 from agent_comms.cli_bridges.session_watch import (
     HeldClaim,
     SessionConnectionClosed,
@@ -60,7 +76,9 @@ from agent_comms.cli_bridges.session_watch import (
     WatchClaim,
     WatchRecord,
 )
-from agent_comms.cli_protocol import CoreError, EarlierItems, TaggedWire
+from agent_comms.cli_bridges.wire_models import WireModel
+from agent_comms.cli_verbs.declared_verb import DeclaredOptions
+from agent_comms.cli_verbs.send_request import SendRequest
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
@@ -70,7 +88,6 @@ from agent_comms.coordination.errors import (
     DeferredRead,
 )
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
-from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import (
     OutlivesLauncherLifetime,
@@ -78,22 +95,13 @@ from agent_comms.execution.child_process import (
     ProcessIdentity,
     SpawnedProcess,
 )
+from agent_comms.execution.launch_runtime import LaunchRuntime, RunningSource
 from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
-from agent_comms.harness_delivery_states import (
-    DeliveredOutcome,
-    EmittedOutcome,
-    FilteredOutcome,
-    MismatchedMonitor,
-    MonitorEvidence,
-    ObservedMonitor,
-    Outcome,
-    TakingLedger,
-    UnconfirmedOutcome,
-)
-from agent_comms.harness_install import HarnessSession
+from agent_comms.installer.harness_install import HarnessSession
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.launch_runtime import LaunchRuntime, RunningSource
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.bus_tables import MessageIdentitySource
 from agent_comms.messaging.message_reference import (
     BridgeBeginning,
     BridgePosition,
@@ -102,6 +110,7 @@ from agent_comms.messaging.message_reference import (
     MessageReference,
 )
 from agent_comms.messaging.messages import Message
+from agent_comms.messaging.send_result import SendResult
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -122,14 +131,6 @@ from agent_comms.registry.thread_status import (
 )
 from agent_comms.registry.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.registry.threads import ExternalThread
-from agent_comms.runtime_updates import (
-    HiddenItem,
-    ReplyingThreadOutput,
-    RuntimeUpdate,
-    ThreadOutput,
-)
-from agent_comms.send_request import SendRequest
-from agent_comms.send_result import SendResult
 from agent_comms.storage.locked_store import FilesRequest, RegistryFile, SQLiteFile
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from agent_comms.storage.private_path import (
@@ -150,13 +151,12 @@ from agent_comms.storage.typed_table import (
     WriterOwnedStore,
 )
 from agent_comms.task_attachments.team_pings import TeamUpdate
-from agent_comms.transcript_publication import PublishesToBus, WaitsOnBusyStore
-from agent_comms.wire_models import WireModel
+from agent_comms.transcript.transcript_publication import PublishesToBus, WaitsOnBusyStore
 from agent_comms_hooks.watch import SessionCommandError
 
 if TYPE_CHECKING:
-    from agent_comms.assignment_store import AssignmentStore
     from agent_comms.cli_bridges.claude_protocol import ReadResultObserved
+    from agent_comms.coordination.assignment_store import AssignmentStore
 
 
 class ReaderState:
