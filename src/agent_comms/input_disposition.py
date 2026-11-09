@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.errors import RelationViolationError
@@ -31,8 +30,8 @@ from agent_comms.input_attempt import (
 from agent_comms.input_key import InputKey, InputKeyText, TurnInputKey
 from agent_comms.input_origin import HarnessAttemptOrigin, InputOrigin, UnattributedInputOrigin
 from agent_comms.lifecycle_capability import Unresolved
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.messaging.messages import MessageInput
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.field_codec import GoalId, InputId, RootId, ThreadLookup, TurnId
 from agent_comms.reported_turn import ReportedTurnState
@@ -56,7 +55,6 @@ if TYPE_CHECKING:
     from agent_comms.execution.turn_lease import TurnLeaseFence
     from agent_comms.private_registry_guard import RegistryPrivacy
     from agent_comms.registry.registry_document import RegistryEntry, RegistrySnapshot
-    from agent_comms.registry.threads import Thread
 
 
 @dataclass(frozen=True)
@@ -299,7 +297,7 @@ class InputDispositions(DurableStore, CompleteInputReader):
             attempt.reference for attempt in attempts)
         return tuple(
             ReservedInput(
-                self.bus_key(message, entry.thread), message.seq, entry.thread.name,
+                message.bus_key(entry.thread), message.seq, entry.thread.name,
                 entry.claimed_generation, message.target, message.body,
                 origin=HarnessAttemptOrigin(attempt.bridge, attempt.reference),
             )
@@ -333,10 +331,6 @@ class InputDispositions(DurableStore, CompleteInputReader):
 
     def in_turn(self, turn_id: TurnId) -> InputDocument:
         return self._select('"turn_id" = ?', (turn_id,))
-
-    @staticmethod
-    def bus_key(message: MessageInput, owner: Thread) -> InputKey:
-        return message.role.response_policy(message).disposition_key(message, owner)
 
     def record(
         self, key: InputKey, *, seq: int | None, owner: str, claim_scope: int,

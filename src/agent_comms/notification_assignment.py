@@ -434,7 +434,7 @@ class NotificationAssignment(NotificationSource):
         """
         registry = RegistryStore.at(root).snapshot()
         keys = {
-            InputDispositions.bus_key(page.source.message, thread): key
+            page.source.message.bus_key(thread): key
             for page in read.selection.pages
             for key, recipient in page.entries
             for thread in registry.recipient(recipient, page.source).input_owners()

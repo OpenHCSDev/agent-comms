@@ -151,7 +151,7 @@ def following_input(claim: PrivateSendClaim, *, generation: int, count: int = 1)
     with Coordination(claim.store_path) as store:
         for message in messages:
             assert accept_initial(comms.bus, claim.selected.root_id, message.seq, store)
-    keys = tuple(InputDispositions.bus_key(message.message, owner) for message in messages)
+    keys = tuple(message.message.bus_key(owner) for message in messages)
     text = '\n'.join(message.message.body for message in messages)
     dispositions = InputDispositions(comms.root)
     for key, message in zip(keys, messages, strict=True):

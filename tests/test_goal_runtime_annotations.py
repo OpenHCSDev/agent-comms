@@ -37,6 +37,7 @@ from agent_comms.execution.turn_failure import (
     TurnFailure,
 )
 from agent_comms.execution.turn_lease import TurnDeclaration
+from agent_comms.execution.turn_origin import TurnOrigin
 from agent_comms.execution.turn_progress import TurnProgress
 from agent_comms.execution.turn_runner import TurnRunner
 from agent_comms.following_inputs import FollowingInputs, OwnerFollowingInputs
@@ -46,7 +47,9 @@ from agent_comms.goal_mutation import GoalTurnProjection
 from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.goal_work import GoalFailureOwner, GoalOwner, GoalWorkSource
 from agent_comms.input_attempt import StoredInput
+from agent_comms.input_key import InputKey
 from agent_comms.input_origin import InputProvenance
+from agent_comms.messages import ClaimNoticeKind, Message, MessageInput
 from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.peer_relation import PeerRelation
@@ -70,6 +73,7 @@ from agent_comms.registry.registry_document import (
     RegistryPresence,
     RegistrySnapshot,
 )
+from agent_comms.registry.thread_creation import ThreadCreationSource
 from agent_comms.registry.thread_identity import TurnFence
 from agent_comms.registry.thread_presentation import ThreadOwnerBinding
 from agent_comms.registry.threads import (
@@ -77,7 +81,10 @@ from agent_comms.registry.threads import (
     ThreadProvenance,
 )
 from agent_comms.relationships import RelationshipSource, ThreadRelationships
+from agent_comms.response_message_source import ResponseMessageSource
+from agent_comms.response_policy import ResponsePolicy
 from agent_comms.route_client import ActivityClient
+from agent_comms.routing import NoTurnOrigin
 from agent_comms.session_config_options import SessionConfigOptions
 from agent_comms.task_owner import TaskOwner
 from agent_comms.task_registry import TaskRegistry
@@ -395,3 +402,32 @@ def test_context_assembly_is_inherited_by_the_original_comms_owner() -> None:
     assert awareness["owner"] is ContextOwner
     assert awareness["relations"] == tuple[PeerRelation, ...]
     assert awareness["return"] is TurnContext
+
+
+def test_original_message_and_identity_provide_key_facts() -> None:
+    assert issubclass(MessageInput, ResponseMessageSource)
+    assert Message.bus_key is MessageInput.bus_key
+    assert issubclass(ThreadIdentitySource, ThreadCreationSource)
+    assert issubclass(Thread, ThreadCreationSource)
+    source = get_type_hints(ResponseMessageSource)
+    message = get_type_hints(MessageInput)
+    assert source["seq"] is message["seq"]
+    assert source["mentions"] == message["mentions"]
+    assert get_type_hints(ThreadIdentitySource)["created_at"] is get_type_hints(ThreadProvenance)["created_at"]
+
+
+def test_key_callbacks_read_the_original_identity_role() -> None:
+    for callback in (MessageInput.bus_key, Message.bus_keys, NoTurnOrigin.bus_keys,
+                     TurnOrigin.bus_keys):
+        assert get_type_hints(callback)["owner"] is ThreadCreationSource
+    assert get_type_hints(ClaimNoticeKind.claimed)["owner"] is ThreadIdentitySource
+    assert get_type_hints(MessageInput.bus_key)["return"] is InputKey
+    assert get_type_hints(Message.bus_keys)["return"] == tuple[InputKey, ...]
+
+
+def test_declared_policy_keys_keep_their_original_message_and_identity_sources() -> None:
+    for policy in ResponsePolicy.members_with(ResponsePolicy):
+        hints = get_type_hints(policy.disposition_key)
+        assert hints["message"] is ResponseMessageSource
+        assert hints["owner"] is ThreadCreationSource
+        assert hints["return"] is InputKey

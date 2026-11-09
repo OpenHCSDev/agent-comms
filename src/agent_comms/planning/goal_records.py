@@ -85,7 +85,7 @@ class GoalRecords(GoalWaitRecovery, GoalWorkSource):
             ) if sequences else ()
             while True:
                 replies.update({
-                    InputDispositions.bus_key(original.message, thread): original.message
+                    original.message.bus_key(thread): original.message
                     for original in page
                 })
                 page = source.direct_replies(

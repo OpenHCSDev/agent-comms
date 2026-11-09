@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-from abc import (
-    ABC,
-    abstractmethod,
-)
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from agent_comms.input_key import InputKey
+from agent_comms.registry.thread_creation import ThreadCreationSource
 
 if TYPE_CHECKING:
-    from agent_comms.input_disposition import InputDispositions
     from agent_comms.messaging.messages import Message
-    from agent_comms.registry.threads import Thread
 
 
 class TurnOrigin(ABC):
@@ -35,4 +31,4 @@ class TurnOrigin(ABC):
     def messages(self) -> tuple[Message, ...]: ...
 
     @abstractmethod
-    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[InputKey, ...]: ...
+    def bus_keys(self, owner: ThreadCreationSource) -> tuple[InputKey, ...]: ...

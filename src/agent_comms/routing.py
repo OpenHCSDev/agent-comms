@@ -23,15 +23,13 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.planning.goal_scope import AllGoals, GoalScope
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_creation import ThreadCreationSource
 from agent_comms.response_policy import NO_ALIASES
 
 if TYPE_CHECKING:
     from agent_comms.bus_publication import Delivered
     from agent_comms.catalog_document import CatalogDocument
-    from agent_comms.input_disposition import InputDispositions
     from agent_comms.messaging.messages import Message
-    from agent_comms.registry.thread_identity import ThreadIncarnation
-    from agent_comms.registry.threads import Thread
     from agent_comms.registry_provenance import RegistryProvenance
     from agent_comms.transcript_routes import NoSentInputText, SentInputText
 
@@ -49,7 +47,7 @@ class NoTurnOrigin(NullMember, TurnOrigin):
     def batch_target(self) -> NoTurnOrigin:
         return self
 
-    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[InputKey, ...]:
+    def bus_keys(self, owner: ThreadCreationSource) -> tuple[InputKey, ...]:
         return ()
 
 

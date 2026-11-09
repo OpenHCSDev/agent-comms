@@ -62,7 +62,9 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.page_traversal import LiveCursor, PageCursor
 from agent_comms.projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from agent_comms.recorded_time import Timestamped
+from agent_comms.registry.thread_creation import ThreadCreationSource
 from agent_comms.registry.thread_identity import AgentThreadRole, ThreadRole
+from agent_comms.response_message_source import ResponseMessageSource
 from agent_comms.response_policy import (
     NO_ALIASES,
     InformationalPolicy,
@@ -88,6 +90,7 @@ from agent_comms.task_sources import (
     NoTaskAttachment,
     TaskAttachment,
 )
+from agent_comms.thread_identity_source import ThreadIdentitySource
 from agent_comms.transport.progress import InterruptibleRead
 from agent_comms.ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
 from agent_comms.wake_policy import BoundedTriageWake, PassiveWake
@@ -95,8 +98,6 @@ from agent_comms.wake_policy import BoundedTriageWake, PassiveWake
 if TYPE_CHECKING:
     from agent_comms.bus_publication import Delivered
     from agent_comms.display_references import ReferenceContext
-    from agent_comms.input_disposition import InputDispositions
-    from agent_comms.registry.threads import Thread
     from agent_comms.retained_task_facts import ExactTaskFact
 
 
@@ -614,7 +615,7 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
         return FieldCodec.decode(ClaimMessage, data)
 
     @classmethod
-    def claimed(cls, owner: Thread) -> Message:
+    def claimed(cls, owner: ThreadIdentitySource) -> Message:
         return Message(
             owner.name, owner.name, "Claimed", cls,
         )
@@ -925,7 +926,7 @@ class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole, decla
 
 
 @dataclass(frozen=True, slots=True)
-class MessageInput(Timestamped, Addressed, BusCapability):
+class MessageInput(Timestamped, Addressed, BusCapability, ResponseMessageSource):
     """The facts an input is keyed and written from: who, where, what text, which role.
 
     Attachments, reports and answers belong to Message; this is never a whole message
@@ -952,6 +953,9 @@ class MessageInput(Timestamped, Addressed, BusCapability):
         WireOrder(10),
         PublicationExclude(),
     ] = ()
+
+    def bus_key(self, owner: ThreadCreationSource) -> InputKey:
+        return self.role.response_policy(self).disposition_key(self, owner)
 
     @property
     def sender_label(self) -> str:
@@ -1177,8 +1181,8 @@ class Message(MessageInput, TurnOrigin):
     def batch_target(self) -> str:
         return self.exact_reply_target
 
-    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[InputKey, ...]:
-        return (dispositions.bus_key(self, owner),)
+    def bus_keys(self, owner: ThreadCreationSource) -> tuple[InputKey, ...]:
+        return (self.bus_key(owner),)
 
     @property
     def reply_target(self) -> str | None:

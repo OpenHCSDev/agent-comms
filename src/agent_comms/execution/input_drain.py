@@ -1030,7 +1030,7 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
         keys.update(
             key
             for turn in self.state(session_id).pending_turns
-            for key in turn.origin.bus_keys(self.dispositions, owner)
+            for key in turn.origin.bus_keys(owner)
         )
         return OwnerQueueInputDeliveryScope(frozenset(keys))
 

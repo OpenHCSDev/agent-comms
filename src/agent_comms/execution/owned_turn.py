@@ -311,7 +311,7 @@ class OwnedTurn:
                 privacy, snapshot = cut.privacy, cut.snapshot
                 originals = tuple(
                     ReservedInput(
-                        key=self.runner.inputs.dispositions.bus_key(origin, self.thread),
+                        key=origin.bus_key(self.thread),
                         sequence=origin.seq,
                         owner=self.thread_name,
                         claim_generation=snapshot.claim_generation(self.thread_name),

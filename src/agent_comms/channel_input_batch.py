@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.input_attempt import StoredInput
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import InputKey
 
 if TYPE_CHECKING:
@@ -57,7 +56,7 @@ class InputBatch(ABC):
         }
         if len(channels) < 2 or tuple(channels.values()) != origins:
             return single
-        expected_keys = tuple(InputDispositions.bus_key(origin, owner) for origin in origins)
+        expected_keys = tuple(origin.bus_key(owner) for origin in origins)
         authorized = ChannelInputBatch(originals)
         return authorized if authorized.keys == expected_keys and authorized.prompt == prompt else single
 

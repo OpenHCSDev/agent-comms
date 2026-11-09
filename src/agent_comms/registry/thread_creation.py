@@ -30,6 +30,13 @@ class CreationTime(float, WireValue, ABC):
         return FieldCodec.value_schema(float)
 
 
+class ThreadCreationSource(ABC):
+    """The original creation value used to distinguish an owner-scoped input key."""
+
+    __slots__ = ()
+    created_at: CreationTime
+
+
 class RecordedCreationTime(CreationTime):
     def distinct_from(self, used: Set[float]) -> CreationTime:
         if self in used:
