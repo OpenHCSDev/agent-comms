@@ -43,7 +43,7 @@ from agent_comms.execution.private_nk_entrypoint import (
     SharedRootLaunch,
 )
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.nominal.field_codec import RootId, ThreadLookup
+from agent_comms.nominal.field_codec import AcpSessionId, RootId, ThreadLookup
 from agent_comms.registry.registry_tables import RegistryRevisionMark, RegistryRowStore
 from agent_comms.registry.privacy_reads import CursorMetadataRead, NativeAnswerRead
 from agent_comms.registry.thread_identity import ClaimedIdentity
@@ -146,7 +146,7 @@ class RegistryPrivacy(ABC):
 
     @abstractmethod
     async def cursor_metadata[Update](
-        self, publication: CursorMetadataRead[Update], thread_name: str, session_id: str,
+        self, publication: CursorMetadataRead[Update], thread_name: str, session_id: AcpSessionId,
     ) -> tuple[Update, ...]: ...
 
     @property
@@ -247,7 +247,7 @@ class PublicRegistry(RegistryPrivacy):
         return NoCursorScope()
 
     async def cursor_metadata[Update](
-        self, publication: CursorMetadataRead[Update], thread_name: str, session_id: str,
+        self, publication: CursorMetadataRead[Update], thread_name: str, session_id: AcpSessionId,
     ) -> tuple[Update, ...]:
         return ()
 
@@ -387,7 +387,7 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         )
 
     async def cursor_metadata[Update](
-        self, publication: CursorMetadataRead[Update], thread_name: str, session_id: str,
+        self, publication: CursorMetadataRead[Update], thread_name: str, session_id: AcpSessionId,
     ) -> tuple[Update, ...]:
         return await publication.observed_metadata(thread_name, session_id)
 
