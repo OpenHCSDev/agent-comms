@@ -432,17 +432,30 @@ class HeldProfile(ABC):
     path: Path
     openable: ClassVar[bool] = False
 
+    def replacement_grants(self) -> tuple[UiGrantId, ...]:
+        """Grants this entry replaces when another profile is accepted."""
+        return ()
+
     @abstractmethod
     def label(self) -> str:
         """How a UI names this entry in one line."""
 
 
 @dataclass(frozen=True)
-class OpenableProfile(HeldProfile):
-    """A decoded profile whose grant has not expired."""
+class ReplaceableProfile(HeldProfile):
+    """A held grant that a successful replacement revokes on its peer."""
 
     path: Path
     profile: UiConnectionProfile
+
+    def replacement_grants(self) -> tuple[UiGrantId, ...]:
+        return (self.profile.credential.grant_id,)
+
+
+@dataclass(frozen=True)
+class OpenableProfile(ReplaceableProfile):
+    """A decoded profile whose grant has not expired."""
+
     openable = True
 
     def label(self) -> str:
@@ -450,11 +463,8 @@ class OpenableProfile(HeldProfile):
 
 
 @dataclass(frozen=True)
-class ExpiredProfile(HeldProfile):
+class ExpiredProfile(ReplaceableProfile):
     """Decoded, but its grant's own expiry has passed; the server would refuse it."""
-
-    path: Path
-    profile: UiConnectionProfile
 
     def label(self) -> str:
         return f"{self.profile.endpoint.url.host} · grant expired"

@@ -19,9 +19,7 @@ from pathlib import Path
 
 from agent_comms.connector_profile import ReachedRoute, UiConnectionProfile, UiGrantId
 from agent_comms.connector_store import (
-    ExpiredProfile,
     HeldUiProfiles,
-    OpenableProfile,
     UiAccess,
 )
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -145,11 +143,7 @@ class TailnetProfiles(TailnetBuses):
     def held_grants(cls, found: PeerBus) -> tuple[UiGrantId, ...]:
         """The recipient names only the grant it is replacing, never a Core-side path."""
         path = cls.path_for(found)
-        match HeldUiProfiles.entry(path, time.time()):
-            case OpenableProfile(profile=held) | ExpiredProfile(profile=held):
-                return (held.credential.grant_id,)
-            case _:
-                return ()
+        return HeldUiProfiles.entry(path, time.time()).replacement_grants()
 
     @staticmethod
     def path_for(found: PeerBus) -> Path:
