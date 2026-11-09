@@ -13,20 +13,20 @@ import pytest
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, InputId
-from agent_comms.native_arguments import SelectedModel
-from agent_comms.native_entries import NativeEntry, NativeInputEvidenceRead
-from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.execution.native_arguments import SelectedModel
+from agent_comms.execution.native_entries import NativeEntry, NativeInputEvidenceRead
+from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.pi_events import ContextCommitted, InputCommitted
-from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof
-from agent_comms.native_pi import (
+from agent_comms.execution.native_input_proof import NativeContextJournal, NativeContextProof
+from agent_comms.execution.native_pi import (
     NativePiRpcLaunch,
     NativePiTerminalFailure,
 )
-from agent_comms.native_session_files import NativeSessionFiles
-from agent_comms.native_entries import NativeEvidenceScope
-from agent_comms.native_session_reopen import PiSessionId
-from agent_comms.native_startup import NATIVE_STARTUP_POLICY
-from agent_comms.native_transcript import NativeTranscript
+from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.execution.native_entries import NativeEvidenceScope
+from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.execution.native_startup import NATIVE_STARTUP_POLICY
+from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.selected.actions import NoSelectedTools
 from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
@@ -310,7 +310,7 @@ def test_a_rejected_prompt_carries_the_providers_own_words():
     reached", and the turn reported only that something had been rejected."""
     from agent_comms.pi_events import FailedResponseOutcome, Response
     from agent_comms.pi_payloads import ReportedText
-    from agent_comms.native_pi import NativePiPromptRejected
+    from agent_comms.execution.native_pi import NativePiPromptRejected
 
     response = Response(
         success=FailedResponseOutcome(),

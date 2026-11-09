@@ -86,7 +86,7 @@ from agent_comms.planning.goals import (
     OrderCheck,
 )
 from agent_comms.held_orders import HeldOrders
-from agent_comms.native_transcript import NativeTranscript
+from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.repository_name import RepositoryName
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.projects.storage_rules import StorageRule

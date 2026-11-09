@@ -1,9 +1,9 @@
 """Native refusal recovery: Core reports one outcome, never blocks on a retry."""
-from agent_comms.native_arguments import SelectedModel
+from agent_comms.execution.native_arguments import SelectedModel
 
 import pytest
 
-import agent_comms.native_pi as native_pi
+import agent_comms.execution.native_pi as native_pi
 import agent_comms.pi_events as pi_events
 
 

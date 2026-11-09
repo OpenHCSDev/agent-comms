@@ -17,7 +17,7 @@ from agent_comms.errors import UnreceivedAnswerError
 from agent_comms.messaging.sending import TeamReceipts
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
-from agent_comms.native_entries import NativeEntry
+from agent_comms.execution.native_entries import NativeEntry
 from agent_comms.registry.thread_status import (
     RunningThreadStatus,
     StoppedThreadStatus,

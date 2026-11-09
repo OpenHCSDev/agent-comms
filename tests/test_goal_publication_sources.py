@@ -220,7 +220,7 @@ async def test_idle_retirement_never_acquires_an_unloaded_session(publication):
 
 
 async def test_idle_retirement_uses_the_backend_contract_and_respects_a_held_turn(publication):
-    from agent_comms.native_child import PiChild
+    from agent_comms.execution.native_child import PiChild
     from agent_comms.pi_durable_backend import PiDurableBackend
 
     comms, agent, session, _client = publication

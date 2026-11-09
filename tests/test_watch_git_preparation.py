@@ -30,8 +30,11 @@ from agent_comms.execution.child_process import (
     SynchronousProcess,
     join_retirement,
 )
-from agent_comms.native_build_inputs import (
-    ConfiguredChildStdio, DetachedChildStdio, GitAcquisitionCancelled, GitLaunch,
+from agent_comms.installer.native_build_inputs import (
+    ConfiguredChildStdio,
+    DetachedChildStdio,
+    GitAcquisitionCancelled,
+    GitLaunch,
 )
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.comms import Comms
@@ -737,7 +740,7 @@ def test_git_opening_preserves_inherited_stdin(owned: bool) -> None:
 
 
 def test_git_bootstrap_opening_works_without_core_imports(git_preparation: GitPreparation) -> None:
-    source = Path(__file__).resolve().parents[1] / "src/agent_comms/native_build_inputs.py"
+    source = Path(__file__).resolve().parents[1] / "src/agent_comms/installer/native_build_inputs.py"
     program = (
         "import runpy,sys; module=runpy.run_path(sys.argv[1]); "
         "r=module['GitLaunch']._run(sys.argv[2], 'rev-parse', 'HEAD'); "

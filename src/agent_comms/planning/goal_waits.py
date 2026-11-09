@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from ..registry.registration import Registration
     from ..messaging.message_bus import MessageBus
     from ..message_reference import MessageReference
-    from ..native_input_owner import RegistryOwner
+    from ..execution.native_input_owner import RegistryOwner
     from ..registry.registry_store import RegistryEdit
 
 

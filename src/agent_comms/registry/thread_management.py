@@ -61,13 +61,13 @@ from ..launch_runtime import (
     TagListText,
 )
 from ..messaging.message_bus import MessageBus
-from ..native_arguments import (
+from ..execution.native_arguments import (
     ConfiguredBinary,
     NativeArguments,
 )
-from ..native_entries import ImportedSessionWriter
-from ..native_session_reopen import PiSessionId
-from ..native_settings import NativeThreadDefaults
+from ..execution.native_entries import ImportedSessionWriter
+from ..execution.native_session_reopen import PiSessionId
+from .native_settings import NativeThreadDefaults
 from ..nominal.field_codec import (
     DeclaredWireType,
     FieldCodec,

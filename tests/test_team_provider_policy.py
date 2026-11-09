@@ -3,7 +3,7 @@
 import pytest
 
 from agent_comms.coordination.errors import IdentityConflict
-from agent_comms.native_arguments import NativeArguments, NoSelectedModel
+from agent_comms.execution.native_arguments import NativeArguments, NoSelectedModel
 
 
 def test_no_selected_model_is_an_explicit_provider_case():

@@ -1,8 +1,8 @@
 """Empty completions fail the request without declaring a dead native runtime."""
 import pytest
 
-from agent_comms.native_pi import NativeEmptyAnswer
-from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.execution.native_pi import NativeEmptyAnswer
+from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.tracked_turn import PendingTrackedTerminal, UnansweredNotifiedTrackedTerminal
 
 

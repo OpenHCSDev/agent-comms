@@ -23,7 +23,7 @@ from agent_comms.active_route import (
     active_route_path,
 )
 from agent_comms.bus import Bus
-from agent_comms.native_build_inputs import DetachedChildStdio
+from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.execution.child_process import SpawnedProcess
 from agent_comms.comms import Comms, wire
 from agent_comms.installer.backup import StoreBackup

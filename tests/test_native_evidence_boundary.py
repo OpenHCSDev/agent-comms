@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from agent_comms.native_entries import NativeEntry
-from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.execution.native_entries import NativeEntry
+from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.pi_wire import PiOmitted
 from agent_comms.pi_payloads import ReportedText, TextContent, UnknownContent
 

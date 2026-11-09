@@ -15,15 +15,15 @@ from agent_comms.launch_runtime import (
     RestartEnvironment,
     ThreadLaunch,
 )
-from agent_comms.native_arguments import (
+from agent_comms.execution.native_arguments import (
     NativeArguments,
     NativeInputProofArgument,
 )
-from agent_comms.native_entries import NativeEvidenceScope
-from agent_comms.native_evidence_read import session_location
-from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.native_session_files import NativeSessionFiles
-from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.execution.native_entries import NativeEvidenceScope
+from agent_comms.execution.native_evidence_read import session_location
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.nominal.field_codec import boundary_decoder
 from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.pi_vocabulary import ThinkingChoice
@@ -52,7 +52,7 @@ class SelectedSession:
         return None
 
     def attestation(self):
-        from ...native_attestation import PendingAttestation
+        from agent_comms.execution.native_attestation import PendingAttestation
 
         return PendingAttestation()
 
@@ -151,12 +151,12 @@ class SavedSelectedSession(SelectedSession):
         return self.identity.session_file
 
     def attestation(self):
-        from ...native_attestation import PendingAttestation
+        from agent_comms.execution.native_attestation import PendingAttestation
 
         return PendingAttestation(self.identity)
 
     def tracked_attestation(self, current):
-        from ...native_attestation import KnownSessionAttestation
+        from agent_comms.execution.native_attestation import KnownSessionAttestation
 
         return KnownSessionAttestation(self.identity)
 

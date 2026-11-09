@@ -10,7 +10,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .native_input_owner import RegistryOwner
+from .execution.native_input_owner import RegistryOwner
 from .notification_progress import TakenProgress, WorkingTakenProgress
 
 if TYPE_CHECKING:

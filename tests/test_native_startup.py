@@ -1,7 +1,11 @@
 """Native startup's get_state wait grows with the saved session's size and stops at its cap."""
 
 
-from agent_comms.native_startup import MeasuredSessionLoad, NativeStartupPolicy, UnmeasuredSessionLoad
+from agent_comms.execution.native_startup import (
+    MeasuredSessionLoad,
+    NativeStartupPolicy,
+    UnmeasuredSessionLoad,
+)
 
 
 def test_readiness_wait_grows_with_session_size_up_to_the_cap():

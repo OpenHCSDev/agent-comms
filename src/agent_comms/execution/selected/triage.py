@@ -42,9 +42,9 @@ if TYPE_CHECKING:
     from agent_comms.execution.selected.participant import SelectedParticipant
     from agent_comms.execution.selected.session import SelectedSession
     from agent_comms.historical_native_inputs import HistoricalNativeInput
-    from agent_comms.native_input_proof import NativeContextProof
-    from agent_comms.native_input_record import TriageNativeExecution
-    from agent_comms.native_runtime_input import NativeRuntimeInput
+    from agent_comms.execution.native_input_proof import NativeContextProof
+    from agent_comms.execution.native_input_record import TriageNativeExecution
+    from agent_comms.execution.native_runtime_input import NativeRuntimeInput
     from agent_comms.private_send_claim import PrivateSendClaim
     from agent_comms.private_send_stage import TriageNativeSend
 

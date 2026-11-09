@@ -21,8 +21,8 @@ from .bus import Bus
 from .nominal.declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime, ThreadLaunch
 from .transport.owner_requests import RetainedOwnerLaunch
-from .native_arguments import NativeArguments
-from .native_pi import NativePiRpcLaunch
+from .execution.native_arguments import NativeArguments
+from .execution.native_pi import NativePiRpcLaunch
 from .pi_vocabulary import ServiceTier, ThinkingChoice
 from .coordination.coordinator import Coordination
 from .nominal.field_codec import FieldCodec
@@ -43,7 +43,7 @@ from .watched import FileSource
 if TYPE_CHECKING:
     from .nominal.field_codec import AcpSessionId
     from .session_config_options import SessionConfigOptions
-    from .native_package import VerifiedNativePackage
+    from .installer.native_package import VerifiedNativePackage
     from .registry.registry_document import RegistrySnapshot
 
 

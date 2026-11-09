@@ -37,8 +37,8 @@ from .nominal.field_codec import (
     TurnId,
 )
 from .input_attempt import InputAttempt
-from .native_failures import NativePiUnavailable
-from .native_output import NativeOutputLocation, NativeRecordLocation
+from .execution.native_failures import NativePiUnavailable
+from .execution.native_output import NativeOutputLocation, NativeRecordLocation
 from .pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_wire import McpLiveAcknowledgement, PiDiagnostic, PiOmitted, PiRequestId, PiUsage
 from .rule_deal import CompactedDeal

@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated, TYPE_CHECKING
 
-from .coordination.errors import TranscriptChanged
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import (
-    ToolCallId,
-    WireName,
-)
+from .turn_item import NativeItemId
+from ..coordination.errors import TranscriptChanged
 from .native_session_reopen import NativeSessionIdentity
-from .execution.turn_item import NativeItemId
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import ToolCallId, WireName
 
 if TYPE_CHECKING:
     from .native_entries import NativeEntry

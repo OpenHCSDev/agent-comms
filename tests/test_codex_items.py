@@ -69,7 +69,7 @@ def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
 )
     from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
     from agent_comms.runtime_updates import ActiveItem, FinishedItem, FinishedTurn, TurnStarted
-    from agent_comms.native_tools import BashTool
+    from agent_comms.transport.native_tools import BashTool
     from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
 
     stream = ItemStream("th")

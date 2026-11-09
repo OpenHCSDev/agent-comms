@@ -66,18 +66,18 @@ from .cursor_publication import CursorDelivery
 from .extension_ui import ExtensionUiSession
 from .nominal.field_codec import InputId, MalformedRecord, boundary_decoder
 from .image_input import ImageInput
-from .native_attestation import AttestationError
-from .native_child import PiSessionChild
-from .native_entries import NativeEvidenceScope
-from .native_failures import NativePiUnavailable
-from .native_input_proof import NativeContextProof, NativeInputCommit
-from .native_package import VerifiedNativePackage
-from .native_pi import NativePiRpcLaunch, read_tracked_input_commitment
-from .native_session_files import NativeSessionFiles
-from .native_session_reopen import PiSessionId
-from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
-from .native_tool_transport import NativeToolMode
-from .native_tool_transport import ToolTransport, UnboundToolTransport
+from .execution.native_attestation import AttestationError
+from .execution.native_child import PiSessionChild
+from .execution.native_entries import NativeEvidenceScope
+from .execution.native_failures import NativePiUnavailable
+from .execution.native_input_proof import NativeContextProof, NativeInputCommit
+from .installer.native_package import VerifiedNativePackage
+from .execution.native_pi import NativePiRpcLaunch, read_tracked_input_commitment
+from .execution.native_session_files import NativeSessionFiles
+from .execution.native_session_reopen import PiSessionId
+from .execution.native_startup import NATIVE_STARTUP_POLICY, NativeStartup
+from .transport.native_tool_transport import NativeToolMode
+from .transport.native_tool_transport import ToolTransport, UnboundToolTransport
 from .pi_rpc import PiRpcChannel
 from .private_sidecar import native_request_digest
 from .prompt_state import PromptState, QueuedOperation, UnwrittenPrompt

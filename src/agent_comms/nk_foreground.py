@@ -32,8 +32,8 @@ from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
 from .fd_readiness import ready
 from .nominal.field_codec import FieldCodec, MalformedRecord, RootId
-from agent_comms.native_session_files import NativeSessionFiles
-from .native_package import VerifiedNativePackage
+from .execution.native_session_files import NativeSessionFiles
+from .installer.native_package import VerifiedNativePackage
 from agent_comms.execution.selected.result import CoordinatedTurn
 from .registry.thread_text import GivenThreadText
 from .projects.checkouts import Checkout

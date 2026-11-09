@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.selected.triage import (
     InvalidTriageDecision,
     RejectedTriageOutcome,
@@ -56,7 +56,7 @@ async def test_one_claim_takes_an_original_ask_and_one_replacement(tmp_path: Pat
 
 
 async def test_the_replacement_alone_proves_the_source(tmp_path: Path):
-    from agent_comms.native_input_record import TriageNativeExecution
+    from agent_comms.execution.native_input_record import TriageNativeExecution
 
     async with prepared_native_triage(tmp_path) as claim:
         context = await recorded_input_context(claim)

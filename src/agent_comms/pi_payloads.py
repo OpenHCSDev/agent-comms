@@ -40,10 +40,10 @@ from .nominal.field_codec import (
 )
 from .planning.goals import GoalDeclaration
 from .lifecycle_capability import Successful
-from .native_failures import NativePiUnavailable
-from .native_file_artifact import NativeFileArtifact
-from .native_output import AssistantOutput, NativeOutputScope, ToolOutput
-from .native_session_reopen import NativeSessionIdentity, NoSessionRetention, PiSessionId
+from .execution.native_failures import NativePiUnavailable
+from .execution.native_file_artifact import NativeFileArtifact
+from .execution.native_output import AssistantOutput, NativeOutputScope, ToolOutput
+from .execution.native_session_reopen import NativeSessionIdentity, NoSessionRetention, PiSessionId
 from .pi_wire import McpCallPolicy, McpServerState, Opaque, OpenPayload, PiDiagnostic, PiField, PiOmitted, PiPayload, PiReported, PiUsage, ReportedInputId, TaggedPayload, UnknownPayload
 from . import agent_events as events
 from .acp_failure import ExhaustedRetry, FailureSource, RecoveredRetry
@@ -157,7 +157,7 @@ class StrictFields(PiPayload):
 if TYPE_CHECKING:
     from .agent_events import AgentEvent
     from .backend import NativeSession, TurnSession
-    from .native_entries import TranscriptProjection
+    from .execution.native_entries import TranscriptProjection
     from .pi_events import AutoRetryEnd
     from .routing import Routing
     from .transcript_routes import SentTextDigest

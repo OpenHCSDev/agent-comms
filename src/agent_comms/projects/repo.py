@@ -29,7 +29,7 @@ from .git_errors import (
     GitCommandError,
     UnavailableCommitError,
 )
-from ..native_build_inputs import (
+from ..installer.native_build_inputs import (
     CloneShape,
     GitLaunch,
 )

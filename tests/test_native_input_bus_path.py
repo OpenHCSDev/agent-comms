@@ -7,7 +7,7 @@ from contextlib import AsyncExitStack, suppress
 from dataclasses import replace
 import signal
 
-import agent_comms.native_package as native_package
+import agent_comms.installer.native_package as native_package
 import pytest
 
 from agent_comms.execution.turn_inbox import (
@@ -22,12 +22,12 @@ from agent_comms.execution.child_process import Platform
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.store_files import RegistryLocking
-from agent_comms.native_package import VerifiedNativePackage
+from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.execution.turn_watchdog import ModelWait
-from agent_comms.native_arguments import NativeInputProofArgument
-from agent_comms.native_input_proof import NativeContextJournal
+from agent_comms.execution.native_arguments import NativeInputProofArgument
+from agent_comms.execution.native_input_proof import NativeContextJournal
 from native_proof_cases import read_context_proof
-from agent_comms.native_transcript import NativeTranscript
+from agent_comms.execution.native_transcript import NativeTranscript
 from bus_history import read_history
 from delivery_owner_fixture import reply_turn_finished
 from native_backend_fixture import native_backend_fixture, wait_for

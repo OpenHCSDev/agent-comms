@@ -15,7 +15,7 @@ from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.execution.turn_context import InstructionFile
-from agent_comms.native_tool_transport import (
+from agent_comms.transport.native_tool_transport import (
     NativeToolMode,
     ToolTransport,
 )

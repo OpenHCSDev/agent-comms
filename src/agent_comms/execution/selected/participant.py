@@ -48,13 +48,13 @@ from agent_comms.message_notification import (
 )
 from agent_comms.message_reference import MessageReference
 from agent_comms.messaging.message_bus import MessageBus
-from agent_comms.native_arguments import SelectedModel
-from agent_comms.native_attestation import ObservedAttestation
-from agent_comms.native_input_owner import (
+from agent_comms.execution.native_arguments import SelectedModel
+from agent_comms.execution.native_attestation import ObservedAttestation
+from agent_comms.execution.native_input_owner import (
     ParticipantOwner,
     RegistryOwner,
 )
-from agent_comms.native_runtime_input import NativeRuntimeTable
+from agent_comms.execution.native_runtime_input import NativeRuntimeTable
 from agent_comms.nominal.field_codec import (
     RootId,
     ThreadLookup,

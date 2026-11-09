@@ -19,19 +19,18 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack
 from typing import TYPE_CHECKING
 
-from agent_comms.errors import RelationViolationError
-from agent_comms.fd_readiness import ready
-
-from .coordination.errors import CoordinationError
-from .nominal.field_codec import AcpSessionId
+from ..coordination.errors import CoordinationError
+from ..errors import RelationViolationError
+from ..fd_readiness import ready
 from .native_entries import NativeEvidenceScope
 from .native_input_proof import NativeContextProof
-from .publication_measurements import PublicationMeasurements
+from ..nominal.field_codec import AcpSessionId
+from ..publication_measurements import PublicationMeasurements
 
 if TYPE_CHECKING:
-    from .execution.input_drain import InputDrain
-    from .owned_send import OwnedSend
-    from .tracked_turn import TrackedTurnSession
+    from .input_drain import InputDrain
+    from ..owned_send import OwnedSend
+    from ..tracked_turn import TrackedTurnSession
 
 _MAX_SEND_SECONDS = 5.0
 

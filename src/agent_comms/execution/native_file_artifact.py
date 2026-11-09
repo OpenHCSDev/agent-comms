@@ -1,10 +1,11 @@
 """Original successful SDK file operation, not current filesystem authority."""
+
 from dataclasses import dataclass
 from pathlib import Path
 
-from .nominal.declared_family import DeclaredFamily
 from .native_integer import NativeIntegerBounds
-from .text_digest import TextDigest
+from ..nominal.declared_family import DeclaredFamily
+from ..text_digest import TextDigest
 
 
 class NativeFileArtifact(DeclaredFamily, affix="FileArtifact"):

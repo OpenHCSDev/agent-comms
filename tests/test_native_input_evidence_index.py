@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from agent_comms.native_entries import NativeEvidenceScope
+from agent_comms.execution.native_entries import NativeEvidenceScope
 from native_proof_cases import write_proof_rows
 from test_native_pi import INPUT_ID, _evidence
 

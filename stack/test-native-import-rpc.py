@@ -16,8 +16,10 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from agent_comms.native_package import (
-    PACKAGE_LAYOUT, VerifiedNativePackage, pinned_native_package,
+from agent_comms.installer.native_package import (
+    PACKAGE_LAYOUT,
+    VerifiedNativePackage,
+    pinned_native_package,
 )
 
 

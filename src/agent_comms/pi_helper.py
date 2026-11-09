@@ -15,7 +15,7 @@ from .execution.child_process import (
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, MalformedRecord
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestartEnvironment
-from .native_package import VerifiedNativePackage
+from .installer.native_package import VerifiedNativePackage
 
 
 class PiHelperError(ValueError):

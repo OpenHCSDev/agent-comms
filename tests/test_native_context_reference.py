@@ -25,8 +25,8 @@ from agent_comms.historical_native_inputs import (
     FullHistoricalNativeInput,
     TriageHistoricalNativeInput,
 )
-from agent_comms.native_claim_epoch import RecordedNativeClaim
-from agent_comms.native_input_record import (
+from agent_comms.execution.native_claim_epoch import RecordedNativeClaim
+from agent_comms.execution.native_input_record import (
     FullNativeExecution,
     NativeInputReference,
     NumberNativeColumn,
@@ -36,8 +36,8 @@ from agent_comms.native_input_record import (
     UnrecordedNativeColumn,
     UnrecordedNativeInputReference,
 )
-from agent_comms.native_input_proof import NativeContextProof
-from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
+from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.execution.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.storage.private_path import FileIdentity
 from agent_comms.proven_source_coverage import InjectedInput, NoInjectedInput, ProvenSourceCoverage, SourcePrefix
 from agent_comms.execution.selected.triage import (
@@ -47,7 +47,7 @@ from agent_comms.execution.selected.triage import (
     IgnoreSelectedTriage,
 )
 from agent_comms.registry.threads import NativeThread
-from agent_comms.native_session_reopen import PiSessionId
+from agent_comms.execution.native_session_reopen import PiSessionId
 
 
 def cursor() -> CurrentNativeCursor:

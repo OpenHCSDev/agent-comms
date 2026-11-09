@@ -40,7 +40,7 @@ from agent_comms.runtime import RuntimeConnection, present_session
 from agent_comms.storage.private_path import PrivateSocketRole
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.native_arguments import GivenBinary
+from agent_comms.execution.native_arguments import GivenBinary
 from delivery_owner_fixture import canonical_agent
 from owner_socket_fixture import declare_owner, silent_socket
 from stored_inputs import stored_inputs

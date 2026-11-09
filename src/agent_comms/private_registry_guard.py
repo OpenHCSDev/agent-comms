@@ -37,8 +37,8 @@ from .coordination.coordinator import Coordination
 from .errors import RelationViolationError
 from .nominal.field_codec import RootId, ThreadLookup
 from .storage.locked_store import RollbackRetained, WireWakeFile
-from .native_input_owner import RegistryOwner
-from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from .execution.native_input_owner import RegistryOwner
+from .execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .private_nk_entrypoint import (
     PrivateNkLaunch,
     SharedRootLaunch,

@@ -35,7 +35,7 @@ from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.coordination.errors import Refused
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, TurnId
-from agent_comms.native_arguments import GivenArguments
+from agent_comms.execution.native_arguments import GivenArguments
 from agent_comms.pi_counts import PiCount
 from agent_comms.read_basis import NamedViewer
 from agent_comms.registry.thread_model import DeclaredModel

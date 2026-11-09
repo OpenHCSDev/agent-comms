@@ -14,7 +14,7 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
 )
 from agent_comms.storage.locked_store import LiveFilesRequest
-from agent_comms.native_runtime_input import SelectedToolSlot
+from agent_comms.execution.native_runtime_input import SelectedToolSlot
 
 
 def old_slot_store(root: Path) -> Path:

@@ -16,8 +16,8 @@ import pytest
 from coding_owner_fixture import OwnerDouble
 
 import agent_comms.execution.selected.tool_broker as broker
-from agent_comms.native_tool_call import SelectedToolBusy
-from agent_comms.native_tools import NativeToolDeclaration
+from agent_comms.transport.native_tool_call import SelectedToolBusy
+from agent_comms.transport.native_tools import NativeToolDeclaration
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.coordinator import Coordination
@@ -31,11 +31,13 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
     TurnId,
 )
-from agent_comms.native_runtime_input import AcknowledgedSlot, ConsumedSlot, SelectedToolSlot
-from agent_comms.native_tool_transport import OwnerToolConnection
-from agent_comms.native_tool_call import (
-    DuplicateToolCallIdentity,
+from agent_comms.execution.native_runtime_input import (
+    AcknowledgedSlot,
+    ConsumedSlot,
+    SelectedToolSlot,
 )
+from agent_comms.transport.native_tool_transport import OwnerToolConnection
+from agent_comms.transport.native_tool_call import DuplicateToolCallIdentity
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import AssistantMessage, ReportedParts, ToolCallContent
 from agent_comms.projects.checkouts import Checkout

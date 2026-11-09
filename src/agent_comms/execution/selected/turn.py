@@ -38,8 +38,8 @@ from agent_comms.execution.turn_phase import (
     PromptAcceptancePhase,
     PublishingPhase,
 )
-from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.native_pi import NativeTurnResult
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_pi import NativeTurnResult
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.private_send_stage import (

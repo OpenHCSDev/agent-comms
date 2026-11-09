@@ -41,7 +41,7 @@ from agent_comms.envelope_claim_transitions import (
     WakeClaim,
 )
 from agent_comms.errors import RelationViolationError
-from agent_comms.native_input_owner import RegistryOwner
+from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import (

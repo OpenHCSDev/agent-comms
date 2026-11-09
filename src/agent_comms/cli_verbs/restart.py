@@ -9,10 +9,10 @@ from agent_comms.nominal.field_codec import NamedArgumentGroup
 from agent_comms.nominal.field_codec import Normalize
 from agent_comms.nominal.field_codec import TargetBound
 from agent_comms.nominal.field_codec import WireName
-from agent_comms.native_arguments import ConfiguredBinary
-from agent_comms.native_arguments import InheritedArguments
-from agent_comms.native_arguments import LaunchArguments
-from agent_comms.native_arguments import LaunchBinary
+from ..execution.native_arguments import ConfiguredBinary
+from ..execution.native_arguments import InheritedArguments
+from ..execution.native_arguments import LaunchArguments
+from ..execution.native_arguments import LaunchBinary
 from agent_comms.restart_scope import AllOwners
 from agent_comms.restart_scope import RestartTarget
 from agent_comms.target_fields import TargetField

@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, TYPE_CHECKING
-from .nominal.field_codec import FieldCodec, MalformedRecord, NullMember, PresentMember, WireName
-from abc import ABC, abstractmethod
-from .execution.turn_item import FreshNativeId
+
+from .turn_item import FreshNativeId
+from ..nominal.field_codec import FieldCodec, MalformedRecord, NullMember, PresentMember, WireName
 
 if TYPE_CHECKING:
     from .native_child import PiSessionChild
     from .native_runtime_input import NativeRuntimeInput
-    from .pi_native_backend import PersistentPiSession
+    from ..pi_native_backend import PersistentPiSession
 
 
 class NativeReopenError(ValueError):

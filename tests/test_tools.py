@@ -19,7 +19,7 @@ from agent_comms_hooks import ToolRefusedError
 class TestToolCatalog:
     def test_native_launch_carries_the_existing_catalog_and_thread_tier(self, comms, tmp_path, monkeypatch):
         from agent_comms.cli_verbs.tools import ToolsCliCommand
-        from agent_comms.native_arguments import NativeArguments
+        from agent_comms.execution.native_arguments import NativeArguments
         from agent_comms.pi_vocabulary import ServiceTier
         from agent_comms.registry.thread_catalog import ThreadCatalog
         from agent_comms.registry.threads import ChosenServiceTier, NextTurnConfiguration

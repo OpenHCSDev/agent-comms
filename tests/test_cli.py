@@ -23,7 +23,7 @@ from agent_comms.registry.threads import (
     ExternalThread,
     NativeThread,
 )
-from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.registry.thread_model import UndeclaredModel
 from agent_comms.cli_command import CommandSelectionChanged, CliCommand, TargetBatchResult, TargetCompleted, TargetFailed, TargetEdit
 from agent_comms.lifecycle_capability import Successful

@@ -1,7 +1,7 @@
 """Typed Pi boundaries exercised through the actual JSON-line codec and stream."""
 
 import json
-from agent_comms.native_tools import NativeToolDeclaration
+from agent_comms.transport.native_tools import NativeToolDeclaration
 from dataclasses import dataclass
 
 import pytest
@@ -187,7 +187,7 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
 
 
 def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repetition():
-    from agent_comms.native_failures import NativePiUnavailable
+    from agent_comms.execution.native_failures import NativePiUnavailable
     from agent_comms.backend import ObservedNativeCommit, PendingNativeCommit
 
     event = decode({"type": "input_committed", "inputId": "a" * 32, "sessionId": "session", "sessionEntryId": "entry", "sessionEntryStart": 128})
@@ -247,7 +247,7 @@ def test_image_forwarding_reuses_image_owner_and_preserves_native_shape():
     ],
 )
 def test_final_content_owns_native_text_claim(content, expected):
-    from agent_comms.native_failures import NativePiUnavailable
+    from agent_comms.execution.native_failures import NativePiUnavailable
 
     event = decode({"type": "message_end", "message": {
         "role": "assistant", "stopReason": "stop", "content": content,
@@ -273,7 +273,7 @@ def test_final_content_owns_native_text_claim(content, expected):
     ],
 )
 def test_saved_failed_turn_uses_the_live_turn_end_decision(stop, content, error, failed):
-    from agent_comms.native_entries import NativeEntry
+    from agent_comms.execution.native_entries import NativeEntry
 
     message = dict(role="assistant", content=content, stopReason=stop,
                    api="api", provider="provider", model="model")
@@ -327,7 +327,7 @@ def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
 
 
 def test_raw_tool_arguments_reach_the_declared_call_refusal():
-    from agent_comms.native_tool_call import RefusedCodingCall
+    from agent_comms.transport.native_tool_call import RefusedCodingCall
     from agent_comms.tool_denial import SelectedToolDenied
 
     event = decode({"type": "message_end", "message": {

@@ -16,7 +16,7 @@ class PrivateCoordinatorTable(SharedFileTables, DurableTables):
 
     @classmethod
     def declarations(cls) -> tuple[type[TypedTable], ...]:
-        import agent_comms.cohort_schema, agent_comms.coordination.response, agent_comms.native_runtime_input, agent_comms.triage_native_sources  # noqa: E401, F401 - declarations register in the existing TypedTable family
+        import agent_comms.cohort_schema, agent_comms.coordination.response, agent_comms.execution.native_runtime_input, agent_comms.triage_native_sources  # noqa: E401, F401 - declarations register in the existing TypedTable family
 
         return TypedTable.members_with(cls)
 

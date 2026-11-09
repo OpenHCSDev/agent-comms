@@ -96,7 +96,7 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.messaging.message_page import MessagePageRequest
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import ConversationRole, InfoKind, Message, NoticeRole, QuestionKind
-from agent_comms.native_arguments import GivenBinary
+from agent_comms.execution.native_arguments import GivenBinary
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.order_story import TeamStory
 from agent_comms.owner_requests import NewestOpenRequest, RequestDirective

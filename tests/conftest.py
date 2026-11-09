@@ -25,7 +25,7 @@ from agent_comms.pi_payloads import PiMessage
 from agent_comms.pi_rule_gate import PiRedeal, PiRuleGate
 from agent_comms.rule_deal import RuleDeal, SessionAudit, StartedDeal
 from agent_comms.rule_deal import ReadSpan
-from agent_comms.native_entries import SessionEntry
+from agent_comms.execution.native_entries import SessionEntry
 from agent_comms.tool_declaration import ToolDeclaration, NoToolRecord
 from contextlib import AsyncExitStack, contextmanager
 from pathlib import Path
@@ -45,8 +45,8 @@ from agent_comms.storage.maintenance_barrier import (
 )
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
-from agent_comms.native_package import pinned_location, pinned_native_package
-from agent_comms.native_tool_transport import ToolListener
+from agent_comms.installer.native_package import pinned_location, pinned_native_package
+from agent_comms.transport.native_tool_transport import ToolListener
 from agent_comms.pi_durable_backend import PiDurableBackend
 from agent_comms.publisher import InitialWrites, ParticipantPublisher
 from agent_comms.registry.registration import Registration
@@ -55,9 +55,9 @@ from agent_comms.registry.thread_text import (
     GivenThreadText,
 )
 from agent_comms.storage.typed_table import TypedTable
-from agent_comms.native_entries import NativeEvidenceScope
+from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.cursor_publication import CursorDelivery
-from agent_comms.native_package import VerifiedNativePackage
+from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.team.order import Team
 from agent_comms.tool_caller import PeerCaller
 from agent_comms.projects.repo import Repo
@@ -87,7 +87,7 @@ class TranscriptRecords:
         return declaration(timestamp=self.timestamp, **facts)
 
     def message(self, payload: dict[str, JsonValue], **coordinates: JsonValue) -> dict[str, JsonValue]:
-        from agent_comms.native_entries import MessageEntry
+        from agent_comms.execution.native_entries import MessageEntry
         from agent_comms.pi_payloads import PiMessage
 
         entry = self.entry(MessageEntry, message=PiMessage.from_wire(payload), **coordinates)
@@ -95,8 +95,8 @@ class TranscriptRecords:
         return {**encoded, "message": payload}
 
     def session(self, id: str, **coordinates: JsonValue) -> SessionEntry:
-        from agent_comms.native_entries import SessionEntry
-        from agent_comms.native_session_reopen import PiSessionId
+        from agent_comms.execution.native_entries import SessionEntry
+        from agent_comms.execution.native_session_reopen import PiSessionId
 
         return self.entry(SessionEntry, id=FieldCodec.decode(PiSessionId, id), **coordinates)
 
@@ -277,7 +277,7 @@ def durable_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def source_reads() -> Iterator[NativeEvidenceScope]:
-    from agent_comms.native_entries import NativeEvidenceScope
+    from agent_comms.execution.native_entries import NativeEvidenceScope
 
     with NativeEvidenceScope() as scope:
         yield scope
@@ -349,7 +349,7 @@ def test_uv(monkeypatch: pytest.MonkeyPatch) -> Path:
 @pytest.fixture(scope="session")
 def native_runtime_package(pinned_native: Path) -> VerifiedNativePackage:
     """The running interpreter's artifact, qualified by the real installer before tests."""
-    from agent_comms.native_package import VerifiedNativePackage
+    from agent_comms.installer.native_package import VerifiedNativePackage
     from agent_comms.deal_prompt import DealPrompt
 
     package = VerifiedNativePackage.qualify(pinned_native)

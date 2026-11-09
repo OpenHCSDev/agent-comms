@@ -24,15 +24,15 @@ from .envelope_claim_transitions import (
 )
 from .nominal.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord
 from .lifecycle_capability import Executing
-from .native_arguments import NativeArguments
-from .native_runtime_input import NativeRuntimeInput
-from .native_tool_transport import NativeToolMode
-from .native_tool_call import (
+from .execution.native_arguments import NativeArguments
+from .execution.native_runtime_input import NativeRuntimeInput
+from .transport.native_tool_transport import NativeToolMode
+from .transport.native_tool_call import (
     CodingCall,
     ToolNotExecuting,
 )
-from .native_tool_transport import GatedToolTransport, ToolListener, UnboundToolTransport
-from .native_tools import NativeToolDeclaration
+from .transport.native_tool_transport import GatedToolTransport, ToolListener, UnboundToolTransport
+from .transport.native_tools import NativeToolDeclaration
 from .pi_payloads import StorageDenialToolDetails
 from .pi_rule_gate import PiRuleGate
 from agent_comms.execution.selected.claim import (

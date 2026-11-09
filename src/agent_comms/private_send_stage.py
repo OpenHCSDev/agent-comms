@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from agent_comms.lifecycle_capability import Active
 
-from agent_comms.native_session_files import NativeSessionFiles
+from .execution.native_session_files import NativeSessionFiles
 
 import asyncio
 import sqlite3
@@ -14,23 +14,28 @@ from contextlib import contextmanager
 from collections.abc import Iterator
 
 from .assignment_states import DeferredAssignment, FailedAssignment, TriagePendingAssignment
-from agent_comms.native_runtime_input import NativeRuntimeTable
+from .execution.native_runtime_input import NativeRuntimeTable
 from .coordination.errors import IdentityConflict, RetryScheduled, StaleFence
 from .coordination.tables.assignments import WakeAssignment
 from .coordination.coordinator import Coordination
 from .durable_turn import DurableTurn
 from .nominal.field_codec import ThreadLookup, InputId, RootId
 from .private_send_rules import NativeClaimCheck, NativeIdentityCheck, NativeReservationCheck
-from .native_input_owner import ParticipantOwner
-from .native_input_record import (NativeInputIdentity, NativeInputExecution, TriageNativeExecution, FullNativeExecution)
-from .native_input_proof import NativeContextProof
-from .native_entries import NativeEvidenceScope
-from .native_prompt_binding import (
+from .execution.native_input_owner import ParticipantOwner
+from .execution.native_input_record import (
+    NativeInputIdentity,
+    NativeInputExecution,
+    TriageNativeExecution,
+    FullNativeExecution,
+)
+from .execution.native_input_proof import NativeContextProof
+from .execution.native_entries import NativeEvidenceScope
+from .execution.native_prompt_binding import (
     PromptBinding,
     expected_prompt_matches_journal,
     expected_prompt_bindings,
 )
-from .native_runtime_input import NativeRuntimeInput
+from .execution.native_runtime_input import NativeRuntimeInput
 from .private_sidecar import native_request_digest
 from .reservation_rules import ReservationViolationError
 from agent_comms.execution.selected.triage import (

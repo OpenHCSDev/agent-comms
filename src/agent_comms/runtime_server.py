@@ -35,7 +35,7 @@ from .controller import (
 from .coordination.coordinator import Coordination
 from .coordination.errors import CoordinationError, IdentityConflict, Refused
 from .errors import RelationViolationError
-from .native_failures import NativeRequestFailure
+from .execution.native_failures import NativeRequestFailure
 from .nominal.field_codec import (
     AcpSessionId,
     FieldCodec,

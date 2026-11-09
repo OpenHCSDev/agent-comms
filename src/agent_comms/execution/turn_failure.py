@@ -15,8 +15,8 @@ from typing import (
 
 from ..attempt_resolution import RecordedResolution
 from ..errors import StaleAttemptError
-from ..native_arguments import SelectedModel
-from ..native_failures import NativePiUnavailable
+from .native_arguments import SelectedModel
+from .native_failures import NativePiUnavailable
 from ..nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
@@ -153,7 +153,7 @@ class ModelRequestFailed(TurnFailure):
         return ProviderRetryExhausted(self.text)
 
     def raise_native(self, proof, model: SelectedModel) -> None:
-        from ..native_pi import NativePiTerminalFailure
+        from .native_pi import NativePiTerminalFailure
 
         raise NativePiTerminalFailure(self.text, proof, model, self)
 

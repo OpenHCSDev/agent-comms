@@ -6,8 +6,13 @@ import subprocess
 
 import pytest
 
-from agent_comms.native_build_inputs import (
-    CloneShape, FullClone, GitLaunch, GitVersion, GitVersionUnsupported, PartialClone,
+from agent_comms.installer.native_build_inputs import (
+    CloneShape,
+    FullClone,
+    GitLaunch,
+    GitVersion,
+    GitVersionUnsupported,
+    PartialClone,
 )
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo

@@ -88,7 +88,7 @@ from ..input_attempt import (
 )
 from ..input_disposition import DeliveryOverview
 from ..messages import Message
-from ..native_input_owner import GoalLaunchOwner
+from ..execution.native_input_owner import GoalLaunchOwner
 from ..nominal.field_codec import GoalId
 from ..owner_requests import (
     NewestOpenRequest,

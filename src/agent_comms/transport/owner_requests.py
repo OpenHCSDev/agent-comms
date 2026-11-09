@@ -18,7 +18,7 @@ from ..execution.child_process import (
     ProcessIdentity,
 )
 from ..errors import RelationViolationError
-from ..native_arguments import (
+from ..execution.native_arguments import (
     ConfiguredBinary,
     InheritedArguments,
     LaunchArguments,

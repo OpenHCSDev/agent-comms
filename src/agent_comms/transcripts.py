@@ -26,13 +26,13 @@ from .historical_views import HistorySource
 from .page_traversal import HistorySourceKey
 from .messaging.message_bus import MessageBus
 from .message_reference import MessageReference
-from .native_runtime_input import PublishedReplyRevision
-from .native_entries import NativeEvidenceScope
-from .native_input_owner import RegistryOwner
-from .native_session_files import NativeSessionFiles
-from .native_transcript import NativeTranscript, RecordsCut, SessionCut
+from .execution.native_runtime_input import PublishedReplyRevision
+from .execution.native_entries import NativeEvidenceScope
+from .execution.native_input_owner import RegistryOwner
+from .execution.native_session_files import NativeSessionFiles
+from .execution.native_transcript import NativeTranscript, RecordsCut, SessionCut
 from .input_disposition import InputDispositions
-from .native_output import NativeRecordLocation
+from .execution.native_output import NativeRecordLocation
 from .notification_assignment import NotificationAssignment
 from agent_comms.message_notification import NotificationWindow
 from .notification_evidence import OwnerOutcomes

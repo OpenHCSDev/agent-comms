@@ -15,7 +15,7 @@ from agent_comms.planning.goals import (
     NoGoal,
     ProblemGoalOrder,
 )
-from agent_comms.native_tools import CoordinationCall, ReadTool
+from agent_comms.transport.native_tools import CoordinationCall, ReadTool
 from agent_comms.pi_payloads import ProvidedToolResult
 from agent_comms.transport.tools.goals import GoalSet
 from agent_comms.tool_denial import SelectedToolDenied

@@ -9,49 +9,33 @@ from __future__ import annotations
 import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Literal
+from typing import Literal, TYPE_CHECKING
 
-from agent_comms.coordination.tables.executions import ExecutionRecord
-
-from .assignment_states import TriagePendingAssignment
-from .coordination.contracts import validate_execution_id
-from .coordination.errors import IdentityConflict, UnrecordedNativeContext
-from .coordination.tables.assignments import (
-    ExecutionAssignmentLink,
-    WakeAssignment,
-)
-from .coordination.tables.participants import OwnerGenerations, OwnerRecord
-from .coordination.tables.responses import ResponseObligation
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import (
-    AssignmentId,
-    FieldCodec,
-    InputId,
-    JsonShapeFamily,
-    JsonShapeMember,
-    MalformedRecord,
-    NativeContext,
-    ThreadLookup,
-)
+from ..assignment_states import TriagePendingAssignment
+from ..coordination.contracts import validate_execution_id
+from ..coordination.errors import IdentityConflict, UnrecordedNativeContext
+from ..coordination.tables.assignments import ExecutionAssignmentLink, WakeAssignment
+from ..coordination.tables.executions import ExecutionRecord
+from ..coordination.tables.participants import OwnerGenerations, OwnerRecord
+from ..coordination.tables.responses import ResponseObligation
 from .native_input_proof import NativeContextProof
 from .native_integer import PositiveNativeIntegerBounds
 from .native_session_reopen import PiSessionId
-from .transcript_routes import InputDisplay, NoDisplayText
-from .storage.typed_table import LOCAL_TABLE_SOURCE, SqlStorage, TableSource, TextStorage, sql_literal
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import AssignmentId, FieldCodec, InputId, JsonShapeFamily, JsonShapeMember, MalformedRecord, NativeContext, ThreadLookup
+from ..storage.typed_table import LOCAL_TABLE_SOURCE, SqlStorage, TableSource, TextStorage, sql_literal
+from ..transcript_routes import InputDisplay, NoDisplayText
 
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
-    from agent_comms.coordination.tables.executions import ExecutionRecord
-
-    from .assignment_states import AssignmentState
-    from .coordination.tables.assignments import WakeAssignment
-    from .cursor_owner import CursorOwner
-    from .historical_native_inputs import HistoricalNativeInput
-    from .message_reference import MessageReference
     from .native_entries import MessageEntry, RecordedEntry, TranscriptProjection
     from .native_runtime_input import NativeRuntimeInput
-    from .transcript_events import TranscriptEvent
+    from ..assignment_states import AssignmentState
+    from ..cursor_owner import CursorOwner
+    from ..historical_native_inputs import HistoricalNativeInput
+    from ..message_reference import MessageReference
+    from ..transcript_events import TranscriptEvent
 
 
 class NativeInputPosition(DeclaredFamily, JsonShapeFamily, affix="NativePosition"):
@@ -265,7 +249,7 @@ class TriageNativeExecution(NativeInputExecution):
     def source_membership_sql(
         cls, *, table_source: TableSource = LOCAL_TABLE_SOURCE,
     ) -> str:
-        from .triage_native_sources import TriageNativeSource
+        from ..triage_native_sources import TriageNativeSource
 
         return (f"SELECT s.input_id, s.assignment_id, s.ordinal, s.attempt "
                 f"FROM {TriageNativeSource.qualified_table(table_source)} s")
@@ -274,7 +258,7 @@ class TriageNativeExecution(NativeInputExecution):
         self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...],
         *, attempt: int = 0,
     ) -> None:
-        from .triage_native_sources import TriageNativeSource
+        from ..triage_native_sources import TriageNativeSource
 
         if not assignments:
             raise IdentityConflict("Native input membership names at least one original source")
@@ -383,7 +367,7 @@ class FullNativeExecution(NativeInputExecution):
     def historical_proof(
         self, record: NativeRuntimeInput, *, lifecycle: AssignmentState, **source,
     ) -> HistoricalNativeInput:
-        from .historical_native_inputs import FullHistoricalNativeInput
+        from ..historical_native_inputs import FullHistoricalNativeInput
 
         record.verdict.require_undecided()
         return FullHistoricalNativeInput(execution=self, **source)

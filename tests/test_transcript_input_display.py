@@ -13,7 +13,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.native_entries import TranscriptProjection
+from agent_comms.execution.native_entries import TranscriptProjection
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.pi_payloads import PiMessage, UserMessage
 from agent_comms.registry.threads import NativeThread

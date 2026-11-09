@@ -26,7 +26,7 @@ from conftest import accept_initial
 from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.messages import InfoKind
-from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.selected.source_batch import (
     SelectedSource,
     SelectedSourceBatch,
