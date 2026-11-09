@@ -1,0 +1,102 @@
+{
+  "reports": [
+    {
+      "operation": "relocate_symbols_to_new_module",
+      "status": "passed",
+      "message": "Module symbol move dependency closure is clean",
+      "details": {
+        "destination_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/registry/registration_reads.py",
+        "import_dependencies": [
+          {
+            "module_name": "abc",
+            "member_name": "ABC",
+            "imported_name": "ABC",
+            "destination_import_required": true,
+            "source_removal_required": false,
+            "name": "ABC",
+            "source": "from abc import ABC\n",
+            "scope": "runtime"
+          },
+          {
+            "module_name": "pathlib",
+            "member_name": "Path",
+            "imported_name": "Path",
+            "destination_import_required": true,
+            "source_removal_required": true,
+            "name": "Path",
+            "source": "from pathlib import Path\n",
+            "scope": "runtime"
+          },
+          {
+            "module_name": "agent_comms.nominal.field_codec",
+            "member_name": "TurnId",
+            "imported_name": "TurnId",
+            "destination_import_required": true,
+            "source_removal_required": true,
+            "name": "TurnId",
+            "source": "from agent_comms.nominal.field_codec import TurnId\n",
+            "scope": "runtime"
+          },
+          {
+            "module_name": "abc",
+            "member_name": "abstractmethod",
+            "imported_name": "abstractmethod",
+            "destination_import_required": true,
+            "source_removal_required": false,
+            "name": "abstractmethod",
+            "source": "from abc import abstractmethod\n",
+            "scope": "runtime"
+          }
+        ],
+        "source_local_dependencies": [],
+        "destination_dependency_names": [],
+        "destination_insertion_line": 2,
+        "source_annotation_evaluation_mode": "stringized",
+        "destination_annotation_evaluation_mode": "stringized",
+        "moved_annotation_count": 12,
+        "source_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/registry/activity_registry_reads.py",
+        "requested_symbol_names": [
+          "RegistryPathRead",
+          "ActivityRegistration"
+        ],
+        "moved_symbol_names": [
+          "RegistryPathRead",
+          "ActivityRegistration"
+        ],
+        "derived_symbol_names": [],
+        "requested_symbol_count": 2,
+        "moved_symbol_count": 2,
+        "derived_symbol_count": 0,
+        "closure_within_budget": true,
+        "imported_dependency_names": [
+          "ABC",
+          "Path",
+          "TurnId",
+          "abstractmethod"
+        ],
+        "import_sources": [
+          "from abc import ABC\n",
+          "from pathlib import Path\n",
+          "from agent_comms.nominal.field_codec import TurnId\n",
+          "from abc import abstractmethod\n"
+        ],
+        "source_import_removal_names": [
+          "Path",
+          "TurnId"
+        ],
+        "is_clean": true,
+        "annotation_evaluation_is_preserved": true,
+        "source_local_dependency_names": [],
+        "source_module_context_dependency_names": [],
+        "destination_builtin_conflict_names": [],
+        "unresolved_dependency_names": [],
+        "ambiguous_import_dependency_names": [],
+        "destination_import_conflict_names": [],
+        "annotation_evaluation_mode_change": []
+      }
+    }
+  ],
+  "is_clean": true,
+  "preflight_failed": false,
+  "report_count": 1
+}

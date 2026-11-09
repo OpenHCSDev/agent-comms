@@ -1,0 +1,246 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "parameterize-original-registration-contract-values",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "\nclass ActivityRegistration(ABC):\n    __slots__ = ()\n    store: RegistryPathRead\n    storage_rule: StorageRule\n\n    @abstractmethod\n    def snapshot(self) -> ActivityRegistryRead: ...\n\n    @abstractmethod\n    def require(self, name: str) -> Thread: ...\n\n",
+                  "new_source": "\nclass ActivityRegistration[Owner, NativeOwner, Snapshot, Storage, Route, Lease, Completion](ABC):\n    __slots__ = ()\n    store: RegistryPathRead\n    storage_rule: Storage\n\n    @abstractmethod\n    def snapshot(self) -> Snapshot: ...\n\n    @abstractmethod\n    def require(self, name: str) -> Owner: ...\n\n"
+                },
+                {
+                  "old_source": "    def lease_local_turn(\n        self, name: str, turn_id: TurnId, *, routing: Routing = NoTurnRouting(),\n    ) -> tuple[NativeThread, int]: ...\n\n    @abstractmethod\n    def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, TurnCompletion]: ...\n",
+                  "new_source": "    def lease_local_turn(\n        self, name: str, turn_id: TurnId, *, routing: Route = ...,\n    ) -> tuple[NativeOwner, int]: ...\n\n    @abstractmethod\n    def release_turn(self, lease: Lease) -> tuple[bool, Completion]: ...\n"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/registry/activity_registry_reads.py",
+              "rationale": ""
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "remove-high-imports-no-longer-read-by-original-contract",
+          "operations": [
+            {
+              "operation": "remove_import_bindings",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/registry/activity_registry_reads.py",
+              "rationale": "",
+              "bound_names": [
+                "TurnCompletion",
+                "TurnLeaseFence",
+                "NoTurnRouting",
+                "Routing",
+                "StorageRule",
+                "NativeThread"
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "move-original-registration-contract-below-its-callbacks",
+          "operations": [
+            {
+              "operation": "relocate_symbols_to_new_module",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/registry/activity_registry_reads.py",
+              "rationale": "",
+              "destination_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/registry/registration_reads.py",
+              "batch": [],
+              "symbol_qualnames": [
+                "RegistryPathRead",
+                "ActivityRegistration"
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "bind-original-provider-and-activity-to-original-value-types",
+          "operations": [
+            {
+              "operation": "replace_class_base",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/registry/registration.py",
+              "target_qualname": "Registration",
+              "rationale": "",
+              "base_name": "ActivityRegistration",
+              "replacement_base_name": "ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion]"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/registry/registration.py",
+              "rationale": "",
+              "import_source": "from agent_comms.execution.turn_lease import TurnLeaseFence, TurnCompletion"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/registry/agent_activity.py",
+              "rationale": "",
+              "import_source": "from agent_comms.registry.threads import NativeThread"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/registry/agent_activity.py",
+              "rationale": "",
+              "import_source": "from agent_comms.projects.storage_rules import StorageRule"
+            },
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "class AgentActivity(RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):\n    def __init__(self, root: Path, registry: ActivityRegistration):\n        self.registry = registry\n",
+                  "new_source": "class AgentActivity(RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):\n    def __init__(self, root: Path, registry: ActivityRegistration[Thread, NativeThread, ActivityRegistryRead, StorageRule, Routing, TurnLeaseFence, TurnCompletion]):\n        self.registry = registry\n"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/registry/agent_activity.py",
+              "rationale": ""
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "use-original-registration-capability-in-notification-callbacks",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "if TYPE_CHECKING:\n    from agent_comms.registry.registration import Registration\n\n\n@dataclass(frozen=True)\nclass NotificationWindow(TaggedUnion, affix=\"\"):\n",
+                  "new_source": "if TYPE_CHECKING:\n    from agent_comms.registry.registration_reads import ActivityRegistration\n\n\n@dataclass(frozen=True)\nclass NotificationWindow(TaggedUnion, affix=\"\"):\n"
+                },
+                {
+                  "old_source": "    @classmethod\n    def references(\n        cls,\n        root: Path,\n        registry: Registration,\n        log: MessageReferencesRead[Message],\n        references: Sequence[MessageReference],\n        *,\n        viewer: OutcomeViewer,\n",
+                  "new_source": "    @classmethod\n    def references(\n        cls,\n        root: Path,\n        registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],\n        log: MessageReferencesRead[Message],\n        references: Sequence[MessageReference],\n        *,\n        viewer: OutcomeViewer,\n"
+                },
+                {
+                  "old_source": "    @classmethod\n    def delivery_window(\n        cls,\n        root: Path,\n        registry: Registration,\n        assignment_read: NotificationAssignmentRead,\n    ) -> NotificationWindow:\n        \"\"\"The captured selection owns original membership and viewer visibility.\"\"\"\n        sources = assignment_read.sources\n",
+                  "new_source": "    @classmethod\n    def delivery_window(\n        cls,\n        root: Path,\n        registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],\n        assignment_read: NotificationAssignmentRead,\n    ) -> NotificationWindow:\n        \"\"\"The captured selection owns original membership and viewer visibility.\"\"\"\n        sources = assignment_read.sources\n"
+                },
+                {
+                  "old_source": "        return CapturedNotificationWindow({}, ())\n\n    @classmethod\n    def sent_sources(\n        cls, root: Path, registry: Registration, log: MessageReferencesRead[Message], name: str, *, limit: int = 5\n    ):\n        \"\"\"Read up to the requested number of messages sent by this thread.\"\"\"\n        if not 1 <= limit <= NotificationSelection.window_limit:\n            raise ValueError(\"Sent notification limit must fit one bounded window\")\n",
+                  "new_source": "        return CapturedNotificationWindow({}, ())\n\n    @classmethod\n    def sent_sources(\n        cls, root: Path, registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion], log: MessageReferencesRead[Message], name: str, *, limit: int = 5\n    ):\n        \"\"\"Read up to the requested number of messages sent by this thread.\"\"\"\n        if not 1 <= limit <= NotificationSelection.window_limit:\n            raise ValueError(\"Sent notification limit must fit one bounded window\")\n"
+                },
+                {
+                  "old_source": "    @classmethod\n    def for_sources(\n        cls,\n        root: Path,\n        registry: Registration,\n        assignment_read: NotificationAssignmentRead,\n",
+                  "new_source": "    @classmethod\n    def for_sources(\n        cls,\n        root: Path,\n        registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],\n        assignment_read: NotificationAssignmentRead,\n"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/messaging/message_notification.py",
+              "rationale": ""
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/messaging/message_notification.py",
+              "rationale": "",
+              "import_source": "from agent_comms.registry.threads import Thread, NativeThread"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/messaging/message_notification.py",
+              "rationale": "",
+              "import_source": "from agent_comms.projects.storage_rules import StorageRule"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/messaging/message_notification.py",
+              "rationale": "",
+              "import_source": "from agent_comms.messaging.routing import Routing"
+            },
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/messaging/message_notification.py",
+              "rationale": "",
+              "import_source": "from agent_comms.execution.turn_lease import TurnLeaseFence, TurnCompletion"
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "promote-cycle-proved-registration-callback-import",
+          "operations": [
+            {
+              "operation": "promote_guarded_import",
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/messaging/message_notification.py",
+              "rationale": "",
+              "module_name": "agent_comms.registry.registration_reads",
+              "import_names": [
+                "ActivityRegistration"
+              ]
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "delete-unused-and-already-runtime-activity-guard-copies",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "from pathlib import Path\nfrom typing import TYPE_CHECKING\n\n",
+                  "new_source": "from pathlib import Path\n\n"
+                },
+                {
+                  "old_source": "\nif TYPE_CHECKING:\n    from agent_comms.agent_backend import AgentBackend\n    from agent_comms.agent_events import RuntimeInfoObservation\n    from agent_comms.messaging.bus_publication import Delivered\n    from agent_comms.messaging.message_notification import MessageNotification\n    from agent_comms.messaging.notification_progress import AssignmentProgress, DeliveryProgress\n    from agent_comms.registry.registration import Registration\n    from agent_comms.registry.registry_document import RegistrySnapshot\n    from agent_comms.registry.thread_status import ThreadStatus\n\n",
+                  "new_source": "\n\n"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-commander-2--ac8b7b78e6634b8dad1497ab50a697c3--agent-comms/.verification/p23-registration-packaged/before/src/agent_comms/registry/agent_activity.py",
+              "rationale": ""
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

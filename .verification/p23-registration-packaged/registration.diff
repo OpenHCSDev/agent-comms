@@ -1,0 +1,282 @@
+diff --git a/.verification/p23-registration-packaged/before/src/agent_comms/messaging/message_notification.py b/.verification/p23-registration-packaged/projected/src/agent_comms/messaging/message_notification.py
+index 713e78cb0..28b1a5fd0 100644
+--- a/.verification/p23-registration-packaged/before/src/agent_comms/messaging/message_notification.py
++++ b/.verification/p23-registration-packaged/projected/src/agent_comms/messaging/message_notification.py
+@@ -2,6 +2,7 @@
+ 
+ from __future__ import annotations
+ 
++from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
+ from agent_comms.messaging.assignment_notice import AssignmentNotice
+ from agent_comms.messaging.message_reads import MessageDeliveryRead, MessageReferencesRead
+ from agent_comms.messaging.notification_contracts import NotificationEvidenceSource, RevisionChanges, RecipientActivityRead
+@@ -14,7 +15,6 @@ from datetime import datetime
+ from functools import cached_property
+ from itertools import batched
+ from pathlib import Path
+-from typing import TYPE_CHECKING
+ 
+ from agent_comms.execution.transcript_sources import AssignedTranscriptSource
+ from agent_comms.messaging.channel_targets import CommandTarget
+@@ -35,6 +35,7 @@ from agent_comms.messaging.notification_progress import (
+ )
+ from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
+ from agent_comms.messaging.revision_views import NotificationEvidenceView
++from agent_comms.messaging.routing import Routing
+ from agent_comms.nominal.field_codec import MessageId, TaggedRecordMember, TaggedUnion, ThreadLookup
+ from agent_comms.notification_assignment import (
+     AssignmentSource,
+@@ -43,14 +44,15 @@ from agent_comms.notification_assignment import (
+     NotificationReadMark,
+     NotificationSelection,
+ )
++from agent_comms.projects.storage_rules import StorageRule
+ from agent_comms.registry.agent_activity import AgentActivity, RecordedRecipientActivity
+ from agent_comms.registry.namespace_reads import NamespaceRead
++from agent_comms.registry.registration_reads import ActivityRegistration
+ from agent_comms.registry.registry_document import RegistrySnapshot
+ from agent_comms.registry.thread_identity import ThreadIncarnation
+ from agent_comms.registry.thread_identity_source import ThreadIdentitySource
++from agent_comms.registry.threads import NativeThread, Thread
+ 
+-if TYPE_CHECKING:
+-    from agent_comms.registry.registration import Registration
+ 
+ 
+ @dataclass(frozen=True)
+@@ -233,7 +235,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
+     def references(
+         cls,
+         root: Path,
+-        registry: Registration,
++        registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],
+         log: MessageReferencesRead[Message],
+         references: Sequence[MessageReference],
+         *,
+@@ -272,7 +274,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
+     def delivery_window(
+         cls,
+         root: Path,
+-        registry: Registration,
++        registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],
+         assignment_read: NotificationAssignmentRead,
+     ) -> NotificationWindow:
+         """The captured selection owns original membership and viewer visibility."""
+@@ -410,7 +412,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
+ 
+     @classmethod
+     def sent_sources(
+-        cls, root: Path, registry: Registration, log: MessageReferencesRead[Message], name: str, *, limit: int = 5
++        cls, root: Path, registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion], log: MessageReferencesRead[Message], name: str, *, limit: int = 5
+     ):
+         """Read up to the requested number of messages sent by this thread."""
+         if not 1 <= limit <= NotificationSelection.window_limit:
+@@ -426,7 +428,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
+     def for_sources(
+         cls,
+         root: Path,
+-        registry: Registration,
++        registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],
+         assignment_read: NotificationAssignmentRead,
+     ) -> tuple[MessageNotification, ...]:
+         """Attach notification outcomes, as the read's viewer sees them, to the public
+diff --git a/.verification/p23-registration-packaged/before/src/agent_comms/registry/activity_registry_reads.py b/.verification/p23-registration-packaged/projected/src/agent_comms/registry/activity_registry_reads.py
+index e75868741..0ff71afca 100644
+--- a/.verification/p23-registration-packaged/before/src/agent_comms/registry/activity_registry_reads.py
++++ b/.verification/p23-registration-packaged/projected/src/agent_comms/registry/activity_registry_reads.py
+@@ -4,23 +4,13 @@ from __future__ import annotations
+ 
+ from abc import ABC, abstractmethod
+ from collections.abc import Iterable, Mapping
+-from pathlib import Path
+ 
+-from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
+ from agent_comms.messaging.delivery_recipients import DeliveryRecipients
+ from agent_comms.messaging.frozen_recipient import FrozenRecipient
+-from agent_comms.messaging.routing import NoTurnRouting, Routing
+-from agent_comms.nominal.field_codec import TurnId
+-from agent_comms.projects.storage_rules import StorageRule
+ from agent_comms.registry.recipient_selection import RecipientSelection
+ from agent_comms.registry.thread_identity import OwnerIdentity
+ from agent_comms.registry.thread_status import ThreadStatus
+-from agent_comms.registry.threads import NativeThread, Thread
+-
+-
+-class RegistryPathRead(ABC):
+-    __slots__ = ()
+-    path: Path
++from agent_comms.registry.threads import Thread
+ 
+ 
+ class ActivityRegistryRead(ABC):
+@@ -44,23 +34,3 @@ class ActivityRegistryRead(ABC):
+ 
+     @abstractmethod
+     def recipient(self, recipient: FrozenRecipient, original: DeliveryRecipients) -> RecipientSelection: ...
+-
+-
+-class ActivityRegistration(ABC):
+-    __slots__ = ()
+-    store: RegistryPathRead
+-    storage_rule: StorageRule
+-
+-    @abstractmethod
+-    def snapshot(self) -> ActivityRegistryRead: ...
+-
+-    @abstractmethod
+-    def require(self, name: str) -> Thread: ...
+-
+-    @abstractmethod
+-    def lease_local_turn(
+-        self, name: str, turn_id: TurnId, *, routing: Routing = NoTurnRouting(),
+-    ) -> tuple[NativeThread, int]: ...
+-
+-    @abstractmethod
+-    def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, TurnCompletion]: ...
+diff --git a/.verification/p23-registration-packaged/before/src/agent_comms/registry/agent_activity.py b/.verification/p23-registration-packaged/projected/src/agent_comms/registry/agent_activity.py
+index f7c62ec99..ccd0ec049 100644
+--- a/.verification/p23-registration-packaged/before/src/agent_comms/registry/agent_activity.py
++++ b/.verification/p23-registration-packaged/projected/src/agent_comms/registry/agent_activity.py
+@@ -14,7 +14,6 @@ from collections.abc import Callable, Iterable, Mapping
+ from dataclasses import dataclass, replace
+ from functools import partial
+ from pathlib import Path
+-from typing import TYPE_CHECKING
+ 
+ from agent_comms.agent_backend import AgentBackend
+ from agent_comms.coordination.coordinator import Coordination
+@@ -39,6 +38,7 @@ from agent_comms.messaging.notification_progress import (
+ from agent_comms.messaging.routing import NoTurnRouting, Routing
+ from agent_comms.nominal.declared_family import DeclaredFamily
+ from agent_comms.nominal.field_codec import ThreadLookup, TurnId
++from agent_comms.projects.storage_rules import StorageRule
+ from agent_comms.registry.activity import (
+     Activity,
+     ActivityCapture,
+@@ -49,20 +49,12 @@ from agent_comms.registry.activity import (
+     NoDrainDiagnostic,
+     ObservedActivity,
+ )
+-from agent_comms.registry.activity_registry_reads import ActivityRegistration, ActivityRegistryRead
++from agent_comms.registry.activity_registry_reads import ActivityRegistryRead
++from agent_comms.registry.registration_reads import ActivityRegistration
+ from agent_comms.registry.thread_identity import OwnerIdentity, ThreadIncarnation
+ from agent_comms.registry.thread_status import ThreadStatus
+-from agent_comms.registry.threads import Thread
+-
+-if TYPE_CHECKING:
+-    from agent_comms.agent_backend import AgentBackend
+-    from agent_comms.agent_events import RuntimeInfoObservation
+-    from agent_comms.messaging.bus_publication import Delivered
+-    from agent_comms.messaging.message_notification import MessageNotification
+-    from agent_comms.messaging.notification_progress import AssignmentProgress, DeliveryProgress
+-    from agent_comms.registry.registration import Registration
+-    from agent_comms.registry.registry_document import RegistrySnapshot
+-    from agent_comms.registry.thread_status import ThreadStatus
++from agent_comms.registry.threads import NativeThread, Thread
++
+ 
+ _LOG = logging.getLogger(__name__)
+ 
+@@ -129,7 +121,7 @@ class LiveRecipientActivity(RecipientActivity):
+         return notification.with_state(state)
+ 
+ class AgentActivity(RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):
+-    def __init__(self, root: Path, registry: ActivityRegistration):
++    def __init__(self, root: Path, registry: ActivityRegistration[Thread, NativeThread, ActivityRegistryRead, StorageRule, Routing, TurnLeaseFence, TurnCompletion]):
+         self.registry = registry
+         self.activity = ActivityStore(root)
+         self.runtime_info = RuntimeInfoStore.at(root)
+diff --git a/.verification/p23-registration-packaged/before/src/agent_comms/registry/registration.py b/.verification/p23-registration-packaged/projected/src/agent_comms/registry/registration.py
+index 672b533e5..e7232731a 100644
+--- a/.verification/p23-registration-packaged/before/src/agent_comms/registry/registration.py
++++ b/.verification/p23-registration-packaged/projected/src/agent_comms/registry/registration.py
+@@ -12,6 +12,7 @@ from agent_comms.errors import RelationViolationError
+ from agent_comms.execution.child_process import NoProcess, ProcessIdentity
+ from agent_comms.execution.input_ingress import InputRegistration
+ from agent_comms.execution.native_input_owner import RegistryOwner
++from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
+ from agent_comms.messaging.channel_targets import DeclaredTag
+ from agent_comms.messaging.routing import NoTurnRouting, Routing
+ from agent_comms.nominal.field_codec import ThreadLookup, TurnId
+@@ -21,9 +22,9 @@ from agent_comms.projects.checkouts import Checkout, CheckoutTransfer, Repositor
+ from agent_comms.projects.repo import Repo
+ from agent_comms.projects.repository_name import RepositoryName
+ from agent_comms.projects.storage_rules import StorageRule
+-from agent_comms.registry.activity_registry_reads import ActivityRegistration
+ from agent_comms.registry.catalog_store import ChannelCatalog
+ from agent_comms.registry.registration_change import RegistrationChange
++from agent_comms.registry.registration_reads import ActivityRegistration
+ from agent_comms.registry.registry_document import (
+     FoundProjectThread,
+     ProjectThreadSelection,
+@@ -48,7 +49,11 @@ from agent_comms.registry.threads import ExternalThread, NativeThread, SubagentT
+ _DEFAULT_PRESENCE = ProcessThreadStatus()
+ 
+ 
+-class Registration(Container[str], InputRegistration[Thread], ActivityRegistration):
++class Registration(
++    Container[str],
++    InputRegistration[Thread],
++    ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],
++):
+     """Own registration transactions; never borrow a Comms or facade's state."""
+ 
+     def __init__(self, store_path: Path):
+diff --git a/.verification/p23-registration-packaged/projected/src/agent_comms/registry/registration_reads.py b/.verification/p23-registration-packaged/projected/src/agent_comms/registry/registration_reads.py
+new file mode 100644
+index 000000000..ac4c60f71
+--- /dev/null
++++ b/.verification/p23-registration-packaged/projected/src/agent_comms/registry/registration_reads.py
+@@ -0,0 +1,31 @@
++from __future__ import annotations
++
++from abc import ABC, abstractmethod
++from pathlib import Path
++
++from agent_comms.nominal.field_codec import TurnId
++
++
++class RegistryPathRead(ABC):
++    __slots__ = ()
++    path: Path
++
++
++class ActivityRegistration[Owner, NativeOwner, Snapshot, Storage, Route, Lease, Completion](ABC):
++    __slots__ = ()
++    store: RegistryPathRead
++    storage_rule: Storage
++
++    @abstractmethod
++    def snapshot(self) -> Snapshot: ...
++
++    @abstractmethod
++    def require(self, name: str) -> Owner: ...
++
++    @abstractmethod
++    def lease_local_turn(
++        self, name: str, turn_id: TurnId, *, routing: Route = ...,
++    ) -> tuple[NativeOwner, int]: ...
++
++    @abstractmethod
++    def release_turn(self, lease: Lease) -> tuple[bool, Completion]: ...
+diff --git a/.verification/p23-registration-packaged/before/src/agent_comms/registry/registry_store.py b/.verification/p23-registration-packaged/projected/src/agent_comms/registry/registry_store.py
+index 19e236c89..b23748233 100644
+--- a/.verification/p23-registration-packaged/before/src/agent_comms/registry/registry_store.py
++++ b/.verification/p23-registration-packaged/projected/src/agent_comms/registry/registry_store.py
+@@ -35,7 +35,6 @@ from agent_comms.execution.turn_lease import (
+ from agent_comms.execution.turn_registry import TurnRegistry
+ from agent_comms.messaging.routing import Routing
+ from agent_comms.nominal.field_codec import FieldCodec, NullMember, TurnId
+-from agent_comms.registry.activity_registry_reads import RegistryPathRead
+ from agent_comms.registry.presence import PresenceStore
+ from agent_comms.registry.private_registry_guard import (
+     PrivateRegistryGuard,
+@@ -43,6 +42,7 @@ from agent_comms.registry.private_registry_guard import (
+     RegistryPrivacy,
+ )
+ from agent_comms.registry.registration_change import InitialRegistration, NativeSourcePublication
++from agent_comms.registry.registration_reads import RegistryPathRead
+ from agent_comms.registry.registry_document import (
+     HistoricalRootPurpose,
+     RegistryDocument,

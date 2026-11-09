@@ -1,0 +1,8 @@
+{
+  "src/agent_comms/messaging/message_notification.py": "56ad6fdeff18c54611c6a4e5440256e640f8224580afcdb36a797ea5cba486d0",
+  "src/agent_comms/registry/activity_registry_reads.py": "1b1c424c53acfdb64cf58dda5aa9c327c6798e620f110e091eabaad5452f2ba6",
+  "src/agent_comms/registry/agent_activity.py": "5251e7748b600ed04d1f3b1e767396ccaa46577d2455a8135c6891ec9a004b98",
+  "src/agent_comms/registry/registration.py": "ee9c3841df28e29dfa02636999dfb7b453cbbfb8a53fffa5fcfce21b4b63e6b1",
+  "src/agent_comms/registry/registry_store.py": "f17cb3ad12fb5ecf92e1cbdaedb5164a2bb633294675e3e443e05d211442db24",
+  "src/agent_comms/registry/registration_reads.py": "dcdb627510a0a13e9e4c71ac266271d8add04a1f77ddd33e7ea2d4984cc5eaab"
+}

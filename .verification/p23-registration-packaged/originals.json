@@ -1,0 +1,35 @@
+{
+  "scope": "source procedures, concrete defaults and stored declarations; no runtime or C3 claim",
+  "unchanged_classes": [
+    "registry/registration.Registration",
+    "registry/agent_activity.RecipientActivity",
+    "registry/agent_activity.RecordedRecipientActivity",
+    "registry/agent_activity.UnavailableRecipientActivity",
+    "registry/agent_activity.LiveRecipientActivity",
+    "registry/agent_activity.AgentActivity",
+    "messaging/message_notification.NotificationWindow",
+    "messaging/message_notification.NoNotificationWindow",
+    "messaging/message_notification.CapturedNotificationWindow",
+    "messaging/message_notification.NotificationPass",
+    "messaging/message_notification.CapturedNotificationEvidence",
+    "messaging/message_notification.MessageNotification",
+    "messaging/message_notification.SentMessageOutcome",
+    "registry/registry_store.CachedRegistry",
+    "registry/registry_store.UncachedRegistry",
+    "registry/registry_store.RegistryRevision",
+    "registry/registry_store.RegistrySelection",
+    "registry/registry_store.RegistryCut",
+    "registry/registry_store.RegistryEntriesCut",
+    "registry/registry_store.RegistryPairCut",
+    "registry/registry_store.RegistryEntryRevision",
+    "registry/registry_store.RegistryReadCounts",
+    "registry/registry_store.RegistryCache",
+    "registry/registry_store.RegistryEdit",
+    "registry/registry_store.RegistryStore"
+  ],
+  "unchanged_read_declarations": [
+    "ActivityRegistryRead",
+    "RegistryPathRead"
+  ],
+  "abstract_routing_default": "ellipsis contract marker; concrete Registration and AgentActivity defaults remain NoTurnRouting()"
+}
