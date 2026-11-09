@@ -12,6 +12,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity
 from agent_comms.execution.input_ingress import InputRegistration
 from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.selected.owner_source import RegistryOwnerSource
 from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
 from agent_comms.messaging.channel_targets import DeclaredTag
 from agent_comms.messaging.routing import NoTurnRouting, Routing
@@ -286,7 +287,7 @@ class Registration(
         with self.store.editing() as edit:
             return self._attach_native_session(edit, original, session_file)
 
-    def claim_fresh_session(self, participant: selected_participant.SelectedParticipant) -> agent_backend.RuntimeLocation:
+    def claim_fresh_session(self, participant: RegistryOwnerSource[RegistryOwner]) -> agent_backend.RuntimeLocation:
         """Create and record the first session while the registry owns its selection.
 
         An execution captured before the first claim joins the recorded session;
@@ -519,6 +520,5 @@ class Registration(
         return name in self.store.read()
 
 from agent_comms import agent_backend
-from agent_comms.execution.selected import participant as selected_participant
 from agent_comms.planning import goal_management, goals
 from agent_comms.registry import catalog_document
