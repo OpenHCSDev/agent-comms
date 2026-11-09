@@ -148,6 +148,9 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
     )
     with pytest.raises(RulesUnread, match="probe"):
         bash.judge_under(peer_deal)  # the costly probes are owed after the reading
+    call("read", {"path": "notes.md"}).judge_under(peer_deal)  # the code a probe cites opens
+    with pytest.raises(RulesUnread):  # while writing and running stay closed
+        call("write", {"path": "notes.md", "content": "x"}).judge_under(peer_deal)
     audit = json.loads(peer_deal.audit.read_text())
     peer_deal.audit.write_text(json.dumps({**audit, "probes": probe_answers(words)}))
     bash.judge_under(peer_deal)
