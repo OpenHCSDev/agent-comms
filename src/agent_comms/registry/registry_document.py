@@ -457,9 +457,13 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         self._decoded.pop(name, None)
 
     def to_wire(self) -> dict[str, JsonValue]:
-        """Only assigned rows need encoding; reading a row leaves its wire value intact."""
-        return {**self._raw, **{name: FieldCodec.encode(thread)
-                               for name, thread in self._decoded.items() if name not in self._raw}}
+        """Each row is encoded once: an assigned row's encoding becomes its stored form until
+        it is assigned again, so a save encodes only the rows that changed since the last one.
+        Reading a row leaves its wire value intact."""
+        for name, thread in self._decoded.items():
+            if name not in self._raw:
+                self._raw[name] = FieldCodec.encode(thread)
+        return dict(self._raw)
 
     @classmethod
     def schema(cls) -> dict[str, JsonValue]:
