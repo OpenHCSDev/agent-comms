@@ -72,6 +72,7 @@ from agent_comms.presentation import (
     WireRevision,
 )
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import (
     DEFAULT_ROSTER,
@@ -85,6 +86,7 @@ from agent_comms.registry_names import DeletedThread
 from agent_comms.retained_task_facts import RetainedTaskFacts
 from agent_comms.sent_message import AssignedSourceIdentity
 from agent_comms.shared_ledger import LedgerDocument
+from agent_comms.storage.private_path import FileRevision
 from agent_comms.tool_result import ToolResult
 from agent_comms.transcripts import TranscriptCursor, Transcripts
 from agent_comms.transport.progress import WireExportObserver
@@ -488,8 +490,17 @@ class HistoryViews:
         return self.bus.bus.revision()
 
     def revision(self) -> WireRevision:
-        """A cheap observer token; activity expiry is checked without rescanning idle logs."""
-        return WireRevision.capture(self, expiry_tick=int(time.time()))
+        """Stat sources only; strict content reads belong to the requesting view."""
+        expiry_tick = int(time.time())
+        captured = {
+            name: tuple(revision for path in group
+                        for revision in FileRevision.capture(path).revisions())
+            for name, group in WireRevision.source_paths(self).items()
+        }
+        return WireRevision(
+            **captured, bus_identity=RecordedBusIdentity.capture(self.bus.bus.path),
+            bus_seq=self.bus.bus.revision(), expiry_tick=expiry_tick,
+        )
 
     def who(self) -> tuple[ThreadView, ...]:
         """Who is here: live presences, with no unread scan that grows with history."""
