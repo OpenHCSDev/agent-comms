@@ -216,6 +216,11 @@ class ReadRequest[Result: ToolResult = ToolResult](ToolRequest[Result], declared
 class RemoteReadUnavailable(CoordinationReadUnavailable, ConnectionError):
     """A remote read acquired no answer; its transport failure remains its cause."""
 
+    def __new__(cls, *args: object) -> Self:
+        # The ConnectionError role owns OSError's native allocation layout.
+        # RuntimeError.__new__ rejects it when Python's unpickler calls it.
+        return ConnectionError.__new__(cls, *args)
+
 
 @dataclass(frozen=True, kw_only=True)
 class ThreadReadRequest[Result: ToolResult = ToolResult](ReadRequest[Result], declared_name=None):
