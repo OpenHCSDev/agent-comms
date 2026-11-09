@@ -5,7 +5,7 @@
 ```sh
 stack/native/prepare-pi-native --python /path/to/python
 # Ask the prepared package owner for the path used by offline tests:
-PI_PACKAGE_DIR=$(PYTHONPATH=src /path/to/python -c 'from agent_comms.native_package import pinned_location; print(pinned_location())') \
+PI_PACKAGE_DIR=$(PYTHONPATH=src /path/to/python -c 'from agent_comms.installer.native_package import pinned_location; print(pinned_location())') \
   PI_OFFLINE=1 node --test \
   experiments/pi-context-proof/required-contract.test.mjs \
   experiments/pi-context-proof/native-runtime.test.mjs \

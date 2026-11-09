@@ -480,13 +480,13 @@ class DuplicatesPhase(MultipleInheritancePhase):
                     (
                         "cohort_schema.py",
                         "coordination/tables/attempts.py",
-                        "native_input_record.py",
+                        "execution/native_input_record.py",
                         "participant_store.py",
                     ),
                 ),
                 (
                     ("trigger_bodies",),
-                    ("coordination/response.py", "native_prompt_binding.py", "private_sidecar.py"),
+                    ("coordination/response.py", "execution/native_prompt_binding.py", "private_sidecar.py"),
                 ),
                 (
                     ("__init__",),

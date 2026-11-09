@@ -29,7 +29,7 @@ correction superseded the `8cf666c` checkpoint's `4a688172…` tree /
 the writer-failure correction record (deleted with the compaction writer); narrow prior packaging CLEAN is
 not independent clearance of the new artifact or of import-resolution closure.
 
-`src/agent_comms/native_package.py` hashes a deterministic preorder of sorted
+`src/agent_comms/installer/native_package.py` hashes a deterministic preorder of sorted
 paths. Each UTF-8 JSON record plus newline binds node type, relative path and
 execute bits; file records also bind size and SHA256 content. Dependencies,
 package.json resolution metadata, native binaries/resources and hidden entries
