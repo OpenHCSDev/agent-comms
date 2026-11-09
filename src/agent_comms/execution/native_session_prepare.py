@@ -19,7 +19,7 @@ from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.pi_payloads import StateData
 
 if TYPE_CHECKING:
-    from agent_comms.pi_native_backend import PersistentPiSession
+    from agent_comms.execution.persistent_pi_session import PersistentPiSession
 
 
 class NativeSessionPreparation(NativeSession):

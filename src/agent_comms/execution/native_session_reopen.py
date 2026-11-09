@@ -19,7 +19,7 @@ from agent_comms.nominal.field_codec import (
 if TYPE_CHECKING:
     from agent_comms.execution.native_child import PiSessionChild
     from agent_comms.execution.native_runtime_input import NativeRuntimeInput
-    from agent_comms.pi_native_backend import PersistentPiSession
+    from agent_comms.execution.persistent_pi_session import PersistentPiSession
 
 
 class NativeReopenError(ValueError):

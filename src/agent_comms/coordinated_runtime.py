@@ -26,6 +26,7 @@ from agent_comms.coordination.snapshot import RecoverySnapshot
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_pi import NativePiRpcLaunch
 from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.execution.persistent_pi_session import PersistentPiSession
 from agent_comms.execution.selected.actions import (
     CodingSelectedAction,
     NoSelectedWritePlans,
@@ -41,7 +42,6 @@ from agent_comms.following_inputs import FollowingInputs
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.native_execution import NativeExecution, PackagedNativeExecution
 from agent_comms.nominal.field_codec import RootId
-from agent_comms.pi_native_backend import PersistentPiSession
 
 
 class SessionSetupFailed(ValueError):
