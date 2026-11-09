@@ -31,13 +31,11 @@ from agent_comms.coordination.errors import (
 )
 from agent_comms.coordination.participant_store import ParticipantSnapshot
 from agent_comms.coordination.reason_codes import GivenReasonCode
-from agent_comms.coordination.response import (
-    LiveResponseOwner,
-    ResponseTable,
-)
+from agent_comms.coordination.response import LiveResponseOwner
 from agent_comms.coordination.snapshot import RecoverySnapshot
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import WireOrigin
+from agent_comms.coordination.tables.response_schema import ResponseTable
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.execution.native_arguments import SelectedModel

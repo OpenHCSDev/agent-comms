@@ -38,6 +38,7 @@ from agent_comms.messaging.notification_progress import (
 )
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, boundary_decoder
+from agent_comms.registry.notification_selection_read import NotificationSelectionRead
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_identity import ThreadIncarnation
@@ -84,7 +85,7 @@ class RecipientSelection:
 
 
 @dataclass(frozen=True)
-class NotificationSelection:
+class NotificationSelection(NotificationSelectionRead["NotificationAssignmentRead"]):
     """The exact per-original recipient cuts used by every expensive evidence reader."""
 
     window_limit: ClassVar[int] = 120
