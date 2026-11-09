@@ -130,7 +130,7 @@ class RegistryPrivacy(ABC):
     """What a registry root's protocol marker decides, selected by the registry store."""
 
     def guard_evidence(self, guard: FileObservation, coordinator: FileObservation,
-                       registry: FileObservation) -> tuple[FileObservation, ...]:
+                       registry: RegistryRevisionMark) -> tuple[FileObservation | RegistryRevisionMark, ...]:
         """The observed files this answer was decided from.
 
         A public root is decided by the guard's absence and the coordinator's schema.
@@ -282,7 +282,7 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
     filename = ".registry-owner-guard"
 
     def guard_evidence(self, guard: FileObservation, coordinator: FileObservation,
-                       registry: FileObservation) -> tuple[FileObservation, ...]:
+                       registry: RegistryRevisionMark) -> tuple[FileObservation | RegistryRevisionMark, ...]:
         """A private root is decided by its guard slots and the registry digest they name."""
         return guard, registry
 

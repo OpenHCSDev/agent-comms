@@ -9,6 +9,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.store_files import AtomicFile
 
 
@@ -19,7 +20,7 @@ from agent_comms.storage.store_files import AtomicFile
 def test_dependent_selection_refuses_changed_authority_without_repeating_its_effect(tmp_path, select):
     from agent_comms.coordination.errors import StaleFence
 
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread("worker", frozenset(), Checkout(tmp_path)))
     selected = select(registry.store)
     effects = []
@@ -39,7 +40,7 @@ def test_an_entry_fence_ignores_other_threads_writes_but_not_its_own(tmp_path):
     # every other live owner used to stale the whole-registry cut before it could write.
     from agent_comms.coordination.errors import StaleFence
 
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread("worker", frozenset(), Checkout(tmp_path)))
     registry.register(NativeThread("neighbour", frozenset(), Checkout(tmp_path)))
     whole = registry.store.snapshot_with_authority()
@@ -60,7 +61,7 @@ def test_missing_registry_version_is_rejected_without_rewriting_the_file(tmp_pat
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.registry.registry_document import RegistryDocument
 
-    path = tmp_path / "registry.json"
+    path = RegistryFile.path_in(tmp_path)
     raw = FieldCodec.encode(RegistryDocument())
     del raw["version"]
     path.write_text(json.dumps(raw))
@@ -71,7 +72,7 @@ def test_missing_registry_version_is_rejected_without_rewriting_the_file(tmp_pat
 
 
 def test_malformed_replacement_never_serves_stale_success(tmp_path):
-    path = tmp_path / "registry.json"
+    path = RegistryFile.path_in(tmp_path)
     registry = Registration(path)
     registry.register(NativeThread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
     saved = path.read_text()
@@ -87,7 +88,7 @@ def test_malformed_replacement_never_serves_stale_success(tmp_path):
 def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
     from agent_comms.registry.registry_document import RegistryDocument
 
-    path = tmp_path / "registry.json"
+    path = RegistryFile.path_in(tmp_path)
     writer = Registration(path)
     for name in ("first", "second", "third"):
         writer.register(NativeThread(name=name, tags=frozenset(), worktree=Checkout(tmp_path)))
@@ -104,7 +105,7 @@ def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
 
     # Another process stops one thread: an external replacement of the file.
     raw = json.loads(path.read_text())
-    stopped = Registration(tmp_path / "other" / "registry.json")
+    stopped = Registration(RegistryFile.path_in(tmp_path / "other"))
     stopped.register(NativeThread(name='second', tags=frozenset(), worktree=Checkout(tmp_path)))
     stopped.unregister("second")
     raw["statuses"]["second"] = json.loads(stopped.store.path.read_text())["statuses"]["second"]
@@ -128,7 +129,7 @@ def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
 
 @pytest.fixture
 def thread_rows_wire(tmp_path):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     for name in ("first", "second"):
         registry.register(NativeThread(name, frozenset(), Checkout(tmp_path)))
     return registry.store.read().threads.to_wire()
@@ -168,7 +169,7 @@ def test_assigning_and_removing_thread_rows_changes_only_the_written_rows(thread
 def test_a_changed_revision_is_checked_as_a_whole(tmp_path):
     from agent_comms.errors import RelationViolationError
 
-    path = tmp_path / "registry.json"
+    path = RegistryFile.path_in(tmp_path)
     registry = Registration(path)
     for name in ("first", "second"):
         registry.register(NativeThread(name=name, tags=frozenset(), worktree=Checkout(tmp_path)))
@@ -190,7 +191,7 @@ def test_a_changed_revision_is_checked_as_a_whole(tmp_path):
 def test_a_reused_revision_still_finds_its_user_thread(tmp_path):
     from agent_comms.registry.thread_identity import UserThreadRole
 
-    path = tmp_path / "registry.json"
+    path = RegistryFile.path_in(tmp_path)
     writer = Registration(path)
     writer.register(NativeThread(name="user", tags=frozenset(), worktree=Checkout(tmp_path),
                            role=UserThreadRole))

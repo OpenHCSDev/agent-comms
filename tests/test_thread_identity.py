@@ -43,12 +43,13 @@ from agent_comms.registry.thread_text import (
     NoThreadText,
 )
 from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 from bus_record_fixture import OWNER_LOOKUP
 from conftest import installed_comms
 
 
 def registry_with_owner(tmp_path):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     return registry
 
@@ -321,7 +322,7 @@ def test_withdrawal_revokes_only_an_existing_owner(tmp_path, withdrawals, status
 
 
 def test_external_unregister_revokes_owner_while_bridge_remains_connected(tmp_path):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(ExternalThread(
         "owner", frozenset(), Checkout(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid())))

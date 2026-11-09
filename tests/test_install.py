@@ -88,7 +88,7 @@ def test_install_routes_a_new_bus_and_replaces_only_a_route_that_selects_none(pr
 def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(private_directory):
     root, _ = bus(private_directory)
     (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
-    barrier = MaintenanceBarrier(root / "registry.json")
+    barrier = MaintenanceBarrier(RegistryFile.path_in(root))
     barrier.begin(MaintenanceOperator.current())
     witnesses = {str(path.relative_to(root)) for path in barrier.witness_paths if path.exists()}
     assert witnesses

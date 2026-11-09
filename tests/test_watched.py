@@ -34,7 +34,7 @@ from agent_comms.registry.view_unread import (
     ReplyReading,
     TranscriptReadState,
 )
-from agent_comms.storage.locked_store import SQLiteStorage
+from agent_comms.storage.locked_store import RegistryFile, SQLiteStorage
 from agent_comms.storage.private_path import FileRevision
 
 
@@ -296,7 +296,7 @@ def test_retired_native_events_preserve_unrelated_source_coverage(tmp_path):
 
 
 def test_unrelated_sqlite_data_events_never_enter_the_native_queue(tmp_path):
-    path = tmp_path / "registry.json"
+    path = RegistryFile.path_in(tmp_path)
     path.write_text("{}")
     sidecars = tuple(tmp_path / ("store.sqlite3" + suffix) for suffix in (
         *SQLiteStorage.transient_suffixes, SQLiteStorage.wal_suffix,

@@ -19,12 +19,13 @@ from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBus
 from agent_comms.registry.registry_document import InvalidRegistryDocument
 from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.private_path import FileIdentity
 
 
 def older_registry(root: Path) -> None:
     """A stored form this decoder refuses, as an install finds it before its carries."""
-    RegistryStore(root / "registry.json").carry_text(json.dumps({
+    RegistryStore(RegistryFile.path_in(root)).carry_text(json.dumps({
         "version": 1, "commander_project": "retired", "threads": {}}))
 
 

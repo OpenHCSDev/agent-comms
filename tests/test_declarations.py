@@ -40,6 +40,7 @@ from agent_comms.registry.thread_text import (
     GivenThreadText,
 )
 from agent_comms.registry.threads import NativeThread, current_thread
+from agent_comms.storage.locked_store import RegistryFile
 from bus_record_fixture import prepare_native_comms
 
 
@@ -96,7 +97,7 @@ class TestGoalRevision:
 
     def test_old_registry_goal_without_revision_reopens_at_zero(self, tmp_path: Path):
         old_goal_id = GoalId.mint()
-        path = tmp_path / "registry.json"
+        path = RegistryFile.path_in(tmp_path)
         registry = Registration(path)
         registry.register(
             NativeThread(name='owner', tags=frozenset(), worktree=Checkout(Path('/wt')), goal=Goal('work',
@@ -151,19 +152,19 @@ class TestMessageDeclaration:
 
 class TestRegistration:
     def test_register_and_require(self, tmp_path: Path):
-        registry = Registration(tmp_path / "registry.json")
+        registry = Registration(RegistryFile.path_in(tmp_path))
         thread = NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt')))
         registry.register(thread)
         assert registry.require("a") is not None
         assert "a" in registry
 
     def test_fail_closed_unknown_reference(self, tmp_path: Path):
-        registry = Registration(tmp_path / "registry.json")
+        registry = Registration(RegistryFile.path_in(tmp_path))
         with pytest.raises(UnregisteredThreadError):
             registry.require("missing")
 
     def test_status_transitions(self, tmp_path: Path):
-        registry = Registration(tmp_path / "registry.json")
+        registry = Registration(RegistryFile.path_in(tmp_path))
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         assert registry.status("a") == HeartbeatThreadStatus()
         registry.unregister("a")
@@ -178,7 +179,7 @@ class TestRegistration:
     def test_owner_claim_survives_session_metadata_and_rotates_on_restart(
         self, tmp_path: Path
     ) -> None:
-        registry = Registration(tmp_path / "registry.json")
+        registry = Registration(RegistryFile.path_in(tmp_path))
         owner = NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt')), process_identity=ProcessIdentity.capture(os.getpid()))
         registry.register(owner)
         before = registry.snapshot().claim_generation("a")
@@ -190,7 +191,7 @@ class TestRegistration:
         assert registry.snapshot().claim_generation("a") > before
 
     def test_owner_claim_follows_same_owner_rename(self, tmp_path: Path) -> None:
-        registry = Registration(tmp_path / "registry.json")
+        registry = Registration(RegistryFile.path_in(tmp_path))
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt')), process_identity=ProcessIdentity.capture(os.getpid())))
         before = registry.snapshot().claim_generation("a")
         registry.rename("a", "renamed-a")
@@ -200,7 +201,7 @@ class TestRegistration:
 
     def test_rename_reclaims_own_alias_without_losing_owner_or_turn(self, tmp_path: Path) -> None:
         goal_1_goal_id = GoalId.mint()
-        registry = Registration(tmp_path / "registry.json")
+        registry = Registration(RegistryFile.path_in(tmp_path))
         registry.register(
             NativeThread(
                 name='agent-comms-ux', tags=frozenset(), worktree=Checkout(Path('/wt')),
@@ -228,7 +229,7 @@ class TestRegistration:
         assert reopened.release_turn(reopened.require("pr17").turn_lease)[0]
 
     def test_other_owner_writes_do_not_invalidate_private_generation(self, tmp_path: Path):
-        registry = Registration(tmp_path / "registry.json")
+        registry = Registration(RegistryFile.path_in(tmp_path))
         for name in ("a", "b"):
             registry.register(NativeThread(name=name, tags=frozenset(), worktree=Checkout(Path('/wt')), process_identity=ProcessIdentity.capture(os.getpid())))
         snapshot = registry.snapshot()
@@ -250,7 +251,7 @@ class TestRegistration:
     def test_registering_saved_turn_never_attests_a_revoked_incarnation(
         self, tmp_path: Path, revocation: str
     ) -> None:
-        registry = Registration(tmp_path / "registry.json")
+        registry = Registration(RegistryFile.path_in(tmp_path))
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt')), process_identity=ProcessIdentity.capture(os.getpid())))
         snapshot = registry.snapshot()
         owner = RegistryOwner.capture_local(snapshot, "a").thread
@@ -299,7 +300,7 @@ class TestRegistration:
         comms = wire(root)
         comms.registry.declare(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt')), process_identity=ProcessIdentity.capture(os.getpid())))
         prepare_native_comms(comms)
-        registry_path = root / "registry.json"
+        registry_path = RegistryFile.path_in(root)
         data = json.loads(registry_path.read_text())
         for field in ("owners", "claims"):
             data.pop(FieldCodec.record_key(RegistryDocument, field))
@@ -336,7 +337,7 @@ class TestRegistration:
             comms.registry.register(NativeThread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         monkeypatch.undo()
         with pytest.raises(RelationViolationError):
-            Registration(root / "registry.json").require("a")
+            Registration(RegistryFile.path_in(root)).require("a")
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     @pytest.mark.parametrize("damage", ["missing", "corrupt", "truncated", "strip_epochs"])
@@ -349,7 +350,7 @@ class TestRegistration:
         comms.registry.declare(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt')), process_identity=ProcessIdentity.capture(os.getpid())))
         prepare_native_comms(comms)
         # A native coordinator is retained evidence of private mode even if its guard vanishes.
-        cold = Registration(root / "registry.json")
+        cold = Registration(RegistryFile.path_in(root))
         assert cold.require("a").name == "a"
         guard = root / ".registry-owner-guard"
         if damage == "missing":
@@ -361,7 +362,7 @@ class TestRegistration:
         elif damage == "truncated":
             guard.write_bytes(guard.read_bytes()[:-1])
         else:
-            path = root / "registry.json"
+            path = RegistryFile.path_in(root)
             data = json.loads(path.read_text())
             for field in ("owners", "claims"):
                 data.pop(FieldCodec.record_key(RegistryDocument, field))
@@ -372,7 +373,7 @@ class TestRegistration:
             comms.registry.register(NativeThread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt'))))
 
     def test_release_turn_resolves_retained_alias_only_for_exact_lease(self, tmp_path: Path):
-        registry = Registration(tmp_path / "registry.json")
+        registry = Registration(RegistryFile.path_in(tmp_path))
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt')), process_identity=ProcessIdentity.capture(os.getpid())))
         registry.rename("a", "b")
         snapshot = registry.snapshot()
@@ -386,7 +387,7 @@ class TestRegistration:
         assert registry.release_turn(leased.turn_lease)[0]
 
     def test_deleting_thread_cannot_be_revived(self, tmp_path: Path):
-        registry = Registration(tmp_path / "registry.json")
+        registry = Registration(RegistryFile.path_in(tmp_path))
         thread = NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt')))
         registry.register(thread)
         registry.unregister("a")
@@ -398,7 +399,7 @@ class TestRegistration:
             registry.register(thread)
 
     def test_active_threads_excludes_stopped(self, tmp_path: Path):
-        registry = Registration(tmp_path / "registry.json")
+        registry = Registration(RegistryFile.path_in(tmp_path))
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         registry.register(NativeThread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         registry.unregister("a")
@@ -406,7 +407,7 @@ class TestRegistration:
         assert set(registry.all_threads()) == {"a", "b"}
 
     def test_remove_drops_declaration_entirely(self, tmp_path: Path):
-        registry = Registration(tmp_path / "registry.json")
+        registry = Registration(RegistryFile.path_in(tmp_path))
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         registry.remove("a")
         assert "a" not in registry
@@ -417,7 +418,7 @@ class TestRegistration:
             registry.remove("a")
 
     def test_persistence_roundtrip(self, tmp_path: Path):
-        path = tmp_path / "registry.json"
+        path = RegistryFile.path_in(tmp_path)
         registry = Registration(path)
         registry.register(
             NativeThread(name='a', tags=frozenset({'x', 'y'}), worktree=Checkout(Path('/wt')), parent=ForkedParent('p'), task=GivenThreadText('t'), process_identity=ProcessIdentity.capture(os.getpid()))
@@ -431,7 +432,7 @@ class TestRegistration:
         assert reloaded.status("a") == StoppedThreadStatus()
 
     def test_peers_excludes_self(self, tmp_path: Path):
-        registry = Registration(tmp_path / "registry.json")
+        registry = Registration(RegistryFile.path_in(tmp_path))
         for name in ("a", "b", "c"):
             registry.register(NativeThread(name=name, tags=frozenset(), worktree=Checkout(Path('/wt'))))
         assert set(registry.peers("b")) == {"a", "c"}

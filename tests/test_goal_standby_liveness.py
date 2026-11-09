@@ -28,6 +28,7 @@ from agent_comms.registry.thread_status import (
 )
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 from goal_owner_fixture import canonical_goal_wire
 
 
@@ -72,7 +73,7 @@ def test_stopped_target_refusal_is_side_effect_free(tmp_path, had_turn):
     comms.registry.register(comms.registry.require("child").without_turn(), StoppedThreadStatus())
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Work"))
     assert goal is not None
-    authoritative = ("registry.json", "goal_waits.sqlite3", "input_dispositions.sqlite3")
+    authoritative = (RegistryFile.filename, "goal_waits.sqlite3", "input_dispositions.sqlite3")
     before = {
         name: (comms.root / name).read_bytes() if (comms.root / name).exists() else None
         for name in authoritative

@@ -23,6 +23,7 @@ from agent_comms.registry.thread_identity import (
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 
 
 def _metadata(registry, leased, lease, tmp_path):
@@ -138,7 +139,7 @@ def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
 
 
 def test_batch_idle_fence_refuses_busy_second_without_partial_commit(tmp_path):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     for name in ("first", "second"):
         registry.register(NativeThread(name, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     before = registry.snapshot()
@@ -152,7 +153,7 @@ def test_batch_idle_fence_refuses_busy_second_without_partial_commit(tmp_path):
 
 
 def test_restart_fence_ends_a_wedged_turn_the_way_stop_does(tmp_path, monkeypatch):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread("owner", frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     registry.lease_local_turn("owner", TurnId("c9bc072f4fa8189466c2a8f2c36a56a4"))
     busy = registry.snapshot()

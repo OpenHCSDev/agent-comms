@@ -20,7 +20,7 @@ from agent_comms.registry.registry_document import ThreadRows
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
-from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.storage.locked_store import DocumentChange, RegistryFile
 from agent_comms.storage.store_files import AtomicFile
 
 
@@ -46,7 +46,7 @@ def test_edit_owns_turn_and_document_owns_later_changes(tmp_path, *, thread_regi
 
 
 def test_store_owns_document_and_failed_edit_cannot_leak_into_cache(tmp_path):
-    registration = Registration(tmp_path / "registry.json")
+    registration = Registration(RegistryFile.path_in(tmp_path))
     registration.register(owner(tmp_path))
     prior = registration.snapshot()
     raw = registration.store.path.read_bytes()
@@ -58,7 +58,7 @@ def test_store_owns_document_and_failed_edit_cannot_leak_into_cache(tmp_path):
 
 
 def test_one_thread_entry_decodes_only_that_thread_and_matches_the_document(tmp_path):
-    registration = Registration(tmp_path / "registry.json")
+    registration = Registration(RegistryFile.path_in(tmp_path))
     registration.register(owner(tmp_path))
     registration.register(replace(owner(tmp_path), name="other", created_at=11.0))
     registration.rename("owner", "renamed")
@@ -95,7 +95,7 @@ def test_a_document_field_without_a_thread_slice_is_refused_at_definition():
 
 
 def test_registry_update_persists_across_reopen(tmp_path):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(owner(tmp_path))
 
     def change(original):
@@ -124,7 +124,7 @@ def test_new_thread_field_has_no_second_registry_decoder_roster(tmp_path, *, thr
 @pytest.mark.skipif(os.name != "posix", reason="nonblocking shared flock acceptance")
 def test_current_cut_excludes_writer_and_releases_for_later_metadata(tmp_path):
     from test_locked_store import assert_writer_excluded
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(owner(tmp_path))
     other = RegistryStore(registry.store.path)
     with registry.store.current_snapshot() as cut:
@@ -154,7 +154,7 @@ def test_lifecycle_document_survives_fresh_process_restart(tmp_path):
     assert steps[5]["threads"]["renamed"]["created_at"] == 10.0
     assert steps[6]["statuses"]["renamed"]["kind"] == "stopped"
     assert "renamed" not in steps[-1]["threads"]
-    restored = Registration(tmp_path / "current" / "registry.json")
+    restored = Registration(RegistryFile.path_in(tmp_path / "current"))
     assert restored.require("child").created_at == 20.0
     assert restored.snapshot().owner_generations["renamed"] > 0
 

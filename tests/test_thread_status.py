@@ -33,6 +33,7 @@ from agent_comms.registry.thread_status import (
 )
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread, OwnerLifecycleControl
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.transport.tool_caller import ThreadCaller
 from conftest import installed_comms
 
@@ -119,7 +120,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
 
 @pytest.mark.parametrize("status", [RunningThreadStatus(), IdleThreadStatus()])
 def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path, status):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(
         NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         status,
@@ -137,7 +138,7 @@ def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path
 
 @pytest.mark.parametrize("status", [StoppedThreadStatus(), ArchivedThreadStatus()])
 def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path, status):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(
         NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         status,
@@ -152,7 +153,7 @@ def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path
 
 
 def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_path):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path)), StoppedThreadStatus())
     registry.begin_delete("owner")
     before = registry.store.path.read_bytes()

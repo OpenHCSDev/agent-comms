@@ -27,6 +27,7 @@ from agent_comms.nominal.lifecycle_capability import Unresolved
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 from stored_inputs import insert_inputs, stored_inputs
 
 PRIOR_KEY = AcpInputKey(InputId.mint())
@@ -195,7 +196,7 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
     from agent_comms.execution.child_process import ProcessIdentity
     from agent_comms.registry.registration import Registration
 
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread('worker', frozenset(), Checkout(tmp_path), created_at=123.0, process_identity=ProcessIdentity.capture(os.getpid())))
     registry.lease_local_turn("worker", TURN)
     lease = registry.require("worker").turn_lease

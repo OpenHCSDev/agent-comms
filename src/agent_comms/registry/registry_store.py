@@ -350,7 +350,7 @@ class RegistryEdit:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocument]):
+class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocument], declared_name=None):
     cache: RegistryCache = field(init=False, compare=False, repr=False)
     presence: PresenceStore = field(init=False, compare=False, repr=False)
     rows: RegistryRowStore = field(init=False, compare=False, repr=False)
@@ -644,7 +644,9 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         observed = (
             _link_revision(self.guard_path),
             _link_revision(CoordinationStore.path_in(self.path.parent)),
-            _link_revision(self.path),
+            # The committed row revision, never the database's stat: a WAL commit leaves the
+            # file untouched, so a stat key would keep a verdict across a commit.
+            self.rows.mark(),
         )
         if (checked := self.cache.guard) is not None:
             key, guard = checked

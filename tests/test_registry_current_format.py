@@ -19,10 +19,11 @@ from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 
 
 def test_goal_family_survives_registry_and_history_reopen(tmp_path):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     for name in GoalState.names():
         state_type = GoalState.member_named(name)
         state = (
@@ -60,7 +61,7 @@ for name in GoalState.names():
 
 
 def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
-    path = tmp_path / "registry.json"
+    path = RegistryFile.path_in(tmp_path)
     registry = Registration(path)
     registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     raw = json.loads(path.read_text())
@@ -78,7 +79,7 @@ def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
 
 
 def test_retained_colliding_creation_dates_remain_readable(tmp_path):
-    path = tmp_path / "registry.json"
+    path = RegistryFile.path_in(tmp_path)
     registry = Registration(path)
     registry.register(NativeThread('one', frozenset(), Checkout(tmp_path)))
     registry.register(NativeThread('two', frozenset(), Checkout(tmp_path)))

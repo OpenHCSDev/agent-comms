@@ -54,6 +54,7 @@ from agent_comms.nominal.lifecycle_capability import Active, Complete
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.typed_table import TypedTable
 from bus_record_fixture import prepare_native_comms
 from conftest import accept_initial, publish_initial, responder
@@ -271,7 +272,7 @@ def test_response_requires_exact_same_root_coordinator(tmp_path: Path) -> None:
             prepare_fenced_response(
                 wrong_database, case.bus, case.fence, "not allowed", exact_target=case.reply_target, owner_witness=case.witness
             )
-        alien_registry = Registration(tmp_path / "foreign" / "registry.json")
+        alien_registry = Registration(RegistryFile.path_in(tmp_path / "foreign"))
         alien_bus = responder(case.comms.root, alien_registry)
         with pytest.raises(IdentityConflict):
             prepare_fenced_response(

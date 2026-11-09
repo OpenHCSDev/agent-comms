@@ -9,18 +9,19 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import ThreadRows
 from agent_comms.registry.threads import ExternalThread
+from agent_comms.storage.locked_store import RegistryFile
 
 
 def test_references_name_every_identity_without_decoding_a_row(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    written = Registration(tmp_path / "written" / "registry.json")
+    written = Registration(RegistryFile.path_in(tmp_path / "written"))
     for name in ("alpha", "beta"):
         written.declare(ExternalThread(name, frozenset(), Checkout(tmp_path)))
     written.rename("beta", "beta-renamed")
     expected = {name: thread.incarnation for name, thread in written.snapshot().named_members()}
 
-    copied = tmp_path / "copied" / "registry.json"
+    copied = RegistryFile.path_in(tmp_path / "copied")
     copied.parent.mkdir()
     shutil.copy(written.store.path, copied)
 

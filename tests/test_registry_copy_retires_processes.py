@@ -12,7 +12,7 @@ ALIVE = {"pid": 2828048, "start_time": 657855705}
 
 def stored(root: Path) -> Path:
     """The keys the installed runtime wrote: a form this decoder refuses, with an extra field."""
-    path = root / "registry.json"
+    path = RegistryFile.path_in(root)
     RegistryStore(path).carry_text(json.dumps({
         "version": 1, "commander_project": "retired", "threads": {
             "running": {"name": "running", "process_identity": ALIVE},
@@ -23,7 +23,7 @@ def stored(root: Path) -> Path:
 
 def test_a_copy_of_an_older_registry_names_no_live_process(tmp_path):
     source = stored(tmp_path)
-    target = tmp_path / "copy" / "registry.json"
+    target = RegistryFile.path_in(tmp_path / "copy")
     target.parent.mkdir()
     before = source.read_text()
     RegistryFile.copy_group(source, target)
