@@ -12,6 +12,7 @@ from itertools import repeat
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Never, Self, TextIO, cast
 
+from agent_comms.execution.imported_messages import ImportedMessage
 from agent_comms.execution.native_evidence_read import (
     NativeEvidencePrefixChanged,
     NativeInputUncommitted,
@@ -66,7 +67,6 @@ from agent_comms.storage.locked_store import DurableFile
 from agent_comms.storage.recorded_time import GeneratedTimestamp
 from agent_comms.storage.store_files import AtomicFile
 from agent_comms.transcript.transcript_events import (
-    ImportedMessage,
     NoticeTranscript,
     TranscriptEvent,
 )

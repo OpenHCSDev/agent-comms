@@ -15,33 +15,23 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.execution.imported_messages import (
+    ImportedInput,
+    ImportedMessage,
+    ImportLimits,
+    NoRetainedRequest,
+)
 from agent_comms.execution.turn_context import CodexRolloutProvenance
 from agent_comms.execution.turn_item import NativeItemId
 from agent_comms.installer.harness_install import Harness
 from agent_comms.nominal.field_codec import FieldCodec, WireName
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
-from agent_comms.transcript.transcript_events import (
-    ImportedInput,
-    ImportedMessage,
-    NoRetainedRequest,
-)
 from agent_comms.transport.tool_result import ToolResult
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.history import History
     from agent_comms.cli_bridges.runtime_updates import SessionFacts
     from agent_comms.transcript.transcript_events import TranscriptEvent
-
-
-@dataclass(frozen=True, slots=True)
-class ImportLimits:
-    messages: int = 200
-    characters: int = 120_000
-    per_message: int = 12_000
-
-    def __post_init__(self) -> None:
-        if min(self.messages, self.characters, self.per_message) <= 0:
-            raise ValueError("Import budgets must be positive.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,7 +184,8 @@ class ImportBuffer:
 
     def append(self, message: ImportedMessage) -> None:
         self.seen += 1
-        message.remember(self)
+        for request in message.retained_request().present():
+            self.latest_request = request.body[: self.limits.per_message]
         message = message.bounded(self.limits)
         self.truncated += int(message.truncated)
         self.messages.append(message)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -12,6 +12,12 @@ from urllib.parse import quote
 from pydantic import JsonValue
 
 from agent_comms.execution.history_view import Dated
+from agent_comms.execution.imported_messages import (
+    ImportedInput,
+    ImportedMessage,
+    ImportedReply,
+    ImportedRequest,
+)
 from agent_comms.execution.pi_wire import PiOmitted, ReportedInputId
 from agent_comms.execution.tool_results import (
     SENT_MESSAGE_MIME,
@@ -28,8 +34,6 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     ActivityExclude,
     FieldCodec,
-    NullMember,
-    PresentMember,
     ToolCallId,
     WireBind,
     WireOmitDefault,
@@ -51,74 +55,6 @@ from agent_comms.ui_model.message_category import (
 
 if TYPE_CHECKING:
     from agent_comms.execution.transcript_sources import TranscriptSource
-    from agent_comms.importing import ImportBuffer, ImportLimits
-
-TRUNCATED = "\n[Import excerpt truncated]"
-
-
-@dataclass(frozen=True, slots=True)
-class NoRetainedRequest(NullMember):
-    def matches(self, latest_request: str) -> bool:
-        return False
-
-
-@dataclass(frozen=True, slots=True)
-class ImportedMessage(ABC):
-    """One transcript event as portable text in the imported Pi session."""
-
-    body: str
-    truncated: bool = False
-
-    def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
-        if self.body.strip():
-            accept(self)
-
-    def bounded(self, limits: ImportLimits) -> ImportedMessage:
-        cap = min(limits.per_message, limits.characters)
-        if len(self.body) <= cap:
-            return self
-        return replace(self, body=self.body[: max(0, cap - len(TRUNCATED))] + TRUNCATED[:cap], truncated=True)
-
-    def remember(self, buffer: ImportBuffer) -> None:
-        """Only a request is the source session's latest request."""
-
-    def retained_request(self) -> ImportedRequest | NoRetainedRequest:
-        return NoRetainedRequest()
-
-    @abstractmethod
-    def pi_message(self, timestamp: int) -> dict[str, object]: ...
-
-
-class ImportedInput(ImportedMessage):
-    """Text the source session's model received: tool calls, results and context."""
-
-    def pi_message(self, timestamp: int) -> dict[str, object]:
-        return {"role": "user", "content": [{"type": "text", "text": self.body}], "timestamp": timestamp}
-
-
-class ImportedRequest(PresentMember, ImportedInput):
-    """A person's or a directing agent's prompt."""
-
-    def remember(self, buffer: ImportBuffer) -> None:
-        buffer.latest_request = self.body[: buffer.limits.per_message]
-
-    def retained_request(self) -> ImportedRequest:
-        return self
-
-    def matches(self, latest_request: str) -> bool:
-        return self.body == latest_request or (
-            self.truncated and latest_request.startswith(self.body.removesuffix(TRUNCATED))
-        )
-
-
-class ImportedReply(ImportedMessage):
-    def pi_message(self, timestamp: int) -> dict[str, object]:
-        zero = {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}
-        return {
-            "role": "assistant", "content": [{"type": "text", "text": self.body}], "timestamp": timestamp,
-            "api": "openai-responses", "provider": "imported", "model": "historical-context", "stopReason": "stop",
-            "usage": {**zero, "totalTokens": 0, "cost": {**zero, "total": 0}},
-        }
 
 
 @dataclass(frozen=True, kw_only=True)

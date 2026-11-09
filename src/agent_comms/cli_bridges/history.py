@@ -28,7 +28,8 @@ from agent_comms.cli_bridges.runtime_updates import (
     RuntimeUpdate,
     SessionFacts,
 )
-from agent_comms.importing import ImportedConversation, ImportLimits, ImportSnapshot
+from agent_comms.execution.imported_messages import ImportLimits
+from agent_comms.importing import ImportedConversation, ImportSnapshot
 from agent_comms.installer.harness_install import (
     ClaudeCodeHarness,
     CodexHarness,
