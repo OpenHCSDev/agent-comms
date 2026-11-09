@@ -24,7 +24,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
-from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile
+from agent_comms.storage.locked_store import InstallationFiles, LiveFilesRequest, RegistryFile
 from bus_record_fixture import prepare_native_comms
 
 
@@ -93,7 +93,11 @@ class CarryingRoot:
         RegistryTitleCarry(LiveFilesRequest(self.comms.root), self.spill).carry(apply=True)
 
     def digests(self) -> dict[Path, str]:
-        return {path: RegistryStore.digest(path) for path in self.registry.written}
+        return {
+            resource.live(self.comms.root): resource.owner.digest(resource.live(self.comms.root))
+            for resource in InstallationFiles(LiveFilesRequest(self.comms.root)).owned_files(
+                self.registry.written)
+        }
 
     def refused_install(self) -> None:
         """Enter the real installer; its next Git command fails on the missing checkout, so

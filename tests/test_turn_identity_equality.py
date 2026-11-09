@@ -10,6 +10,7 @@ from agent_comms.registry.thread_identity import (
     TurnFence,
     TurnIdentity,
 )
+from agent_comms.storage.locked_store import RegistryFile
 
 
 def test_turn_identity_equality_across_observation_types(tmp_path):
@@ -18,7 +19,7 @@ def test_turn_identity_equality_across_observation_types(tmp_path):
     finished = FinishedTurnFence(identity, TurnId('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), 1)
     lease = TurnLeaseFence(
         identity, TurnId('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), 1,
-        record=StoredTurnRecord.for_identity(tmp_path / "registry.json", identity),
+        record=StoredTurnRecord.for_identity(RegistryFile.path_in(tmp_path), identity),
     )
     assert observed == finished == lease
     assert lease == finished == observed

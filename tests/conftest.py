@@ -611,7 +611,7 @@ def bus(tmp_path: Path) -> Bus:
 @pytest.fixture
 def thread_registration(tmp_path_factory: pytest.TempPathFactory) -> Registration:
     from agent_comms.registry.registration import Registration
-    return Registration(tmp_path_factory.mktemp('thread-registration') / 'registry.json')
+    return Registration(RegistryFile.path_in(tmp_path_factory.mktemp('thread-registration')))
 
 
 @pytest.fixture

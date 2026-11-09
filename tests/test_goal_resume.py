@@ -40,6 +40,7 @@ from agent_comms.planning.goals import (
 )
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
 
@@ -321,13 +322,13 @@ def test_exhausted_goal_revision_refuses_transition_without_write(comms):
         NativeThread(name='owner', tags=frozenset(), worktree=Checkout(Path('/wt')), goal=Goal('work', goal_id,
             published_seq=0, revision=(1 << 63) - 1))
     )
-    before = (comms.root / "registry.json").read_bytes()
+    before = (RegistryFile.path_in(comms.root)).read_bytes()
     with pytest.raises(ValueError):
         comms.goals.update_goal(
             "owner",
             BlockedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal_id)), progress="do not write"),
         )
-    assert (comms.root / "registry.json").read_bytes() == before
+    assert (RegistryFile.path_in(comms.root)).read_bytes() == before
 
 
 def test_a_blocked_goal_is_retried_by_its_holder_or_team_and_authorize_retry_guards_each(comms, monkeypatch):

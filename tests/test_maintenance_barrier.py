@@ -24,6 +24,7 @@ from agent_comms.nominal.lifecycle_capability import Executing
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import (
     HOLDER_NONCE,
     DrainingPhase,
@@ -47,7 +48,7 @@ from agent_comms.storage.store_files import (
 
 def test_nested_holds_restore_the_previous_authority_on_failure(tmp_path, monkeypatch):
     monkeypatch.delenv(HOLDER_NONCE, raising=False)
-    gates = tuple(MaintenanceBarrier(tmp_path / name / "registry.json")
+    gates = tuple(MaintenanceBarrier(tmp_path / RegistryFile.path_in(name))
                   for name in ("first", "second"))
     first, second = (gate.begin(MaintenanceOperator.current()) for gate in gates)
     with first.holding():
@@ -72,7 +73,7 @@ def test_maintenance_operator_rejects_invalid_external_text(text: object) -> Non
 
 
 def test_draining_lends_existing_turn_but_holds_new_prompt(tmp_path: Path) -> None:
-    gate = MaintenanceBarrier(tmp_path / 'wire' / 'registry.json')
+    gate = MaintenanceBarrier(RegistryFile.path_in(tmp_path / 'wire'))
     hold = gate.begin(MaintenanceOperator.current())
     assert hold.phase is DrainingPhase
     with gate.read().phase.send_new(None) as new:
@@ -183,7 +184,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
 def test_state_generation_requires_exact_matching_positive_int(
     tmp_path: Path, generation: object
 ) -> None:
-    gate = MaintenanceBarrier(tmp_path / "wire" / "registry.json")
+    gate = MaintenanceBarrier(RegistryFile.path_in(tmp_path / "wire"))
     assert gate.read().phase is ReadyPhase  # Fresh roots remain default OFF.
     gate.begin(MaintenanceOperator.current())
     state = json.loads(gate.state_path.read_text())
@@ -209,7 +210,7 @@ def test_state_generation_requires_exact_matching_positive_int(
     ["missing-state", "missing-marker", "corrupt-state", "stale-generation", "symlink-state"],
 )
 def test_enabled_witness_damage_never_restores_default_off(tmp_path: Path, fault: str) -> None:
-    gate = MaintenanceBarrier(tmp_path / "wire" / "registry.json")
+    gate = MaintenanceBarrier(RegistryFile.path_in(tmp_path / "wire"))
     gate.begin(MaintenanceOperator.current())
     if fault == "missing-state":
         gate.state_path.unlink()
@@ -244,7 +245,7 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
     proc.join(10)
     assert proc.exitcode == 0
     assert q.get(timeout=2)[0] == "denied"
-    async with MaintenanceBarrier(root / "registry.json").ingress_async() as status:
+    async with MaintenanceBarrier(RegistryFile.path_in(root)).ingress_async() as status:
         with status.phase.send_new(None, None, "native", "original") as outcome:
             assert isinstance(outcome, HeldSend)
     assert comms.owners.maintenance.read() == hold
@@ -297,11 +298,11 @@ async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: P
     entered = asyncio.Event()
 
     async def native_write():
-        async with MaintenanceBarrier(root / "registry.json").ingress_async() as status:
+        async with MaintenanceBarrier(RegistryFile.path_in(root)).ingress_async() as status:
             with status.phase.send_running(None, None, "native", "original"):
                 entered.set()
 
-    async with _async_store_lock(root / 'registry.json', ExclusiveLock(), StoreGuard.contention):
+    async with _async_store_lock(RegistryFile.path_in(root), ExclusiveLock(), StoreGuard.contention):
         send = asyncio.create_task(native_write())
         try:
             # The original exclusive owner must resume on the same loop while
@@ -318,7 +319,7 @@ async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: P
 
 def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     root = tmp_path / "wire"
-    gate = MaintenanceBarrier(root / "registry.json")
+    gate = MaintenanceBarrier(RegistryFile.path_in(root))
     control = gate
     # The same lock spans final state check, delegate and fake stdin write.
     import threading
@@ -328,7 +329,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     changed = threading.Event()
 
     async def fake_send() -> None:
-        async with MaintenanceBarrier(root / "registry.json").ingress_async() as status:
+        async with MaintenanceBarrier(RegistryFile.path_in(root)).ingress_async() as status:
             with status.phase.send_running(None, None, "id", "text"):
                 entered.set()
                 assert release.wait(5)
@@ -347,7 +348,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     sender.join(5)
     closer.join(5)
     assert changed.is_set()
-    with _store_lock(root / 'registry.json', ExclusiveLock(), StoreGuard.contention), pytest.raises(RelationViolationError):
+    with _store_lock(RegistryFile.path_in(root), ExclusiveLock(), StoreGuard.contention), pytest.raises(RelationViolationError):
         gate.assert_open_unlocked()
 
 
@@ -365,14 +366,14 @@ def test_activity_updates_runtime_state_without_publication_while_draining(tmp_p
     for name in ('a', 'b'):
         assert cli('register', '--name', name, '--worktree', '/wt')[0] == 0
     before = bus.revision()
-    registry_before = (tmp_path / "registry.json").read_bytes()
-    gate = MaintenanceBarrier(tmp_path / 'registry.json')
+    registry_before = (RegistryFile.path_in(tmp_path)).read_bytes()
+    gate = MaintenanceBarrier(RegistryFile.path_in(tmp_path))
     hold = gate.begin(MaintenanceOperator.current())
     code, out = cli('activity', '--name', 'a', '--state', 'working')
     assert code == 0, out
     assert ActivityStore(tmp_path).current('a').state is ActivityState.WORKING
     assert bus.revision() == before
-    assert (tmp_path / 'registry.json').read_bytes() == registry_before
+    assert RegistryFile.path_in(tmp_path).read_bytes() == registry_before
     gate.clear(hold)
     assert cli('send', '--from', 'a', '--to', 'b', '--body', 'hi')[0] == 0
 

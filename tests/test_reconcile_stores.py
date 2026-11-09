@@ -234,6 +234,16 @@ def test_a_schema_change_outside_the_hold_is_refused_naming_the_store(private_co
             assert not db.execute("SELECT 1 FROM sqlite_master WHERE name=?", (index,)).fetchone()
 
 
+def test_schema_selection_does_not_grant_access_to_uncommitted_registry_data(private_comms):
+    store = private_comms.registry.store
+    captured = store.read_revision().source
+    # An unguarded commit invalidates access, but does not change the protocol's table family.
+    store.rows.commit(captured.raw, captured)
+    with pytest.raises(RelationViolationError):
+        store.privacy()
+    assert CoordinationStore.schema_at(CoordinationStore.path_in(private_comms.root)) is PrivateCoordinatorSchema
+
+
 def test_planned_reconcile_names_the_same_stores_and_writes_nothing(private_comms):
     """The installer asks this before its backup, under the hold that would let a write
     through: it must name what reconcile-stores rewrites and leave every byte alone."""

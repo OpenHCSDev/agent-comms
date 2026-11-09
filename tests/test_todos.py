@@ -93,7 +93,7 @@ from agent_comms.projects.work_branches import WorkBranches
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import CoreWatcherIncarnation
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
-from agent_comms.storage.locked_store import RootFile
+from agent_comms.storage.locked_store import RegistryFile, RootFile
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.team_pings import RulePing
 from agent_comms.team.order import PullRequestVerb, SayVerb, Team
@@ -118,7 +118,7 @@ pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work", "t
 
 def thread(name: str, root: Path, created: float) -> Thread:
     """A registered thread: work is assigned only to a holder the registry knows."""
-    registration = Registration(Path(root) / "registry.json")
+    registration = Registration(RegistryFile.path_in(Path(root)))
     registration.register(NativeThread(name, frozenset(), Checkout(root), created_at=created))
     return registration.require(name)
 
@@ -453,7 +453,7 @@ def pr_team(tmp_path, monkeypatch, proof_build_checkouts, durable_home, github_c
     # The volume is the tmp_path HOME; the machine's floor belongs to the live bus's rule.
     rule = StorageRule(checkout_base=source.checkout.parent, floor_gib=0)
     (tmp_path / "storage.json").write_text(json.dumps(FieldCodec.encode(rule)))
-    Registration(tmp_path / "registry.json").register(colleague)
+    Registration(RegistryFile.path_in(tmp_path)).register(colleague)
     # The source carries the copied plans; a second checkout of its repository would
     # be compared against the source's installed commit, which it never holds.
     # Verbs act as the teammate running them; no colleague stands in for an actor-less context.

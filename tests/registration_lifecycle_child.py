@@ -15,15 +15,16 @@ from agent_comms.registry.thread_text import (
     GivenThreadText,
 )
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 
 
 def main(root: Path, turn: TurnId) -> None:
     root.mkdir()
-    registry = Registration(root / "registry.json")
+    registry = Registration(RegistryFile.path_in(root))
     steps = []
 
     def capture() -> None:
-        row = json.loads(registry.store.path.read_text().replace(str(root), "<root>"))
+        row = registry.store.stored()
         row["turns"] = {name: FieldCodec.encode(thread.turn_record.read())
                         for name, thread in registry.snapshot().threads.items()}
         assert Registration(registry.store.path).snapshot() == registry.snapshot()

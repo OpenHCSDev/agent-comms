@@ -72,6 +72,7 @@ from agent_comms.notification_assignment import NotificationAssignment, Notifica
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.registry.registry_tables import RegistryRowRevision
 from agent_comms.registry.thread_presentation import ThreadPresentation
 from agent_comms.registry.threads import Thread, ThreadProvenance
 from agent_comms.storage.private_path import (
@@ -611,7 +612,7 @@ class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
         return RecordedPageSource(self.source.key)
 
     @projected(view=ContentExclude, name="source")
-    def content_source(self) -> tuple[str, str, RecordedBusIdentity, RecordedBusIdentity, int, FileObservation]:
+    def content_source(self) -> tuple[str, str, RecordedBusIdentity, RecordedBusIdentity, int, RegistryRowRevision]:
         return (self.source.key, self.source.original_root, self.source.bus_identity,
                 self.source.snapshot_bus_identity, self.source.snapshot_bus_revision,
                 self.source.snapshot_registry_revision)

@@ -17,6 +17,7 @@ from agent_comms.registry.thread_text import (
     GivenThreadText,
 )
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 from bus_history import read_history
 from conftest import installed_comms
 
@@ -122,7 +123,7 @@ class TestPresence:
         """P1270: being seen is presence, not a declaration change. The heartbeat moves only
         presence.json, so registry.json (5.7 MB on the live bus) is not rewritten for it, and
         a reader that opened the registry earlier still sees the new time."""
-        path = tmp_path / "registry.json"
+        path = RegistryFile.path_in(tmp_path)
         registry = Registration(path)
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         reader = Registration(path)
@@ -140,7 +141,7 @@ class TestPresence:
         """#4190 send-back (f-ci): a reader captures the registry, a rename commits, then the
         reader lays presence over what it captured. Rows are never dropped, so the old
         revision's thread still has one, and the renamed thread reads under its new name."""
-        path = tmp_path / "registry.json"
+        path = RegistryFile.path_in(tmp_path)
         registry = Registration(path)
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         reader = Registration(path).store
@@ -157,7 +158,7 @@ class TestPresence:
 
         from agent_comms.registry.presence import PresenceStore
 
-        path = tmp_path / "registry.json"
+        path = RegistryFile.path_in(tmp_path)
         registry = Registration(path)
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         reader = Registration(path).store

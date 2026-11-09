@@ -21,6 +21,7 @@ from agent_comms.planning.goal_states import UnrecordedBlockGoal
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.transport.request import ToolRequest
 from agent_comms.transport.tool_caller import ThreadCaller
 from conftest import installed_comms
@@ -41,7 +42,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
     )
     assert progressed is not None
     before_history = comms.goals.goal_history("worker", OneGoal(original.id))
-    before_registry = (tmp_path / "registry.json").read_bytes()
+    before_registry = (RegistryFile.path_in(tmp_path)).read_bytes()
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
 
     for kwargs in (
@@ -55,7 +56,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
                 "worker", BlockedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(original.id)), **kwargs)
             )
         assert comms.registry.require("worker").goal == progressed
-        assert (tmp_path / "registry.json").read_bytes() == before_registry
+        assert (RegistryFile.path_in(tmp_path)).read_bytes() == before_registry
         assert comms.goals.goal_history("worker", OneGoal(original.id)) == before_history
 
     with pytest.raises(ValueError):
@@ -63,7 +64,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
             comms,
             {"goal_id": original.id, "status": "blocked", "progress": " \t "}, caller=ThreadCaller("worker"),
         )
-    assert (tmp_path / "registry.json").read_bytes() == before_registry
+    assert (RegistryFile.path_in(tmp_path)).read_bytes() == before_registry
 
 
 def test_unrecorded_block_is_labeled_unavailable_not_inferred_from_progress(tmp_path):

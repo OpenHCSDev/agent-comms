@@ -33,6 +33,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.waking.wake_candidate_index import (
     ProjectionUnavailableError,
@@ -104,7 +105,7 @@ def _projection(
         index,
         after_seq,
         through_seq,
-        registry=Registration(index.bus.path.with_name("registry.json")),
+        registry=Registration(RegistryFile.path_in(index.bus.path.parent)),
         expected_participant_generation=store.participants.get(
             owner.incarnation.lookup
         ).owner_identity.generation,

@@ -1,15 +1,53 @@
 """Registry reads reuse unchanged declarations but follow external wire writes."""
 
-import json
+
+from contextlib import closing
 
 import pytest
 
-from agent_comms.nominal.field_codec import MalformedRecord
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import InvalidRegistryDocument
+from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.store_files import AtomicFile
+
+
+def test_replacing_a_database_at_the_same_counter_does_not_reuse_its_cached_rows(tmp_path):
+    first = Registration(RegistryFile.path_in(tmp_path / "first"))
+    second = Registration(RegistryFile.path_in(tmp_path / "second"))
+    first.register(NativeThread("original", frozenset(), Checkout(tmp_path)))
+    second.register(NativeThread("replacement", frozenset(), Checkout(tmp_path)))
+    before = first.store.read_revision()
+    assert before.source.mark == second.store.rows.mark()
+    staged = RegistryFile.path_in(tmp_path / "staged")
+    staged.parent.mkdir()
+    RegistryFile.copy_file(second.store.path, staged)
+    # Publish a complete replacement, as rollback does; this is not a row update.
+    AtomicFile(first.store.path).replace(staged)
+    first.store.presence.replace(second.store.presence.read())
+    assert set(first.all_threads()) == {"replacement"}
+    assert not first.store.has_revision(before.source.revision)
+
+
+def test_retained_registry_keeps_wal_rows_and_revision_ignores_checkpoints(tmp_path):
+    registry = Registration(RegistryFile.path_in(tmp_path / "source"))
+    registry.register(NativeThread("first", frozenset(), Checkout(tmp_path)))
+    # Keep an older SQLite read open so the second declaration remains in the WAL.
+    with closing(RegistryFile.read_snapshot(registry.store.path)):
+        registry.register(NativeThread("second", frozenset(), Checkout(tmp_path)))
+        captured = registry.store.read_revision()
+        retained = registry.store.retain(tmp_path / "retained")
+        assert set(retained.document.threads) == {"first", "second"}
+        assert registry.store.has_revision(captured.source.revision)
+    with closing(RegistryFile.writer(registry.store.path)) as db:
+        db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    assert registry.store.has_revision(captured.source.revision)
+    registry.unregister("second")
+    assert not registry.store.has_revision(captured.source.revision)
+    assert set(RegistryStore.at(tmp_path / "retained").read().threads) == {"first", "second"}
 
 
 @pytest.mark.parametrize("select", [
@@ -19,7 +57,7 @@ from agent_comms.storage.store_files import AtomicFile
 def test_dependent_selection_refuses_changed_authority_without_repeating_its_effect(tmp_path, select):
     from agent_comms.coordination.errors import StaleFence
 
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread("worker", frozenset(), Checkout(tmp_path)))
     selected = select(registry.store)
     effects = []
@@ -39,7 +77,7 @@ def test_an_entry_fence_ignores_other_threads_writes_but_not_its_own(tmp_path):
     # every other live owner used to stale the whole-registry cut before it could write.
     from agent_comms.coordination.errors import StaleFence
 
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread("worker", frozenset(), Checkout(tmp_path)))
     registry.register(NativeThread("neighbour", frozenset(), Checkout(tmp_path)))
     whole = registry.store.snapshot_with_authority()
@@ -60,34 +98,35 @@ def test_missing_registry_version_is_rejected_without_rewriting_the_file(tmp_pat
     from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.registry.registry_document import RegistryDocument
 
-    path = tmp_path / "registry.json"
+    path = RegistryFile.path_in(tmp_path)
     raw = FieldCodec.encode(RegistryDocument())
     del raw["version"]
-    path.write_text(json.dumps(raw))
-    before = path.read_bytes()
+    RegistryStore(path).rewrite_stored(lambda _, stored=raw: stored)
+    before = RegistryStore(path).rows.mark()
     with pytest.raises(RelationViolationError, match="version"):
         Registration(path).snapshot()
-    assert path.read_bytes() == before
+    assert RegistryStore(path).rows.mark() == before
 
 
 def test_malformed_replacement_never_serves_stale_success(tmp_path):
-    path = tmp_path / "registry.json"
+    path = RegistryFile.path_in(tmp_path)
     registry = Registration(path)
     registry.register(NativeThread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
-    saved = path.read_text()
+    saved = registry.store.stored()
     registry.require("worker")
-    AtomicFile(path).write_text("{")
+    # A row that names another thread: the stored form no decoder accepts.
+    registry.store.rewrite_stored(lambda raw: {**raw, "threads": {"worker": {"name": "other"}}})
     for _ in range(2):
-        with pytest.raises(MalformedRecord):
+        with pytest.raises(InvalidRegistryDocument):
             registry.require("worker")
-    AtomicFile(path).write_text(saved)
+    registry.store.rewrite_stored(lambda _: saved)
     assert registry.require("worker").name == "worker"
 
 
 def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
     from agent_comms.registry.registry_document import RegistryDocument
 
-    path = tmp_path / "registry.json"
+    path = RegistryFile.path_in(tmp_path)
     writer = Registration(path)
     for name in ("first", "second", "third"):
         writer.register(NativeThread(name=name, tags=frozenset(), worktree=Checkout(tmp_path)))
@@ -103,12 +142,12 @@ def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
     stored = dict(reader.store.read().statuses)
 
     # Another process stops one thread: an external replacement of the file.
-    raw = json.loads(path.read_text())
-    stopped = Registration(tmp_path / "other" / "registry.json")
+    raw = RegistryStore(path).stored()
+    stopped = Registration(RegistryFile.path_in(tmp_path / "other"))
     stopped.register(NativeThread(name='second', tags=frozenset(), worktree=Checkout(tmp_path)))
     stopped.unregister("second")
-    raw["statuses"]["second"] = json.loads(stopped.store.path.read_text())["statuses"]["second"]
-    AtomicFile(path).write_text(json.dumps(raw, indent=2))
+    raw["statuses"]["second"] = stopped.store.stored()["statuses"]["second"]
+    RegistryStore(path).rewrite_stored(lambda _, stored=raw: stored)
 
     after = reader.all_threads()
     changed = reader.store.cache.read_counts()
@@ -128,7 +167,7 @@ def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
 
 @pytest.fixture
 def thread_rows_wire(tmp_path):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     for name in ("first", "second"):
         registry.register(NativeThread(name, frozenset(), Checkout(tmp_path)))
     return registry.store.read().threads.to_wire()
@@ -168,21 +207,21 @@ def test_assigning_and_removing_thread_rows_changes_only_the_written_rows(thread
 def test_a_changed_revision_is_checked_as_a_whole(tmp_path):
     from agent_comms.errors import RelationViolationError
 
-    path = tmp_path / "registry.json"
+    path = RegistryFile.path_in(tmp_path)
     registry = Registration(path)
     for name in ("first", "second"):
         registry.register(NativeThread(name=name, tags=frozenset(), worktree=Checkout(tmp_path)))
     registry.require("first")
     # A declaration without its status: the unchanged rows do not excuse it.
-    raw = json.loads(path.read_text())
+    raw = RegistryStore(path).stored()
     del raw["statuses"]["second"]
-    AtomicFile(path).write_text(json.dumps(raw, indent=2))
+    RegistryStore(path).rewrite_stored(lambda _, stored=raw: stored)
     with pytest.raises(RelationViolationError):
         registry.require("first")
     # A changed row that does not decode is rejected too.
-    raw = json.loads(path.read_text())
+    raw = RegistryStore(path).stored()
     raw["statuses"]["second"] = {"kind": "no-such-status"}
-    AtomicFile(path).write_text(json.dumps(raw, indent=2))
+    RegistryStore(path).rewrite_stored(lambda _, stored=raw: stored)
     with pytest.raises(RelationViolationError):
         registry.require("first")
 
@@ -190,7 +229,7 @@ def test_a_changed_revision_is_checked_as_a_whole(tmp_path):
 def test_a_reused_revision_still_finds_its_user_thread(tmp_path):
     from agent_comms.registry.thread_identity import UserThreadRole
 
-    path = tmp_path / "registry.json"
+    path = RegistryFile.path_in(tmp_path)
     writer = Registration(path)
     writer.register(NativeThread(name="user", tags=frozenset(), worktree=Checkout(tmp_path),
                            role=UserThreadRole))
@@ -199,8 +238,8 @@ def test_a_reused_revision_still_finds_its_user_thread(tmp_path):
     assert [thread.name for thread in reader.store.read().user_thread().existing()] == ["user"]
 
     # Only the worker's row changes; the user's declaration is reused, not decoded again.
-    raw = json.loads(path.read_text())
+    raw = RegistryStore(path).stored()
     raw["threads"]["worker"]["title"] = "retitled"
-    AtomicFile(path).write_text(json.dumps(raw, indent=2))
+    RegistryStore(path).rewrite_stored(lambda _, stored=raw: stored)
 
     assert [thread.name for thread in reader.store.read().user_thread().existing()] == ["user"]

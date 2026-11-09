@@ -60,6 +60,7 @@ from agent_comms.nominal.field_codec import (
     compile_decoder,
     projected,
 )
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.transcript.transcript_events import ToolStartTranscript
 from conftest import transcript_records
 
@@ -1042,7 +1043,7 @@ def test_identity_and_digest_text_is_one_rule_at_every_reader(tmp_path: Path) ->
     root_id = RootId.mint()
     # The field decodes at its boundary; the guard receives the namespace's declared kind.
     assert AddressedPage.capture(lookup=minted).lookup == minted
-    assert PrivateRegistryGuard(tmp_path / "registry.json", root_id).root_id.hex() == root_id
+    assert PrivateRegistryGuard(RegistryFile.path_in(tmp_path), root_id).root_id.hex() == root_id
     for invalid in (minted.upper(), minted[:31], int(minted, 16)):
         with pytest.raises(MalformedRecord):
             AddressedPage.capture(lookup=invalid)

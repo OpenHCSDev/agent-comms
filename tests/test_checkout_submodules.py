@@ -121,13 +121,13 @@ def test_retired_checkout_remains_readable_without_qualifying_a_new_launch(tmp_p
     assert qualified.path == project
     comms = wire(tmp_path / 'wire')
     comms.registry.declare(NativeThread('retired', frozenset(), Checkout(qualified.path)))
-    before = comms.registry.store.path.read_bytes()
+    before = comms.registry.store.rows.mark()
     shutil.rmtree(project)
     reopened = wire(comms.root).registry.require('retired')
     assert reopened.worktree == Checkout(project)
     assert reopened.project_path == project
     assert FieldCodec.encode(reopened.worktree) == str(project)
-    assert comms.registry.store.path.read_bytes() == before
+    assert comms.registry.store.rows.mark() == before
     with pytest.raises(FileNotFoundError):
         FieldCodec.decode(LaunchCheckout, str(project))
 

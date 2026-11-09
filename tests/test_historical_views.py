@@ -274,7 +274,7 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     live.registry.remove("alice")
     live.registry.register(replacement)
     source = live.views.attach_history(old.root)
-    original_registry = (old.root / "registry.json").read_bytes()
+    original_registry = (RegistryFile.path_in(old.root)).read_bytes()
     original_native = native.read_bytes()
 
     read = live.transcripts.capture_page_read("alice", page_source=RecordedPageSource(source.key))
@@ -299,7 +299,7 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     live_identity = live.transcripts.capture_page_read("alice").identity
     live_identity.publish_turn(lambda root, thread: delivered.append((root, thread)))
     assert delivered == [(str(live.root), live.registry.require("alice"))]
-    assert (old.root / "registry.json").read_bytes() == original_registry
+    assert (RegistryFile.path_in(old.root)).read_bytes() == original_registry
     assert native.read_bytes() == original_native
 
 

@@ -27,19 +27,6 @@ from aiohttp.test_utils import TestClient, TestServer
 from yarl import URL
 
 from agent_comms.comms import Comms, wire
-from agent_comms.transport.connector import (
-    ApprovalLink,
-    AuthorizationCodeGrant,
-    BoundedRoute,
-    Connector,
-    ConnectorSendTool,
-    ConnectorVerb,
-    GrantUiVerb,
-    LongLivedRoute,
-    RevokeVerb,
-    RunningRequest,
-    ServeVerb,
-)
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import TranscriptChanged
 from agent_comms.coordination.service_passes import ServicePassStore
@@ -59,7 +46,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.git_errors import FailedGitCommand
 from agent_comms.registry.thread_identity import UserThreadRole
 from agent_comms.registry.threads import NativeThread
-from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.storage.locked_store import DocumentChange, RegistryFile
 from agent_comms.storage.maintenance_barrier import (
     InstallingPhase,
     MaintenanceBarrier,
@@ -71,6 +58,19 @@ from agent_comms.storage.maintenance_barrier import (
 from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lock
 from agent_comms.team.standing_rules import ServicePassFailing
 from agent_comms.transcript.transcripts import EarlierThan
+from agent_comms.transport.connector import (
+    ApprovalLink,
+    AuthorizationCodeGrant,
+    BoundedRoute,
+    Connector,
+    ConnectorSendTool,
+    ConnectorVerb,
+    GrantUiVerb,
+    LongLivedRoute,
+    RevokeVerb,
+    RunningRequest,
+    ServeVerb,
+)
 from agent_comms.transport.connector_caller import (
     CALLER,
     GrantRefusedError,
@@ -792,7 +792,7 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
         headers = {"Authorization": f"Bearer {await approved_token(reader, wire(copied_root))}"}
         copied_bus = Bus(Bus.path_in(copied_root))
         before = copied_bus.revision()
-        barrier = MaintenanceBarrier(copied_root / "registry.json")
+        barrier = MaintenanceBarrier(RegistryFile.path_in(copied_root))
         held = barrier.begin(MaintenanceOperator.current())
         for phase in phases:
             held = barrier.advance(held, phase)

@@ -45,6 +45,7 @@ from agent_comms.registry.thread_text import (
     GivenThreadText,
 )
 from agent_comms.registry.threads import ChosenModel, NativeThread, NextTurnConfiguration
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
@@ -510,7 +511,7 @@ class TestPollAndWire:
     def test_runtime_files_created_on_demand(self, tmp_path: Path) -> None:
         comms = wire(tmp_path / "fresh")
         comms.registry.declare(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
-        assert (tmp_path / "fresh" / "registry.json").exists()
+        assert (RegistryFile.path_in(tmp_path / "fresh")).exists()
 
 
 class TestCrossWireIsolation:
