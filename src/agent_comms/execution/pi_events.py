@@ -35,6 +35,7 @@ from agent_comms.execution.pi_wire import (
     PiUsage,
     UnknownPayload,
 )
+from agent_comms.execution.provider_records import ReportedText
 from agent_comms.execution.request_progress import RequestProgress
 from agent_comms.execution.turn_phase import (
     AcceptsPrompt,
@@ -72,7 +73,6 @@ from agent_comms.pi_payloads import (
     ProviderRetryOutcome,
     ReportedCompaction,
     ReportedFlag,
-    ReportedText,
     UnreportedUsage,
 )
 from agent_comms.transport.tool_declaration import ToolDeclaration

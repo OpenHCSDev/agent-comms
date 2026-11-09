@@ -10,6 +10,10 @@ from agent_comms.execution.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.execution.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
 from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.pi_wire import PiPayload
+from agent_comms.execution.provider_records import (
+    TextContent,
+    ToolCallContent,
+)
 from agent_comms.execution.tool_results import NoToolDiff
 from agent_comms.execution.turn_usage import UsageAccount
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord
@@ -21,8 +25,6 @@ from agent_comms.pi_payloads import (
     ProvidedToolResult,
     ReportedModel,
     StateData,
-    TextContent,
-    ToolCallContent,
     UnknownData,
     UnreportedModel,
     UnreportedUsage,

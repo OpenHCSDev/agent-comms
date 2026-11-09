@@ -4,11 +4,12 @@ import json
 from dataclasses import dataclass
 
 from agent_comms.messaging.read_basis import ChannelDisplayScope, ReadCursor, UnreadQuery
+from agent_comms.messaging.unread_query_source import UnreadQuerySource
 from agent_comms.registry.registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True, slots=True)
-class DisplayUnreadSelection:
+class DisplayUnreadSelection(UnreadQuerySource):
     """The complete captured inputs that determine an unread count."""
 
     seen: ReadCursor

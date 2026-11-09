@@ -16,6 +16,10 @@ from agent_comms.coordination.session import NativeCapture
 from agent_comms.execution.channel_coding_tools import CodingToolSocket
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.pi_events import ToolExecutionEnd, ToolExecutionStart
+from agent_comms.execution.provider_records import (
+    ReportedText,
+    ToolCallContent,
+)
 from agent_comms.messaging.envelope_claim_transitions import (
     ClaimConflict,
     ClaimTransitionError,
@@ -28,8 +32,6 @@ from agent_comms.pi_payloads import (
     AssistantMessage,
     ReportedFlag,
     ReportedParts,
-    ReportedText,
-    ToolCallContent,
 )
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread

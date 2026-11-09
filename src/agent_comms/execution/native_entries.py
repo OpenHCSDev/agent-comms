@@ -46,6 +46,7 @@ from agent_comms.execution.pi_wire import (
     ReportedInputId,
     TaggedPayload,
 )
+from agent_comms.execution.provider_records import ReportedText
 from agent_comms.execution.transcript_routes import (
     InputPresentation,
     NoInputDisplay,
@@ -65,7 +66,7 @@ from agent_comms.nominal.field_codec import (
     WireName,
     WireOmitDefault,
 )
-from agent_comms.pi_payloads import PiMessage, ReportedText
+from agent_comms.pi_payloads import PiMessage
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.storage.locked_store import DurableFile
 from agent_comms.storage.recorded_time import GeneratedTimestamp

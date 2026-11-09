@@ -10,6 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from agent_comms.execution.provider_records import ReportedText
 from native_proof_cases import read_context_proof, read_proof_rows, write_proof_rows
 
 from agent_comms.coordination.errors import IdentityConflict
@@ -48,7 +49,6 @@ from agent_comms.execution.turn_usage import UsageAccount
 from agent_comms.execution.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, InputId
-from agent_comms.pi_payloads import ReportedText
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 
 INPUT_ID = InputId('a' * 32)

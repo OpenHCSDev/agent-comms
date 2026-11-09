@@ -36,8 +36,8 @@ if TYPE_CHECKING:
     from agent_comms.execution.pending_requests import PendingRequest, PendingRequests
     from agent_comms.execution.pi_commands import PiCommand
     from agent_comms.execution.pi_events import Response
+    from agent_comms.execution.provider_records import PiContent
     from agent_comms.execution.turn_phase import TurnPhase
-    from agent_comms.pi_payloads import PiContent
 
 
 class PiPayload(ExternalField):

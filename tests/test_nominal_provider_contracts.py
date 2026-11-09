@@ -10,6 +10,7 @@ from agent_comms.execution.native_failure_reads import (
     NativeResponseErrorRead,
     NativeResponseFailureRead,
 )
+from agent_comms.execution.provider_records import ReportedText
 from agent_comms.execution.runtime_info_source import RuntimeInfoWrites
 from agent_comms.execution.turn_failure_reads import (
     GoalFailurePermit,
@@ -54,7 +55,6 @@ from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.published_bus import BusResources
 from agent_comms.execution.pi_events import NativeOperationError
 from agent_comms.execution.pi_events import Response
-from agent_comms.pi_payloads import ReportedText
 from agent_comms.execution.pi_wire import PiDiagnostic
 from agent_comms.execution.pi_wire import PiOmitted
 from agent_comms.planning.goal_attempt_phase import GoalAttemptTransition

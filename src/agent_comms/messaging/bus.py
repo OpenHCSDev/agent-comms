@@ -29,7 +29,7 @@ from agent_comms.messaging.bus_tables import (
     SentSource,
 )
 from agent_comms.messaging.channel_targets import NamedTarget
-from agent_comms.messaging.display_unread_selection import DisplayUnreadSelection
+from agent_comms.messaging.unread_query_source import UnreadQuerySource
 from agent_comms.messaging.envelope_claim_transitions import (
     ClaimOwner,
     ClaimProjection,
@@ -137,7 +137,7 @@ class DisplayUnread:
     def counts(self) -> dict[str, int]:
         return {query.channel: count for query, count in self.counted.items()}
 
-    def advanced(self, source: BusReader, selection: DisplayUnreadSelection) -> DisplayUnread:
+    def advanced(self, source: BusReader, selection: UnreadQuerySource) -> DisplayUnread:
         queries = selection.queries()
         through = source.revision()
         if through == self.through and tuple(self.counted) == queries:
@@ -515,7 +515,7 @@ class BusReader(
             ))
 
     def display_unread(
-        self, selection: DisplayUnreadSelection, *, through: int,
+        self, selection: UnreadQuerySource, *, through: int,
     ) -> DisplayUnread:
         """Count every selected scope's whole interval through one revision."""
         return DisplayUnread(through, self.count_unread(selection.queries(), through=through))
