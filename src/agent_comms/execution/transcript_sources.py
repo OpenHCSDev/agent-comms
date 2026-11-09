@@ -88,7 +88,7 @@ from agent_comms.registry.thread_identity import (
     RecordedThreadIncarnation,
     ThreadIncarnation,
 )
-from agent_comms.registry.thread_identity_source import ThreadIdentitySource
+from agent_comms.registry.thread_incarnation_read import ReadsThreadIncarnation
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.private_path import FileIdentity, FileRevision, MissingFile
 from agent_comms.storage.recorded_time import (
@@ -1434,7 +1434,7 @@ class AssignedTranscriptSource(TranscriptSource):
     bus: Bus
 
     @classmethod
-    def for_thread(cls, root: Path, thread: ThreadIdentitySource[ThreadIncarnation], bus: Bus) -> Self:
+    def for_thread(cls, root: Path, thread: ReadsThreadIncarnation[ThreadIncarnation], bus: Bus) -> Self:
         return cls(root, thread.incarnation.require_recorded(), bus)
 
     @classmethod
@@ -1480,7 +1480,7 @@ class AssignedTranscriptSource(TranscriptSource):
         cursor.wire.require_source(AssignedSourceIdentity(str(self.root), self.recipient))
 
     @classmethod
-    def for_recorded(cls, root: Path, thread: ThreadIdentitySource[ThreadIncarnation], bus: Bus, records: TranscriptSource):
+    def for_recorded(cls, root: Path, thread: ReadsThreadIncarnation[ThreadIncarnation], bus: Bus, records: TranscriptSource):
         """Only the original recorded birth can select frozen assignments."""
         return thread.incarnation.recorded_or(
             lambda recorded: cls(root, recorded, bus), lambda: records

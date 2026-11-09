@@ -15,7 +15,6 @@ from agent_comms.acp_extension import (
     IdentifiedInputStarted,
     InputDeliveryChangedUpdate,
     InputFailedUpdate,
-    LiveCursorScope,
     LiveQueueScope,
     McpClientAcknowledgementUpdate,
     NoQueueScope,
@@ -69,6 +68,7 @@ from agent_comms.registry.thread_identity import (
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.private_path import MissingFile
 from agent_comms.transcript.transcript_drafts import NoDraft
+from agent_comms.transport.attachment_scope import LiveCursorScope
 
 
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):

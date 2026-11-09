@@ -82,7 +82,7 @@ from agent_comms.registry.thread_identity import (
     TurnIdentity,
     UnobservedTools,
 )
-from agent_comms.registry.thread_identity_source import ThreadIdentitySource
+from agent_comms.registry.thread_incarnation_read import ReadsThreadIncarnation
 from agent_comms.registry.thread_model import (
     CatalogSelection,
     DeclaredModel,

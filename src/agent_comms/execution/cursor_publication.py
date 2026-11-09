@@ -19,7 +19,6 @@ from acp.schema import SessionInfoUpdate
 from agent_comms.acp_extension import (
     CursorAdvancedUpdate,
     CursorEnvelope,
-    CursorScope,
     UnavailableCursorObservation,
     encode_updates,
 )
@@ -32,6 +31,8 @@ from agent_comms.execution.publication_measurements import PublicationMeasuremen
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.publisher import ResponseWrites
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
+from agent_comms.registry.privacy_reads import CursorMetadataRead
+from agent_comms.transport.attachment_scope import CursorScope
 from agent_comms.transport.runtime_server import RuntimeServer
 
 if TYPE_CHECKING:
@@ -138,7 +139,7 @@ class CursorDelivery:
         )
 
 
-class CursorPublication:
+class CursorPublication(CursorMetadataRead[CursorAdvancedUpdate]):
     """Connection-owned observer; durable proof and execution stay elsewhere."""
 
     def __init__(self, comms: Comms, runtime: RuntimeServer):

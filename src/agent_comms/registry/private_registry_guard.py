@@ -38,25 +38,27 @@ from agent_comms.execution.child_process import Platform
 from agent_comms.execution.input_root_authority import InputRootAuthority
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
-from agent_comms.execution.private_nk_entrypoint import PrivateNkLaunch, SharedRootLaunch
-from agent_comms.nominal.field_codec import RootId, ThreadLookup
+from agent_comms.execution.private_nk_entrypoint import (
+    PrivateNkLaunch,
+    RootLaunch,
+    SharedRootLaunch,
+)
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.nominal.field_codec import AcpSessionId, RootId, ThreadLookup
+from agent_comms.registry.privacy_reads import CursorMetadataRead, NativeAnswerRead
 from agent_comms.registry.registry_tables import RegistryRevisionMark, RegistryRowStore
 from agent_comms.registry.thread_identity import ClaimedIdentity
 from agent_comms.storage.locked_store import RollbackRetained, WireWakeFile
 from agent_comms.storage.private_path import FileObservation, PrivateFileRole
+from agent_comms.storage.typed_table import TableSchema
+from agent_comms.transport.attachment_scope import CursorScope, LiveCursorScope, NoCursorScope
 
 if TYPE_CHECKING:
-    from agent_comms.acp_extension import CursorAdvancedUpdate, CursorScope
-    from agent_comms.execution.cursor_publication import CursorPublication
-    from agent_comms.execution.historical_native_inputs import HistoricalNativeAnswers
-    from agent_comms.execution.private_nk_entrypoint import RootLaunch
-    from agent_comms.messaging.message_reference import MessageReference
     from agent_comms.notification_assignment import (
         NotificationAssignmentRead,
         NotificationSelection,
     )
     from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.storage.typed_table import TableSchema
 
 _MAGIC = b"ACRG"
 
@@ -133,7 +135,7 @@ class RegistryPrivacy(InputRootAuthority):
         """
         return guard, coordinator
 
-    def native_answered(self, answers: HistoricalNativeAnswers,
+    def native_answered(self, answers: NativeAnswerRead[MessageReference],
                         references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
         """Which of these inputs a native transcript answered, read under this root's privacy."""
         return answers.answered_inputs(references)
@@ -144,9 +146,9 @@ class RegistryPrivacy(InputRootAuthority):
     ) -> CursorScope: ...
 
     @abstractmethod
-    async def cursor_metadata(
-        self, publication: CursorPublication, thread_name: str, session_id: str,
-    ) -> tuple[CursorAdvancedUpdate, ...]: ...
+    async def cursor_metadata[Update](
+        self, publication: CursorMetadataRead[Update], thread_name: str, session_id: AcpSessionId,
+    ) -> tuple[Update, ...]: ...
 
     @abstractmethod
     def write(
@@ -233,16 +235,15 @@ class PublicRegistry(RegistryPrivacy):
     def cursor_scope(
         self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
     ) -> CursorScope:
-        from agent_comms.acp_extension import NoCursorScope
 
         return NoCursorScope()
 
-    async def cursor_metadata(
-        self, publication: CursorPublication, thread_name: str, session_id: str,
-    ) -> tuple[CursorAdvancedUpdate, ...]:
+    async def cursor_metadata[Update](
+        self, publication: CursorMetadataRead[Update], thread_name: str, session_id: AcpSessionId,
+    ) -> tuple[Update, ...]:
         return ()
 
-    def native_answered(self, answers: HistoricalNativeAnswers,
+    def native_answered(self, answers: NativeAnswerRead[MessageReference],
                         references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
         """A public root has no native inputs, so no native answers."""
         return frozenset()
@@ -365,7 +366,6 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
     def cursor_scope(
         self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
     ) -> CursorScope:
-        from agent_comms.acp_extension import LiveCursorScope, NoCursorScope
 
         try:
             owner = RegistryOwner.capture_local(snapshot, thread_name)
@@ -377,9 +377,9 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
             owner=owner.thread.require_process(),
         )
 
-    async def cursor_metadata(
-        self, publication: CursorPublication, thread_name: str, session_id: str,
-    ) -> tuple[CursorAdvancedUpdate, ...]:
+    async def cursor_metadata[Update](
+        self, publication: CursorMetadataRead[Update], thread_name: str, session_id: AcpSessionId,
+    ) -> tuple[Update, ...]:
         return await publication.observed_metadata(thread_name, session_id)
 
     def launch(self, root: Path) -> RootLaunch:
