@@ -39,8 +39,8 @@ from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.execution.private_nk_entrypoint import PrivateNkLaunch, SharedRootLaunch
 from agent_comms.nominal.field_codec import RootId, ThreadLookup
+from agent_comms.registry.registry_tables import RegistryRowStore
 from agent_comms.registry.thread_identity import ClaimedIdentity
-from agent_comms.storage import store_files
 from agent_comms.storage.locked_store import RollbackRetained, WireWakeFile
 from agent_comms.storage.private_path import FileObservation, PrivateFileRole
 
@@ -72,7 +72,6 @@ _COMMITTED = 2
 _MAX_SEQ = (1 << 63) - 1
 
 
-_MAX_REGISTRY = 32 << 20
 
 
 _HEADER = struct.Struct("!4sB16sQB32s")
@@ -89,28 +88,13 @@ def _reject(detail: str) -> NoReturn:
 
 
 def registry_digest(path: Path) -> bytes:
-    """Hash the exact owned registry bytes, distinguishing absence from empty."""
-    try:
-        fd = PrivateFileRole.read(
-            path, RelationViolationError("Private registry guard registry is not a bounded owner-only regular file"))
-    except FileNotFoundError:
-        return _EMPTY
-    try:
-        info = os.fstat(fd)
-        if info.st_size > _MAX_REGISTRY:
-            _reject("registry is not a bounded owner-only regular file")
-        digest = hashlib.sha256(b"present\0")
-        total = 0
-        while data := os.read(fd, 65536):
-            total += len(data)
-            if total > _MAX_REGISTRY:
-                _reject("registry grew beyond the bounded evidence read")
-            digest.update(data)
-        if total != info.st_size:
-            _reject("registry changed during its evidence read")
-        return digest.digest()
-    finally:
-        os.close(fd)
+    """The committed registry revision this guard vouches for, read from its row store: one
+    indexed read, never a hash of every row. No committed rows is the empty registry."""
+    return revision_digest(RegistryRowStore(path.parent).revision())
+
+
+def revision_digest(revision: int) -> bytes:
+    return _EMPTY if not revision else hashlib.sha256(b"rows\0" + revision.to_bytes(8, "big")).digest()
 
 
 def _record(root_id: bytes, seq: int, phase: int, digest: bytes) -> bytes:
@@ -168,7 +152,8 @@ class RegistryPrivacy(ABC):
         """Require the original native namespace; a public registry has none."""
 
     @abstractmethod
-    def write(self, registry_path: Path, text: str) -> None: ...
+    def write(self, registry_path: Path, revision: int, commit: Callable[[], int]) -> None:
+        """Commit the registry's rows as ``revision``; a private guard brackets the commit."""
 
     @abstractmethod
     def launch(self, root: Path) -> RootLaunch: ...
@@ -253,8 +238,8 @@ class PublicRegistry(RegistryPrivacy):
     def namespace(self) -> RootId:
         _reject("native namespace requires the original registry guard")
 
-    def write(self, registry_path: Path, text: str) -> None:
-        store_files.AtomicFile(registry_path).write_text(text)
+    def write(self, registry_path: Path, revision: int, commit: Callable[[], int]) -> None:
+        commit()
 
     def launch(self, root: Path) -> RootLaunch:
         return SharedRootLaunch(root)
@@ -492,11 +477,12 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         finally:
             os.close(fd)
 
-    def write(self, registry_path: Path, text: str) -> None:
+    def write(self, registry_path: Path, revision: int, commit: Callable[[], int]) -> None:
         # A pending guard after any failed write MUST remain fail-closed.
-        digest = hashlib.sha256(b"present\0" + text.encode("utf-8")).digest()
+        digest = revision_digest(revision)
         sequence, slot = self.prepare(digest)
-        store_files.AtomicFile(registry_path).write_text(text)
+        if commit() != revision:
+            _reject("row commit landed on another revision than the one it prepared")
         self.commit(sequence, slot, digest)
 
     def create_pending(self) -> None:
@@ -505,13 +491,6 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         if self.path.exists() or self.path.is_symlink():
             _reject("already exists before initialization")
         digest = registry_digest(self.registry_path)
-        if digest != _EMPTY:
-            registry_fd = PrivateFileRole.read(self.registry_path, RelationViolationError(
-                "Private registry guard registry is not a bounded owner-only regular file"))
-            try:
-                os.fsync(registry_fd)
-            finally:
-                os.close(registry_fd)
         Platform.current().sync_directory(self.registry_path.parent)
         fd = PrivateFileRole.create(self.path, RelationViolationError(
             "Private registry guard file is not a fixed owner-only regular file"))
