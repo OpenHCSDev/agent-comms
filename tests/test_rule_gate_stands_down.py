@@ -95,3 +95,24 @@ def test_the_bus_watch_is_not_a_job_to_wait_for():
     tree = [[session, "1", "claude"], [hook_process, session, "python3 rule_gate.py idle"]]
     assert gate.jobs_among(tree + watch, int(hook_process)) == 0
     assert gate.jobs_among(tree + watch + job, int(hook_process)) == 1
+
+
+def test_a_narrow_terminal_does_not_cut_the_watch_out_of_its_command_line(monkeypatch):
+    """ps cuts `args` to $COLUMNS. A real watch's shell line is a long snapshot preamble with
+    the watch at its end, so at 80 columns the watch was cut off and counted as a job, and every
+    stop was refused (2026-11-08). The count reads the live process table, uncut."""
+    spec = importlib.util.spec_from_file_location("rule_gate", GATE)
+    gate = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = gate
+    spec.loader.exec_module(gate)
+    # argv[0] carries the snapshot marker first, as a real `bash -c source …snapshot…` line does.
+    watch = subprocess.Popen(
+        ["/x/shell-snapshots/snapshot-bash.sh", "-c", "import time; time.sleep(30)",
+         "true && " * 40, "agent-comms-claude-bridge watch"],
+        executable=sys.executable)
+    try:
+        monkeypatch.setenv("COLUMNS", "80")
+        assert gate.own_background_jobs() == 0
+    finally:
+        watch.kill()
+        watch.wait()
