@@ -27,11 +27,11 @@ from aiohttp.test_utils import TestClient, TestServer
 from yarl import URL
 
 from agent_comms.comms import Comms, wire
+from agent_comms.execution.transcript_sources import EarlierThan, NativeTranscript
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import TranscriptChanged
 from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.execution.launch_root import LaunchRoot
-from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.watch_passes import WatchPass
 from agent_comms.host_services.connector import ConnectorService
@@ -57,7 +57,6 @@ from agent_comms.storage.maintenance_barrier import (
 )
 from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lock
 from agent_comms.team.standing_rules import ServicePassFailing
-from agent_comms.transcript.transcripts import EarlierThan
 from agent_comms.transport.connector import (
     ApprovalLink,
     AuthorizationCodeGrant,

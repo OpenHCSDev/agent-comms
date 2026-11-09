@@ -13,13 +13,13 @@ from agent_comms.coordination.errors import TranscriptChanged
 from agent_comms.execution.native_output import AssistantOutput, ToolOutput
 from agent_comms.execution.pi_events import NativeOutputCommitted, PiEvent
 from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.transcript_sources import Through
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     ToolCallId,
 )
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.transcript.transcripts import Through
 from conftest import installed_comms
 
 
@@ -113,7 +113,7 @@ def test_sdk_emits_scoped_marker_after_original_append(pinned_native, tmp_path):
     assert len(ended) == 1 and isinstance(ended[0], NativeRoundCommitted)
     assert ended[0].location.session_entry_end == markers[-2]['sessionEntryEnd']
 
-    from agent_comms.execution.native_transcript import NativeTranscript
+    from agent_comms.execution.transcript_sources import NativeTranscript
 
     assert NativeTranscript(ended[0].location.path).committed_output_cut(
         ended[0].location).offset == markers[-2]['sessionEntryEnd']

@@ -40,6 +40,7 @@ from agent_comms.execution.acp_failure import ACPFailure, BackendDeliveryFailure
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.context_reading import UnmeasuredContext
 from agent_comms.execution.pi_wire import McpLiveAcknowledgement
+from agent_comms.execution.transcript_sources import NativeTranscriptCursor
 from agent_comms.execution.turn_context import (
     ContextManifest,
     NextContextTurn,
@@ -68,7 +69,6 @@ from agent_comms.registry.thread_identity import (
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.private_path import MissingFile
 from agent_comms.transcript.transcript_drafts import NoDraft
-from agent_comms.transcript.transcripts import NativeTranscriptCursor
 
 
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):

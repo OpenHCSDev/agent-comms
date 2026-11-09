@@ -13,11 +13,11 @@ from agent_comms.cli_bridges.runtime_updates import ThreadOutput
 from agent_comms.cli_bridges.shared import Binding, StoredBinding, Watch
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import CoordinationReadUnavailable
+from agent_comms.execution.transcript_sources import EarlierThan, Through
 from agent_comms.nominal.field_codec import MessageId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.transcript.external_transcript_rows import ExternalItemRow
-from agent_comms.transcript.transcripts import EarlierThan, Through
 from conftest import installed_comms
 
 

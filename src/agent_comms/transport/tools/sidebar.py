@@ -23,6 +23,7 @@ from agent_comms.display_order import ChannelSort, ThreadSort
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.input_origin import HumanInputOrigin
 from agent_comms.execution.session_revision import SessionObservation
+from agent_comms.execution.transcript_sources import TranscriptCursor
 from agent_comms.execution.turn_context import (
     CodexRolloutProvenance,
     ContextSourceText,
@@ -78,7 +79,6 @@ from agent_comms.registry.thread_management import (
 from agent_comms.registry.thread_presentation import ThreadPresentation
 from agent_comms.registry.thread_text import ExpectedSession
 from agent_comms.registry.threads import Thread
-from agent_comms.transcript.transcripts import TranscriptCursor
 from agent_comms.transport.request import ObservedRequest, ReadRequest, ToolRequest, tool_field
 from agent_comms.transport.runtime_request import RuntimeRequest
 from agent_comms.transport.tool_result import ToolResult

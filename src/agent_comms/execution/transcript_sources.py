@@ -7,27 +7,54 @@ A display cursor advances each only when that source's record is consumed.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Iterable, Iterator
+from collections import defaultdict
+from collections.abc import Awaitable, Callable, Generator, Iterable, Iterator, Sequence
 from contextlib import aclosing, closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
+from itertools import takewhile
+from math import inf
 from pathlib import Path
 from sqlite3 import Connection
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import Annotated, ClassVar, Self
 
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import StaleRevision, TranscriptChanged
+from agent_comms.errors import RelationViolationError
 from agent_comms.execution.context_entry_reader import ReadsContextEntries
 from agent_comms.execution.history_view import HistoryView
-from agent_comms.execution.native_entries import TranscriptProjection
+from agent_comms.execution.native_entries import (
+    MessageEntry,
+    NativeEntry,
+    RootEntry,
+    SessionEntry,
+    TranscriptProjection,
+)
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_input_proof import (
+    NativeContextJournal,
+    NativeContextProof,
+    NativeInputLocation,
+)
 from agent_comms.execution.native_output import NativeRecordLocation
-from agent_comms.execution.native_record_file import ReadsNativeInputs, SessionCut
-from agent_comms.execution.native_records import NativeRecord, TranscriptRecord
+from agent_comms.execution.native_record_file import (
+    MissingSessionCut,
+    PresentSessionCut,
+    ReadsNativeInputs,
+    RecordsCut,
+    SessionCut,
+    record_end,
+    reverse_records,
+)
+from agent_comms.execution.native_records import NativeRecord, NoNativeInput, TranscriptRecord
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+from agent_comms.execution.transcript_cursor_reads import MarksSourceRead, TranscriptRuntime
 from agent_comms.execution.transcript_routes import TranscriptRoutes, _SessionRoutes
 from agent_comms.execution.turn_bound import TurnBound
 from agent_comms.execution.turn_context import SegmentManifest
-from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
+from agent_comms.execution.turn_item import FreshNativeId, NativeItemId, NativeTurnId
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.message_reference import MessageReference
@@ -50,8 +77,13 @@ from agent_comms.registry.thread_identity import (
     ThreadIncarnation,
 )
 from agent_comms.storage.locked_store import RegistryFile
-from agent_comms.storage.private_path import FileIdentity, MissingFile
-from agent_comms.storage.recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
+from agent_comms.storage.private_path import FileIdentity, FileRevision, MissingFile
+from agent_comms.storage.recorded_time import (
+    EventTime,
+    GeneratedTimestamp,
+    RecordedEventTime,
+    UnrecordedEventTime,
+)
 from agent_comms.storage.typed_table import Column, DurableStore, StoreWriter, TypedTable
 from agent_comms.team.rule_deal import Mute, Speaking, Voice
 from agent_comms.transcript.external_transcript_rows import (
@@ -81,8 +113,6 @@ from agent_comms.transcript.transcript_events import (
 )
 from agent_comms.transport.tool_declaration import ToolDeclaration
 
-if TYPE_CHECKING:
-    from agent_comms.transcript.transcripts import NativeTranscriptCursor, TranscriptCursor
 
 
 class WireFrontier(DeclaredFamily, ResolvesSentReports, affix="WireFrontier"):
@@ -92,7 +122,6 @@ class WireFrontier(DeclaredFamily, ResolvesSentReports, affix="WireFrontier"):
 
     def cursor(self, session_file: str, offset: int, *,
                file: FileIdentity | MissingFile) -> NativeTranscriptCursor:
-        from agent_comms.transcript.transcripts import NativeTranscriptCursor
         return NativeTranscriptCursor(session_file, offset, file=file)
 
     def at(self, sequence: int) -> Self:
@@ -129,7 +158,6 @@ class AssignedSourceCursor(AssignedSourceIdentity, WireFrontier):
 
     def cursor(self, session_file: str, offset: int, *,
                file: FileIdentity | MissingFile) -> NativeTranscriptCursor:
-        from agent_comms.transcript.transcripts import WireTranscriptCursor
         return WireTranscriptCursor(session_file, offset, self, file=file)
 
     def within(self, parent: WireFrontier) -> bool:
@@ -508,6 +536,551 @@ class TranscriptSource(ReadsPublishedMessages, ResolvesSentReports):
         return tuple(project_events(TranscriptProjection(
             entry.routing_in(routes), routes.input_display(entry.input_id), position=record.start,
         )))
+
+
+class NativeTranscript(ReadsNativeInputs, TranscriptSource):
+    def __init__(self, path: Path):
+        self.path = path
+
+    def completed_input(self, context: NativeContextProof) -> bool:
+        """Start at the proved input byte offset; never borrow the following input's final."""
+        cut = self.cut()
+        with closing(self.forward(context.session_entry_start, cut.offset)) as records:
+            anchor = next(records)
+            if not anchor.project(lambda original: original.entry.require_entry_id() == context.session_entry_id):
+                raise TranscriptChanged("Native answer input changed after its proof was read")
+            own_turn = takewhile(
+                lambda record: not record.project(lambda original: original.entry.input_boundary), records)
+            finals = tuple(record for record in own_turn if record.project(lambda original:
+                original.entry.final_reply and any(
+                    text for event in original.events for text in event.assistant_parts())))
+            answered = anchor in self.inputs_for(finals, floor=context.session_entry_start)
+        if not cut.holds(self.cut(), cut.offset):
+            raise TranscriptChanged("Native answer source changed during its read")
+        return answered
+
+    def _tool_call_times(self, since: float = -inf) -> Generator[float]:
+        try:
+            with closing(self.tail()) as entries:
+                for entry in entries:
+                    timestamp = entry.timestamp.at.timestamp()
+                    if timestamp < since:
+                        return
+                    if any(message.assistant and message.tool_calls
+                           for message in entry.messages):
+                        yield timestamp
+        except FileNotFoundError:
+            return
+
+    def last_tool_call(self) -> EventTime:
+        with closing(self._tool_call_times()) as times:
+            return next(
+                (RecordedEventTime(timestamp) for timestamp in times), UnrecordedEventTime(),
+            )
+
+    @contextmanager
+    def reading(self):
+        """Keep the native record owner bound across one page projection."""
+        yield self
+
+    def imported_sources(self):
+        """Read original metadata before conversation, including native configuration.
+
+        The importer writes its metadata after the header. A native saved-file
+        producer may also prepend model/settings records. Stop at conversation;
+        never scan the remaining history or claim this was a model request.
+        """
+        revision = FileRevision.from_stat(self.path.stat())
+        with self.path.open("rb") as stream:
+            SessionEntry.read(stream.readline())
+            sources = []
+            for raw in stream:
+                entry = NativeEntry.read(raw)
+                if entry.is_message:
+                    break
+                sources.extend(entry.imported_sources())
+        if FileRevision.from_stat(self.path.stat()) != revision:
+            raise ValueError("Imported context saved source changed while reading")
+        return tuple(sources)
+
+    def cut(self) -> SessionCut:
+        try:
+            stream = self.path.open("rb")
+        except FileNotFoundError:
+            return MissingSessionCut()
+        # One open file supplies both the revision and its last record boundary.
+        with stream:
+            revision = FileRevision.from_file(stream)
+            return PresentSessionCut(revision, record_end(stream, revision.size))
+
+    def committed_output_cut(self, location: NativeRecordLocation) -> SessionCut:
+        """Corroborate one indexed output against its original header and row."""
+        if self.path.absolute() != location.path:
+            raise TranscriptChanged()
+        with self.path.open("rb") as stream:
+            revision = FileRevision.from_file(stream)
+            header = SessionEntry.read(stream.readline())
+            if header.id != location.session_id or revision.size < location.session_entry_end:
+                raise TranscriptChanged()
+            stream.seek(location.session_entry_start - 1)
+            if stream.read(1) != b"\n":
+                raise TranscriptChanged()
+            raw = stream.read(location.session_entry_end - location.session_entry_start)
+            if (len(raw) != location.session_entry_end - location.session_entry_start
+                    or not raw.endswith(b"\n")):
+                raise TranscriptChanged()
+            location.require_entry(NativeEntry.read(raw))
+            return PresentSessionCut(revision, location.session_entry_end)
+
+    def publication_revision(self, root: Path, recipient: RecordedThreadIncarnation):
+        return self.cut().publication_revision(root, self, recipient)
+
+    @contextmanager
+    def projection(self, sources, routes):
+        """Project records through their native input and the session's routes."""
+        with routes.for_session(str(self.path)) as session_routes:
+            def project(records, *, max_records, max_bytes):
+                return sources.native_records(
+                    self.fragments(records, max_records=max_records, max_bytes=max_bytes),
+                    routes=session_routes, reader=self)
+
+            yield project
+
+    def fragments(self, records, *, max_records, max_bytes):
+        """Borrow original decoded records within the caller's page budget.
+
+        An oversized original stays whole. No cursor advances during capture;
+        the traversal still owns consumption of each independent source.
+        """
+        fragment, used = [], 0
+        for record in records:
+            if fragment and used + record.size > max_bytes:
+                yield tuple(fragment)
+                fragment, used = [], 0
+            fragment.append(record)
+            used += record.size
+            if len(fragment) >= max_records or used >= max_bytes:
+                yield tuple(fragment)
+                fragment, used = [], 0
+        if fragment:
+            yield tuple(fragment)
+
+    def recorded_contexts(self, contexts, entry_ids):
+        return contexts.entries(NativeSessionIdentity(self.session_id, str(self.path)),
+                               tuple(NativeItemId(identity) for identity in entry_ids))
+
+    @property
+    def session_id(self):
+        with self.path.open("rb") as stream:
+            try:
+                entry = SessionEntry.read(stream.readline())
+            except MalformedRecord:
+                return None
+        return entry.id
+
+    def annotation_ids(self, after: int, through: int) -> tuple[FreshNativeId, ...]:
+        return tuple(identity for record in self.forward(after, through)
+                     for identity in record.annotation_id.present())
+
+    def require_publication_context(
+        self,
+        user: MessageEntry,
+        *,
+        session_entry_start: int,
+        files: NativeSessionFiles,
+    ) -> NativeContextProof:
+        """Corroborate the existing native producer's context, without replay.
+
+        Native inputDigest identifies a request envelope, not plain text. The
+        original STARTED ledger separately proves the exact sent text. Native's
+        journal owns context inclusion for the actual header/input/entry identity;
+        this bounded indexed lookup does not guess a request kind or options.
+        """
+        files.require_private_directory(self.path.parent)
+        with self.path.open("rb") as stream:
+            header = SessionEntry.read(stream.readline())
+        with NativeContextJournal.open_evidence(files.input_proof) as db:
+            try:
+                proof = NativeContextJournal.for_input(db, user.require_input_id())
+            except NativePiUnavailable as missing:
+                raise MalformedRecord(
+                    "Native publication has no committed context inclusion"
+                ) from missing
+            return proof.corroborate(
+                self.path.absolute(),
+                NativeInputLocation(
+                    user.require_input_id(),
+                    header.id,
+                    user.id.require_present(),
+                    session_entry_start=session_entry_start,
+                ),
+            )
+
+    def inputs_for(self, records: Sequence[NativeRecord], *, floor: int = 0) -> tuple[NativeRecord, ...]:
+        """Find the user input behind each record in one reverse walk for the batch.
+
+        Parent IDs are followed back from the latest record; every intervening
+        record is visited once for the whole batch, and the walk stops when each
+        chain reaches a user boundary or a root. Tool rounds and branches cannot
+        lend another input's publication proof.
+        """
+        found: list[NativeRecord] = [NoNativeInput()] * len(records)
+        waiting: dict[str | RootEntry, list[int]] = defaultdict(list)
+        latest = 0
+        for position, record in enumerate(records):
+            entry = record.entry
+            if entry is None:
+                continue
+            if entry.input_boundary:
+                found[position] = record
+            else:
+                waiting[entry.parent_id].append(position)
+                latest = max(latest, record.start)
+        # A chain that reaches a root (no parent) has no input.
+        waiting.pop(RootEntry(), [])
+        if waiting:
+            for ancestor in self.reverse(latest, floor=floor):
+                entry = ancestor.entry
+                if entry is None or entry.id not in waiting:
+                    continue
+                chain = waiting.pop(entry.id)
+                if entry.input_boundary:
+                    for position in chain:
+                        found[position] = ancestor
+                else:
+                    waiting[entry.parent_id].extend(chain)
+                    waiting.pop(RootEntry(), [])
+                if not waiting:
+                    break
+        return tuple(found)
+
+    def input_for(self, record: NativeRecord) -> NativeRecord:
+        """Follow the native record's parents to find the user input that started it."""
+        return self.inputs_for((record,))[0]
+
+    def publication_input(self, *, after: int, through: int, files: NativeSessionFiles):
+        """Return the final producer and its actual tracked input ancestry.
+
+        This bounded reverse walk runs before any BUS/registry lock is acquired.
+        A display-tolerant malformed record cannot supply publication evidence.
+        """
+        for record in self.reverse(through):
+            if record.start < after:
+                break
+            if not record.is_final_publication():
+                continue
+            user = self.input_for(record)
+            entry = user.require_entry().require_tracked_user()
+            self.require_publication_context(entry, session_entry_start=user.start, files=files)
+            return record, entry
+        raise RelationViolationError("Native turn has no final reply after its checkpoint")
+
+    """How far back receipts read: a Pi record carrying tool output is large, so a smaller
+    window can hold no turn's end."""
+
+    def voice(self, deal: Speaking) -> Voice:
+        """A native thread can receive the question; its own audit carries the answer."""
+        return deal
+
+    def tail(self, *, max_bytes: int | None = None):
+        end = self.path.stat().st_size
+        floor = max(0, end - max_bytes) if max_bytes is not None else 0
+        for _, _, raw in reverse_records(self.path, end, floor=floor):
+            # Skip only the record still being appended; corrupt history raises.
+            if raw.endswith(b"\n"):
+                yield NativeEntry.read(raw)
+
+    def forward(self, after: int, through: int):
+        with self.path.open("rb") as stream:
+            stream.seek(after)
+            while stream.tell() < through:
+                start = stream.tell()
+                raw = stream.readline(through - start)
+                if not raw:
+                    return
+                yield NativeRecord.read(start, stream.tell(), raw)
+
+    def reverse(self, before: int, *, floor: int = 0) -> Generator[NativeRecord]:
+        for start, end, raw in reverse_records(self.path, before, floor=floor):
+            yield NativeRecord.read(start, end, raw)
+
+
+@dataclass(frozen=True, slots=True)
+class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
+    """A native transcript position; WireTranscriptCursor adds an assigned wire source."""
+
+    session_file: ClassVar[str | None] = None
+    offset: ClassVar[int] = 0
+    wire: ClassVar[WireFrontier] = NoWireFrontier()
+
+    def indexed_by(self, current: RecordsCut) -> bool:
+        """Whether the current source still indexes this position. A position in no file's bytes
+        has nothing a rewrite can move."""
+        return True
+
+    def at_offset(self, offset: int) -> TranscriptCursor:
+        return replace(self, offset=offset)
+
+    def at_sequence(self, sequence: int) -> TranscriptCursor:
+        return self.with_frontier(self.wire.at(sequence))
+
+    @abstractmethod
+    def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor: ...
+
+    @abstractmethod
+    def mark_read(self, reads: MarksSourceRead[SessionCut], viewer: str, runtime: TranscriptRuntime) -> None: ...
+
+    def contains(self, other: TranscriptCursor) -> bool:
+        return other.within(self)
+
+    def same_position(self, other: TranscriptCursor) -> bool:
+        return self == other
+
+    def accepts_source(self, other: TranscriptCursor) -> bool:
+        return self.session_file == other.session_file
+
+    def within(self, other: TranscriptCursor) -> bool:
+        return (self.accepts_source(other) and self.offset <= other.offset
+                and self.wire.within(other.wire))
+
+    def earlier_page(self) -> PagePosition:
+        """The page that ends where this read position starts."""
+        return EarlierThan(self)
+
+    def later_page(self) -> PagePosition:
+        """The page that starts where this read position ends."""
+        return LaterThan(self)
+
+    def page_limit(self) -> PageLimit:
+        """A painted read position pins the page to the source it was read from."""
+        return Through(self)
+
+    def matches_runtime(self, runtime: TranscriptRuntime) -> bool:
+        return self.session_file == runtime.read_key
+
+    def require_readable(
+        self, runtime: TranscriptRuntime, reader: TranscriptSource, current: RecordsCut, through: int,
+    ) -> None:
+        if (not self.matches_runtime(runtime) or not reader.valid_offset(self.offset, through)
+                or not self.indexed_by(current)):
+            raise TranscriptChanged()
+
+    def requires_commit(self) -> bool:
+        """A changed transcript at a read position needs no commit before it is read again."""
+        return False
+
+    def painted_read[Result](self, acknowledge: Callable[[TranscriptCursor], Result],
+                             nothing: Result) -> Result:
+        """Choose painted acknowledgement work before any reader or write lock is opened."""
+        return acknowledge(self)
+
+    async def read_page[Page](self, loader: Callable[..., Awaitable[Page]],
+                        position: PagePosition) -> Page:
+        return await loader(position=position, limit=self.page_limit())
+
+    def covers_incoming(self, sequence: int) -> bool:
+        # Callers hold a canonical recipient assignment, never an arbitrary seq.
+        return 0 < sequence <= self.wire.sequence
+
+    def over_native(self, prefixes: Sequence[TranscriptCursor]) -> TranscriptCursor:
+        """This wire position over the furthest committed native prefix within it: wire
+        assignment can advance without transferring anonymous native output."""
+        within = tuple(prefix for prefix in prefixes if prefix.wire.within(self.wire))
+        prefix = max((prefix for prefix in within if prefix.session_file == self.session_file),
+                     key=lambda prefix: prefix.offset, default=self.inherited_prefix(within))
+        return self.with_prefix(prefix)
+
+    def inherited_prefix(self, prefixes: Sequence[TranscriptCursor]) -> TranscriptCursor:
+        return self.at_offset(0)
+
+    def with_prefix(self, prefix: TranscriptCursor) -> TranscriptCursor:
+        return self.at_offset(prefix.offset)
+
+
+@dataclass(frozen=True, slots=True)
+class UnreadTranscriptCursor(TranscriptCursor):
+    """No source has been read; this is not a source position or a read mark."""
+
+    def contains(self, other: TranscriptCursor) -> bool:
+        return False
+
+    def within(self, other: TranscriptCursor) -> bool:
+        return False
+
+    def same_position(self, other: TranscriptCursor) -> bool:
+        return False
+
+    def accepts_source(self, other: TranscriptCursor) -> bool:
+        return True
+
+    def earlier_page(self) -> PagePosition:
+        """Nothing read bounds no page: the latest one."""
+        return LatestPage()
+
+    def later_page(self) -> PagePosition:
+        return LatestPage()
+
+    def page_limit(self) -> PageLimit:
+        """Nothing read pins no source window; the page's own frontier applies."""
+        return AtFrontier()
+
+    def requires_commit(self) -> bool:
+        """A replaced source with nothing read must be committed before it is read again."""
+        return True
+
+    def painted_read[Result](self, acknowledge: Callable[[TranscriptCursor], Result],
+                             nothing: Result) -> Result:
+        return nothing
+
+    def at_offset(self, offset: int) -> TranscriptCursor:
+        return self
+
+    def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor:
+        return self
+
+    def mark_read(self, reads: MarksSourceRead[SessionCut], viewer: str, runtime: TranscriptRuntime) -> None:
+        """Nothing has been drawn, so there is nothing to acknowledge."""
+
+
+class FileTranscriptCursor(TranscriptCursor, declared_name=None):
+    """A position in a file's bytes: a session rewritten through os.replace is another file,
+    and every old offset past 0 indexes nothing in it, even where it still fits."""
+
+    __slots__ = ()
+    file: FileIdentity | MissingFile
+
+    def indexed_by(self, current: RecordsCut) -> bool:
+        return current.indexes(self.file, self.offset)
+
+
+@dataclass(frozen=True, slots=True)
+class NativeTranscriptCursor(FileTranscriptCursor):
+    session_file: str = field()
+    offset: int = field()
+    file: FileIdentity | MissingFile = field(kw_only=True)
+
+    def inherited_prefix(self, prefixes: Sequence[TranscriptCursor]) -> TranscriptCursor:
+        return next(iter(prefixes), self.at_offset(0))
+
+    def with_prefix(self, prefix: TranscriptCursor) -> TranscriptCursor:
+        return prefix.with_frontier(self.wire)
+
+    def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor:
+        return frontier.cursor(self.session_file, self.offset, file=self.file)
+
+    def mark_read(self, reads: MarksSourceRead[SessionCut], viewer: str, runtime: TranscriptRuntime) -> None:
+        if self.session_file != runtime.read_key:
+            raise TranscriptChanged()
+        for key in runtime.read_keys():
+            # A mark painted from a replaced file would count the new file read through an
+            # offset that indexes nothing in it.
+            current = NativeTranscript(Path(key)).cut()
+            if not self.indexed_by(current):
+                raise TranscriptChanged()
+            reads.mark_read(viewer, key, self.offset, current)
+
+
+@dataclass(frozen=True, slots=True)
+class WireTranscriptCursor(NativeTranscriptCursor):
+    wire: AssignedSourceCursor = field()
+
+
+@dataclass(frozen=True)
+class PagePosition(DeclaredFamily, affix=""):
+    """Where a bounded transcript page starts: the latest page, or one side of a read cursor."""
+
+    def require_readable(
+        self, runtime: TranscriptRuntime, reader: TranscriptSource, current: RecordsCut, through: int,
+    ) -> None:
+        """The latest page has no cursor to validate."""
+
+    def within(self, frontier: TranscriptCursor) -> bool:
+        return True
+
+    def initial(self, frontier: TranscriptCursor) -> TranscriptCursor:
+        return frontier
+
+    def traversal(self) -> TranscriptTraversal:
+        return EarlierTranscript()
+
+    def shows_fork_start(self, frontier: TranscriptCursor) -> bool:
+        """An inherited thread's fork origin closes its oldest page; the latest page reaches it."""
+        return True
+
+    def later_only(self) -> PagePosition:
+        """A re-read under a new limit keeps only a later-than cursor; any other page starts latest."""
+        return LatestPage()
+
+
+@dataclass(frozen=True, slots=True)
+class LatestPage(PagePosition):
+    """The newest page up to the frontier."""
+
+
+@dataclass(frozen=True, slots=True)
+class CursorPage(PagePosition, declared_name=None):
+    """A page beside a read cursor, which must belong to the page's source and fit its cut."""
+
+    cursor: TranscriptCursor
+
+    def require_readable(
+        self, runtime: TranscriptRuntime, reader: TranscriptSource, current: RecordsCut, through: int,
+    ) -> None:
+        self.cursor.require_readable(runtime, reader, current, through)
+
+    def within(self, frontier: TranscriptCursor) -> bool:
+        return frontier.contains(self.cursor)
+
+    def initial(self, frontier: TranscriptCursor) -> TranscriptCursor:
+        return self.cursor
+
+
+@dataclass(frozen=True, slots=True)
+class EarlierThan(CursorPage):
+    def shows_fork_start(self, frontier: TranscriptCursor) -> bool:
+        return self.cursor == frontier
+
+
+@dataclass(frozen=True, slots=True)
+class LaterThan(CursorPage):
+    def traversal(self) -> TranscriptTraversal:
+        return LaterTranscript()
+
+    def shows_fork_start(self, frontier: TranscriptCursor) -> bool:
+        return False
+
+    def later_only(self) -> PagePosition:
+        return self
+
+
+@dataclass(frozen=True)
+class PageLimit(DeclaredFamily, affix=""):
+    """How far a page's source reaches: its live frontier, or a cursor already painted."""
+
+    def bound(self, frontier: TranscriptCursor) -> TranscriptCursor:
+        return frontier
+
+    def accepts_runtime(self, runtime: TranscriptRuntime) -> bool:
+        """An unpinned page uses the thread's first available transcript source."""
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class AtFrontier(PageLimit):
+    """The page reaches the source's current frontier."""
+
+
+@dataclass(frozen=True, slots=True)
+class Through(PageLimit):
+    """The page reaches no further than a cursor already painted, in that cursor's source."""
+
+    cursor: TranscriptCursor
+
+    def bound(self, frontier: TranscriptCursor) -> TranscriptCursor:
+        return self.cursor
+
+    def accepts_runtime(self, runtime: TranscriptRuntime) -> bool:
+        return self.cursor.matches_runtime(runtime)
 
 
 @dataclass(frozen=True)

@@ -31,9 +31,8 @@ from agent_comms.errors import (
     RelationViolationError,
     TodoError,
 )
-from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.execution.transcript_sources import ExternalTranscript
+from agent_comms.execution.transcript_sources import ExternalTranscript, NativeTranscript
 from agent_comms.execution.turn_bound import TurnsSince
 from agent_comms.execution.turn_digests import (
     OrderEditCountRead,
