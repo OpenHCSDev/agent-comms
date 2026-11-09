@@ -9,8 +9,9 @@ from typing import Annotated
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.controller import NO_CONTROLLER
 from agent_comms.execution.input_key import InputKey, InputKeyText
+from agent_comms.execution.input_text_context import InputTextContext
 from agent_comms.execution.turn_context import Provenance
-from agent_comms.input_ingress import InputIngressContext, InputRegistry, InputTextContext
+from agent_comms.input_ingress import InputIngressContext, InputRegistry
 from agent_comms.input_lookup import InputLookup
 from agent_comms.installer.harness_install import HarnessSession
 from agent_comms.messaging.message_reference import MessageReference

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent_comms.input_ingress import InputRootAuthority
+from agent_comms.execution.input_root_authority import InputRootAuthority
 from agent_comms.input_publication_read import InputPublicationRead
 
 import agent_comms.execution.turn_context as turn_context

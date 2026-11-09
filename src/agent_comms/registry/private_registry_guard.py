@@ -35,10 +35,10 @@ from agent_comms.coordination.schema import CoordinatorTable
 from agent_comms.coordination.tables.participants import Participants
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import Platform
+from agent_comms.execution.input_root_authority import InputRootAuthority
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.execution.private_nk_entrypoint import PrivateNkLaunch, SharedRootLaunch
-from agent_comms.input_ingress import InputRootAuthority
 from agent_comms.nominal.field_codec import RootId, ThreadLookup
 from agent_comms.registry.registry_tables import RegistryRevisionMark, RegistryRowStore
 from agent_comms.registry.thread_identity import ClaimedIdentity

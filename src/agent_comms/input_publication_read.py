@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from agent_comms.input_ingress import InputRootAuthority
+from agent_comms.execution.input_root_authority import InputRootAuthority
 
 
 class InputPublicationRead[Subject, Original](ABC):

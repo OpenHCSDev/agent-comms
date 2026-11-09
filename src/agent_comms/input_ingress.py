@@ -3,28 +3,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from pathlib import Path
 
-from agent_comms.input_lookup import InputLookup
-from agent_comms.nominal.field_codec import RootId
+from agent_comms.execution.input_root_authority import InputRootAuthority
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ClaimedIdentity
 from agent_comms.registry.user_thread_lookup import UserThreadLookup
 from agent_comms.task_owner import TaskOwner
 from agent_comms.task_registry import TaskRegistry
-
-
-class InputRootAuthority(ABC):
-    __slots__ = ()
-
-    @property
-    @abstractmethod
-    def namespace(self) -> RootId:
-        """Require the original native namespace; a public registry has none."""
-
-    @abstractmethod
-    def require_root(self, root_id: RootId, error: Exception) -> None: ...
 
 
 class InputRegistry[Owner: TaskOwner](TaskRegistry[Owner]):
@@ -72,9 +57,3 @@ class InputIngressContext[Owner: TaskOwner](ABC):
     __slots__ = ()
     registry: InputRegistration[Owner]
     messaging: InputUserIdentity[Owner]
-
-
-class InputTextContext[Attempt](ABC):
-    __slots__ = ()
-    root: Path
-    input_dispositions: Callable[[Path], InputLookup[Attempt]]
