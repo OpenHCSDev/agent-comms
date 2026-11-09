@@ -18,12 +18,12 @@ from typing import TYPE_CHECKING, Annotated
 
 from agent_comms import cli_command
 from agent_comms.activity import ActivityState
+from agent_comms.cli_bridges.codex_records import CodexRolloutProvenance
 from agent_comms.cli_result import CliResult, TargetEditResult
 from agent_comms.comms import Comms
 from agent_comms.execution.child_process import NoProcess, ProcessState
 from agent_comms.execution.owner_lifecycle import OwnerRestartResult
 from agent_comms.execution.turn_context import (
-    CodexRolloutProvenance,
     ContextManifest,
     ContextSegment,
     ContributionCoordinates,

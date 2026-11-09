@@ -31,7 +31,7 @@ from agent_comms.execution.native_session_reopen import (
     PiSessionId,
 )
 from agent_comms.execution.turn_item import FreshNativeId, NativeItemId
-from agent_comms.importing import ImportedSessionMetadata
+from agent_comms.imported_session_metadata import ImportedSessionMetadata
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     FieldCodec,

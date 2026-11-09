@@ -40,7 +40,8 @@ from agent_comms.historical_views import ConversationRevision
 from agent_comms.history_result import HistoryPageResult
 from agent_comms.history_views import RetiredViews
 from agent_comms.host_logs import HostLog, HostLogRead
-from agent_comms.importing import ImportedSessionMetadata, ThreadImported
+from agent_comms.imported_session_metadata import ImportedSessionMetadata
+from agent_comms.importing import ThreadImported
 from agent_comms.input_origin import HumanInputOrigin
 from agent_comms.message_notification import MessageNotification
 from agent_comms.messaging.message_reference import MessageReference

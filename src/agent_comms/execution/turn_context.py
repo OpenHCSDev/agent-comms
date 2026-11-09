@@ -44,7 +44,7 @@ from agent_comms.wake_policy import WakePolicy
 
 
 @dataclass(frozen=True)
-class Provenance(DeclaredFamily, affix="Provenance"):
+class Provenance(DeclaredFamily, affix="Provenance", discovery_package="agent_comms.cli_bridges.codex_records"):
     """A source coordinate, not permission to execute or replay it."""
 
     @abstractmethod
@@ -96,36 +96,8 @@ class FileProvenance(Provenance):
         return raw.decode("utf-8")
 
 
-@dataclass(frozen=True)
-class CodexRolloutProvenance(Provenance):
-    """Authenticate historical role-record bytes; never current instructions."""
-
-    path: str
-    offset: int
-    length: int
-    sha256: str
-    instruction: int
-
-    def public_description(self) -> str:
-        return (f"Historical Codex instruction · {self.path} · record bytes "
-                f"{self.offset}:{self.offset + self.length} · item {self.instruction} "
-                "· not current instructions")
-
-    def public_text(self, comms) -> str:
-        from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD
-
-        if min(self.offset, self.length, self.instruction) < 0:
-            raise ValueError("Historical Codex source coordinates must be nonnegative")
-        with Path(self.path).open("rb") as source:
-            source.seek(self.offset)
-            raw = source.read(self.length)
-        if len(raw) != self.length or hashlib.sha256(raw).hexdigest() != self.sha256:
-            raise ValueError("Historical Codex source record changed or is unavailable")
-        try:
-            instruction = ROLLOUT_RECORD.validate_json(raw).instructions()[self.instruction]
-        except IndexError as error:
-            raise ValueError("Historical instruction is outside its original record") from error
-        return instruction.text
+class HistoricalInstructionProvenance(Provenance, declared_name=None):
+    """A retained instruction from a source session, never current execution authority."""
 
 
 @dataclass(frozen=True)

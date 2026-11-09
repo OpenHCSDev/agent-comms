@@ -12,13 +12,14 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING
 
+from agent_comms.cli_bridges.codex_records import CodexRolloutProvenance
 from agent_comms.cli_result import CliResult
-from agent_comms.execution.turn_context import CodexRolloutProvenance
 from agent_comms.execution.turn_item import NativeItemId
 from agent_comms.harness_install import Harness
-from agent_comms.nominal.field_codec import FieldCodec, WireName
+from agent_comms.imported_session_metadata import ImportedSessionMetadata
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
 from agent_comms.tool_result import ToolResult
 from agent_comms.transcript_events import ImportedInput, ImportedMessage, NoRetainedRequest
@@ -38,29 +39,6 @@ class ImportLimits:
     def __post_init__(self) -> None:
         if min(self.messages, self.characters, self.per_message) <= 0:
             raise ValueError("Import budgets must be positive.")
-
-
-@dataclass(frozen=True, slots=True)
-class ImportedSessionMetadata:
-    """Original saved import observation; references grant reading, never execution."""
-
-    harness: Annotated[type[Harness], WireName("format")]
-    source_id: str
-    messages_seen: int
-    messages_imported: int
-    truncated_messages: int
-    notices: tuple[str, ...]
-    historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
-
-    @classmethod
-    def sources_for_owner(cls, registry, owner):
-        """Original metadata membership borrows registry and selected-file ownership."""
-        current = registry.require(owner.name)
-        if current.incarnation != owner.incarnation:
-            raise ValueError("Imported context thread incarnation changed")
-        if current.session_file != owner.session_file:
-            raise ValueError("Imported context selected session changed")
-        return current.runtime.imported_sources()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

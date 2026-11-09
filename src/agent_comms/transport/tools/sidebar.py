@@ -10,13 +10,7 @@ from typing import Annotated
 from pydantic import JsonValue
 
 from agent_comms.acp_extension import CoordinationChangedUpdate
-from agent_comms.messaging.channel_targets import (
-    ChannelSelection,
-    CommandTarget,
-    NamedTarget,
-    NoChannel,
-)
-from agent_comms.messaging.channels import Channel
+from agent_comms.cli_bridges.codex_records import CodexRolloutProvenance
 from agent_comms.cli_command import PreparedTargetAction, TargetAction, TargetEdit
 from agent_comms.cli_result import TargetEditResult
 from agent_comms.context_store import (
@@ -29,12 +23,7 @@ from agent_comms.context_store import (
 from agent_comms.display_order import ChannelSort, ThreadSort
 from agent_comms.display_references import ReferenceNames
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.execution.turn_context import (
-    CodexRolloutProvenance,
-    ContextSourceText,
-    Provenance,
-    SegmentManifest,
-)
+from agent_comms.execution.turn_context import ContextSourceText, Provenance, SegmentManifest
 from agent_comms.exporting import (
     WireExportFormat,
     WireExportLimit,
@@ -53,6 +42,13 @@ from agent_comms.historical_views import (
 from agent_comms.history_views import RetiredViews
 from agent_comms.importing import ThreadImported
 from agent_comms.input_origin import HumanInputOrigin
+from agent_comms.messaging.channel_targets import (
+    ChannelSelection,
+    CommandTarget,
+    NamedTarget,
+    NoChannel,
+)
+from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import ThreadLookup, WireName
