@@ -24,7 +24,7 @@ import struct
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn
+from typing import NoReturn
 
 from agent_comms.coordination.cohort_schema import AcceptanceFrontier, PrivateCoordinatorSchema
 from agent_comms.coordination.coordinator import Coordination
@@ -37,7 +37,7 @@ from agent_comms.coordination.tables.response_schema import ResponseTable
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import Platform
 from agent_comms.execution.input_root_authority import InputRootAuthority
-from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.native_input_owner import NativeOwnerRegistry, RegistryOwner
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.execution.private_nk_entrypoint import (
     PrivateNkLaunch,
@@ -55,8 +55,6 @@ from agent_comms.storage.private_path import FileObservation, PrivateFileRole
 from agent_comms.storage.typed_table import TableSchema
 from agent_comms.transport.attachment_scope import CursorScope, LiveCursorScope, NoCursorScope
 
-if TYPE_CHECKING:
-    from agent_comms.registry.registry_document import RegistrySnapshot
 
 _MAGIC = b"ACRG"
 
@@ -140,7 +138,7 @@ class RegistryPrivacy(InputRootAuthority):
 
     @abstractmethod
     def cursor_scope(
-        self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
+        self, snapshot: NativeOwnerRegistry, thread_name: str, session_id: str,
     ) -> CursorScope: ...
 
     @abstractmethod
@@ -231,7 +229,7 @@ class PublicRegistry(RegistryPrivacy):
         return selection.read_without_assignments()
 
     def cursor_scope(
-        self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
+        self, snapshot: NativeOwnerRegistry, thread_name: str, session_id: str,
     ) -> CursorScope:
 
         return NoCursorScope()
@@ -361,7 +359,7 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         return RootId(self.root_id.hex())
 
     def cursor_scope(
-        self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
+        self, snapshot: NativeOwnerRegistry, thread_name: str, session_id: str,
     ) -> CursorScope:
 
         try:
