@@ -11,7 +11,7 @@ from agent_comms.heartbeat_subjects import HeartbeatSubject, UnlandedHeadSubject
 from agent_comms.nominal.field_codec import PathText
 from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.projects.checkouts import UnpushedHead
-from agent_comms.repository_name import RepositoryName
+from ..projects.repository_name import RepositoryName
 from agent_comms.team.standing_rules import (
     DatedStandingRule,
     HeadLine,

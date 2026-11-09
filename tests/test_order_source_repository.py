@@ -17,7 +17,7 @@ from agent_comms.planning.pull_requests import (
     PullRequestCommit,
     PullRequestLink,
 )
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.team.order import Team
 from agent_comms.work_branches import WorkBranches
 from github_fixture import GitHubFixture

@@ -27,7 +27,7 @@ from agent_comms.nominal.field_codec import (
     SubclassUnion,
     WireOmitDefault,
 )
-from agent_comms.repository_name import RepositoryName
+from ..projects.repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from agent_comms.projects.storage_rules import StorageRule

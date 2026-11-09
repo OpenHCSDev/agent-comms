@@ -29,7 +29,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.native_settings import NativeThreadDefaults
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.repository_name import RepositoryName
+from .projects.repository_name import RepositoryName
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.shell_effects import AcquireRepositoryStorageEffect, CreateCheckoutStorageEffect
 

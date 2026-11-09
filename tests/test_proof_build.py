@@ -62,7 +62,7 @@ from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.threads import NativeThread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.team.order import Team
 from agent_comms.team.standing import InstallDue
 from agent_comms.tool_caller import ThreadCaller

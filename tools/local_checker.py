@@ -33,7 +33,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import Argument, FieldCodec
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.storage_rules import StorageRule
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.work_branches import WorkBranches
 
 

@@ -58,7 +58,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.registry.threads import Thread
-from agent_comms.repository_name import RepositoryName
+from ..projects.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore, TeamPass
 from agent_comms.task_attachments.owner_notices import OrderNotice, TeamNotice
 from agent_comms.team.questions import UnansweredTeammateAsks

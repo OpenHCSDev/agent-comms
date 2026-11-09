@@ -228,7 +228,7 @@ from agent_comms.registry.thread_identity import (
     ThreadIncarnation,
 )
 from agent_comms.registry.threads import Thread
-from agent_comms.repository_name import RepositoryName
+from ..projects.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
 from agent_comms.storage.typed_table import (
     CapturedRows,

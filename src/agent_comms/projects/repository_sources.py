@@ -10,7 +10,7 @@ from pydantic import JsonValue
 from agent_comms.nominal.field_codec import FieldCodec, WireValue
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
-from agent_comms.repository_name import RepositoryName
+from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from agent_comms.projects.storage_rules import StorageRule

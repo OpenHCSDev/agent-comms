@@ -63,7 +63,7 @@ from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.projects.checkouts import DetachedStart, RepositoryReads
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
-from agent_comms.repository_name import RepositoryName
+from .projects.repository_name import RepositoryName
 from agent_comms.systemd_unit import AgentsSlice
 from agent_comms.team.order import TeamContext
 from agent_comms.test_lease import LeaseStart, TestLease

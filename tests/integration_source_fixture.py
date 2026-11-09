@@ -26,7 +26,7 @@ from agent_comms.planning.orders import (
 )
 from agent_comms.projects.repo import Repo
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.team.order import Team, TeamContext
 from agent_comms.tool_caller import PeerCaller
 from agent_comms.transport.tools.orders import CommsTodoCreateTool

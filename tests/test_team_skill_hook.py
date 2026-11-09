@@ -45,7 +45,7 @@ from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import ForkThread, NativeThread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.rule_deal import (
     AuditDue,
     CompactedDeal,

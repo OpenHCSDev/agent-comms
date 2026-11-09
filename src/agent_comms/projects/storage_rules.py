@@ -35,7 +35,7 @@ from agent_comms.projects.repo import Repo
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_storage import CheckoutReuse, StoragePath, StorageRoots
 from agent_comms.registry.threads import Thread
-from agent_comms.repository_name import RepositoryName
+from .repository_name import RepositoryName
 from agent_comms.storage.locked_store import DurableFile
 from agent_comms.storage.private_path import PrivateDirectoryRole
 from agent_comms.storage.store_files import ExclusiveAtomicFile

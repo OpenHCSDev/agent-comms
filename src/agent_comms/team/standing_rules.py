@@ -83,7 +83,7 @@ from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.registry.registry_document import RegisteredTeamProject, RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
-from agent_comms.repository_name import RepositoryName
+from ..projects.repository_name import RepositoryName
 from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.service_passes import FailingPass, ServicePasses, ServicePassStore
 from agent_comms.task_attachments.owner_notices import OrderNotice

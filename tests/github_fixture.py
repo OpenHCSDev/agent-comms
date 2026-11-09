@@ -13,7 +13,7 @@ from agent_comms.planning.orders import (
     ListedPullRequest,
     UnmergedListedPullRequest,
 )
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from github_cli_stub import hold, store
 
 

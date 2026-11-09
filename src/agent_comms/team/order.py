@@ -104,7 +104,7 @@ from agent_comms.projects.repo import Repo
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.repository_name import RepositoryName
+from ..projects.repository_name import RepositoryName
 from agent_comms.slop import Slop
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from agent_comms.storage.typed_table import RowNotFoundError

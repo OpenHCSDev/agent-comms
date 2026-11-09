@@ -16,7 +16,7 @@ from agent_comms.planning.problem_findings import FixShape
 from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.projects.repo import Repo
 from agent_comms.registry.registry_document import RegisteredTeamProject
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from fixture_git import IDENTITY
 
 

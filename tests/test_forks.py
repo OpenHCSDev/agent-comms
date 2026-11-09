@@ -104,7 +104,7 @@ from agent_comms.registry.thread_text import (
     SubagentRole,
 )
 from agent_comms.registry.threads import ExternalThread, ForkThread, NativeThread
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop
 from agent_comms.storage.maintenance_barrier import (

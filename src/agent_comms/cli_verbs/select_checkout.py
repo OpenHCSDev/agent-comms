@@ -10,7 +10,7 @@ from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import CheckoutResult
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize, PathText
-from agent_comms.repository_name import RepositoryName
+from ..projects.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
 
 

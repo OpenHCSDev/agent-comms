@@ -8,13 +8,15 @@ import subprocess
 from dataclasses import dataclass
 from typing import ClassVar
 
-from agent_comms.nominal.field_codec import MalformedRecord, WireValue
+from ..nominal.field_codec import MalformedRecord, WireValue
 
 # A read that outlives the timeout is attempted again: one stalled call otherwise fails
 # the run that made it, and in the gate that run is the one the merge queue waits on.
 # A request naming its method is attempted once, because a timeout cannot say whether
 # it was applied.
 READ_ATTEMPTS = 2
+
+
 READ_TIMEOUT_SECONDS = 60
 
 

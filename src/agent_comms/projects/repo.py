@@ -31,7 +31,7 @@ from agent_comms.projects.git_errors import (
     GitCommandError,
     UnavailableCommitError,
 )
-from agent_comms.repository_name import RepositoryName
+from .repository_name import RepositoryName
 
 
 class RepositorySelection(ABC):

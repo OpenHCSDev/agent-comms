@@ -79,7 +79,7 @@ from agent_comms.registry.registry_store import RegistryEdit
 from agent_comms.registry.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from agent_comms.registry.threads import Thread
 from agent_comms.reported_turn import ReportedTurnState
-from agent_comms.repository_name import RepositoryName
+from ..projects.repository_name import RepositoryName
 from agent_comms.transport.runtime_request import AttachedRuntimeRequest
 
 if TYPE_CHECKING:

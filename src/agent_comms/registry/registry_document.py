@@ -92,7 +92,7 @@ from agent_comms.registry_provenance import (
     RegistryProvenance,
     RetiredRecipient,
 )
-from agent_comms.repository_name import RepositoryName
+from ..projects.repository_name import RepositoryName
 from agent_comms.restart_refusals import (
     OwnerBusyRefusal,
     OwnerChangedBeforeFenceRefusal,
