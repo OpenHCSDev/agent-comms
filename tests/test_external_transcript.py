@@ -166,7 +166,7 @@ async def test_earlier_page_requests_reach_initial_and_committed_watch_observati
     turn_turn_id = NativeTurnId('turn')
     from agent_comms.cli_bridges.cli_protocol import EarlierItems
     from agent_comms.cli_bridges.runtime_updates import FinishedItem
-    from agent_comms.transcript.external_transcript import EarlierPage
+    from agent_comms.transcript.external_transcript_rows import EarlierPage
 
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread("cli", frozenset(), Checkout(tmp_path)))

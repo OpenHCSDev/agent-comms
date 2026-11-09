@@ -92,7 +92,7 @@ from agent_comms.storage.maintenance_barrier import (
     MaintenanceHeldError,
     MaintenanceOperator,
 )
-from agent_comms.transcript.external_transcript import ExternalTurnInput
+from agent_comms.transcript.external_transcript_rows import ExternalTurnInput
 from agent_comms.transcript.transcript_events import AssistantTranscript
 from bus_record_fixture import prepare_native_comms
 from conftest import accept_initial, declare_test_bus, publish_initial
