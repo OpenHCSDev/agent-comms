@@ -19,6 +19,7 @@ from agent_comms.storage.typed_table import (
     Column,
     DurableTables,
     FrozenColumn,
+    Index,
     SharedFileTables,
     TypedTable,
 )
@@ -43,10 +44,25 @@ class RegistryRow(RegistryTable, TypedTable, declared_name=None):
 
 
 @dataclass(frozen=True)
+class RevisionStamped(RegistryRow, declared_name=None):
+    """A row stamped with the revision that last wrote it, so a reader holding revision r reads
+    only the rows with changed_at > r."""
+
+    changed_at: Annotated[int, Column(check="changed_at > 0")]
+    indexes = (Index(("changed_at",), unique=False, where=None),)
+
+
+@dataclass(frozen=True)
+class RegistryNamedRow(RevisionStamped, declared_name=None):
+    """A row keyed by a thread name or alias."""
+
+
+@dataclass(frozen=True)
 class RegistryHeader(RegistryRow):
     """The document's scalar fields: one row, keyed by a constant."""
 
     header: Annotated[int, FrozenColumn(primary_key=True, check="header = 1")]
+    revision: Annotated[int, Column(check="revision >= 0")]
     purpose: RootPurpose
     team_project: TeamProject
     owner_counter: Annotated[int, Column(check="owner_counter >= 0")]
@@ -54,7 +70,7 @@ class RegistryHeader(RegistryRow):
 
 
 @dataclass(frozen=True)
-class RegistryThreads(RegistryRow):
+class RegistryThreads(RegistryNamedRow):
     """A thread's declaration, under its name."""
 
     name: Annotated[str, FrozenColumn(primary_key=True)]
@@ -62,7 +78,7 @@ class RegistryThreads(RegistryRow):
 
 
 @dataclass(frozen=True)
-class RegistryStatuses(RegistryRow):
+class RegistryStatuses(RegistryNamedRow):
     """A thread's status, under its name."""
 
     name: Annotated[str, FrozenColumn(primary_key=True)]
@@ -70,7 +86,7 @@ class RegistryStatuses(RegistryRow):
 
 
 @dataclass(frozen=True)
-class RegistryAliases(RegistryRow):
+class RegistryAliases(RegistryNamedRow):
     """An alias and the thread name it resolves to."""
 
     alias: Annotated[str, FrozenColumn(primary_key=True)]
@@ -78,7 +94,7 @@ class RegistryAliases(RegistryRow):
 
 
 @dataclass(frozen=True)
-class RegistryOwnerGenerations(RegistryRow):
+class RegistryOwnerGenerations(RegistryNamedRow):
     """A name's owner generation; deleted names keep theirs as a tombstone."""
 
     name: Annotated[str, FrozenColumn(primary_key=True)]
@@ -86,8 +102,17 @@ class RegistryOwnerGenerations(RegistryRow):
 
 
 @dataclass(frozen=True)
-class RegistryClaimGenerations(RegistryRow):
+class RegistryClaimGenerations(RegistryNamedRow):
     """A name's claim generation; deleted names keep theirs as a tombstone."""
 
     name: Annotated[str, FrozenColumn(primary_key=True)]
     generation: Annotated[int, Column(check="generation > 0")]
+
+
+@dataclass(frozen=True)
+class RegistryRemovals(RevisionStamped):
+    """A row removed at a revision: incremental readers learn deletions here, since a deleted
+    row can't answer ``changed_at > r`` itself. The family is the row class, not a name for it."""
+
+    family: Annotated[type[RegistryNamedRow], FrozenColumn(primary_key=True)]
+    name: Annotated[str, FrozenColumn(primary_key=True)]
