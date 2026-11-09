@@ -13,6 +13,7 @@ from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.historical_views import HistoryArchive
+from agent_comms.messaging.bus_read_source import BusReadSource
 from agent_comms.messaging.bus_route_counts import HeldUnseenCounts
 from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.messaging.channels import AnyChannel, Channel
@@ -66,7 +67,7 @@ class UnreadCut:
         return counts
 
 
-class MessageBus[Writes: Publisher](PublishedBus[Writes]):
+class MessageBus[Writes: Publisher](PublishedBus[Writes], BusReadSource):
     def __init__(
         self, root: Path, registry: Registration, publisher: type[Writes],
     ):

@@ -37,6 +37,7 @@ from agent_comms.goal_mutation import (
     GoalWaitProjection,
 )
 from agent_comms.goal_permit_source import GoalStoreSource
+from agent_comms.goal_snapshots import GoalSnapshots
 from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
@@ -227,7 +228,7 @@ class BornGoalTarget(GoalTarget):
 
 class Goals(
     GoalRecords, ProblemGoals, WakeWorkSource[Thread], GoalFork[Thread, GoalDeclaration],
-    GoalStoreSource[GoalAttemptStore], GoalReadyGrantSource[NativeThread, Generation],
+    GoalStoreSource[GoalAttemptStore], GoalReadyGrantSource[NativeThread, Generation], GoalSnapshots[Thread, GoalSnapshot],
 ):
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
         """Create a teammate's child goal from its parent's active work."""

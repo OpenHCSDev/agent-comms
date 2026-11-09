@@ -9,7 +9,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import (
+    Annotated,
+    ClassVar,
+    Self,
+)
 
 from agent_comms import relationships
 from agent_comms.activity import Activity, ActivityData, ActivityState, ObservedActivity
@@ -27,8 +31,11 @@ from agent_comms.display_order import ChannelSort, NameChannelSort
 from agent_comms.display_references import CurrentDisplayReferences
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.goal_execution import GoalExecution
+from agent_comms.goal_execution_snapshot import GoalExecutionSnapshot
+from agent_comms.goal_snapshots import GoalSnapshots
 from agent_comms.mentions import MentionCandidate
 from agent_comms.message_notification import MessageNotification
+from agent_comms.messaging.bus_read_source import BusReadSource
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.channels import Channel, ChannelMemberIndex, Channels
 from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
@@ -101,10 +108,6 @@ from agent_comms.ui_model.unread import (
     UnreadPresentation,
 )
 
-if TYPE_CHECKING:
-    from agent_comms.messaging.message_bus import MessageBus
-    from agent_comms.planning.goal_management import Goals
-
 
 @dataclass(frozen=True, slots=True)
 class SentMessageSummary:
@@ -172,8 +175,8 @@ class ReadThrough(ChannelReadMark):
 
 class BusPresentation:
     def __init__(
-        self, bus: MessageBus, registry: Registration, catalog: ChannelCatalog,
-        agents: AgentActivity, goals: Goals,
+        self, bus: BusReadSource, registry: Registration, catalog: ChannelCatalog,
+        agents: AgentActivity, goals: GoalSnapshots[Thread, GoalExecutionSnapshot],
     ):
         self.bus = bus
         self.registry = registry
@@ -315,19 +318,19 @@ class InboxRead(DeclaredFamily, affix="Read"):
     """Whether a thread read counts each thread's unread messages."""
 
     @abstractmethod
-    def counts(self, bus: MessageBus, names: Sequence[str]) -> Mapping[str, InboxCount]: ...
+    def counts(self, bus: BusReadSource, names: Sequence[str]) -> Mapping[str, InboxCount]: ...
 
 
 @dataclass(frozen=True)
 class CountedRead(InboxRead):
-    def counts(self, bus: MessageBus, names: Sequence[str]) -> Mapping[str, InboxCount]:
+    def counts(self, bus: BusReadSource, names: Sequence[str]) -> Mapping[str, InboxCount]:
         # One bus snapshot for every thread, not one per thread.
         return {name: CountedInbox(count) for name, count in bus.pending_counts_all(names).items()}
 
 
 @dataclass(frozen=True)
 class UncountedRead(InboxRead):
-    def counts(self, bus: MessageBus, names: Sequence[str]) -> Mapping[str, InboxCount]:
+    def counts(self, bus: BusReadSource, names: Sequence[str]) -> Mapping[str, InboxCount]:
         return {name: UncountedInbox() for name in names}
 
 
@@ -345,7 +348,7 @@ class ThreadRecord(CliResult):
 
     @classmethod
     def read(cls, snapshot: RegistrySnapshot, agents: AgentActivity,
-             goals: Goals, threads: Iterable[Thread],
+             goals: GoalSnapshots[Thread, GoalExecutionSnapshot], threads: Iterable[Thread],
              pending: Mapping[str, InboxCount]) -> tuple[ThreadRecord, ...]:
         """Only active threads are observed; the rest show the absent activity."""
         threads = tuple(threads)
@@ -385,7 +388,7 @@ class ThreadView(ThreadRecord):
     @classmethod
     def roster(
         cls, snapshot: RegistrySnapshot, agents: AgentActivity,
-        goals: Goals,
+        goals: GoalSnapshots[Thread, GoalExecutionSnapshot],
         visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> tuple[ThreadView, ...]:
         threads = tuple(snapshot.visible_threads(visibility, names=names))
@@ -447,7 +450,7 @@ class CoordinationSnapshot:
         cls, root: Path, registry: RegistrySnapshot, catalog: CatalogDocument,
         agents: AgentActivity, declarations: Channels,
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
-        goals: Goals, unread: Mapping[str, int], channel_unread: Mapping[str, int],
+        goals: GoalSnapshots[Thread, GoalExecutionSnapshot], unread: Mapping[str, int], channel_unread: Mapping[str, int],
         visibility: RosterVisibility, read_marker_notice: ReadNotice = NoReadNotice(),
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""

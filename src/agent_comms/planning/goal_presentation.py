@@ -3,7 +3,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, fields
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import (
+    ClassVar,
+    Self,
+)
 
 from agent_comms.goal_execution import (
     BlockedExecution,
@@ -11,6 +14,7 @@ from agent_comms.goal_execution import (
     GoalExecution,
     WaitingExecution,
 )
+from agent_comms.goal_execution_snapshot import GoalExecutionSnapshot
 from agent_comms.goal_ledger import FailedTurnEvidence
 from agent_comms.goal_wait_target import GoalWaitTarget
 from agent_comms.lifecycle_capability import Active
@@ -187,7 +191,7 @@ class UnpublishedGoalSnapshot(NullMember, GoalPublicationSnapshot):
 
 
 @dataclass(frozen=True)
-class GoalSnapshot(GoalPublicationSnapshot):
+class GoalSnapshot(GoalPublicationSnapshot, GoalExecutionSnapshot):
     goal: GoalDeclaration
     execution: GoalExecutionControls
 

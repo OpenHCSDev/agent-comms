@@ -324,13 +324,14 @@ def test_a_rollback_holds_the_root_until_every_store_opens_under_its_runtime(
             migration.carry((step(LiveFilesRequest(comms.root), comms.root.parent / "spill"),), staged)
         with owners.held_on_failure():
             hold = backup.restore(partial(staged.restore_stores, hold))
+            outgoing = replace(staged, runtime=RootRuntimeStore.at(comms.root).read().runtime())
             with hold.holding():
-                staged.require_opens(comms.root)
+                outgoing.require_opens(comms.root)
         with hold.holding():
             ledger_one_failure_short(comms.root)
             with pytest.raises(UpgradeRefused, match="goal_attempts.sqlite3"):
                 with owners.held_on_failure():
-                    staged.require_opens(comms.root)
+                    outgoing.require_opens(comms.root)
     owners.release()
     owners.give_back.close()
     assert started == []
