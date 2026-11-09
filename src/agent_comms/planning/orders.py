@@ -2405,6 +2405,12 @@ class MergedProblemOrder(CommittedCheckSource, AwaitingInstallationProblemOrder)
     def superseded_links(self, order: CheckedProblemOrder) -> tuple[MergedLink, ...]:
         return self.publication_links(order)
 
+    def require_checked(self, problem: str) -> None:
+        for recorded in self.check.recorded(self.check_commit, self.check.directory):
+            self.check.result.require(recorded)
+            return
+        super().require_checked(problem)
+
     def check_base(self, repo: Path) -> str:
         return f'{self.sha}^1'
 

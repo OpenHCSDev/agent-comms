@@ -14,6 +14,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import FieldCodec, RecordProblems
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.planning.goals import (
+    CheckedCommit,
     CountCheckResult,
     OrderCheck,
 )
@@ -33,6 +34,9 @@ from agent_comms.planning.orders import (
     TriageScope,
 )
 from agent_comms.planning.pull_requests import PullRequestLink
+from agent_comms.execution.child_process import OrderCheckFailedError
+from agent_comms.progress_claims import InstalledClaim
+from agent_comms.projects.repo import Repo
 from agent_comms.projects.checkouts import (
     Checkout,
     DetachedStart,
@@ -99,6 +103,51 @@ class TestOrderCompletion:
         return self.record(held_team, replace(
             current.order, check=check,
             pull_requests=(PullRequestLink(repo.github, 1),)).merged(graph.installed))
+
+    @pytest.mark.parametrize('closed', (False, True), ids=('merged', 'installed-merged'))
+    def test_recorded_source_claim_accepts_the_merged_family(
+        self, held_team: Team, passed_merged_order: Todo, closed: bool,
+    ) -> None:
+        ctx = held_team
+        artifact = ctx.root / 'installed-source.txt'
+        works = 'The copied application keeps its checked source result available.'
+        artifact.write_text(works)
+        if closed:
+            main(['close', 'P1', '--works', works, '--artifact', str(artifact)], ctx)
+        before = ctx.comms.goals.todos.get('P1')
+        assert InstalledClaim('P1').verify(ctx.comms, ctx.repos[0].checkout) == ()
+        assert ctx.comms.goals.todos.get('P1') == before
+
+    @pytest.mark.parametrize('command', ('printf 1', 'printf unproved'))
+    def test_recorded_source_claim_refuses_invalid_results(
+        self, held_team: Team, passed_merged_order: Todo, command: str,
+    ) -> None:
+        ctx = held_team
+        original = passed_merged_order.order
+        check = OrderCheck(original.check.directory, command, CountCheckResult(0))
+        check.at(original.check_commit, check.directory,
+                 ctx.comms.registry.storage_rule.checkout_base)
+        merged = replace(original, check=check)
+        for order in (merged, merged.installed('Copied application proof', str(ctx.root))):
+            with pytest.raises((TodoError, OrderCheckFailedError)):
+                order.require_checked(passed_merged_order.id)
+
+    @pytest.mark.parametrize('unrecorded', (
+        lambda order: replace(order, check=replace(order.check, command='printf 0')),
+        lambda order: replace(order, check=replace(
+            order.check, command=order.check.command + ' ')),
+        lambda order: replace(order, sha=Repo.git(
+            order.check.directory, 'rev-parse', f'{order.check_commit}^1').strip()),
+    ), ids=('missing', 'wrong-command', 'wrong-commit'))
+    def test_recorded_source_claim_never_runs_missing_evidence(
+        self, held_team: Team, passed_merged_order: Todo, unrecorded,
+    ) -> None:
+        merged = unrecorded(passed_merged_order.order)
+        before = CheckedCommit.stored(merged.check.directory, merged.check_commit)
+        for order in (merged, merged.installed('Copied application proof', str(held_team.root))):
+            with pytest.raises(TodoError, match='its order has none'):
+                order.require_checked(passed_merged_order.id)
+        assert CheckedCommit.stored(merged.check.directory, merged.check_commit) == before
 
     @pytest.mark.parametrize('commands', ((), (('done', 'worker', 'P1'),)))
     @pytest.mark.parametrize('command', (
