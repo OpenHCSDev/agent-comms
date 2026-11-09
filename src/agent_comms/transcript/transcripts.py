@@ -37,7 +37,6 @@ from agent_comms.execution.transcript_sources import (
     LaterTranscript,
     LiveAssignedTranscriptSource,
     NoWireFrontier,
-    TranscriptDraft,
     TranscriptSource,
     TranscriptTraversal,
     WireFrontier,
@@ -89,6 +88,7 @@ from agent_comms.storage.private_path import (
     MissingFile,
 )
 from agent_comms.transcript.external_transcript import ExternalTranscript
+from agent_comms.transcript.transcript_drafts import TranscriptDraft
 from agent_comms.transcript.transcript_events import (
     ForkOriginTranscript,
     ForkTaskTranscript,
