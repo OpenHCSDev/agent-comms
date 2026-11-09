@@ -11,6 +11,7 @@ from typing import get_args, get_origin, get_type_hints
 import pytest
 
 from agent_comms import agent_events
+from agent_comms.cli_bridges.shared import CliBridge, LineMonitorBridge
 from agent_comms.execution.acp import AcpSelectedWriteAuthority
 from agent_comms.execution.acp import CommsAgent
 from agent_comms.execution.acp import SdkSessionConnection
@@ -460,8 +461,15 @@ def test_original_import_factory_callbacks_use_actual_source_capabilities() -> N
     assert get_args(get_type_hints(ImportBuffer.add)["events"]) == (TranscriptEvent,)
     assert get_type_hints(PublishesTranscript.transcript)["return"] == AsyncIterator[RuntimeUpdate]
     delivery = get_type_hints(DeliversInput.deliver)
-    assert delivery["message"] is Message
+    assert delivery["message"] is DeliversInput.__type_params__[0]
     assert delivery["return"] == type[Outcome]
+    bindings = tuple(get_args(base) for base in CliBridge.__orig_bases__
+                     if get_origin(base) is DeliversInput)
+    assert bindings == ((Message,),)
+    assert issubclass(CliBridge, DeliversInput)
+    concrete = get_type_hints(LineMonitorBridge.deliver)
+    assert concrete["message"] is Message
+    assert concrete["return"] == type[Outcome]
 
 
 def test_origin_message_result_contract_preserves_original_providers() -> None:
