@@ -12,9 +12,11 @@ import subprocess
 import sys
 import sysconfig
 import tempfile
+import tomllib
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import AsyncExitStack, contextmanager
+from importlib.metadata import distribution
 from pathlib import Path
 
 import pytest
@@ -215,12 +217,33 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 
     Child processes import this checkout's sources, the ``pythonpath`` pyproject declares:
     a relative or missing PYTHONPATH sends them to whatever tree the venv's editable
-    install names, which on 2026-10-24 was a stale checkout one TurnFailure short."""
+    install names, which on 2026-10-24 was a stale checkout one TurnFailure short.
+
+    PYTHONPATH chooses the source; the venv's entry points and console scripts are a copy
+    of whichever pyproject was last installed. A copy from another checkout launches moved
+    modules by their old path (on 2026-11-09, ten host_services tests ran an
+    agent-comms-connector importing agent_comms.connector after it moved to transport/), so
+    the session refuses to run until the venv's copy matches this checkout's declaration."""
     from xdist import is_xdist_worker
 
     os.environ["PYTHONPATH"] = os.pathsep.join(
         str(path) for path in session.config.getini("pythonpath"))
-    if session.config.option.collectonly or is_xdist_worker(session):
+    if is_xdist_worker(session):
+        return
+    root = Path(__file__).resolve().parents[1]
+    project = tomllib.loads((root / "pyproject.toml").read_text())["project"]
+    declared = {("console_scripts", name, value) for name, value in project["scripts"].items()}
+    declared |= {(group, name, value) for group, points in project["entry-points"].items()
+                 for name, value in points.items()}
+    installed = {(point.group, point.name, point.value)
+                 for point in distribution("agent-comms").entry_points}
+    if declared != installed:
+        raise pytest.UsageError(
+            f"This venv's agent-comms entry points were installed from another pyproject "
+            f"than {root / 'pyproject.toml'}: missing {sorted(declared - installed)}, "
+            f"stale {sorted(installed - declared)}. Rebuild it from this checkout: "
+            f"toad's bin/toad-test-env --agent-comms {root}, or `uv pip install -e {root}`.")
+    if session.config.option.collectonly:
         return
     from agent_comms.projects.checkouts import Checkout
 
