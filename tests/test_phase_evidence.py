@@ -122,7 +122,7 @@ def main_of(tmp_path, files):
 def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry(tmp_path):
     source = Path(__file__).parents[1] / "src/agent_comms"
     reading = main_of(tmp_path, {
-        "src/phase_evidence.py": (source / "phase_evidence.py").read_text(),
+        "src/phase_evidence.py": (source / "planning" / "phase_evidence.py").read_text(),
         "src/planning/plan_phases.py": (source / "planning" / "plan_phases.py").read_text(),
         "src/producer.py": "PI_0_85_1_EVENT_KINDS = frozenset({'alpha', 'beta'})\n"
                            "class Runtime:\n    event_kinds = PI_0_85_1_EVENT_KINDS\n",
