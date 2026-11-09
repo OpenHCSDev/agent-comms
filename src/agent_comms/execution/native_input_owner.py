@@ -7,6 +7,7 @@ recheck the canonical registry/SQLite snapshot under their operation's locks.
 from __future__ import annotations
 
 import os
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
@@ -33,6 +34,21 @@ if TYPE_CHECKING:
     from agent_comms.registry.registry_document import RegistrySnapshot
 
 
+class NativeOwnerRegistry(ABC):
+    """The original locked namespace reads needed to capture local executable authority."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def require_active(self, name: str) -> Thread: ...
+
+    @abstractmethod
+    def require_member[Kind: Thread](self, name: str, kind: type[Kind]) -> Kind: ...
+
+    @abstractmethod
+    def claim_generation(self, name: str) -> int: ...
+
+
 @dataclass(frozen=True, kw_only=True)
 class RegistryOwner:
     check_type: ClassVar[type[RegistryIdentityCheck]] = GoalRegistryClaimCheck
@@ -49,7 +65,7 @@ class RegistryOwner:
         return self.thread.require_turn_lease()
 
     @classmethod
-    def capture_local(cls, snapshot: RegistrySnapshot, name: str) -> RegistryOwner:
+    def capture_local(cls, snapshot: NativeOwnerRegistry, name: str) -> RegistryOwner:
         """Read local executable authority from this single locked snapshot."""
         snapshot.require_active(name)
         thread = snapshot.require_member(name, NativeThread)
