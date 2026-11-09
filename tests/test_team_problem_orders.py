@@ -13,7 +13,7 @@ from test_todos import order as checked_order
 from source_revision_fixture import SourceRepository
 
 from agent_comms.change_report import FileLine
-from agent_comms.child_process import BoundedRun
+from agent_comms.execution.child_process import BoundedRun
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.goals import CountCheckResult
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime

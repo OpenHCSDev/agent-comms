@@ -33,7 +33,7 @@ from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.native_build_inputs import DetachedChildStdio
-from agent_comms.child_process import (
+from ..execution.child_process import (
     OutlivesLauncherLifetime,
     Platform,
     ProcessIdentity,

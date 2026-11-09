@@ -152,7 +152,7 @@ from ..channel_targets import (
     IncarnationThreadTarget,
     NamedTarget,
 )
-from ..child_process import (
+from ..execution.child_process import (
     ChildResult,
     OrderCheckFailedError,
 )

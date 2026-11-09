@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 from agent_comms.build_artifact import BuildArtifact
-from agent_comms.child_process import Platform
+from ...execution.child_process import Platform
 
 
 class InterpreterBuild(BaseModel):

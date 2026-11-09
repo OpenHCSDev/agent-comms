@@ -13,7 +13,7 @@ from .runtime_request import (
     ResultRuntimeRequest,
 )
 from .. import launch_runtime
-from ..child_process import (
+from ..execution.child_process import (
     Platform,
     ProcessIdentity,
 )

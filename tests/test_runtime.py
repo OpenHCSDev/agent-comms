@@ -23,7 +23,7 @@ from agent_comms.acp_extension import (
     decode_updates,
     encode_updates,
 )
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.input_key import BusInputKey

@@ -21,7 +21,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.team_hud import TeamFrame
 from agent_comms.transport.tools.orders import CommsTodoCreateTool
 from team_heartbeat_fixture import ObservedHeartbeat, current_hud, observe_team

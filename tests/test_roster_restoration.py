@@ -18,7 +18,10 @@ from agent_comms.registry.registry_document import ThreadRows
 
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.coordination.tables.executions import NoPointedExecution
-from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
 from agent_comms.comms import wire
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.errors import RelationViolationError

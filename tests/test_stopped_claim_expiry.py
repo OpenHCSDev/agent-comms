@@ -7,7 +7,10 @@ import os
 from dataclasses import replace
 from functools import partial
 
-from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
 from agent_comms.comms import wire
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.envelope_claim_transitions import NativeClaim, WakeClaims

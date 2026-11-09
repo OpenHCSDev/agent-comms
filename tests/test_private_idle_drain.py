@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 import agent_comms.agent_events as events
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole
 from agent_comms.execution.owned_turn import OwnedTurn

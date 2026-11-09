@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 
-from .child_process import ProcessIdentity
+from .execution.child_process import ProcessIdentity
 from .coordination.tables.assignments import WakeAssignment
 from .reservation_rules import ReservationRule, RuleCheck
 from .native_input_record import NativeInputIdentity, NativeInputRecord

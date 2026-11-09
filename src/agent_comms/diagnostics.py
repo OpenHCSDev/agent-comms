@@ -21,7 +21,10 @@ from metaclass_registry.mro_dispatch import (
 )
 
 
-from .child_process import Platform, ProcessState
+from .execution.child_process import (
+    Platform,
+    ProcessState,
+)
 from .nominal.field_codec import FieldCodec, InputId, ScratchName, TurnId
 from .storage.locked_store import PatternFile, RuntimeFile
 from .native_failures import NativeRequestFailure

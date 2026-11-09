@@ -10,7 +10,10 @@ from typing import TYPE_CHECKING, Concatenate
 
 from ..catalog_store import ChannelCatalog
 from ..channel_targets import DeclaredTag
-from ..child_process import NoProcess, ProcessIdentity
+from ..execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
 from ..errors import RelationViolationError
 from ..nominal.field_codec import ThreadLookup, TurnId
 from ..repository_name import RepositoryName

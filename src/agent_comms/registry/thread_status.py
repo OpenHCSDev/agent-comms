@@ -13,7 +13,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from ..child_process import (
+from ..execution.child_process import (
     ProcessFence,
     ProcessIdentity,
     ProcessSighting,

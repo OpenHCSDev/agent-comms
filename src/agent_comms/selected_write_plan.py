@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.coordinator import Coordination
 
-from .child_process import Platform
+from .execution.child_process import Platform
 from .coordination.cohort import sealed_cohort_assignments
 from .nominal.declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim

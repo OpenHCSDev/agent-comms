@@ -13,7 +13,7 @@ from agent_comms.channel_targets import ChannelSelection, CommandTarget, NamedTa
 
 from ...acp_extension import CoordinationChangedUpdate
 from ...channels import Channel
-from ...child_process import ProcessIdentity
+from ...execution.child_process import ProcessIdentity
 from ...cli_command import PreparedTargetAction, TargetAction, TargetEdit
 from ...cli_result import TargetEditResult
 from ...context_store import (

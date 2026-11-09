@@ -18,7 +18,10 @@ import pytest
 from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_failure import NativeTurnError
-from agent_comms.child_process import ChildOutcome, ProcessIdentity
+from agent_comms.execution.child_process import (
+    ChildOutcome,
+    ProcessIdentity,
+)
 from agent_comms.comms import Comms, wire
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, GoalId
 from agent_comms.planning.goal_actions import (

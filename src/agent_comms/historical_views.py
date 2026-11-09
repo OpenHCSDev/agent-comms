@@ -19,7 +19,7 @@ from .bus import Bus
 from .catalog_store import ChannelCatalog
 from .channel_targets import NamedTarget, ThreadTarget
 from .channels import Channel
-from .child_process import Platform
+from .execution.child_process import Platform
 from .coordination.errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
 from .nominal.field_codec import (

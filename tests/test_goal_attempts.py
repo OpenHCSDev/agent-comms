@@ -19,7 +19,7 @@ import pytest
 from agent_comms.execution.turn_failure import BackendFailed
 
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import RecoveryBlocked

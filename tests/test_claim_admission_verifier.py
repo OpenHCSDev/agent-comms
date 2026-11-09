@@ -19,7 +19,7 @@ import agent_comms.selected_claim as selected_claim
 from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import ClaimId, TurnId
 from agent_comms.selected_claim import (
     publish_selected_resource_claim,

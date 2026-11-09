@@ -6,7 +6,7 @@ import os
 from dataclasses import replace
 
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.input_key import BusInputKey
 from agent_comms.planning.goal_actions import (

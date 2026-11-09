@@ -35,7 +35,7 @@ from ..agent_activity import AgentActivity
 from ..agent_backend import RuntimeLocation
 from ..catalog_store import ChannelCatalog
 from ..channel_targets import DeclaredTag
-from ..child_process import (
+from ..execution.child_process import (
     NO_PROCESS,
     ProcessIdentity,
     ProcessState,

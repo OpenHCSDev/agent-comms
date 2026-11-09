@@ -25,7 +25,7 @@ from ..catalog_document import CatalogAccess
 from ..change_report import CitationProject
 from ..channel_targets import TeammatesTag, ResolvedTarget, SurroundingChannel
 from ..channels import Channel, ChannelMemberIndex
-from ..child_process import ProcessIdentity
+from ..execution.child_process import ProcessIdentity
 from ..nominal.declared_family import DeclaredFamily
 from ..errors import OutsideRegistrySlice, RelationViolationError, UnregisteredThreadError
 from ..nominal.field_codec import (

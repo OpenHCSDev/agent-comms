@@ -370,7 +370,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
 
     import os
     from uuid import uuid4
-    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.execution.child_process import ProcessIdentity
     from agent_comms.input_disposition import InputDispositions
     from agent_comms.input_origin import WireInputOrigin
 

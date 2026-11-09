@@ -14,7 +14,10 @@ import pytest
 
 
 from agent_comms.messaging.bus_read import UiRead
-from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
 from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
 from agent_comms.planning.orders import ProgressRead

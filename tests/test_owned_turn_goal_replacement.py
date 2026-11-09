@@ -12,7 +12,7 @@ from agent_comms.controller import NO_CONTROLLER
 from agent_comms.channel_coding_tools import OrdinaryGoalRule
 from agent_comms.acp import CommsAgent
 from agent_comms.execution.turn_inbox import InputContent
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, OrderId
 from agent_comms.planning.goal_actions import (
     BlockedGoalAction,

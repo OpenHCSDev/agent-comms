@@ -13,7 +13,7 @@ from dataclasses import FrozenInstanceError, replace
 import pytest
 
 from agent_comms.native_build_inputs import ConfiguredChildStdio
-from agent_comms.child_process import SpawnedProcess
+from agent_comms.execution.child_process import SpawnedProcess
 from bus_record_fixture import (
     OWNER_LOOKUP, RECIPIENT_LOOKUP, RENAMED_OWNER_LOOKUP, UNRELATED_LOOKUP,
 )

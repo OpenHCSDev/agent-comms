@@ -61,7 +61,10 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
 from agent_comms.team.order import Team, PullRequestVerb, SayVerb
 from agent_comms.task_attachments.team_pings import RulePing
 from agent_comms.team.standing_rules import (

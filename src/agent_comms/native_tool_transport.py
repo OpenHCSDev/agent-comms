@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 from agent_comms_hooks import ToolRefusedError
 
-from .child_process import join_retirement
+from .execution.child_process import join_retirement
 from .coordination.database import CoordinationStore
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, InputId, MalformedRecord, Token256Text

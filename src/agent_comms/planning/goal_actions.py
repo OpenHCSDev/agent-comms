@@ -43,7 +43,7 @@ from ..change_report import (
     FileLine,
     NoSourceReference,
 )
-from ..child_process import ProcessIdentity
+from ..execution.child_process import ProcessIdentity
 from ..command import Command
 from ..errors import RelationViolationError
 from .goal_mentions import bind_goal_mentions

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.bus import Bus
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.storage.private_path import FileIdentity
 from agent_comms.recorded_bus import RecordedBus
 from agent_comms.registry.registry_document import InvalidRegistryDocument

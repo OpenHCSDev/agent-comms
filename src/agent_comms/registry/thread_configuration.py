@@ -6,7 +6,7 @@ from pathlib import Path
 from .registration import Registration
 from ..acp_extension import CoordinationChangedUpdate
 from ..agent_activity import AgentActivity
-from ..child_process import ProcessIdentity
+from ..execution.child_process import ProcessIdentity
 from .thread_management import ThreadManagement
 
 

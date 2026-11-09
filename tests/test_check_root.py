@@ -10,7 +10,7 @@ import pytest
 from bus_record_fixture import append_reply
 
 from agent_comms.check_root import CheckRoot
-from agent_comms.child_process import NoProcess
+from agent_comms.execution.child_process import NoProcess
 from agent_comms.cli import CliInvocation
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import UnreceivedAnswerError

@@ -25,7 +25,7 @@ from pathlib import Path
 
 from agent_comms.coordination.errors import PublicationActivationBlocked
 
-from .child_process import ProcessIdentity
+from .execution.child_process import ProcessIdentity
 from .comms import wire
 from .coordinated_runtime import SelectedExecution
 from .cursor_publication import CursorDelivery

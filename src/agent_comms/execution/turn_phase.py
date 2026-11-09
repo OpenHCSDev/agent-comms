@@ -17,7 +17,7 @@ from ..activity import (
     ObservedActivity,
 )
 from ..agent_events import AgentEvent
-from ..child_process import ProcessIdentity
+from .child_process import ProcessIdentity
 from ..nominal.declared_family import DeclaredFamily
 from ..nominal.field_codec import ToolCallId
 from ..pi_payloads import ProviderDiagnosticError

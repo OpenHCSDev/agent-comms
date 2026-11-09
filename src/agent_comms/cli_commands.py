@@ -21,7 +21,10 @@ from typing import Annotated, TYPE_CHECKING
 
 
 from .activity import ActivityState
-from .child_process import NoProcess, ProcessState
+from .execution.child_process import (
+    NoProcess,
+    ProcessState,
+)
 from .cli_result import CliResult, TargetEditResult
 from .comms import Comms
 from .nominal.declared_family import DeclaredFamily

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 import pytest
 
 from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.controller import SessionUpdateSink
 from agent_comms.external_transcript import ExternalTranscript

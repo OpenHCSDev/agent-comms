@@ -10,7 +10,7 @@ from typing import (
     ClassVar,
 )
 
-from ..child_process import (
+from ..execution.child_process import (
     CheckPrinted,
     NoIntegerPrinted,
 )

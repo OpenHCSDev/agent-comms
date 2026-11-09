@@ -252,7 +252,7 @@ def test_cli_registry_reads_do_not_load_the_pi_runtime(tmp_path):
 @pytest.mark.asyncio
 async def test_runner_obtains_one_backend_per_session_from_the_thread_declaration(comms):
     from agent_comms.acp import CommsAgent
-    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.execution.child_process import ProcessIdentity
     from agent_comms.errors import RelationViolationError
     from agent_comms.native_arguments import GivenArguments, GivenBinary
     from agent_comms.pi_native_backend import PersistentPiSession

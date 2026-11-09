@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.agent_events import AgentInfo
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.nominal.field_codec import TurnId

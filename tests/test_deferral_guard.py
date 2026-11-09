@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.hook_deferral import FutureOrder, Later, NextTick, TranscriptRecord
 from agent_comms.cli_bridges.hook_requests import HookReply, StopRequest

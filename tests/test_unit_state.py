@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 import pytest
 
 from agent_comms.activity import ActivityState
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.planning.orders import (
     DeliverTodo,
     OperationDelivery,

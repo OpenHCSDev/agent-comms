@@ -13,7 +13,7 @@ from agent_comms_hooks import ToolRefusedError
 
 from ..active_route import ActiveRoute
 from ..bus import Bus
-from ..child_process import ResidentManager
+from ..execution.child_process import ResidentManager
 from ..connector import (
     LOOPBACK,
     PORT,

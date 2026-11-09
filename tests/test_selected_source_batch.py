@@ -9,7 +9,7 @@ import os
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from conftest import accept_initial
 from agent_comms.coordination.cohort import pending_sealed_assignments

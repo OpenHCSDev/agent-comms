@@ -20,7 +20,7 @@ from agent_comms.channel_targets import ChannelTarget, CommandTarget, ThreadTarg
 from agent_comms.channels import AnyChannel
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError

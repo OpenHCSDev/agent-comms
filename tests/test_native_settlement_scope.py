@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.attempt_states import SucceededAttempt
 from agent_comms.bus import Bus
-from agent_comms.child_process import NoProcess
+from agent_comms.execution.child_process import NoProcess
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim

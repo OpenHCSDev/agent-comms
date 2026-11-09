@@ -38,7 +38,7 @@ import pytest
 from agent_comms import agent_events as events
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.channel_targets import TeammatesTag, CommsTag
 from agent_comms.messaging.sending import TeamReceipts
 from agent_comms.team.standing_rules import (
