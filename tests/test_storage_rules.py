@@ -34,6 +34,11 @@ from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.repository_sources import LocalRepositorySource
+from agent_comms.projects.shell_effects import (
+    CreateCheckoutStorageEffect,
+    RemoveCheckoutStorageEffect,
+    shell_storage_effects,
+)
 from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.projects.storage_rules import (
     CheckoutAllocation,
@@ -43,7 +48,6 @@ from agent_comms.projects.storage_rules import (
     StorageRule,
     UnitStorage,
 )
-from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_creation import RecordedCreationTime
 from agent_comms.registry.thread_storage import (
@@ -54,15 +58,10 @@ from agent_comms.registry.thread_storage import (
     UnassignedThreadStorage,
 )
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.shell_effects import (
-    CreateCheckoutStorageEffect,
-    RemoveCheckoutStorageEffect,
-    StorageDenied,
-    shell_storage_effects,
-)
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.standing_rules import StorageHomeMissing
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tool_denial import SelectedToolDenied
+from agent_comms.transport.tool_caller import ThreadCaller
+from agent_comms.transport.tool_denial import SelectedToolDenied, StorageDenied
 from source_revision_fixture import SourceRepository
 
 

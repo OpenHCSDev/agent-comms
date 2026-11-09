@@ -8,8 +8,9 @@ from dataclasses import fields, replace
 
 import pytest
 
+from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.channel_targets import IncarnationThreadTarget, ThreadTarget
-from agent_comms.display_references import (
+from agent_comms.messaging.display_references import (
     ChannelDisplayReference,
     CurrentDisplayReferences,
     DisplayReference,
@@ -18,8 +19,7 @@ from agent_comms.display_references import (
     RetiredThreadReference,
     ThreadDisplayReference,
 )
-from agent_comms.errors import RelationViolationError
-from agent_comms.historical_views import HistorySource
+from agent_comms.messaging.historical_views import HistorySource
 from agent_comms.nominal.field_codec import MalformedRecord
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import HistoricalRootPurpose, ThreadRows

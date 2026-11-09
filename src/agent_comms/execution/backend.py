@@ -38,10 +38,10 @@ from metaclass_registry.mro_dispatch import MroDispatch, handles
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import NO_INPUT_START_LISTENER, InputStartListener
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.execution import pi_commands as commands
 from agent_comms.execution import pi_events as pi
 from agent_comms.execution.acp_failure import UnrecordedFailureSource
+from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.execution.extension_ui import ExtensionUiSession
 from agent_comms.execution.image_input import ImageInput
 from agent_comms.execution.native_attestation import AttestationError
@@ -91,12 +91,12 @@ from agent_comms.execution.turn_watchdog import (
 )
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import InputId, MalformedRecord, boundary_decoder
-from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.transport.native_tool_transport import (
     NativeToolMode,
     ToolTransport,
     UnboundToolTransport,
 )
+from agent_comms.transport.tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from agent_comms.execution.acp_failure import ProviderRetryResult

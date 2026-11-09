@@ -27,18 +27,18 @@ from agent_comms.acp_extension import (
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_key import AcpInputKey
+from agent_comms.execution.queued_input import QueuedInput, QueuedInputContext
+from agent_comms.execution.runtime import present_session
 from agent_comms.execution.transcript_routes import NoDisplayText
 from agent_comms.input_attempt import ReservedInput
-from agent_comms.input_key import AcpInputKey
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId, TurnId
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.queued_input import QueuedInput, QueuedInputContext
 from agent_comms.registry.thread_identity import (
     ClaimedIdentity,
     RecordedThreadIncarnation,
 )
 from agent_comms.registry.threads import NativeThread
-from agent_comms.runtime import present_session
 from bus_record_fixture import prepare_native_comms
 from stored_inputs import stored_inputs
 
@@ -220,6 +220,8 @@ async def test_ending_a_drained_session_leaves_no_state_for_it(tmp_path):
 
 async def test_original_queued_and_routed_starts_own_their_input_identity(tmp_path):
     from agent_comms.channel_input_batch import SingleInputBatch
+    from agent_comms.execution.input_key import BusInputKey
+    from agent_comms.execution.queued_input import AcceptedTurn
     from agent_comms.execution.turn_goal_permission import (
         InactiveGoalPermission,
         TurnGoalPermission,
@@ -231,9 +233,7 @@ async def test_original_queued_and_routed_starts_own_their_input_identity(tmp_pa
         RoutedOriginalInput,
     )
     from agent_comms.input_attempt import StartedInput
-    from agent_comms.input_key import BusInputKey
-    from agent_comms.queued_input import AcceptedTurn
-    from agent_comms.text_digest import TextDigest
+    from agent_comms.nominal.text_digest import TextDigest
 
     _, agent, incarnation, generation = _owner(tmp_path)
     input_id, native_id = InputId.mint(), InputId.mint()

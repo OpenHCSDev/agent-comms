@@ -9,14 +9,14 @@ import pytest
 from agent_comms.cli import CliInvocation
 from agent_comms.cli_verbs.cli_commands import ConstraintPinnedResult
 from agent_comms.context_segments.retained import RetainedSegment
+from agent_comms.execution.input_key import AcpInputKey
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_lease import NoTurnLease
-from agent_comms.input_key import AcpInputKey
-from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId
+from agent_comms.nominal.lifecycle_capability import Unresolved
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.session_file import RegistrySessionLocation
 from bus_history import read_history
 from stored_inputs import stored_inputs
 
@@ -136,8 +136,8 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
 
 async def original_input_consumer_journey(tmp_path, command):
     """Reuse the original ACP reservation fixture; never dispatch its inputs."""
-    from agent_comms.queued_input import QueuedInput
-    from agent_comms.retained_task_facts import InputTaskFact
+    from agent_comms.execution.queued_input import QueuedInput
+    from agent_comms.messaging.retained_task_facts import InputTaskFact
     from test_acp_queue_contract import _owner
     from test_current_input_origin import Client, capture
 

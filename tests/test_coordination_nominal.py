@@ -2,7 +2,11 @@
 
 import pytest
 
-from agent_comms.assignment_states import AssignmentState, EngagedAssignment, FullPendingAssignment
+from agent_comms.coordination.assignment_states import (
+    AssignmentState,
+    EngagedAssignment,
+    FullPendingAssignment,
+)
 from agent_comms.coordination.attempt_states import SucceededAttempt
 from agent_comms.coordination.errors import IntegrityViolationError
 from agent_comms.coordination.execution_states import (
@@ -20,9 +24,9 @@ from agent_comms.coordination.tables.executions import (
     ExecutionRecord,
     WireOrigin,
 )
-from agent_comms.lifecycle_capability import Failed
 from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId
-from agent_comms.wake_policy import FullWake, MessageAudience
+from agent_comms.nominal.lifecycle_capability import Failed
+from agent_comms.waking.wake_policy import FullWake, MessageAudience
 from bus_record_fixture import OWNER_LOOKUP
 
 
@@ -123,7 +127,7 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
 
 
 def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
-    from agent_comms.assignment_states import FailedAssignment
+    from agent_comms.coordination.assignment_states import FailedAssignment
     from agent_comms.coordination.coordinator import Coordination
 
     class AwaitingAssignment(FullPendingAssignment):

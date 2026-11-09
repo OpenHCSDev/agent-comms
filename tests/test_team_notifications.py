@@ -12,12 +12,12 @@ from multiprocessing import Pipe
 
 import pytest
 
-from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.comms import Comms
 from agent_comms.coordination.errors import DeferredRead
+from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.errors import (
     HumanSendRefusedError,
     RelationViolationError,
@@ -27,7 +27,8 @@ from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
 )
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.messaging.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.messaging.bus_read import UiRead
 from agent_comms.messaging.channel_targets import TeammatesTag, ThreadTarget
 from agent_comms.messaging.message_page import MessagePageRequest
@@ -41,11 +42,11 @@ from agent_comms.projects.checkouts import (
     Checkout,
     UnpushedHead,
 )
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.projects.work_branches import WorkBranchError
 from agent_comms.registry.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
 from agent_comms.registry.thread_management import GivenTags
 from agent_comms.registry.threads import ForkThread, NativeThread, Thread
-from agent_comms.service_passes import ServicePassStore
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.team_pings import (
     PublishedFacts,
     RulePing,
@@ -60,15 +61,16 @@ from agent_comms.team.standing_rules import (
     StandingRule,
     UndatedStandingRule,
 )
+from agent_comms.team.team_heartbeat import TeamHeartbeat, TeamObservation
+from agent_comms.team.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, UnreadableUsage
+from agent_comms.team.team_hud_records import Teammate
 from agent_comms.team.vibe_check import OverloadDegradation
-from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
-from agent_comms.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, UnreadableUsage
-from agent_comms.team_hud_records import PhasesDoneByPlanGroup, Teammate
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.transcript_events import IncomingTranscript
+from agent_comms.transcript.transcript_events import IncomingTranscript
+from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.reads import TeammateRead
 from agent_comms.transport.tools.served import invoke_tool
 from agent_comms.ui_model import observation
+from agent_comms.ui_model.hud_groups import PhasesDoneByPlanGroup
 from agent_comms.ui_model.message_category import HeartbeatCategory, InboundCategory, all_categories
 from agent_comms.ui_model.observation import (
     ObservationService,
@@ -82,8 +84,7 @@ from agent_comms.ui_model.teammate_state import (
     TeammateState,
     UrgentGroup,
 )
-from agent_comms.wake_policy import PassiveWake
-from agent_comms.work_branches import WorkBranchError
+from agent_comms.waking.wake_policy import PassiveWake
 from agent_comms_hooks.watch import WatchRecord
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
 from test_holder_standing_rules import state_cards
@@ -606,7 +607,7 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
         RetainedStorePhase,
         ReviewQueuePhase,
     )
-    from agent_comms.team_hud_records import TeamPhase
+    from agent_comms.team.team_hud_records import TeamPhase
 
     comms = notification_bus
     colleague = comms.registry.require("colleague").incarnation
@@ -997,7 +998,7 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
 
 def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_evidence(notification_bus):
     comms = notification_bus
-    from agent_comms.head_review import PullRequestHead
+    from agent_comms.projects.head_review import PullRequestHead
     from agent_comms.projects.repository_name import RepositoryName
     from agent_comms.team.standing_rules import OrderlessUnreviewedHead
 
@@ -1020,7 +1021,7 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
     assert len(message.task.handled) == 12
     assert {entry.text for entry in message.task.board(comms)} == {rule.line() for rule in rules}
     assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12
-    from agent_comms.text_digest import TextDigest
+    from agent_comms.nominal.text_digest import TextDigest
 
     swapped = (*packet.handled[:-1], replace(packet.handled[-1], observation=TextDigest.of("other observation")))
     replacement = replace(packet, handled=swapped, waiting=swapped)

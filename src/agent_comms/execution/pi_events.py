@@ -21,6 +21,7 @@ from agent_comms.execution.native_pi import NativePiOperationFailed
 from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.native_turn_context import ContextObserved, NativeContextManifestData
 from agent_comms.execution.pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
+from agent_comms.execution.pi_vocabulary import CompactionReason, UnknownCompactionReason
 from agent_comms.execution.pi_wire import (
     AnonymousRequest,
     Opaque,
@@ -70,8 +71,7 @@ from agent_comms.pi_payloads import (
     ReportedText,
     UnreportedUsage,
 )
-from agent_comms.pi_vocabulary import CompactionReason, UnknownCompactionReason
-from agent_comms.tool_declaration import ToolDeclaration
+from agent_comms.transport.tool_declaration import ToolDeclaration
 
 if TYPE_CHECKING:
     from agent_comms.execution.backend import TurnSession

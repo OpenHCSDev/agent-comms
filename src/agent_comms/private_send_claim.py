@@ -29,6 +29,7 @@ from agent_comms.execution.native_prompt_send import PromptBoundary
 from agent_comms.execution.native_runtime_input import NativeRuntimeTable
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.native_startup import NativeStartup
+from agent_comms.execution.owned_send import OwnedSend
 from agent_comms.execution.publication_measurements import PublicationMeasurements
 from agent_comms.execution.tracked_turn import (
     NO_FOLLOWING_INPUTS,
@@ -41,10 +42,9 @@ from agent_comms.execution.turn_input_source import SelectedOriginalInput
 from agent_comms.following_inputs import FollowingInputs
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
-from agent_comms.owned_send import OwnedSend
+from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
-from agent_comms.text_digest import TextDigest
 from agent_comms.transport.native_tool_transport import NativeToolMode
 
 if TYPE_CHECKING:

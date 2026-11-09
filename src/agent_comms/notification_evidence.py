@@ -13,8 +13,9 @@ from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import JsonValue
 
-from agent_comms.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -27,7 +28,6 @@ from agent_comms.nominal.field_codec import (
     ThreadLookup,
     boundary_decoder,
 )
-from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry.thread_identity import ThreadIncarnation
 
 
@@ -39,10 +39,10 @@ class ConsumptionEvidence(ABC):
 
 
 if TYPE_CHECKING:
-    from agent_comms.bus_publication import Delivered
     from agent_comms.comms import Comms
     from agent_comms.coordination.tables.assignments import WakeAssignment
     from agent_comms.message_notification import MessageNotification
+    from agent_comms.messaging.bus_publication import Delivered
     from agent_comms.notification_assignment import AssignmentActivityEvidence
     from agent_comms.notification_progress import (
         AssignmentProgress,

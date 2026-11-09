@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.tool_result import ToolResult
+from agent_comms.transport.tool_result import ToolResult
 
 
 class HostLog(DeclaredFamily, affix="HostLog"):

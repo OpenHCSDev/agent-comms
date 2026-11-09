@@ -9,8 +9,8 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_key import AcpInputKey
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_key import AcpInputKey
 from agent_comms.nominal.field_codec import GoalId, InputId
 from agent_comms.planning.goal_actions import (
     ActiveGoalAction,

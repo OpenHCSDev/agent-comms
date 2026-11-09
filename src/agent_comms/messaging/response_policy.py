@@ -9,9 +9,9 @@ from functools import cache
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from agent_comms.class_fact import ClassFact
-from agent_comms.input_key import BusInputKey, InputKey, OwnedBusInputKey
+from agent_comms.execution.input_key import BusInputKey, InputKey, OwnedBusInputKey
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
+from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:

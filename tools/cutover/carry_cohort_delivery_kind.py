@@ -5,7 +5,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.cohort_schema import ClaimBatchAcknowledgements, CohortDeliveries
+from agent_comms.coordination.cohort_schema import ClaimBatchAcknowledgements, CohortDeliveries
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.probes.carry import Carried, Carry

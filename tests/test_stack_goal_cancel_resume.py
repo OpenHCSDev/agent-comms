@@ -8,8 +8,8 @@ from acp.schema import SessionNotification
 
 from agent_comms.coordination.errors import Refused
 from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.input_key import AcpInputKey
 from agent_comms.input_attempt import StartedInput
-from agent_comms.input_key import AcpInputKey
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId
 from agent_comms.planning.goal_attempts import GoalAttemptStore
 from agent_comms.planning.goal_generation import (

@@ -23,10 +23,9 @@ from agent_comms.bus import (
     BusReader,
     BusSnapshot,
 )
-from agent_comms.bus_publication import Delivered
-from agent_comms.cohort_schema import CohortTable
 from agent_comms.comms import Comms
 from agent_comms.coordination.cohort import _claim_record
+from agent_comms.coordination.cohort_schema import CohortTable
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
@@ -42,7 +41,8 @@ from agent_comms.envelope_claim_transitions import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_input_owner import RegistryOwner
-from agent_comms.private_registry_guard import RegistryPrivacy
+from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import (
     NativeThread,

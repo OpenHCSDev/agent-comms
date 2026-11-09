@@ -14,8 +14,8 @@ from agent_comms.comms import Comms, wire
 from agent_comms.context_store import ContextStore
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.input_key import TurnInputKey
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_key import TurnInputKey
 from agent_comms.installer.launch import InstallRun
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.probes.inputs import SelectedInputsProbe

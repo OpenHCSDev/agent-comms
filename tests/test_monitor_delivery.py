@@ -15,8 +15,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.agent_inbox import TakenInputStart
-from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_protocol import (
     ClaudeMonitorFrame,
@@ -60,6 +58,7 @@ from agent_comms.cli_bridges.shared import (
     core_watch_failure,
 )
 from agent_comms.comms import wire
+from agent_comms.coordination.assignment_states import DeferredAssignment, DeliveredAssignment
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import CoordinationReadUnavailable
@@ -73,9 +72,9 @@ from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
-from agent_comms.external_transcript import ExternalTurnInput
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.launch_runtime import InstalledSource, LaunchRuntime, RuntimeReplacedError
+from agent_comms.messaging.agent_inbox import TakenInputStart
 from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.message_reference import BridgeStart, MessageReference
 from agent_comms.messaging.messages import AlertKind, InfoKind, Message, NoticeRole, QuestionKind
@@ -89,7 +88,8 @@ from agent_comms.storage.maintenance_barrier import (
     MaintenanceHeldError,
     MaintenanceOperator,
 )
-from agent_comms.transcript_events import AssistantTranscript
+from agent_comms.transcript.external_transcript import ExternalTurnInput
+from agent_comms.transcript.transcript_events import AssistantTranscript
 from bus_record_fixture import prepare_native_comms
 from conftest import accept_initial, declare_test_bus, publish_initial
 from transcript_record_fixture import transcript_record

@@ -8,13 +8,13 @@ import sys
 from contextlib import suppress
 
 from agent_comms.acp import CommsAgent
-from agent_comms.active_route import ActiveRoute
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.launch_root import LaunchRoot, started
-from agent_comms.owner_connection import socket_path
-from agent_comms.root_runtime import RootRuntimeStore
+from agent_comms.execution.launch_root import LaunchRoot, started
+from agent_comms.execution.root_runtime import RootRuntimeStore
+from agent_comms.installer.active_route import ActiveRoute
+from agent_comms.transport.owner_connection import socket_path
 
 
 async def run() -> None:

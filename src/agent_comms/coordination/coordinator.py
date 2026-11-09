@@ -30,8 +30,8 @@ from agent_comms.storage.store_files import DEFAULT_STORE_CONTENTION, StoreConte
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
+    from agent_comms.coordination.service_passes import ServicePassStore
     from agent_comms.execution.watch_passes import Watch
-    from agent_comms.service_passes import ServicePassStore
 
 Result = TypeVar("Result")
 

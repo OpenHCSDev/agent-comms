@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.plan_reading import PlanReading
     from agent_comms.planning.plan_phases import PlanPhase
+    from agent_comms.planning.plan_reading import PlanReading
     from agent_comms.registry.threads import Thread
 
 

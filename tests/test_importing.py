@@ -39,20 +39,21 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NO_PROCESS
 from agent_comms.execution.native_entries import ImportedMetadataEntry, NativeEntry
 from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_context import CodexRolloutProvenance
-from agent_comms.harness_install import (
-    ClaudeCodeHarness,
-    CodexHarness,
-    Harness,
-    OpenCodeHarness,
-    PiHarness,
-)
 from agent_comms.importing import (
     ImportBuffer,
     ImportedSessionMetadata,
     ImportLimits,
     ImportSnapshot,
     ThreadImported,
+)
+from agent_comms.installer.harness_install import (
+    ClaudeCodeHarness,
+    CodexHarness,
+    Harness,
+    OpenCodeHarness,
+    PiHarness,
 )
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 from agent_comms.projects.checkouts import Checkout
@@ -68,8 +69,7 @@ from agent_comms.registry.thread_text import (
     ThreadText,
 )
 from agent_comms.registry.threads import ExternalThread, NativeThread, ThreadProvenance
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.transcript_events import (
+from agent_comms.transcript.transcript_events import (
     ImportedMessage,
     ImportedReply,
     ImportedRequest,

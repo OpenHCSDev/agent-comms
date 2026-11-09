@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from agent_comms.coordination.attempt_states import TerminalAttempt
     from agent_comms.coordination.snapshot import RecoverySnapshot
     from agent_comms.messaging.message_bus import MessageBus
-    from agent_comms.private_registry_guard import RegistryPrivacy
+    from agent_comms.registry.private_registry_guard import RegistryPrivacy
     from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.registry.registry_store import RegistryCut
 
@@ -181,7 +181,7 @@ class NativeCoordinationSession(CoordinationSession):
     def bus(self) -> MessageBus:
         """Create native bus owners only when this session first needs a boundary."""
         import agent_comms.messaging.message_bus as message_bus
-        import agent_comms.publisher as publisher
+        import agent_comms.messaging.publisher as publisher
         import agent_comms.registry.registration as registration
 
         return message_bus.MessageBus(

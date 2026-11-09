@@ -15,12 +15,10 @@ from dataclasses import (
 from pathlib import Path
 
 from agent_comms.bus import Bus, BusReader
-from agent_comms.bus_publication import Delivered
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.coordination.errors import DMScopeChanged
+from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.messages import Message
-from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
-from agent_comms.nominal.sealed import Sealed
 from agent_comms.messaging.read_basis import (
     AllConversation,
     ChannelConversation,
@@ -32,12 +30,14 @@ from agent_comms.messaging.read_basis import (
     MessageDisplayScope,
     ReadCursor,
 )
-from agent_comms.recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
+from agent_comms.messaging.recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
+from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.nominal.sealed import Sealed
 from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_provenance import RegistryProvenance
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
 from agent_comms.registry.threads import Thread
-from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.private_path import ObservedPath

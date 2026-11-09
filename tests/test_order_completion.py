@@ -7,9 +7,9 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.errors import TodoError
 from agent_comms.execution.child_process import OrderCheckFailedError
+from agent_comms.installer.build_identity import RecordedBuildIdentity
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import FieldCodec, RecordProblems
@@ -34,18 +34,18 @@ from agent_comms.planning.orders import (
     Todo,
     TriageScope,
 )
+from agent_comms.planning.progress_claims import InstalledClaim
 from agent_comms.planning.pull_requests import PullRequestLink
-from agent_comms.progress_claims import InstalledClaim
 from agent_comms.projects.checkouts import (
     Checkout,
     DetachedStart,
 )
 from agent_comms.projects.repo import Repo
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.projects.work_branches import WorkBranches
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.order import Team, main
 from agent_comms.team.standing import HolderGone
 from agent_comms.ui_model.teammate_state import AwaitingApplicationRun, TeammateObservation
-from agent_comms.work_branches import WorkBranches
 from team_heartbeat_fixture import capture_frame
 from test_proof_build import ProofBuildCheckout
 

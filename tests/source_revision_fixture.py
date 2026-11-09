@@ -10,13 +10,13 @@ from typing import ClassVar, Self
 
 import tomli_w
 
-from agent_comms.change_report import FileLine, OrderRoots
 from agent_comms.planning.orders import FixScope
 from agent_comms.planning.problem_findings import FixShape
 from agent_comms.planning.pull_requests import PullRequestLink
+from agent_comms.projects.change_report import FileLine, OrderRoots
 from agent_comms.projects.repo import Repo
-from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.registry.registry_document import RegisteredTeamProject
 from fixture_git import IDENTITY
 
 

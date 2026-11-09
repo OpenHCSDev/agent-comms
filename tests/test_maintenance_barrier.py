@@ -19,8 +19,8 @@ from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
-from agent_comms.lifecycle_capability import Executing
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
+from agent_comms.nominal.lifecycle_capability import Executing
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import NativeThread
@@ -99,7 +99,7 @@ def test_phase_owner_is_default_off_and_clear_is_exact(tmp_path: Path) -> None:
 
 
 def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> None:
-    from agent_comms.owner_cutover import MaintainedOwnerCutover, PreserveOwnerRuntime
+    from agent_comms.execution.owner_cutover import MaintainedOwnerCutover, PreserveOwnerRuntime
 
     class ScratchCutover(MaintainedOwnerCutover):
         def require_selection(self, snapshot, owners):
@@ -113,11 +113,11 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
     cutover = ScratchCutover()
     cutover.maintenance_hold = hold
     cutover.require_restart_phase(comms.owners)
-    from agent_comms.restart_refusals import OwnerMaintenancePendingRefusal
+    from agent_comms.execution.restart_refusals import OwnerMaintenancePendingRefusal
 
     with pytest.raises(OwnerMaintenancePendingRefusal) as refused:
         PreserveOwnerRuntime().require_restart_phase(comms.owners)
-    from agent_comms.lifecycle_capability import Pending
+    from agent_comms.nominal.lifecycle_capability import Pending
 
     assert refused.value.queue_state().items_with(Pending, refused.value)
     comms.owners.maintenance.clear(hold)
@@ -388,8 +388,8 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
         ThreadOutput,
     )
     from agent_comms.execution.turn_phase import ModelWaitPhase
-    from agent_comms.recorded_time import RecordedEventTime
-    from agent_comms.transcript_events import AssistantTranscript
+    from agent_comms.storage.recorded_time import RecordedEventTime
+    from agent_comms.transcript.transcript_events import AssistantTranscript
 
     comms = wire(tmp_path)
     comms.registry.declare(NativeThread('cli', frozenset(), Checkout(tmp_path)))

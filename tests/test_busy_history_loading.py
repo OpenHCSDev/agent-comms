@@ -10,11 +10,11 @@ import pytest
 
 from agent_comms.acp_extension import TranscriptSnapshotUpdate
 from agent_comms.comms import wire
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import UnrecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
-from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.ui_model.observation import (
     LocalRouteObservation,

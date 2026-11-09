@@ -17,30 +17,69 @@ from dataclasses import (
 )
 from functools import cached_property
 
-from agent_comms.planning.goal_waits import GoalExecutionInputs, GoalWait, StandbyReview
-from agent_comms.planning.order_words import StrikeReason
-from agent_comms.planning.orders import ProblemGoals, Assignment, RecordOrderHeadVerdict, JudgedCall, SendBackVerdict, Todo, TodoBatch, TodoCommand, TodoStore
 from agent_comms.agent_events import GoalChange, GoalChanged, GoalUnchanged
-from agent_comms.context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeWorkContext
+from agent_comms.context_segments.wake_values import (
+    NoWakeGoalContext,
+    WakeGoalContext,
+    WakeWorkContext,
+)
 from agent_comms.coordination.errors import StaleFence
-from agent_comms.errors import BirthChangedError, RelationViolationError, StaleAttemptError, TodoError, UnregisteredThreadError, UnresolvedAttemptError
-from agent_comms.planning.goal_actions import GoalAction, GoalActionContext, HeadReviewedOrderGoalAction, GoalPrecondition, GoalPublicationContext, RuntimeInvocable, SentBackOrderGoalAction, SetGoalAction
-from agent_comms.planning.goal_attempts import Generation
-from agent_comms.planning.goal_history import GoalHistoryEntry, RecordedGoalHistory
-from agent_comms.planning.goal_presentation import GoalExecution, GoalPublicationSnapshot, GoalSnapshot, IdleGoalExecution
-from agent_comms.planning.goal_records import GoalRecords
-from agent_comms.planning.goal_scope import AllGoals, GoalScope, OneGoal
-from agent_comms.planning.goals import Goal, GoalDeclaration
-from agent_comms.input_attempt import InputDeliveryScope, UNOBSERVED_DELIVERY_SCOPE, UnresolvedInputReference
+from agent_comms.errors import (
+    BirthChangedError,
+    RelationViolationError,
+    StaleAttemptError,
+    TodoError,
+    UnregisteredThreadError,
+    UnresolvedAttemptError,
+)
+from agent_comms.execution.native_input_owner import GoalLaunchOwner
+from agent_comms.execution.turn_lease import TurnDeclaration
+from agent_comms.input_attempt import (
+    UNOBSERVED_DELIVERY_SCOPE,
+    InputDeliveryScope,
+    UnresolvedInputReference,
+)
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.messaging.messages import Message
-from agent_comms.execution.native_input_owner import GoalLaunchOwner
 from agent_comms.nominal.field_codec import GoalId
-from agent_comms.owner_requests import NewestOpenRequest, RequestDirective
+from agent_comms.planning.goal_actions import (
+    GoalAction,
+    GoalActionContext,
+    GoalPrecondition,
+    GoalPublicationContext,
+    HeadReviewedOrderGoalAction,
+    RuntimeInvocable,
+    SentBackOrderGoalAction,
+    SetGoalAction,
+)
+from agent_comms.planning.goal_attempts import Generation
+from agent_comms.planning.goal_history import GoalHistoryEntry, RecordedGoalHistory
+from agent_comms.planning.goal_presentation import (
+    GoalExecution,
+    GoalPublicationSnapshot,
+    GoalSnapshot,
+    IdleGoalExecution,
+)
+from agent_comms.planning.goal_records import GoalRecords
+from agent_comms.planning.goal_scope import AllGoals, GoalScope, OneGoal
+from agent_comms.planning.goal_waits import GoalExecutionInputs, GoalWait, StandbyReview
+from agent_comms.planning.goals import Goal, GoalDeclaration
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
+    Assignment,
+    JudgedCall,
+    ProblemGoals,
+    RecordOrderHeadVerdict,
+    SendBackVerdict,
+    Todo,
+    TodoBatch,
+    TodoCommand,
+    TodoStore,
+)
+from agent_comms.planning.owner_requests import NewestOpenRequest, RequestDirective
 from agent_comms.registry.registry_document import RegistryDocument, RegistrySnapshot
-from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.execution.turn_lease import TurnDeclaration
+from agent_comms.registry.threads import NativeThread, Thread
 
 _LOG = logging.getLogger(__name__)
 

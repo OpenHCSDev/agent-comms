@@ -50,8 +50,8 @@ from agent_comms.peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from agent_comms.planning.goals import Goal, NoGoal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ThreadIncarnation, TurnIdentity
-from agent_comms.tool_result import DeclaredReply, ToolResult
-from agent_comms.wake_policy import WakePolicy
+from agent_comms.transport.tool_result import DeclaredReply, ToolResult
+from agent_comms.waking.wake_policy import WakePolicy
 
 if TYPE_CHECKING:
     from agent_comms.context_store import RecordedContextState

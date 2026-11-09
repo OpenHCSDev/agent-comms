@@ -12,10 +12,10 @@ from agent_comms.execution.turn_item import (
     FreshNativeId,
     FreshNativeIdText,
 )
+from agent_comms.messaging.routing import ScheduledTurn, TurnRouting
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.routing import ScheduledTurn, TurnRouting
-from agent_comms.transcript_events import UserTranscript
+from agent_comms.transcript.transcript_events import UserTranscript
 from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID
 from conftest import installed_comms, transcript_records
 

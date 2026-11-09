@@ -1,5 +1,5 @@
 """The board frame is a view; only an owed team gets enforcement and packets."""
-from agent_comms.team_service import OwedHeartbeat, UnownedHeartbeat
+from agent_comms.team.team_service import OwedHeartbeat, UnownedHeartbeat
 
 
 def test_an_owed_team_is_enforced_and_sent_its_packets():

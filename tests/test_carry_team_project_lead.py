@@ -7,9 +7,9 @@ from cutover.carry_registry_presence import RegistryPresence
 from cutover.carry_team_project_lead import TeamProjectLead
 
 from agent_comms.comms import wire
-from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.presence import PresenceStore
+from agent_comms.registry.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry.registry_document import NoTeamProject, RegisteredTeamProject
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.threads import NativeThread

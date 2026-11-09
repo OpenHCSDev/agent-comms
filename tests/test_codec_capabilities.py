@@ -12,6 +12,7 @@ from agent_comms.cli_bridges.codex_protocol import UserInput
 from agent_comms.cli_bridges.opencode_parts import Part
 from agent_comms.execution.native_startup import NativeStartupPolicy
 from agent_comms.execution.pi_events import PiEvent
+from agent_comms.execution.pi_vocabulary import CompactionReason, PiStopReason
 from agent_comms.execution.pi_wire import PiDiagnostic, PiPayload, UnknownPayload
 from agent_comms.execution.turn_output import TurnOutput
 from agent_comms.execution.turn_phase import (
@@ -46,7 +47,6 @@ from agent_comms.pi_payloads import (
     UnknownContent,
     UnknownData,
 )
-from agent_comms.pi_vocabulary import CompactionReason, PiStopReason
 
 
 class CapabilityRepresentation(DeclaredFamily, FieldRepresentation, affix="Representation"):
@@ -160,6 +160,12 @@ async def test_delta_siblings_share_progress_and_inherit_default_emission():
 
 
 def test_external_fields_use_their_declared_type_not_their_parent_or_field_name():
+    from agent_comms.execution.pi_vocabulary import (
+        CompactionReason,
+        OverflowCompactionReason,
+        PiStopReason,
+        StopStopReason,
+    )
     from agent_comms.pi_payloads import (
         AbsentMessage,
         MissingToolResult,
@@ -167,12 +173,6 @@ def test_external_fields_use_their_declared_type_not_their_parent_or_field_name(
         PiModel,
         PiToolResult,
         UnreportedModel,
-    )
-    from agent_comms.pi_vocabulary import (
-        CompactionReason,
-        OverflowCompactionReason,
-        PiStopReason,
-        StopStopReason,
     )
 
     @dataclass(frozen=True)

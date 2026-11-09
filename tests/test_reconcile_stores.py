@@ -27,12 +27,13 @@ from agent_comms.cli_verbs.cli_commands import PlannedStoresResult
 from agent_comms.cli_verbs.planned_reconcile import PlannedReconcileCliCommand
 from agent_comms.cli_verbs.read_back import ReadBackCliCommand
 from agent_comms.cli_verbs.reconcile_stores import ReconcileStoresCliCommand
-from agent_comms.cohort_schema import PrivateCoordinatorSchema
+from agent_comms.coordination.cohort_schema import PrivateCoordinatorSchema
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.session import CoordinationSession
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.execution.triage_native_sources import TriageNativeSource
 from agent_comms.installer.backup import StoreBackup, bus_files
 from agent_comms.installer.commands import InstallCommands
@@ -50,7 +51,6 @@ from agent_comms.messaging.messages import (
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, MessageId
 from agent_comms.planning.goal_attempts import GoalAttemptStore
 from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
-from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile, SQLiteFile
 from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier,

@@ -58,7 +58,7 @@ from agent_comms.storage.typed_table import (
     RetainsChildren,
     TextStorage,
 )
-from agent_comms.wake_candidate_index import ProjectionUnavailableError
+from agent_comms.waking.wake_candidate_index import ProjectionUnavailableError
 
 if TYPE_CHECKING:
     from agent_comms.coordination.tables.assignments import WakeAssignment

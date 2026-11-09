@@ -16,7 +16,6 @@ from agent_comms.execution.turn_phase import (
     ModelWaitPhase,
     ToolRunningPhase,
 )
-from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     ToolCallId,
@@ -28,6 +27,7 @@ from agent_comms.pi_payloads import (
 )
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.transcript.external_transcript import ExternalTranscript
 from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved
 from agent_comms.ui_model.sidebar import SidebarModel
 

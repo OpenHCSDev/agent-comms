@@ -8,16 +8,16 @@ from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.execution.native_input_proof import NativeContextProof
-from agent_comms.input_key import InputKey, InputKeyText, PublicInputKeyText
-from agent_comms.input_origin import (
+from agent_comms.execution.input_key import InputKey, InputKeyText, PublicInputKeyText
+from agent_comms.execution.input_origin import (
     InputDelivery,
     InputOrigin,
     InputProvenance,
     UnattributedInputOrigin,
     UndeliveredInput,
 )
-from agent_comms.lifecycle_capability import LifecycleCapability, Unresolved
+from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.execution.reported_turn import ReportedTurnState
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -32,11 +32,11 @@ from agent_comms.nominal.field_codec import (
     WireRequired,
     boundary_decoder,
 )
+from agent_comms.nominal.lifecycle_capability import LifecycleCapability, Unresolved
+from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.notification_evidence import ConsumptionEvidence
 from agent_comms.notification_progress import DeliveryProgress, ShownToModelProgress
 from agent_comms.registry.thread_identity import GenerationCounter, ThreadIncarnation
-from agent_comms.reported_turn import ReportedTurnState
-from agent_comms.text_digest import TextDigest
 
 if TYPE_CHECKING:
     from agent_comms.execution.turn_lease import TurnLeaseFence

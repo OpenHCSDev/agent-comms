@@ -7,6 +7,7 @@ from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
 )
+from agent_comms.execution.reported_turn import NoReportedTurn
 from agent_comms.execution.turn_lease import (
     ActiveTurn,
     FinishedTurn,
@@ -22,7 +23,6 @@ from agent_comms.registry.thread_identity import (
     TurnFence,
     TurnIdentity,
 )
-from agent_comms.reported_turn import NoReportedTurn
 
 
 @pytest.mark.parametrize('turn', [

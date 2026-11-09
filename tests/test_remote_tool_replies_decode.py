@@ -5,10 +5,10 @@ reply, and its composer stayed held as if the send had failed."""
 
 from agent_comms.cli_verbs.cli_commands import ThreadArchivedResult
 from agent_comms.messaging.channels import Channel
-from agent_comms.send_result import MessagePublished
-from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.tool_result import ToolResult
+from agent_comms.messaging.send_result import MessagePublished
+from agent_comms.transport.tool_declaration import ToolDeclaration
 from agent_comms.transport.tool_request import HumanToolRequest, PublishingToolRequest
+from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools.orders import (
     CommsBoardTool,
     TeamBoard,

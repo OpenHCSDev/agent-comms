@@ -10,6 +10,7 @@ from agent_comms.cli_bridges.shared import UnobservedBridge
 from agent_comms.cli_verbs.cli_commands import BusReadBack
 from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.errors import RelationViolationError, ThreadNotStoppedError
+from agent_comms.execution.root_runtime import RootRuntimeStore
 from agent_comms.host_services import RestartedService
 from agent_comms.installer.backup import BackupReport, RestoreSpace
 from agent_comms.installer.commands import InstallCommands
@@ -56,7 +57,6 @@ from agent_comms.registry.thread_identity import (
     UserThreadRole,
 )
 from agent_comms.registry.threads import ExternalThread, NativeThread, ServiceThread
-from agent_comms.root_runtime import RootRuntimeStore
 from cli_command import core
 from conftest import declare_test_bus
 from source_revision_fixture import SourceRepository

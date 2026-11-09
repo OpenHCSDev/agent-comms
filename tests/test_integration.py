@@ -22,17 +22,6 @@ from nominal_refactor_advisor import audit
 from agent_comms import integration
 from agent_comms.errors import TodoError
 from agent_comms.execution.test_lease import TestLease
-from agent_comms.head_review import (
-    BaseSide,
-    CombinedInput,
-    HeadReview,
-    HeadSide,
-    IntegrationInput,
-    MergeHeadReview,
-    PromotedHeadReview,
-    PullRequestHead,
-    ResolvedIntegrationSource,
-)
 from agent_comms.installer.runtime_resolution import PrivateUvProject, StackSources
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.goal_actions import CreateProblemGoalAction
@@ -50,12 +39,23 @@ from agent_comms.projects.git_errors import (
     GitCommandError,
     UnavailableCommitError,
 )
+from agent_comms.projects.head_review import (
+    BaseSide,
+    CombinedInput,
+    HeadReview,
+    HeadSide,
+    IntegrationInput,
+    MergeHeadReview,
+    PromotedHeadReview,
+    PullRequestHead,
+    ResolvedIntegrationSource,
+)
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.order import Team
-from agent_comms.tool_caller import PeerCaller
-from agent_comms.tool_denial import StorageDenied
+from agent_comms.transport.tool_caller import PeerCaller
+from agent_comms.transport.tool_denial import StorageDenied
 from agent_comms.transport.tools.orders import CommsTodoCreateTool
 from agent_comms_hooks import ToolRefusedError
 from fixture_git import ENVIRONMENT, SETTINGS

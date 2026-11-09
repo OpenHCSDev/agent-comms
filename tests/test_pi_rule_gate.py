@@ -17,6 +17,7 @@ from agent_comms.execution.selected.tool_broker import (
     SelectedToolRequest,
     SelectedWriteArguments,
 )
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 from agent_comms.pi_rule_gate import PiRedeal, RulesUnread
@@ -41,7 +42,6 @@ from agent_comms.rule_deal import (
     Unmeant,
     Unread,
 )
-from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.task_attachments.owner_notices import MeantNotice, RestartNotice
 from agent_comms.team.package import TeamPackage
 from agent_comms.transport.native_tool_call import CodingCall

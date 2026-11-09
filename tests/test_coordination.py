@@ -10,7 +10,7 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
-from agent_comms.assignment_states import (
+from agent_comms.coordination.assignment_states import (
     CompletedAssignment,
     EngagedAssignment,
 )
@@ -73,7 +73,7 @@ from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, SnapshotExclude
 from agent_comms.storage.store_files import StoreBusy
 from agent_comms.storage.typed_table import HeldBusFile, JsonStorage
-from agent_comms.wake_policy import FullWake
+from agent_comms.waking.wake_policy import FullWake
 from bus_record_fixture import (
     OWNER_LOOKUP,
     RECIPIENT_LOOKUP,

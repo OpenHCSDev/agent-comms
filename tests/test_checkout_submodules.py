@@ -11,7 +11,6 @@ import pytest
 
 import fixture_git
 from agent_comms.bus import Bus
-from agent_comms.change_report import FileLine
 from agent_comms.cli_verbs.cli_commands import OrderCheckoutGrant
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
@@ -23,6 +22,7 @@ from agent_comms.planning.orders import (
     TodoConflict,
     WithdrawTodo,
 )
+from agent_comms.projects.change_report import FileLine
 from agent_comms.projects.checkouts import (
     Checkout,
     CheckoutHoldsWorkError,
@@ -36,12 +36,12 @@ from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import StorageRule
-from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_creation import RecordedCreationTime
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.tool_denial import StorageDenied
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.transport.tool_denial import StorageDenied
 from cli_command import core, core_process
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository

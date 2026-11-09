@@ -11,7 +11,7 @@ from acp.schema import TextContentBlock
 
 import agent_comms.agent_events as events
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from bus_history import read_history

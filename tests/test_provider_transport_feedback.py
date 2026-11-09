@@ -16,6 +16,7 @@ from agent_comms.execution.acp_failure import (
 )
 from agent_comms.execution.pi_events import MessageEnd
 from agent_comms.execution.pi_rpc import PiRpcChannel
+from agent_comms.execution.pi_vocabulary import ErrorStopReason
 from agent_comms.execution.turn_failure import (
     ModelRequestFailed,
     ProviderTransportFailed,
@@ -30,7 +31,6 @@ from agent_comms.pi_payloads import (
     RequestBytes,
     UnrecognizedTransportStage,
 )
-from agent_comms.pi_vocabulary import ErrorStopReason
 
 FIXTURE = Path(__file__).with_name("fixtures") / "native_provider_transport_1011.json"
 

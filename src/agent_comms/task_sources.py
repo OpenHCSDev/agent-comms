@@ -13,8 +13,8 @@ from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.projection_source import ProjectionSource
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, TurnId, WireOmitDefault
-from agent_comms.owner_requests import OwnerRequestId, RequestDirective
 from agent_comms.planning.goals import GoalDeclaration, GoalRevision
+from agent_comms.planning.owner_requests import OwnerRequestId, RequestDirective
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import (
     RecordedThreadIncarnation,
@@ -23,7 +23,7 @@ from agent_comms.registry.thread_identity import (
     UserThreadRole,
 )
 from agent_comms.ui_model.message_category import MessageCategory
-from agent_comms.working_memory_requests import AnnotationBudgetExhausted
+from agent_comms.working_memory.working_memory_requests import AnnotationBudgetExhausted
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -37,11 +37,11 @@ if TYPE_CHECKING:
     from agent_comms.input_attempt import StoredInput
     from agent_comms.input_disposition import InputDispositions
     from agent_comms.messaging.messages import Message
+    from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
     from agent_comms.planning.goal_management import Goals
     from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.registry.registry_provenance import RegistryProvenance
     from agent_comms.registry.threads import Thread
-    from agent_comms.registry_provenance import RegistryProvenance
-    from agent_comms.retained_task_facts import RetainedTaskFacts
     from agent_comms.storage.typed_table import TypedTable
     from agent_comms.task_attachments.team_pings import TeamUpdate
 
@@ -302,7 +302,7 @@ class TaskAttachment(
         return ()
 
     def user_task_facts(self, message: Message):
-        from agent_comms.retained_task_facts import UserSourceTaskFact
+        from agent_comms.messaging.retained_task_facts import UserSourceTaskFact
 
         return (UserSourceTaskFact(message),)
 
@@ -366,7 +366,7 @@ class UserTaskSupersession(TaskAttachment, declared_name="user_supersession"):
         previous.require_user_revision(sender, registry)
 
     def user_task_facts(self, message: Message):
-        from agent_comms.retained_task_facts import UserTaskCorrectionFact
+        from agent_comms.messaging.retained_task_facts import UserTaskCorrectionFact
 
         return (UserTaskCorrectionFact(message),)
 
@@ -517,7 +517,7 @@ class Subtask(ModelTaskDeclaration):
         return super().applies(owner, registry) and self.turn_scope_matches(owner, registry)
 
     def retained_task_facts(self, message: Message):
-        from agent_comms.retained_task_facts import SubtaskTaskFact
+        from agent_comms.messaging.retained_task_facts import SubtaskTaskFact
 
         return (SubtaskTaskFact(message),)
 
@@ -599,7 +599,7 @@ class HumanConstraintPin(ScopedTaskDeclaration):
             raise RelationViolationError("USER pin recipient did not receive its original message")
 
     def user_task_facts(self, message: Message):
-        from agent_comms.retained_task_facts import HumanConstraintTaskFact
+        from agent_comms.messaging.retained_task_facts import HumanConstraintTaskFact
 
         return (HumanConstraintTaskFact(message),)
 
@@ -662,7 +662,7 @@ class Decision(ModelTaskDeclaration, declared_name="choice"):
         return original.require_decision()
 
     def retained_task_facts(self, message: Message):
-        from agent_comms.retained_task_facts import DecisionTaskFact
+        from agent_comms.messaging.retained_task_facts import DecisionTaskFact
 
         return (DecisionTaskFact(message),)
 
@@ -692,13 +692,13 @@ class Constraint(ModelTaskDeclaration):
         return original.task.require_constraint()
 
     def retained_task_facts(self, message: Message):
-        from agent_comms.retained_task_facts import ConstraintTaskFact
+        from agent_comms.messaging.retained_task_facts import ConstraintTaskFact
 
         return (ConstraintTaskFact(message),)
 
 
 from agent_comms.execution.turn_context import ContextSegment
-from agent_comms.working_memory_labels import ClassifierVersion, JevClassifier
+from agent_comms.working_memory.working_memory_labels import ClassifierVersion, JevClassifier
 
 
 @dataclass(frozen=True, kw_only=True)

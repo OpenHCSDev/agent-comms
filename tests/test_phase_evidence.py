@@ -8,8 +8,7 @@ import pytest
 from nominal_refactor_advisor.audit.findings import GodFunction
 
 import fixture_git
-from agent_comms.nominal_census import NominalCensus
-from agent_comms.plan_reading import PlanReading
+from agent_comms.planning.nominal_census import NominalCensus
 from agent_comms.planning.phase_artifacts import RecordedArtifact
 from agent_comms.planning.phase_evidence import (
     AllEvidence,
@@ -44,9 +43,10 @@ from agent_comms.planning.plan_phases import (
     PlanPhase,
     RostersPhase,
 )
+from agent_comms.planning.plan_reading import PlanReading
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
-from agent_comms.work_branches import WorkBranches
+from agent_comms.projects.work_branches import WorkBranches
 
 git = fixture_git.run
 
@@ -135,9 +135,9 @@ def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry
         ("src/remaining.py", "class Backend:\n    serves_threads = True\n"),
         ("src/remaining.py", "class Backend:\n    serves_new_threads: ClassVar[bool] = True\n"),
         ("src/agent_comms/installer/probes/carry.py", "class Carry:\n    declared: ClassVar[dict] = {}\n"),
-        ("src/agent_comms/private_registry_guard.py", "class RegistryPrivacy:\n    kinds = {}\n"),
+        ("src/agent_comms/registry/private_registry_guard.py", "class RegistryPrivacy:\n    kinds = {}\n"),
         ("src/agent_comms/registry/thread_identity.py", "class BirthlessIncarnation:\n    members = {}\n"),
-        ("src/agent_comms/tool_calls.py", "class CliToolArguments:\n    types = {}\n"),
+        ("src/agent_comms/cli_bridges/tool_calls.py", "class CliToolArguments:\n    types = {}\n"),
         ("src/agent_comms/execution/pi_events.py", "class PiEvent:\n    _start_phases = {}\n"),
         ("src/agent_comms/execution/pi_events.py", "class PiEvent:\n    _end_events = {}\n"),
     ):

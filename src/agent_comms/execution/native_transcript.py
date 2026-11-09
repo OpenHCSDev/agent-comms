@@ -36,8 +36,8 @@ from agent_comms.execution.transcript_sources import TranscriptRecord, Transcrip
 from agent_comms.execution.turn_item import FreshNativeId, NativeItemId
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import MalformedRecord
-from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.storage.private_path import FileIdentity, FileRevision, MissingFile
+from agent_comms.storage.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 
 if TYPE_CHECKING:
     from agent_comms.execution.native_output import NativeRecordLocation

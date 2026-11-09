@@ -13,8 +13,6 @@ from typing import Annotated, NoReturn
 
 import pytest
 
-from agent_comms.bus_publication import HumanOrigin
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
@@ -23,12 +21,14 @@ from agent_comms.errors import (
     RelationViolationError,
     UnregisteredThreadError,
 )
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.messaging.bus_publication import HumanOrigin
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import InfoKind, Message
+from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.nominal.field_codec import PathText
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.registry.thread_identity import (
     RecordedThreadIncarnation,
     UserThreadRole,
@@ -142,8 +142,8 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     )
     # The actual publisher, candidate scan and foreground acceptor must all wake Bob,
     # while Alice is the direct addressee and Bob may contribute if relevant.
-    from agent_comms.wake_candidate_index import WakeCandidateIndex
-    from agent_comms.wake_policy import BoundedTriageWake, FullWake
+    from agent_comms.waking.wake_candidate_index import WakeCandidateIndex
+    from agent_comms.waking.wake_policy import BoundedTriageWake, FullWake
 
     expected = {"alice": FullWake, "bob": BoundedTriageWake}
     for name, mode in expected.items():

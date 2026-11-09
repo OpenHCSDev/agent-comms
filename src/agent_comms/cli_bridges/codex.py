@@ -45,9 +45,9 @@ from agent_comms.cli_bridges.shared import (
 )
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.messaging.messages import Message
+from agent_comms.messaging.send_result import SendResult
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import UnreportedTools
-from agent_comms.send_result import SendResult
 
 
 @dataclass

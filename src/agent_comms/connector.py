@@ -44,11 +44,11 @@ from aiohttp.typedefs import Handler
 from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRoute
 from yarl import URL
 
-from agent_comms.active_route import CommsRoute, resolve_comms_route
 from agent_comms.cli_bridges.claude_transcript import WATCH_REPLACED
-from agent_comms.closed_pull_requests import ClosedPullRequestWatch
+from agent_comms.cli_bridges.inbox_watch import InboxWatch, OpenWatch, WatchRoute, WatchTickets
+from agent_comms.cli_bridges.open_viewer import OpenObservation, OpenViewer
+from agent_comms.cli_verbs.declared_verb import DeclaredVerb
 from agent_comms.comms import Comms, client_wire, wire
-from agent_comms.connector_caller import CALLER, ConnectorCaller, ConnectorTool, GrantRefusedError
 from agent_comms.connector_store import (
     CODE_SECONDS,
     ApprovalQueueFull,
@@ -67,7 +67,7 @@ from agent_comms.connector_store import (
     digest,
 )
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.declared_verb import DeclaredVerb
+from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.execution.child_process import (
     GitChildren,
     HelperStart,
@@ -75,13 +75,14 @@ from agent_comms.execution.child_process import (
     SpawnedHelper,
     join_retirement,
 )
+from agent_comms.execution.launch_root import started
 from agent_comms.execution.watch_passes import Watch
 from agent_comms.host_services import HostService
-from agent_comms.inbox_watch import InboxWatch, OpenWatch, WatchRoute, WatchTickets
-from agent_comms.launch_root import started
+from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
 from agent_comms.messaging.bus_identity import BusIdentityStore
 from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.messaging.messages import QuestionKind
+from agent_comms.messaging.send_result import MessagePublished
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     Argument,
@@ -92,20 +93,22 @@ from agent_comms.nominal.field_codec import (
     WireTransient,
     boundary_decoder,
 )
-from agent_comms.open_viewer import OpenObservation, OpenViewer
-from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from agent_comms.planning.command import Command
+from agent_comms.planning.owner_requests import NewestOpenRequest, RequestSelection
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.closed_pull_requests import ClosedPullRequestWatch
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.send_result import MessagePublished
 from agent_comms.served_endpoints import OfferedByTailnet, ServedEndpoints
-from agent_comms.service_passes import ServicePassStore
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.task_sources import OwnerRequestAttachment
 from agent_comms.team.standing import UnownedOrderWatch
-from agent_comms.team_heartbeat import TeamHeartbeat
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tool_result import ToolResult
+from agent_comms.team.team_heartbeat import TeamHeartbeat
+from agent_comms.transport.connector_caller import (
+    CALLER,
+    ConnectorCaller,
+    ConnectorTool,
+    GrantRefusedError,
+)
 from agent_comms.transport.connector_profile import (
     MCP_PATH,
     OBSERVE_PATH,
@@ -129,7 +132,9 @@ from agent_comms.transport.mcp import (
 )
 from agent_comms.transport.progress import CancellableWireExport, WireExportObserver
 from agent_comms.transport.request import tool_field
+from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tool_request import ConnectorService, NoConnectorService, ServedRequest
+from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools.orders import CommsHeadVerdictTool, HeadVerdictTool
 from agent_comms.transport.tools.send import CommsSendTool, SendTool
 from agent_comms.ui_model.observation import RelayConnection, relay_frames, serve_encoded

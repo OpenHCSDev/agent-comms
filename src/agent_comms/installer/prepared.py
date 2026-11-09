@@ -5,10 +5,10 @@ import signal
 import sys
 from dataclasses import dataclass
 
+from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.installer.bootstrap import BuiltRuntime, stopped
 from agent_comms.installer.launch import InstallRun
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.launch_root import LaunchRoot
 from agent_comms.nominal.field_codec import FieldCodec
 
 

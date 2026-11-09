@@ -19,7 +19,6 @@ from agent_comms.execution.turn_phase import (
     IdlePhase,
     ToolRunningPhase,
 )
-from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.planning.goal_actions import (
     EditGoalAction,
@@ -38,6 +37,7 @@ from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.storage.locked_store import GoalWakeFile, RegistryFile
+from agent_comms.transcript.external_transcript import ExternalTranscript
 from delivery_owner_fixture import canonical_agent
 from goal_owner_fixture import canonical_goal_wire
 

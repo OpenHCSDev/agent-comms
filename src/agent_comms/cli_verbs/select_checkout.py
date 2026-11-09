@@ -11,7 +11,7 @@ from agent_comms.cli_verbs.cli_commands import CheckoutResult
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize, PathText
 from agent_comms.projects.repository_name import RepositoryName
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tool_caller import ThreadCaller
 
 
 @dataclass(frozen=True, kw_only=True)

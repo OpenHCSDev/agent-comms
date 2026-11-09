@@ -6,8 +6,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.class_fact import ClassFact
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
+from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.storage.typed_table import TypedRow
 

@@ -9,16 +9,15 @@ from pathlib import Path
 import pytest
 
 import fixture_git
-from agent_comms.build_identity import (
+from agent_comms.comms import wire
+from agent_comms.execution.check_root import CheckRoot
+from agent_comms.installer.build_identity import (
     DeliveredCommitNotInstalledError,
     ProofBuildMismatchError,
     RecordedBuildIdentity,
     UninstalledRepositoryError,
     UnrecordedBuildIdentity,
 )
-from agent_comms.check_root import CheckRoot
-from agent_comms.comms import wire
-from agent_comms.held_orders import HeldOrders
 from agent_comms.installer.logs import InstallLogs
 from agent_comms.installer.probes.interpreter import RecordedInterpreterBuild
 from agent_comms.installer.probes.packages import (
@@ -36,6 +35,7 @@ from agent_comms.planning.goals import (
     CountCheckResult,
     OrderCheck,
 )
+from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.planning.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.planning.orders import (
     CheckedCommitDelivery,
@@ -51,27 +51,27 @@ from agent_comms.planning.orders import (
     Todo,
     UnmergedListedPullRequest,
 )
+from agent_comms.planning.progress_claims import WorkingClaim
 from agent_comms.planning.pull_requests import (
     MainDeliveryMerge,
     PullRequestCommit,
     PullRequestLink,
 )
-from agent_comms.progress_claims import WorkingClaim
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.projects.work_branches import WorkBranches
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.order import Team
 from agent_comms.team.standing import InstallDue
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.orders import (
     CommsOrderDoneTool,
     CommsProblemCloseTool,
     CommsTodoCreateTool,
 )
-from agent_comms.work_branches import WorkBranches
 from conftest import record_installed_runtime
 from github_fixture import GitHubFixture
 from order_scope_fixture import FIX_SCOPE

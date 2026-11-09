@@ -15,17 +15,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Never
 
-from agent_comms.lifecycle_capability import Complete, Executing, LifecycleCapability
 from agent_comms.nominal.field_codec import InputId, SlotId, ToolCallId
-from agent_comms.storage_room import NoRoomNeeded, RoomReservation
-from agent_comms.tool_denial import SelectedToolDenied
+from agent_comms.nominal.lifecycle_capability import Complete, Executing, LifecycleCapability
+from agent_comms.storage.storage_room import NoRoomNeeded, RoomReservation
+from agent_comms.transport.tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from agent_comms.envelope_claim_transitions import FileClaimPath
     from agent_comms.execution.turn_goal_permission import TurnGoalPermission
     from agent_comms.pi_payloads import PiToolResult
     from agent_comms.pi_rule_gate import PiRuleGate
-    from agent_comms.shell_effects import StorageEffect
+    from agent_comms.projects.shell_effects import StorageEffect
 
 
 class ToolNotExecuting(SelectedToolDenied):

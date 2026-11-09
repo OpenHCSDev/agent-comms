@@ -10,11 +10,11 @@ from typing import Annotated
 from agent_comms.comms import Comms
 from agent_comms.connector import ServeVerb
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.launch_root import LaunchRoot, started
+from agent_comms.execution.launch_root import LaunchRoot, started
 from agent_comms.nominal.field_codec import PathText
-from agent_comms.tool_caller import ToolCaller
-from agent_comms.tool_result import ToolResult
+from agent_comms.transport.tool_caller import ToolCaller
 from agent_comms.transport.tool_request import ReadTool, ServedRequest
+from agent_comms.transport.tool_result import ToolResult
 
 
 @dataclass(frozen=True)

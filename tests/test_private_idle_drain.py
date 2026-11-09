@@ -62,7 +62,7 @@ async def test_observation_waits_for_the_held_coordinator_snapshot(tmp_path):
 
 @pytest.mark.asyncio
 async def test_empty_delivery_recovery_does_not_wait_for_wire_writer(tmp_path):
-    from agent_comms.queued_input import DeliveredInput
+    from agent_comms.execution.queued_input import DeliveredInput
 
     comms, agent, root_id = _covered_session(tmp_path)
     entered, release = threading.Event(), threading.Event()

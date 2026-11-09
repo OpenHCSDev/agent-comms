@@ -48,7 +48,7 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, GitCommitText, boundary_decoder
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
-from agent_comms.work_branches import WorkBranches
+from agent_comms.projects.work_branches import WorkBranches
 
 if TYPE_CHECKING:
     from agent_comms.installer.runtime_stack import RuntimeStack

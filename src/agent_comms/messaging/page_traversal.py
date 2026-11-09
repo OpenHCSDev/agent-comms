@@ -19,7 +19,7 @@ from agent_comms.nominal.field_codec import (
     TaggedRecordMember,
     TaggedUnion,
 )
-from agent_comms.tool_result import ToolResult
+from agent_comms.transport.tool_result import ToolResult
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader

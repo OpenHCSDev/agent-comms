@@ -27,21 +27,21 @@ from agent_comms.execution.child_process import (
     NoProcess,
     SpawnedProcess,
 )
+from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
+from agent_comms.execution.pi_vocabulary import ThinkingLevelField
+from agent_comms.execution.restart_scope import OwnersNamed
+from agent_comms.execution.session_file import NoSessionFile
 from agent_comms.execution.turn_failure import BackendFailed, FailedTurnResolution
 from agent_comms.installer.native_package import MANIFEST
-from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId, TurnId, compile_decoder
-from agent_comms.owner_connection import socket_path
-from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.owner_release import NoRelease
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
-from agent_comms.restart_scope import OwnersNamed
-from agent_comms.session_file import NoSessionFile
+from agent_comms.transport.owner_connection import socket_path
 from delivery_owner_fixture import canonical_agent
 from native_backend_fixture import native_backend_fixture
 
@@ -69,7 +69,7 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
         await asyncio.sleep(0.02)
     assert (await Coordination.run_worker(partial(comms.owners.start_many, ("worker",))))[0].pid == owner.require_process().pid
     assert not owner.process_identity.runs_here()
-    from agent_comms.owner_cutover import PreserveOwnerRuntime
+    from agent_comms.execution.owner_cutover import PreserveOwnerRuntime
 
     assert owner.process_alive
     assert isinstance(comms.owners.releases.read_many(("worker",))["worker"], NoRelease)
@@ -115,8 +115,8 @@ async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_c
 
     from agent_comms.acp import CommsClient
     from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
-    from agent_comms.tool_caller import NoThreadCaller
     from agent_comms.transport.owner_requests import RetainedOwnerLaunch
+    from agent_comms.transport.tool_caller import NoThreadCaller
     from agent_comms.transport.tools.served import CommsResourcesTool
     from delivery_owner_fixture import FakeClient
     from native_backend_fixture import NativeBackendFixture
@@ -288,7 +288,7 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
 @pytest.mark.skipif(sys.platform != "linux", reason="Exact retained launch uses Linux /proc")
 async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, monkeypatch, native_workers):
     """One provider-free installed worker batch, with original distinct settings."""
-    from agent_comms.owner_cutover import PreserveOwnerRuntime
+    from agent_comms.execution.owner_cutover import PreserveOwnerRuntime
     from agent_comms.planning.goal_states import BlockedGoal
     from agent_comms.planning.goals import Goal
     from agent_comms.transport.owner_requests import RetainedOwnerLaunch

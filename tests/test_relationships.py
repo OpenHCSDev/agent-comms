@@ -53,7 +53,7 @@ def setup_wire(tmp_path):
 
 
 def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkeypatch):
-    from agent_comms.tool_caller import ThreadCaller
+    from agent_comms.transport.tool_caller import ThreadCaller
     comms = setup_wire(tmp_path)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     before = comms.registry.snapshot()
@@ -283,7 +283,7 @@ def test_live_alias_resolves_but_deleted_alias_does_not_erase_note(tmp_path, mon
         "owner", RelationshipEdit.member_named("add"), "peer", "Review before rename"
     )
     monkeypatch.setenv("AGENT_COMMS_THREAD", "peer")
-    from agent_comms.tool_caller import ThreadCaller
+    from agent_comms.transport.tool_caller import ThreadCaller
 
     comms.threads.rename_self("reviewer", caller=ThreadCaller("peer"))
     assert collaboration_rows(comms)[0].target == "reviewer"

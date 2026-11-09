@@ -25,10 +25,10 @@ from agent_comms.planning.goal_actions import (
     OwnerInvocable,
 )
 from agent_comms.planning.orders import OwnerRequest, Todo
-from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.owner_notices import (
     ChokeholdNotice,
     EscalationNotice,
@@ -46,8 +46,8 @@ from agent_comms.team.standing_rules import (
     Sign,
     UndatedStandingRule,
 )
-from agent_comms.team_service import TeamService
-from agent_comms.tool_result import ToolResult
+from agent_comms.team.team_service import TeamService
+from agent_comms.transport.tool_result import ToolResult
 from agent_comms.ui_model.teammate_state import TeammateState
 
 

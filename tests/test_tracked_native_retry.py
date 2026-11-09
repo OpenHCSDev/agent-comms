@@ -3,11 +3,13 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.execution.acp_failure import NoRetry
+from agent_comms.execution.input_key import TurnInputKey
 from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_pi import NativeEmptyAnswer, NativePiTerminalFailure
 from agent_comms.execution.native_startup import NativeStartupPolicy
 from agent_comms.execution.pi_events import NativeRetryEnd
+from agent_comms.execution.queued_input import AcceptedTurn
 from agent_comms.execution.tracked_turn import (
     CompletedTrackedTerminal,
     PendingTrackedTerminal,
@@ -34,10 +36,8 @@ from agent_comms.execution.turn_watchdog import (
     ProgressWatchdog,
 )
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_key import TurnInputKey
 from agent_comms.nominal.field_codec import InputId, TurnId
 from agent_comms.pi_payloads import FailedProviderRetry, PiMessage, SucceededProviderRetry
-from agent_comms.queued_input import AcceptedTurn
 
 
 def tracked_turn(output, terminal):

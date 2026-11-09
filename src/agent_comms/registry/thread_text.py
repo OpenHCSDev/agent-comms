@@ -13,7 +13,7 @@ from collections.abc import (
 from dataclasses import dataclass
 from typing import ClassVar
 
-from agent_comms.history_view import ForkOwnHistory, HistoryView, OwnHistory
+from agent_comms.execution.history_view import ForkOwnHistory, HistoryView, OwnHistory
 from agent_comms.nominal.field_codec import (
     NullMember,
     SingleFieldValue,

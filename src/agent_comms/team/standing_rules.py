@@ -30,40 +30,73 @@ from typing import (
 )
 
 from agent_comms.bus import BusReader
-from agent_comms.messaging.channel_targets import ThreadTarget
-from agent_comms.execution.child_process import ProcessIdentity, ResidentMemory
+from agent_comms.cli_verbs.declared_verb import DeclaredVerb
 from agent_comms.comms import Comms
-from agent_comms.declared_verb import DeclaredVerb
+from agent_comms.coordination.service_passes import FailingPass, ServicePasses, ServicePassStore
 from agent_comms.errors import RejectedEnforcementError, RelationViolationError
-from agent_comms.planning.goal_management import Goals
-from agent_comms.head_review import HeadReviewOrder, PullRequestHead
-from agent_comms.heartbeat_subjects import AnswerSubject, HeadSubject, HeartbeatSubject, TeammateSubject
-from agent_comms.held_orders import HeldOrders
+from agent_comms.execution.child_process import ProcessIdentity, ResidentMemory
+from agent_comms.execution.root_runtime import RootRuntimeStore
+from agent_comms.execution.turn_digests import (
+    LastTurns,
+    OrderEditCountRead,
+    RecentTurnsSince,
+    TurnDigestRead,
+)
+from agent_comms.heartbeat_subjects import (
+    AnswerSubject,
+    HeadSubject,
+    HeartbeatSubject,
+    TeammateSubject,
+)
+from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.declared_family import DeclaredFamily, RegisteredFamily
-from agent_comms.nominal.field_codec import DefaultExternalName, DefaultedName, FieldCodec, OrderId
-from agent_comms.owner_requests import OwnerRequestId, RequestDirective
+from agent_comms.nominal.field_codec import DefaultedName, DefaultExternalName, FieldCodec, OrderId
+from agent_comms.nominal.text_digest import TextDigest
+from agent_comms.planning.goal_management import Goals
+from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.orders import (
+    ClosedHeadReading,
+    EditWorkplaces,
+    HeadReviewRecord,
+    HeadVerdict,
+    OrderClaim,
+    OrderProgress,
+    OwnerRequest,
+    PresentCheckout,
+    ProgressRead,
+    ProgressSource,
+    PullRequest,
+    StoredClosedHead,
+    StoredHeadReview,
+    Todo,
+    TodoConflict,
+    TodoStore,
+)
+from agent_comms.planning.owner_requests import OwnerRequestId, RequestDirective
 from agent_comms.planning.plan_phases import PlanPhase
-from agent_comms.plan_reading import PlanReading, PlanReadings
-from agent_comms.planning.orders import ClosedHeadReading, EditWorkplaces, HeadReviewRecord, HeadVerdict, OrderClaim, OrderProgress, OwnerRequest, PresentCheckout, ProgressRead, ProgressSource, PullRequest, StoredClosedHead, StoredHeadReview, Todo, TodoConflict, TodoStore
+from agent_comms.planning.plan_reading import PlanReading, PlanReadings
 from agent_comms.planning.pull_requests import MergeBlock
-from agent_comms.recorded_time import EventTime, RecordedEventTime
-from agent_comms.registry.registry_document import RegisteredTeamProject, RegistrySnapshot
-from agent_comms.registry.threads import Thread
 from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
-from agent_comms.root_runtime import RootRuntimeStore
-from agent_comms.service_passes import FailingPass, ServicePassStore, ServicePasses
 from agent_comms.projects.storage_rules import MemoryUse, StorageRule, UnitStorage
-from agent_comms.task_attachments.owner_notices import OrderNotice
-from agent_comms.team_service import TeamService
-from agent_comms.text_digest import TextDigest
+from agent_comms.projects.work_branches import (
+    BranchDifference,
+    SourceGrowth,
+    UnparsedSource,
+    WorkBranchError,
+)
+from agent_comms.registry.registry_document import RegisteredTeamProject, RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.transcript_events import TurnDigest
-from agent_comms.execution.turn_digests import LastTurns, OrderEditCountRead, RecentTurnsSince, TurnDigestRead
-from agent_comms.work_branches import BranchDifference, SourceGrowth, UnparsedSource, WorkBranchError
+from agent_comms.registry.threads import Thread
+from agent_comms.storage.recorded_time import EventTime, RecordedEventTime
+from agent_comms.task_attachments.owner_notices import OrderNotice
+from agent_comms.team.team_service import TeamService
+from agent_comms.transcript.transcript_events import TurnDigest
+
 
 class TeammateEvidence(ABC):
     """The original holder facts consumed by standing-rule scans."""

@@ -14,12 +14,12 @@ from agent_comms.acp import SdkSessionConnection
 from agent_comms.agent_backend import NoInputStartListener
 from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.execution.child_process import (
     BoundedRun,
     join_retirement,
 )
 from agent_comms.execution.controller import NO_CONTROLLER, NoController
+from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.execution.fresh_private_session import create_fresh_private_session
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary, NativeArguments
 from agent_comms.execution.native_child import PiSessionChild

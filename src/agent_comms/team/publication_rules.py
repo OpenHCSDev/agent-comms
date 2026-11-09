@@ -6,12 +6,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Self
 
-from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_subjects import HeartbeatSubject, UnlandedHeadSubject
 from agent_comms.nominal.field_codec import PathText
 from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.projects.checkouts import UnpushedHead
+from agent_comms.projects.head_review import PullRequestHead
 from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.work_branches import CommitBase, WorkBranches
 from agent_comms.team.standing_rules import (
     DatedStandingRule,
     HeadLine,
@@ -19,7 +20,6 @@ from agent_comms.team.standing_rules import (
     HeldOrderBranchRule,
     UndatedStandingRule,
 )
-from agent_comms.work_branches import CommitBase, WorkBranches
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence

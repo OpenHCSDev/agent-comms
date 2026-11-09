@@ -1,0 +1,156 @@
+"""Core assigns checked work to its unit, then starts it through the native lifecycle.
+
+A phase declares an existing PendingProblemOrder, not a second task format. Work
+without that declaration stays visible; readiness is not permission to invent an
+acceptance check. Failed startup state stays retained for explicit disposition.
+"""
+
+from __future__ import annotations
+
+import math
+import time
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, Self
+
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.planning.goal_actions import (
+    CreateProblemGoalAction,
+    GoalActionContext,
+    OrderGoalAction,
+    ProblemOrderGoalAction,
+)
+from agent_comms.planning.orders import PendingProblemOrder
+from agent_comms.planning.owner_requests import NewestOpenRequest
+from agent_comms.planning.phase_tasks import PhaseTask
+from agent_comms.projects.checkouts import Checkout, CheckoutStart
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.repository_sources import LocalRepositorySource
+from agent_comms.projects.shell_effects import (
+    AcquireRepositoryStorageEffect,
+    CreateCheckoutStorageEffect,
+)
+from agent_comms.projects.storage_projection import StorageProjection
+from agent_comms.registry.native_settings import NativeThreadDefaults
+from agent_comms.registry.thread_status import StoppedThreadStatus
+from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.storage.recorded_time import RecordedEventTime
+
+if TYPE_CHECKING:
+    from agent_comms.comms import Comms
+    from agent_comms.planning.plan_phases import PlanPhase
+    from agent_comms.planning.plan_reading import PlanReading
+
+
+@dataclass(frozen=True)
+class WorkDispatch:
+    """Allocate a unit, assign its checked native order, then start it."""
+
+    action: ProblemOrderGoalAction
+    revision: int
+
+    @property
+    def name(self) -> str:
+        return f"unit-{self.action.problem.lower()}-r{self.revision}"
+
+    def publish(self, comms: Comms, child: Thread) -> Thread:
+        """Assign the native order before its unit can begin work."""
+        comms.goals.update_goal(child.name, self.action)
+        return comms.registry.require(child.name)
+
+    def start(self, comms: Comms) -> Thread:
+        defaults = NativeThreadDefaults()
+        # A concurrent rotation contends on one checkout. Never adopt a partial attempt.
+        name = self.name
+        storage = comms.registry.storage_rule
+        checkout = storage.order_checkout(storage.initial_roots(name), self.action.problem)
+        candidate = NativeThread(
+            name,
+            frozenset(),
+            Checkout(checkout),
+            model=defaults.model,
+            thinking_level=defaults.thinking_level,
+        )
+        self.action.require_ready(GoalActionContext(comms.goals, candidate))
+        comms.registry.require_declaration_available(candidate, StoppedThreadStatus())
+        repository = Repo.of(self.action.order.check.directory)
+        source = LocalRepositorySource(repository)
+        projection = StorageProjection(storage, candidate, comms)
+        AcquireRepositoryStorageEffect(checkout, source).check(projection)
+        Repo.git(repository.checkout, "fetch", "origin", "main")
+        start = CheckoutStart.of(repository.checkout, f"auto/{name}", "origin/main")
+        CreateCheckoutStorageEffect(checkout, source, start).check(projection)
+        Checkout.add(repository.checkout, checkout, start)
+        location = candidate.runtime.new_location(comms.root, checkout)
+        child = comms.registry.declare(
+            replace(
+                candidate,
+                session_file=RegistrySessionLocation.from_path(location.read_key, comms.root),
+            ),
+            StoppedThreadStatus(),
+        )
+        # A failed publication leaves a stopped unit and its checkout, not an
+        # untracked running task. A failed/uncertain start never releases its order.
+        self.publish(comms, child)
+        comms.owners.start_many((child.name,))
+        return comms.registry.require(child.name)
+
+
+@dataclass(frozen=True)
+class ReusedWorkDispatch(WorkDispatch):
+    """Publish to an existing unit without allocating or starting another process."""
+
+    unit: Thread
+
+    @classmethod
+    def for_teammate(cls, action: OrderGoalAction, unit: Thread) -> Self:
+        bound = replace(
+            action,
+            expect=replace(action.expect, expected_checkpoint=unit.goal.captured),
+        )
+        return cls(bound, action.expected_revision, unit)
+
+    @property
+    def name(self) -> str:
+        return self.unit.name
+
+    def start(self, comms: Comms) -> Thread:
+        return self.publish(comms, comms.registry.require(self.name))
+
+
+@dataclass(frozen=True)
+class CheckedPhaseTask(PhaseTask):
+    """An explicitly authored task; its order owns source, check, edits and run."""
+
+    problem: str
+    repo: RepositoryName
+    text: str
+    order: PendingProblemOrder
+    review_seconds: float
+    instruction = "Core assigns the declared checked task to a teammate and starts it"
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.review_seconds) or self.review_seconds <= 0:
+            raise ValueError("A phase task needs a finite positive review interval.")
+
+    def start(
+        self, comms: Comms, assigner: Thread, phase: type[PlanPhase], reading: PlanReading
+    ) -> None:
+        if not phase.ready(reading) or phase.ordered(reading):
+            return
+        # This task's existing row belongs to UnownedWheelSpin. Other phase subtasks
+        # neither supply this task's check nor replace its explicit identity.
+        if any(todo.id == self.problem for todo in reading.todos):
+            return
+        now = time.time()
+        order = replace(self.order.reissued(now), serves=phase)
+        action = CreateProblemGoalAction(
+            problem=self.problem,
+            repo=self.repo,
+            text=self.text,
+            order=order,
+            request=NewestOpenRequest().for_order(comms.goals.todos, assigner.acting_identity),
+            assigner=assigner.incarnation,
+            review_at=RecordedEventTime(now + self.review_seconds),
+        )
+        WorkDispatch(action, revision=0).start(comms)

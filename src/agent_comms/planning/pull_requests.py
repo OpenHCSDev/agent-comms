@@ -11,12 +11,12 @@ from typing import (
     Self,
 )
 
-from agent_comms.change_report import FetchedRevision
 from agent_comms.errors import TodoError
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.projects.change_report import FetchedRevision
 from agent_comms.projects.repository_name import RepositoryName
-from agent_comms.work_branches import PageInfo, WorkBranches
+from agent_comms.projects.work_branches import PageInfo, WorkBranches
 
 
 @dataclass(frozen=True)

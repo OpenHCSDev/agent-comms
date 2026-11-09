@@ -13,8 +13,8 @@ from agent_comms.execution.transcript_routes import (
     TranscriptRoutes,
 )
 from agent_comms.execution.turn_item import FreshNativeId
-from agent_comms.routing import MessageRoute, TurnRouting
-from agent_comms.text_digest import TextDigest
+from agent_comms.messaging.routing import MessageRoute, TurnRouting
+from agent_comms.nominal.text_digest import TextDigest
 from bus_record_fixture import INPUT_ID
 
 

@@ -6,9 +6,9 @@ from multiprocessing import Pipe
 from multiprocessing.connection import Connection
 from pathlib import Path
 
-from agent_comms.bus_publication import Delivered
 from agent_comms.comms import Comms
 from agent_comms.coordination.database import CoordinationStore
+from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.notification_evidence import RecipientLimit

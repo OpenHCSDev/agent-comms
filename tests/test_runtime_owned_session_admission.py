@@ -16,12 +16,12 @@ from agent_comms.comms import wire
 from agent_comms.coordination.errors import Refused
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
-from agent_comms.owner_connection import socket_path
-from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.private_path import PrivateSocketRole
+from agent_comms.transport.owner_connection import socket_path
 from agent_comms.transport.runtime_requests import GoalHistoryRuntimeRequest
 from served_requests import served
 
@@ -151,7 +151,7 @@ def test_a_captured_owner_binds_only_its_birth_after_its_name_is_reused_in_proce
     """The owner a caller checked is the owner the request binds: a same-process replacement
     under the same name is refused at bind, and a rename of the captured owner still binds."""
     from agent_comms.errors import RelationViolationError
-    from agent_comms.owner_connection import AnyOwner, CapturedOwner
+    from agent_comms.transport.owner_connection import AnyOwner, CapturedOwner
 
     comms = wire(tmp_path / "wire")
     project = tmp_path / "project"

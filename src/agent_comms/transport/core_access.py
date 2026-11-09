@@ -12,10 +12,10 @@ from dataclasses import dataclass
 from typing import cast
 
 from agent_comms.comms import Comms
-from agent_comms.tool_caller import HumanCaller
-from agent_comms.tool_result import ToolResult
 from agent_comms.transport.request import CoreAccess, ToolRequest
+from agent_comms.transport.tool_caller import HumanCaller
 from agent_comms.transport.tool_request import ServedRequest
+from agent_comms.transport.tool_result import ToolResult
 
 
 @dataclass(frozen=True)

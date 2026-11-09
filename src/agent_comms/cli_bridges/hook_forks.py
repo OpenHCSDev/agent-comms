@@ -9,7 +9,7 @@ from agent_comms.cli_bridges.shared import Binding
 from agent_comms.comms import Comms
 from agent_comms.execution.turn_phase import ModelWaitPhase, TurnPhase
 from agent_comms.registry.threads import Thread
-from agent_comms.tool_caller import ForkCaller, ForkRecordOwed
+from agent_comms.transport.tool_caller import ForkCaller, ForkRecordOwed
 from agent_comms_hooks import ClaudeSubagentHook, ClaudeTranscriptHook, SubagentId, ToolRefusedError
 
 

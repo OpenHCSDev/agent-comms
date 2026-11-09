@@ -33,6 +33,13 @@ from agent_comms.execution.native_session_reopen import (
     NoSessionRetention,
     PiSessionId,
 )
+from agent_comms.execution.pi_vocabulary import (
+    NoThinkingOverride,
+    PiStopReason,
+    ThinkingLevel,
+    ThinkingLevelField,
+    UnreportedStopReason,
+)
 from agent_comms.execution.pi_wire import (
     McpCallPolicy,
     McpServerState,
@@ -48,6 +55,7 @@ from agent_comms.execution.pi_wire import (
     TaggedPayload,
     UnknownPayload,
 )
+from agent_comms.execution.tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from agent_comms.execution.turn_context import (
     ContextTurn,
     MeasuredNativeSegment,
@@ -58,7 +66,7 @@ from agent_comms.execution.turn_context import (
 )
 from agent_comms.execution.turn_failure import ModelRequestFailed, ProviderTransportFailed
 from agent_comms.execution.turn_item import CompactionChargeId, ProviderResponseId, UsageChargeId
-from agent_comms.lifecycle_capability import Successful
+from agent_comms.messaging.send_result import CorrectionResult, CorrectionUnreported
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     ExternalNull,
@@ -77,23 +85,13 @@ from agent_comms.nominal.field_codec import (
     WireRequired,
     WireValue,
 )
+from agent_comms.nominal.lifecycle_capability import Successful
 from agent_comms.pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
-from agent_comms.pi_vocabulary import (
-    NoThinkingOverride,
-    PiStopReason,
-    ThinkingLevel,
-    ThinkingLevelField,
-    UnreportedStopReason,
-)
 from agent_comms.planning.goals import GoalDeclaration
-from agent_comms.recorded_time import EventMilliseconds, EventTime, UnrecordedEventTime
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
-from agent_comms.send_result import CorrectionResult, CorrectionUnreported
-from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.tool_result import DeclaredReply
-from agent_comms.tool_results import NoSentMessage, NoToolDiff, ToolDiff
-from agent_comms.transcript_events import (
+from agent_comms.storage.recorded_time import EventMilliseconds, EventTime, UnrecordedEventTime
+from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
     SentTranscript,
@@ -103,6 +101,8 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
+from agent_comms.transport.tool_declaration import ToolDeclaration
+from agent_comms.transport.tool_result import DeclaredReply
 
 
 @dataclass(frozen=True)
@@ -173,7 +173,7 @@ if TYPE_CHECKING:
     from agent_comms.execution.transcript_routes import SentTextDigest
     from agent_comms.execution.turn_goal_permission import TurnGoalPermission
     from agent_comms.execution.turn_phase import TurnPhase
-    from agent_comms.routing import Routing
+    from agent_comms.messaging.routing import Routing
 
 
 # A Pi payload field is omitted from the wire while it holds its default.

@@ -20,7 +20,9 @@ from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
+from agent_comms.execution.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.installer.backup import StoreBackup, bus_files
 from agent_comms.installer.carry import STEPS, CarryChain, FinishedCarryStore
 from agent_comms.installer.commands import InstallCommands
@@ -45,13 +47,11 @@ from agent_comms.installer.upgrade import (
     UnchangedRehearsal,
     carried,
 )
-from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_status import RunningThreadStatus
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.storage.maintenance_barrier import (
     DrainingPhase,

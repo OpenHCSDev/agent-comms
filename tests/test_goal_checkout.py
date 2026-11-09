@@ -22,12 +22,12 @@ from agent_comms.projects.repository_sources import (
     GitHubRepositorySource,
     RepositorySource,
 )
+from agent_comms.projects.shell_effects import AcquireRepositoryStorageEffect
 from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.thread_creation import RecordedCreationTime
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
-from agent_comms.shell_effects import AcquireRepositoryStorageEffect
-from agent_comms.tool_denial import StorageDenied
+from agent_comms.transport.tool_denial import StorageDenied
 from cli_command import core_process
 from source_revision_fixture import SourceRepository
 

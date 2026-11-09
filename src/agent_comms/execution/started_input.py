@@ -6,8 +6,8 @@ from functools import partial
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.nominal.field_codec import AcpSessionId
+from agent_comms.nominal.lifecycle_capability import Unresolved
 
 if TYPE_CHECKING:
     from agent_comms.acp_extension import InputStartedUpdate, QueueScope

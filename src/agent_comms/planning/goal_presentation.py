@@ -18,9 +18,9 @@ from typing import (
     Self,
 )
 
-from agent_comms.lifecycle_capability import Active
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import GoalId, NullMember, WireValue
+from agent_comms.nominal.lifecycle_capability import Active
 from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
 from agent_comms.planning.goal_states import PauseSource
 from agent_comms.planning.goals import Goal, GoalCheckpoint, GoalDeclaration
@@ -28,7 +28,7 @@ from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
-    from agent_comms.bus_publication import Delivered
+    from agent_comms.messaging.bus_publication import Delivered
     from agent_comms.planning.goal_actions import GoalAction
 
 

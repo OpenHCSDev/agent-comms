@@ -4,8 +4,8 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from agent_comms.class_fact import ClassFact
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
+from agent_comms.nominal.class_fact import ClassFact
 
 _NAME = r"[A-Za-z0-9_-]"
 

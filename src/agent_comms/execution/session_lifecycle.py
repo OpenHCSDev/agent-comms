@@ -37,10 +37,12 @@ from agent_comms.coordination.errors import Refused
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, join_retirement
 from agent_comms.execution.controller import NO_CONTROLLER, NoController
+from agent_comms.execution.input_key import InputKey, InputKeyText
+from agent_comms.execution.owner_protocol import IncompatibleOwner, IncompatibleOwnerError
+from agent_comms.execution.runtime import RuntimeProxy
 from agent_comms.execution.session_config_options import SessionConfigOptions
 from agent_comms.execution.session_effects import SessionEffects
 from agent_comms.execution.turn_input_source import NoTurnAcceptance
-from agent_comms.input_key import InputKey, InputKeyText
 from agent_comms.launch_runtime import ThreadLaunch
 from agent_comms.nominal.field_codec import (
     AcpSessionId,
@@ -48,7 +50,6 @@ from agent_comms.nominal.field_codec import (
     MalformedRecord,
     boundary_decoder,
 )
-from agent_comms.owner_protocol import IncompatibleOwner, IncompatibleOwnerError
 from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import RegistryEntry
@@ -67,14 +68,13 @@ from agent_comms.registry.thread_presentation import (
 from agent_comms.registry.thread_status import ActiveThreadPresence
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.runtime import RuntimeProxy
-from agent_comms.runtime_server import RuntimeServer
-from agent_comms.transcript_updates import TranscriptReplay
+from agent_comms.transcript.transcript_updates import TranscriptReplay
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.transport.runtime_requests import (
     FreshSubscribeRuntimeRequest,
     SubscribeRuntimeRequest,
 )
+from agent_comms.transport.runtime_server import RuntimeServer
 
 if TYPE_CHECKING:
     from agent_comms.acp import SdkSessionConnection

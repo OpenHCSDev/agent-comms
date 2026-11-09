@@ -64,6 +64,7 @@ from agent_comms.cli_bridges.shared import (
     TranscriptConfirmsDelivery,
     WireReference,
 )
+from agent_comms.cli_bridges.tool_calls import CliToolArguments, ToolCall
 from agent_comms.cli_bridges.wire_models import WireModel
 from agent_comms.execution.turn_item import (
     NamedSourceTurn,
@@ -80,13 +81,11 @@ from agent_comms.nominal.field_codec import (
     TranscriptRecordId,
 )
 from agent_comms.pi_counts import PiCount, PiCountWire
-from agent_comms.recorded_time import EventTime
 from agent_comms.registry.thread_identity import OfferedTools, ToolName, UnobservedTools
 from agent_comms.registry.thread_model import ThreadModel
 from agent_comms.registry.thread_text import ThreadText
-from agent_comms.tool_calls import CliToolArguments, ToolCall
-from agent_comms.tool_declaration import ContextRows, one_line
-from agent_comms.transcript_events import (
+from agent_comms.storage.recorded_time import EventTime
+from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     NarrationTranscript,
     NoticeTranscript,
@@ -94,6 +93,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
+from agent_comms.transport.tool_declaration import ContextRows, one_line
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.shared import MonitorAttachment

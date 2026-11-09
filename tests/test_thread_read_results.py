@@ -73,7 +73,7 @@ def test_changed_interest_retains_one_results_mapping_and_starts_empty():
 def test_assignment_row_changes_attribute_only_their_view(
     private_directory, changed_name, expected,
 ):
-    from agent_comms.assignment_states import DeferredAssignment
+    from agent_comms.coordination.assignment_states import DeferredAssignment
     from agent_comms.coordination.cohort import sealed_cohort_assignments
     from agent_comms.coordination.coordinator import Coordination
     from agent_comms.messaging.notification_reads import LiveNotificationRead
@@ -175,7 +175,10 @@ ACQUIRED_EVIDENCE = {
 def test_thread_reading_keeps_acquired_evidence_and_publishes_its_projection(private_directory):
     import pickle
 
-    from agent_comms.transcripts import AcquiredThreadPresentation, NotifiedThreadPresentation
+    from agent_comms.transcript.transcripts import (
+        AcquiredThreadPresentation,
+        NotifiedThreadPresentation,
+    )
     from conftest import publish_initial
     from test_coordinated_runtime import _root
 

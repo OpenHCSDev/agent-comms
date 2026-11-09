@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from agent_comms.assignment_states import EngagedAssignment
+from agent_comms.coordination.assignment_states import EngagedAssignment
 from agent_comms.coordination.errors import IdentityConflict, StaleRevision
 from agent_comms.coordination.execution_states import (
     FailedExecution,

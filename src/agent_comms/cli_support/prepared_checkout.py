@@ -14,7 +14,7 @@ from agent_comms.projects.checkouts import RepositoryReads
 from agent_comms.projects.repository_sources import RepositorySource
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.threads import Thread
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tool_caller import ThreadCaller
 
 
 @dataclass(frozen=True, kw_only=True)

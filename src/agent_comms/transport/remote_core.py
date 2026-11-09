@@ -20,7 +20,6 @@ from yarl import URL
 
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.nominal.field_codec import FieldCodec, RpcCallId
-from agent_comms.tool_result import ToolResult
 from agent_comms.transport.connector_profile import (
     OBSERVE_PATH,
     EndpointRoute,
@@ -43,6 +42,7 @@ from agent_comms.transport.request import (
     RequestPoster,
     ToolRequest,
 )
+from agent_comms.transport.tool_result import ToolResult
 from agent_comms.ui_model.observation import (
     ObservationPeer,
     ObservationSource,

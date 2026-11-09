@@ -329,7 +329,7 @@ def test_all_read_uses_one_watermark_without_sparse_sequences(tmp_path):
 def test_recorded_bus_identity_is_one_member(tmp_path):
     from agent_comms.coordination.errors import DMScopeChanged
     from agent_comms.messaging.read_ledger import ReadDocument
-    from agent_comms.recorded_bus import NoRecordedBus, RecordedBus
+    from agent_comms.messaging.recorded_bus import NoRecordedBus, RecordedBus
     from agent_comms.storage.private_path import FileIdentity, ObservedPath
 
     comms = prepared(tmp_path)

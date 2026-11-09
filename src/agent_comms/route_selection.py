@@ -1,6 +1,6 @@
 """A client's selection of the current Comms route.
 
-The route owner (:mod:`agent_comms.active_route`) validates the published
+The route owner (:mod:`agent_comms.installer.active_route`) validates the published
 selection and private marker without constructing a service. Writes need no
 route lock: each store refuses a write under maintenance inside its own write
 transaction.
@@ -12,10 +12,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms import errors
-from agent_comms.active_route import CommsRoute, resolve_comms_route
 from agent_comms.bus import Bus
-from agent_comms.launch_root import LaunchRoot
-from agent_comms.recorded_bus import RecordedBusIdentity
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
+from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 
 
 @dataclass(frozen=True)

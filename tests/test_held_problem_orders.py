@@ -9,10 +9,9 @@ import pytest
 
 from agent_comms.coordination.errors import Refused
 from agent_comms.errors import GoalRefused
+from agent_comms.execution.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
-from agent_comms.owner_protocol import OwnerFailure, OwnerLine
-from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.planning.goal_actions import (
     ClearGoalAction,
     CreateProblemGoalAction,
@@ -33,22 +32,23 @@ from agent_comms.planning.orders import (
     SelectedClaimReviewer,
     StrikeTodo,
 )
+from agent_comms.planning.owner_requests import NewestOpenRequest
 from agent_comms.planning.pull_requests import (
     PullRequestCommit,
     PullRequestLink,
 )
 from agent_comms.planning.todo_refusals import TeammateOccupied
-from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
+from agent_comms.projects.work_branches import WorkBranches
 from agent_comms.storage.locked_store import RootFile
+from agent_comms.storage.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.team.order import OrderFile, main
 from agent_comms.team.request import RequestAddVerb
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.channels import CommsChannelsTool
 from agent_comms.transport.tools.orders import (
     CommsOrderDeliverTool,
     CommsTodoCreateTool,
 )
-from agent_comms.work_branches import WorkBranches
 from test_todos import order, thread
 
 pytest_plugins = ("test_todos",)

@@ -19,7 +19,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-from agent_comms.probed_command import ProbedCommand
+from agent_comms.transport.probed_command import ProbedCommand
 
 
 @dataclass(frozen=True, slots=True)

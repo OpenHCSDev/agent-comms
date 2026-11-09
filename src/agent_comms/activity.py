@@ -23,7 +23,6 @@ from agent_comms.nominal.field_codec import (
     WireRequired,
     projected,
 )
-from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.thread_identity import OwnerIdentity
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
 from agent_comms.registry.thread_presentation import (
@@ -32,11 +31,12 @@ from agent_comms.registry.thread_presentation import (
     ThreadPresentationStatus,
     WorkingThreadPresentationStatus,
 )
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.storage.typed_table import Column, DerivedStore, StoreRows, TypedTable
 
 if TYPE_CHECKING:
-    from agent_comms.agent_activity import AgentActivity
     from agent_comms.execution.turn_phase import TurnPhase
+    from agent_comms.registry.agent_activity import AgentActivity
     from agent_comms.registry.threads import Thread
 
 

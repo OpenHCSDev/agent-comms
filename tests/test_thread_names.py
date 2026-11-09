@@ -10,7 +10,7 @@ from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_management import ThreadTitleResult
 from agent_comms.registry.threads import NativeThread
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tool_caller import ThreadCaller
 
 
 def _declare(comms, name, worktree):
@@ -251,7 +251,7 @@ def test_a_ui_reads_a_threads_context_through_core(tmp_path):
 
 def test_a_ui_lists_historical_identities_through_core(tmp_path):
     """Every sender is null and one sender is its name, so neither needs a None flag."""
-    from agent_comms.historical_views import (
+    from agent_comms.messaging.historical_views import (
         AllHistoricalSenders,
         HistoricalSenders,
         NamedHistoricalSender,

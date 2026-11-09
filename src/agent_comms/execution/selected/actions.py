@@ -28,7 +28,7 @@ from agent_comms.transport.native_tool_transport import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.channel_coding_tools import CodingToolOwner
+    from agent_comms.execution.channel_coding_tools import CodingToolOwner
 
 
 class SelectedAction(ABC):
@@ -144,7 +144,7 @@ class CodingSelectedAction(SelectedAction):
         return (InstructionFile.read("selected-coding.md"),)
 
     def mode(self, owner: CodingToolOwner) -> NativeToolMode:
-        from agent_comms.channel_coding_tools import CodingToolMode
+        from agent_comms.execution.channel_coding_tools import CodingToolMode
 
         return CodingToolMode(owner)
 

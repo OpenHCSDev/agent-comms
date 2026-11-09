@@ -152,7 +152,7 @@ class TestHandlers:
         self, tmp_path: Path, session_project: Path, native_runtime_package,
     ):
         from agent_comms.config_options import ServiceTierConfigOption
-        from agent_comms.pi_vocabulary import ServiceTier
+        from agent_comms.execution.pi_vocabulary import ServiceTier
 
         agent = self._agent(tmp_path)
         try:

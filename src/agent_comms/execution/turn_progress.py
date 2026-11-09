@@ -35,10 +35,10 @@ from agent_comms.execution.turn_failure import ModelRequestFailed, NoTurnFailure
 from agent_comms.execution.turn_lease import TurnState
 from agent_comms.execution.turn_phase import NativePhaseChanged, PublishingPhase
 from agent_comms.messaging.messages import AlertKind, NoticeRole
+from agent_comms.messaging.send_result import SendResult
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.registry.thread_identity import ClaimedIdentity
-from agent_comms.send_result import SendResult
-from agent_comms.transcript_updates import TurnTranscriptUpdate
+from agent_comms.transcript.transcript_updates import TurnTranscriptUpdate
 
 if TYPE_CHECKING:
     from agent_comms.execution.owned_turn import OwnedTurn, TurnGoalAccount

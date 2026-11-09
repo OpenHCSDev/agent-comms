@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.execution.root_runtime import RootRuntime
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstalledProgram
@@ -43,7 +44,6 @@ from agent_comms.projects.checkouts import Checkout, ScratchCheckout
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.threads import NativeThread
-from agent_comms.root_runtime import RootRuntime
 from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage.typed_table import ReconciledFile

@@ -1,4 +1,4 @@
-from agent_comms.transcript_events import (
+from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     ContextTranscript,
     ThinkingTranscript,

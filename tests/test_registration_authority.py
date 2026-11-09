@@ -172,7 +172,7 @@ def test_a_claim_drop_waiting_on_a_turn_retired_under_it_finds_the_retirement(tm
 def test_turn_access_waits_for_private_registry_commit(tmp_path, operation):
     from concurrent.futures import ThreadPoolExecutor
 
-    from agent_comms.private_registry_guard import registry_digest
+    from agent_comms.registry.private_registry_guard import registry_digest
     from agent_comms.storage.store_files import AtomicFile
 
     registry = registered(tmp_path)
@@ -221,7 +221,7 @@ def test_turn_access_waits_for_private_registry_commit(tmp_path, operation):
 
 
 def test_turn_read_still_rejects_abandoned_post_replacement_guard(tmp_path):
-    from agent_comms.private_registry_guard import registry_digest
+    from agent_comms.registry.private_registry_guard import registry_digest
     from agent_comms.storage.store_files import AtomicFile
 
     registry = registered(tmp_path)
@@ -238,8 +238,8 @@ def test_turn_read_still_rejects_abandoned_post_replacement_guard(tmp_path):
 
 
 def test_private_guard_check_survives_coordination_writes(tmp_path, monkeypatch):
-    from agent_comms import private_registry_guard
     from agent_comms.coordination.database import CoordinationStore
+    from agent_comms.registry import private_registry_guard
 
     registry = registered(tmp_path)
     registry.store.prepare_native_root()

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.pi_wire import PiOmitted, ReportedInputId
 from agent_comms.execution.turn_item import FreshNativeId
+from agent_comms.messaging.routing import NoTurnRouting, Routing, TurnRouting
 from agent_comms.nominal.field_codec import (
     InputId,
     NominalSpelling,
@@ -19,7 +20,7 @@ from agent_comms.nominal.field_codec import (
     NullMember,
     SingleFieldValue,
 )
-from agent_comms.routing import NoTurnRouting, Routing, TurnRouting
+from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.storage.private_path import FileObservation, FileRevision
 from agent_comms.storage.typed_table import (
     Column,
@@ -28,8 +29,7 @@ from agent_comms.storage.typed_table import (
     TextStorage,
     WithoutRowid,
 )
-from agent_comms.text_digest import TextDigest
-from agent_comms.transcript_events import ContextTranscript, TranscriptEvent
+from agent_comms.transcript.transcript_events import ContextTranscript, TranscriptEvent
 
 if TYPE_CHECKING:
     from sqlite3 import Connection

@@ -5,14 +5,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.execution.turn_context import ContextSegment, OwnerProvenance, WireProvenance
-from agent_comms.exporting import (
+from agent_comms.messaging.exporting import (
     AuthoredSourceScope,
     FullLimit,
     WireExportBoundary,
     WireExportProvenance,
     WireTranscriptExporter,
 )
-from agent_comms.retained_task_facts import RetainedTaskFacts
+from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
 
 
 @dataclass(frozen=True, kw_only=True)

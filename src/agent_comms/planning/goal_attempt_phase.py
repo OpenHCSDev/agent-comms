@@ -11,9 +11,9 @@ from typing import (
 )
 
 from agent_comms.errors import UnresolvedAttemptError
-from agent_comms.lifecycle import LifecycleState
-from agent_comms.lifecycle_capability import Failed, Terminal
 from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.lifecycle import LifecycleState
+from agent_comms.nominal.lifecycle_capability import Failed, Terminal
 from agent_comms.planning.attempt_resolution import AttemptResolution
 
 if TYPE_CHECKING:

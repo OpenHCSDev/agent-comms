@@ -13,9 +13,9 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, NoReturn
 
 from agent_comms.coordination.errors import Refused
-from agent_comms.delivery_presentation import DeliveryPresentation
 from agent_comms.execution.pi_wire import PiDiagnostic
 from agent_comms.input_attempt import InputAttempt
+from agent_comms.messaging.delivery_presentation import DeliveryPresentation
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     FieldCodec,

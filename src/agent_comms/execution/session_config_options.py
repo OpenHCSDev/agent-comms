@@ -22,10 +22,10 @@ from agent_comms.coordination.errors import Refused
 from agent_comms.execution.child_process import join_retirement
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.turn_inbox import UseSettings
+from agent_comms.messaging.watched import FileSource
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.registry.thread_model import CatalogSelection
 from agent_comms.registry.threads import ChosenModel, NextTurnConfiguration, Thread
-from agent_comms.watched import FileSource
 
 if TYPE_CHECKING:
     from acp.schema import SessionConfigOptionBoolean
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from agent_comms.execution.pi_commands import SettingCommand
     from agent_comms.execution.session_effects import SessionEffects
     from agent_comms.execution.session_lifecycle import SessionLifecycle
-    from agent_comms.runtime_server import RuntimeServer
+    from agent_comms.transport.runtime_server import RuntimeServer
 
 
 class SessionConfigOptions:

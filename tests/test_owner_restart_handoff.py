@@ -16,9 +16,9 @@ from agent_comms.execution.child_process import (
 )
 from agent_comms.execution.native_arguments import ConfiguredBinary, InheritedArguments
 from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
+from agent_comms.execution.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, UnsetVariable
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.owner_release import (
     OwnerReleaseEvidence,

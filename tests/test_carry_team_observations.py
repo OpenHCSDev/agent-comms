@@ -24,8 +24,8 @@ from agent_comms.task_attachments.team_pings import (
     TeamUpdateStore,
 )
 from agent_comms.team.standing_rules import ServicePassFailing
+from agent_comms.team.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, UnreadableUsage
 from agent_comms.team.vibe_check import OverloadDegradation
-from agent_comms.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, UnreadableUsage
 
 
 @pytest.fixture

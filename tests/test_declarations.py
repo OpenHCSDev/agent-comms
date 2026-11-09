@@ -17,13 +17,15 @@ from agent_comms.execution.child_process import (
 )
 from agent_comms.execution.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.launch_runtime import CallingThreadUnavailable
 from agent_comms.messaging.messages import HandoffKind, InfoKind, Message
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.pi_counts import PiCount
 from agent_comms.planning.goals import Goal
-from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.registry.shared_ledger import SharedLedger
@@ -38,8 +40,6 @@ from agent_comms.registry.thread_text import (
     GivenThreadText,
 )
 from agent_comms.registry.threads import NativeThread, current_thread
-from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
-from agent_comms.session_file import RegistrySessionLocation
 from bus_record_fixture import prepare_native_comms
 
 

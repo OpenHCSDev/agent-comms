@@ -9,7 +9,7 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.harness_install import replace_link
+from agent_comms.installer.harness_install import replace_link
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
 from agent_comms.storage.store_files import StoreGuard

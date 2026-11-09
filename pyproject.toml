@@ -149,9 +149,9 @@ ban-relative-imports = "all"
 extend-immutable-calls = [
     "agent_comms.storage.store_files.ExclusiveLock",
     "agent_comms.importing.ImportLimits",
-    "agent_comms.transcripts.LatestPage",
-    "agent_comms.transcripts.AtFrontier",
-    "agent_comms.transcripts.LivePageSource",
+    "agent_comms.transcript.transcripts.LatestPage",
+    "agent_comms.transcript.transcripts.AtFrontier",
+    "agent_comms.transcript.transcripts.LivePageSource",
     "agent_comms.notification_evidence.FirstRecipient",
     "agent_comms.notification_evidence.RecipientLimit",
 ]

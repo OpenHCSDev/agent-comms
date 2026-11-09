@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING
 
 from agent_comms.execution.pending_requests import PendingRequest, PendingRequests
 from agent_comms.execution.pi_events import PiEvent, Response
-from agent_comms.jsonl_stream import JsonlStreamReader
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.nominal.sealed import Sealed
+from agent_comms.transport.jsonl_stream import JsonlStreamReader
 
 if TYPE_CHECKING:
     from agent_comms.execution.pi_commands import PiCommand

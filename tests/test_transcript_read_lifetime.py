@@ -11,12 +11,12 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import wire
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import DEFAULT_ROSTER
 from agent_comms.registry.threads import NativeThread
-from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.registry.view_unread import transcript_read_state
 from agent_comms.ui_model.unread import IndexingUnread
-from agent_comms.view_unread import transcript_read_state
 from native_unread_fixture import native_reader
 
 

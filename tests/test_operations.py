@@ -16,6 +16,8 @@ from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.context_reading import ContextUsage
 from agent_comms.execution.native_entries import CompactionEntry, ModelChangeEntry
+from agent_comms.execution.pi_vocabulary import HighThinkingLevel
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.history_views import CallingThreadTarget, NamedThreadTarget
 from agent_comms.launch_runtime import CallingThreadUnavailable, ThreadLaunch
 from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
@@ -25,7 +27,6 @@ from agent_comms.messaging.messages import QuestionKind
 from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_counts import PiCount
-from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.presentation import CountedInbox, CountedRead, UncountedRead
 from agent_comms.projects.checkouts import (
     Checkout,
@@ -44,14 +45,13 @@ from agent_comms.registry.thread_text import (
     GivenThreadText,
 )
 from agent_comms.registry.threads import ChosenModel, NativeThread, NextTurnConfiguration
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.transcript_events import (
+from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
     ToolEndTranscript,
     ToolStartTranscript,
 )
+from agent_comms.transport.tool_caller import ThreadCaller
 from conftest import transcript_records
 
 

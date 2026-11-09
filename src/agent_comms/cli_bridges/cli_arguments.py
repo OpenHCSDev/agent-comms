@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Never, Self
 
 from agent_comms.cli_verbs.cli_command import CliCommand
-from agent_comms.launch_root import DefaultLaunch, LaunchRequest, LaunchRoot
+from agent_comms.execution.launch_root import DefaultLaunch, LaunchRequest, LaunchRoot
 from agent_comms.nominal.field_codec import SubclassUnion
 from agent_comms.registry.thread_text import AbsentText, GivenText, TextChoice
 

@@ -22,16 +22,16 @@ from agent_comms.acp_extension import (
 from agent_comms.comms import wire
 from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_input_record import TriageNativeExecution
+from agent_comms.execution.owner_cutover import PreserveOwnerRuntime
+from agent_comms.execution.owner_restart import OwnerRestartRequest
+from agent_comms.execution.pi_vocabulary import OffThinkingLevel
+from agent_comms.execution.restart_scope import OwnersNamed
 from agent_comms.execution.turn_lease import NoTurnRecord
 from agent_comms.launch_runtime import RestoredRuntime
-from agent_comms.lifecycle_capability import Executing
-from agent_comms.owner_cutover import PreserveOwnerRuntime
-from agent_comms.owner_restart import OwnerRestartRequest
-from agent_comms.pi_vocabulary import OffThinkingLevel
+from agent_comms.nominal.lifecycle_capability import Executing
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
-from agent_comms.restart_scope import OwnersNamed
 from bus_history import read_history
 from bus_record_fixture import configure_local_native, prepare_native_comms, start_source_owner
 
@@ -358,7 +358,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             "Canonical reply and any rejected-result alert published",
         )
         if reject_triage:
-            from agent_comms.assignment_states import FailedAssignment
+            from agent_comms.coordination.assignment_states import FailedAssignment
             from agent_comms.coordination.coordinator import Coordination
             from agent_comms.execution.historical_native_inputs import read_historical_native_inputs
 

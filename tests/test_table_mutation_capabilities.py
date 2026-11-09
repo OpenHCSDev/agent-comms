@@ -18,8 +18,8 @@ from agent_comms.coordination.execution_states import (
 from agent_comms.coordination.schema import CoordinatorTable
 from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.participants import OwnerGenerations, Participants
-from agent_comms.lifecycle import LifecycleState
 from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.lifecycle import LifecycleState
 from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.storage.typed_table import (
     AccumulatingBits,

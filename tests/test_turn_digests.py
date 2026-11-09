@@ -22,6 +22,7 @@ from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.context_store import ContextEntry
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_context import (
     JournalProvenance,
     SegmentManifest,
@@ -40,13 +41,12 @@ from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
-from agent_comms.external_transcript import NoEarlierPage
+from agent_comms.messaging.watched import FileSource
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.transcript_events import AssistantTranscript, TurnDigest
-from agent_comms.watched import FileSource
+from agent_comms.transcript.external_transcript import NoEarlierPage
+from agent_comms.transcript.transcript_events import AssistantTranscript, TurnDigest
 from agent_comms_hooks import ToolRefusedError
 from transcript_record_fixture import transcript_record
 

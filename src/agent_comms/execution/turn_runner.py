@@ -31,6 +31,8 @@ from agent_comms.execution.input_drain import (
     SessionScheduleCheck,
     WakeScheduleCheck,
 )
+from agent_comms.execution.input_key import InputKey
+from agent_comms.execution.input_origin import InputOrigin, UnattributedInputOrigin
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.owned_turn import OwnedTurn
 from agent_comms.execution.pi_commands import (
@@ -39,6 +41,7 @@ from agent_comms.execution.pi_commands import (
     NativeQuery,
 )
 from agent_comms.execution.pi_events import CancelledUiChoice, DialogUiRequest, ExtensionUiChoice
+from agent_comms.execution.queued_input import InitialInput
 from agent_comms.execution.reservation_rules import ReservationRule, ReservationViolationError
 from agent_comms.execution.turn_context import SegmentManifest
 from agent_comms.execution.turn_effects import TurnEffects
@@ -50,21 +53,18 @@ from agent_comms.execution.turn_input_source import (
 from agent_comms.execution.turn_lease import TurnLeaseFence, TurnState
 from agent_comms.execution.turn_phase import CancellingPhase, TurnPhase
 from agent_comms.following_inputs import OwnerFollowingInputs
-from agent_comms.input_key import InputKey
-from agent_comms.input_origin import InputOrigin, UnattributedInputOrigin
 from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.messaging.channels import AllChannel
 from agent_comms.messaging.messages import Message
+from agent_comms.messaging.routing import NoTurnRouting, Routing, ScheduledTurn
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId, InputId, TurnId
 from agent_comms.pi_payloads import NativeContextData, StateData
 from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms.planning.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction
 from agent_comms.planning.goal_scope import OneGoal
-from agent_comms.queued_input import InitialInput
 from agent_comms.registry.threads import Thread
-from agent_comms.routing import NoTurnRouting, Routing, ScheduledTurn
-from agent_comms.runtime_server import RuntimeServer, SubscriberClosed
-from agent_comms.transcript_updates import TurnTranscriptUpdate
+from agent_comms.transcript.transcript_updates import TurnTranscriptUpdate
+from agent_comms.transport.runtime_server import RuntimeServer, SubscriberClosed
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms

@@ -24,8 +24,6 @@ from typing import (
     get_origin,
 )
 
-from agent_comms.change_report import NoChangeReport, ReportEvidence, SourceRoots
-from agent_comms.class_fact import ClassFact
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.envelope_claim_transitions import (
     ClaimOwner,
@@ -37,8 +35,8 @@ from agent_comms.envelope_claim_transitions import (
     UnclaimedResource,
 )
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.input_key import InputKey
 from agent_comms.execution.turn_origin import TurnOrigin
-from agent_comms.input_key import InputKey
 from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.message_reference import MessageReference
@@ -50,6 +48,7 @@ from agent_comms.messaging.response_policy import (
     ResponseEligibility,
     ResponsePolicy,
 )
+from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     ClaimId,
@@ -66,8 +65,9 @@ from agent_comms.nominal.field_codec import (
     compile_decoder,
     projected,
 )
-from agent_comms.recorded_time import Timestamped
+from agent_comms.projects.change_report import NoChangeReport, ReportEvidence, SourceRoots
 from agent_comms.registry.thread_identity import AgentThreadRole, ThreadRole
+from agent_comms.storage.recorded_time import Timestamped
 from agent_comms.storage.typed_table import (
     LOCAL_TABLE_SOURCE,
     AppendOnlyTables,
@@ -86,14 +86,14 @@ from agent_comms.storage.typed_table import (
 from agent_comms.task_sources import Decision, NoTaskAttachment, TaskAttachment
 from agent_comms.transport.progress import InterruptibleRead
 from agent_comms.ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
-from agent_comms.wake_policy import BoundedTriageWake, PassiveWake
+from agent_comms.waking.wake_policy import BoundedTriageWake, PassiveWake
 
 if TYPE_CHECKING:
-    from agent_comms.bus_publication import Delivered
-    from agent_comms.display_references import ReferenceContext
     from agent_comms.input_disposition import InputDispositions
+    from agent_comms.messaging.bus_publication import Delivered
+    from agent_comms.messaging.display_references import ReferenceContext
+    from agent_comms.messaging.retained_task_facts import ExactTaskFact
     from agent_comms.registry.threads import Thread
-    from agent_comms.retained_task_facts import ExactTaskFact
 
 
 class BusTables(TypedTable, AppendOnlyTables, SharedFileTables, DurableTables, declared_name=None):
@@ -1360,7 +1360,7 @@ class ClaimMessage(Claimed, Message):
         return Message.from_message(self, type=ClaimHistoryKind)
 
     def retained_task_facts(self) -> Iterator[ExactTaskFact]:
-        from agent_comms.retained_task_facts import ClaimTaskFact
+        from agent_comms.messaging.retained_task_facts import ClaimTaskFact
         yield from super().retained_task_facts()
         yield ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))
 

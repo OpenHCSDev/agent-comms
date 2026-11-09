@@ -17,20 +17,23 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from agent_comms.agent_inbox import TakenInputCursor
 from agent_comms.bus import Bus, BusSnapshot
-from agent_comms.messaging.bus_route_counts import HeldUnseenCounts
-from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.messaging.channel_targets import NamedTarget
-from agent_comms.messaging.channels import AnyChannel, Channel
 from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.historical_views import HistoryArchive
-from agent_comms.messaging.message_page import DisplayedMessagePage, InboxPage, MessagePageRequest, PageBounds
+from agent_comms.messaging.agent_inbox import TakenInputCursor
+from agent_comms.messaging.bus_route_counts import HeldUnseenCounts
+from agent_comms.messaging.channel_targets import NamedTarget
+from agent_comms.messaging.channels import AnyChannel, Channel
+from agent_comms.messaging.historical_views import HistoryArchive
+from agent_comms.messaging.message_page import (
+    DisplayedMessagePage,
+    InboxPage,
+    MessagePageRequest,
+    PageBounds,
+)
 from agent_comms.messaging.message_reference import FirstUnreadStart, InboxStart, NewestUnreadStart
-from agent_comms.peer_relevance import Prioritized
-from agent_comms.publisher import Publisher
 from agent_comms.messaging.published_bus import PublishedBus
+from agent_comms.messaging.publisher import Publisher
 from agent_comms.messaging.read_basis import (
     AnonymousViewer,
     DisplayViewer,
@@ -40,14 +43,15 @@ from agent_comms.messaging.read_basis import (
 )
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.messaging.read_selection import CapturedSelection
+from agent_comms.messaging.routing import DeliveryScope
+from agent_comms.messaging.watched import FileSource
+from agent_comms.peer_relevance import Prioritized
+from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
 from agent_comms.relationships import PeerRelation
-from agent_comms.routing import DeliveryScope
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
-from agent_comms.watched import FileSource
-
 
 
 @dataclass(frozen=True)

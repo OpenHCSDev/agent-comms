@@ -4,12 +4,12 @@ import asyncio
 from contextlib import aclosing
 from dataclasses import replace
 
-import agent_comms.restart_queue as queue
+import agent_comms.execution.restart_queue as queue
 from agent_comms.bus import Bus
+from agent_comms.messaging.watched import FileSource
 from agent_comms.nominal.field_codec import FieldCodec, RestartId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.watched import FileSource
 from restart_fixture import dead_owner_restart
 
 
@@ -47,11 +47,11 @@ async def test_restore_owner_keeps_blocked_goal_unchanged(
     from agent_comms.cli_verbs.cli_command import TargetBatchResult
     from agent_comms.cli_verbs.restore_owner import RestoreOwnerCliCommand
     from agent_comms.cli_verbs.target_action import TargetActionCliCommand
-    from agent_comms.owner_connection import socket_path
     from agent_comms.planning.goal_actions import (
         BlockedGoalAction,
         SetGoalAction,
     )
+    from agent_comms.transport.owner_connection import socket_path
 
     source_programs.bind(tmp_path)
     comms = private_comms

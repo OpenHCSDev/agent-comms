@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.cohort_schema import CohortTable
+from agent_comms.coordination.cohort_schema import CohortTable
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import IdentityConflict
@@ -45,7 +45,7 @@ from agent_comms.nominal.field_codec import (
     ThreadLookup,
     WireName,
 )
-from agent_comms.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.typed_table import TypedRow
 

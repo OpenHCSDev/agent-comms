@@ -15,10 +15,10 @@ from types import SimpleNamespace
 import pytest
 
 import agent_comms.execution.selected.tool_broker as broker
-from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.envelope_claim_transitions import WakeClaim
+from agent_comms.execution.channel_coding_tools import CodingToolSocket
 from agent_comms.execution.native_runtime_input import (
     AcknowledgedSlot,
     ConsumedSlot,
@@ -37,11 +37,11 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.pi_payloads import AssistantMessage, ReportedParts, ToolCallContent
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.storage_room import NoRoomNeeded
-from agent_comms.tool_denial import SelectedToolDenied
+from agent_comms.storage.storage_room import NoRoomNeeded
 from agent_comms.transport.native_tool_call import DuplicateToolCallIdentity, SelectedToolBusy
 from agent_comms.transport.native_tool_transport import OwnerToolConnection
 from agent_comms.transport.native_tools import NativeToolDeclaration
+from agent_comms.transport.tool_denial import SelectedToolDenied
 from coding_owner_fixture import OwnerDouble
 
 

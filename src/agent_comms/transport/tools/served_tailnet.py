@@ -3,9 +3,9 @@
 from dataclasses import replace
 
 from agent_comms.comms import Comms
-from agent_comms.tool_caller import ToolCaller
 from agent_comms.transport.tailnet_buses import TailnetBuses
 from agent_comms.transport.tailnet_profiles import AskedPeer, TailnetProfiles
+from agent_comms.transport.tool_caller import ToolCaller
 from agent_comms.transport.tool_request import CoreRead, HumanToolRequest
 from agent_comms.transport.tools.tailnet import (
     CommsTailnetBusesTool,

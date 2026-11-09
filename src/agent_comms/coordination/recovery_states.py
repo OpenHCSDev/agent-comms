@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from agent_comms.coordination.vocabulary import CoordinatorVocabulary
-from agent_comms.lifecycle_capability import LifecycleCapability, Unresolved
+from agent_comms.nominal.lifecycle_capability import LifecycleCapability, Unresolved
 
 
 @dataclass(frozen=True)

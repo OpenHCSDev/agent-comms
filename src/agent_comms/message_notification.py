@@ -11,13 +11,13 @@ from itertools import batched
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.agent_activity import AgentActivity, RecordedRecipientActivity
 from agent_comms.execution.transcript_sources import AssignedTranscriptSource
-from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
+from agent_comms.messaging.revision_views import NotificationEvidenceView
 from agent_comms.nominal.field_codec import MessageId, TaggedRecordMember, TaggedUnion, ThreadLookup
 from agent_comms.notification_assignment import (
     AssignmentSource,
@@ -37,18 +37,18 @@ from agent_comms.notification_progress import (
     DeliveryProgress,
     HumanReadProgress,
 )
+from agent_comms.registry.agent_activity import AgentActivity, RecordedRecipientActivity
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.revision_views import NotificationEvidenceView
 
 if TYPE_CHECKING:
-    from agent_comms.agent_activity import RecipientActivity
     from agent_comms.bus import Bus
-    from agent_comms.bus_publication import Delivered
     from agent_comms.comms import Comms
+    from agent_comms.messaging.bus_publication import Delivered
     from agent_comms.presentation import WireRevision
+    from agent_comms.registry.agent_activity import RecipientActivity
     from agent_comms.registry.registration import Registration
-    from agent_comms.registry_provenance import RegistryProvenance
+    from agent_comms.registry.registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True)

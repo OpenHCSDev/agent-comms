@@ -13,6 +13,7 @@ from agent_comms.execution.native_arguments import (
     LaunchArguments,
     LaunchBinary,
 )
+from agent_comms.execution.restart_scope import AllOwners, RestartTarget
 from agent_comms.nominal.field_codec import (
     Argument,
     NamedArgumentGroup,
@@ -20,7 +21,6 @@ from agent_comms.nominal.field_codec import (
     TargetBound,
     WireName,
 )
-from agent_comms.restart_scope import AllOwners, RestartTarget
 
 
 @dataclass(frozen=True, kw_only=True)

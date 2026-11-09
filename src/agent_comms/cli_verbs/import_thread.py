@@ -9,7 +9,7 @@ from agent_comms.cli_support.importing import ImportingCliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.cli_verbs.target_fields import ChoiceTargetField
 from agent_comms.comms import Comms
-from agent_comms.harness_install import Harness
+from agent_comms.installer.harness_install import Harness
 from agent_comms.nominal.field_codec import Argument, Editor, PathText
 from agent_comms.registry.thread_text import AnySession, ExpectedSession
 

@@ -15,31 +15,12 @@ from typing import Annotated, ClassVar
 
 from _pytest.config import get_config
 
-from agent_comms.active_route import resolve_comms_route
-from agent_comms.build_identity import RepositoryCommit
-from agent_comms.declared_verb import DeclaredOptions
+from agent_comms.cli_verbs.declared_verb import DeclaredOptions
 from agent_comms.execution.child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
+from agent_comms.execution.systemd_unit import AgentsSlice
 from agent_comms.execution.test_lease import LeaseStart, TestLease
-from agent_comms.head_review import (
-    BaseSide,
-    CombinedInput,
-    HeadReview,
-    HeadSide,
-    InputPublication,
-    IntegrationInput,
-    IntegrationSource,
-    LocalIntegrationSource,
-    MergedIntegrationSource,
-    MergeHeadReview,
-    OrdinaryInput,
-    PromotedHeadReview,
-    PullRequestHead,
-    ResolvedIntegrationSource,
-    Side,
-    SourceCheckout,
-    UnpromotedHeadReview,
-    UnpublishedInput,
-)
+from agent_comms.installer.active_route import resolve_comms_route
+from agent_comms.installer.build_identity import RepositoryCommit
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.launch_runtime import CheckoutSource, RestoredRuntime
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -63,12 +44,31 @@ from agent_comms.planning.orders import (
 from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.projects.checkouts import DetachedStart, RepositoryReads
 from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.head_review import (
+    BaseSide,
+    CombinedInput,
+    HeadReview,
+    HeadSide,
+    InputPublication,
+    IntegrationInput,
+    IntegrationSource,
+    LocalIntegrationSource,
+    MergedIntegrationSource,
+    MergeHeadReview,
+    OrdinaryInput,
+    PromotedHeadReview,
+    PullRequestHead,
+    ResolvedIntegrationSource,
+    Side,
+    SourceCheckout,
+    UnpromotedHeadReview,
+    UnpublishedInput,
+)
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
-from agent_comms.systemd_unit import AgentsSlice
+from agent_comms.projects.work_branches import WorkBranches
 from agent_comms.team.order import TeamContext
-from agent_comms.tool_caller import PeerCaller
-from agent_comms.work_branches import WorkBranches
+from agent_comms.transport.tool_caller import PeerCaller
 from agent_comms_hooks import ToolRefusedError
 
 

@@ -14,7 +14,7 @@ from pydantic import Field, PlainSerializer, ValidateAs
 from agent_comms.cli_bridges.wire_models import DeclaredModel, WireModel, _WireFamilyMeta
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import NominalSpelling, NominalText
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.storage.recorded_time import RecordedEventTime
 
 
 class RateWindow(WireModel):

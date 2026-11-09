@@ -35,7 +35,7 @@ from agent_comms.storage.typed_table import (
 if TYPE_CHECKING:
     from agent_comms.messaging.channel_targets import NamedTarget
     from agent_comms.messaging.read_basis import RepliesDisplayScope
-    from agent_comms.registry_provenance import RegistryProvenance
+    from agent_comms.registry.registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True)

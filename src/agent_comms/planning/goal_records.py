@@ -5,7 +5,6 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.agent_activity import AgentActivity
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.message_bus import MessageBus
@@ -19,6 +18,7 @@ from agent_comms.planning.goal_waits import (
     GoalWaits,
 )
 from agent_comms.planning.orders import TodoStore
+from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import Thread
 

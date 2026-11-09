@@ -5,8 +5,8 @@ from dataclasses import replace
 from agent_comms.comms import wire
 from agent_comms.heartbeat_subjects import TeamHistory
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.team_pings import RulePing, TeamUpdate, TeamUpdateNotice
 from agent_comms.team.standing import TeamDeaf
 

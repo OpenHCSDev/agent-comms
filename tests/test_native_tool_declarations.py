@@ -19,7 +19,15 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
 )
 from agent_comms.registry.thread_identity import UnobservedTools
-from agent_comms.tool_declaration import (
+from agent_comms.transport.native_tools import (
+    BashTool,
+    CodingTool,
+    EditTool,
+    NativeToolDeclaration,
+    ReadTool,
+    WriteTool,
+)
+from agent_comms.transport.tool_declaration import (
     EditAction,
     ExecuteAction,
     OtherAction,
@@ -28,14 +36,6 @@ from agent_comms.tool_declaration import (
     SearchAction,
     ToolDeclaration,
     UndeclaredTool,
-)
-from agent_comms.transport.native_tools import (
-    BashTool,
-    CodingTool,
-    EditTool,
-    NativeToolDeclaration,
-    ReadTool,
-    WriteTool,
 )
 from conftest import transcript_records
 from delivery_owner_fixture import canonical_agent
@@ -90,7 +90,7 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
 
 @pytest.mark.parametrize("name,label", [("grep", "Search"), ("glob", "Find")])
 async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, label):
-    from agent_comms.transcript_events import ToolStartTranscript
+    from agent_comms.transcript.transcript_events import ToolStartTranscript
 
     arguments = {"pattern": "shared preview"}
     event = events.ToolStart.from_call("pattern-case", name, arguments)
@@ -114,8 +114,8 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
     ("edit", "Edit", EditAction), ("write", "Write", EditAction),
 ])
 def test_recorded_metadata_does_not_require_an_executable_request(name, label, kind):
-    from agent_comms.tool_denial import SelectedToolDenied
-    from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
+    from agent_comms.transcript.transcript_events import ToolEndTranscript, ToolStartTranscript
+    from agent_comms.transport.tool_denial import SelectedToolDenied
 
     foreign = {"file_path": "external.txt"}
     start = transcript_records.event(ToolStartTranscript, position=0, tool_call_id="saved", tool_name=name, raw_input=foreign)
@@ -135,9 +135,9 @@ def test_recorded_metadata_does_not_require_an_executable_request(name, label, k
 def test_foreign_protocol_owners_decode_canonical_preview_arguments():
     from agent_comms.cli_bridges.codex_protocol import FileChange, UpdatedFile
     from agent_comms.cli_bridges.opencode_parts import ToolPart
+    from agent_comms.cli_bridges.tool_calls import ToolCall
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.tool_calls import ToolCall
-    from agent_comms.transcript_events import TranscriptEvent
+    from agent_comms.transcript.transcript_events import TranscriptEvent
     from agent_comms.transport.native_tools import FilePatchTool
 
     start, end = FileChange(path="codex.txt", diff="@@ -1 +1 @@\\n-old\\n+new\\n",
@@ -159,9 +159,9 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
 
 
 def test_core_commands_share_native_identity_without_changing_external_decode():
-    from agent_comms.tool_declaration import NativeRequestTools
     from agent_comms.transport.native_tools import NativeExecutableTool
     from agent_comms.transport.request import ToolRequest
+    from agent_comms.transport.tool_declaration import NativeRequestTools
     from agent_comms.transport.tool_request import NativeToolRequest
     from agent_comms.transport.tools.send import CommsSendTool
 
@@ -189,7 +189,7 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
 
 def test_native_call_fields_are_not_model_arguments():
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.tool_denial import SelectedToolDenied
+    from agent_comms.transport.tool_denial import SelectedToolDenied
 
     arguments = {"path": "file.py", "content": "value"}
     call = NativeToolDeclaration.decode("owned-call", "write", arguments)

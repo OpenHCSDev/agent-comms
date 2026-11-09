@@ -10,6 +10,7 @@ from agent_comms.execution.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.execution.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
 from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.pi_wire import PiPayload
+from agent_comms.execution.tool_results import NoToolDiff
 from agent_comms.execution.turn_usage import UsageAccount
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord
 from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
@@ -30,7 +31,6 @@ from agent_comms.registry.thread_model import (
     DeclaredModel,
     UndeclaredModel,
 )
-from agent_comms.tool_results import NoToolDiff
 from agent_comms.transport.native_tools import NativeToolDeclaration
 
 
@@ -339,8 +339,8 @@ def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
 
 
 def test_raw_tool_arguments_reach_the_declared_call_refusal():
-    from agent_comms.tool_denial import SelectedToolDenied
     from agent_comms.transport.native_tool_call import RefusedCodingCall
+    from agent_comms.transport.tool_denial import SelectedToolDenied
 
     event = decode({"type": "message_end", "message": {
         "role": "assistant", "content": [

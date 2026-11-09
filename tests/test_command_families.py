@@ -15,6 +15,7 @@ from agent_comms.execution.native_arguments import (
     GivenBinary,
     InheritedArguments,
 )
+from agent_comms.execution.pi_vocabulary import ServiceTier
 from agent_comms.messaging.history_result import (
     ChannelHistoryPageResult,
     DmHistoryPageResult,
@@ -22,7 +23,6 @@ from agent_comms.messaging.history_result import (
 )
 from agent_comms.messaging.messages import InfoKind
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
 from agent_comms.registry.threads import NativeThread

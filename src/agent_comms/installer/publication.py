@@ -16,7 +16,7 @@ import agent_comms
 from agent_comms.connector import LOOPBACK, PORT
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.execution.child_process import ResidentManager
-from agent_comms.harness_install import ConnectorClientHarness, Harness, replace_link
+from agent_comms.installer.harness_install import ConnectorClientHarness, Harness, replace_link
 from agent_comms.installer.runtime_resolution import (
     ConsoleScriptPackage,
     RuntimePackage,

@@ -8,19 +8,19 @@ from functools import partial
 
 import pytest
 
-from agent_comms.bus_publication import AgentOrigin
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_lease import NoTurnLease
+from agent_comms.messaging.bus_publication import AgentOrigin
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.messages import InfoKind, Message, NoticeRole
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.task_sources import Decision
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
 from bus_history import read_history
 
@@ -49,7 +49,10 @@ def admit(comms, name):
 
 
 def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms):
-    from agent_comms.retained_task_facts import CurrentHumanConstraintTaskFact, RetainedTaskFacts
+    from agent_comms.messaging.retained_task_facts import (
+        CurrentHumanConstraintTaskFact,
+        RetainedTaskFacts,
+    )
     from agent_comms.task_sources import (
         CorrectionTaskChange,
         ExplicitTaskScopeSelection,
@@ -154,7 +157,10 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
 def test_constraint_original_wording_scope_correction_and_human_authority(comms, monkeypatch):
     new_goal_id = GoalId.mint()
     original_goal_id = GoalId.mint()
-    from agent_comms.retained_task_facts import CurrentConstraintTaskFact, RetainedTaskFacts
+    from agent_comms.messaging.retained_task_facts import (
+        CurrentConstraintTaskFact,
+        RetainedTaskFacts,
+    )
     from agent_comms.task_sources import Constraint, CorrectionTaskChange, UserTaskSupersession
 
     owner = admit(comms, "alpha")
@@ -224,7 +230,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     assert len(rows) == 2 and rows[0] == original
     assert rows[1].task.change.original == original.reference
     assert correction["reference"] == FieldCodec.encode(rows[1].reference)
-    from agent_comms.retained_task_facts import RetainedTaskFacts
+    from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
 
     retained = comms.views.retained_context(alpha.name).retained
     assert tuple(fact.source.reference for fact in retained.facts) == tuple(
@@ -261,7 +267,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
 def test_equal_text_choices_keep_original_identity_through_rename_and_goal_replacement(comms, monkeypatch):
     goal_id = GoalId.mint()
     replacement_goal_id = GoalId.mint()
-    from agent_comms.retained_task_facts import CurrentDecisionTaskFact, RetainedTaskFacts
+    from agent_comms.messaging.retained_task_facts import CurrentDecisionTaskFact, RetainedTaskFacts
 
     owner = admit(comms, "alpha")
     owner = replace(owner, goal=Goal("Keep checked root", goal_id, published_seq=0, revision=1))
@@ -349,7 +355,10 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
 
 def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_choice(comms, monkeypatch):
     goal_id = GoalId.mint()
-    from agent_comms.retained_task_facts import CurrentUserTaskCorrectionFact, RetainedTaskFacts
+    from agent_comms.messaging.retained_task_facts import (
+        CurrentUserTaskCorrectionFact,
+        RetainedTaskFacts,
+    )
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
 
     owner = admit(comms, "alpha")
@@ -388,7 +397,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
 
 
 def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, monkeypatch):
-    from agent_comms.retained_task_facts import (
+    from agent_comms.messaging.retained_task_facts import (
         CurrentDecisionTaskFact,
         CurrentUserTaskCorrectionFact,
         DecisionTaskFact,

@@ -5,11 +5,11 @@ from unittest.mock import patch
 
 import pytest
 
+from agent_comms.execution.runtime_info import RuntimeInfoStore
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.shared_ledger import SharedLedger
 from agent_comms.registry.threads import NativeThread
-from agent_comms.runtime_info import RuntimeInfoStore
 from agent_comms.storage.locked_store import DocumentChange
 
 

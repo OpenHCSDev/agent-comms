@@ -22,7 +22,6 @@ from typing import (
     Literal,
 )
 
-from agent_comms.change_report import CitationProject
 from agent_comms.errors import GoalRefused, RejectedEnforcementError, RelationViolationError
 from agent_comms.execution.child_process import (
     BoundedRun,
@@ -35,12 +34,12 @@ from agent_comms.execution.child_process import (
     TimedOutOutcome,
 )
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
+from agent_comms.execution.reported_turn import NoReportedTurn, ReportedTurnState
 from agent_comms.execution.turn_goal_permission import (
     ContinuationGoalPermission,
     GoalPermission,
     InactiveGoalPermission,
 )
-from agent_comms.lifecycle_capability import Active
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -53,16 +52,17 @@ from agent_comms.nominal.field_codec import (
     SubclassUnion,
     TurnId,
 )
+from agent_comms.nominal.lifecycle_capability import Active
+from agent_comms.nominal.registration_inheritance import RegistrationInheritance
+from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.planning.goal_authority import GoalAuthority, GoalTurnAuthority, NoGoalAuthority
 from agent_comms.planning.goal_states import ActiveGoal, GoalState
+from agent_comms.projects.change_report import CitationProject
 from agent_comms.projects.checkouts import DetachedStart, ScratchCheckout
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
-from agent_comms.registration_inheritance import RegistrationInheritance
+from agent_comms.projects.shell_effects import shell_storage_effects
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from agent_comms.reported_turn import NoReportedTurn, ReportedTurnState
-from agent_comms.shell_effects import shell_storage_effects
-from agent_comms.text_digest import TextDigest
 from agent_comms.ui_model.goal import GoalDisplay
 from agent_comms_hooks.shell_commands import ShellCommand
 

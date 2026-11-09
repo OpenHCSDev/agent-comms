@@ -7,13 +7,13 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Self
 
-from agent_comms.build_identity import InstalledBuild
+from agent_comms.installer.build_identity import InstalledBuild
 from agent_comms.nominal.field_codec import DisclosedRecord, DisclosureIdentity, OrderId
-from agent_comms.recorded_time import EventTime
-from agent_comms.tool_result import ToolResult
+from agent_comms.storage.recorded_time import EventTime
+from agent_comms.transport.tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from agent_comms.held_orders import HeldOrders
+    from agent_comms.planning.held_orders import HeldOrders
     from agent_comms.planning.orders import StrikeTodo, Todo
 
 

@@ -5,27 +5,27 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.change_report import (
+from agent_comms.errors import MissingSourceLine
+from agent_comms.nominal.field_codec import OwnerRequestKey
+from agent_comms.planning.goal_actions import OrderGoalAction
+from agent_comms.planning.orders import FixScope
+from agent_comms.planning.owner_requests import OwnerRequestId
+from agent_comms.planning.problem_findings import (
+    FixShape,
+    LocatedProblemFinding,
+)
+from agent_comms.planning.pull_requests import PullRequestHeadRevision
+from agent_comms.projects.change_report import (
     CitedRevisions,
     FileLine,
     MainRevision,
     OrderRoots,
     RegisteredRoots,
 )
-from agent_comms.errors import MissingSourceLine
-from agent_comms.nominal.field_codec import OwnerRequestKey
-from agent_comms.owner_requests import OwnerRequestId
-from agent_comms.planning.goal_actions import OrderGoalAction
-from agent_comms.planning.orders import FixScope
-from agent_comms.planning.problem_findings import (
-    FixShape,
-    LocatedProblemFinding,
-)
-from agent_comms.planning.pull_requests import PullRequestHeadRevision
 from agent_comms.projects.git_errors import GitCommandError
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.storage.recorded_time import RecordedEventTime
 from source_revision_fixture import SourceRepository
 from test_todos import order
 

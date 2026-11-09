@@ -56,7 +56,7 @@ from agent_comms.planning.goal_states import (
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.maintenance_barrier import MaintenanceOperator
-from agent_comms.tool_caller import ToolCaller
+from agent_comms.transport.tool_caller import ToolCaller
 from agent_comms.transport.tools.goals import CommsGoalHistoryTool
 
 

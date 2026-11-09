@@ -18,9 +18,9 @@ from queue import Queue
 
 import pytest
 
-from agent_comms.change_report import BranchHeadRevision, CommitRevision, FileLine, OrderRoots
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.execution.child_process import (
     AsyncWork,
     ChildRetirementFailed,
@@ -34,14 +34,13 @@ from agent_comms.execution.child_process import (
     join_retirement,
 )
 from agent_comms.execution.watch_passes import Watch
-from agent_comms.head_review import OpenPullRequestHead
 from agent_comms.installer.native_build_inputs import (
     ConfiguredChildStdio,
     DetachedChildStdio,
     GitAcquisitionCancelled,
     GitLaunch,
 )
-from agent_comms.nominal_census import NominalCensus
+from agent_comms.planning.nominal_census import NominalCensus
 from agent_comms.planning.orders import (
     CitedEvidence,
     DraftPullRequest,
@@ -56,14 +55,20 @@ from agent_comms.planning.phase_evidence import (
     PathsAbsent,
     PhaseEvidence,
 )
+from agent_comms.projects.change_report import (
+    BranchHeadRevision,
+    CommitRevision,
+    FileLine,
+    OrderRoots,
+)
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.git_errors import (
     GitCommandError,
     UnavailableCommitError,
 )
+from agent_comms.projects.head_review import OpenPullRequestHead
 from agent_comms.projects.repo import Repo
-from agent_comms.service_passes import ServicePassStore
-from agent_comms.work_branches import SourceGrowth, WorkBranchError, WorkBranches
+from agent_comms.projects.work_branches import SourceGrowth, WorkBranchError, WorkBranches
 from git_shutdown_fixture import HeldGitHTTP, held_commit
 from source_revision_fixture import SourceRepository
 from team_heartbeat_fixture import RetainedNominalPlanReadings

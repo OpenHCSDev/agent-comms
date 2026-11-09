@@ -4,7 +4,7 @@ import json
 import sys
 
 from agent_comms import package_stamp
-from agent_comms.core_stamp import CoreStamp
+from agent_comms.installer.core_stamp import CoreStamp
 
 if __name__ == "__main__":
     # The stamp factory's child names the commit it builds; it is bound before any module

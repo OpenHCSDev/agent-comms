@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.active_route import active_route_path
 from agent_comms.comms import Comms, wire
+from agent_comms.installer.active_route import active_route_path
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.install_choices import RehearsalMode
 from agent_comms.installer.launch import InstallReport

@@ -3,8 +3,8 @@
 import pickle
 
 from agent_comms.comms import Comms
-from agent_comms.display_references import CurrentDisplayReferences, DisplayReferences
-from agent_comms.historical_views import HistorySource
+from agent_comms.messaging.display_references import CurrentDisplayReferences, DisplayReferences
+from agent_comms.messaging.historical_views import HistorySource
 from agent_comms.messaging.messages import NO_HISTORY_SOURCE, InfoKind, Message, PublicRecord
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation

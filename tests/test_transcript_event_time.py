@@ -6,11 +6,11 @@ from datetime import datetime
 import pytest
 
 from agent_comms.execution.native_entries import NativeEntry, TranscriptProjection
+from agent_comms.messaging.routing import TurnRouting
 from agent_comms.nominal.field_codec import MalformedRecord, RecordedTimestamp
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.routing import TurnRouting
-from agent_comms.transcript_events import AssistantTranscript
+from agent_comms.transcript.transcript_events import AssistantTranscript
 from conftest import installed_comms
 from transcript_record_fixture import transcript_record
 
@@ -67,7 +67,7 @@ def test_external_source_without_a_time_refuses_before_event_construction(source
 
     from agent_comms.cli_bridges.claude_protocol import TimedRecord
     from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD
-    from agent_comms.recorded_time import UnrecordedTimeError
+    from agent_comms.storage.recorded_time import UnrecordedTimeError
 
     record = ({'uuid': transcript_record('record'), 'position': 0} if source == 'claude' else
               {'type': 'response_item', 'payload': {'type': 'message', 'role': 'assistant', 'content': []}})
@@ -93,7 +93,7 @@ def test_codex_rollout_projects_the_enclosing_record_clock():
 
 
 def test_malformed_shell_words_refuse_instead_of_reaching_any_rule(tmp_path):
-    from agent_comms.shell_effects import ShellInvocation
+    from agent_comms.projects.shell_effects import ShellInvocation
 
     with pytest.raises(ValueError):
         tuple(ShellInvocation.parse('uv pip install package "unterminated', tmp_path))

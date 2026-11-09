@@ -4,8 +4,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.nominal.field_codec import OrderId
-from agent_comms.nominal_census import NominalCensus
-from agent_comms.plan_reading import PlanReading
+from agent_comms.planning.nominal_census import NominalCensus
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     ReleaseTodo,
@@ -16,7 +15,8 @@ from agent_comms.planning.plan_phases import (
     BusWriterPhase,
     PlanPhase,
 )
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.planning.plan_reading import PlanReading
+from agent_comms.storage.recorded_time import RecordedEventTime
 from test_todo_stories import recorded_problem
 
 

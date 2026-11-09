@@ -14,7 +14,7 @@ from typing import Self
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.transcript_events import SentTranscript
+from agent_comms.transcript.transcript_events import SentTranscript
 
 
 class PublicationSource(ABC):

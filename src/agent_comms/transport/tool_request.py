@@ -16,9 +16,6 @@ from agent_comms.execution.child_process import AsyncWork, ReadWork
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, ToolCallId
 from agent_comms.nominal.served_declaration import ServesDeclaration
 from agent_comms.registry.threads import ThreadCommandAvailability
-from agent_comms.tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
-from agent_comms.tool_declaration import NativeRequestTools
-from agent_comms.tool_result import ToolResult
 from agent_comms.transport.native_tools import CoordinationCall, NativeToolDeclaration
 from agent_comms.transport.progress import WireExportObserver
 from agent_comms.transport.request import (
@@ -28,6 +25,9 @@ from agent_comms.transport.request import (
     ToolRequest,
     declared_result,
 )
+from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
+from agent_comms.transport.tool_declaration import NativeRequestTools
+from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 
 

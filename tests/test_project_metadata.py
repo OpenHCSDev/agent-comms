@@ -12,11 +12,11 @@ from module_layers import MaterializedClients
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 
-from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_resolution import PrivateUvProject, ProjectMetadata, StackSources
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.projects.head_review import BaseSide, HeadSide, IntegrationInput
 from agent_comms.projects.repository_name import RepositoryName
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources

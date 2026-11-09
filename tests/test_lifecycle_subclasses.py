@@ -35,7 +35,7 @@ from agent_comms.coordination.tables.executions import (
     NoPointedExecution,
     ReplayAssessments,
 )
-from agent_comms.pi_vocabulary import PendingStopReason
+from agent_comms.execution.pi_vocabulary import PendingStopReason
 from test_coordination_store import final_evidence, ready, started
 
 FAILED_SUCCESSOR_SOURCES = (

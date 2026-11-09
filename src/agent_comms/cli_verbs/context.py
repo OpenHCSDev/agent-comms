@@ -5,7 +5,7 @@ import argparse
 from dataclasses import dataclass
 from typing import ClassVar, Self
 
-from agent_comms.cli_context import ContextSelection, CurrentContextCliCommand
+from agent_comms.cli_verbs.cli_context import ContextSelection, CurrentContextCliCommand
 
 
 @dataclass(frozen=True, kw_only=True)

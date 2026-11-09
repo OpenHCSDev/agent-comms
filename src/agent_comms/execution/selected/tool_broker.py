@@ -55,7 +55,6 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
 )
 from agent_comms.pi_rule_gate import PiRuleGate
-from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.transport.native_tool_call import (
     NativeToolCall,
     SelectedToolBusy,
@@ -67,6 +66,7 @@ from agent_comms.transport.native_tool_transport import (
     ToolListener,
     UnboundToolTransport,
 )
+from agent_comms.transport.tool_denial import SelectedToolDenied
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
 _MAX_CONTENT = 128 * 1024

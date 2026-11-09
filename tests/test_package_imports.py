@@ -40,7 +40,7 @@ sys.path.insert(0, {str(source)!r})
 from dataclasses import dataclass
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 goal_id = GoalId.mint()
-from agent_comms.tool_declaration import ToolDeclaration
+from agent_comms.transport.tool_declaration import ToolDeclaration
 assert 'agent_comms.transport.tools.served' not in sys.modules
 @dataclass(frozen=True)
 class SavedTool:

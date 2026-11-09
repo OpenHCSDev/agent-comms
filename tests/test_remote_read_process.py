@@ -14,7 +14,6 @@ from yarl import URL
 
 from agent_comms.nominal.field_codec import FieldCodec, RootId
 from agent_comms.remote_core_process import ProcessRemoteCoreAccess, ProcessViewerEnd
-from agent_comms.tool_result import ToolResult
 from agent_comms.transport.connector_profile import (
     BearerSecret,
     HttpsMcpEndpoint,
@@ -23,6 +22,7 @@ from agent_comms.transport.connector_profile import (
 )
 from agent_comms.transport.progress import WireExportObserver, WireExportProgress
 from agent_comms.transport.request import ObservedRequest, ReadRequest, ToolRequest
+from agent_comms.transport.tool_result import ToolResult
 
 
 @dataclass(frozen=True)

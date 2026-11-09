@@ -15,6 +15,7 @@ from agent_comms.cli_bridges.runtime_updates import (
     ToolDraft,
     TurnEnded,
 )
+from agent_comms.cli_bridges.tool_calls import ToolCall
 from agent_comms.execution.transcript_sources import NoDraft
 from agent_comms.execution.turn_item import (
     NativeItemId,
@@ -25,9 +26,8 @@ from agent_comms.execution.turn_phase import (
     ToolRunningPhase,
 )
 from agent_comms.nominal.field_codec import ToolCallId
-from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from agent_comms.tool_calls import ToolCall
-from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript
+from agent_comms.storage.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from agent_comms.transcript.transcript_events import AssistantTranscript, ThinkingTranscript
 from test_codex_items import _output
 
 

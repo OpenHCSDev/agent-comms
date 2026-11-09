@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from agent_comms.context_segments.retained import RetainedSegment
-from agent_comms.exporting import WireExportFormat
+from agent_comms.messaging.exporting import WireExportFormat
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import FieldCodec
 

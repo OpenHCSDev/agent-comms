@@ -26,7 +26,7 @@ def test_runtime_wire_imports_no_acp():
 
 def test_cold_server_decodes_the_served_request_without_prior_producer_imports():
     result = cold_runtime('''
-from agent_comms.runtime_server import ServedRuntimeRequest
+from agent_comms.transport.runtime_server import ServedRuntimeRequest
 from agent_comms.transport.owner_requests import ReadHostResourcesRuntimeRequest
 from agent_comms.transport.runtime_request import RuntimeRequest
 from agent_comms.nominal.field_codec import FieldCodec

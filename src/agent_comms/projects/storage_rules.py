@@ -28,20 +28,20 @@ from agent_comms.errors import TodoError
 from agent_comms.execution.child_process import ResidentMemory
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, MalformedRecord, ValueDirective
-from agent_comms.problem_number import ProblemNumber
+from agent_comms.planning.problem_number import ProblemNumber
 from agent_comms.projects.checkouts import Checkout, RepositoryReads
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.work_branches import WorkBranches
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_storage import CheckoutReuse, StoragePath, StorageRoots
 from agent_comms.registry.threads import Thread
-from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.storage.locked_store import DurableFile
 from agent_comms.storage.private_path import PrivateDirectoryRole
+from agent_comms.storage.storage_room import RoomAllocation
 from agent_comms.storage.store_files import ExclusiveAtomicFile
-from agent_comms.storage_room import RoomAllocation
-from agent_comms.tool_denial import StorageDenied
-from agent_comms.work_branches import WorkBranches
+from agent_comms.transport.tool_denial import StorageDenied
 
 if TYPE_CHECKING:
     from agent_comms.planning.orders import Todo, TodoStore

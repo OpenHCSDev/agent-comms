@@ -6,9 +6,9 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agent_comms.class_fact import ClassFact
 from agent_comms.messaging.page_traversal import LiveCursor, NewestCursor, PageCursor, PageTraversal
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
+from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     MalformedRecord,

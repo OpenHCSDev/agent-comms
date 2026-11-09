@@ -36,10 +36,8 @@ from functools import cached_property
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
 from agent_comms.errors import TodoError
-from agent_comms.head_review import HeadReviewOrder, PromotedHeadReview, PullRequestHead
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     Argument,
@@ -81,14 +79,16 @@ from agent_comms.planning.orders import (
     UnderReviewHeadVerdict,
     UnquotedHeadReview,
 )
-from agent_comms.recorded_time import EventTime
-from agent_comms.slop import Derivation, Slop
+from agent_comms.projects.change_report import FileLine
+from agent_comms.projects.head_review import HeadReviewOrder, PromotedHeadReview, PullRequestHead
+from agent_comms.projects.slop import Derivation, Slop
+from agent_comms.storage.recorded_time import EventTime
 from agent_comms.team import order
 from agent_comms.team.order import TeamVerb
 from agent_comms.team.publication_rules import ClosedUnmergedPullRequest
 from agent_comms.team.standing_rules import HeadReviewRule, StandingRule
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tool_declaration import EditCall, ReplacementEdit
+from agent_comms.transport.tool_caller import ThreadCaller
+from agent_comms.transport.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.transport.tools.orders import (
     CommsHeadVerdictTool,
     CommsUnjudgedTool,

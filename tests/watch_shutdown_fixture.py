@@ -14,13 +14,13 @@ from agent_comms.comms import Comms
 from agent_comms.connector import Connector, ServeVerb
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.execution.child_process import ReadWork
+from agent_comms.execution.launch_root import LaunchRoot, started
 from agent_comms.execution.watch_passes import (
     Watch,
     WatchPass,
 )
-from agent_comms.launch_root import LaunchRoot, started
 from agent_comms.projects.repo import Repo
-from agent_comms.work_branches import WorkBranches
+from agent_comms.projects.work_branches import WorkBranches
 from connector_shutdown_fixture import HeldCall
 from git_shutdown_fixture import HeldGitHTTP
 from source_revision_fixture import SourceRepository

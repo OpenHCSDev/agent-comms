@@ -37,8 +37,10 @@ from agent_comms.cli_bridges.runtime_updates import (
     TurnStarted,
 )
 from agent_comms.cli_bridges.shared import BridgeInputObserved
+from agent_comms.cli_bridges.tool_calls import DecodedToolCall, ToolCall
 from agent_comms.cli_bridges.usage_reading import RateLimits
 from agent_comms.cli_bridges.wire_models import DeclaredWireFamily, WireModel
+from agent_comms.execution.tool_results import NoToolDiff, ToolDiff
 from agent_comms.execution.turn_item import NamedSourceTurn, NativeItemId, NativeTurnId
 from agent_comms.execution.turn_phase import (
     CompactionPhase,
@@ -46,7 +48,6 @@ from agent_comms.execution.turn_phase import (
     ToolRunningPhase,
     TurnPhase,
 )
-from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -54,11 +55,9 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
     boundary_decoder,
 )
-from agent_comms.recorded_time import EventTime, UnrecordedEventTime
-from agent_comms.tool_calls import DecodedToolCall, ToolCall
-from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.tool_results import NoToolDiff, ToolDiff
-from agent_comms.transcript_events import (
+from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
+from agent_comms.transcript.external_transcript import EarlierPage, NoEarlierPage
+from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
     ThinkingTranscript,
@@ -67,6 +66,7 @@ from agent_comms.transcript_events import (
     UserTranscript,
 )
 from agent_comms.transport.native_tools import FilePatchTool
+from agent_comms.transport.tool_declaration import ToolDeclaration
 
 
 class UserInput(TaggedWire, ABC, affix=""):

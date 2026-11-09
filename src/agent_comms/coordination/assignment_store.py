@@ -6,7 +6,7 @@ import sqlite3
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 
-from agent_comms.assignment_states import AssignmentState, DeferredAssignment
+from agent_comms.coordination.assignment_states import AssignmentState, DeferredAssignment
 from agent_comms.coordination.errors import IdentityConflict, StaleRevision
 from agent_comms.coordination.results import AlreadyApplied, Applied
 from agent_comms.coordination.session import CoordinationSession

@@ -22,18 +22,7 @@ from agent_comms.messaging.notification_reads import (
     RecordedNotificationRead,
 )
 from agent_comms.messaging.page_traversal import HistorySourceKey
-from agent_comms.nominal.field_codec import FieldCodec, MessageId, OrderId
-from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
-from agent_comms.presentation import NoRevision, WireRevision
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_identity import (
-    AgentThreadRole,
-    RecordedThreadIncarnation,
-    UserThreadRole,
-)
-from agent_comms.registry.threads import NativeThread
-from agent_comms.registry_provenance import DeletedThread
-from agent_comms.revision_views import (
+from agent_comms.messaging.revision_views import (
     ActivityView,
     NotificationEvidenceView,
     NotificationsView,
@@ -42,11 +31,26 @@ from agent_comms.revision_views import (
     StatusView,
     StoresView,
 )
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, OrderId
+from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
+from agent_comms.presentation import NoRevision, WireRevision
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_provenance import DeletedThread
+from agent_comms.registry.thread_identity import (
+    AgentThreadRole,
+    RecordedThreadIncarnation,
+    UserThreadRole,
+)
+from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.private_path import FileRevision, MissingFile
-from agent_comms.team_hud_records import TeammateDetail
-from agent_comms.tool_declaration import NativeRequestTools
-from agent_comms.transcripts import EarlierThan, NativeTranscriptCursor, RecordedPageSource
+from agent_comms.team.team_hud_records import TeammateDetail
+from agent_comms.transcript.transcripts import (
+    EarlierThan,
+    NativeTranscriptCursor,
+    RecordedPageSource,
+)
 from agent_comms.transport.request import ToolRequest
+from agent_comms.transport.tool_declaration import NativeRequestTools
 from agent_comms.transport.tools.reads import (
     InputDeliveryRead,
     OwnerGoalRead,

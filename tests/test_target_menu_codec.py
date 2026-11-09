@@ -56,7 +56,6 @@ def test_a_prepared_action_offers_the_choices_it_was_prepared_with():
 
 
 def test_every_action_result_crosses_by_shape_and_keeps_its_cli_form():
-    from agent_comms.channel_management import TagChangeResult
     from agent_comms.cli_verbs.cli_command import TargetBatchResult
     from agent_comms.cli_verbs.cli_commands import (
         TagRenamedResult,
@@ -69,6 +68,7 @@ def test_every_action_result_crosses_by_shape_and_keeps_its_cli_form():
     )
     from agent_comms.cli_verbs.cli_result import TargetEditResult
     from agent_comms.execution.owner_lifecycle import OwnerStartResult
+    from agent_comms.messaging.channel_management import TagChangeResult
     from agent_comms.messaging.channels import Channel
 
     answer = TargetEditResult | Channel

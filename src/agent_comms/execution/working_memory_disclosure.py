@@ -7,7 +7,7 @@ from typing import Annotated
 
 from agent_comms.execution.turn_context import ContextSegment, ContextSpan
 from agent_comms.nominal import field_codec
-from agent_comms.working_memory_questions import SpanQuestion
+from agent_comms.working_memory.working_memory_questions import SpanQuestion
 
 
 @dataclass(frozen=True)

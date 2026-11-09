@@ -6,6 +6,7 @@ from typing import (
     ClassVar,
 )
 
+from agent_comms.cli_bridges.tool_calls import CliToolArguments
 from agent_comms.execution.pi_events import PiEvent
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -35,16 +36,15 @@ from agent_comms.planning.phase_evidence import (
     RestatedMembersAbsent,
 )
 from agent_comms.planning.phase_tasks import PhaseTask, UnspecifiedPhaseTask
-from agent_comms.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.thread_identity import BirthlessIncarnation
 from agent_comms.storage.store_files import SqliteStore
-from agent_comms.tool_calls import CliToolArguments
 from agent_comms_hooks.process_claim import ProcessSingleton
 from agent_comms_hooks.queue_bypass import QueueBypassGuard
 
 if TYPE_CHECKING:
-    from agent_comms.plan_reading import PlanReading
     from agent_comms.planning.orders import Todo
+    from agent_comms.planning.plan_reading import PlanReading
 
 
 class Plan(DeclaredFamily, affix="Plan"):
@@ -328,7 +328,7 @@ class BusWriterPhase(VirtualBusPhase):
     after = (BusInterfacePhase,)
     evidence = PatternAbsent(
         "[a]ppend_private_unlocked",
-        ("src/agent_comms/bus_publication.py", "src/agent_comms/publisher.py"),
+        ("src/agent_comms/messaging/bus_publication.py", "src/agent_comms/messaging/publisher.py"),
     )
 
 
@@ -339,10 +339,10 @@ class BusDeliveryReadersPhase(VirtualBusPhase):
     evidence = PatternAbsent(
         OLD_LOG_READ,
         (
-            "src/agent_comms/wake_candidate_index.py",
+            "src/agent_comms/waking/wake_candidate_index.py",
             "src/agent_comms/notification_assignment.py",
             "src/agent_comms/messaging/read_ledger.py",
-            "src/agent_comms/cursor_publication.py",
+            "src/agent_comms/execution/cursor_publication.py",
             "src/agent_comms/planning/goal_waits.py",
         ),
     )
@@ -355,11 +355,11 @@ class BusHistoryReadersPhase(VirtualBusPhase):
     evidence = PatternAbsent(
         OLD_LOG_READ,
         (
-            "src/agent_comms/historical_views.py",
+            "src/agent_comms/messaging/historical_views.py",
             "src/agent_comms/presentation.py",
-            "src/agent_comms/transcripts.py",
+            "src/agent_comms/transcript/transcripts.py",
             "src/agent_comms/execution/transcript_sources.py",
-            "src/agent_comms/active_route.py",
+            "src/agent_comms/installer/active_route.py",
             "src/agent_comms/acp.py",
             "src/agent_comms/comms.py",
             "src/agent_comms/messaging/message_bus.py",
@@ -662,7 +662,7 @@ class InheritanceCleanupPhase(MultipleInheritancePhase):
     after = (OwnTypeChecksPhase,)
     evidence = AllEvidence(
         (
-            ParentsShared(paths=("src/agent_comms/lifecycle_capability.py",)),
+            ParentsShared(paths=("src/agent_comms/nominal/lifecycle_capability.py",)),
             RestatedMembersAbsent(),
             PatternAbsent(
                 rf"\b(getattr|hasattr)\([^,()]+, *[\"']"
@@ -800,7 +800,7 @@ class MaintenanceGatePhase(RemainingSlopPhase):
 
     evidence = PatternAbsent(
         r"assert_open_unlocked\(\)",
-        ("src/agent_comms/agent_activity.py", "src/agent_comms/wire_log.py"),
+        ("src/agent_comms/registry/agent_activity.py", "src/agent_comms/wire_log.py"),
     )
 
 

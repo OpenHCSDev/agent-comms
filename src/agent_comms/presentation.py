@@ -13,17 +13,16 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms import relationships
 from agent_comms.activity import Activity, ActivityData, ActivityState, ObservedActivity
-from agent_comms.agent_activity import AgentActivity
 from agent_comms.bus import DisplayUnread
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.coordination.errors import DMPaintedBoundChanged, StaleRevision
 from agent_comms.display_order import ChannelSort, NameChannelSort
-from agent_comms.display_references import CurrentDisplayReferences
-from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.execution.runtime_info import RuntimeInfo
 from agent_comms.message_notification import MessageNotification, NotificationPass
 from agent_comms.messaging.activity_clocks import ChannelActivity
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.channels import Channel, ChannelMemberIndex, Channels
+from agent_comms.messaging.display_references import CurrentDisplayReferences
 from agent_comms.messaging.mentions import MentionCandidate
 from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
 from agent_comms.messaging.message_reference import MessageReference
@@ -35,6 +34,21 @@ from agent_comms.messaging.read_basis import (
 )
 from agent_comms.messaging.read_ledger import NoReadNotice, ReadNotice
 from agent_comms.messaging.read_selection import CapturedSelection
+from agent_comms.messaging.recorded_bus import NoRecordedBus, RecordedBusIdentity
+from agent_comms.messaging.revision_views import (
+    ActivityView,
+    BusSourceView,
+    ExternalTranscriptsView,
+    NotificationEvidenceView,
+    NotificationsView,
+    RegistrationsView,
+    RevisionView,
+    SidebarView,
+    StatusSourced,
+    StoresView,
+    TeamBoardView,
+    TeamFramesView,
+)
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     Differs,
@@ -53,7 +67,7 @@ from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.planning.goal_presentation import GoalExecution
 from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.planning.orders import TodoStore
-from agent_comms.recorded_bus import NoRecordedBus, RecordedBusIdentity
+from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.registry_document import DEFAULT_ROSTER, RosterVisibility
 from agent_comms.registry.thread_presentation import (
     ThreadOwnerBinding,
@@ -62,26 +76,12 @@ from agent_comms.registry.thread_presentation import (
 )
 from agent_comms.registry.thread_status import ActiveThreadPresence, ThreadStatus, ThreadStatusName
 from agent_comms.registry.threads import Thread
-from agent_comms.revision_views import (
-    ActivityView,
-    BusSourceView,
-    ExternalTranscriptsView,
-    NotificationEvidenceView,
-    NotificationsView,
-    RegistrationsView,
-    RevisionView,
-    SidebarView,
-    StatusSourced,
-    StoresView,
-    TeamBoardView,
-    TeamFramesView,
-)
-from agent_comms.runtime_info import RuntimeInfo
 from agent_comms.storage.locked_store import GoalWakeFile
 from agent_comms.storage.private_path import FileRevision
-from agent_comms.storage_room import RoomLedger
-from agent_comms.team_frame_file import TeamFrameFile
-from agent_comms.tool_result import ToolResult
+from agent_comms.storage.storage_room import RoomLedger
+from agent_comms.team.team_frame_file import TeamFrameFile
+from agent_comms.transcript.external_transcript import ExternalTranscript
+from agent_comms.transport.tool_result import ToolResult
 from agent_comms.ui_model.unread import (
     ExactUnread,
     IndexingUnread,
@@ -90,18 +90,18 @@ from agent_comms.ui_model.unread import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.agent_activity import AgentActivity
     from agent_comms.bus import BusSnapshot
-    from agent_comms.catalog_document import CatalogDocument
-    from agent_comms.catalog_store import ChannelCatalog
     from agent_comms.comms import Comms
     from agent_comms.history_views import HistoryViews
     from agent_comms.messaging.message_bus import MessageBus
     from agent_comms.pi_counts import PiCount
     from agent_comms.planning.goal_management import Goals
+    from agent_comms.registry.agent_activity import AgentActivity
+    from agent_comms.registry.catalog_document import CatalogDocument
+    from agent_comms.registry.catalog_store import ChannelCatalog
     from agent_comms.registry.registration import Registration
     from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry_provenance import DeletedThread
+    from agent_comms.registry.registry_provenance import DeletedThread
     from agent_comms.ui_model.observation import ThreadsObserved
 
 

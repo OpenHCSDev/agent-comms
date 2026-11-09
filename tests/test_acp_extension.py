@@ -68,7 +68,7 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.private_path import MissingFile
-from agent_comms.transcripts import NativeTranscriptCursor
+from agent_comms.transcript.transcripts import NativeTranscriptCursor
 
 
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
@@ -87,7 +87,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     from agent_comms.execution.turn_item import NativeItemId
     from agent_comms.messaging.sent_message import AssignedSourceIdentity
     from agent_comms.storage.private_path import FileRevision
-    from agent_comms.transcripts import NativeCommittedPrefix
+    from agent_comms.transcript.transcripts import NativeCommittedPrefix
     sample_path = tmp_path / "session.jsonl"
     sample_path.write_text("{}\n")
     committed = NativeCommittedPrefix(

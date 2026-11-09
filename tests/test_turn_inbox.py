@@ -5,6 +5,7 @@
 import pytest
 
 from agent_comms.execution.native_session_prepare import NativeSessionPreparation
+from agent_comms.execution.pi_vocabulary import OffThinkingLevel
 from agent_comms.execution.turn_failure import (
     QueuedInputMissing,
     QueuedInputNotSent,
@@ -21,7 +22,6 @@ from agent_comms.execution.turn_inbox import (
 )
 from agent_comms.execution.turn_inputs import InputForwarding
 from agent_comms.nominal.field_codec import InputId
-from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.registry.thread_model import UndeclaredModel
 from native_response_fixture import native_response_session
 

@@ -3,14 +3,14 @@ requests, recorded once by the origin that speaks for the owner."""
 
 import pytest
 
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.connector import ConnectorSendTool
-from agent_comms.connector_caller import DirectorCaller
 from agent_comms.errors import CommittedMessageError
-from agent_comms.owner_requests import RequestDirective
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.planning.owner_requests import RequestDirective
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.typed_table import RowNotFoundError
+from agent_comms.transport.connector_caller import DirectorCaller
 from agent_comms.transport.tools.served import invoke_tool
 from goal_owner_fixture import canonical_goal_wire
 

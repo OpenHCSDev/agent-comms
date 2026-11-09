@@ -46,8 +46,8 @@ from agent_comms.cli_bridges.shared import (
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.messaging.messages import Message
+from agent_comms.messaging.send_result import SendResult
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.send_result import SendResult
 
 
 async def event_payloads(response: aiohttp.ClientResponse) -> AsyncIterator[str]:

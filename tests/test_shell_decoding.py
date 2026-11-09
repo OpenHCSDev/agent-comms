@@ -6,13 +6,13 @@ import shlex
 import unittest
 from pathlib import Path
 
-from agent_comms.shell_effects import (
+from agent_comms.projects.shell_effects import (
     ForbiddenStorageEffect,
     ShellInvocation,
-    StorageDenied,
     WriteStorageEffect,
     shell_storage_effects,
 )
+from agent_comms.transport.tool_denial import StorageDenied
 from agent_comms_hooks.bounded_waits import WaitCommand
 from agent_comms_hooks.shell_commands import HereDocument, ShellCommand, ShellText
 

@@ -21,7 +21,6 @@ from agent_comms.bus import (
     PrivateRecord,
     PublicRecord,
 )
-from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
 from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.tables.publications import PublicationIntents
 from agent_comms.errors import (
@@ -30,6 +29,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
+from agent_comms.messaging.bus_publication import Delivered, HumanOrigin, KeyedPublication
 from agent_comms.messaging.bus_route_counts import BusRouteCounts
 from agent_comms.messaging.bus_tables import (
     AnsweredSource,

@@ -8,7 +8,7 @@ from pathlib import Path
 import agent_comms.execution.backend as backend
 from agent_comms.agent_backend import NoInputStartListener
 from agent_comms.comms import wire
-from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.execution.selected.actions import NoSelectedTools
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.pi_native_backend import PersistentPiSession

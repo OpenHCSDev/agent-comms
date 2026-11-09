@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
     from agent_comms.acp import AcpSelectedWriteAuthority
     from agent_comms.execution.turn_runner import TurnRunner
-    from agent_comms.runtime_server import RuntimeServer
+    from agent_comms.transport.runtime_server import RuntimeServer
 
 
 class PermissionOptionId(NominalText):

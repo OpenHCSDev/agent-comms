@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from agent_comms.coordination.errors import DrainDeferred
 
 if TYPE_CHECKING:
-    from agent_comms.send_result import SendResult
+    from agent_comms.messaging.send_result import SendResult
 
 
 class NativeRequestFailure(RuntimeError, DrainDeferred):  # noqa: N818 - nominal request outcome

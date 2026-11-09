@@ -21,7 +21,10 @@ from agent_comms.cli_verbs import cli_command
 from agent_comms.cli_verbs.cli_result import CliResult, TargetEditResult
 from agent_comms.comms import Comms
 from agent_comms.execution.child_process import NoProcess, ProcessState
+from agent_comms.execution.input_origin import InputProvenance
 from agent_comms.execution.owner_lifecycle import OwnerRestartResult
+from agent_comms.execution.pi_vocabulary import ServiceTier, ThinkingLevelField
+from agent_comms.execution.session_file import SessionFile
 from agent_comms.execution.turn_context import (
     CodexRolloutProvenance,
     ContextManifest,
@@ -30,10 +33,7 @@ from agent_comms.execution.turn_context import (
     Provenance,
     TurnContext,
 )
-from agent_comms.head_review import PullRequestHead
 from agent_comms.importing import ThreadImported
-from agent_comms.input_origin import InputProvenance
-from agent_comms.lifecycle_capability import Complete
 from agent_comms.messaging.history_result import HistoryPageResult
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -45,21 +45,21 @@ from agent_comms.nominal.field_codec import (
     WireOmitDefault,
     boundary_decoder,
 )
-from agent_comms.pi_vocabulary import ServiceTier, ThinkingLevelField
+from agent_comms.nominal.lifecycle_capability import Complete
 from agent_comms.planning.goals import Goal
 from agent_comms.planning.orders import Todo
 from agent_comms.presentation import ThreadRecord, ThreadView
 from agent_comms.projects.checkouts import Checkout, CheckoutStart
+from agent_comms.projects.head_review import PullRequestHead
 from agent_comms.projects.repo import Repo
-from agent_comms.projects.storage_projection import StorageProjection
-from agent_comms.registry.thread_model import ThreadModel
-from agent_comms.registry.threads import Thread
-from agent_comms.session_file import SessionFile
-from agent_comms.shell_effects import (
+from agent_comms.projects.shell_effects import (
     AcquireRepositoryStorageEffect,
     CreateCheckoutStorageEffect,
     RemoveCheckoutStorageEffect,
 )
+from agent_comms.projects.storage_projection import StorageProjection
+from agent_comms.registry.thread_model import ThreadModel
+from agent_comms.registry.threads import Thread
 from agent_comms.storage.typed_table import SQLiteSchemaDifference, StoreRewrite
 
 if TYPE_CHECKING:

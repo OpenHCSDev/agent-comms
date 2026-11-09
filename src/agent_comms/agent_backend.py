@@ -25,20 +25,20 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms.execution.history_view import OwnHistory
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.pi_commands import NativeQuery
+from agent_comms.execution.pi_vocabulary import CompactionReason
 from agent_comms.execution.session_revision import NoSessionObservation, SessionObservation
 from agent_comms.execution.turn_inbox import InputContent
 from agent_comms.execution.turn_outcome import TurnOutcome
-from agent_comms.history_view import OwnHistory
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_payloads import PiResponseData
-from agent_comms.pi_vocabulary import CompactionReason
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.rule_deal import DealDelivery
-from agent_comms.tool_result import DeclaredReply
+from agent_comms.transport.tool_result import DeclaredReply
 
 if TYPE_CHECKING:
     from agent_comms.agent_events import AgentEvent

@@ -9,8 +9,8 @@ from typing import (
 
 from acp.schema import PromptRequest
 
-from agent_comms.annotation_correction import CorrectsAnnotation
 from agent_comms.context_store import ContextManifestReference
+from agent_comms.coordination.annotation_correction import CorrectsAnnotation
 from agent_comms.execution.turn_context import (
     DispatchRequest,
     PreviewProvenance,
@@ -19,12 +19,12 @@ from agent_comms.execution.turn_context import (
     SegmentManifest,
 )
 from agent_comms.nominal.field_codec import GoalId, WireName
-from agent_comms.owner_connection import NoControllerToken, OwnerConnection
 from agent_comms.planning.goal_actions import GoalAction
 from agent_comms.planning.goal_scope import AllGoals, OneGoal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
+from agent_comms.transport.owner_connection import NoControllerToken, OwnerConnection
 from agent_comms.transport.runtime_request import (
     AttachedResultRuntimeRequest,
     AttachedRuntimeRequest,
@@ -34,8 +34,8 @@ from agent_comms.transport.tools.sidebar import (
     QueueAction,
     SendNowQueueAction,
 )
-from agent_comms.working_memory_labels import ClassifierVersion, ModelLabel
-from agent_comms.working_memory_questions import SpanAnswer
+from agent_comms.working_memory.working_memory_labels import ClassifierVersion, ModelLabel
+from agent_comms.working_memory.working_memory_questions import SpanAnswer
 
 
 @dataclass(frozen=True, kw_only=True)

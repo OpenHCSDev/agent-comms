@@ -11,7 +11,7 @@ from agent_comms.nominal.field_codec import RecordProblems
 from agent_comms.planning.order_runs import OrderRun
 from agent_comms.projects.git_errors import SourceReadFailure
 from agent_comms.projects.repo import Repo
-from agent_comms.work_branches import WorkBranches
+from agent_comms.projects.work_branches import WorkBranches
 
 SOURCE_READ_FAILURES = (OSError, SourceReadFailure, TimeoutExpired)
 

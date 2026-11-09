@@ -11,16 +11,20 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.owner_cutover import PreserveOwnerRuntime
 from agent_comms.execution.owner_lifecycle import OwnerLifecycle, OwnerRestartSelection
+from agent_comms.execution.owner_restart import (
+    FencedOwnerBatch,
+    OwnerRestartRequest,
+    StoppedOwnerFailure,
+)
+from agent_comms.execution.pi_vocabulary import OffThinkingLevel
+from agent_comms.execution.restart_scope import OwnersNamed
 from agent_comms.launch_runtime import RestoredRuntime
-from agent_comms.owner_cutover import PreserveOwnerRuntime
-from agent_comms.owner_restart import FencedOwnerBatch, OwnerRestartRequest, StoppedOwnerFailure
-from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.owner_release import NoRelease
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
-from agent_comms.restart_scope import OwnersNamed
 from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from bus_record_fixture import configure_local_native, prepare_native_comms, start_source_owner
 

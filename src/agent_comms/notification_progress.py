@@ -14,8 +14,8 @@ from agent_comms.registry.thread_presentation import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.bus_publication import Delivered
     from agent_comms.message_notification import MessageNotification
+    from agent_comms.messaging.bus_publication import Delivered
 
 
 @dataclass(frozen=True)

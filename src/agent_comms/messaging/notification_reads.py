@@ -6,9 +6,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 from agent_comms.comms import Comms
-from agent_comms.historical_views import HistorySource
 from agent_comms.message_notification import NotificationPass, NotificationWindow
 from agent_comms.messaging.bus_read import UiRead
+from agent_comms.messaging.historical_views import HistorySource
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.page_traversal import HistorySourceKey
 from agent_comms.messaging.read_basis import ReadAuthority

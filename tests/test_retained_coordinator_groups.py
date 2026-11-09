@@ -7,11 +7,14 @@ from uuid import uuid4
 
 import pytest
 
-from agent_comms.assignment_states import FullPendingAssignment, TriagePendingAssignment
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.codex import CodexBridge
 from agent_comms.cli_bridges.harness_delivery_states import EmittedOutcome, ReceivingMonitor
 from agent_comms.comms import wire
+from agent_comms.coordination.assignment_states import (
+    FullPendingAssignment,
+    TriagePendingAssignment,
+)
 from agent_comms.coordination.attempt_start import AttemptStart
 from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.coordination.database import CoordinationStore
@@ -45,7 +48,7 @@ from agent_comms.storage.typed_table import (
     TypedTable,
     UnallocatedRowId,
 )
-from agent_comms.wake_policy import FullWake, MessageAudience
+from agent_comms.waking.wake_policy import FullWake, MessageAudience
 from bus_record_fixture import (
     FIRST_INPUT_ID,
     RECIPIENT_LOOKUP,

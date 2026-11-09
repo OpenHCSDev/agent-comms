@@ -5,9 +5,11 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.assignment_states import FullPendingAssignment, TriagePendingAssignment
-from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.comms import wire
+from agent_comms.coordination.assignment_states import (
+    FullPendingAssignment,
+    TriagePendingAssignment,
+)
 from agent_comms.coordination.tables.executions import NoPointedExecution
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.errors import RelationViolationError
@@ -15,7 +17,9 @@ from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
 )
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_lease import NoTurnRecord
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import ThreadRows
@@ -25,7 +29,6 @@ from agent_comms.registry.thread_status import (
 )
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
-from agent_comms.session_file import RegistrySessionLocation
 from bus_record_fixture import prepare_native_comms
 from conftest import installed_comms
 

@@ -7,6 +7,7 @@ import pytest
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_lease import (
     ActiveTurn,
     NoFinishedTurn,
@@ -22,7 +23,6 @@ from agent_comms.registry.thread_identity import (
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
-from agent_comms.session_file import RegistrySessionLocation
 
 
 def _metadata(registry, leased, lease, tmp_path):

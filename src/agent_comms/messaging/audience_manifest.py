@@ -16,8 +16,8 @@ from functools import cached_property
 from typing import Final
 
 from agent_comms.execution.participant_identity import ParticipantIdentity
-from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.channel_targets import exact_stored_target
+from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.messages import BusCapability, CarriesEnvelope, Message
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, ThreadLookup
 

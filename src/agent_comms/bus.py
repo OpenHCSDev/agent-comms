@@ -11,7 +11,6 @@ from itertools import islice
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.envelope_claim_transitions import (
     ClaimOwner,
     ClaimProjection,
@@ -23,6 +22,7 @@ from agent_comms.errors import CommittedMessageError, RelationViolationError, Un
 from agent_comms.messaging.activity_clocks import ActivityClocks, ChannelActivity
 from agent_comms.messaging.bus_activity_index import BusActivityIndex
 from agent_comms.messaging.bus_display_index import BusDisplayIndex
+from agent_comms.messaging.bus_publication import Delivered, KeyedPublication
 from agent_comms.messaging.bus_route_counts import RouteCounts
 from agent_comms.messaging.bus_tables import (
     AnsweredSource,
@@ -52,6 +52,7 @@ from agent_comms.messaging.messages import (
     StoredWireHistory,
 )
 from agent_comms.messaging.read_basis import CursorRow, ReadCursor, RepliesDisplayScope, UnreadQuery
+from agent_comms.messaging.watched import Watched
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
 from agent_comms.storage.locked_store import (
     BusFile,
@@ -69,7 +70,6 @@ from agent_comms.storage.typed_table import (
     SQLiteDatabase,
     WalStore,
 )
-from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
     from agent_comms.messaging.read_selection import DisplayUnreadSelection

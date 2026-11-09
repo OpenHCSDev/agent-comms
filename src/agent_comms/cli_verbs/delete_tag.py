@@ -4,15 +4,15 @@ import dataclasses
 from dataclasses import dataclass, replace
 from typing import Annotated, Self
 
-from agent_comms.channel_management import (
-    KeepThreadsTagDisposition,
-    TagChangeResult,
-    TagDisposition,
-)
 from agent_comms.cli_support.exact_tag import ExactTagCliCommand
 from agent_comms.cli_verbs.cli_command import MultipleTargets, TargetActionCommand
 from agent_comms.cli_verbs.target_fields import ChoiceTargetField
 from agent_comms.comms import Comms
+from agent_comms.messaging.channel_management import (
+    KeepThreadsTagDisposition,
+    TagChangeResult,
+    TagDisposition,
+)
 from agent_comms.nominal.field_codec import Argument, Editor, TargetBound
 
 

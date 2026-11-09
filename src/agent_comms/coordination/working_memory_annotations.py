@@ -7,14 +7,14 @@ from contextlib import contextmanager
 from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
 from agent_comms.errors import RelationViolationError
-from agent_comms.working_memory_labels import (
+from agent_comms.working_memory.working_memory_labels import (
     CalibrationReport,
     ClassifierVersion,
     HumanLabel,
     ModelLabel,
     QuestionVersion,
 )
-from agent_comms.working_memory_requests import (
+from agent_comms.working_memory.working_memory_requests import (
     CompletedAnnotationOutcome,
     DisclosureRequest,
     SubmittedAnnotationOutcome,

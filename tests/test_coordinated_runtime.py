@@ -22,10 +22,10 @@ from agent_comms.coordination.errors import (
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from agent_comms.execution.pi_vocabulary import HighThinkingLevel
 from agent_comms.execution.turn_context import TurnContext
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.notification_progress import HumanReadProgress
-from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.thread_text import GivenThreadText

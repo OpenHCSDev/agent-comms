@@ -20,6 +20,7 @@ from agent_comms.display_order import CreatedThreadSort, LastActivityThreadSort,
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.messages import Message, MessageInput, MessageRole
+from agent_comms.messaging.routing import DeliveryScope
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import GoalId
@@ -36,11 +37,10 @@ from agent_comms.registry.registry_document import RegistrySnapshot, RosterVisib
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
 from agent_comms.registry.threads import Thread
-from agent_comms.routing import DeliveryScope
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
-from agent_comms.tool_result import ToolResult
+from agent_comms.transport.tool_result import ToolResult
 
 if TYPE_CHECKING:
     from agent_comms.history_views import HistoryViews

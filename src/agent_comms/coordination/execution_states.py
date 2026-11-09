@@ -6,7 +6,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.assignment_states import (
+from agent_comms.coordination.assignment_states import (
     AssignmentState,
     CompletedAssignment,
     DeferredAssignment,
@@ -19,8 +19,8 @@ from agent_comms.coordination.errors import (
     ResponseClaimBlocked,
 )
 from agent_comms.coordination.vocabulary import CoordinatorVocabulary
-from agent_comms.lifecycle import LifecycleState
-from agent_comms.lifecycle_capability import Active, Complete, Failed, Successful, Terminal
+from agent_comms.nominal.lifecycle import LifecycleState
+from agent_comms.nominal.lifecycle_capability import Active, Complete, Failed, Successful, Terminal
 
 if TYPE_CHECKING:
     from agent_comms.coordination.snapshot import RecoverySnapshot

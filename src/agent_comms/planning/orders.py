@@ -57,49 +57,19 @@ from typing import (
     get_origin,
 )
 
-from agent_comms.build_identity import (
+from agent_comms.bus import BusReader
+from agent_comms.coordination.session import NativeCapture
+from agent_comms.errors import MissingSourceLine, TodoError
+from agent_comms.execution.child_process import ChildResult, OrderCheckFailedError
+from agent_comms.installer.build_identity import (
     BuildIdentity,
     CommitInstallation,
     InstalledBuild,
     RecordedBuildIdentity,
     UnrecordedBuildIdentity,
 )
-from agent_comms.bus import BusReader
-from agent_comms.bus_publication import AgentOrigin
-from agent_comms.change_report import (
-    CitationProject,
-    CitedRevisions,
-    CommitRevision,
-    Declaration,
-    FileLine,
-    MainRevision,
-    NoSourceReference,
-    OrderRoots,
-    SourceReference,
-    SourceRevision,
-    SourceRoots,
-    SourceText,
-    WorkingTree,
-)
-from agent_comms.coordination.session import NativeCapture
-from agent_comms.errors import MissingSourceLine, TodoError
-from agent_comms.execution.child_process import ChildResult, OrderCheckFailedError
-from agent_comms.head_review import (
-    HeadReview,
-    HeadReviewOrder,
-    HeadReviewRelation,
-    HeadReviewStatus,
-    IntegrationInput,
-    MergeArm,
-    MergeHeadReview,
-    PreparedHeadReview,
-    PullRequestHead,
-    ReadPullRequestHead,
-    UnpromotedHeadReview,
-    UntouchedMergeArm,
-)
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.lifecycle_capability import LifecycleCapability, Pending
+from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.channel_targets import (
     CommandTarget,
     CommsTag,
@@ -129,15 +99,7 @@ from agent_comms.nominal.field_codec import (
     WireTransient,
     boundary_decoder,
 )
-from agent_comms.owner_requests import (
-    OpenRequestState,
-    OwnerRequestId,
-    RequestAtRevision,
-    RequestDirective,
-    RequestLink,
-    RequestSelection,
-    RequestState,
-)
+from agent_comms.nominal.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.planning.command import Command
 from agent_comms.planning.delivery_evidence import (
     SOURCE_READ_FAILURES,
@@ -162,6 +124,15 @@ from agent_comms.planning.order_words import (
     StrikeReason,
     VerdictReason,
 )
+from agent_comms.planning.owner_requests import (
+    OpenRequestState,
+    OwnerRequestId,
+    RequestAtRevision,
+    RequestDirective,
+    RequestLink,
+    RequestSelection,
+    RequestState,
+)
 from agent_comms.planning.plan_phases import OrderPhase, UnplannedPhase
 from agent_comms.planning.problem_findings import (
     ExpectedProblem,
@@ -173,6 +144,8 @@ from agent_comms.planning.problem_findings import (
     Successor,
     UnlocatedProblemFinding,
 )
+from agent_comms.planning.problem_number import ProblemNumber
+from agent_comms.planning.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
 from agent_comms.planning.progress_readings import (
     DistanceReading,
     DistanceReadings,
@@ -206,8 +179,21 @@ from agent_comms.planning.todo_refusals import (
     TeammateOccupied,
     TodoStoreUnwritable,
 )
-from agent_comms.problem_number import ProblemNumber
-from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
+from agent_comms.projects.change_report import (
+    CitationProject,
+    CitedRevisions,
+    CommitRevision,
+    Declaration,
+    FileLine,
+    MainRevision,
+    NoSourceReference,
+    OrderRoots,
+    SourceReference,
+    SourceRevision,
+    SourceRoots,
+    SourceText,
+    WorkingTree,
+)
 from agent_comms.projects.checkouts import (
     Checkout,
     CommitFilter,
@@ -216,10 +202,32 @@ from agent_comms.projects.checkouts import (
     RepositoryReads,
 )
 from agent_comms.projects.git_errors import FailedGitCommand, SourceReadFailure
+from agent_comms.projects.head_review import (
+    HeadReview,
+    HeadReviewOrder,
+    HeadReviewRelation,
+    HeadReviewStatus,
+    IntegrationInput,
+    MergeArm,
+    MergeHeadReview,
+    PreparedHeadReview,
+    PullRequestHead,
+    ReadPullRequestHead,
+    UnpromotedHeadReview,
+    UntouchedMergeArm,
+)
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.slop import DeclarationDerivation, Slop
 from agent_comms.projects.storage_rules import CheckoutAllocation, StorageRule
-from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from agent_comms.projects.work_branches import (
+    BranchComparison,
+    BranchDifference,
+    CommitBase,
+    SourceGrowth,
+    WorkBranchError,
+    WorkBranches,
+)
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot, TeamProject
 from agent_comms.registry.registry_store import RegistryStore
@@ -229,7 +237,7 @@ from agent_comms.registry.thread_identity import (
     ThreadIncarnation,
 )
 from agent_comms.registry.threads import Thread
-from agent_comms.slop import DeclarationDerivation, Slop
+from agent_comms.storage.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.storage.typed_table import (
     CapturedRows,
     Column,
@@ -249,15 +257,7 @@ from agent_comms.storage.typed_table import (
     TypedTable,
 )
 from agent_comms.team.rule_file import RuleFile
-from agent_comms.tool_result import ToolResult
-from agent_comms.work_branches import (
-    BranchComparison,
-    BranchDifference,
-    CommitBase,
-    SourceGrowth,
-    WorkBranchError,
-    WorkBranches,
-)
+from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 
 

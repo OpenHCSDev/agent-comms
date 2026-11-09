@@ -13,7 +13,13 @@ from pathlib import Path
 from typing import ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
 
-from agent_comms.connector_caller import (
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, NominalSpelling, NominalText, RootId
+from agent_comms.storage.locked_store import DocumentChange, ExternalFile, FilesRequest
+from agent_comms.storage.maintenance_barrier import CarriedDocument
+from agent_comms.storage.store_files import DependentStateTier, DrainedWriters, SingleFileStore
+from agent_comms.storage.typed_table import GuardedExternalStore
+from agent_comms.transport.connector_caller import (
     CALLER,
     ConnectorCaller,
     ForkingCaller,
@@ -23,12 +29,6 @@ from agent_comms.connector_caller import (
     UiCaller,
     UiReadCaller,
 )
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import FieldCodec, NominalSpelling, NominalText, RootId
-from agent_comms.storage.locked_store import DocumentChange, ExternalFile, FilesRequest
-from agent_comms.storage.maintenance_barrier import CarriedDocument
-from agent_comms.storage.store_files import DependentStateTier, DrainedWriters, SingleFileStore
-from agent_comms.storage.typed_table import GuardedExternalStore
 from agent_comms.transport.connector_profile import (
     MCP_PATH,
     BearerSecret,

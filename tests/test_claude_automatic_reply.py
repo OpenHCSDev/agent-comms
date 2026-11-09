@@ -22,7 +22,6 @@ from agent_comms.cli_bridges.runtime_updates import (
 from agent_comms.cli_bridges.shared import Binding, Options, StoredBinding, Watch
 from agent_comms.comms import Comms
 from agent_comms.connector import ConnectorSendTool
-from agent_comms.connector_caller import DirectorCaller
 from agent_comms.coordination.errors import CoordinationBeginUnavailable
 from agent_comms.execution.turn_digests import LastTurns
 from agent_comms.execution.turn_item import (
@@ -47,6 +46,7 @@ from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread
 from agent_comms.team.standing_rules import DirectiveUnacted
+from agent_comms.transport.connector_caller import DirectorCaller
 from test_monitor_delivery import attached_monitor, bridge, decoded_record, event_from, notification
 from transcript_record_fixture import transcript_record
 

@@ -9,9 +9,9 @@ from typing import TextIO, cast
 
 from pydantic import JsonValue
 
+from agent_comms.execution.pi_vocabulary import ServiceTier
 from agent_comms.nominal.field_codec import SubclassUnion
-from agent_comms.pi_vocabulary import ServiceTier
-from agent_comms.tool_result import DeclaredReply, ToolResult
+from agent_comms.transport.tool_result import DeclaredReply, ToolResult
 
 
 class ResultShower(ABC):

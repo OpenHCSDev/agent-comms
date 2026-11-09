@@ -20,11 +20,10 @@ from typing import (
 
 from pydantic import JsonValue
 
-from agent_comms.change_report import CitationProject, FileLine, NoSourceReference
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.input_key import InputKey, InputKeyText
-from agent_comms.lifecycle_capability import Settled
+from agent_comms.execution.input_key import InputKey, InputKeyText
+from agent_comms.execution.reported_turn import ReportedTurnState
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -34,8 +33,7 @@ from agent_comms.nominal.field_codec import (
     MessageId,
     RetryDecisionId,
 )
-from agent_comms.owner_connection import CapturedOwner
-from agent_comms.owner_requests import OwnerRequestId
+from agent_comms.nominal.lifecycle_capability import Settled
 from agent_comms.planning.attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
 from agent_comms.planning.command import Command
 from agent_comms.planning.goal_mentions import bind_goal_mentions
@@ -72,14 +70,16 @@ from agent_comms.planning.orders import (
     Todo,
     TodoCommand,
 )
+from agent_comms.planning.owner_requests import OwnerRequestId
 from agent_comms.planning.problem_findings import ExpectedProblem
-from agent_comms.progress_claims import ProgressClaim
+from agent_comms.planning.progress_claims import ProgressClaim
+from agent_comms.projects.change_report import CitationProject, FileLine, NoSourceReference
 from agent_comms.projects.repository_name import RepositoryName
-from agent_comms.recorded_time import EventTime
 from agent_comms.registry.registry_store import RegistryEdit
 from agent_comms.registry.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from agent_comms.registry.threads import Thread
-from agent_comms.reported_turn import ReportedTurnState
+from agent_comms.storage.recorded_time import EventTime
+from agent_comms.transport.owner_connection import CapturedOwner
 from agent_comms.transport.runtime_request import AttachedRuntimeRequest
 
 if TYPE_CHECKING:

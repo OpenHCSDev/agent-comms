@@ -6,7 +6,7 @@ from abc import (
 )
 from typing import TYPE_CHECKING
 
-from agent_comms.input_key import InputKey
+from agent_comms.execution.input_key import InputKey
 
 if TYPE_CHECKING:
     from agent_comms.input_disposition import InputDispositions

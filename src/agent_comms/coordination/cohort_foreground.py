@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from agent_comms.cohort_schema import AcceptanceFrontier, CohortDeliveries, CohortTable
 from agent_comms.coordination.cohort import AcceptedCohort
+from agent_comms.coordination.cohort_schema import AcceptanceFrontier, CohortDeliveries, CohortTable
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.session import NativeCommit

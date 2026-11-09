@@ -9,8 +9,8 @@ from pathlib import Path
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.pi_vocabulary import PendingStopReason
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
-from agent_comms.pi_vocabulary import PendingStopReason
 from agent_comms.storage.private_path import (
     FileIdentity,
     FileRevision,

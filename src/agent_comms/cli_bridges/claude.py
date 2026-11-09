@@ -18,8 +18,8 @@ from agent_comms.cli_bridges.hook_session import SessionHook
 from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.cli_bridges.shared import Enrol, LineMonitorBridge, Options, Watch, run_bridge
+from agent_comms.messaging.watched import FileSource
 from agent_comms.storage.private_path import FileRevision
-from agent_comms.watched import FileSource
 from agent_comms_hooks.shell_commands import ConnectCommand
 
 

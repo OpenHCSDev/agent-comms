@@ -4,8 +4,8 @@ import os
 from pathlib import Path
 
 from agent_comms.acp_extension import CoordinationChangedUpdate
-from agent_comms.agent_activity import AgentActivity
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_management import ThreadManagement
 

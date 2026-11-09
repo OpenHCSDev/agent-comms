@@ -27,8 +27,8 @@ from agent_comms.coordination.obligation_states import (
     SilentResponse,
 )
 from agent_comms.coordination.vocabulary import CoordinatorVocabulary
-from agent_comms.lifecycle import LifecycleState
-from agent_comms.lifecycle_capability import Failed, Terminal
+from agent_comms.nominal.lifecycle import LifecycleState
+from agent_comms.nominal.lifecycle_capability import Failed, Terminal
 
 if TYPE_CHECKING:
     from agent_comms.coordination.tables.attempts import ReplayFact

@@ -7,17 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.check_root import CheckRoot
 from agent_comms.cli import CliInvocation
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import UnreceivedAnswerError
+from agent_comms.execution.check_root import CheckRoot
 from agent_comms.execution.child_process import NoProcess
 from agent_comms.execution.native_entries import NativeEntry
 from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
-from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.messaging.sending import TeamReceipts
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_status import (
@@ -25,7 +24,12 @@ from agent_comms.registry.thread_status import (
     StoppedThreadStatus,
 )
 from agent_comms.registry.threads import NativeThread
-from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
+from agent_comms.transcript.external_transcript import ExternalTranscript
+from agent_comms.transcript.transcript_events import (
+    AssistantTranscript,
+    NoticeTranscript,
+    UserTranscript,
+)
 from bus_record_fixture import append_reply
 
 

@@ -35,7 +35,6 @@ from agent_comms.coordination.tables.executions import (
 from agent_comms.coordination.tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination.tables.recovery import RecoveryAudit
 from agent_comms.coordination.tables.responses import ResponseObligation
-from agent_comms.lifecycle_capability import Active, Complete
 from agent_comms.nominal.field_codec import (
     SnapshotExclude,
     SnapshotName,
@@ -44,6 +43,7 @@ from agent_comms.nominal.field_codec import (
     boundary_decoder,
     projected,
 )
+from agent_comms.nominal.lifecycle_capability import Active, Complete
 
 if TYPE_CHECKING:
     from agent_comms.coordination.attempt_states import TerminalAttempt

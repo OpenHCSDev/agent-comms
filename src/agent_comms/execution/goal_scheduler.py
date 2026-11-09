@@ -17,6 +17,7 @@ from agent_comms.errors import GoalAttemptError, GoalRefused, RelationViolationE
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.input_drain import WakeScheduleCheck
 from agent_comms.execution.reservation_rules import ReservationViolationError
+from agent_comms.messaging.routing import ScheduledTurn
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId
 from agent_comms.planning.goal_actions import (
     EditGoalAction,
@@ -32,7 +33,6 @@ from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.planning.goals import Goal, GoalDeclaration, GoalRevision
 from agent_comms.registry.registry_document import RegistryDocument, RegistrySnapshot
 from agent_comms.registry.threads import NativeThread
-from agent_comms.routing import ScheduledTurn
 from agent_comms.storage.locked_store import GoalWakeFile
 
 if TYPE_CHECKING:

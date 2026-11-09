@@ -46,10 +46,9 @@ from typing import (
     overload,
 )
 
-from agent_comms.class_fact import ClassFact
 from agent_comms.errors import RelationViolationError
-from agent_comms.lifecycle import LifecycleState
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
+from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMember, declared_words
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -68,6 +67,7 @@ from agent_comms.nominal.field_codec import (
     WireValue,
     compile_decoder,
 )
+from agent_comms.nominal.lifecycle import LifecycleState
 from agent_comms.package_stamp import STAMP
 from agent_comms.storage.locked_store import (
     DeclaredFile,

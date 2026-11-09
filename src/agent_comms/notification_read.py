@@ -13,10 +13,10 @@ from agent_comms.message_notification import (
     NotificationPass,
     NotificationWindow,
 )
+from agent_comms.messaging.revision_views import ActivityView, NotificationEvidenceView
 from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.presentation import WireRevision
-from agent_comms.registry_provenance import DeletedThread
-from agent_comms.revision_views import ActivityView, NotificationEvidenceView
+from agent_comms.registry.registry_provenance import DeletedThread
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
 from agent_comms.execution.turn_digests import OrderToolCallCountRead, TurnsSince
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.standing_rules import HeldBranch, HeldBranchRule, HeldOrderBranchRule
 
 

@@ -12,9 +12,7 @@ from agent_comms.execution.turn_context import (
     SystemLayerSegment,
     UnattributedProvenance,
 )
-from agent_comms.working_memory_labels import (
-    JevClassifier,
-)
+from agent_comms.working_memory.working_memory_labels import JevClassifier
 from working_memory_fixture import local_system
 
 

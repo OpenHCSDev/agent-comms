@@ -14,7 +14,7 @@ from typing import (
     Literal,
 )
 
-from agent_comms.assignment_states import (
+from agent_comms.coordination.assignment_states import (
     FailedAssignment,
     IgnoredAssignment,
     TriagePendingAssignment,
@@ -37,8 +37,8 @@ from agent_comms.storage.typed_table import TextStorage
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
-    from agent_comms.assignment_states import AssignmentState
     from agent_comms.coordinated_runtime import SelectedExecution
+    from agent_comms.coordination.assignment_states import AssignmentState
     from agent_comms.execution.historical_native_inputs import HistoricalNativeInput
     from agent_comms.execution.native_input_proof import NativeContextProof
     from agent_comms.execution.native_input_record import TriageNativeExecution

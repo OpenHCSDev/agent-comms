@@ -16,30 +16,46 @@ from subprocess import TimeoutExpired
 from typing import ClassVar, Self
 
 from agent_comms.comms import Comms
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.heartbeat_subjects import HeartbeatSubject, TeammateSubject
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.ui_model.hud_groups import (
-    ExpandedHudGroup, HudGroup, IdleGroup, InProgressGroup, ParkedGroup,
-    ReadyToTestGroup, UrgentGroup,
-)
 from agent_comms.nominal.field_codec import (
     DisclosedRecord,
     MalformedRecord,
     ToolCallId,
 )
 from agent_comms.planning.goal_presentation import GoalSnapshot
-from agent_comms.heartbeat_subjects import HeartbeatSubject, TeammateSubject
-from agent_comms.messaging.messages import Message
-from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.planning.orders import (
+    MergedProgress,
+    NoCommitProgress,
+    OrderProgress,
+    ProgressSource,
+    Todo,
+)
 from agent_comms.projects.git_errors import GitCommandError
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.projects.work_branches import WorkBranchError
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread
-from agent_comms.transcript_events import OrderCall, TurnDigest
-from agent_comms.work_branches import WorkBranchError
-
-from agent_comms.planning.orders import MergedProgress, NoCommitProgress, OrderProgress, ProgressSource, Todo
-from agent_comms.team.standing_rules import FamilyScan, ObservedTeammate, TeammateEvidence, HeartbeatFrame, UndatedStandingRule
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.team.standing_rules import (
+    FamilyScan,
+    HeartbeatFrame,
+    ObservedTeammate,
+    TeammateEvidence,
+    UndatedStandingRule,
+)
+from agent_comms.transcript.transcript_events import OrderCall, TurnDigest
+from agent_comms.ui_model.hud_groups import (
+    ExpandedHudGroup,
+    HudGroup,
+    IdleGroup,
+    InProgressGroup,
+    ParkedGroup,
+    ReadyToTestGroup,
+    UrgentGroup,
+)
 
 
 class TeammateClock(DisclosedRecord, DeclaredFamily, affix="Clock"):

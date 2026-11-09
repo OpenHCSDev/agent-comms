@@ -19,10 +19,9 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.bus_publication import Delivered
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.meant_voice import BusVoice
+from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.registry.threads import Thread
 from agent_comms.rule_deal import (
@@ -34,7 +33,8 @@ from agent_comms.rule_deal import (
     RuleDeal,
     Voice,
 )
-from agent_comms.tool_denial import SelectedToolDenied
+from agent_comms.team.meant_voice import BusVoice
+from agent_comms.transport.tool_denial import SelectedToolDenied
 from agent_comms_hooks.skill import DeckReader, RulesOnly
 
 if TYPE_CHECKING:

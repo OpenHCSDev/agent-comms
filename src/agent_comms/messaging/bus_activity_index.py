@@ -7,10 +7,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Annotated
 
-from agent_comms.class_fact import ClassFact
 from agent_comms.messaging import activity_clocks
 from agent_comms.messaging.messages import BusProjectionTables
 from agent_comms.messaging.projection_source import ProducedRow
+from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.storage.typed_table import Column
 
 

@@ -13,8 +13,8 @@ import pytest
 
 import agent_comms.installer.native_package as native_package
 from agent_comms.bus import Bus
-from agent_comms.core_stamp import WheelStamp
 from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.installer.core_stamp import WheelStamp
 from agent_comms.installer.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from agent_comms.installer.native_package import (
     NativePackageError,

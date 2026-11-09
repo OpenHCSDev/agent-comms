@@ -47,7 +47,7 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.task_sources import AnnotationDisclosureGrant, ProjectTaskScope
-from agent_comms.working_memory_labels import (
+from agent_comms.working_memory.working_memory_labels import (
     HumanLabel,
     JevChoice,
     JevClassifier,
@@ -56,8 +56,8 @@ from agent_comms.working_memory_labels import (
     ModelLabel,
     QuestionVersion,
 )
-from agent_comms.working_memory_questions import KindQuestion, OtherSpan, SpanAnswer
-from agent_comms.working_memory_requests import (
+from agent_comms.working_memory.working_memory_questions import KindQuestion, OtherSpan, SpanAnswer
+from agent_comms.working_memory.working_memory_requests import (
     AnnotationBudgetExhausted,
     DisclosureRequest,
     FailedAnnotationOutcome,

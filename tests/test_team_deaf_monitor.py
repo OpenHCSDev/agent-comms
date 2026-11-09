@@ -32,7 +32,7 @@ from agent_comms.registry.thread_status import ConnectedThreadStatus
 from agent_comms.registry.threads import ExternalThread
 from agent_comms.task_attachments.owner_notices import TeamNotice
 from agent_comms.task_attachments.team_pings import TeamUpdate
-from agent_comms.team_heartbeat import TeamHeartbeat
+from agent_comms.team.team_heartbeat import TeamHeartbeat
 
 pytest_plugins = ("test_holder_standing_rules",)
 

@@ -14,8 +14,8 @@ from queue import Empty
 
 import pytest
 
-from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.cli_verbs.stop import StopCliCommand
+from agent_comms.coordination.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import RecoveryBlocked
 from agent_comms.errors import GoalRefused, StaleAttemptError, UnresolvedAttemptError

@@ -11,13 +11,7 @@ from agent_comms.execution.child_process import (
     ProcessIdentity,
     SpawnedProcess,
 )
-from agent_comms.installer.runtime_retention import (
-    RefusedRetirement,
-    RuntimeRetention,
-    SweptRetirement,
-)
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.runtime_processes import (
+from agent_comms.execution.runtime_processes import (
     ImportingRuntimeProcess,
     PointerReference,
     RuntimeApplication,
@@ -27,6 +21,12 @@ from agent_comms.runtime_processes import (
     UnreadableRuntimeProcess,
     UnretiredRuntimeProcess,
 )
+from agent_comms.installer.runtime_retention import (
+    RefusedRetirement,
+    RuntimeRetention,
+    SweptRetirement,
+)
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def built(runtimes: Path, name: str, *, completed: bool = True) -> LaunchRuntime:

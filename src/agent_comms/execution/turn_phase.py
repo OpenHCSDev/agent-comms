@@ -19,8 +19,8 @@ from agent_comms.nominal.field_codec import ToolCallId
 from agent_comms.pi_payloads import ProviderDiagnosticError
 
 if TYPE_CHECKING:
-    from agent_comms.agent_activity import AgentActivity
     from agent_comms.execution.turn_lease import TurnLeaseFence
+    from agent_comms.registry.agent_activity import AgentActivity
 
 
 @dataclass(frozen=True)

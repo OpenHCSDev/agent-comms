@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.coordination.errors import IdentityConflict, IntegrityViolationError
 from agent_comms.coordination.reason_codes import NoReasonCode
 from agent_comms.coordination.vocabulary import CoordinatorVocabulary
-from agent_comms.lifecycle import LifecycleState
-from agent_comms.lifecycle_capability import Deferred, Failed, Pending, Successful, Terminal
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import MessageId, NullMember
+from agent_comms.nominal.lifecycle import LifecycleState
+from agent_comms.nominal.lifecycle_capability import Deferred, Failed, Pending, Successful, Terminal
 
 if TYPE_CHECKING:
     from agent_comms.coordination.session import CoordinationSession

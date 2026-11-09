@@ -27,9 +27,9 @@ from agent_comms.nominal.field_codec import (
     WireTransient,
 )
 from agent_comms.storage.maintenance_barrier import FreshIngress
-from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.tool_result import ToolResult
 from agent_comms.transport.progress import WireExportObserver
+from agent_comms.transport.tool_declaration import ToolDeclaration
+from agent_comms.transport.tool_result import ToolResult
 
 
 class ArgumentTool:

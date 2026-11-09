@@ -3,15 +3,15 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.message_notification import MessageNotification
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.channels import AnyChannel
-from agent_comms.connector_caller import DirectorCaller
-from agent_comms.message_notification import MessageNotification
 from agent_comms.presentation import SentMessageSummary
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
-from agent_comms.tool_declaration import NativeRequestTools
+from agent_comms.transport.connector_caller import DirectorCaller
+from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.transport.tool_declaration import NativeRequestTools
 from agent_comms.transport.tools.served import invoke_tool
 from agent_comms_hooks import ToolRefusedError
 
@@ -20,7 +20,7 @@ class TestToolCatalog:
     def test_native_launch_carries_the_existing_catalog_and_thread_tier(self, comms, tmp_path, monkeypatch):
         from agent_comms.cli_verbs.tools import ToolsCliCommand
         from agent_comms.execution.native_arguments import NativeArguments
-        from agent_comms.pi_vocabulary import ServiceTier
+        from agent_comms.execution.pi_vocabulary import ServiceTier
         from agent_comms.registry.thread_catalog import ThreadCatalog
         from agent_comms.registry.threads import ChosenServiceTier, NextTurnConfiguration
 
@@ -124,7 +124,7 @@ class TestToolCatalog:
         import threading
         import time
 
-        from agent_comms.agent_inbox import TakenInputAfter
+        from agent_comms.messaging.agent_inbox import TakenInputAfter
         from agent_comms.nominal.field_codec import FieldCodec
 
         for name in ("a", "b"):

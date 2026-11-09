@@ -24,10 +24,9 @@ from pydantic import JsonValue
 import fixture_git  # noqa: F401
 import goal_owner_fixture
 from agent_comms.bus import Bus, BusRecord
-from agent_comms.bus_publication import AgentOrigin
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import Comms, wire
-from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.execution.native_entries import NativeEvidenceScope, SessionEntry
 from agent_comms.execution.pi_durable_backend import PiDurableBackend
 from agent_comms.installer.native_package import (
@@ -37,6 +36,7 @@ from agent_comms.installer.native_package import (
 )
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.messages import (
@@ -46,12 +46,12 @@ from agent_comms.messaging.messages import (
     MessageKind,
     MessageRole,
 )
+from agent_comms.messaging.publisher import InitialWrites, ParticipantPublisher
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_payloads import PiMessage
 from agent_comms.pi_rule_gate import PiRedeal, PiRuleGate
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
-from agent_comms.publisher import InitialWrites, ParticipantPublisher
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_model import DeclaredModel
@@ -70,9 +70,9 @@ from agent_comms.storage.maintenance_barrier import (
 )
 from agent_comms.storage.typed_table import TypedTable
 from agent_comms.team.order import Team
-from agent_comms.tool_caller import PeerCaller
-from agent_comms.tool_declaration import NoToolRecord, ToolDeclaration
 from agent_comms.transport.native_tool_transport import ToolListener
+from agent_comms.transport.tool_caller import PeerCaller
+from agent_comms.transport.tool_declaration import NoToolRecord, ToolDeclaration
 from agent_comms_hooks.watch import WatchRecord
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
@@ -293,7 +293,7 @@ def source_reads() -> Iterator[NativeEvidenceScope]:
 
 @pytest.fixture
 def cursor_delivery(source_reads: NativeEvidenceScope) -> CursorDelivery:
-    from agent_comms.cursor_publication import CursorDelivery
+    from agent_comms.execution.cursor_publication import CursorDelivery
 
     return CursorDelivery(source_reads=source_reads)
 
@@ -381,7 +381,7 @@ def _test_worker_hosts_stop_with_the_test(request: pytest.FixtureRequest) -> Ite
 @pytest.fixture(autouse=True)
 def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """A developer's live managed process is not a test wire or native child."""
-    from agent_comms.launch_root import LaunchRoot
+    from agent_comms.execution.launch_root import LaunchRoot
 
     with LaunchRoot.unstarted().selected():
         for name in _MANAGED_RUNTIME_ENVIRONMENT:
@@ -433,8 +433,8 @@ def private_comms(private_directory: Path) -> Iterator[Comms]:
 
     root = private_directory / "wire"
     comms = prepare_native_comms(wire(root))
+    from agent_comms.execution.launch_root import LaunchRoot
     from agent_comms.installer.logs import InstallLogs
-    from agent_comms.launch_root import LaunchRoot
 
     try:
         with LaunchRoot.from_path(root).selected():

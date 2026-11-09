@@ -22,28 +22,33 @@ from agent_comms.acp_extension import (
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.input_key import BusInputKey
 from agent_comms.execution.native_arguments import GivenBinary
+from agent_comms.execution.owner_protocol import (
+    OwnerAnnouncement,
+    OwnerReady,
+    OwnerResult,
+    OwnerUpdate,
+)
+from agent_comms.execution.runtime import RuntimeConnection, present_session
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.input_disposition import InputDispositions, InputDocument
-from agent_comms.input_key import BusInputKey
 from agent_comms.messaging.bus_read import OwnerReadRuntimeRequest
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, RootId
-from agent_comms.owner_connection import (
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.storage.private_path import PrivateSocketRole
+from agent_comms.transport.owner_connection import (
     CapturedOwner,
     OwnerIdentityChangedError,
     OwnerReplyConnection,
     OwnerReplyLostError,
     socket_path,
 )
-from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.runtime import RuntimeConnection, present_session
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.storage.private_path import PrivateSocketRole
-from agent_comms.tool_caller import ToolCaller
 from agent_comms.transport.runtime_request import RuntimeRequest
 from agent_comms.transport.runtime_requests import QueueActionRuntimeRequest
+from agent_comms.transport.tool_caller import ToolCaller
 from agent_comms.transport.tools.orders import ServedInputDeliveryRead
 from agent_comms.transport.tools.reads import InputDeliveryRead
 from delivery_owner_fixture import canonical_agent
@@ -211,7 +216,7 @@ async def test_subscription_replay_uses_requested_alias(
     tmp_path, request_original, private_comms, native_runtime_package
 ):
     from agent_comms.coordination.coordinator import Coordination
-    from agent_comms.launch_root import LaunchRoot
+    from agent_comms.execution.launch_root import LaunchRoot
 
     comms = private_comms
     LaunchRoot.from_path(comms.root).install()
@@ -452,7 +457,7 @@ async def test_a_queue_action_binds_the_incarnation_its_caller_read(comms, queue
 def test_a_queue_action_reply_reaches_its_caller():
     """The owner answers a queue action with the reply it encodes; one the codec cannot encode
     closed the socket after the action ran, and every steer Toad sent showed an unknown outcome."""
-    from agent_comms.owner_protocol import OwnerLine, OwnerResult
+    from agent_comms.execution.owner_protocol import OwnerLine, OwnerResult
     from agent_comms.runtime_requests import QueueActionReply
 
     line = FieldCodec.compact(FieldCodec.encode(OwnerResult(result=FieldCodec.encode(QueueActionReply()))))

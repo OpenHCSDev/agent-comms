@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from agent_comms.assignment_states import EngagedAssignment
+from agent_comms.coordination.assignment_states import EngagedAssignment
 from agent_comms.coordination.attempt_start import AttemptStart
 from agent_comms.coordination.attempt_states import (
     AttemptState,

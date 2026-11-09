@@ -22,7 +22,7 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from agent_comms.class_fact import ClassFact, Declarations
+from agent_comms.nominal.class_fact import ClassFact, Declarations
 
 
 def declared_words(stem: str) -> str:

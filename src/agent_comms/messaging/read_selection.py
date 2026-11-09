@@ -4,8 +4,6 @@ import json
 from dataclasses import dataclass
 
 from agent_comms.bus import BusSnapshot
-from agent_comms.catalog_document import CatalogDocument
-from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.messaging.channels import Channels
 from agent_comms.messaging.read_basis import (
@@ -15,9 +13,11 @@ from agent_comms.messaging.read_basis import (
     UnreadQuery,
 )
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
+from agent_comms.registry.catalog_document import CatalogDocument
+from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.registry_provenance import RegistryProvenance
+from agent_comms.registry.registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True, slots=True)

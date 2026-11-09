@@ -4,8 +4,8 @@ import subprocess
 
 import pytest
 
-from agent_comms.connector_caller import UiCaller, UiReadCaller
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.transport.connector_caller import UiCaller, UiReadCaller
 from agent_comms.transport.core_access import LocalCoreAccess
 from agent_comms.transport.tailnet_buses import (
     PeerBus,

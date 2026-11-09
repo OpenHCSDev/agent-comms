@@ -32,7 +32,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import UserThreadRole
 from agent_comms.registry.threads import NativeThread
 from agent_comms.relationships import CollaboratingRelationshipGroup, RelationshipEdit
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
 from conftest import installed_comms
 

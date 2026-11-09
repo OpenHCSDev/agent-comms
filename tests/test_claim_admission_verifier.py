@@ -11,8 +11,8 @@ from tempfile import TemporaryDirectory
 import pytest
 
 import agent_comms.execution.selected.claim as selected_claim
-from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.comms import wire
+from agent_comms.coordination.assignment_states import FullPendingAssignment
 from agent_comms.coordination.attempt_start import AttemptStart
 from agent_comms.coordination.attempt_states import (
     ModelRunningAttempt,

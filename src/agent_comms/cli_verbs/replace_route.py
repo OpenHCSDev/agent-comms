@@ -4,12 +4,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
-from agent_comms.active_route import ActiveRoute, CommsRoute, active_route_path, route_new_bus
 from agent_comms.bus import Bus
 from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.cli_verbs.cli_commands import RouteReplacedResult
 from agent_comms.comms import Comms
-from agent_comms.recorded_bus import RecordedBusIdentity
+from agent_comms.installer.active_route import (
+    ActiveRoute,
+    CommsRoute,
+    active_route_path,
+    route_new_bus,
+)
+from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 
 
 @dataclass(frozen=True, kw_only=True)

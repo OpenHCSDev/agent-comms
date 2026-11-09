@@ -14,7 +14,6 @@ from metaclass_registry.mro_dispatch import (
 )
 
 from agent_comms.agent_events import CompactionEvent
-from agent_comms.cohort_schema import CohortTable
 from agent_comms.comms import Comms
 from agent_comms.context_store import (
     UNREAD_CONTEXT,
@@ -24,6 +23,7 @@ from agent_comms.coordination.cohort import (
     _claim_record,
     pending_sealed_assignments,
 )
+from agent_comms.coordination.cohort_schema import CohortTable
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (
     IdentityConflict,
@@ -38,8 +38,8 @@ from agent_comms.coordination.response import (
 from agent_comms.coordination.snapshot import RecoverySnapshot
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import WireOrigin
-from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.native_attestation import ObservedAttestation
 from agent_comms.execution.native_input_owner import (
@@ -67,6 +67,7 @@ from agent_comms.message_notification import (
 )
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.publisher import ParticipantPublisher
 from agent_comms.nominal.field_codec import (
     RootId,
     ThreadLookup,
@@ -78,7 +79,6 @@ from agent_comms.notification_assignment import (
     NotificationSelection,
 )
 from agent_comms.notification_evidence import OwnerOutcomes
-from agent_comms.publisher import ParticipantPublisher
 
 
 class NoLivePublication(MroDispatch):

@@ -20,8 +20,8 @@ from agent_comms.context_store import (
     ContextManifestReference,
 )
 from agent_comms.display_order import ChannelSort, ThreadSort
-from agent_comms.display_references import ReferenceNames
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_origin import HumanInputOrigin
 from agent_comms.execution.session_revision import SessionObservation
 from agent_comms.execution.turn_context import (
     CodexRolloutProvenance,
@@ -29,24 +29,9 @@ from agent_comms.execution.turn_context import (
     Provenance,
     SegmentManifest,
 )
-from agent_comms.exporting import (
-    WireExportFormat,
-    WireExportLimit,
-    WireExportProvenance,
-    WireExportScope,
-)
-from agent_comms.harness_install import Harness
-from agent_comms.historical_views import (
-    AllHistoricalSenders,
-    ConversationObservation,
-    ConversationRevision,
-    HistoricalSenders,
-    HistoricalThread,
-    UnobservedConversation,
-)
 from agent_comms.history_views import RetiredViews
 from agent_comms.importing import ThreadImported
-from agent_comms.input_origin import HumanInputOrigin
+from agent_comms.installer.harness_install import Harness
 from agent_comms.messaging.channel_targets import (
     ChannelSelection,
     CommandTarget,
@@ -54,8 +39,25 @@ from agent_comms.messaging.channel_targets import (
     NoChannel,
 )
 from agent_comms.messaging.channels import Channel
+from agent_comms.messaging.display_references import ReferenceNames
+from agent_comms.messaging.exporting import (
+    WireExportFormat,
+    WireExportLimit,
+    WireExportProvenance,
+    WireExportScope,
+)
+from agent_comms.messaging.historical_views import (
+    AllHistoricalSenders,
+    ConversationObservation,
+    ConversationRevision,
+    HistoricalSenders,
+    HistoricalThread,
+    UnobservedConversation,
+)
 from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
 from agent_comms.messaging.page_traversal import LatestSequence
+from agent_comms.messaging.send_result import MessagePublished
+from agent_comms.messaging.served_bus import ServedBus, UnidentifiedBus
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import ThreadLookup, WireName
 from agent_comms.presentation import WireRevision
@@ -76,13 +78,11 @@ from agent_comms.registry.thread_presentation import ThreadPresentation
 from agent_comms.registry.thread_text import ExpectedSession
 from agent_comms.registry.threads import Thread
 from agent_comms.relationships import SortableRelationshipGroup, ThreadCommsSnapshot
-from agent_comms.send_result import MessagePublished
-from agent_comms.served_bus import ServedBus, UnidentifiedBus
-from agent_comms.tool_result import ToolResult
-from agent_comms.transcripts import TranscriptCursor
+from agent_comms.transcript.transcripts import TranscriptCursor
 from agent_comms.transport.request import ObservedRequest, ReadRequest, ToolRequest, tool_field
 from agent_comms.transport.runtime_request import RuntimeRequest
-from agent_comms.working_memory_labels import ModelLabel
+from agent_comms.transport.tool_result import ToolResult
+from agent_comms.working_memory.working_memory_labels import ModelLabel
 
 
 @dataclass(frozen=True, kw_only=True)

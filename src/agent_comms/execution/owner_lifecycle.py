@@ -19,12 +19,13 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.active_route import resolve_comms_route
-from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.cli_verbs.cli_result import TargetEditResult
+from agent_comms.coordination.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import Platform, ProcessIdentity
 from agent_comms.execution.diagnostics import OwnerProcessOutput
+from agent_comms.execution.input_key import AcpInputKey, InputKey
+from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.native_arguments import (
     ConfiguredBinary,
     InheritedArguments,
@@ -32,9 +33,16 @@ from agent_comms.execution.native_arguments import (
     LaunchBinary,
     NativeArguments,
 )
+from agent_comms.execution.private_nk_entrypoint import PrivateNkLaunch, RootLaunch
+from agent_comms.execution.restart_refusals import (
+    OwnerBusyRefusal,
+    OwnerGenerationChangedRefusal,
+    OwnerSelectionChangedRefusal,
+)
+from agent_comms.execution.restart_scope import AllOwners, RestartScope
+from agent_comms.execution.root_runtime import RootRuntimeStore
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_key import AcpInputKey, InputKey
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.installer.active_route import resolve_comms_route
 from agent_comms.launch_runtime import (
     INHERITED_ENVIRONMENT,
     LaunchRuntime,
@@ -45,8 +53,6 @@ from agent_comms.launch_runtime import (
 from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import InputId, RecordMember
-from agent_comms.owner_connection import OwnerConnection
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from agent_comms.registry.owner_release import OwnerReleaseStore
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
@@ -54,15 +60,9 @@ from agent_comms.registry.registry_store import RegistryEdit
 from agent_comms.registry.thread_identity import ClaimedIdentity, OwnerIdentity
 from agent_comms.registry.thread_text import GivenThreadText, NoThreadText, ThreadText
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.restart_refusals import (
-    OwnerBusyRefusal,
-    OwnerGenerationChangedRefusal,
-    OwnerSelectionChangedRefusal,
-)
-from agent_comms.restart_scope import AllOwners, RestartScope
-from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.task_attachments.owner_notices import RestartNotice
+from agent_comms.transport.owner_connection import OwnerConnection
 from agent_comms.transport.owner_requests import (
     RetainedOwnerLaunch,
     StartOwnerRuntimeRequest,
@@ -166,7 +166,7 @@ class OwnerStartResult(RecordMember, TargetEditResult):
         return (self.thread,)
 
 
-from agent_comms.owner_cutover import OwnerCutover, PreserveOwnerRuntime
+from agent_comms.execution.owner_cutover import OwnerCutover, PreserveOwnerRuntime
 
 
 class OwnerLifecycle:
@@ -303,7 +303,7 @@ class OwnerLifecycle:
         replacement launches. It owns its writer
         proof and operation; failure leaves the fenced batch stopped for review.
         """
-        from agent_comms.owner_restart import OwnerRestartRequest
+        from agent_comms.execution.owner_restart import OwnerRestartRequest
 
         request = OwnerRestartRequest(scope, agent_bin, agent_args, expected, runtime)
         return cutover.restart(self, request)

@@ -12,9 +12,9 @@ from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.runtime_stack import WheelRuntime
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize, PathText
+from agent_comms.projects.shell_effects import BuildStorageEffect, WriteStorageEffect
 from agent_comms.projects.storage_projection import StorageProjection
-from agent_comms.shell_effects import BuildStorageEffect, WriteStorageEffect
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tool_caller import ThreadCaller
 
 
 @dataclass(frozen=True)

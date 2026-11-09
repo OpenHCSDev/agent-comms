@@ -33,13 +33,13 @@ from agent_comms.cli_bridges.runtime_updates import (
 from agent_comms.cli_bridges.wire_models import WireModel
 from agent_comms.execution.turn_context import CodexRolloutProvenance
 from agent_comms.nominal.field_codec import StoredSessionId, ToolCallId
-from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.transcript_events import (
+from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     ToolEndTranscript,
     ToolStartTranscript,
     UserTranscript,
 )
+from agent_comms.transport.tool_declaration import ToolDeclaration
 
 
 @dataclass

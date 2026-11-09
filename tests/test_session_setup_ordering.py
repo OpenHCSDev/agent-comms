@@ -11,7 +11,7 @@ from acp.connection import StreamDirection, StreamEvent
 
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.execution.launch_root import LaunchRoot
 from bus_record_fixture import prepare_native_comms
 
 

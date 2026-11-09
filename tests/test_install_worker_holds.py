@@ -15,6 +15,7 @@ from agent_comms.cli_verbs.read_back import ReadBackCliCommand
 from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.comms import Comms
+from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (
     ProbeReply,
@@ -28,7 +29,6 @@ from agent_comms.installer.probes.packages import DistributionVersionsProbe
 from agent_comms.installer.probes.resolution import InstalledPackagesProbe
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.installer.upgrade import Stack
-from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec
 from agent_comms.projects.checkouts import Checkout

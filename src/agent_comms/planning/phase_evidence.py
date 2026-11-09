@@ -28,7 +28,7 @@ from agent_comms.projects.checkouts import Checkout, CheckoutHistory
 from agent_comms.projects.repo import Repo
 
 if TYPE_CHECKING:
-    from agent_comms.plan_reading import PlanReading
+    from agent_comms.planning.plan_reading import PlanReading
 
 
 @dataclass(frozen=True)

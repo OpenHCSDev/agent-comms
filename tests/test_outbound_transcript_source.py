@@ -7,8 +7,8 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.activity import StoppedDrainDiagnostic
-from agent_comms.assignment_states import DeferredAssignment
 from agent_comms.comms import wire
+from agent_comms.coordination.assignment_states import DeferredAssignment
 from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (
@@ -23,6 +23,7 @@ from agent_comms.execution.transcript_sources import AssignedTranscriptSource
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.channels import AnyChannel
 from agent_comms.messaging.messages import Message
+from agent_comms.messaging.routing import MessageRoute, TurnRouting
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.notification_assignment import (
     AssignmentActivityEvidence,
@@ -40,9 +41,8 @@ from agent_comms.pi_payloads import PublishedMessageToolDetails
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.threads import NativeThread
-from agent_comms.routing import MessageRoute, TurnRouting
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.transcripts import EarlierThan, TranscriptRead, TranscriptSourceWindow
+from agent_comms.transcript.transcripts import EarlierThan, TranscriptRead, TranscriptSourceWindow
+from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
 from conftest import accept_initial, publish_initial
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
@@ -422,7 +422,7 @@ def test_a_forced_key_batch_captures_the_same_evidence_through_the_recipient_ind
 
 def test_a_page_retains_its_sent_publication_answers_across_the_wire(tmp_path):
     from agent_comms.messaging.sent_message import PublishedSentMessage
-    from agent_comms.transcripts import TranscriptPage
+    from agent_comms.transcript.transcripts import TranscriptPage
 
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     message = comms.messaging.send("beta", "sender", "Retained remote publication").message
@@ -445,9 +445,9 @@ def test_a_page_retains_its_sent_publication_answers_across_the_wire(tmp_path):
 
 def test_captured_report_evidence_keeps_unproved_reports_unproved(tmp_path):
     from agent_comms.messaging.sent_message import PublishedSentMessage
+    from agent_comms.messaging.sent_reports import CapturedSentReports
     from agent_comms.nominal.field_codec import ToolCallId
-    from agent_comms.sent_reports import CapturedSentReports
-    from agent_comms.transcript_events import SentTranscript, ToolEndTranscript
+    from agent_comms.transcript.transcript_events import SentTranscript, ToolEndTranscript
 
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     message = comms.messaging.send("beta", "sender", "Exact original").message

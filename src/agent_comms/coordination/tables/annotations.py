@@ -23,9 +23,9 @@ from agent_comms.storage.typed_table import (
     UnallocatedRowId,
     sql_literal,
 )
-from agent_comms.working_memory_labels import Classifier, ModelLabel, SpanLabel
-from agent_comms.working_memory_questions import SpanQuestion
-from agent_comms.working_memory_requests import AnnotationOutcome, DisclosureRequest
+from agent_comms.working_memory.working_memory_labels import Classifier, ModelLabel, SpanLabel
+from agent_comms.working_memory.working_memory_questions import SpanQuestion
+from agent_comms.working_memory.working_memory_requests import AnnotationOutcome, DisclosureRequest
 
 
 class ContextSpanRows(TypedTable, declared_name=None):

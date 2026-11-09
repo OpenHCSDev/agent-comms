@@ -12,6 +12,7 @@ from agent_comms.coordination.errors import StaleFence
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.owned_turn import OwnedTurn
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_input_source import NoTurnAcceptance
 from agent_comms.execution.turn_lease import NoTurnLease
 from agent_comms.execution.turn_phase import PreparingPhase
@@ -20,7 +21,6 @@ from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import ChosenModel, NativeThread, NextTurnConfiguration
-from agent_comms.session_file import RegistrySessionLocation
 from conftest import installed_comms
 
 

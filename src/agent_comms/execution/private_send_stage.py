@@ -9,7 +9,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-from agent_comms.assignment_states import (
+from agent_comms.coordination.assignment_states import (
     DeferredAssignment,
     FailedAssignment,
     TriagePendingAssignment,
@@ -43,10 +43,10 @@ from agent_comms.execution.private_sidecar import native_request_digest
 from agent_comms.execution.reservation_rules import ReservationRule, ReservationViolationError
 from agent_comms.execution.selected.triage import DecidedTriageRecord, SelectedTriage
 from agent_comms.execution.turn_failure import TurnFailure
-from agent_comms.lifecycle_capability import Active
 from agent_comms.nominal.field_codec import InputId, RootId, ThreadLookup
+from agent_comms.nominal.lifecycle_capability import Active
+from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.storage.typed_table import SqlValue
-from agent_comms.text_digest import TextDigest
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-import agent_comms.restart_queue as queue
+import agent_comms.execution.restart_queue as queue
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
 from agent_comms.launch_runtime import RestartEnvironment

@@ -38,7 +38,6 @@ from agent_comms.execution.pi_wire import PiUsage
 from agent_comms.execution.reservation_rules import ReservationRule, RuleCheck
 from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.execution.turn_item import UsageChargeId
-from agent_comms.lifecycle_capability import Failed
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     AttemptId,
@@ -49,6 +48,7 @@ from agent_comms.nominal.field_codec import (
     NoAttemptId,
     TurnId,
 )
+from agent_comms.nominal.lifecycle_capability import Failed
 from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.planning.attempt_resolution import (
     AttemptResolution,

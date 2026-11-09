@@ -28,7 +28,8 @@ from agent_comms.cli_bridges.runtime_updates import (
     RuntimeUpdate,
     SessionFacts,
 )
-from agent_comms.harness_install import (
+from agent_comms.importing import ImportedConversation, ImportLimits, ImportSnapshot
+from agent_comms.installer.harness_install import (
     ClaudeCodeHarness,
     CodexHarness,
     Harness,
@@ -36,7 +37,6 @@ from agent_comms.harness_install import (
     OpenCodeHarness,
     PiHarness,
 )
-from agent_comms.importing import ImportedConversation, ImportLimits, ImportSnapshot
 from agent_comms.nominal.field_codec import SubclassUnion
 from agent_comms.registry.thread_text import (
     AbsentText,

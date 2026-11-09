@@ -20,16 +20,18 @@ from agent_comms.execution.acp_failure import (
 )
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.context_reading import ContextReading
+from agent_comms.execution.input_origin import InputOrigin, UnattributedInputOrigin
 from agent_comms.execution.native_output import NativeOutputScope
 from agent_comms.execution.native_runtime_input import CurrentNativeCursor
+from agent_comms.execution.owner_protocol import IncompatibleOwner
 from agent_comms.execution.pi_wire import McpLiveAcknowledgement
+from agent_comms.execution.reported_turn import ReportedTurn, ReportedTurnState
 from agent_comms.execution.transcript_sources import NoDraft
 from agent_comms.execution.turn_context import ContextManifest
 from agent_comms.execution.turn_inbox import SendNow, TurnInbox
 from agent_comms.execution.turn_lease import TurnState
-from agent_comms.external_transcript import DraftRow
 from agent_comms.input_attempt import InputAttempt
-from agent_comms.input_origin import InputOrigin, UnattributedInputOrigin
+from agent_comms.messaging.routing import MessageRoute, NoMessageRoute
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     AcceptsNull,
@@ -47,14 +49,11 @@ from agent_comms.nominal.field_codec import (
     WireOmitDefault,
     WireValue,
 )
-from agent_comms.owner_protocol import IncompatibleOwner
 from agent_comms.planning.goal_presentation import GoalExecution, GoalSnapshot
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ClaimedIdentity, ClaimScoped, ThreadIncarnation
-from agent_comms.reported_turn import ReportedTurn, ReportedTurnState
-from agent_comms.routing import MessageRoute, NoMessageRoute
-from agent_comms.tool_result import ToolResult
-from agent_comms.transcripts import (
+from agent_comms.transcript.external_transcript import DraftRow
+from agent_comms.transcript.transcripts import (
     LivePageSource,
     NativeCommittedPrefix,
     PageSource,
@@ -63,7 +62,8 @@ from agent_comms.transcripts import (
     TranscriptRead,
     TranscriptReadIdentity,
 )
-from agent_comms.working_memory_labels import ModelLabel
+from agent_comms.transport.tool_result import ToolResult
+from agent_comms.working_memory.working_memory_labels import ModelLabel
 
 if TYPE_CHECKING:
     from acp.schema import AgentMessageChunk
