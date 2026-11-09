@@ -13,7 +13,7 @@ class PrivateCoordinatorTable(SharedFileTables, DurableTables):
 
     @classmethod
     def declarations(cls) -> tuple[type[TypedTable], ...]:
-        import agent_comms.coordination.response, agent_comms.coordination.tables.response_schema
+        import agent_comms.coordination.response
         import agent_comms.execution.native_runtime_input
         import agent_comms.execution.triage_native_sources
         from agent_comms.coordination import (
