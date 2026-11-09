@@ -73,7 +73,7 @@ from agent_comms.registry.thread_identity import (
     TurnIdentity,
     UnobservedTools,
 )
-from agent_comms.registry.thread_identity_source import ThreadIdentitySource
+from agent_comms.registry.thread_incarnation_read import ReadsThreadIncarnation
 from agent_comms.registry.thread_model import (
     CatalogSelection,
     DeclaredModel,
@@ -256,7 +256,7 @@ class NextTurnConfiguration:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadProvenance(ThreadIdentitySource[ThreadIncarnation]):
+class ThreadProvenance(ReadsThreadIncarnation[ThreadIncarnation]):
     """Recorded thread identity, without permission to own a process or start a turn."""
 
     name: str = field(kw_only=False)
