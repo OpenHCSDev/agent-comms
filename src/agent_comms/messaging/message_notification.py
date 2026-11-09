@@ -44,12 +44,13 @@ from agent_comms.notification_assignment import (
     NotificationSelection,
 )
 from agent_comms.registry.agent_activity import AgentActivity, RecordedRecipientActivity
+from agent_comms.registry.namespace_reads import NamespaceRead
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity_source import ThreadIdentitySource
 
 if TYPE_CHECKING:
     from agent_comms.registry.registration import Registration
-    from agent_comms.registry.registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True)
@@ -295,10 +296,10 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
         )
 
     @classmethod
-    def recorded_delivery_window(
+    def recorded_delivery_window[Member: ThreadIdentitySource, Selection](
         cls,
         root: Path,
-        namespace: RegistryProvenance,
+        namespace: NamespaceRead[Member, Selection],
         sources: Sequence[MessageDeliveryRead[Message]],
         *,
         viewer: OutcomeViewer,
@@ -320,10 +321,10 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
         )
 
     @classmethod
-    def project_delivery_window(
+    def project_delivery_window[Member: ThreadIdentitySource, Selection](
         cls,
         root: Path,
-        snapshot: RegistryProvenance,
+        snapshot: NamespaceRead[Member, Selection],
         observations: Mapping[ThreadLookup, RecipientActivityRead[AssignmentNotice[DeliveryProgress], AssignmentProgress, DeliveryProgress]],
         *,
         assignment_read: NotificationAssignmentRead,
