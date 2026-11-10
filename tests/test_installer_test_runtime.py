@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.test_lease import LeaseStart
 from agent_comms.installer import runtime_home
 from agent_comms.installer.backup import SavedFile
 from agent_comms.installer.commands import InstallCommands
@@ -55,7 +56,7 @@ def test_test_home_requires_uv_on_path_even_with_an_installer_uv(tmp_path, monke
 
 
 @pytest.mark.timeout(290)
-def test_checkout_native_tests_use_a_private_runtime(tmp_path, test_uv):
+def test_checkout_native_tests_use_a_private_runtime(tmp_path, test_uv, integration_lease: LeaseStart):
     repository = Path(__file__).resolve().parents[1]
     checkout = tmp_path / "checkout"
     subprocess.run(["git", "clone", "--shared", "-q", repository, checkout], check=True)
@@ -89,6 +90,7 @@ def test_checkout_native_tests_use_a_private_runtime(tmp_path, test_uv):
             sys.executable,
             "-m",
             "agent_comms.installer.test_runtime",
+            *integration_lease.arguments(),
             # Qualify the private runtime with one real saved-owner roundtrip.
             # The bus-path module exercises its queue/steer/cancel cases independently.
             "tests/test_native_input_bus_path.py::"
@@ -101,6 +103,7 @@ def test_checkout_native_tests_use_a_private_runtime(tmp_path, test_uv):
             "PYTHONPATH": str(checkout / "src"),
             "UV_CACHE_DIR": cache,
         },
+        pass_fds=integration_lease.descriptors(),
         capture_output=True,
         text=True,
         timeout=280,

@@ -20,6 +20,7 @@ from secrets import token_hex
 
 from agent_comms.execution.child_process import ResidentManager
 from agent_comms.execution.launch_runtime import LaunchRuntime, RestartEnvironment
+from agent_comms.execution.test_lease import LeaseStart, TestLease
 from agent_comms.installer.build_artifact import BuildArtifact
 from agent_comms.installer.building_runtime import BuildingRuntime
 from agent_comms.installer.commands import InstallCommands
@@ -149,7 +150,7 @@ class RuntimeStack(Extendable):
             core = self.commands.git(self.checkout, "rev-parse", "HEAD").strip()
             RuntimeResolution.recorded(self.runtime.prefix).complete(self, core)
 
-    def test(self, *pytest_arguments: str) -> None:
+    def test(self, *pytest_arguments: str, start: LeaseStart = TestLease.default_start) -> None:
         """Run checkout tests against this runtime's installed packages, never its source."""
         self.commands.run(self.uv, "pip", "install", "--python", self.python,
                           "-r", "pyproject.toml", "--extra", "dev", cwd=self.checkout,
@@ -162,7 +163,8 @@ class RuntimeStack(Extendable):
                 self.python, "-m", "pytest", "-q", "-s",
                 "-o", "pythonpath=. tools", "-o", "faulthandler_timeout=60",
                 "--basetemp", Path(temporary) / "pytest", "-p", "no:cacheprovider",
-                *pytest_arguments, cwd=self.checkout, env=self.environment()), end="")
+                *start.arguments(), *pytest_arguments, cwd=self.checkout, env=self.environment(),
+                pass_fds=start.descriptors()), end="")
 
     def probe[Answer](self, probe: RuntimeProbe[Answer]) -> Answer:
         """Every call into this runtime during an install goes to its one worker, which
