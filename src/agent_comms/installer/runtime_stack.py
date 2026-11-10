@@ -37,11 +37,10 @@ from agent_comms.installer.native_package import NativePackageStore, pinned_pack
 from agent_comms.installer.practice import RuntimeHome
 from agent_comms.installer.probes.imports import ClientImportsProbe
 from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
-from agent_comms.installer.probes.resolution import InstalledPackagesProbe, RuntimeResolutionProbe
+from agent_comms.installer.probes.resolution import RuntimeResolutionProbe
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_resolution import (
     ConsoleScriptPackage,
-    CorePackage,
     ProjectMetadata,
     ResolvedLock,
     RuntimePackage,
