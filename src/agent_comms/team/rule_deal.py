@@ -34,6 +34,7 @@ from agent_comms.projects.repo import Repo
 from agent_comms.projects.rule_probes import Probe, ProbeContext
 from agent_comms.storage.locked_store import DocumentChange, LockedStore
 from agent_comms.storage.store_files import AtomicFile, DependentStateTier, SingleFileStore
+from agent_comms.team.dealt_sources import DealtSources
 from agent_comms.team.instruction_deck import DealtCalls
 from agent_comms.team.prompt_reads import DealtRead, DealtSource, PreparedPrompt, PromptReads
 from agent_comms.team.rule_file import RuleFile
@@ -454,20 +455,6 @@ class AuditDue:
         """Prompts as JSON strings: the quotes bound the exact text, so punctuation a refusal
         sentence adds after them is never copied in (2026-11-02: two sessions copied a period)."""
         return ", ".join(json.dumps(text, ensure_ascii=False) for text in words)
-
-
-class DealtSources(ABC):
-    """Which packaged files a session is dealt and which rules its audit answers. The deck
-    readers (agent_comms_hooks.skill.DeckReader) are the one list, for every backend."""
-
-    @classmethod
-    @abstractmethod
-    def rules(cls) -> tuple[RuleFile, ...]: ...
-
-    @classmethod
-    @abstractmethod
-    def sources(cls) -> tuple[Path, ...]:
-        """The packaged files ordered read in full: the rules themselves, never a copy."""
 
 
 class State(ABC):
