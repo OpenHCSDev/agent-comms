@@ -75,13 +75,15 @@ class RowMapping[Key: Hashable, Value](MutableMapping[Key, Value]):
         self._root = Map()
         self._next_position = 0
 
-    def popitem(self) -> tuple[Key, Value]:
-        # MutableMapping permits an arbitrary entry. Do not sort the whole mapping
-        # for each pop: clearing n entries must not become n complete enumerations.
+    def any_key(self) -> Key:
+        """Select one key without sorting or enumerating the collection."""
         try:
-            key = next(iter(self._root))
+            return next(iter(self._root))
         except StopIteration:
             raise KeyError("mapping is empty") from None
+
+    def popitem(self) -> tuple[Key, Value]:
+        key = self.any_key()
         value = self[key]
         del self[key]
         return key, value
@@ -129,6 +131,13 @@ class RowMapping[Key: Hashable, Value](MutableMapping[Key, Value]):
             if (key in self) != (key in earlier)
             or (key in self and self[key] != earlier[key])
         )
+
+    def changed_in_order(self, earlier: RowMapping[Key, Value]) -> tuple[Key, ...]:
+        """Order only changed keys, preserving insertion order for surviving writes."""
+        return tuple(sorted(
+            self.differing(earlier),
+            key=lambda key: (self._root[key] if key in self else earlier._root[key]).position,
+        ))
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, RowMapping):

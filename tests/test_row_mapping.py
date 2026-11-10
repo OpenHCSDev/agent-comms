@@ -62,6 +62,13 @@ def test_iteration_keeps_insertion_order_across_edits():
     assert rows.popitem() == ('x', 5)
 
 
+def test_changed_keys_keep_new_rows_in_insertion_order():
+    original = RowMapping({'kept': 0})
+    edit = original.copy()
+    edit.update({'z': 1, 'a': 2, 'm': 3})
+    assert edit.changed_in_order(original) == ('z', 'a', 'm')
+
+
 def test_frozen_roots_reject_mutation_but_can_start_a_new_edit():
     frozen = RowMapping({'a': 1}).freeze()
     with pytest.raises(TypeError, match='read-only'):

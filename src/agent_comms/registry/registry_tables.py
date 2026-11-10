@@ -10,11 +10,11 @@ and a reader holding revision r reads only what changed after r.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from functools import cache
 from pathlib import Path
-from typing import Annotated, ClassVar, Self
+from typing import Annotated, ClassVar, Self, cast
 
 from pydantic import JsonValue
 
@@ -23,6 +23,7 @@ from agent_comms.nominal.field_codec import FieldCodec, WireValue
 from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.private_path import FileIdentity, FileRevision, MissingFile
+from agent_comms.storage.row_mapping import RowMapping
 from agent_comms.storage.typed_table import (
     Column,
     DurableStore,
@@ -32,7 +33,10 @@ from agent_comms.storage.typed_table import (
     TypedTable,
 )
 
-type RawDocument = dict[str, JsonValue]
+type RawDocument = Mapping[str, object]
+"""An in-memory encoded document; mapping sections retain immutable row roots.
+RegistryCapture.wire_document materializes JSON at an explicit export boundary.
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,14 +108,26 @@ class RegistryNamedRow(RevisionStamped, declared_name=None):
         return emptied(document, cls.path)
 
     @classmethod
+    def changed_entries(cls, document: RegistryDocument, earlier: RegistryDocument) -> tuple[str, ...]:
+        return RowMapping.owning(cls.entries(document)).changed_in_order(
+            RowMapping.owning(cls.entries(earlier)))
+
+    @classmethod
+    def entry_wire(cls, document: RegistryDocument, name: str) -> JsonValue:
+        return FieldCodec.encode(cls.entries(document)[name])
+
+    @classmethod
     def section_wire(cls, document: RegistryDocument, earlier: RegistryDocument,
-             stored: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
-        """This section's wire form: an entry still the object ``earlier`` held keeps its stored
-        form, so a save encodes only the entries the edit replaced."""
-        before = cls.entries(earlier)
-        return {name: stored[name] if name in stored and before.get(name) is value
-                else FieldCodec.encode(value)
-                for name, value in cls.entries(document).items()}
+                     stored: Mapping[str, JsonValue]) -> RowMapping[str, JsonValue]:
+        """Apply changed keys to the captured root; untouched rows are not enumerated."""
+        mapping = RowMapping.owning(stored).copy()
+        entries = cls.entries(document)
+        for name in cls.changed_entries(document, earlier):
+            if name in entries:
+                mapping[name] = cls.entry_wire(document, name)
+            else:
+                del mapping[name]
+        return mapping
 
     @classmethod
     def stored(cls, value: JsonValue) -> object:
@@ -128,21 +144,21 @@ class RegistryNamedRow(RevisionStamped, declared_name=None):
                      if issubclass(member, RegistryNamedRow))
 
     @classmethod
-    def mapping_in(cls, raw: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
-        value: JsonValue = raw
+    def mapping_in(cls, raw: Mapping[str, object]) -> Mapping[str, JsonValue]:
+        value: object = raw
         for key in cls.section():
-            value = value[key]
-        return value
+            value = cast(Mapping[str, object], value)[key]
+        return cast(Mapping[str, JsonValue], value)
 
     @classmethod
-    def placed(cls, raw: RawDocument, mapping: dict[str, JsonValue]) -> RawDocument:
+    def placed(cls, raw: RawDocument, mapping: Mapping[str, JsonValue]) -> RawDocument:
         """``raw`` with this section replaced by ``mapping``, copying only the dicts on its path."""
         return cls._placed(raw, cls.section(), mapping)
 
     @staticmethod
-    def _placed(raw: RawDocument, path: tuple[str, ...], mapping: dict[str, JsonValue]) -> RawDocument:
+    def _placed(raw: RawDocument, path: tuple[str, ...], mapping: Mapping[str, JsonValue]) -> RawDocument:
         head, *rest = path
-        return {**raw, head: RegistryNamedRow._placed(raw[head], tuple(rest), mapping)
+        return {**raw, head: RegistryNamedRow._placed(cast(RawDocument, raw[head]), tuple(rest), mapping)
                 if rest else mapping}
 
 
@@ -175,10 +191,12 @@ class RegistryThreads(WireStoredRow):
     value: StoredWire
 
     @classmethod
-    def section_wire(cls, document: RegistryDocument, earlier: RegistryDocument,
-             stored: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
-        """ThreadRows already keeps each unassigned row's stored form."""
-        return document.threads.to_wire()
+    def changed_entries(cls, document: RegistryDocument, earlier: RegistryDocument) -> tuple[str, ...]:
+        return document.threads.changed_in_order(earlier.threads)
+
+    @classmethod
+    def entry_wire(cls, document: RegistryDocument, name: str) -> JsonValue:
+        return document.threads.wire_at(name)
 
 
 @dataclass(frozen=True)
@@ -254,10 +272,26 @@ class RegistryRowRevision:
 
 @dataclass(frozen=True, slots=True)
 class RegistryCapture:
-    """One committed revision of the registry document, in its wire form."""
+    """One committed revision's encoded rows, sharing immutable mapping roots.
+
+    This is an in-process capture; wire_document owns its complete JSON export.
+    """
 
     revision: RegistryRowRevision
     raw: RawDocument
+
+    def __post_init__(self) -> None:
+        raw = self.raw
+        for family in RegistryNamedRow.families():
+            raw = family.placed(raw, RowMapping.owning(family.mapping_in(raw)).freeze())
+        object.__setattr__(self, "raw", raw)
+
+    def wire_document(self) -> dict[str, JsonValue]:
+        """Export complete JSON only for a decoder or a caller requesting stored data."""
+        raw = self.raw
+        for family in RegistryNamedRow.families():
+            raw = family.placed(raw, dict(family.mapping_in(raw)))
+        return cast(dict[str, JsonValue], raw)
 
     @property
     def mark(self) -> RegistryRevisionMark:
@@ -265,7 +299,7 @@ class RegistryCapture:
 
     @classmethod
     def empty(cls) -> Self:
-        return cls(RegistryRowRevision.empty(), FieldCodec.encode(RegistryDocument()))
+        return cls(RegistryRowRevision.empty(), cast(RawDocument, FieldCodec.encode(RegistryDocument())))
 
     def encoded(self, document: RegistryDocument, earlier: RegistryDocument) -> RawDocument:
         """``document``'s wire form, given that ``earlier`` was decoded from this capture: only
@@ -274,7 +308,7 @@ class RegistryCapture:
         cleared = document
         for family in families:
             cleared = family.cleared(cleared)
-        raw = FieldCodec.encode(cleared)
+        raw = cast(RawDocument, FieldCodec.encode(cleared))
         for family in families:
             raw = family.placed(raw, family.section_wire(document, earlier, family.mapping_in(self.raw)))
         return raw
@@ -284,14 +318,17 @@ class RegistryCapture:
         and declared again after this revision ends declared. Unchanged sections stay shared."""
         if changes.revision == self.revision:
             return self
-        raw = changes.header.scalars.wire
+        raw = cast(RawDocument, changes.header.scalars.wire)
         for family in RegistryNamedRow.families():
             removed = changes.removed(family)
             written = changes.written(family)
             mapping = family.mapping_in(self.raw)
             if removed or written:
-                mapping = {name: value for name, value in mapping.items() if name not in removed}
-                mapping.update(written)
+                updated = RowMapping.owning(mapping).copy()
+                for name in removed:
+                    updated.pop(name, None)
+                updated.update(written)
+                mapping = updated
             raw = family.placed(raw, mapping)
         return RegistryCapture(changes.revision, raw)
 
@@ -366,21 +403,15 @@ class RegistryRowStore(DurableStore, RegistryFile):
             scalars = raw
             for family in RegistryNamedRow.families():
                 scalars = family.placed(scalars, {})
-                for row in self.differences(family, raw, previous.raw, mark):
-                    row.upsert(db)
-                for name in family.mapping_in(previous.raw).keys() - family.mapping_in(raw).keys():
-                    family.delete(db, name=name)
-                    RegistryRemovals(changed_at=mark.revision, family=family, name=name).upsert(db)
-            RegistryHeader(header=1, revision=mark.revision, scalars=StoredWire(scalars)).upsert(db)
+                current = RowMapping.owning(family.mapping_in(raw))
+                earlier = RowMapping.owning(family.mapping_in(previous.raw))
+                for name in current.changed_in_order(earlier):
+                    if name in current:
+                        family(changed_at=mark.revision, name=name,
+                               value=family.stored(current[name])).upsert(db)
+                    else:
+                        family.delete(db, name=name)
+                        RegistryRemovals(changed_at=mark.revision, family=family, name=name).upsert(db)
+            RegistryHeader(header=1, revision=mark.revision,
+                           scalars=StoredWire(cast(JsonValue, scalars))).upsert(db)
             return mark
-
-    @staticmethod
-    def differences(
-        family: type[RegistryNamedRow], raw: RawDocument, previous: RawDocument,
-        mark: RegistryRevisionMark,
-    ) -> Iterator[RegistryNamedRow]:
-        """The rows ``raw`` writes: identity first, so an unchanged row costs one pointer test."""
-        earlier = family.mapping_in(previous)
-        for name, value in family.mapping_in(raw).items():
-            if name not in earlier or (earlier[name] is not value and earlier[name] != value):
-                yield family(changed_at=mark.revision, name=name, value=family.stored(value))

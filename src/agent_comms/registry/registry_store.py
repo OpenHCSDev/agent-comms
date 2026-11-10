@@ -49,6 +49,7 @@ from agent_comms.registry.registry_document import (
     RegistrySnapshot,
 )
 from agent_comms.registry.registry_tables import (
+    RawDocument,
     RegistryCapture,
     RegistryRowRevision,
     RegistryRowStore,
@@ -142,7 +143,7 @@ class RegistryRevision(CachedRegistry):
         return reuse(self) if self.source.revision == revision else read(self)
 
     def decoded(self, store: RegistryStore, raw: dict) -> RegistryDocument:
-        document = RegistryDocument.from_wire(raw, (self.source.raw, self.document))
+        document = RegistryDocument.from_wire(raw, (self.source.wire_document(), self.document))
         document.threads.bind(store._bind_thread)
         return document
 
@@ -443,7 +444,7 @@ class RegistryStore(
             ).current(self)
 
     def _cache_revision(self, stale: CachedRegistry, source: RegistryCapture) -> RegistryRevision:
-        entry = RegistryRevision.presented(self, source, stale.decoded(self, source.raw))
+        entry = RegistryRevision.presented(self, source, stale.decoded(self, source.wire_document()))
         self.cache.entry = entry
         with self.cache.measurement:
             self.cache.counts.decodes += 1
@@ -630,7 +631,8 @@ class RegistryStore(
     def stored(self) -> dict:
         """A copy of the committed rows in their stored wire form, before any decoding."""
         with self.guarded_read():
-            return FieldCodec.parse(FieldCodec.compact(self._capture_unlocked().raw))
+            captured = self._capture_unlocked()
+        return FieldCodec.parse(FieldCodec.compact(captured.wire_document()))
 
     def rewrite_stored(self, change: Callable[[dict], dict]) -> None:
         """Change the stored rows under the exclusive guard without decoding thread state.
@@ -640,8 +642,9 @@ class RegistryStore(
         with self.guarded_write():
             entry = self.cache.entry
             original = self._capture_unlocked()
-            raw = change(FieldCodec.parse(FieldCodec.compact(original.raw)))
-            if raw != original.raw:
+            stored = original.wire_document()
+            raw = change(FieldCodec.parse(FieldCodec.compact(stored)))
+            if raw != stored:
                 self._commit_unlocked(raw, original)
                 # The earlier revision stays cached: the next read applies only the rows this
                 # commit changed, and decodes them then, so a form the decoder refuses is refused
@@ -674,7 +677,7 @@ class RegistryStore(
     def _publish_unlocked(self, document: RegistryDocument) -> None:
         self.save_unlocked(document)
 
-    def _commit_unlocked(self, raw: dict, previous: RegistryCapture) -> RegistryCapture:
+    def _commit_unlocked(self, raw: RawDocument, previous: RegistryCapture) -> RegistryCapture:
         """Commit the rows of ``raw`` that differ from ``previous``, bracketed by the guard."""
         mark = previous.mark.successor()
         self.cache.entry = UncachedRegistry()

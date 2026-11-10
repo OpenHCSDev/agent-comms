@@ -427,6 +427,9 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         """The names whose rows differ from ``other``'s, added and removed ones included."""
         return self._rows.differing(other._rows)
 
+    def changed_in_order(self, earlier: ThreadRows) -> tuple[str, ...]:
+        return self._rows.changed_in_order(earlier._rows)
+
     def children(self, parent: str) -> tuple[Thread, ...]:
         """Select the declared parent before decoding any complete thread row."""
         return tuple(row.thread for row in self._rows.values() if row.matches_parent(parent))
@@ -455,8 +458,13 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         self._rows.clear()
 
     def popitem(self) -> tuple[str, Thread]:
-        name, row = self._rows.popitem()
-        return name, row.thread
+        name = self._rows.any_key()
+        thread = self[name]
+        del self[name]
+        return name, thread
+
+    def wire_at(self, name: str) -> dict[str, JsonValue]:
+        return self._rows[name].wire
 
     def to_wire(self) -> dict[str, JsonValue]:
         """Export all rows, each retaining its own cached encoding.

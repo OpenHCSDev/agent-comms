@@ -215,6 +215,18 @@ def test_thread_rows_keep_their_owned_wire_form_at_the_codec_boundary(thread_row
     assert FieldCodec.encode(ThreadRows.from_wire(thread_rows_wire)) == thread_rows_wire
 
 
+def test_popping_a_thread_row_does_not_remove_it_when_decoding_fails(thread_rows_wire):
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.registry.registry_document import ThreadRows
+
+    malformed = {**thread_rows_wire["first"], FieldCodec.record_key(Thread, "tags"): 42}
+    rows = ThreadRows.from_wire({"first": malformed})
+    with pytest.raises(InvalidRegistryDocument):
+        rows.popitem()
+    assert "first" in rows
+    assert rows.to_wire() == {"first": malformed}
+
+
 def test_thread_row_copies_share_decodes_without_sharing_writes(thread_rows_wire):
     from dataclasses import replace
 
@@ -235,6 +247,37 @@ def test_thread_row_copies_share_decodes_without_sharing_writes(thread_rows_wire
         frozen.popitem()
     with pytest.raises(TypeError, match="read-only"):
         frozen.clear()
+
+
+def test_captures_and_row_commits_visit_only_changed_keys(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.registry.registry_tables import RegistryThreads
+    from agent_comms.registry.thread_text import GivenThreadText
+    from agent_comms.storage.row_mapping import RowMapping
+
+    registry = Registration(RegistryFile.path_in(tmp_path))
+    for name in ("first", "second"):
+        registry.register(NativeThread(name, frozenset(), Checkout(tmp_path)))
+    original = registry.store.read_revision()
+    document = original.document.copy()
+    changed = replace(document.threads["second"], task=GivenThreadText("updated"))
+    document.threads["second"] = changed
+    iterate = RowMapping.__iter__
+
+    def bounded_rows(rows):
+        if len(rows):
+            raise AssertionError("capture or commit enumerated an unchanged row collection")
+        return iterate(rows)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(RowMapping, "__iter__", bounded_rows)
+        encoded = original.source.encoded(document, original.document)
+        registry.store.rows.commit(encoded, original.source)
+        refreshed = registry.store.rows.captured(original.source)
+    assert RegistryThreads.mapping_in(refreshed.raw)["second"] == FieldCodec.encode(changed)
+    assert RegistryThreads.mapping_in(refreshed.raw)["first"] is RegistryThreads.mapping_in(original.source.raw)["first"]
 
 
 def test_a_changed_revision_is_checked_as_a_whole(tmp_path):
