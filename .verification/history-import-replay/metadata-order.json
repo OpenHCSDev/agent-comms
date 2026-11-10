@@ -1,0 +1,24 @@
+{
+  "defect": "Historical import replay leaves entry-point group names on deleted provider modules, so runtime preparation sees zero hooks.",
+  "why_stupid": "This is broken because the group spelling is the same moved module identity already recorded by Git, and NRA already owns module mentions in project manifests.",
+  "unplanned_reason": "The actual P23 automatic recovery built both wheels and passed pip check, then stopped at missing preparation hooks. Friction and comms-teammate requested this native metadata repair with the existing API.",
+  "order": {
+    "kind": "pending",
+    "owner": "openhcsdev/nominalrefactoradvisor:nominal_refactor_advisor/refactors/module_move.py:4250",
+    "scope": {"kind": "fix", "shape": {"parents": ["openhcsdev/nominalrefactoradvisor:nominal_refactor_advisor/refactors/module_move.py:4250"], "members": ["openhcsdev/nominalrefactoradvisor:nominal_refactor_advisor/refactors/module_history.py:131"]}},
+    "check": {
+      "directory": "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor",
+      "command": "git grep -l 'def project_manifests' -- nominal_refactor_advisor/refactors/module_move.py | wc -l",
+      "result": {"kind": "count", "expected": 1}
+    },
+    "edits": [
+      "Extend the existing Git-driven operation to replay module identities in caller project metadata through the existing manifest rewrite owner.",
+      "Preserve the public four-input constructor, all preparation hooks and the neovim target. Derive old/new group spelling from actual Git-recorded provider moves, not a hardcoded path roster.",
+      "Prove the original recorded Toad pyproject group migrates to the target provider's actual module identity with its hook target unchanged, including a metadata-only caller control.",
+      "Restrict physical edits to the isolated caller tree and preserve provider sources, package versions, native text-file conflict checks and preparation validation."
+    ],
+    "banned": ["manual caller metadata edit", "hardcoded rename roster", "preparation bypass", "dependency upgrade", "installer-tree edit", "new agent", "full historical source rerun"],
+    "report": "Native operation head, original pyproject before/after, unchanged hook target, scoped caller-only manifest write, focused controls, usable unchanged API. The file-count check is structural only.",
+    "run": {"kind": "application", "text": "Native historical replay repairs the original Toad preparation entry-point group from the recorded provider move while preserving its neovim hook target and selected packages."}
+  }
+}

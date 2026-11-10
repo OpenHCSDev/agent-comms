@@ -1,0 +1,13 @@
+{
+  "old_group": "agent_comms.runtime_preparation",
+  "new_group": "agent_comms.installer.runtime_preparation",
+  "hook_target": "toad.neovim_runtime:Neovim",
+  "selected_hook_count": 1,
+  "app_imports": [],
+  "caller": "c19b927039f8811eb466a534e65c3dd634d1879f",
+  "provider_source": "311cc7bb47dede8edbea6e0175bd4a1ee6a8d553",
+  "provider_target": "00ff77ae91cb8dea6c788000db3525219be73c5f",
+  "python_source_changes": [],
+  "diff": "--- original/pyproject.toml\n+++ replayed/pyproject.toml\n@@ -52,7 +52,7 @@\n [project.scripts]\n toad = \"toad.cli:main\"\n \n-[project.entry-points.\"agent_comms.runtime_preparation\"]\n+[project.entry-points.\"agent_comms.installer.runtime_preparation\"]\n neovim = \"toad.neovim_runtime:Neovim\"\n \n [project.entry-points.\"agent_comms.writer_owned_stores\"]\n",
+  "before_selected_hook_count": 0
+}
