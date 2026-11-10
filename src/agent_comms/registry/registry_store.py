@@ -127,7 +127,9 @@ class RegistryRevision(CachedRegistry):
                   document: RegistryDocument) -> RegistryRevision:
         captured = store.presence.read(store.cache.presence_source)
         store.cache.presence_source = captured
-        return cls(source, document.presented(captured), captured.revision)
+        # Validate against the edit's original key root before copying resets its
+        # change baseline. The retained document then owns an independent edit view.
+        return cls(source, document.presented(captured).copy(), captured.revision)
 
     def current(self, store: RegistryStore) -> RegistryRevision:
         """This registry revision with the presence stored now: re-laid, and cached in this
@@ -679,7 +681,7 @@ class RegistryStore(
         raw = original.source.encoded(document, original.document)
         source = self._commit_unlocked(raw, original.source)
         # Still under the exclusive lock: the committed revision is this document.
-        self.cache.entry = RegistryRevision.presented(self, source, document.copy())
+        self.cache.entry = RegistryRevision.presented(self, source, document)
 
     def _publish_unlocked(self, document: RegistryDocument) -> None:
         self.save_unlocked(document)

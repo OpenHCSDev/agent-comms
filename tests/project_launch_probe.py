@@ -11,7 +11,7 @@ from agent_comms.transport.runtime_request import RuntimeRequest
 from agent_comms.transport.serving.served_requests import ServedProjectRuntimeRequest
 
 request = RuntimeRequest.member_named(ProjectRuntimeRequest.declared_name)
-assert request is ProjectRuntimeRequest
+assert request is ServedProjectRuntimeRequest
 
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.registry_document import RegistrySnapshot

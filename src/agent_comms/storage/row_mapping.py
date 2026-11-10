@@ -7,10 +7,11 @@ insertion order, while comparing related revisions examines their writes alone.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Hashable, Iterable, Iterator, Mapping, MutableMapping, Set
 from dataclasses import dataclass, replace
 from types import MappingProxyType
-from typing import NoReturn, cast
+from typing import NoReturn, Self, cast
 
 from immutables import Map
 
@@ -24,7 +25,23 @@ class RowSlot[Value]:
         return replace(self, value=value)
 
 
-class RowMapping[Key: Hashable, Value](MutableMapping[Key, Value]):
+class SnapshotRows[Key, Value](MutableMapping[Key, Value], ABC):
+    """Rows whose owner supplies edit, snapshot, selection and change operations."""
+
+    @abstractmethod
+    def copy(self) -> SnapshotRows[Key, Value]: ...
+
+    @abstractmethod
+    def freeze(self) -> Mapping[Key, Value]: ...
+
+    @abstractmethod
+    def only(self, names: Iterable[Key]) -> SnapshotRows[Key, Value]: ...
+
+    @abstractmethod
+    def differing(self, earlier: Self) -> frozenset[Key]: ...
+
+
+class RowMapping[Key: Hashable, Value](SnapshotRows[Key, Value]):
     """One editable revision, with changes recorded where the writes happen."""
 
     def __init__(self, values: Mapping[Key, Value] = MappingProxyType({})) -> None:
@@ -116,21 +133,28 @@ class RowMapping[Key: Hashable, Value](MutableMapping[Key, Value]):
         """Direct or sibling edits compare their changed keys, never the complete roots."""
         if self._root is earlier._root:
             return frozenset()
-        candidates: Iterable[Key]
-        if self._base is earlier._root:
-            candidates = self._changed
-        elif earlier._base is self._root:
-            candidates = earlier._changed
-        elif self._base is earlier._base:
-            candidates = self._changed.update(earlier._changed)
-        else:
-            # Independently supplied mappings have no shared mutation history.
-            candidates = set(self._root).union(earlier._root)
         return frozenset(
-            key for key in candidates
+            key for key in self._difference_candidates(earlier)
             if (key in self) != (key in earlier)
             or (key in self and self[key] != earlier[key])
         )
+
+    def _difference_candidates(self, earlier: RowMapping[Key, Value]) -> Iterable[Key]:
+        if self._base is earlier._root:
+            return self._changed
+        if earlier._base is self._root:
+            return earlier._changed
+        if self._base is earlier._base:
+            return self._changed.update(earlier._changed)
+        # Independently supplied mappings have no shared mutation history.
+        return set(self._root).union(earlier._root)
+
+    def differing_keys(self, earlier: RowMapping[Key, Value]) -> frozenset[Key]:
+        """Compare membership without inspecting or decoding any row value."""
+        if self._root is earlier._root:
+            return frozenset()
+        return frozenset(key for key in self._difference_candidates(earlier)
+                         if (key in self) != (key in earlier))
 
     def keyset(self) -> RowKeys[Key]:
         return RowKeys(cast(RowMapping[Key, object], self.freeze()))
@@ -173,8 +197,7 @@ class RowKeys[Key: Hashable](Set[Key]):
         return iter(self.rows)
 
     def differing(self, earlier: RowKeys[Key]) -> frozenset[Key]:
-        return frozenset(key for key in self.rows.differing(earlier.rows)
-                         if (key in self) != (key in earlier))
+        return self.rows.differing_keys(earlier.rows)
 
 
 class ReadOnlyRows[Key, Value]:

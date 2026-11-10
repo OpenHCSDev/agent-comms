@@ -2,6 +2,7 @@
 
 
 from contextlib import closing
+from unittest.mock import patch
 
 import pytest
 
@@ -15,6 +16,20 @@ from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.store_files import AtomicFile
+
+
+def test_complete_declaration_keeps_row_reads_bounded_as_the_registry_grows(tmp_path):
+    counts = []
+    for size in (8, 64):
+        root = tmp_path / str(size)
+        registry = Registration(RegistryFile.path_in(root))
+        for index in range(size):
+            registry.declare(NativeThread(f"worker-{index}", frozenset(), Checkout(tmp_path)))
+        with patch.object(RowMapping, "__getitem__", autospec=True,
+                          side_effect=RowMapping.__getitem__) as reads:
+            registry.declare(NativeThread("measured", frozenset(), Checkout(tmp_path)))
+            counts.append(reads.call_count)
+    assert counts[0] == counts[1]
 
 
 def test_presence_updates_and_presentations_do_not_enumerate_unchanged_rows(tmp_path, monkeypatch):

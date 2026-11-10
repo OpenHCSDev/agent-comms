@@ -12,7 +12,7 @@ from types import MappingProxyType
 from typing import Self
 
 from agent_comms.nominal.field_codec import FieldCodec, FieldPlan, SlicePolicy
-from agent_comms.storage.row_mapping import RowMapping
+from agent_comms.storage.row_mapping import RowMapping, SnapshotRows
 
 
 class ThreadSlice[Value](ABC):
@@ -149,11 +149,11 @@ class SharedRowsSlice(MappingRowsSlice):
     """Edits and snapshots share immutable roots and compare their changed keys."""
 
     @classmethod
-    def owned(cls, value: Mapping) -> RowMapping:
+    def owned(cls, value: Mapping) -> SnapshotRows:
         return RowMapping.owning(value)
 
     @classmethod
-    def copy(cls, value: Mapping) -> RowMapping:
+    def copy(cls, value: Mapping) -> SnapshotRows:
         return cls.owned(value).copy()
 
     @classmethod
@@ -162,7 +162,7 @@ class SharedRowsSlice(MappingRowsSlice):
 
     @classmethod
     def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
-              earlier: MutableMapping, changed: MutableMapping) -> RowMapping:
+              earlier: MutableMapping, changed: MutableMapping) -> SnapshotRows:
         merged = cls.owned(earlier).copy()
         for name in earlier:
             if name not in rows:

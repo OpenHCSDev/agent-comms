@@ -58,6 +58,7 @@ from agent_comms.execution.input_key import InputKey
 from agent_comms.execution.input_origin import InputProvenance
 from agent_comms.messaging.messages import ClaimNoticeKind, Message, MessageInput
 from agent_comms.messaging.response_message_source import ResponseMessageSource
+from agent_comms.messaging.retained_task_facts import ExactTaskFact
 from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.field_codec import NullMember, PresentMember, ThreadLookup
 from agent_comms.planning.goal_actions import GoalAction, SetGoalAction, StandbyGoalAction
@@ -338,20 +339,20 @@ def test_dependency_reply_reads_its_original_sender_identity() -> None:
     'agent_comms.planning.goal_management',
     "agent_comms.agent_event_updates",
     'agent_comms.execution.goal_scheduler',
-    "agent_comms.execution.session_config_options",
+    SessionConfigOptions.__module__,
     "agent_comms.session_reads",
     "agent_comms.acp_extension",
     "agent_comms.queue_publication",
     "agent_comms.execution.input_drain",
     "agent_comms.following_input_contracts",
     "agent_comms.following_inputs",
-    "agent_comms.execution.tracked_turn",
+    TrackedTurnSession.__module__,
     "agent_comms.private_send_claim",
     "agent_comms.execution.session_tasks",
     "agent_comms.session_owner_reads",
     "agent_comms.execution.session_lifecycle",
     'agent_comms.execution.turn_runner',
-    "agent_comms.execution.acp",
+    CommsAgent.__module__,
     "agent_comms.planning.goal_waits",
     "agent_comms.transport.tools.goals",
     "agent_comms.agent_events",
@@ -359,16 +360,16 @@ def test_dependency_reply_reads_its_original_sender_identity() -> None:
     "agent_comms.runtime_info_source",
     "agent_comms.turn_progress_reads",
     'agent_comms.execution.turn_progress',
-    "agent_comms.registry.route_client",
+    ActivityClient.__module__,
     "agent_comms.task_scope",
     "agent_comms.task_scope_owner",
-    "agent_comms.messaging.task_sources",
+    ScopedTaskDeclaration.__module__,
     "agent_comms.execution.agent_event",
     "agent_comms.registry_names",
     "agent_comms.task_owner",
     "agent_comms.task_registry",
     "agent_comms.thread_identity_source",
-    "agent_comms.messaging.retained_task_facts",
+    ExactTaskFact.__module__,
     'agent_comms.messaging.sending',
     'agent_comms.transport.tools.repositories',
 ))

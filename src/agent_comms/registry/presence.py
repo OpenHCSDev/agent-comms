@@ -6,16 +6,16 @@ thread. Presentation scopes those rows without copying the complete collection.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, MutableMapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from sqlite3 import Connection
 from typing import Annotated, ClassVar, Self
 
-from agent_comms.messaging.snapshot_slices import OwnRow
+from agent_comms.messaging.snapshot_slices import SharedRowsSlice
 from agent_comms.nominal.field_codec import MalformedRecord
 from agent_comms.storage.private_path import FileIdentity, FileRevision, MissingFile
-from agent_comms.storage.row_mapping import ReadOnlyRows, RowKeys, RowMapping
+from agent_comms.storage.row_mapping import ReadOnlyRows, RowKeys, RowMapping, SnapshotRows
 from agent_comms.storage.store_files import DependentStateTier
 from agent_comms.storage.typed_table import Column, DurableStore, FrozenColumn, Index, StoreRows, TypedTable
 
@@ -57,7 +57,7 @@ class PresenceCapture:
         return cls(PresenceRevision(MissingFile(), 0), RowMapping().freeze())
 
 
-class PresenceRows(MutableMapping[str, float]):
+class PresenceRows(SnapshotRows[str, float]):
     """A declaration-scoped presence view, editable through a small change set."""
 
     def __init__(self) -> None:
@@ -123,6 +123,9 @@ class PresenceRows(MutableMapping[str, float]):
         result._names = self._names.freeze()
         return result
 
+    def only(self, names: Iterable[str]) -> PresenceRows:
+        return PresenceRows.owning({name: self[name] for name in names if name in self})
+
     def differing(self, earlier: PresenceRows) -> frozenset[str]:
         candidates = (self._values.differing(earlier._values)
                       | self._names.keyset().differing(earlier._names.keyset()))
@@ -156,26 +159,11 @@ class FrozenPresenceRows(ReadOnlyRows[str, float], PresenceRows):
     """A retained scoped view cannot mutate its timestamp rows."""
 
 
-class PresenceRowsSlice(OwnRow[PresenceRows]):
+class PresenceRowsSlice(SharedRowsSlice):
     @classmethod
     def owned(cls, value: Mapping[str, float]) -> PresenceRows:
         return PresenceRows.owning(value)
 
-    @classmethod
-    def copy(cls, value: Mapping[str, float]) -> PresenceRows:
-        return cls.owned(value).copy()
-
-    @classmethod
-    def freeze(cls, value: Mapping[str, float]) -> PresenceRows:
-        return cls.owned(value).freeze()
-
-    @classmethod
-    def differing(cls, earlier: Mapping[str, float], current: Mapping[str, float]) -> frozenset[str]:
-        return cls.owned(current).differing(cls.owned(earlier))
-
-    @classmethod
-    def only(cls, value: PresenceRows, names: frozenset[str]) -> PresenceRows:
-        return cls.owned({name: value[name] for name in names if name in value})
 
 
 @dataclass(frozen=True, slots=True)
