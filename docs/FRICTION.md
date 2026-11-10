@@ -97,8 +97,22 @@ never consults it: allocation is required before reading, not before writing.
 Reading another repo to answer "does this bug have a test" is the cheapest possible way to
 avoid writing the wrong fix, and today it is the most gated operation in the system.
 
-**Owner:** the storage rule's clone ban. **Fix:** allow a scratch clone under
-`checkout_base`/scratch with `RepositoryReads()` only, no edit boundary, no allocation.
+**Owner:** the repository-source family and storage checks. **P130 repair:** expose the
+existing acquisition and `RepositoryReads()` path through the normal tool adapter:
+
+```sh
+agent-comms tool --from UNIT --tool comms_repository_read \
+  --arguments '{"repository":"github:OWNER/REPO"}'
+```
+
+An existing local repository path is also accepted as `repository`. A remote read uses the
+caller's existing private donor and origin's declared default branch; a local read preserves
+its requested branch and bytes. Neither requires a goal, a problem, or an editable checkout.
+The result carries the declared `Repo`, including its checkout path. Reading never adds that
+path to the caller's editable roots, and subsequent source edits are still refused. Direct
+`git clone` stays refused because it does not declare a read-only destination; its refusal
+shows the actual native read call derived from the tool declaration, alongside the existing
+writable-checkout instructions.
 
 ## 4. The deal audit's shape cannot be discovered, and it gates every tool
 

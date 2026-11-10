@@ -99,6 +99,13 @@ class ForbiddenStorageEffect(StorageEffect):
         projection.deny(self.reason)
 
 
+class ForbiddenRepositoryStorageEffect(ForbiddenStorageEffect):
+    """Core supplies its declared read command beside the refused Git mutation."""
+
+    def check(self, projection: StorageAdmission) -> None:
+        projection.deny_repository_operation(self.reason)
+
+
 @dataclass(frozen=True)
 class AllocateStorageEffect(StorageEffect):
     work: ClassVar[tuple[type[RoomWork], ...]] = (AllocationRoomWork,)
@@ -133,13 +140,26 @@ class CheckoutStorageEffect(AllocateStorageEffect):
         super().check(projection)
 
 
-@dataclass(frozen=True)
-class AcquireRepositoryStorageEffect(CheckoutStorageEffect):
-    """Check both allocations before a source can clone or fetch; donors grant no edits."""
+class AcquiresRepositorySource(StorageEffect):
+    """Acquisition checks the caller's donor in addition to its other storage work."""
+
+    repository: RepositorySource
 
     def check(self, projection: StorageAdmission) -> None:
         super().check(projection)
         projection.require_repository_donors(self.repository)
+
+
+@dataclass(frozen=True)
+class AcquireRepositoryStorageEffect(AcquiresRepositorySource, CheckoutStorageEffect):
+    """Editable acquisition checks both allocations; the donor itself grants no edits."""
+
+
+@dataclass(frozen=True)
+class ReadRepositoryStorageEffect(AcquiresRepositorySource):
+    """A remote read checks its donor; an existing local read allocates nothing."""
+
+    repository: RepositorySource
 
 
 @dataclass(frozen=True)
@@ -262,9 +282,10 @@ class GitInvocation:
 class ForbidsCommands(ShellProgram):
     forbidden: ClassVar[tuple[tuple[str, ...], ...]] = ((),)
     reason: ClassVar[str] = 'virtualenv creation and uv sync are forbidden; use the shared environment'
+    forbidden_effect: ClassVar[type[ForbiddenStorageEffect]] = ForbiddenStorageEffect
 
     def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
-        selected = (ForbiddenStorageEffect(self.reason),) if self.matches(args, self.forbidden) else ()
+        selected = (self.forbidden_effect(self.reason),) if self.matches(args, self.forbidden) else ()
         return super().effects(args, cwd) + selected
 
 
@@ -343,9 +364,10 @@ class WritesWorkingTree(ShellProgram):
 class GitProgram(GitLaunch, ForbidsCommands, WritesWorkingTree):
 
     forbidden = (('clone',), ('worktree', 'add'), ('worktree', 'move'), ('worktree', 'remove'))
-    reason = ('git clone, worktree add, worktree move and worktree remove are forbidden: reading a '
-              'repository needs no allocation, and `agent-comms repositories` names the checkout '
-              'the team already has. A tree you intend to write comes from an allocated problem, '
+    forbidden_effect = ForbiddenRepositoryStorageEffect
+    reason = ('git clone, worktree add, worktree move and worktree remove are forbidden: '
+              '`agent-comms repositories` lists existing team checkouts. '
+              'A tree you intend to write comes from an allocated problem, '
               'and a problem needs a request first, so the chain is `agent-comms-team request add '
               '--as UNIT "what is wrong"`, then `agent-comms-team order problem ORDER.json --as '
               'UNIT --to UNIT --where PATH:LINE`, then `agent-comms checkout add P<n> --from '
