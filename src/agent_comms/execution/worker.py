@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import os
+import resource
 import signal
 import sys
 from contextlib import suppress
@@ -30,6 +31,7 @@ async def run_host(comms: Comms, listener_fd: int) -> None:
     """Own the root's host, not whichever unit happened to launch it first."""
     try:
         lower_priority()
+        open_every_file_this_host_may_need()
         comms.owners.require_private_launch()
         comms.owners.launch_authority.check()
         host = RootRuntimeStore.at(comms.root).read().host.observed(comms.root)
@@ -55,6 +57,21 @@ OWNER_NICENESS = 10
 def lower_priority() -> None:
     current = os.getpriority(os.PRIO_PROCESS, 0)
     os.setpriority(os.PRIO_PROCESS, 0, max(current, OWNER_NICENESS))
+
+
+def open_every_file_this_host_may_need() -> None:
+    """Take the open-file budget this host's own kernel already allows it.
+
+    One host answers every session on the bus, and each one holds its stores open: a
+    live host sat at 748 descriptors, 157 of them on registry.sqlite3, against the 1024
+    soft limit a login shell happened to hand it, while its hard limit was 524288. The
+    next open() to run out of budget was an unrelated diagnostics file, so the refusal
+    named that file instead of the budget, and the read that failed had nothing to do
+    with the sessions holding the descriptors. The soft limit is this process's to set.
+    """
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    if soft < hard:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
 
 
 def main() -> int:
