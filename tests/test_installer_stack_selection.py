@@ -170,6 +170,6 @@ def test_client_repair_passes_exact_git_inputs_to_nra(tmp_path: Path) -> None:
         "caller_root": str(client),
     }]
     (command,) = commands.calls
-    assert command[1:4] == ("tool", "run", "--refresh-package")
+    assert command[1:6] == ("tool", "run", "--python", str(source.python), "--refresh-package")
     assert "nominal-refactor-advisor @ git+https://example.invalid/nra@main" in command
     assert command[-1] == "--json"

@@ -418,7 +418,8 @@ class HistoricalRuntimeBuild(RuntimeBuild):
                 "caller_root": str(client),
             }],
         }]}))
-        self.commands.run(source.uv, "tool", "run", "--refresh-package", requirement.name,
+        self.commands.run(source.uv, "tool", "run", "--python", source.python,
+                          "--refresh-package", requirement.name,
                           "--from", str(requirement),
                           "nominal-refactor-advisor", client, "--codemod-plan", plan,
                           "--codemod-apply", "--json")
