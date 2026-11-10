@@ -18,6 +18,8 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from secrets import token_hex
 
+from packaging.utils import canonicalize_name
+
 from agent_comms.execution.child_process import ResidentManager
 from agent_comms.execution.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.execution.test_lease import LeaseStart, TestLease
@@ -244,9 +246,13 @@ class WheelRuntime(RuntimeStack):
     source_runtime: LaunchRuntime
     wheels: tuple[Path, ...]
 
+    @property
+    def input_directory(self) -> Path:
+        return self.runtime.prefix / "inputs"
+
     def wheel_inputs(self) -> tuple[Path, ...]:
         """The new runtime retains its own exact inputs; borrowed originals stay read-only."""
-        return tuple(self.runtime.prefix / "inputs" / wheel.name for wheel in self.wheels)
+        return tuple(self.input_directory / wheel.name for wheel in self.wheels)
 
     def sync(self) -> None:
         named_prefix = self.runtime.interpreter.parent.parent
@@ -273,7 +279,7 @@ class WheelRuntime(RuntimeStack):
                           self.interpreter.interpreter, prefix)
         if self.runtime.interpreter.resolve() != self.interpreter.interpreter.resolve():
             raise UpgradeRefused("Prepared target did not select the requested interpreter")
-        (prefix / "inputs").mkdir(mode=0o700)
+        self.input_directory.mkdir(mode=0o700)
         for artifact, destination in zip(artifacts, self.wheel_inputs(), strict=True):
             shutil.copyfile(artifact.path, destination)
             destination.chmod(0o400)
@@ -285,8 +291,14 @@ class WheelRuntime(RuntimeStack):
         shutil.copytree(self.source_runtime.prefix / "share", prefix / "share", symlinks=True)
         self.commands.run(self.uv, "--offline", "pip", "install", "--no-deps", "--reinstall",
                           "--python", self.python, *self.wheel_inputs(), env=self.environment())
+        self.complete_dependencies(metadata, source)
         self.commands.run(self.uv, "--offline", "pip", "check", "--python", self.python,
                           env=self.environment())
+
+    def complete_dependencies(
+        self, metadata: tuple[ProjectMetadata, ...], source: RuntimeResolution,
+    ) -> None:
+        """Exact functional wheel inputs retain their donor dependency set."""
 
     def prepare(self) -> RuntimeResolution:
         """Prepare once; a retained path is never silently rebound or reused."""
@@ -298,7 +310,26 @@ class WheelRuntime(RuntimeStack):
 
 @dataclass(frozen=True)
 class HistoricalRuntime(WheelRuntime, TargetRuntime):
-    """A checked wheel build that also owns the historical target's carry declarations."""
+    """Retain working packages and resolve requirements added by the historical source."""
+
+    def complete_dependencies(
+        self, metadata: tuple[ProjectMetadata, ...], source: RuntimeResolution,
+    ) -> None:
+        selected = {project.name for project in metadata}
+        constraints = self.input_directory / "recorded-constraints.txt"
+        constraints.write_text("".join(
+            f"{name}=={package.version}\n"
+            for name, package in source.packages.items() if name not in selected
+        ))
+        additions = self.input_directory / "added-requirements.txt"
+        additions.write_text("".join(
+            f"{requirement}\n"
+            for project in metadata for requirement in project.requirements
+            if canonicalize_name(requirement.name) not in source.packages
+        ))
+        self.commands.run(self.uv, "pip", "install", "--python", self.python,
+                          "--constraint", constraints, "--requirements", additions,
+                          env=self.environment())
 
 
 @dataclass(frozen=True)

@@ -11,6 +11,12 @@ from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import TargetProgram
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_home import RuntimeHome
+from agent_comms.installer.runtime_resolution import (
+    CorePackage,
+    ProjectMetadata,
+    RuntimeResolution,
+    ToadPackage,
+)
 from agent_comms.installer.runtime_stack import (
     HistoricalRuntime,
     HistoricalRuntimeBuild,
@@ -173,3 +179,62 @@ def test_client_repair_passes_exact_git_inputs_to_nra(tmp_path: Path) -> None:
     assert command[1:6] == ("tool", "run", "--python", str(source.python), "--refresh-package")
     assert "nominal-refactor-advisor @ git+https://example.invalid/nra@main" in command
     assert command[-1] == "--json"
+
+
+def dependency_wheel(
+    directory: Path, name: str, version: str, module: str,
+    requirements: tuple[str, ...] = (),
+) -> Path:
+    """Build a small wheel that uv can really install."""
+    normalized = name.replace("-", "_")
+    info = f"{normalized}-{version}.dist-info"
+    wheel = directory / f"{normalized}-{version}-py3-none-any.whl"
+    entries = {
+        f"{module}/__init__.py": "",
+        f"{info}/METADATA": (
+            f"Metadata-Version: 2.4\nName: {name}\nVersion: {version}\n"
+            + "".join(f"Requires-Dist: {requirement}\n" for requirement in requirements)
+        ),
+        f"{info}/WHEEL": (
+            "Wheel-Version: 1.0\nGenerator: dependency-test\n"
+            "Root-Is-Purelib: true\nTag: py3-none-any\n"
+        ),
+    }
+    entries[f"{info}/RECORD"] = "".join(f"{path},,\n" for path in entries) + f"{info}/RECORD,,\n"
+    with ZipFile(wheel, "w") as archive:
+        for path, content in entries.items():
+            archive.writestr(path, content)
+    return wheel
+
+
+@pytest.mark.skipif(
+    not RuntimeResolution.record_path().is_file(),
+    reason="copying an installed build needs its recorded runtime",
+)
+def test_historical_runtime_installs_new_declared_dependency(tmp_path: Path, test_uv: Path) -> None:
+    """Install a newly required package after copying the old packages."""
+    donor = LaunchRuntime.installed()
+    recorded = RuntimeResolution.at(donor.prefix)
+    added = dependency_wheel(tmp_path, "historical-added-dependency", "1.0", "historical_added_dependency")
+    requirement = f"{ProjectMetadata.from_wheel(added).name} @ {added.as_uri()}"
+    wheels = tuple(
+        dependency_wheel(tmp_path, package.distribution,
+                         recorded.packages[package.distribution].version,
+                         module, (requirement,))
+        for package, module in ((CorePackage, CorePackage.__module__.partition(".")[0]),
+                                (ToadPackage, ToadPackage.import_root))
+    )
+    home = tmp_path / "home"
+    uv = RuntimeHome.uv_path(home)
+    uv.parent.mkdir(parents=True)
+    uv.symlink_to(test_uv)
+    with InstallCommands() as commands:
+        target = HistoricalRuntime(
+            checkout=Path(__file__).resolve().parents[1], commands=commands, home=home,
+            runtime=LaunchRuntime.at_prefix(tmp_path / "historical"),
+            program=TargetProgram(tmp_path / "steps"), interpreter=donor,
+            source_runtime=donor, wheels=wheels,
+        )
+        target.sync()
+        assert (target.runtime.purelib / "historical_added_dependency" / "__init__.py").is_file()
+        assert RuntimeResolution.at(donor.prefix) == recorded
