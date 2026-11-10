@@ -104,7 +104,6 @@ from agent_comms.installer.owner_starts import OwnerStart
 from agent_comms.installer.practice import (
     PracticeCopy,
     PracticeMeasurement,
-    RehearsalHome,
 )
 from agent_comms.installer.probes.carry import (
     Carried,
@@ -140,6 +139,7 @@ from agent_comms.installer.reporting import (
     UnpostedWriter,
 )
 from agent_comms.installer.request import InstallRequest
+from agent_comms.installer.runtime_home import RehearsalHome
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.installer.runtime_retention import (
     RetirementOutcome,

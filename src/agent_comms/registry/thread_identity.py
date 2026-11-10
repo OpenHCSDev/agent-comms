@@ -4,7 +4,6 @@ import hashlib
 import math
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, MutableMapping, Sequence
-from copy import copy
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
@@ -35,7 +34,6 @@ from agent_comms.nominal.field_codec import (
     WireValue,
 )
 from agent_comms.registry.cli_options import JsonFlagRecord
-from agent_comms.storage.row_mapping import RowMapping
 
 if TYPE_CHECKING:
     from agent_comms.execution.child_process import ProcessIdentity
@@ -604,13 +602,6 @@ class GenerationCounter(ProjectionSource):
             )
         ):
             raise ValueError("invalid registry generation counter")
-        self.generations = RowMapping.owning(self.generations)
-
-    def copy(self) -> GenerationCounter:
-        """Copy validated state without revalidating every unchanged allocation."""
-        following = copy(self)
-        following.generations = RowMapping.owning(self.generations).copy()
-        return following
 
     @staticmethod
     def require_positive(value: int) -> int:

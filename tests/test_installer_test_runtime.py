@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.execution.launch_runtime import LaunchRuntime
-from agent_comms.installer import practice
+from agent_comms.installer import runtime_home
 from agent_comms.installer.backup import SavedFile
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.declared_uv import DeclaredUv
@@ -20,11 +20,11 @@ from agent_comms.projects.checkouts import Checkout
 
 
 def test_rehearsal_home_requires_both_installed_inputs(tmp_path, monkeypatch, test_uv):
-    executable = practice.TestHome(tmp_path).uv
+    executable = runtime_home.TestHome(tmp_path).uv
     installed_home = tmp_path / "installed"
     installed_home.mkdir()
     monkeypatch.setenv("HOME", str(installed_home))
-    home = practice.RehearsalHome(tmp_path / "rehearsal")
+    home = runtime_home.RehearsalHome(tmp_path / "rehearsal")
     with pytest.raises(FileNotFoundError):
         home.prepare()
     selected = installed_home / "runtime"
@@ -34,7 +34,7 @@ def test_rehearsal_home_requires_both_installed_inputs(tmp_path, monkeypatch, te
     current.symlink_to(selected, target_is_directory=True)
     with pytest.raises(FileNotFoundError):
         home.prepare()
-    uv = practice.RuntimeHome.uv_path(installed_home)
+    uv = runtime_home.RuntimeHome.uv_path(installed_home)
     uv.parent.mkdir(parents=True)
     uv.symlink_to(executable)
     home.prepare()
@@ -43,15 +43,15 @@ def test_rehearsal_home_requires_both_installed_inputs(tmp_path, monkeypatch, te
 
 
 def test_test_home_requires_uv_on_path_even_with_an_installer_uv(tmp_path, monkeypatch, test_uv):
-    executable = practice.TestHome(tmp_path).uv
+    executable = runtime_home.TestHome(tmp_path).uv
     installed_home = tmp_path / "installed"
-    uv = practice.RuntimeHome.uv_path(installed_home)
+    uv = runtime_home.RuntimeHome.uv_path(installed_home)
     uv.parent.mkdir(parents=True)
     uv.symlink_to(executable)
     monkeypatch.setenv("HOME", str(installed_home))
     monkeypatch.setenv("PATH", "")
     with pytest.raises(UpgradeRefused):
-        practice.TestHome(tmp_path / "test-home").prepare()
+        runtime_home.TestHome(tmp_path / "test-home").prepare()
 
 
 @pytest.mark.timeout(290)
@@ -63,7 +63,7 @@ def test_checkout_native_tests_use_a_private_runtime(tmp_path, test_uv):
 
     # A machine's existing installation is not the test command's build destination.
     live_home = tmp_path / "live-home"
-    practice.TestHome(live_home).prepare()
+    runtime_home.TestHome(live_home).prepare()
     assert not (live_home / ".local/share/agent-comms/current").exists(follow_symlinks=False)
     runtimes = live_home / ".local/share/agent-comms/runtimes"
     runtimes.mkdir(parents=True)
@@ -117,7 +117,7 @@ def test_checkout_native_tests_use_a_private_runtime(tmp_path, test_uv):
 def test_the_installer_replaces_a_uv_its_checkout_does_not_declare(tmp_path, test_uv):
     """A uv reporting another version is replaced by the checkout's declared uv, in place."""
     checkout = Path(__file__).resolve().parents[1]
-    uv = practice.RuntimeHome.uv_path(tmp_path)
+    uv = runtime_home.RuntimeHome.uv_path(tmp_path)
     uv.parent.mkdir(parents=True)
     uv.write_text(f'#!/bin/sh\n[ "$1" = --version ] && echo "uv 0.0.0" && exit\n'
                   f'exec {test_uv} "$@"\n')

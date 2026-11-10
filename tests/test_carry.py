@@ -25,7 +25,7 @@ from agent_comms.execution.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.execution.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.installer.backup import StoreBackup, bus_files
-from agent_comms.installer.carry import STEPS, CarryChain, FinishedCarryStore
+from agent_comms.installer.carry import CarryChain, FinishedCarryStore
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstallClock, TargetProgram
 from agent_comms.installer.launch import InstallReport
@@ -34,7 +34,7 @@ from agent_comms.installer.probes.carry import Carried, Carry, MigrateOperation
 from agent_comms.installer.probes.commands import CliOutput, CliUndecodableError
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.installer.runtime_resolution import RuntimeResolution
-from agent_comms.installer.target_tree import TargetTree
+from agent_comms.installer.target_tree import STEPS, TargetTree
 from agent_comms.installer.upgrade import (
     ExistingBusInstall,
     HeldOwnersStopped,

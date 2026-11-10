@@ -22,7 +22,6 @@ from agent_comms.execution.child_process import ResidentManager
 from agent_comms.execution.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.installer.build_artifact import BuildArtifact
 from agent_comms.installer.building_runtime import BuildingRuntime
-from agent_comms.installer.carry import STEPS
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.installer.interpreter_operation import (
@@ -34,11 +33,11 @@ from agent_comms.installer.interpreter_operation import (
 )
 from agent_comms.installer.native_build_inputs import NativeBuildInputs
 from agent_comms.installer.native_package import NativePackageStore, pinned_package_for
-from agent_comms.installer.practice import RuntimeHome
 from agent_comms.installer.probes.imports import ClientImportsProbe
 from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
 from agent_comms.installer.probes.resolution import RuntimeResolutionProbe
 from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.runtime_home import RuntimeHome
 from agent_comms.installer.runtime_resolution import (
     ConsoleScriptPackage,
     ProjectMetadata,
@@ -47,6 +46,7 @@ from agent_comms.installer.runtime_resolution import (
     RuntimeResolution,
     ToadPackage,
 )
+from agent_comms.installer.target_tree import STEPS
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.storage_rules import StorageRule

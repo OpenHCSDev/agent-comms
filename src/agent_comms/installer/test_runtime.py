@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.practice import TestHome
+from agent_comms.installer.runtime_home import TestHome
 from agent_comms.installer.runtime_stack import RuntimeStack
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.storage_rules import StorageRule

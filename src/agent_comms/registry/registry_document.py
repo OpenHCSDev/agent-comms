@@ -1,3 +1,5 @@
+from copy import copy
+
 from agent_comms.cli_verbs.target_command_bindings import TargetCommandBindings
 from agent_comms.messaging.claim_registry_read import ClaimRegistryRead
 from agent_comms.registry.activity_registry_reads import ActivityRegistryRead
@@ -672,7 +674,9 @@ class GenerationOf(ThreadSlice[GenerationCounter]):
 
     @classmethod
     def copy(cls, value: GenerationCounter) -> GenerationCounter:
-        return value.copy()
+        following = copy(value)
+        following.generations = SharedRowsSlice.copy(value.generations)
+        return following
 
 
 class RootPurpose(DeclaredFamily, affix="RootPurpose"):
