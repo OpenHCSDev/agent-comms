@@ -21,4 +21,6 @@ Only this header changes:
 
 `metadata-focused-2.log`: 12 passed in 6.76s, exit 0. Covers metadata-only replay, unchanged hook and unrelated strings, provider-behavior refusal, existing Python replay, and three existing manifest-owner controls. The preceding failed run was a missing fixture parent directory, retained in `metadata-focused.log`.
 
+Post-landing repository guards also passed: `metadata-repository-guards.log`, 71 passed, 8,690 deselected, exit 0. They ran behind the landing and did not hold recovery.
+
 The API is unchanged. Preparation remains mandatory. Friction owns wheel rebuild, recovery/carry and the live installation; none is claimed here.
