@@ -1,11 +1,11 @@
 """The install's first stage: build the target's locked runtime, then become it.
 
-Any runtime's launcher, the outgoing one included, starts ``python -m agent_comms.installer``
-inside the target tree with the tree's ``src`` on its path and the install request on stdin
-(InstallRun.spawn). That interpreter predates the target's dependencies, so this stage
-imports only installer-internal modules: it reads nothing of the request, builds the
-runtime the tree's lock declares, and execs that runtime's interpreter into the target
-stage (installer/prepared.py), which still finds the request on stdin.
+The launcher starts its own installer inside the target checkout, with the install
+request still on stdin (InstallRun.spawn). Its current build policy chooses and checks
+all target packages before old target code can refresh their versions. This stage imports
+only installer-internal modules, then execs the checked runtime into its own target stage
+(installer/prepared.py), which still finds the request on stdin. Carry remains owned by
+the target runtime and the target checkout.
 """
 from __future__ import annotations
 
