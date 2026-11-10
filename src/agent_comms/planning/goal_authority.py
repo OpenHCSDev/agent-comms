@@ -8,7 +8,7 @@ from agent_comms.planning.goal_states import GoalState
 
 
 class GoalTurnAuthority(SubclassUnion, affix=""):
-    """Absent authority stays absent; a captured goal supplies the continuing-state rule."""
+    """The current goal decides whether an accepted input can keep working."""
 
     def keeps_turn_under(self, current: GoalTurnAuthority) -> bool:
         return current == self
@@ -23,7 +23,10 @@ class GoalTurnAuthority(SubclassUnion, affix=""):
 
 @dataclass(frozen=True)
 class NoGoalAuthority(NullMember, GoalTurnAuthority):
-    """The absent member, declared beside the captured member before any consumer compiles it."""
+    """Clearing an assignment leaves an already accepted input free to continue."""
+
+    def continues(self, captured: GoalAuthority) -> bool:
+        return True
 
     def describe(self) -> str:
         return "no goal"
@@ -35,7 +38,7 @@ class GoalAuthority(RecordMember, GoalTurnAuthority):
 
     Assigning or replacing a problem order revises the goal but keeps its authority, and an
     order or retry that makes the same goal active keeps a running turn; pausing, completing,
-    blocking, clearing or replacing the goal ends it.
+    blocking or replacing the goal ends it. Clearing the goal removes that restriction.
     """
 
     goal_id: GoalId

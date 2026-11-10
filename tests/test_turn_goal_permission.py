@@ -58,17 +58,17 @@ def test_order_revision_keeps_the_granted_authority():
     )
     assert not permission.allows(replace(ordered, state=BlockedGoal("stopped by its owner")))
     assert not permission.allows(replace(ordered, state=PausedGoal()))
-    assert not permission.allows(NoGoal())
+    OrdinaryGoalRule.require(permission, NoGoal())
 
 
 def test_a_dead_permission_names_both_authorities_it_compared():
-    """A refusal says which authority the input carried and which the goal has now, so the
-    model can end the turn instead of retrying the same tool call."""
+    """Replacing a goal still refuses tools captured under a different goal."""
     completed = Goal('the completed goal', GoalId.mint(), published_seq=0, state=CompletedGoal())
+    current = Goal('the replacement goal', GoalId.mint(), published_seq=0)
     permission = TurnGoalPermission(OwnerGoalPermission(completed.authority))
     with pytest.raises(SelectedToolDenied) as denial:
-        OrdinaryGoalRule.require(permission, NoGoal())
+        OrdinaryGoalRule.require(permission, current)
     said = str(denial.value)
     assert str(completed.id) in said
     assert 'in state completed' in said
-    assert 'the goal is now no goal' in said
+    assert f'the goal is now goal {current.id}' in said
