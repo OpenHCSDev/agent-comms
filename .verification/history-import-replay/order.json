@@ -1,0 +1,25 @@
+{
+  "defect": "Native module-mention replay fixes strings but leaves real importing callers on Core module paths removed by recorded Git moves.",
+  "why_stupid": "This is broken because the existing module redirect already owns import binding migration, but historical recovery cannot invoke it without also moving provider code or hand-editing callers.",
+  "unplanned_reason": "comms-teammate requested this caller-only native repair for historical installer recovery; Tristan explicitly requires automated import repair without changing the installed dependency cohort.",
+  "order": {
+    "kind": "pending",
+    "owner": "openhcsdev/nominalrefactoradvisor:nominal_refactor_advisor/refactors/module_move.py:266",
+    "scope": {"kind": "fix", "shape": {"parents": ["openhcsdev/nominalrefactoradvisor:nominal_refactor_advisor/refactors/module_move.py:266"], "members": []}},
+    "check": {
+      "directory": "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor",
+      "command": "git grep -l '^class ReplayGitModuleImportsOperation' -- nominal_refactor_advisor | wc -l",
+      "result": {"kind": "count", "expected": 1}
+    },
+    "edits": [
+      "Expose caller-only import replay through the existing module redirect provider, deriving old/new module identities from actual Git-recorded renames and the supplied old/new provider sources.",
+      "Use the actual Core 311cc7bb to 00ff77ae9 rename record and Toad c19b927 importing callers as proof inputs; do not encode a fixed SHA or path roster in the mechanism.",
+      "Rewrite only importing caller copies in a private source tree; provider Core snapshots are proof inputs and must not be written or replaced.",
+      "Preserve the installed dependency set, import order, local scopes, alias bindings and native refusal rules; refuse unproved missing or ambiguous target bindings and moves absent from Git history.",
+      "Reuse the existing owned NRA checkout from fresh main, keep this operation in a separate PR from completed P115, and return a usable native command or plan to comms-teammate."
+    ],
+    "banned": ["manual caller import edits", "hardcoded SHA/path rosters", "dependency upgrades", "Core provider rewrites", "installer-tree edits", "compatibility shim", "Claude dependency", "new agent"],
+    "report": "NRA base/head, actual Git rename input, original Toad importing caller before/after, native binding and refusal evidence, private-only changed paths, separate PR and usable replay command. The class count is only a structural check.",
+    "run": {"kind": "application", "text": "The native replay repairs the original installed Toad importing callers from recorded Core module moves while leaving every selected provider package unchanged."}
+  }
+}

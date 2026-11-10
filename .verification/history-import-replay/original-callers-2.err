@@ -1,0 +1,37 @@
+parsed 342 modules: 1.183s
+Timeout (0:00:20)!
+Thread 0x00007f4a172f3bc0 [python] (most recent call first):
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/implementation_identity.py", line 184 in _derived
+  <invalid frame>
+Timeout (0:00:20)!
+Thread 0x00007f4a172f3bc0 [python] (most recent call first):
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/implementation_identity.py", line ??? in _callable_dependencies
+  <invalid frame>
+Timeout (0:00:20)!
+Thread 0x00007f4a172f3bc0 [python] (most recent call first):
+  <invalid frame>
+snapshot: 70.756s
+Timeout (0:00:20)!
+Thread 0x00007f4a172f3bc0 [python] (most recent call first):
+  File "<frozen posixpath>", line 457 in realpath
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 938 in resolve
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/python_module_identity.py", line 40 in from_import_root
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/refactors/module_history.py", line 41 in identity
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/refactors/module_history.py", line 141 in <genexpr>
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/refactors/module_history.py", line 140 in <genexpr>
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/refactors/module_history.py", line 134 in recorded_moves
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/refactors/module_history.py", line 161 in source_edits_from_snapshot
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/codemod_reproof.py", line 102 in <lambda>
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/codemod_reproof.py", line 112 in required_reproof
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/codemod_reproof.py", line 102 in <lambda>
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/codemod_selection_context.py", line 121 in retained_operation_derivation
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/codemod_reproof.py", line 100 in source_edits
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/codemod_operations.py", line 121 in originated_edits
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 669 in <genexpr>
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 665 in edit_batch_for_recipes
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 1332 in from_snapshot
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 1240 in preflight
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 1294 in simulate
+  File "/home/ts/wt/comms-toad-selector--P115--nominalrefactoradvisor/nominal_refactor_advisor/codemod_runtime.py", line 1123 in simulate
+  File "/home/ts/wt/comms-toad-selector--P14--agent-comms/.verification/history-import-replay/run_original_callers.py", line 49 in <module>
+simulated: 88.637s
