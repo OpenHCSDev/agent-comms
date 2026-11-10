@@ -25,7 +25,7 @@ from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Annotated, Literal, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import JsonValue
 
@@ -63,7 +63,6 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     ExternalJsonShape,
     FieldCodec,
-    FieldPlan,
     MalformedRecord,
     SlicePolicy,
     TaggedRecordMember,
@@ -591,14 +590,13 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     def freeze(self) -> ThreadRows:
         return self._copy_into(FrozenThreadRows(), self._rows.freeze())
 
-    def reuse(self, rows: Mapping[str, object], kept: frozenset[str], earlier: ThreadRows) -> None:
+    def reuse(self, rows: Mapping[str, object], changed_names: Collection[str], earlier: ThreadRows) -> None:
         updated = earlier.copy()
-        for name in earlier:
-            if name not in rows:
+        for name in changed_names:
+            if name in rows:
+                updated._put_row(name, self._rows[name].rebound(earlier._binding))
+            else:
                 del updated[name]
-        for name, row in self._rows.items():
-            if name not in kept:
-                updated._put_row(name, row.rebound(earlier._binding))
         updated._copy_into(self, updated._rows)
 
 
@@ -616,9 +614,9 @@ class ThreadRowsSlice(OwnRow[ThreadRows]):
         return value.freeze()
 
     @classmethod
-    def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
+    def reuse(cls, rows: Mapping[str, object], changed_names: Collection[str],
               earlier: ThreadRows, changed: ThreadRows) -> ThreadRows:
-        changed.reuse(rows, kept, earlier)
+        changed.reuse(rows, changed_names, earlier)
         return changed
 
     @classmethod
@@ -630,45 +628,6 @@ class ThreadRowsSlice(OwnRow[ThreadRows]):
         return current.differing(earlier)
 
 
-@dataclass(frozen=True)
-class ThreadSection:
-    """A document field holding one row per thread name. Its field plan owns both the
-    wire key and the attribute, so a revision reuses unchanged rows without naming them."""
-
-    plan: FieldPlan
-
-    def rows(self, raw: Mapping[str, object]) -> dict[str, object]:
-        rows = raw.get(self.plan.key)
-        if not isinstance(rows, dict):
-            raise MalformedRecord(f"registry section {self.plan.key} must be an object")
-        return rows
-
-    def decoded(self, document: object) -> MutableMapping[str, object]:
-        rows = self.plan.current(document)
-        if not isinstance(rows, MutableMapping):
-            raise TypeError(f"{self.plan.name} does not hold one row per thread")
-        return rows
-
-    def kept(self, raw: Mapping[str, object], earlier_raw: Mapping[str, object],
-             earlier: object) -> frozenset[str]:
-        """Names whose row equals the earlier revision's, so their decoded value is reused."""
-        held, before = self.decoded(earlier), self.rows(earlier_raw)
-        return frozenset(
-            name for name, row in self.rows(raw).items()
-            if name in held and name in before and before[name] == row
-        )
-
-    def changed_rows(self, raw: Mapping[str, object], kept: frozenset[str]) -> dict[str, object]:
-        return {name: row for name, row in self.rows(raw).items() if name not in kept}
-
-    def reuse(self, raw: Mapping[str, object], kept: frozenset[str], earlier: object,
-              changed: object) -> None:
-        """Fill ``changed``'s own rows, in wire order, with the earlier decoded value of
-        every kept name; ``changed`` decoded only the rows that differ."""
-        self.plan.assign(changed, ThreadSlice.of(self.plan).reuse(
-            self.rows(raw), kept, self.plan.current(earlier), self.plan.current(changed)))
-
-
 class GenerationOf(ThreadSlice[GenerationCounter]):
     """An editable generation counter with its own generations mapping."""
 
@@ -676,6 +635,32 @@ class GenerationOf(ThreadSlice[GenerationCounter]):
     def copy(cls, value: GenerationCounter) -> GenerationCounter:
         following = copy(value)
         following.generations = SharedRowsSlice.copy(value.generations)
+        return following
+
+    @classmethod
+    def wire_changes(cls, current: object, earlier: object) -> object:
+        plan = FieldCodec.field_plan(GenerationCounter, "generations")
+        if not isinstance(current, Mapping) or not isinstance(earlier, Mapping):
+            raise MalformedRecord("registry generation counter must be an object")
+        default = FieldCodec.encode(plan.default())
+        return {**current, plan.key: SharedRowsSlice.wire_changes(
+            current.get(plan.key, default), earlier.get(plan.key, default))}
+
+    @classmethod
+    def refreshed(cls, current: object, previous: object,
+                  earlier: GenerationCounter, decoded: GenerationCounter) -> GenerationCounter:
+        plan = FieldCodec.field_plan(GenerationCounter, "generations")
+        if not isinstance(current, Mapping) or not isinstance(previous, Mapping):
+            raise MalformedRecord("registry generation counter must be an object")
+        default = FieldCodec.encode(plan.default())
+        following = copy(decoded)
+        following.generations = SharedRowsSlice.refreshed(
+            current.get(plan.key, default), previous.get(plan.key, default),
+            earlier.generations, decoded.generations)
+        # A reduced allocation ceiling changes every retained value's validity.
+        # Normal monotonic updates only validate their decoded changed rows.
+        if following.counter < earlier.counter:
+            return FieldCodec.decode(GenerationCounter, FieldCodec.encode(following))
         return following
 
 
@@ -887,16 +872,7 @@ class RegistryDocument(RegistryPresence[MutableMapping[str, ThreadStatus]]):
         return self.entry(name) if self.canonical_name(name) in self.threads else None
 
     @classmethod
-    def thread_sections(cls) -> tuple[ThreadSection, ...]:
-        """The sections that hold one row per thread name."""
-        return tuple(
-            ThreadSection(own)
-            for plan in FieldCodec.field_plans(cls) if plan.declared.init and plan.records
-            for own in ThreadSlice.of(plan).own_row_plans(plan)
-        )
-
-    @classmethod
-    def from_wire(cls, raw: dict, earlier: tuple[dict, RegistryDocument] | None = None
+    def from_wire(cls, raw: dict, earlier: tuple[Mapping[str, object], RegistryDocument] | None = None
                   ) -> RegistryDocument:
         """Decode a registry revision.
 
@@ -913,15 +889,20 @@ class RegistryDocument(RegistryPresence[MutableMapping[str, ThreadStatus]]):
                 earlier_raw, decoded = earlier
                 if not isinstance(raw, dict):
                     raise MalformedRecord("registry document must be an object")
-                kept = tuple(
-                    (section, section.kept(raw, earlier_raw, decoded))
-                    for section in cls.thread_sections()
-                )
-                changed = FieldCodec.decode(cls, {**raw, **{
-                    section.plan.key: section.changed_rows(raw, same) for section, same in kept
-                }})
-                for section, same in kept:
-                    section.reuse(raw, same, decoded, changed)
+                plans = tuple(plan for plan in FieldCodec.field_plans(cls)
+                              if plan.declared.init and plan.records)
+                defaults = {plan.key: FieldCodec.encode(plan.default()) for plan in plans}
+                narrowed = {**raw, **{
+                    plan.key: ThreadSlice.of(plan).wire_changes(
+                        raw[plan.key], earlier_raw.get(plan.key, defaults[plan.key]))
+                    for plan in plans if plan.key in raw
+                }}
+                changed = FieldCodec.decode(cls, narrowed)
+                for plan in plans:
+                    plan.assign(changed, ThreadSlice.of(plan).refreshed(
+                        raw.get(plan.key, defaults[plan.key]),
+                        earlier_raw.get(plan.key, defaults[plan.key]),
+                        plan.current(decoded), plan.current(changed)))
                 document = changed
             names = set(document.threads)
             if names != set(document.statuses):

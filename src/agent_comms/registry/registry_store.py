@@ -6,7 +6,7 @@ import os
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
@@ -79,7 +79,7 @@ class CachedRegistry(ABC):
         """Reuse this revision's answer, or read its replacement."""
 
     @abstractmethod
-    def decoded(self, store: RegistryStore, raw: dict) -> RegistryDocument:
+    def decoded(self, store: RegistryStore, source: RegistryCapture) -> RegistryDocument:
         """Decode ``raw``, reusing the threads this revision already decoded."""
 
     @abstractmethod
@@ -99,8 +99,8 @@ class UncachedRegistry(NullMember, CachedRegistry):
     ) -> Answer:
         return read(self)
 
-    def decoded(self, store: RegistryStore, raw: dict) -> RegistryDocument:
-        return store._decode(raw)
+    def decoded(self, store: RegistryStore, source: RegistryCapture) -> RegistryDocument:
+        return store._decode(source.raw, (RegistryCapture.empty().raw, RegistryDocument()))
 
     def captured(self, store: RegistryStore) -> RegistryCapture:
         return store.rows.captured(RegistryCapture.empty())
@@ -146,9 +146,8 @@ class RegistryRevision(CachedRegistry):
     ) -> Answer:
         return reuse(self) if self.source.revision == revision else read(self)
 
-    def decoded(self, store: RegistryStore, raw: dict) -> RegistryDocument:
-        document = RegistryDocument.from_wire(raw, (self.source.wire_document(), self.document))
-        document.threads.bind(store._bind_thread)
+    def decoded(self, store: RegistryStore, source: RegistryCapture) -> RegistryDocument:
+        document = store._decode(source.raw, (self.source.raw, self.document))
         return replace(document, last_seen=self.document.last_seen)
 
     def captured(self, store: RegistryStore) -> RegistryCapture:
@@ -449,7 +448,7 @@ class RegistryStore(
             ).current(self)
 
     def _cache_revision(self, stale: CachedRegistry, source: RegistryCapture) -> RegistryRevision:
-        entry = RegistryRevision.presented(self, source, stale.decoded(self, source.wire_document()))
+        entry = RegistryRevision.presented(self, source, stale.decoded(self, source))
         self.cache.entry = entry
         with self.cache.measurement:
             self.cache.counts.decodes += 1
@@ -613,8 +612,8 @@ class RegistryStore(
             return thread
         return replace(thread, turn_record=record, session_file=session)
 
-    def _decode(self, data: object) -> RegistryDocument:
-        document = self.record_type.from_wire(data)
+    def _decode(self, data: object, earlier: tuple[Mapping[str, object], RegistryDocument] | None = None) -> RegistryDocument:
+        document = self.record_type.from_wire(data, earlier)
         document.threads.bind(self._bind_thread)
         return document
 
