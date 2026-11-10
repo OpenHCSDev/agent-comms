@@ -3,18 +3,15 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from pydantic import JsonValue
 
 from agent_comms.nominal.field_codec import FieldCodec, WireValue
-from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.checkouts import Checkout, RepositoryReads
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.repository_storage import RepositoryStorage
 
-if TYPE_CHECKING:
-    from agent_comms.projects.storage_rules import StorageRule
-    from agent_comms.registry.threads import Thread
 
 
 class RepositorySource(WireValue):
@@ -36,14 +33,21 @@ class RepositorySource(WireValue):
     @abstractmethod
     def github(self) -> RepositoryName: ...
 
-    def allocations(self, rule: StorageRule, thread: Thread) -> tuple[Path, ...]:
+    def allocations[Owner](self, rule: RepositoryStorage[Owner], thread: Owner) -> tuple[Path, ...]:
         """A local donor already exists; no new source allocation is needed."""
         return ()
 
     @abstractmethod
-    def acquire(self, rule: StorageRule, thread: Thread) -> Repo: ...
+    def acquire[Owner](self, rule: RepositoryStorage[Owner], thread: Owner) -> Repo: ...
 
-    def qualify(self, checkout: Path, rule: StorageRule, thread: Thread) -> Repo:
+    def readable[Owner](
+        self, rule: RepositoryStorage[Owner], thread: Owner, reads: RepositoryReads,
+    ) -> Repo:
+        """An explicit local source stays on its requested checkout and revision."""
+        repository = self.acquire(rule, thread)
+        return reads.repository(repository.checkout)
+
+    def qualify[Owner](self, checkout: Path, rule: RepositoryStorage[Owner], thread: Owner) -> Repo:
         if not Checkout.git_roots(checkout):
             raise ValueError(f"Checkout {checkout} is occupied or incomplete; retained unchanged")
         repository = Repo.from_origin(checkout)
@@ -63,7 +67,7 @@ class LocalRepositorySource(RepositorySource):
     def to_wire(self) -> str:
         return str(self.repository.checkout)
 
-    def acquire(self, rule: StorageRule, thread: Thread) -> Repo:
+    def acquire[Owner](self, rule: RepositoryStorage[Owner], thread: Owner) -> Repo:
         self.qualify(self.repository.checkout, rule, thread)
         return self.repository
 
@@ -79,14 +83,26 @@ class GitHubRepositorySource(RepositorySource):
     def to_wire(self) -> str:
         return f"github:{self.repository.to_wire()}"
 
-    def allocations(self, rule: StorageRule, thread: Thread) -> tuple[Path, ...]:
+    def allocations[Owner](self, rule: RepositoryStorage[Owner], thread: Owner) -> tuple[Path, ...]:
         return (rule.repository_donor(thread, self.repository),)
 
-    def acquire(self, rule: StorageRule, thread: Thread) -> Repo:
+    def acquire[Owner](self, rule: RepositoryStorage[Owner], thread: Owner) -> Repo:
         donor, = self.allocations(rule, thread)
         return Repo.acquire_github(self.repository, donor)
 
-    def qualify(self, checkout: Path, rule: StorageRule, thread: Thread) -> Repo:
+    def readable[Owner](
+        self, rule: RepositoryStorage[Owner], thread: Owner, reads: RepositoryReads,
+    ) -> Repo:
+        """Materialize only this caller's read-only donor at origin's declared default."""
+        repository = super().readable(rule, thread, reads)
+        with repository.acquiring():
+            Repo.git(repository.checkout, "fetch", repository.remote)
+            Repo.git(repository.checkout, "remote", "set-head", repository.remote, "--auto")
+        branch = repository.default_branch()
+        Repo.git(repository.checkout, "checkout", "--detach", f"{repository.remote}/{branch}")
+        return repository
+
+    def qualify[Owner](self, checkout: Path, rule: RepositoryStorage[Owner], thread: Owner) -> Repo:
         repository = Repo.qualified_github(checkout, self.repository)
         donor, = self.allocations(rule, thread)
         rule.require_repository_donor(thread, self.repository, donor)

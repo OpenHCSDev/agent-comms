@@ -744,6 +744,8 @@ def test_the_clone_refusal_names_every_step_that_creates_an_allocation(tmp_path,
                  'agent-comms-team order problem', 'agent-comms checkout add'):
         assert step in text, text
     assert text.index('request add') < text.index('order problem') < text.index('checkout add')
+    assert 'comms_repository_read' in text
+    assert '--arguments' in text and 'github:' in text
 
 
 @pytest.mark.parametrize('command,kind', [
@@ -753,9 +755,9 @@ def test_the_clone_refusal_names_every_step_that_creates_an_allocation(tmp_path,
     ('uv pip install package', 'AllocateStorageEffect'),
     ('npm ci', 'AllocateStorageEffect'),
     ('ffmpeg -i input output', 'AllocateStorageEffect'),
-    ('git -C repo worktree add --detach extra origin/main', 'ForbiddenStorageEffect'),
-    ('git worktree remove --force extra', 'ForbiddenStorageEffect'),
-    ('git worktree move extra elsewhere', 'ForbiddenStorageEffect'),
+    ('git -C repo worktree add --detach extra origin/main', 'ForbiddenRepositoryStorageEffect'),
+    ('git worktree remove --force extra', 'ForbiddenRepositoryStorageEffect'),
+    ('git worktree move extra elsewhere', 'ForbiddenRepositoryStorageEffect'),
     ('git -C ../other--P3 reset --hard', 'WriteStorageEffect'),
     ('pip install --help\nmkdir target', 'WriteStorageEffect'),
     ('mkdir -p target', 'WriteStorageEffect'),

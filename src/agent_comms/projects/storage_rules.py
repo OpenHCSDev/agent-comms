@@ -33,6 +33,7 @@ from agent_comms.projects.checkouts import Checkout, RepositoryReads
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.repository_storage import RepositoryStorage
 from agent_comms.projects.work_branches import WorkBranches
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_reads import ThreadCheckoutSource
@@ -342,7 +343,7 @@ class ScopedDirectory(ValueDirective[Path]):
 
 
 @dataclass(frozen=True)
-class StorageRule(RoomAllocation, DurableFile, ThreadCheckoutSource[Thread]):
+class StorageRule(RoomAllocation, DurableFile, ThreadCheckoutSource[Thread], RepositoryStorage[Thread]):
     filename: ClassVar[str] = "storage.json"
     # Shared Python control host, measured through real three/29-owner journeys.
     host_memory_bytes: ClassVar[int] = 512 * 2**20
