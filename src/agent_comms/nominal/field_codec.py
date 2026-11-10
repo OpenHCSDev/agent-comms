@@ -13,7 +13,16 @@ import re
 import sys
 import types
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Collection, Hashable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import (
+    Callable,
+    Collection,
+    Hashable,
+    Iterable,
+    Iterator,
+    Mapping,
+    MutableMapping,
+    Sequence,
+)
 from contextvars import ContextVar
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
@@ -782,6 +791,10 @@ class FieldPlan(ViewColumn):
 
     def current(self, record: object) -> object:
         return cast(object, getattr(record, self.name))
+
+    def assign(self, record: object, value: object) -> None:
+        """Assign this declared field on an editable record."""
+        setattr(record, self.name, value)
 
     @cached_property
     def argument_normalizer(self) -> Callable[[object], object]:
@@ -3709,7 +3722,7 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
     key: ValueDecoder[K]
     value: ValueDecoder[V]
     arguments: tuple[object, object]
-    origins = (dict, Mapping)
+    origins = (dict, Mapping, MutableMapping)
 
     def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
         return tuple(('*', *path) for path in self.value.field_paths(key, seen))
@@ -3734,7 +3747,7 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
         return _OpaqueDecoder[dict[K, V]](dict)
 
     def accepts_value(self, value: object) -> bool:
-        return isinstance(value, dict)
+        return isinstance(value, get_origin(self.target) or self.target)
 
     def compile_comparison(self, compiled: set[object]) -> None:
         self.key.compile_comparison(compiled)

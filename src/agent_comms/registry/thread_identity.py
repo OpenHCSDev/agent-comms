@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import math
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, MutableMapping, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
@@ -590,7 +590,7 @@ class GenerationCounter(ProjectionSource):
     """One monotonic allocation domain, including deleted-name tombstones."""
 
     counter: int = 0
-    generations: dict[str, int] = field(default_factory=dict)
+    generations: MutableMapping[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if (

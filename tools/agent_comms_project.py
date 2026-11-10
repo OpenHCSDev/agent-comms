@@ -36,10 +36,10 @@ from agent_comms.execution.child_process import (
     SpawnedProcess,
 )
 from agent_comms.execution.launch_runtime import RestoredRuntime
-from agent_comms.installer.carry import STEPS
 from agent_comms.installer.core_stamp import WheelStamp
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.installer.runtime_resolution import StackSources
+from agent_comms.installer.target_tree import STEPS
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import boundary_decoder

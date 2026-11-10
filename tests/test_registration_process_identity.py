@@ -31,9 +31,10 @@ from agent_comms.storage.maintenance_barrier import (
     MaintenanceOperator,
     PausedPhase,
 )
+from agent_comms.transport import runtime_requests
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.transport.project_request import ProjectRuntimeRequest
-from agent_comms.transport.runtime_server import RuntimeRequest
+from agent_comms.transport.runtime_request import RuntimeRequest
 from served_requests import served
 
 
@@ -211,8 +212,8 @@ def test_configured_native_launch_preserves_original_project_binding(tmp_path: P
 
 
 @pytest.mark.parametrize("first_module", (
-    "agent_comms.registry.threads", "agent_comms.transport.project_request",
-    "agent_comms.config_options", "agent_comms.runtime_requests",
+    NativeThread.__module__, ProjectRuntimeRequest.__module__,
+    ConfigOptions.__module__, runtime_requests.__name__,
 ))
 def test_native_project_command_cold_contracts(first_module: str) -> None:
     result = subprocess.run(

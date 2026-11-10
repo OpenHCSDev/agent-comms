@@ -29,6 +29,7 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.projects.slop import Slop
 from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.team.dealt_sources import DealtSources
 from agent_comms.team.package import TeamPackage
 from agent_comms.team.pattern_sources import PostmortemFailure
 from agent_comms.team.rule_deal import (
@@ -38,7 +39,6 @@ from agent_comms.team.rule_deal import (
     CompactionDeal,
     DealDelivery,
     DealTrigger,
-    DealtSources,
     PrimedDeal,
     StartedDeal,
     SystemPromptDelivery,

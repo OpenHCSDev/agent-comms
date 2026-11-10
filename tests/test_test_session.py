@@ -3,12 +3,13 @@
 import subprocess
 import sys
 import threading
+import os
 from pathlib import Path
 
 import pytest
 
 import pytest_session as sessions
-from agent_comms.execution.test_lease import HostTestLease, NewTestRun
+from agent_comms.execution.test_lease import HostTestLease, InheritedTestRun, NewTestRun
 from agent_comms.projects.storage_rules import StorageRule
 
 pytest_plugins = ("pytester",)
@@ -28,6 +29,10 @@ def test_controller_prepares_once_and_confirmation_does_not_reacquire(
     with sessions.TestSession.from_worker_hint("", NewTestRun(), lease) as owner:
         owner.prepare()
         owner.confirm(controller_session)
+        assert owner.start.descriptors()
+        with lease.held(InheritedTestRun(os.dup(owner.start.descriptors()[0]))):
+            with lease.observed() as shared:
+                assert shared.held
         with lease.observed() as claim:
             assert claim.held
     with lease.observed() as claim:

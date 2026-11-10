@@ -171,10 +171,10 @@ class InstallCommands:
         print("=", measured.line(), file=sys.stderr, flush=True)
 
     def run(self, *command: str | Path, cwd: Path = Path(),
-            env: Mapping[str, str] = os.environ) -> str:
+            env: Mapping[str, str] = os.environ, pass_fds: tuple[int, ...] = ()) -> str:
         argv = tuple(map(str, command))
         with self.timing(CommandPhase(argv)):
-            completed = subprocess.run(argv, cwd=cwd, env=env,
+            completed = subprocess.run(argv, cwd=cwd, env=env, pass_fds=pass_fds,
                                        capture_output=True, text=True)
         if completed.returncode:
             raise UpgradeRefused(f"{command[0]} failed: {completed.stdout.strip()}\n"

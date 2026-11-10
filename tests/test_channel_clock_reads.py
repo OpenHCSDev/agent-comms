@@ -6,12 +6,12 @@ from agent_comms.messaging.bus_activity_index import BusActivityIndex
 from agent_comms.messaging.channels import RetiredTagChannel
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
-from agent_comms.registry.registry_document import ThreadRows
+from agent_comms.registry.registry_document import StoredThreadRow
 from agent_comms.registry.threads import ExternalThread
 from conftest import installed_comms
 
 
-def forbid(owner: type, name: str, monkeypatch: pytest.MonkeyPatch) -> None:
+def forbid(owner: object, name: str, monkeypatch: pytest.MonkeyPatch) -> None:
     def forbidden(*_args: object, **_kwargs: object) -> None:
         raise AssertionError(f"{name} ran on an inbox read")
 
@@ -47,5 +47,5 @@ def test_sender_bindings_decode_no_thread_row(tmp_path, monkeypatch):
     comms.registry.rename("beta", "beta-renamed")
     expected = comms.registry.snapshot().sender_bindings
 
-    forbid(ThreadRows, "decode_row", monkeypatch)
+    forbid(StoredThreadRow.thread, "func", monkeypatch)
     assert Registration(comms.registry.store.path).snapshot().sender_bindings == expected

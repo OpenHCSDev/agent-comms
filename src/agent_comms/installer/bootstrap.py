@@ -18,6 +18,7 @@ from typing import ClassVar, Never
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import LaunchedPhaseTiming
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_stack import RuntimeStack
 from agent_comms.installer.target_tree import ScratchTree
 from agent_comms.nominal.field_codec import FieldCodec
@@ -59,3 +60,16 @@ class BuiltRuntime:
     @classmethod
     def argument(cls) -> BuiltRuntime:
         return FieldCodec.decode(cls, FieldCodec.parse(sys.argv[1]))
+
+
+def main() -> None:
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(signum, stopped)
+    try:
+        BuiltRuntime.bootstrap()
+    except UpgradeRefused as error:
+        raise SystemExit(str(error))
+
+
+if __name__ == "__main__":
+    main()
