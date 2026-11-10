@@ -26,9 +26,9 @@ from typing import TYPE_CHECKING, Annotated, Literal, Self
 
 from pydantic import JsonValue
 
-from agent_comms.messaging.delivery_recipients import DeliveryRecipients
 from agent_comms.errors import OutsideRegistrySlice, RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_ingress import InputRegistry
 from agent_comms.execution.native_input_owner import NativeOwnerRegistry
 from agent_comms.execution.restart_refusals import (
     OwnerBusyRefusal,
@@ -44,13 +44,13 @@ from agent_comms.execution.turn_lease import (
     TurnLeaseFence,
     TurnRecord,
 )
-from agent_comms.execution.input_ingress import InputRegistry
 from agent_comms.messaging.channel_targets import ResolvedTarget, SurroundingChannel, TeammatesTag
 from agent_comms.messaging.channels import Channel, ChannelMemberIndex
+from agent_comms.messaging.delivery_recipients import DeliveryRecipients
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.snapshot_slices import (
-    MappingRowsSlice,
     OwnRow,
+    SharedRowsSlice,
     SnapshotRestored,
     SnapshotValue,
     ThreadSlice,
@@ -84,12 +84,14 @@ from agent_comms.registry.registration_change import (
     RegistrationChange,
     UpdatedRegistration,
 )
+from agent_comms.registry.registry_names import DeletedThread
 from agent_comms.registry.registry_provenance import (
     RegisteredRecipient,
     RegistryProvenance,
     RetiredRecipient,
 )
 from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
+from agent_comms.registry.task_registry import TaskRegistry
 from agent_comms.registry.thread_creation import CreationTime
 from agent_comms.registry.thread_identity import (
     ClaimedIdentity,
@@ -114,8 +116,7 @@ from agent_comms.registry.thread_status import (
 from agent_comms.registry.thread_text import ForkedParent, NoParent
 from agent_comms.registry.threads import Thread, ThreadWorkState
 from agent_comms.registry.user_thread_lookup import FoundUserThread, NoUserThread, UserThreadLookup
-from agent_comms.registry.registry_names import DeletedThread
-from agent_comms.registry.task_registry import TaskRegistry
+from agent_comms.storage.row_mapping import ReadOnlyRows, RowMapping
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 
@@ -313,108 +314,157 @@ class InvalidRegistryDocument(RelationViolationError):
         super().__init__(f"Invalid registry document: {error}")
 
 
+class ThreadRow(ABC):
+    """One declaration owns its stored value and its lazily decoded value."""
+
+    @property
+    @abstractmethod
+    def thread(self) -> Thread: ...
+
+    @property
+    @abstractmethod
+    def wire(self) -> dict[str, JsonValue]: ...
+
+    @property
+    def birth(self) -> CreationTime:
+        return self.thread.created_at
+
+    def matches_parent(self, parent: str) -> bool:
+        return self.thread.parent.named(parent)
+
+    @abstractmethod
+    def rebound(self, binding: Callable[[Thread], Thread]) -> ThreadRow: ...
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ThreadRow):
+            return NotImplemented
+        return self is other or self.same(other)
+
+    def same(self, other: ThreadRow) -> bool:
+        return self.thread == other.thread
+
+    def same_stored(self, other: StoredThreadRow) -> bool:
+        return self.thread == other.thread
+
+
+@dataclass(eq=False)
+class StoredThreadRow(ThreadRow):
+    row: dict[str, JsonValue]
+    binding: Callable[[Thread], Thread]
+
+    @cached_property
+    def thread(self) -> Thread:
+        try:
+            return self.binding(FieldCodec.decode(Thread, self.row))
+        except ValueError as error:
+            raise InvalidRegistryDocument(error) from error
+
+    @property
+    def wire(self) -> dict[str, JsonValue]:
+        return self.row
+
+    @cached_property
+    def birth(self) -> CreationTime:
+        try:
+            return CreationTime.from_wire(self.row.get(FieldCodec.record_key(Thread, "created_at")))
+        except ValueError as error:
+            raise InvalidRegistryDocument(error) from error
+
+    def matches_parent(self, parent: str) -> bool:
+        return self.row.get(FieldCodec.record_key(Thread, "parent")) == FieldCodec.encode(ForkedParent(parent))
+
+    def rebound(self, binding: Callable[[Thread], Thread]) -> ThreadRow:
+        return self if self.binding == binding else StoredThreadRow(self.row, binding)
+
+    def same(self, other: ThreadRow) -> bool:
+        return other.same_stored(self)
+
+    def same_stored(self, other: StoredThreadRow) -> bool:
+        return self.row == other.row or self.thread == other.thread
+
+
+@dataclass(eq=False)
+class AssignedThreadRow(ThreadRow):
+    value: Thread
+
+    @property
+    def thread(self) -> Thread:
+        return self.value
+
+    @cached_property
+    def wire(self) -> dict[str, JsonValue]:
+        return FieldCodec.encode(self.thread)
+
+    def rebound(self, binding: Callable[[Thread], Thread]) -> ThreadRow:
+        return AssignedThreadRow(binding(self.thread))
+
+
 class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     """A revision's thread rows, decoded and bound only when read."""
 
     def __init__(self) -> None:
-        # checked_rows proved each stored row an object, so the type keeps that proof.
-        self._raw: dict[str, dict[str, JsonValue]] = {}
-        self._decoded: dict[str, Thread] = {}
+        self._rows: RowMapping[str, ThreadRow] = RowMapping()
         self._binding: Callable[[Thread], Thread] = self.unbound
-        # The rows this copy was frozen from: a stored row decoded here is learned there too,
-        # so the next revision's reuse inherits it. Rows not frozen from anything learn alone.
-        self._source: ThreadRows = self
 
     @staticmethod
     def unbound(thread: Thread) -> Thread:
         return thread
 
     def bind(self, binding: Callable[[Thread], Thread]) -> None:
+        if self._binding == binding:
+            return
+        self._rows = RowMapping({name: row.rebound(binding) for name, row in self._rows.items()})
         self._binding = binding
-        self._decoded = {name: binding(thread) for name, thread in self._decoded.items()}
 
     def __eq__(self, other: object) -> bool:
-        """Rows still stored on both sides compare as their JSON; only rows that differ there,
-        or that either side wrote, are decoded, so a one-row edit never decodes the registry.
+        """Related revisions compare their writes; unchanged cells share their decode.
         Rows equal only rows: a plain mapping is a different value."""
         if not isinstance(other, ThreadRows):
             return NotImplemented
-        return self.keys() == other.keys() and all(self.same_row(other, name) for name in self)
-
-    def same_row(self, other: ThreadRows, name: str) -> bool:
-        """One name's row on both sides: compared as JSON while both still hold it, decoded
-        only where either side wrote it."""
-        if name not in self or name not in other:
-            return name not in self and name not in other
-        return ((name in self._raw and name in other._raw and self._raw[name] == other._raw[name])
-                or self[name] == other[name])
+        return self._rows == other._rows
 
     def differing(self, other: ThreadRows) -> frozenset[str]:
         """The names whose rows differ from ``other``'s, added and removed ones included."""
-        return frozenset(name for name in self.keys() | other.keys()
-                         if not self.same_row(other, name))
+        return self._rows.differing(other._rows)
 
     def children(self, parent: str) -> tuple[Thread, ...]:
         """Select the declared parent before decoding any complete thread row."""
-        key = FieldCodec.field_plan(Thread, "parent").key
-        expected = FieldCodec.encode(ForkedParent(parent))
-        return tuple(
-            self[name] for name in self
-            if (self._decoded[name].parent.named(parent) if name in self._decoded
-                else self._raw[name].get(key) == expected)
-        )
+        return tuple(row.thread for row in self._rows.values() if row.matches_parent(parent))
 
     def __getitem__(self, name: str) -> Thread:
-        if name not in self._decoded:
-            row = self._raw[name]
-            self._decoded[name] = self.decode_row(row)
-            self._source.learned(self, name, row)
-        return self._decoded[name]
-
-    def learned(self, copy: ThreadRows, name: str, row: Mapping[str, JsonValue]) -> None:
-        """``copy`` decoded one of its stored rows. While this still stores that same row under
-        the same binding, the decode is this row's too: a reader that reads only the file holds
-        every row raw and decodes through frozen snapshots, and without this the next revision
-        carried none of their decodes and decoded every row a walker touched again."""
-        if name in self._raw and self._raw[name] is row and self._binding == copy._binding:
-            self._decoded.setdefault(name, copy._decoded[name])
-
-    def decode_row(self, row: object) -> Thread:
-        try:
-            thread = FieldCodec.decode(Thread, row)
-        except ValueError as error:
-            raise InvalidRegistryDocument(error) from error
-        return self._binding(thread)
+        return self._rows[name].thread
 
     def __iter__(self) -> Iterator[str]:
-        return iter(dict.fromkeys((*self._raw, *self._decoded)))
+        return iter(self._rows)
 
     def __len__(self) -> int:
-        return len(self._raw.keys() | self._decoded.keys())
+        return len(self._rows)
 
     def __contains__(self, name: object) -> bool:
-        return name in self._raw or name in self._decoded
+        return name in self._rows
 
     def __setitem__(self, name: str, thread: Thread) -> None:
         if thread.name != name:
             raise MalformedRecord("thread name differs from its declaration")
-        self._decoded[name] = self._binding(thread)
-        self._raw.pop(name, None)
+        self._rows[name] = AssignedThreadRow(self._binding(thread))
 
     def __delitem__(self, name: str) -> None:
-        if name not in self:
-            raise KeyError(name)
-        self._raw.pop(name, None)
-        self._decoded.pop(name, None)
+        del self._rows[name]
+
+    def clear(self) -> None:
+        self._rows.clear()
+
+    def popitem(self) -> tuple[str, Thread]:
+        name, row = self._rows.popitem()
+        return name, row.thread
 
     def to_wire(self) -> dict[str, JsonValue]:
-        """Each row is encoded once: an assigned row's encoding becomes its stored form until
-        it is assigned again, so a save encodes only the rows that changed since the last one.
-        Reading a row leaves its wire value intact."""
-        for name, thread in self._decoded.items():
-            if name not in self._raw:
-                self._raw[name] = FieldCodec.encode(thread)
-        return dict(self._raw)
+        """Export all rows, each retaining its own cached encoding.
+
+        The complete export walks the mapping; incremental commits must select
+        changed keys before asking their cells for wire values.
+        """
+        return {name: row.wire for name, row in self._rows.items()}
 
     @classmethod
     def schema(cls) -> dict[str, JsonValue]:
@@ -432,12 +482,7 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
 
     def birth(self, name: str) -> CreationTime:
         """One row's creation time, read alone: a stored row is never decoded for it."""
-        if name in self._decoded:
-            return self._decoded[name].created_at
-        try:
-            return CreationTime.from_wire(self._raw[name].get("created_at"))
-        except ValueError as error:
-            raise InvalidRegistryDocument(error) from error
+        return self._rows[name].birth
 
     def births(self) -> set[float]:
         return {self.birth(name) for name in self}
@@ -460,7 +505,9 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     @classmethod
     def from_wire(cls, raw: object) -> Self:
         result = cls()
-        result._raw = cls.checked_rows(raw)
+        result._rows = RowMapping({
+            name: StoredThreadRow(row, result._binding) for name, row in cls.checked_rows(raw).items()
+        })
         return result
 
     @classmethod
@@ -469,41 +516,35 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         result.update(threads)
         return result
 
-    def copy(self) -> ThreadRows:
-        result = ThreadRows()
-        result._raw = self._raw.copy()
-        result._decoded = self._decoded.copy()
+    def _copy_into(self, result: ThreadRows, rows: RowMapping[str, ThreadRow]) -> ThreadRows:
+        result._rows = rows
         result._binding = self._binding
         return result
+
+    def copy(self) -> ThreadRows:
+        return self._copy_into(ThreadRows(), self._rows.copy())
 
     def only(self, names: frozenset[str]) -> ThreadRows:
-        """The named rows alone, each still raw or decoded as it is here."""
-        result = ThreadRows()
-        result._raw = {name: row for name, row in self._raw.items() if name in names}
-        result._decoded = {name: thread for name, thread in self._decoded.items() if name in names}
-        result._binding = self._binding
-        return result
+        """The selected rows retain their shared decode and wire values."""
+        return self._copy_into(ThreadRows(), self._rows.only(names))
 
     def freeze(self) -> ThreadRows:
-        result = FrozenThreadRows()
-        result._raw = self._raw.copy()
-        result._decoded = self._decoded.copy()
-        result._binding = self._binding
-        result._source = self
-        return result
+        return self._copy_into(FrozenThreadRows(), self._rows.freeze())
 
     def reuse(self, rows: Mapping[str, object], kept: frozenset[str], earlier: ThreadRows) -> None:
-        self._raw = self.checked_rows(rows)
-        self._decoded = {name: earlier._decoded[name] for name in kept if name in earlier._decoded}
+        updated = earlier._rows.copy()
+        for name in earlier:
+            if name not in rows:
+                del updated[name]
+        for name, row in self._rows.items():
+            if name not in kept:
+                updated[name] = row.rebound(earlier._binding)
+        self._rows = updated
         self._binding = earlier._binding
 
 
-class FrozenThreadRows(ThreadRows):
-    def __setitem__(self, name: str, thread: Thread) -> None:
-        raise TypeError("snapshot thread rows are read-only")
-
-    def __delitem__(self, name: str) -> None:
-        raise TypeError("snapshot thread rows are read-only")
+class FrozenThreadRows(ReadOnlyRows[str, Thread], ThreadRows):
+    """The thread view composes the same read-only capability as other row views."""
 
 
 class ThreadRowsSlice(OwnRow[ThreadRows]):
@@ -517,8 +558,9 @@ class ThreadRowsSlice(OwnRow[ThreadRows]):
 
     @classmethod
     def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
-              earlier: ThreadRows, changed: ThreadRows) -> None:
+              earlier: ThreadRows, changed: ThreadRows) -> ThreadRows:
         changed.reuse(rows, kept, earlier)
+        return changed
 
     @classmethod
     def only(cls, value: ThreadRows, names: frozenset[str]) -> ThreadRows:
@@ -564,8 +606,8 @@ class ThreadSection:
               changed: object) -> None:
         """Fill ``changed``'s own rows, in wire order, with the earlier decoded value of
         every kept name; ``changed`` decoded only the rows that differ."""
-        ThreadSlice.of(self.plan).reuse(
-            self.rows(raw), kept, self.plan.current(earlier), self.plan.current(changed))
+        self.plan.assign(changed, ThreadSlice.of(self.plan).reuse(
+            self.rows(raw), kept, self.plan.current(earlier), self.plan.current(changed)))
 
 
 class GenerationOf(ThreadSlice[GenerationCounter]):
@@ -573,7 +615,7 @@ class GenerationOf(ThreadSlice[GenerationCounter]):
 
     @classmethod
     def copy(cls, value: GenerationCounter) -> GenerationCounter:
-        return GenerationCounter(value.counter, dict(value.generations))
+        return value.copy()
 
 
 class RootPurpose(DeclaredFamily, affix="RootPurpose"):
@@ -702,7 +744,7 @@ class RegisteredTeamProject(TeamProject):
 
 @ThreadSlice.required
 @dataclass
-class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
+class RegistryDocument(RegistryPresence[MutableMapping[str, ThreadStatus]]):
     version: Annotated[
         Literal[3], SlicePolicy(WholeDocumentValue), WireRequired()
     ] = 3
@@ -715,16 +757,16 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     threads: Annotated[ThreadRows, SlicePolicy(ThreadRowsSlice)] = field(
         default_factory=ThreadRows
     )
-    statuses: Annotated[dict[str, ThreadStatus], SlicePolicy(MappingRowsSlice)] = field(
+    statuses: Annotated[MutableMapping[str, ThreadStatus], SlicePolicy(SharedRowsSlice)] = field(
         default_factory=dict
     )
-    last_seen: Annotated[dict[str, float], WireTransient()] = field(
+    last_seen: Annotated[MutableMapping[str, float], SlicePolicy(SharedRowsSlice), WireTransient()] = field(
         default_factory=dict, compare=False
     )
     """Presence, stored by PresenceStore and laid over each revision as it is read: a
     heartbeat that changes only this leaves the document equal, so registry.json is not
     rewritten for it."""
-    aliases: Annotated[dict[str, str], SlicePolicy(MappingRowsSlice)] = field(
+    aliases: Annotated[MutableMapping[str, str], SlicePolicy(SharedRowsSlice)] = field(
         default_factory=dict
     )
     owners: Annotated[GenerationCounter, SlicePolicy(GenerationOf)] = field(
@@ -734,14 +776,18 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         GenerationCounter, SlicePolicy(GenerationOf)
     ] = field(default_factory=GenerationCounter)
 
+    def __post_init__(self) -> None:
+        for plan in FieldCodec.field_plans(type(self)):
+            if plan.declared.init:
+                plan.assign(self, ThreadSlice.of(plan).owned(plan.current(self)))
+
     def copy(self) -> RegistryDocument:
         return replace(
             self,
-            last_seen=dict(self.last_seen),
             **{
                 plan.name: ThreadSlice.of(plan).copy(plan.current(self))
                 for plan in FieldCodec.field_plans(type(self))
-                if plan.declared.init and plan.records
+                if plan.declared.init
             },
         )
 
@@ -1159,11 +1205,11 @@ class RegistrySnapshot(
 ):
     purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)]
     threads: Annotated[ThreadRows, SlicePolicy(ThreadRowsSlice)]
-    statuses: Annotated[Mapping[str, ThreadStatus], SlicePolicy(MappingRowsSlice)]
-    last_seen: Annotated[Mapping[str, float], SlicePolicy(MappingRowsSlice)]
-    aliases: Annotated[Mapping[str, str], SlicePolicy(MappingRowsSlice)]
-    owner_generations: Annotated[Mapping[str, int], SlicePolicy(MappingRowsSlice)]
-    _claimed_generations: Annotated[Mapping[str, int], SlicePolicy(MappingRowsSlice)] = field(repr=False)
+    statuses: Annotated[Mapping[str, ThreadStatus], SlicePolicy(SharedRowsSlice)]
+    last_seen: Annotated[Mapping[str, float], SlicePolicy(SharedRowsSlice)]
+    aliases: Annotated[Mapping[str, str], SlicePolicy(SharedRowsSlice)]
+    owner_generations: Annotated[Mapping[str, int], SlicePolicy(SharedRowsSlice)]
+    _claimed_generations: Annotated[Mapping[str, int], SlicePolicy(SharedRowsSlice)] = field(repr=False)
     team_project: Annotated[TeamProject, SlicePolicy(WholeDocumentValue)] = field(
         default_factory=NoTeamProject
     )

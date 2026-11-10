@@ -204,6 +204,39 @@ def test_assigning_and_removing_thread_rows_changes_only_the_written_rows(thread
     assert rows.to_wire() == {"first": wire["first"]}
 
 
+def test_thread_rows_keep_their_owned_wire_form_at_the_codec_boundary(thread_rows_wire, monkeypatch):
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.registry.registry_document import StoredThreadRow, ThreadRows
+
+    def decoded(_row):
+        raise AssertionError("encoding stored thread rows decoded a declaration")
+
+    monkeypatch.setattr(StoredThreadRow.thread, "func", decoded)
+    assert FieldCodec.encode(ThreadRows.from_wire(thread_rows_wire)) == thread_rows_wire
+
+
+def test_thread_row_copies_share_decodes_without_sharing_writes(thread_rows_wire):
+    from dataclasses import replace
+
+    from agent_comms.registry.registry_document import ThreadRows
+    from agent_comms.registry.thread_text import GivenThreadText
+
+    rows = ThreadRows.from_wire(thread_rows_wire)
+    edit, frozen = rows.copy(), rows.freeze()
+    learned = frozen["first"]
+    assert rows["first"] is learned
+    assert edit["first"] is learned
+    edit["first"] = replace(learned, task=GivenThreadText("edited"))
+    assert edit.differing(rows) == frozenset({"first"})
+    assert frozen["first"] is learned
+    assert rows["first"] is learned
+    assert list(edit.only(frozenset({"second", "first"}))) == ["first", "second"]
+    with pytest.raises(TypeError, match="read-only"):
+        frozen.popitem()
+    with pytest.raises(TypeError, match="read-only"):
+        frozen.clear()
+
+
 def test_a_changed_revision_is_checked_as_a_whole(tmp_path):
     from agent_comms.errors import RelationViolationError
 

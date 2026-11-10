@@ -12,10 +12,16 @@ from types import MappingProxyType
 from typing import Self
 
 from agent_comms.nominal.field_codec import FieldCodec, FieldPlan, SlicePolicy
+from agent_comms.storage.row_mapping import RowMapping
 
 
 class ThreadSlice[Value](ABC):
     """How a registry field is copied. Each field declares its policy in metadata."""
+
+    @classmethod
+    def owned(cls, value: Value) -> Value:
+        """Admit a field into the representation its declared policy owns."""
+        return value
 
     @classmethod
     @abstractmethod
@@ -34,7 +40,7 @@ class ThreadSlice[Value](ABC):
 
     @classmethod
     def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
-              earlier: Value, changed: Value) -> None:
+              earlier: Value, changed: Value) -> Value:
         raise TypeError(f"{cls.__name__} does not hold reusable rows")
 
     @classmethod
@@ -113,6 +119,8 @@ class OwnRow[Rows](SnapshotValue[Rows]):
 
 
 class MappingRowsSlice(OwnRow[MutableMapping]):
+    """A plain mapping snapshot, without imposing a persistent representation."""
+
     @classmethod
     def copy(cls, value: Mapping) -> dict:
         return dict(value)
@@ -123,10 +131,8 @@ class MappingRowsSlice(OwnRow[MutableMapping]):
 
     @classmethod
     def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
-              earlier: MutableMapping, changed: MutableMapping) -> None:
-        merged = {name: (earlier if name in kept else changed)[name] for name in rows}
-        changed.clear()
-        changed.update(merged)
+              earlier: MutableMapping, changed: MutableMapping) -> MutableMapping:
+        return {name: (earlier if name in kept else changed)[name] for name in rows}
 
     @classmethod
     def only(cls, value: MutableMapping, names: frozenset[str]) -> MutableMapping:
@@ -137,6 +143,42 @@ class MappingRowsSlice(OwnRow[MutableMapping]):
         absent = object()
         return frozenset(name for name in earlier.keys() | current.keys()
                          if earlier.get(name, absent) != current.get(name, absent))
+
+
+class SharedRowsSlice(MappingRowsSlice):
+    """Edits and snapshots share immutable roots and compare their changed keys."""
+
+    @classmethod
+    def owned(cls, value: Mapping) -> RowMapping:
+        return RowMapping.owning(value)
+
+    @classmethod
+    def copy(cls, value: Mapping) -> RowMapping:
+        return cls.owned(value).copy()
+
+    @classmethod
+    def freeze(cls, value: Mapping) -> Mapping:
+        return cls.owned(value).freeze()
+
+    @classmethod
+    def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
+              earlier: MutableMapping, changed: MutableMapping) -> RowMapping:
+        merged = cls.owned(earlier).copy()
+        for name in earlier:
+            if name not in rows:
+                del merged[name]
+        for name, row in changed.items():
+            if name in rows and name not in kept:
+                merged[name] = row
+        return merged
+
+    @classmethod
+    def only(cls, value: MutableMapping, names: frozenset[str]) -> MutableMapping:
+        return cls.owned(value).only(names)
+
+    @classmethod
+    def differing(cls, earlier: Mapping, current: Mapping) -> frozenset[str]:
+        return cls.owned(current).differing(cls.owned(earlier))
 
 
 class WholeDocumentValue[Value](SnapshotValue[Value]):
