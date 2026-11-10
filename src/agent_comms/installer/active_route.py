@@ -11,7 +11,7 @@ import os
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager, nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -59,19 +59,19 @@ class ActiveRouteFile(FileTransactions, SingleFileStore, DependentStateTier):
         """Capture private route bytes; decoding belongs outside every publication guard."""
         path = self.path
         refusal = RouteFileNotPrivate()
-        try:
-            fd = PrivateFileRole.read(path, refusal)
-        except FileNotFoundError:
-            return DocumentBytes(MissingFile(), b"")
-        try:
+        with ExitStack() as reading:
+            # Only the open answers "no route published yet"; a missing directory below
+            # is the changed-route failure this must still raise.
+            try:
+                fd = reading.enter_context(PrivateFileRole.reading(path, refusal))
+            except FileNotFoundError:
+                return DocumentBytes(MissingFile(), b"")
             PrivateDirectoryRole.require(
                 path.parent.lstat(), ValueError("active comms route directory must be owner-only"))
             info = os.fstat(fd)
             if not 0 < info.st_size <= 4096:
                 raise refusal
             raw = os.read(fd, 4097)
-        finally:
-            os.close(fd)
         try:
             current = path.lstat()
         except FileNotFoundError as error:
@@ -90,13 +90,10 @@ class ActiveRouteFile(FileTransactions, SingleFileStore, DependentStateTier):
         """Pin the publication directory without lending any caller a store lock."""
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         refusal = ValueError("active comms route directory changed or is not owned")
-        directory = OwnedDirectoryRole.read(self.path.parent, refusal)
-        try:
+        with OwnedDirectoryRole.reading(self.path.parent, refusal) as directory:
             OwnedDirectoryRole.held(directory, self.path.parent, refusal)
             Platform.current().make_private_descriptor(directory, 0o700)
             yield directory
-        finally:
-            os.close(directory)
 
     def update[Value, Result](
         self, read: Callable[[], Value], change: Callable[[Value, int], Result],

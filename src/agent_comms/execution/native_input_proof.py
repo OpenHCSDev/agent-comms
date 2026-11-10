@@ -165,17 +165,10 @@ class NativeContextJournal(
         """
         with ExitStack() as ownership:
             try:
-                held = ownership.enter_context(
-                    closing(
-                        os.fdopen(
-                            PrivateFileRole.read(
-                                path,
-                                NativePiUnavailable("Native proof indexed evidence is unavailable"),
-                            ),
-                            "rb",
-                        )
-                    )
-                )
+                held = ownership.enter_context(PrivateFileRole.stream(
+                    path,
+                    NativePiUnavailable("Native proof indexed evidence is unavailable"),
+                ))
                 before = os.fstat(held.fileno())
                 db = ownership.enter_context(closing(SQLiteFile.recovering_snapshot(path)))
                 if cls.schema_differs(db):

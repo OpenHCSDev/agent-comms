@@ -125,13 +125,11 @@ def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
         raise IdentityConflict("Private sidecar path must be lexical.")
     with ExitStack() as stack:
         refusal = IdentityConflict("Private sidecar snapshots require a trusted directory.")
-        fd = TrustedAncestorRole.read(path.anchor, refusal)
-        stack.callback(os.close, fd)
+        fd = stack.enter_context(TrustedAncestorRole.reading(path.anchor, refusal))
         current = Path(path.anchor)
         ancestors = [(current, _identity(os.fstat(fd)))]
         for part in path.parent.parts[1:]:
-            fd = TrustedAncestorRole.read(part, refusal, dir_fd=fd)
-            stack.callback(os.close, fd)
+            fd = stack.enter_context(TrustedAncestorRole.reading(part, refusal, dir_fd=fd))
             current /= part
             ancestors.append((current, _identity(os.fstat(fd))))
         directory = _PinnedDirectory(path.parent, fd, tuple(ancestors))
@@ -162,8 +160,7 @@ def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
 
 def _read_snapshot(directory: _PinnedDirectory, name: str) -> tuple[bytes, os.stat_result]:
     # O_NONBLOCK ensures a FIFO substitution cannot hang before fstat rejects it.
-    fd = PrivateFileRole.read(name, UnprivateSidecarFile(), dir_fd=directory.fd)
-    try:
+    with PrivateFileRole.reading(name, UnprivateSidecarFile(), dir_fd=directory.fd) as fd:
         info = os.fstat(fd)
         if not 100 <= info.st_size <= _MAX_SIDECAR_BYTES:
             raise IdentityConflict("Private sidecar snapshot is empty or oversized.")
@@ -181,8 +178,6 @@ def _read_snapshot(directory: _PinnedDirectory, name: str) -> tuple[bytes, os.st
         if raw[:16] != b"SQLite format 3\x00" or raw[18:20] != b"\x01\x01":
             raise IdentityConflict("Private sidecar must be a standalone rollback-mode snapshot.")
         return raw, info
-    finally:
-        os.close(fd)
 
 
 def _connect(raw: bytes | None) -> sqlite3.Connection:
@@ -305,21 +300,19 @@ def _publish(
     # explicit diagnosis, never replay of a reserved input or a guessed rollback.
     begun = False
     try:
-        marker = PrivateFileRole.create(intent, UnprivateSidecarFile(), dir_fd=directory.fd)
-        begun = True
-        try:
+        with PrivateFileRole.creating(
+            intent, UnprivateSidecarFile(), dir_fd=directory.fd,
+        ) as marker:
+            begun = True
             _write_all(marker, b"sidecar-snapshot-v1\n")
             os.fsync(marker)
-        finally:
-            os.close(marker)
         os.fsync(directory.fd)
-        fd = PrivateFileRole.create(staging, UnprivateSidecarFile(), dir_fd=directory.fd)
-        try:
+        with PrivateFileRole.creating(
+            staging, UnprivateSidecarFile(), dir_fd=directory.fd,
+        ) as fd:
             _write_all(fd, raw)
             os.fsync(fd)
             staged = os.fstat(fd)
-        finally:
-            os.close(fd)
         directory.unchanged(name, expected)
         directory.unchanged(staging, staged)
         os.replace(staging, name, src_dir_fd=directory.fd, dst_dir_fd=directory.fd)
