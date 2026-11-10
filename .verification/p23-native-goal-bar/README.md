@@ -32,3 +32,7 @@ Friction corrected the requirement after the source trace: do not force an idle 
 This supersedes only the earlier statement that the third arrangement was unresolved; the failed-state trace above remains the evidence for the correction. The next request stays held by the original provider gate; its deliberate disconnect at fixture close is declared. A final helper patch requires the actual available owner goal rather than an unavailable display retaining the same snapshot.
 
 Three native operations across the two Toad helper/test sources simulated with exit 0. No product/shared-source edit or native/app test run. The helper readiness prefix is already applied in friction's assembly; apply only this successor suffix with normal native reproof.
+
+## Assembled behavior result
+
+Friction applied the successor suffix with full shared-context reproof at Toad c0020780a3f8a67550575d193eb8fa9222241b9d, paired with Core f2f589d762f730d39665ace2011fdfdb93f55749. Its targeted native goal-bar/objective run collected and passed 10 cases in 159.51s, exit 0. Read receipts: /home/ts/.cache/agent-scratch/comms-friction/p23-repaired-consumers-toad.log and p23-repaired-consumers-toad.exit. Both original native files using the arranging fixture were included. No extra run was launched by this contribution. This qualifies the applied goal-bar repair in that assembled pair; installation and the separate real Standby-owner acceptance are not asserted here.
