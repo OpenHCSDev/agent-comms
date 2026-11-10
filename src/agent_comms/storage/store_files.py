@@ -795,17 +795,24 @@ class AtomicFile:
 
     @contextmanager
     def _staging(self) -> Iterator[tuple[BinaryIO, Path]]:
-        descriptor, temporary = self._stage()
+        output, temporary = self._stage()
         try:
-            with os.fdopen(descriptor, "wb") as output:
+            with output:
                 Platform.current().make_private_descriptor(output.fileno(), self.mode)
                 yield output, temporary
         finally:
             self._discard(temporary)
 
-    def _stage(self) -> tuple[int, Path]:
+    def _stage(self) -> tuple[BinaryIO, Path]:
+        """Both stagings hand back a stream that owns its descriptor, so no override
+        leaves an int for _staging to remember."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        return StoreOwner.stage_file(self.path)
+        descriptor, temporary = StoreOwner.stage_file(self.path)
+        try:
+            return os.fdopen(descriptor, "wb"), temporary
+        except BaseException:
+            os.close(descriptor)
+            raise
 
     def _discard(self, staged: Path) -> None:
         staged.unlink(missing_ok=True)
@@ -880,12 +887,12 @@ class DirectoryAtomicFile(AtomicFile):
 
     directory: int
 
-    def _stage(self) -> tuple[int, Path]:
+    def _stage(self) -> tuple[BinaryIO, Path]:
         temporary = self.path.with_name(StoreOwner.staging_name.format(
             name=self.path.name, token=ScratchName.mint()) + StoreOwner.staging_suffix)
-        descriptor = PrivateFileRole.create(temporary.name, ValueError(
-            "Staged publication is not a private regular file"), dir_fd=self.directory)
-        return descriptor, temporary
+        return PrivateFileRole.created_stream(temporary.name, ValueError(
+            "Staged publication is not a private regular file"),
+            dir_fd=self.directory), temporary
 
     def _discard(self, staged: Path) -> None:
         try:

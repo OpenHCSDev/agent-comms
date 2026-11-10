@@ -1634,11 +1634,8 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
         refusal = RelationViolationError(f'Message export directory {parent} is not private')
         PrivateDirectoryRole.make_parents(parent)
         TrustedAncestorRole.require_path(parent.parent, refusal)
-        directory = PrivateDirectoryRole.read(parent, refusal)
-        try:
+        with PrivateDirectoryRole.reading(parent, refusal) as directory:
             yield directory
-        finally:
-            os.close(directory)
 
     def export(self, lines: tuple[str, ...]) -> None:
         """Publish the message's lines once. A file already at this path must
@@ -1650,8 +1647,8 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
             try:
                 ExclusiveDirectoryAtomicFile(path, directory=directory).write_bytes(data)
             except FileExistsError:
-                with os.fdopen(PrivateFileRole.read(path.name, refusal, dir_fd=directory),
-                               'rb') as existing:
+                with (PrivateFileRole.reading(path.name, refusal, dir_fd=directory) as fd,
+                      os.fdopen(fd, 'rb', closefd=False) as existing):
                     if existing.read() != data:
                         raise refusal from None
 

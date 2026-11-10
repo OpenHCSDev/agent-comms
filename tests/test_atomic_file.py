@@ -86,8 +86,7 @@ def test_anchored_publication_refuses_a_replaced_directory_and_discards_its_stag
     parent = tmp_path / "messages"
     parent.mkdir(mode=0o700)
     moved = tmp_path / "moved"
-    directory = PrivateDirectoryRole.read(parent, ValueError("not a private directory"))
-    try:
+    with PrivateDirectoryRole.reading(parent, ValueError("not a private directory")) as directory:
         with ExclusiveDirectoryAtomicFile(parent / "export.jsonl", directory=directory).prepared(
                 b"body") as publish:
             parent.rename(moved)
@@ -95,7 +94,5 @@ def test_anchored_publication_refuses_a_replaced_directory_and_discards_its_stag
             (parent / "marker").write_text("new")
             with pytest.raises(ValueError):
                 publish()
-    finally:
-        os.close(directory)
     assert [entry.name for entry in parent.iterdir()] == ["marker"]
     assert list(moved.iterdir()) == []

@@ -22,7 +22,8 @@ import sqlite3
 import stat
 import struct
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from pathlib import Path
 from typing import NoReturn
 
@@ -333,12 +334,12 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
     @classmethod
     def namespace_at(cls, registry_path: Path) -> RootId:
         """Decode the protocol marker without granting access to registry data."""
-        descriptor = PrivateFileRole.read(cls.path_in(registry_path.parent),
-            RelationViolationError("Private registry guard file is not a fixed owner-only regular file"))
-        try:
+        with PrivateFileRole.reading(
+            cls.path_in(registry_path.parent),
+            RelationViolationError(
+                "Private registry guard file is not a fixed owner-only regular file"),
+        ) as descriptor:
             raw = os.pread(descriptor, _SIZE, 0)
-        finally:
-            os.close(descriptor)
         if len(raw) != _SIZE:
             _reject("slot has an invalid length")
         _, _, root_id, _, _, _ = _HEADER.unpack(raw[:_HEADER.size])
@@ -415,18 +416,22 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
                 return
             cursor = cursor.parent
 
-    def _open(self, opening: Callable[[str | Path, Exception], int]) -> int:
+    @contextmanager
+    def _opened(
+        self, opening: Callable[[str | Path, Exception], AbstractContextManager[int]],
+    ) -> Iterator[int]:
+        """This guard's slots, for as long as the caller's block needs them."""
         self._trusted_root()
-        try:
-            fd = opening(self.path, RelationViolationError(
-                "Private registry guard file is not a fixed owner-only regular file"))
-        except FileNotFoundError as error:
-            _reject(f"file is missing: {error.__class__.__name__}")
-        info = os.fstat(fd)
-        if info.st_size != 2 * _SIZE:
-            os.close(fd)
-            _reject("file is not a fixed owner-only regular file")
-        return fd
+        with ExitStack() as scope:
+            # Only the open answers "missing"; a short file below is a separate refusal.
+            try:
+                fd = scope.enter_context(opening(self.path, RelationViolationError(
+                    "Private registry guard file is not a fixed owner-only regular file")))
+            except FileNotFoundError as error:
+                _reject(f"file is missing: {error.__class__.__name__}")
+            if os.fstat(fd).st_size != 2 * _SIZE:
+                _reject("file is not a fixed owner-only regular file")
+            yield fd
 
     def _slots(self, fd: int) -> tuple[tuple[int, int, bytes], tuple[int, int, bytes]]:
         # Validate BOTH slots even when the first appears to authorize the
@@ -468,35 +473,26 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
     def verify(self) -> tuple[int, bytes]:
         # A read-only check must not emit IN_CLOSE_WRITE and wake the wire
         # watcher again; private ACP drains verify this guard on every wake.
-        fd = self._open(PrivateFileRole.read)
-        try:
+        with self._opened(PrivateFileRole.reading) as fd:
             seq, digest, _ = self._authority(fd)
             return seq, digest
-        finally:
-            os.close(fd)
 
     def prepare(self, new_digest: bytes) -> tuple[int, int]:
-        fd = self._open(PrivateFileRole.update)
-        try:
+        with self._opened(PrivateFileRole.updating) as fd:
             seq, _, index = self._authority(fd)
             if seq >= _MAX_SEQ:
                 _reject("sequence is exhausted")
             self._write(fd, index, _record(self.root_id, seq + 1, _PENDING, new_digest))
             return seq + 1, index
-        finally:
-            os.close(fd)
 
     def commit(self, seq: int, index: int, new_digest: bytes) -> None:
-        fd = self._open(PrivateFileRole.update)
-        try:
+        with self._opened(PrivateFileRole.updating) as fd:
             current = self._slots(fd)[index]
             if current != (seq, _PENDING, new_digest):
                 _reject("pending commitment changed")
             if registry_digest(self.registry_path) != new_digest:
                 _reject("replacement differs from pending digest")
             self._write(fd, index, _record(self.root_id, seq, _COMMITTED, new_digest))
-        finally:
-            os.close(fd)
 
     def write(
         self, registry_path: Path, mark: RegistryRevisionMark,
@@ -516,21 +512,18 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
             _reject("already exists before initialization")
         digest = registry_digest(self.registry_path)
         Platform.current().sync_directory(self.registry_path.parent)
-        fd = PrivateFileRole.create(self.path, RelationViolationError(
-            "Private registry guard file is not a fixed owner-only regular file"))
-        try:
+        with PrivateFileRole.creating(self.path, RelationViolationError(
+            "Private registry guard file is not a fixed owner-only regular file"),
+        ) as fd:
             if os.pwrite(fd, _record(self.root_id, 0, _COMMITTED, digest) * 2, 0) != 2 * _SIZE:
                 _reject("initial slots were incomplete")
             os.fsync(fd)
             Platform.current().sync_directory(self.registry_path.parent)
             self._write(fd, 1, _record(self.root_id, 1, _PENDING, digest))
-        finally:
-            os.close(fd)
 
 
     def commit_initial(self) -> None:
-        fd = self._open(PrivateFileRole.update)
-        try:
+        with self._opened(PrivateFileRole.updating) as fd:
             first, second = self._slots(fd)
             if first != (0, _COMMITTED, registry_digest(self.registry_path)) or second != (
                 1,
@@ -539,8 +532,6 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
             ):
                 _reject("initial pending record is invalid")
             self._write(fd, 1, _record(self.root_id, 1, _COMMITTED, first[2]))
-        finally:
-            os.close(fd)
 
 
 import agent_comms.coordination.coordinator as coordinator

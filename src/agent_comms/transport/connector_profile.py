@@ -223,21 +223,18 @@ class UiConnectionProfile:
         path = path.parent.resolve() / path.name
         PrivateDirectoryRole.make_parents(path.parent)
         refusal = ValueError("The UI profile requires an owner-only private directory")
-        directory = PrivateDirectoryRole.read(path.parent, refusal)
-        try:
+        with PrivateDirectoryRole.reading(path.parent, refusal) as directory:
             ExclusiveDirectoryAtomicFile(path=path, directory=directory).write_text(
                 FieldCodec.compact(FieldCodec.encode(self), allow_nan=False))
-        finally:
-            os.close(directory)
         return path
 
     @classmethod
     def read(cls, path: Path) -> Self:
         """Decode once from a private regular file, without following a leaf symlink."""
-        descriptor = PrivateFileRole.read(
-            path.expanduser(), ValueError("The UI profile is not a private credential file"))
-        with os.fdopen(descriptor, "r", encoding="utf-8") as source:
-            return FieldCodec.decode(cls, FieldCodec.parse(source.read()))
+        with PrivateFileRole.stream(
+            path.expanduser(), ValueError("The UI profile is not a private credential file"),
+        ) as source:
+            return FieldCodec.decode(cls, FieldCodec.parse(source.read().decode("utf-8")))
 
 
 @dataclass(frozen=True)
