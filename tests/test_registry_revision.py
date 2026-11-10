@@ -6,6 +6,8 @@ from contextlib import closing
 import pytest
 
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.presence import PresenceRows, PresenceStore
+from agent_comms.storage.row_mapping import RowMapping
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import InvalidRegistryDocument
 from agent_comms.registry.registry_store import RegistryStore
@@ -13,6 +15,29 @@ from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.store_files import AtomicFile
+
+
+def test_presence_updates_and_presentations_do_not_enumerate_unchanged_rows(tmp_path, monkeypatch):
+    store = PresenceStore(tmp_path)
+    store.set_rows({f"worker-{i}": float(i) for i in range(400)}, {})
+    before = store.read()
+    scope = before.seen.keyset()
+    retained = PresenceRows().presented(before, scope)
+    changed = retained.copy()
+    changed["worker-0"] = 1000.0
+    original = RowMapping.__iter__
+
+    def require_changed_rows_only(rows):
+        if len(rows):
+            raise AssertionError("presence enumerated a complete row mapping")
+        return original(rows)
+
+    monkeypatch.setattr(RowMapping, "__iter__", require_changed_rows_only)
+    store.set_rows(changed, retained)
+    following = retained.presented(store.read(before), scope)
+    assert retained["worker-0"] == 0.0
+    assert following["worker-0"] == 1000.0
+    assert following["worker-399"] == 399.0
 
 
 def test_replacing_a_database_at_the_same_counter_does_not_reuse_its_cached_rows(tmp_path):
@@ -27,7 +52,9 @@ def test_replacing_a_database_at_the_same_counter_does_not_reuse_its_cached_rows
     RegistryFile.copy_file(second.store.path, staged)
     # Publish a complete replacement, as rollback does; this is not a row update.
     AtomicFile(first.store.path).replace(staged)
-    first.store.presence.replace(second.store.presence.read())
+    staged_presence = staged.parent / second.store.presence.path.name
+    second.store.presence.copy_file(second.store.presence.path, staged_presence)
+    AtomicFile(first.store.presence.path).replace(staged_presence)
     assert set(first.all_threads()) == {"replacement"}
     assert not first.store.has_revision(before.source.revision)
 

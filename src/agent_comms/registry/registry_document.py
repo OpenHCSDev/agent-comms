@@ -80,6 +80,7 @@ from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.activity import ActivityCapture, ObservedActivity
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.catalog_document import CatalogAccess
+from agent_comms.registry.presence import PresenceCapture, PresenceRowsSlice
 from agent_comms.registry.registration_change import (
     InitialRegistration,
     RegistrationChange,
@@ -117,7 +118,7 @@ from agent_comms.registry.thread_status import (
 from agent_comms.registry.thread_text import ForkedParent, NoParent
 from agent_comms.registry.threads import Thread, ThreadWorkState
 from agent_comms.registry.user_thread_lookup import FoundUserThread, NoUserThread, UserThreadLookup
-from agent_comms.storage.row_mapping import ReadOnlyRows, RowMapping
+from agent_comms.storage.row_mapping import ReadOnlyRows, RowKeys, RowMapping
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 
@@ -532,6 +533,9 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
             row.birth.distinct_from(frozenset())
             raise RelationViolationError("Registry birth data changed outside its row owner.")
 
+    def names(self) -> RowKeys[str]:
+        return self._rows.keyset()
+
     def births(self) -> Set[float]:
         self._require_births()
         return self._birth_counts.keys()
@@ -813,7 +817,7 @@ class RegistryDocument(RegistryPresence[MutableMapping[str, ThreadStatus]]):
     statuses: Annotated[MutableMapping[str, ThreadStatus], SlicePolicy(SharedRowsSlice)] = field(
         default_factory=dict
     )
-    last_seen: Annotated[MutableMapping[str, float], SlicePolicy(SharedRowsSlice), WireTransient()] = field(
+    last_seen: Annotated[MutableMapping[str, float], SlicePolicy(PresenceRowsSlice), WireTransient()] = field(
         default_factory=dict, compare=False
     )
     """Presence, stored by PresenceStore and laid over each revision as it is read: a
@@ -844,12 +848,13 @@ class RegistryDocument(RegistryPresence[MutableMapping[str, ThreadStatus]]):
             },
         )
 
-    def presented(self, seen: Mapping[str, float]) -> RegistryDocument:
-        """This revision with the stored presence laid over it. Every declared thread has a
-        presence row: the edit that declared it wrote its row before the registry."""
-        if not self.threads.keys() <= seen.keys():
-            raise InvalidRegistryDocument(MalformedRecord("a declared thread has no presence row"))
-        return replace(self, last_seen={name: seen[name] for name in self.threads})
+    def presented(self, captured: PresenceCapture) -> RegistryDocument:
+        """Retain a scoped view; continuing coverage checks inspect new names alone."""
+        try:
+            seen = PresenceRowsSlice.owned(self.last_seen).presented(captured, self.threads.names())
+        except MalformedRecord as error:
+            raise InvalidRegistryDocument(error) from error
+        return replace(self, last_seen=seen)
 
     def install_thread(self, thread: Thread) -> None:
         """Retire a withdrawn reference inside this registry transaction."""
@@ -1259,7 +1264,7 @@ class RegistrySnapshot(
     purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)]
     threads: Annotated[ThreadRows, SlicePolicy(ThreadRowsSlice)]
     statuses: Annotated[Mapping[str, ThreadStatus], SlicePolicy(SharedRowsSlice)]
-    last_seen: Annotated[Mapping[str, float], SlicePolicy(SharedRowsSlice)]
+    last_seen: Annotated[Mapping[str, float], SlicePolicy(PresenceRowsSlice)]
     aliases: Annotated[Mapping[str, str], SlicePolicy(SharedRowsSlice)]
     owner_generations: Annotated[Mapping[str, int], SlicePolicy(SharedRowsSlice)]
     _claimed_generations: Annotated[Mapping[str, int], SlicePolicy(SharedRowsSlice)] = field(repr=False)

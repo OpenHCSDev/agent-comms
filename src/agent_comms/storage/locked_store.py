@@ -1123,10 +1123,11 @@ class RegistryFile(RollbackRetained, PublishedSQLiteFile, GoalWakeFile):
             target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             if source in copied:
                 cls.copy_file(source, target)
-            for path in copied & frozenset(registry.companion_paths):
-                destination = target.parent / path.relative_to(source.parent)
-                destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-                RootFile.copy_file(path, destination)
+            for path, owner in registry.companion_files.items():
+                if path in copied:
+                    destination = target.parent / path.relative_to(source.parent)
+                    destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                    owner.copy_file(path, destination)
         RegistryStore(target).retire_processes()
         return copied
 

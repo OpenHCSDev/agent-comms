@@ -7,10 +7,10 @@ insertion order, while comparing related revisions examines their writes alone.
 
 from __future__ import annotations
 
-from collections.abc import Hashable, Iterable, Iterator, Mapping, MutableMapping
+from collections.abc import Hashable, Iterable, Iterator, Mapping, MutableMapping, Set
 from dataclasses import dataclass, replace
 from types import MappingProxyType
-from typing import NoReturn
+from typing import NoReturn, cast
 
 from immutables import Map
 
@@ -132,6 +132,9 @@ class RowMapping[Key: Hashable, Value](MutableMapping[Key, Value]):
             or (key in self and self[key] != earlier[key])
         )
 
+    def keyset(self) -> RowKeys[Key]:
+        return RowKeys(cast(RowMapping[Key, object], self.freeze()))
+
     def changed_in_order(self, earlier: RowMapping[Key, Value]) -> tuple[Key, ...]:
         """Order only changed keys, preserving insertion order for surviving writes."""
         return tuple(sorted(
@@ -148,6 +151,30 @@ class RowMapping[Key: Hashable, Value](MutableMapping[Key, Value]):
             key in other and slot.value == other[key]
             for key, slot in self._root.items()
         )
+
+
+class RowKeys[Key: Hashable](Set[Key]):
+    """A stable key projection retaining the row root's change evidence."""
+
+    def __init__(self, rows: RowMapping[Key, object]) -> None:
+        self.rows = rows
+
+    @classmethod
+    def _from_iterable(cls, values: Iterable[Key]) -> frozenset[Key]:
+        return frozenset(values)
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+    def __contains__(self, key: object) -> bool:
+        return key in self.rows
+
+    def __iter__(self) -> Iterator[Key]:
+        return iter(self.rows)
+
+    def differing(self, earlier: RowKeys[Key]) -> frozenset[Key]:
+        return frozenset(key for key in self.rows.differing(earlier.rows)
+                         if (key in self) != (key in earlier))
 
 
 class ReadOnlyRows[Key, Value]:

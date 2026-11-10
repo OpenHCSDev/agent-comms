@@ -34,7 +34,7 @@ from agent_comms.execution.turn_lease import (
 from agent_comms.execution.turn_registry import TurnRegistry
 from agent_comms.messaging.routing import Routing
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, TurnId
-from agent_comms.registry.presence import PresenceStore
+from agent_comms.registry.presence import PresenceCapture, PresenceRevision, PresenceStore
 from agent_comms.registry.private_registry_guard import (
     PrivateRegistryGuard,
     PublicRegistry,
@@ -60,6 +60,7 @@ from agent_comms.storage.locked_store import (
     LockedStore,
     PublishedProperty,
     RegistryFile,
+    RootFile,
 )
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.private_path import FileObservation, FileRevision, MissingFile
@@ -118,19 +119,20 @@ class RegistryRevision(CachedRegistry):
 
     source: RegistryCapture
     document: RegistryDocument
-    presence: FileObservation
-    """The presence.json revision laid over ``document``; presence moves without the registry."""
+    presence: PresenceRevision
+    """The presence commit laid over the document; heartbeats leave declarations alone."""
 
     @classmethod
     def presented(cls, store: RegistryStore, source: RegistryCapture,
                   document: RegistryDocument) -> RegistryRevision:
-        observed = FileRevision.capture(store.presence.path)
-        return cls(source, document.presented(store.presence.read().seen), observed)
+        captured = store.presence.read(store.cache.presence_source)
+        store.cache.presence_source = captured
+        return cls(source, document.presented(captured), captured.revision)
 
     def current(self, store: RegistryStore) -> RegistryRevision:
         """This registry revision with the presence stored now: re-laid, and cached in this
-        revision's place, only when presence.json changed since it was laid."""
-        if FileRevision.capture(store.presence.path) == self.presence:
+        revision's place, only when presence committed since it was laid."""
+        if store.presence.revision() == self.presence:
             return self
         revision = RegistryRevision.presented(store, self.source, self.document)
         store.cache.entry = revision
@@ -145,7 +147,7 @@ class RegistryRevision(CachedRegistry):
     def decoded(self, store: RegistryStore, raw: dict) -> RegistryDocument:
         document = RegistryDocument.from_wire(raw, (self.source.wire_document(), self.document))
         document.threads.bind(store._bind_thread)
-        return document
+        return replace(document, last_seen=self.document.last_seen)
 
     def captured(self, store: RegistryStore) -> RegistryCapture:
         return store.rows.captured(self.source)
@@ -251,6 +253,7 @@ class RegistryCache:
     """
 
     entry: CachedRegistry = field(default_factory=UncachedRegistry)
+    presence_source: PresenceCapture = field(default_factory=PresenceCapture.empty)
     # Observers wake on the same registry change from several threads; one
     # decodes the new revision and the others take its result.
     decoding: threading.Lock = field(default_factory=threading.Lock)
@@ -343,7 +346,7 @@ class RegistryEdit:
 
     def commit(self) -> None:
         # Presence rows before the registry, and none dropped: any revision a reader captured,
-        # however long before it reads presence.json, names only threads that have a row.
+        # however long before it reads presence, names only threads that have a row.
         if self.document.last_seen != self.original.document.last_seen:
             self.store.presence.set_rows(self.document.last_seen, self.original.document.last_seen)
         if self.document != self.original.document:
@@ -376,7 +379,7 @@ class RegistryStore(
         # Guard-loss checks must know every private declaration before taking this store's lock.
         PrivateCoordinatorTable.declarations()
         object.__setattr__(self, "cache", RegistryCache.for_path(self.path))
-        object.__setattr__(self, "presence", PresenceStore.at(self.path.parent))
+        object.__setattr__(self, "presence", PresenceStore(self.path.parent))
         object.__setattr__(self, "rows", RegistryRowStore(self.path.parent))
 
     record_type = RegistryDocument
@@ -554,9 +557,13 @@ class RegistryStore(
 
     @property
     def companion_paths(self) -> tuple[Path, ...]:
-        """The plain files retained with the rows: presence, the guard and turn records."""
-        return (self.presence.path, self.guard_path,
-                *sorted(StoredTurnRecord.matching_in(self.path.parent)))
+        return tuple(self.companion_files)
+
+    @property
+    def companion_files(self) -> dict[Path, type[RootFile]]:
+        """Retain each companion with its owner's copying behavior."""
+        return {self.presence.path: type(self.presence), self.guard_path: PrivateRegistryGuard,
+                **dict.fromkeys(sorted(StoredTurnRecord.matching_in(self.path.parent)), StoredTurnRecord)}
 
     def revision_unlocked(self) -> tuple[RegistryRowRevision, FileObservation]:
         """The database instance, committed counter and guard that brackets every commit."""
