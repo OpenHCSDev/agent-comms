@@ -1,0 +1,17 @@
+{
+  "toad_base": "dc0b4985b66cfad8cc7b713c4252f13ec65a5525",
+  "toad_head": "0f41d673c094d8be48e536d1f54d33608b736843",
+  "pr": "https://github.com/OpenHCSDev/toad/pull/1731",
+  "nra_merge": "6d246d861e2a2539682788b8ef1cb8e1a8b572a4",
+  "native_applied": true,
+  "changed_paths": [
+    "/home/ts/wt/comms-toad-selector--P6/tests/native/command_target_probe.py",
+    "/home/ts/wt/comms-toad-selector--P6/tests/native/goal_read_probe.py",
+    "/home/ts/wt/comms-toad-selector--P6/tests/support/command_target_probe.py",
+    "/home/ts/wt/comms-toad-selector--P6/tests/support/goal_read_probe.py"
+  ],
+  "source_changes": "two exact renames, zero changed lines",
+  "placement_guard": "1 passed, exit 0",
+  "raw_receipt": ".verification/p23-input-origin/p115-owned-toad-apply.json",
+  "raw_sha256": "97767742691b1e1bbd45de1fbbed2f2090f9bc31cc5d35997675f491450e36ef"
+}

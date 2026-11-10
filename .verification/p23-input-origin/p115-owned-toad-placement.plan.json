@@ -1,0 +1,27 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "move-original-probes-with-native-module-placement",
+          "reason": "Apply the merged P115 operation in the holder's existing owned Toad checkout from current main. Preserve the original cold-import scripts completely; native module/caller owners perform the migration. Friction's shared pair is outside the write set.",
+          "operations": [
+            {
+              "operation": "relocate_module_to_new_module",
+              "file_path": "/home/ts/wt/comms-toad-selector--P6/tests/native/command_target_probe.py",
+              "destination_path": "/home/ts/wt/comms-toad-selector--P6/tests/support/command_target_probe.py"
+            },
+            {
+              "operation": "relocate_module_to_new_module",
+              "file_path": "/home/ts/wt/comms-toad-selector--P6/tests/native/goal_read_probe.py",
+              "destination_path": "/home/ts/wt/comms-toad-selector--P6/tests/support/goal_read_probe.py"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+.                                                                        [100%]
+=============================== warnings summary ===============================
+../comms-toad-selector--P6/src/toad/acp/agent_process.py:13
+../comms-toad-selector--P6/src/toad/acp/agent_process.py:13
+  /home/ts/wt/comms-toad-selector--P6/src/toad/acp/agent_process.py:13: DeprecationWarning: Using `ClientSideConnection` directly is deprecated, please use `acp.connect_to_agent` instead.
+    from acp import Client, ClientSideConnection, schema
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 2 warnings in 0.03s

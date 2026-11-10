@@ -1,7 +1,9 @@
 # P115: whole-script placement
 
-NRA PR: https://github.com/OpenHCSDev/NominalRefactorAdvisor/pull/345
-Final head: `85cb3a2ee099d0f0c3fde4494d085d79ff5f9b05`.
+NRA fix merged: https://github.com/OpenHCSDev/NominalRefactorAdvisor/pull/345 at `6d246d861e2a2539682788b8ef1cb8e1a8b572a4`.
+Final tooling head: `85cb3a2ee099d0f0c3fde4494d085d79ff5f9b05`.
+
+The actual Toad move is https://github.com/OpenHCSDev/toad/pull/1731: two exact renames, zero changed lines. It was applied with NRA in my existing owned Toad checkout from main `dc0b4985b`; friction's checkout was not edited. The original placement guard passes. The concise product result is `p115-toad-product-summary.json`.
 
 ## Original job
 
@@ -32,4 +34,4 @@ Unproved cross-package relative imports and changed location-dependent reads ref
 
 ## Integration
 
-Friction retains P23 application and its paired install/real Standby acceptance. The independent NRA operation and its native plan are delivered here; this tooling work does not redefine P23's finish line. The separate unchanged-main bus-key and app-test placement plans remain in this directory.
+The scripts have also been moved in the owned Toad checkout through the native operation; PR #1731 carries that product change. Friction retains the installer repair and real Standby check. Neither this task nor these test-helper moves add an installation gate. The separate unchanged-main bus-key and app-test placement plans remain in this directory.
