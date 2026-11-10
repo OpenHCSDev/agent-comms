@@ -17,6 +17,7 @@ from collections.abc import (
     Mapping,
     MutableMapping,
     Sequence,
+    Set,
 )
 from dataclasses import dataclass, field, replace
 from functools import cached_property
@@ -92,7 +93,7 @@ from agent_comms.registry.registry_provenance import (
 )
 from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
 from agent_comms.registry.task_registry import TaskRegistry
-from agent_comms.registry.thread_creation import CreationTime
+from agent_comms.registry.thread_creation import CreationIdentityCollisionError, CreationTime
 from agent_comms.registry.thread_identity import (
     ClaimedIdentity,
     GenerationCounter,
@@ -404,6 +405,8 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
 
     def __init__(self) -> None:
         self._rows: RowMapping[str, ThreadRow] = RowMapping()
+        self._birth_counts: RowMapping[float, int] = RowMapping()
+        self._unreadable_births: RowMapping[str, ThreadRow] = RowMapping()
         self._binding: Callable[[Thread], Thread] = self.unbound
 
     @staticmethod
@@ -449,13 +452,44 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     def __setitem__(self, name: str, thread: Thread) -> None:
         if thread.name != name:
             raise MalformedRecord("thread name differs from its declaration")
-        self._rows[name] = AssignedThreadRow(self._binding(thread))
+        self._put_row(name, AssignedThreadRow(self._binding(thread)))
+
+    def _adjust_birth(self, birth: CreationTime, amount: int) -> None:
+        before = self._birth_counts.get(birth, 0)
+        after = before + amount
+        if after:
+            self._birth_counts[birth] = after
+        else:
+            del self._birth_counts[birth]
+
+    def _index_birth(self, name: str, row: ThreadRow, amount: int) -> None:
+        try:
+            birth = row.birth.distinct_from(frozenset())
+        except (InvalidRegistryDocument, CreationIdentityCollisionError):
+            # Retain the source, not an exception with a growing traceback. A local
+            # entry read does not need another row's creation metadata to decode.
+            if amount > 0:
+                self._unreadable_births[name] = row
+            else:
+                del self._unreadable_births[name]
+        else:
+            self._adjust_birth(birth, amount)
+
+    def _put_row(self, name: str, row: ThreadRow) -> None:
+        if name in self._rows:
+            self._index_birth(name, self._rows[name], -1)
+        self._index_birth(name, row, 1)
+        self._rows[name] = row
 
     def __delitem__(self, name: str) -> None:
+        row = self._rows[name]
         del self._rows[name]
+        self._index_birth(name, row, -1)
 
     def clear(self) -> None:
         self._rows.clear()
+        self._birth_counts.clear()
+        self._unreadable_births.clear()
 
     def popitem(self) -> tuple[str, Thread]:
         name = self._rows.any_key()
@@ -492,8 +526,15 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         """One row's creation time, read alone: a stored row is never decoded for it."""
         return self._rows[name].birth
 
-    def births(self) -> set[float]:
-        return {self.birth(name) for name in self}
+    def _require_births(self) -> None:
+        if self._unreadable_births:
+            row = self._unreadable_births[self._unreadable_births.any_key()]
+            row.birth.distinct_from(frozenset())
+            raise RelationViolationError("Registry birth data changed outside its row owner.")
+
+    def births(self) -> Set[float]:
+        self._require_births()
+        return self._birth_counts.keys()
 
     def incarnation(self, name: str) -> ThreadIncarnation:
         """One row's identity, read from its name and birth alone."""
@@ -506,16 +547,15 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
 
     def require_distinct_births(self) -> None:
         """Rows decode late, so a read of one thread never sees two sharing a creation lookup."""
-        births: set[float] = set()
-        for name in self:
-            births.add(self.birth(name).distinct_from(births))
+        self._require_births()
+        if len(self._rows) != len(self._birth_counts):
+            raise CreationIdentityCollisionError()
 
     @classmethod
     def from_wire(cls, raw: object) -> Self:
         result = cls()
-        result._rows = RowMapping({
-            name: StoredThreadRow(row, result._binding) for name, row in cls.checked_rows(raw).items()
-        })
+        for name, row in cls.checked_rows(raw).items():
+            result._put_row(name, StoredThreadRow(row, result._binding))
         return result
 
     @classmethod
@@ -526,6 +566,8 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
 
     def _copy_into(self, result: ThreadRows, rows: RowMapping[str, ThreadRow]) -> ThreadRows:
         result._rows = rows
+        result._birth_counts = self._birth_counts.copy()
+        result._unreadable_births = self._unreadable_births.copy()
         result._binding = self._binding
         return result
 
@@ -534,21 +576,24 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
 
     def only(self, names: frozenset[str]) -> ThreadRows:
         """The selected rows retain their shared decode and wire values."""
-        return self._copy_into(ThreadRows(), self._rows.only(names))
+        result = ThreadRows()
+        result._binding = self._binding
+        for name, row in self._rows.only(names).items():
+            result._put_row(name, row)
+        return result
 
     def freeze(self) -> ThreadRows:
         return self._copy_into(FrozenThreadRows(), self._rows.freeze())
 
     def reuse(self, rows: Mapping[str, object], kept: frozenset[str], earlier: ThreadRows) -> None:
-        updated = earlier._rows.copy()
+        updated = earlier.copy()
         for name in earlier:
             if name not in rows:
                 del updated[name]
         for name, row in self._rows.items():
             if name not in kept:
-                updated[name] = row.rebound(earlier._binding)
-        self._rows = updated
-        self._binding = earlier._binding
+                updated._put_row(name, row.rebound(earlier._binding))
+        updated._copy_into(self, updated._rows)
 
 
 class FrozenThreadRows(ReadOnlyRows[str, Thread], ThreadRows):

@@ -249,6 +249,54 @@ def test_thread_row_copies_share_decodes_without_sharing_writes(thread_rows_wire
         frozen.clear()
 
 
+def test_birth_index_survives_copies_rename_and_removal_without_a_row_walk(thread_rows_wire, monkeypatch):
+    from dataclasses import replace
+
+    from agent_comms.registry.registry_document import ThreadRows
+    from agent_comms.registry.thread_creation import CreationIdentityCollisionError
+
+    rows = ThreadRows.from_wire(thread_rows_wire)
+    first, second = rows["first"], rows["second"]
+    frozen, edit = rows.freeze(), rows.copy()
+
+    def enumerated(_rows):
+        raise AssertionError("birth query enumerated thread rows")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(ThreadRows, "__iter__", enumerated)
+        assert first.created_at in edit.births()
+        edit.require_distinct_births()
+        edit["renamed"] = replace(first, name="renamed")
+        with pytest.raises(CreationIdentityCollisionError):
+            edit.require_distinct_births()
+        del edit["first"]
+        edit.require_distinct_births()
+        del edit["renamed"]
+        assert first.created_at not in edit.births()
+        assert first.created_at in frozen.births()
+        assert first.created_at in rows.births()
+        assert second.created_at in edit.births()
+    selected = rows.only(frozenset({"second"}))
+    assert set(selected.births()) == {second.created_at}
+    edit.clear()
+    assert not edit.births()
+    edit.require_distinct_births()
+
+
+def test_birth_errors_stay_local_and_a_row_replacement_repairs_the_index(thread_rows_wire):
+    from dataclasses import replace
+
+    from agent_comms.registry.registry_document import ThreadRows
+
+    rows = ThreadRows.from_wire({"bad": {"name": "bad", "not": "a thread"}})
+    with pytest.raises(InvalidRegistryDocument):
+        rows.births()
+    valid = ThreadRows.from_wire(thread_rows_wire)["first"]
+    rows["bad"] = replace(valid, name="bad")
+    assert set(rows.births()) == {valid.created_at}
+    rows.require_distinct_births()
+
+
 def test_captures_and_row_commits_visit_only_changed_keys(tmp_path, monkeypatch):
     from dataclasses import replace
 
