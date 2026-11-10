@@ -1,0 +1,52 @@
+{
+  "revisions_before": {
+    "core": "d00155dd3d456025df7b3f4c56253fe9a5115a2b",
+    "toad": "c0020780a3f8a67550575d193eb8fa9222241b9d",
+    "nra": "2cafc6bad7f457bac3fa6b6ba2877ac7cc36c77a"
+  },
+  "revisions_after": {
+    "core": "d00155dd3d456025df7b3f4c56253fe9a5115a2b",
+    "toad": "c0020780a3f8a67550575d193eb8fa9222241b9d",
+    "nra": "2cafc6bad7f457bac3fa6b6ba2877ac7cc36c77a"
+  },
+  "interpreter": "/home/ts/.cache/toad/test-env/4f4f4f5751050005/bin/python",
+  "workspace": "/home/ts/wt/comms-toad-selector--P14--agent-comms/.verification/p23-input-origin/p115-original-probe-consumer",
+  "native_application": "private source copies only",
+  "records": [
+    {
+      "script": "command_target_probe",
+      "first_module": "toad.screens.main",
+      "source_sha256": "2aac65303799060a2989b7d027e2f3a76b8082a56ba0a0d67706f1046c050629",
+      "body_preserved": true,
+      "before": {
+        "exit": 0,
+        "stdout": "{\n  \"mro\": [\n    \"toad.screens.main.MainScreen\",\n    \"toad.command_target_scope.CommandTargetScope\",\n    \"toad.widget_actions.NativeMethodKeys\",\n    \"toad.widget_actions.HiddenActions\",\n    \"toad.widget_actions.ActionPresentation\",\n    \"toad.widget_actions.TogglesIrc\",\n    \"toad.widget_actions.CyclesSessions\",\n    \"toad.session_scope.ViewSessionOrigin\",\n    \"toad.session_scope.ProjectSessionOrigin\",\n    \"toad.session_scope.SessionOrigin\",\n    \"toad.project_path_owner.CheckoutRoot\",\n    \"toad.widgets.conversation.SourcesScope\",\n    \"toad.screens.session_view.SidebarSessionView\",\n    \"textual.view.WidgetView\",\n    \"textual.view.BoxView\",\n    \"textual.box_model.BoxGeometry\",\n    \"textual._paint_state.PaintLayer\",\n    \"textual._styles_cache.FramePaint\",\n    \"textual.box_model.Bordered\",\n    \"textual.view.TextView\",\n    \"textual.text_format.TextFormat\",\n    \"toad.navigation_context.NavigationOwner\",\n    \"toad.screens.session_view.SessionView\",\n    \"toad.widget_actions.DeclaredWidgetActions\",\n    \"toad.widgets.message_notifications.VisibleReadMarking\",\n    \"toad.core_event_carrier.CoreEventReceiver\",\n    \"metaclass_registry.mro_dispatch.MroDispatch\",\n    \"textual.containers.Vertical\",\n    \"textual.containers.VerticalContainer\",\n    \"textual.widget.Widget\",\n    \"textual.navigation.ScrollsView\",\n    \"textual.navigation.Navigable\",\n    \"toad.session_scope.SessionScope\",\n    \"toad.project_path_owner.ProjectPathOwner\",\n    \"toad.navigation_context.NavigationScope\",\n    \"toad.launch_binding.AgentOrigin\",\n    \"toad.app_node.ToadNode\",\n    \"textual.dom.DOMNode\",\n    \"textual.css.native.DeclaresTheme\",\n    \"textual._paint_state.PaintNode\",\n    \"textual.message_pump.MessagePump\",\n    \"textual.message_pump.ParentLinks\",\n    \"typing.Generic\",\n    \"builtins.object\"\n  ],\n  \"conversation_mro\": [\n    \"toad.widgets.conversation.Conversation\",\n    \"toad.goal_view.GoalView\",\n    \"toad.transcript_scope.TranscriptView\",\n    \"toad.layout_preferences.FollowsLayoutPreferences\",\n    \"toad.messages.QueueEvidenceOwner\",\n    \"toad.conversation_comms_handlers.ConversationCommsHandlers\",\n    \"toad.core_event_carrier.CoreEventReceiver\",\n    \"toad.widget_actions.NativeMethodKeys\",\n    \"toad.widget_actions.DeclaredWidgetActions\",\n    \"toad.widgets.conversation.ConversationSessionBinding\",\n    \"metaclass_registry.mro_dispatch.MroDispatch\",\n    \"toad.widget_view.WorkspaceHosted\",\n    \"toad.widgets.observed_thread_activity.ThreadStatusOwner\",\n    \"toad.delivery_failure_view.DeliveryFailureView\",\n    \"toad.launch_binding.AgentConversation\",\n    \"toad.app_node.ToadNode\",\n    \"toad.category_filter.CategoryFilterView\",\n    \"textual.containers.Vertical\",\n    \"textual.containers.VerticalContainer\",\n    \"textual.widget.Widget\",\n    \"textual.navigation.ScrollsView\",\n    \"textual.navigation.Navigable\",\n    \"textual.dom.DOMNode\",\n    \"textual.css.native.DeclaresTheme\",\n    \"textual._paint_state.PaintNode\",\n    \"textual.message_pump.MessagePump\",\n    \"textual.message_pump.ParentLinks\",\n    \"typing.Generic\",\n    \"toad.menus.MenuConversation\",\n    \"builtins.object\"\n  ],\n  \"bar_mro\": [\n    \"toad.widgets.goal_bar.GoalBar\",\n    \"toad.goal_view.GoalCollapse\",\n    \"toad.native_style.ComposedWhenShown\",\n    \"toad.native_style.SidePadding\",\n    \"textual.containers.VerticalGroup\",\n    \"textual.containers.VerticalContainer\",\n    \"textual.widget.Widget\",\n    \"textual.navigation.ScrollsView\",\n    \"textual.navigation.Navigable\",\n    \"textual.dom.DOMNode\",\n    \"textual.css.native.DeclaresTheme\",\n    \"textual._paint_state.PaintNode\",\n    \"textual.message_pump.MessagePump\",\n    \"textual.message_pump.ParentLinks\",\n    \"builtins.object\"\n  ],\n  \"owners\": {\n    \"navigation_context\": \"toad.screens.main.MainScreen\",\n    \"thread_identity\": \"toad.screens.session_view.SessionView\",\n    \"navigation_owner\": \"toad.navigation_context.NavigationOwner\",\n    \"prepare_presentation\": \"toad.screens.main.MainScreen\",\n    \"retire_presentation\": \"toad.screens.main.MainScreen\"\n  }\n}\n",
+        "stderr": ""
+      },
+      "after": {
+        "exit": 0,
+        "stdout": "{\n  \"mro\": [\n    \"toad.screens.main.MainScreen\",\n    \"toad.command_target_scope.CommandTargetScope\",\n    \"toad.widget_actions.NativeMethodKeys\",\n    \"toad.widget_actions.HiddenActions\",\n    \"toad.widget_actions.ActionPresentation\",\n    \"toad.widget_actions.TogglesIrc\",\n    \"toad.widget_actions.CyclesSessions\",\n    \"toad.session_scope.ViewSessionOrigin\",\n    \"toad.session_scope.ProjectSessionOrigin\",\n    \"toad.session_scope.SessionOrigin\",\n    \"toad.project_path_owner.CheckoutRoot\",\n    \"toad.widgets.conversation.SourcesScope\",\n    \"toad.screens.session_view.SidebarSessionView\",\n    \"textual.view.WidgetView\",\n    \"textual.view.BoxView\",\n    \"textual.box_model.BoxGeometry\",\n    \"textual._paint_state.PaintLayer\",\n    \"textual._styles_cache.FramePaint\",\n    \"textual.box_model.Bordered\",\n    \"textual.view.TextView\",\n    \"textual.text_format.TextFormat\",\n    \"toad.navigation_context.NavigationOwner\",\n    \"toad.screens.session_view.SessionView\",\n    \"toad.widget_actions.DeclaredWidgetActions\",\n    \"toad.widgets.message_notifications.VisibleReadMarking\",\n    \"toad.core_event_carrier.CoreEventReceiver\",\n    \"metaclass_registry.mro_dispatch.MroDispatch\",\n    \"textual.containers.Vertical\",\n    \"textual.containers.VerticalContainer\",\n    \"textual.widget.Widget\",\n    \"textual.navigation.ScrollsView\",\n    \"textual.navigation.Navigable\",\n    \"toad.session_scope.SessionScope\",\n    \"toad.project_path_owner.ProjectPathOwner\",\n    \"toad.navigation_context.NavigationScope\",\n    \"toad.launch_binding.AgentOrigin\",\n    \"toad.app_node.ToadNode\",\n    \"textual.dom.DOMNode\",\n    \"textual.css.native.DeclaresTheme\",\n    \"textual._paint_state.PaintNode\",\n    \"textual.message_pump.MessagePump\",\n    \"textual.message_pump.ParentLinks\",\n    \"typing.Generic\",\n    \"builtins.object\"\n  ],\n  \"conversation_mro\": [\n    \"toad.widgets.conversation.Conversation\",\n    \"toad.goal_view.GoalView\",\n    \"toad.transcript_scope.TranscriptView\",\n    \"toad.layout_preferences.FollowsLayoutPreferences\",\n    \"toad.messages.QueueEvidenceOwner\",\n    \"toad.conversation_comms_handlers.ConversationCommsHandlers\",\n    \"toad.core_event_carrier.CoreEventReceiver\",\n    \"toad.widget_actions.NativeMethodKeys\",\n    \"toad.widget_actions.DeclaredWidgetActions\",\n    \"toad.widgets.conversation.ConversationSessionBinding\",\n    \"metaclass_registry.mro_dispatch.MroDispatch\",\n    \"toad.widget_view.WorkspaceHosted\",\n    \"toad.widgets.observed_thread_activity.ThreadStatusOwner\",\n    \"toad.delivery_failure_view.DeliveryFailureView\",\n    \"toad.launch_binding.AgentConversation\",\n    \"toad.app_node.ToadNode\",\n    \"toad.category_filter.CategoryFilterView\",\n    \"textual.containers.Vertical\",\n    \"textual.containers.VerticalContainer\",\n    \"textual.widget.Widget\",\n    \"textual.navigation.ScrollsView\",\n    \"textual.navigation.Navigable\",\n    \"textual.dom.DOMNode\",\n    \"textual.css.native.DeclaresTheme\",\n    \"textual._paint_state.PaintNode\",\n    \"textual.message_pump.MessagePump\",\n    \"textual.message_pump.ParentLinks\",\n    \"typing.Generic\",\n    \"toad.menus.MenuConversation\",\n    \"builtins.object\"\n  ],\n  \"bar_mro\": [\n    \"toad.widgets.goal_bar.GoalBar\",\n    \"toad.goal_view.GoalCollapse\",\n    \"toad.native_style.ComposedWhenShown\",\n    \"toad.native_style.SidePadding\",\n    \"textual.containers.VerticalGroup\",\n    \"textual.containers.VerticalContainer\",\n    \"textual.widget.Widget\",\n    \"textual.navigation.ScrollsView\",\n    \"textual.navigation.Navigable\",\n    \"textual.dom.DOMNode\",\n    \"textual.css.native.DeclaresTheme\",\n    \"textual._paint_state.PaintNode\",\n    \"textual.message_pump.MessagePump\",\n    \"textual.message_pump.ParentLinks\",\n    \"builtins.object\"\n  ],\n  \"owners\": {\n    \"navigation_context\": \"toad.screens.main.MainScreen\",\n    \"thread_identity\": \"toad.screens.session_view.SessionView\",\n    \"navigation_owner\": \"toad.navigation_context.NavigationOwner\",\n    \"prepare_presentation\": \"toad.screens.main.MainScreen\",\n    \"retire_presentation\": \"toad.screens.main.MainScreen\"\n  }\n}\n",
+        "stderr": ""
+      },
+      "same_exit_and_stdout": true
+    },
+    {
+      "script": "goal_read_probe",
+      "first_module": "toad.goal_interaction",
+      "source_sha256": "8d028a84d4e8e0090a1ec6de8095ea5213939941d32782b3de49da791b2a5a26",
+      "body_preserved": true,
+      "before": {
+        "exit": 0,
+        "stdout": "{\"first_module\": \"toad.goal_interaction\", \"members\": [\"clear\", \"collapse\", \"edit\", \"history\", \"toggle\"]}\n",
+        "stderr": ""
+      },
+      "after": {
+        "exit": 0,
+        "stdout": "{\"first_module\": \"toad.goal_interaction\", \"members\": [\"clear\", \"collapse\", \"edit\", \"history\", \"toggle\"]}\n",
+        "stderr": ""
+      },
+      "same_exit_and_stdout": true
+    }
+  ],
+  "scope": "Actual production classes from the existing P23 environment; two original scripts before/after one native private relocation. No shared-pair write, fake provider, suite or paid call."
+}

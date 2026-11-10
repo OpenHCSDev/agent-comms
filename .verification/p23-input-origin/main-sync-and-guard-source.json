@@ -1,0 +1,18 @@
+{
+  "main": "2914c07bf3a64f85fb6c88c58655943b103829cf",
+  "artifact_head_after_rebase": "b1cdae7f20830f3b3b0f2097d4b97aa3cf09bd9b",
+  "behind_main": 0,
+  "ahead_artifact_commits": 15,
+  "product_source_delta_against_main": "none",
+  "toad_original": "6587aee50bc73af398d16a33c6807c33bdeec038",
+  "toad_current": "c0020780a3f8a67550575d193eb8fa9222241b9d",
+  "unchanged_between_toad_heads": [
+    "src/toad/screens/bus_choice.py",
+    "src/toad/widget_actions.py",
+    "tests/app/test_channel_display_basis.py",
+    "tests/native/command_target_probe.py",
+    "tests/native/goal_read_probe.py"
+  ],
+  "evidence": "git merge-base --is-ancestor origin/main HEAD returned 0; git diff origin/main -- src was empty; the exact five-file Toad git diff returned 0",
+  "scope": "Source equality and main synchronization only; no new tests, simulations, probe execution or shared-pair edits"
+}

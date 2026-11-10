@@ -1,0 +1,31 @@
+{
+  "defect": "NRA cannot relocate either executable cold-import probe because whole-module placement requires a movable declaration before every call.",
+  "why_stupid": "This is wrong because the original Python module already owns the complete ordered program, but symbol selection demands a fake declaration before it will move that program intact.",
+  "unplanned_reason": "Tristan forbids waiting on exhausted Claude agents; friction explicitly requested this separate Pi tooling repair for the two preserved executable probes.",
+  "order": {
+    "kind": "pending",
+    "owner": "openhcsdev/nominalrefactoradvisor:nominal_refactor_advisor/refactors/module_move.py:2410",
+    "scope": {
+      "kind": "fix",
+      "shape": {
+        "parents": ["openhcsdev/nominalrefactoradvisor:nominal_refactor_advisor/refactors/module_move.py:2410"],
+        "members": []
+      }
+    },
+    "check": {
+      "directory": "/home/ts/wt/comms-commander-2--6ec911da2d7a4caa8e50cc32b92062d1--nominalrefactoradvisor",
+      "command": "git grep -l '^class RelocateModuleToNewModuleOperation' -- nominal_refactor_advisor/refactors/module_move.py | wc -l",
+      "result": {"kind": "count", "expected": 1}
+    },
+    "edits": [
+      "Add a native whole-module placement operation on the actual module-move provider family, preserving every executable statement and import order without an anchor declaration.",
+      "Reuse existing module identity, import-consumer and path-caller rewrite owners; delete the original script path atomically after moving its complete source.",
+      "Use an independently allocated NRA checkout from current main; the existing P23 Core/Toad pair and its engine-edit ban remain untouched.",
+      "Prove the original command_target_probe and goal_read_probe bodies move intact, including cold import before later imports, all assertions, argv contract and JSON output; cover actual imported and script-path callers.",
+      "Return a usable probe-placement plan to P23 and keep the independent operation PR separate from P23 source integration."
+    ],
+    "banned": ["fake anchor declaration", "wrapper script", "reordered import", "old-path forwarding shell", "manual product-source relocation", "shared-pair edit", "Claude dependency", "new agent"],
+    "report": "NRA base and head, native operation and refusal boundaries, original-script byte/order preservation and caller migration, focused consumer evidence, separate PR, usable probe plan. The class-count check is structural only, not behavioral qualification.",
+    "run": {"kind": "application", "text": "The native operation moves both original P23 cold-import scripts into tests/support and migrates real callers without changing their subprocess behavior."}
+  }
+}

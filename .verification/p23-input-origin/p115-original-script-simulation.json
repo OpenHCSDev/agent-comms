@@ -1,0 +1,27 @@
+{
+  "toad_head": "c0020780a3f8a67550575d193eb8fa9222241b9d",
+  "nra_head": "85cb3a2ee099d0f0c3fde4494d085d79ff5f9b05",
+  "nra_has_uncommitted_fix": false,
+  "native_simulation_clean": true,
+  "preserved": [
+    {
+      "old": "/home/ts/wt/comms-friction--P23--toad/tests/native/command_target_probe.py",
+      "new": "/home/ts/wt/comms-friction--P23--toad/tests/support/command_target_probe.py",
+      "source_sha256": "2aac65303799060a2989b7d027e2f3a76b8082a56ba0a0d67706f1046c050629",
+      "body_preserved": true
+    },
+    {
+      "old": "/home/ts/wt/comms-friction--P23--toad/tests/native/goal_read_probe.py",
+      "new": "/home/ts/wt/comms-friction--P23--toad/tests/support/goal_read_probe.py",
+      "source_sha256": "8d028a84d4e8e0090a1ec6de8095ea5213939941d32782b3de49da791b2a5a26",
+      "body_preserved": true
+    }
+  ],
+  "changed_paths": [
+    "/home/ts/wt/comms-friction--P23--toad/tests/native/command_target_probe.py",
+    "/home/ts/wt/comms-friction--P23--toad/tests/native/goal_read_probe.py",
+    "/home/ts/wt/comms-friction--P23--toad/tests/support/command_target_probe.py",
+    "/home/ts/wt/comms-friction--P23--toad/tests/support/goal_read_probe.py"
+  ],
+  "scope": "Native simulation of original scripts and support package only; no application, original-probe execution, tests or shared edits. Existing tracked caller absence was established separately; this is not a new full-tree scan."
+}

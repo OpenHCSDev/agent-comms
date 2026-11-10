@@ -1,0 +1,27 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "place-original-cold-import-probes-under-support",
+          "reason": "Use P115's native whole-module operation to move the actual original scripts, including their cold import before later imports, declarations, assertions, argv reads and JSON output. Preserve complete source order and let existing native identity/path owners migrate callers. No anchor, wrapper, forwarding shell or import-order change. P115 head 85cb3a2e passes native projection of both original bodies and executable import/path-caller controls; the actual original probes also passed a private relocation against the P23 classes. Applying this plan to the shared pair remains with its integration owner.",
+          "operations": [
+            {
+              "operation": "relocate_module_to_new_module",
+              "file_path": "/home/ts/wt/comms-friction--P23--toad/tests/native/command_target_probe.py",
+              "destination_path": "/home/ts/wt/comms-friction--P23--toad/tests/support/command_target_probe.py"
+            },
+            {
+              "operation": "relocate_module_to_new_module",
+              "file_path": "/home/ts/wt/comms-friction--P23--toad/tests/native/goal_read_probe.py",
+              "destination_path": "/home/ts/wt/comms-friction--P23--toad/tests/support/goal_read_probe.py"
+            }
+          ],
+          "architecture_guards": [],
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}
