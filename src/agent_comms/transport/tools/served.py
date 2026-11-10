@@ -392,7 +392,7 @@ class ServedCommsContextInspectionTool(CoreRead[ContextInspectionRead], CommsCon
             comms.registry.store.coordinator_reader,
             tuple(resource.value for resource in page.resources), JevClassifier.version())
         return ContextInspectionRead(
-            entry, page, thread.runtime.session_observation(comms.root, thread), annotations,
+            comms.root, entry, page, thread.runtime.session_observation(comms.root, thread), annotations,
             ImportedSessionMetadata.sources_for_owner(comms.registry, thread))
 
 
