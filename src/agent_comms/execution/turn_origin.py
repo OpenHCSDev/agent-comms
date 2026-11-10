@@ -1,20 +1,10 @@
-from __future__ import annotations
-
-from abc import (
-    ABC,
-    abstractmethod,
-)
-from typing import TYPE_CHECKING
+from abc import ABC, abstractmethod
 
 from agent_comms.execution.input_key import InputKey
-
-if TYPE_CHECKING:
-    from agent_comms.input_disposition import InputDispositions
-    from agent_comms.messaging.messages import Message
-    from agent_comms.registry.threads import Thread
+from agent_comms.registry.thread_creation import ThreadCreationSource
 
 
-class TurnOrigin(ABC):
+class TurnOrigin[MessageType](ABC):
     """The source of a scheduled turn owns batching and delivery identity."""
 
     __slots__ = ()
@@ -32,7 +22,7 @@ class TurnOrigin(ABC):
     def autonomous(self) -> bool: ...
 
     @abstractmethod
-    def messages(self) -> tuple[Message, ...]: ...
+    def messages(self) -> tuple[MessageType, ...]: ...
 
     @abstractmethod
-    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[InputKey, ...]: ...
+    def bus_keys(self, owner: ThreadCreationSource) -> tuple[InputKey, ...]: ...

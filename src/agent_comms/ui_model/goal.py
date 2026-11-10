@@ -1,35 +1,37 @@
-"""Display behavior composed by goal declarations and unavailable observations."""
-
-from __future__ import annotations
+"""Display contracts shared by goal declarations and execution observations."""
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from agent_comms.planning.goal_presentation import GoalExecution
-    from agent_comms.planning.goals import GoalDeclaration
 
 
-class GoalDisplay(ABC):
+class GoalExecutionDisplay[Subject](ABC):
+    @abstractmethod
+    def heading(self, revision: int) -> str: ...
+
+    @abstractmethod
+    def details_heading(self, heading: str) -> str: ...
+
+    @abstractmethod
+    def waiting_for(self, goal: Subject) -> bool: ...
+
+
+class GoalDisplay[Snapshot, Subject](ABC):
     @property
     @abstractmethod
     def can_control(self) -> bool: ...
 
     @property
     @abstractmethod
-    def snapshot(self) -> GoalDeclaration: ...
+    def snapshot(self) -> Snapshot: ...
 
     @property
     @abstractmethod
     def visible(self) -> bool: ...
 
     @abstractmethod
-    def heading(self, execution: GoalExecution) -> str: ...
+    def heading(self, execution: GoalExecutionDisplay[Subject]) -> str: ...
 
-    def details_heading(self, execution: GoalExecution) -> str:
+    def details_heading(self, execution: GoalExecutionDisplay[Subject]) -> str:
         return self.heading(execution)
 
     @abstractmethod
-    def standby(self, execution: GoalExecution) -> bool: ...
-
-
+    def standby(self, execution: GoalExecutionDisplay[Subject]) -> bool: ...

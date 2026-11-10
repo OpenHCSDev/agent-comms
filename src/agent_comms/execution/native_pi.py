@@ -7,19 +7,25 @@ publication. Verified package and send authority remain required for every turn.
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.execution.launch_root import LaunchRoot, started
 from agent_comms.execution.launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from agent_comms.execution.native_arguments import NativeArguments, SelectedModel
-from agent_comms.execution.native_entries import NO_EVIDENCE_READ, NoEvidenceRead
+from agent_comms.execution.native_entries import (
+    NO_EVIDENCE_READ,
+    NativeEvidenceRead,
+    NoEvidenceRead,
+)
 from agent_comms.execution.native_evidence_read import NativeInputUncommitted
+from agent_comms.execution.native_failure_reads import (
+    NativeOperationFailureRead,
+    NativeResponseFailureRead,
+)
 from agent_comms.execution.native_failures import NativePiUnavailable, NativeRequestFailure
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.native_session_files import NativeAgentSettings, NativeSessionFiles
@@ -30,11 +36,6 @@ from agent_comms.installer.active_route import ActiveRoute, resolve_comms_route
 from agent_comms.installer.native_package import MANIFEST, SYSTEM_PROMPT, VerifiedNativePackage
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.transport.native_tool_transport import NativeToolMode
-
-if TYPE_CHECKING:
-    from agent_comms.execution.native_entries import NativeEvidenceRead
-    from agent_comms.execution.pi_events import NativeOperationError, Response
-    from agent_comms.execution.turn_failure import TurnFailure
 
 CAPABILITY = "pi-native-input-v1-live-only"
 
@@ -87,7 +88,7 @@ class NativePiInputNotSent(NativePiUnavailable):
 class NativePiPromptRejected(NativePiUnavailable):
     """A refusal matched to its RPC request; it permits neither retry nor new input."""
 
-    def __init__(self, response: Response):
+    def __init__(self, response: NativeResponseFailureRead):
         self.response = response
         # Pi's own words reach the failure, not just the diagnostic file: on 2026-11-07 a
         # thread could not resume because summarisation hit "The usage limit has been
@@ -104,7 +105,7 @@ class NativePiPromptRejected(NativePiUnavailable):
 class NativePiOperationFailed(NativePiUnavailable):
     """Keep the native event private while reporting a fixed public failure."""
 
-    def __init__(self, event: NativeOperationError) -> None:
+    def __init__(self, event: NativeOperationFailureRead) -> None:
         self.event = event
         super().__init__("Native Pi refused an operation (see diagnostic)")
 
@@ -125,32 +126,6 @@ def main() -> int:
     )
     os.execvpe(argv[0], list(argv), environment)
     return 0
-
-
-class NativePiTerminalFailure(NativePiUnavailable):
-    """A proved input ended in a failed terminal and its owned process was reaped."""
-
-    def __init__(
-        self, detail: str, context: NativeContextProof, model: SelectedModel,
-        failure: TurnFailure,
-    ):
-        super().__init__(f"Native Pi assistant did not finish successfully: {detail}")
-        self.context = context
-        self.model = model
-        self.failure = failure
-        # Provider text may contain arbitrary response bodies. Only complete
-        # known short errors may be broadcast into a shared channel.
-        match = re.fullmatch(
-            r"(?:(?:Codex|OpenAI|Anthropic) error: )?"
-            r"(The usage limit has been reached|Insufficient credits|"
-            r"(?:401|402|403|429)(?::\s*|\s+)(?:insufficient credits|rate limit|unauthorized)|"
-            r"Model output limit reached)\.?",
-            detail,
-            flags=re.IGNORECASE,
-        )
-        self.public_message = (
-            f"{model.qualified}: {match.group(1) if match else 'request failed'}."
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,8 +207,6 @@ class NativePiRpcLaunch:
 
         The launch is the caller's root's; without one, this process's selection.
         """
-        from agent_comms.installer.active_route import resolve_comms_route
-
         package = resolve_comms_route(root).launch().launched_package()
         cls._command_selection(command, runtime, package)
         return package

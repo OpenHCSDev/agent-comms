@@ -1,0 +1,20 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "p23-remaining-sending-module-bindings",
+      "reason": "Both actual startup roots now stop because bus_activity_index imports activity_clocks through sending, which binds no such module. The complete remaining from-sending scan across owned Core/Toad src/tests/tools finds only one other module alias, historical_views in the source ownership guard; Messaging and TeamReceipts are actual sending declarations and stay. Bind both original modules directly without changing any class, method, field, metadata accessor, SQL, test assertion or constructor. No wrapper or re-export.",
+      "operations": [
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/bus_activity_index.py",
+          "replacements": [{"old_source":"from agent_comms.messaging.sending import activity_clocks","new_source":"from agent_comms.messaging import activity_clocks"}]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/comms-friction--P17/tests/guards/test_source_proof_ownership.py",
+          "replacements": [{"old_source":"from agent_comms.messaging.sending import historical_views","new_source":"from agent_comms.messaging import historical_views"}]
+        }
+      ]
+    }
+  ]
+}

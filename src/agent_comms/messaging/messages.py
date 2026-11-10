@@ -13,22 +13,14 @@ from dataclasses import Field, dataclass, field, fields, make_dataclass, replace
 from functools import cache
 from inspect import get_annotations
 from itertools import accumulate, batched
-from typing import (
-    TYPE_CHECKING,
-    Annotated,
-    ClassVar,
-    Self,
-    Type,
-    cast,
-    dataclass_transform,
-    get_origin,
-)
+from typing import Annotated, ClassVar, Self, Type, cast, dataclass_transform, get_origin
 
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.input_key import InputKey
 from agent_comms.execution.turn_origin import TurnOrigin
 from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.messaging.display_references import NO_HISTORY_SOURCE, MessageHistory
 from agent_comms.messaging.envelope_claim_transitions import (
     ClaimOwner,
     ClaimProducer,
@@ -39,16 +31,21 @@ from agent_comms.messaging.envelope_claim_transitions import (
     UnclaimedResource,
 )
 from agent_comms.messaging.mentions import ThreadMention
+from agent_comms.messaging.message_clock_source import MessageClockSource
+from agent_comms.messaging.message_reads import MessageDeliveryRead
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.message_send_reads import MessageReferenceRead
+from agent_comms.messaging.message_sender import PublicSender
 from agent_comms.messaging.page_traversal import LiveCursor, PageCursor
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
+from agent_comms.messaging.response_message_source import ResponseMessageSource
 from agent_comms.messaging.response_policy import (
     NO_ALIASES,
     InformationalPolicy,
     ResponseEligibility,
     ResponsePolicy,
 )
-from agent_comms.messaging.task_sources import Decision, NoTaskAttachment, TaskAttachment
+from agent_comms.messaging.task_sources import NoTaskAttachment, TaskAttachment
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -67,8 +64,9 @@ from agent_comms.nominal.field_codec import (
     projected,
 )
 from agent_comms.projects.change_report import NoChangeReport, ReportEvidence, SourceRoots
+from agent_comms.registry.thread_creation import ThreadCreationSource
 from agent_comms.registry.thread_identity import AgentThreadRole, ThreadRole
-from agent_comms.storage.recorded_time import Timestamped
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
 from agent_comms.storage.typed_table import (
     LOCAL_TABLE_SOURCE,
     AppendOnlyTables,
@@ -87,13 +85,6 @@ from agent_comms.storage.typed_table import (
 from agent_comms.transport.progress import InterruptibleRead
 from agent_comms.ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
 from agent_comms.waking.wake_policy import BoundedTriageWake, PassiveWake
-
-if TYPE_CHECKING:
-    from agent_comms.input_disposition import InputDispositions
-    from agent_comms.messaging.bus_publication import Delivered
-    from agent_comms.messaging.display_references import ReferenceContext
-    from agent_comms.messaging.retained_task_facts import ExactTaskFact
-    from agent_comms.registry.threads import Thread
 
 
 class BusTables(TypedTable, AppendOnlyTables, SharedFileTables, DurableTables, declared_name=None):
@@ -417,7 +408,7 @@ class BusCapability(TypedRow, ProjectionSource):
 
     table = _CapabilityTable()
 
-    def deliveries(self) -> tuple[Delivered, ...]:
+    def deliveries(self) -> tuple[MessageDeliveryRead[Message], ...]:
         return ()
 
     @classmethod
@@ -610,7 +601,7 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
         return FieldCodec.decode(ClaimMessage, data)
 
     @classmethod
-    def claimed(cls, owner: Thread) -> Message:
+    def claimed(cls, owner: ThreadIdentitySource) -> Message:
         return Message(
             owner.name, owner.name, "Claimed", cls,
         )
@@ -921,12 +912,7 @@ class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole, decla
 
 
 @dataclass(frozen=True, slots=True)
-class PublicSender(NullMember):
-    """Public history has no frozen participant incarnation."""
-
-
-@dataclass(frozen=True, slots=True)
-class MessageInput(Timestamped, Addressed, BusCapability):
+class MessageInput(MessageClockSource, Addressed, BusCapability, ResponseMessageSource):
     """The facts an input is keyed and written from: who, where, what text, which role.
 
     Attachments, reports and answers belong to Message; this is never a whole message
@@ -954,6 +940,9 @@ class MessageInput(Timestamped, Addressed, BusCapability):
         PublicationExclude(),
     ] = ()
 
+    def bus_key(self, owner: ThreadCreationSource) -> InputKey:
+        return self.role.response_policy(self).disposition_key(self, owner)
+
     @property
     def sender_label(self) -> str:
         """Who sent this as its reader sees it: the thread and what kind of sender it is."""
@@ -961,7 +950,7 @@ class MessageInput(Timestamped, Addressed, BusCapability):
 
 
 @dataclass(frozen=True, slots=True)
-class Message(MessageInput, TurnOrigin):
+class Message(MessageInput, TurnOrigin['Message'], MessageReferenceRead):
     """Declares one inter-thread message.
 
     The bus assigns ``seq`` (a monotonically increasing log position) at send
@@ -1041,13 +1030,6 @@ class Message(MessageInput, TurnOrigin):
     def category(self) -> type[MessageCategory]:
         """The filter category this message files under, answered by what it carries."""
         return self.task.category(self.role.category)
-
-    def require_decision(self) -> Decision:
-        return self.task.require_decision()
-
-    @property
-    def retains_authored_task(self) -> bool:
-        return self.task.retains_authored_task
 
     def require_task_publication(self, sender, snapshot, original_source) -> None:
         self.task.require_target(self.target, snapshot)
@@ -1185,8 +1167,8 @@ class Message(MessageInput, TurnOrigin):
     def batch_target(self) -> str:
         return self.exact_reply_target
 
-    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[InputKey, ...]:
-        return (dispositions.bus_key(self, owner),)
+    def bus_keys(self, owner: ThreadCreationSource) -> tuple[InputKey, ...]:
+        return (self.bus_key(owner),)
 
     @property
     def reply_target(self) -> str | None:
@@ -1359,26 +1341,8 @@ class ClaimMessage(Claimed, Message):
         """A copied history keeps the envelope's display facts and drops its claim."""
         return Message.from_message(self, type=ClaimHistoryKind)
 
-    def retained_task_facts(self) -> Iterator[ExactTaskFact]:
-        from agent_comms.messaging.retained_task_facts import ClaimTaskFact
+    def retained_task_facts(self) -> Iterator[task_facts.ExactTaskFact]:
         yield from super().retained_task_facts()
-        yield ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))
+        yield task_facts.ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))
 
-
-class MessageHistory:
-    """Where a displayed message was recorded: an attached history snapshot, or nowhere (live)."""
-
-    __slots__ = ()
-
-    def references_from(self, context: ReferenceContext) -> ReferenceContext:
-        """The names a body recorded here links through; a live message uses the current ones."""
-        return context
-
-
-class NoHistorySource(MessageHistory):
-    """A live message: no snapshot recorded it."""
-
-    __slots__ = ()
-
-
-NO_HISTORY_SOURCE = NoHistorySource()
+import agent_comms.messaging.retained_task_facts as task_facts

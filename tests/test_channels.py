@@ -41,7 +41,7 @@ from agent_comms.projects.checkouts import (
     Checkout,
     LaunchCheckout,
 )
-from agent_comms.registry.registry_document import RosterVisibility
+from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_management import (
     ForkSpec,
     GivenTags,

@@ -3,14 +3,14 @@
 from dataclasses import dataclass, replace
 
 import pytest
-from metaclass_registry.mro_dispatch import (
-    MroDispatch,
-    handles,
-)
+from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 import agent_comms.agent_events as events
 from agent_comms.execution.pending_requests import PendingRequests
+from agent_comms.execution.pi_commands import SetModel, SetThinkingLevel
+from agent_comms.execution.pi_events import Response
 from agent_comms.execution.pi_wire import RequestId
+from agent_comms.execution.turn_failure import AuthorityChanged
 from agent_comms.execution.turn_item import PiRequestKey
 
 
@@ -168,17 +168,35 @@ async def test_handler_can_consume_without_returning_a_publication(synchronous):
 
 
 def test_done_reports_its_failure_reason_code():
-    from agent_comms.execution.turn_failure import AuthorityChanged
-
     done = events.Done("failed", False, AuthorityChanged("failed"), {"elapsed_ms": 3})
     assert done.reason_code == "authority_changed"
     assert done.diagnostic == {"elapsed_ms": 3}
 
 
-async def test_request_correlation_separates_families_and_ignores_late_results():
-    from agent_comms.execution.pi_commands import SetModel, SetThinkingLevel
-    from agent_comms.execution.pi_events import Response
+@pytest.mark.parametrize("ok", (True, False))
+def test_done_calls_the_captured_failure_constructor_only_on_failure(ok: bool) -> None:
+    terminal = events.Done("finished", ok)
+    error = events.Error("provider error")
+    failure = events.UnresolvedNativeTurnOutcome()
+    invoked: list[events.Done] = []
 
+    def resolve_failure(
+        actual: events.Done, observed: events.Error | None,
+    ) -> events.NativeTurnOutcome:
+        assert actual is terminal and observed is error
+        invoked.append(actual)
+        return failure
+
+    resolved = terminal.resolve(error, resolve_failure)
+    assert resolved.ok is ok
+    assert invoked == ([] if ok else [terminal])
+    if ok:
+        assert isinstance(resolved.outcome, events.SuccessfulNativeTurnOutcome)
+    else:
+        assert resolved.outcome is failure
+
+
+async def test_request_correlation_separates_families_and_ignores_late_results():
     pending = PendingRequests()
     wire_id = "same"
     key = PiRequestKey(wire_id)

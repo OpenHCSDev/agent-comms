@@ -9,13 +9,18 @@ from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
 from itertools import islice
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import Self
 
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
+from agent_comms.messaging.claim_registry_read import ClaimRegistryRead
+from agent_comms.registry.presence_reads import PresenceThread
+from agent_comms.registry.registry_names import RegistryNames
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
 from agent_comms.messaging.activity_clocks import ActivityClocks, ChannelActivity
 from agent_comms.messaging.bus_activity_index import BusActivityIndex
 from agent_comms.messaging.bus_display_index import BusDisplayIndex
 from agent_comms.messaging.bus_publication import Delivered, KeyedPublication
+from agent_comms.messaging.bus_record_builder import RecordBuilder
 from agent_comms.messaging.bus_route_counts import RouteCounts
 from agent_comms.messaging.bus_tables import (
     AnsweredSource,
@@ -28,6 +33,7 @@ from agent_comms.messaging.bus_tables import (
     SentSource,
 )
 from agent_comms.messaging.channel_targets import NamedTarget
+from agent_comms.messaging.unread_query_source import UnreadQuerySource
 from agent_comms.messaging.envelope_claim_transitions import (
     ClaimOwner,
     ClaimProjection,
@@ -35,7 +41,13 @@ from agent_comms.messaging.envelope_claim_transitions import (
     RecordedScope,
     ResourceClaim,
 )
+from agent_comms.messaging.message_reads import (
+    ConversationRead,
+    MessageIdentityRead,
+    MessageReferencesRead,
+)
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.message_writer import MessageWriter
 from agent_comms.messaging.messages import (
     Addressed,
     BusCapability,
@@ -71,10 +83,6 @@ from agent_comms.storage.typed_table import (
     WalStore,
 )
 
-if TYPE_CHECKING:
-    from agent_comms.messaging.read_selection import DisplayUnreadSelection
-    from agent_comms.registry.registry_document import RegistrySnapshot
-
 
 class ClaimRecord(PublicRecord, ClaimMessage):
     pass
@@ -86,9 +94,6 @@ class PrivateRecord(Delivered):
 
 class KeyedPrivateRecord(PrivateRecord, KeyedPublication):
     pass
-
-
-type RecordBuilder = Callable[[int, sqlite3.Connection], BusRecord]
 
 
 @dataclass(frozen=True)
@@ -136,7 +141,7 @@ class DisplayUnread:
     def counts(self) -> dict[str, int]:
         return {query.channel: count for query, count in self.counted.items()}
 
-    def advanced(self, source: BusReader, selection: DisplayUnreadSelection) -> DisplayUnread:
+    def advanced(self, source: BusReader, selection: UnreadQuerySource) -> DisplayUnread:
         queries = selection.queries()
         through = source.revision()
         if through == self.through and tuple(self.counted) == queries:
@@ -164,11 +169,16 @@ class DisplayUnread:
         return DisplayUnread(through, {query: counted[query] for query in queries})
 
 
-class BusReader(RouteCounts, ABC):
+class BusReader(
+    RouteCounts,
+    ConversationRead[Delivered],
+    MessageReferencesRead[Message],
+    MessageIdentityRead,
+):
     """One query implementation for individual reads and a held read snapshot."""
 
     def answering(self, references: tuple[MessageReference, ...], route: NamedTarget,
-                  snapshot: RegistrySnapshot) -> tuple[MessageReference, ...]:
+                  snapshot: RegistryNames[ThreadIdentitySource]) -> tuple[MessageReference, ...]:
         """Select answer links on this reader's own connection."""
         with self.observing() as connection:
             return MessageIdentitySource.answering(connection, references, route, snapshot)
@@ -178,6 +188,10 @@ class BusReader(RouteCounts, ABC):
         """Keep queries and their physical identity on one held snapshot."""
         with self.observing() as db:
             yield BusSnapshot.from_connection(db)
+
+    def contains_message_identity(self, sender: str, message_id: MessageId) -> bool:
+        with self.observing() as db:
+            return MessageIdentitySource.exists(db, sender=sender, message_id=message_id)
 
     def revision(self) -> int:
         with self.observing() as db:
@@ -505,7 +519,7 @@ class BusReader(RouteCounts, ABC):
             ))
 
     def display_unread(
-        self, selection: DisplayUnreadSelection, *, through: int,
+        self, selection: UnreadQuerySource, *, through: int,
     ) -> DisplayUnread:
         """Count every selected scope's whole interval through one revision."""
         return DisplayUnread(through, self.count_unread(selection.queries(), through=through))
@@ -552,7 +566,7 @@ class StoredBusReader(BusReader, SQLiteReader):
 
 class Bus(
     FileStore, StoredBusReader, ReconciledFile, WalStore, CarriedWriter, BusFile,
-    CompleteInputReader, Watched,
+    CompleteInputReader, Watched, MessageWriter,
 ):
     """One SQLite transaction owns the sequence and all of a record's fields."""
 
@@ -653,8 +667,8 @@ class Bus(
     def resource_claim(self, db: sqlite3.Connection, resource: str) -> ResourceClaim:
         return HeldResources.owner_for(db, resource)
 
-    def prepare_claim[Change: ClaimTransition](
-        self, db: sqlite3.Connection, transition: Change, registry: RegistrySnapshot,
+    def prepare_claim[Change: ClaimTransition, Owner: PresenceThread](
+        self, db: sqlite3.Connection, transition: Change, registry: ClaimRegistryRead[Owner],
     ) -> Change:
         previous = HeldResources.all_claims(db)
         projected = transition.apply(previous, registry)
@@ -664,8 +678,8 @@ class Bus(
             if resource not in projected and resource not in transition.resources
         ))
 
-    def acquire_resource_claim(
-        self, resource: str, claim: RecordedScope, registry: RegistrySnapshot, build: RecordBuilder,
+    def acquire_resource_claim[Owner: PresenceThread](
+        self, resource: str, claim: RecordedScope, registry: ClaimRegistryRead[Owner], build: RecordBuilder,
     ) -> ClaimOwner:
         def acquire(db: sqlite3.Connection) -> int:
             def publish() -> ClaimOwner:
@@ -701,3 +715,4 @@ class BusSnapshot(PresentPath, BusReader):
     @contextmanager
     def reading(self) -> Iterator[BusSnapshot]:
         yield self
+

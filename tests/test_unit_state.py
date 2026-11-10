@@ -13,6 +13,7 @@ import pytest
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.launch_runtime import LaunchRoot
 from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
@@ -43,7 +44,6 @@ from agent_comms.team.standing_rules import (
 )
 from agent_comms.team.team_heartbeat import TeamObservation
 from agent_comms.team.team_hud import TeamFrame
-from agent_comms.transcript.external_transcript import ExternalTranscript
 from agent_comms.transcript.transcript_events import ToolStartTranscript
 from agent_comms.ui_model.teammate_state import (
     AwaitingApplicationRun,

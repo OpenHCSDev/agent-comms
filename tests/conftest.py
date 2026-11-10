@@ -37,6 +37,7 @@ from agent_comms.installer.native_package import (
     pinned_native_package,
 )
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
+from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.messaging.bus import Bus, BusRecord
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.channel_targets import CommandTarget
@@ -56,10 +57,7 @@ from agent_comms.projects.repo import Repo
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_model import DeclaredModel
-from agent_comms.registry.thread_text import (
-    ForkedParent,
-    GivenThreadText,
-)
+from agent_comms.registry.thread_text import ForkedParent, GivenThreadText
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import (
@@ -570,8 +568,8 @@ def ledger_one_failure_short(root: Path) -> Path:
     from contextlib import closing
 
     from agent_comms.execution.turn_failure import TurnFailure
+    from agent_comms.planning.goal_ledger import FailedTurnEvidence
     from agent_comms.planning.goal_attempts import GoalAttemptStore
-    from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
     from agent_comms.storage.typed_table import sql_literal
 
     directory = root / GoalAttemptStore.root_directory

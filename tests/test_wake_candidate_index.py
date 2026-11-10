@@ -18,7 +18,7 @@ from agent_comms.notification_assignment import (
     NotificationAssignmentRead,
     NotificationSelection,
 )
-from agent_comms.planning.goal_presentation import GoalWaitTarget
+from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goal_waits import RecordedGoalWait
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration

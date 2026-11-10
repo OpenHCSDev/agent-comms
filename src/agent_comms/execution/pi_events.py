@@ -10,6 +10,10 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from agent_comms import agent_events as events
 from agent_comms.execution.acp_failure import UnrecordedFailureSource
 from agent_comms.execution.controller import ChoiceRequest, PermissionOptionId
+from agent_comms.execution.native_failure_reads import (
+    NativeOperationFailureRead,
+    NativeResponseFailureRead,
+)
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_input_proof import (
     NativeContextRecord,
@@ -31,6 +35,7 @@ from agent_comms.execution.pi_wire import (
     PiUsage,
     UnknownPayload,
 )
+from agent_comms.execution.provider_records import ReportedText
 from agent_comms.execution.request_progress import RequestProgress
 from agent_comms.execution.turn_phase import (
     AcceptsPrompt,
@@ -68,7 +73,6 @@ from agent_comms.pi_payloads import (
     ProviderRetryOutcome,
     ReportedCompaction,
     ReportedFlag,
-    ReportedText,
     UnreportedUsage,
 )
 from agent_comms.transport.tool_declaration import ToolDeclaration
@@ -263,7 +267,7 @@ class AgentEnd(AcceptsPrompt, NativePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativeOperationError(NativePiEvent):
+class NativeOperationError(NativePiEvent, NativeOperationFailureRead):
     """The native run refused an operation after the prompt was acknowledged."""
 
     error: str
@@ -803,7 +807,7 @@ class ResponseOutcome(DeclaredFamily, DeclaredWireType, affix="ResponseOutcome")
 
 
 @dataclass(frozen=True, kw_only=True)
-class Response(NativePiEvent, DurablePiEvent):
+class Response(NativePiEvent, DurablePiEvent, NativeResponseFailureRead):
     command: type[PiCommand] = UnknownCommand
     data: PiResponseData = field(default_factory=MissingData)
     error: ReportedText | PiOmitted = PiOmitted()

@@ -18,6 +18,7 @@ from agent_comms.coordination.errors import StaleFence
 from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, Platform
+from agent_comms.execution.input_ingress import InputAuthorityCut, InputRegistryStore
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_lease import (
@@ -30,6 +31,7 @@ from agent_comms.execution.turn_lease import (
     TurnDeclaration,
     TurnRecord,
 )
+from agent_comms.execution.turn_registry import TurnRegistry
 from agent_comms.messaging.routing import Routing
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, TurnId
 from agent_comms.registry.presence import PresenceStore
@@ -39,6 +41,7 @@ from agent_comms.registry.private_registry_guard import (
     RegistryPrivacy,
 )
 from agent_comms.registry.registration_change import InitialRegistration, NativeSourcePublication
+from agent_comms.registry.registration_reads import RegistryPathRead
 from agent_comms.registry.registry_document import (
     HistoricalRootPurpose,
     RegistryDocument,
@@ -189,7 +192,7 @@ class RegistrySelection:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryCut(RegistrySelection):
+class RegistryCut(RegistrySelection, InputAuthorityCut[Thread]):
     """The complete decoded registry and its original namespace authority."""
 
     snapshot: RegistrySnapshot
@@ -329,10 +332,10 @@ class RegistryEdit:
             current,
             turn_generation=identity.generation,
             project_resume_due=False,
-            turn_record=StoredTurnRecord.begin(self.store.path, identity, turn),
+            turn_record=StoredTurnRecord.begin(self.store.path, identity, turn, registry_type=RegistryStore),
         )
         if current.turn_generation:
-            self.superseded.append(StoredTurnRecord.for_identity(self.store.path, current.turn_identity))
+            self.superseded.append(StoredTurnRecord.for_identity(self.store.path, current.turn_identity, registry_type=RegistryStore))
         self.document.threads[current.name] = leased
         self.document.last_seen[current.name] = time.time()
         return leased, self.document.owners.generations[current.name]
@@ -351,7 +354,15 @@ class RegistryEdit:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocument], declared_name=None):
+class RegistryStore(
+    RegistryLocking,
+    RegistryFile,
+    CarriedDocument[RegistryDocument],
+    TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn],
+    InputRegistryStore[Thread],
+    RegistryPathRead,
+    declared_name=None,
+):
     cache: RegistryCache = field(init=False, compare=False, repr=False)
     presence: PresenceStore = field(init=False, compare=False, repr=False)
     rows: RegistryRowStore = field(init=False, compare=False, repr=False)
@@ -586,7 +597,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         return FieldCodec.encode(value)
 
     def _bind_thread(self, thread: Thread) -> Thread:
-        record = thread.turn_record.bound_to(self.path, thread.turn_identity)
+        record = thread.turn_record.bound_to(self.path, thread.turn_identity, registry_type=RegistryStore)
         session = thread.session_file.bound_to(self.path.parent)
         if record is thread.turn_record and session is thread.session_file:
             return thread

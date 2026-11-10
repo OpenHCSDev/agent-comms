@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 from acp.schema import PromptResponse
 
@@ -21,7 +21,6 @@ from agent_comms.acp_extension import (
     QueueScope,
     encode_updates,
 )
-from agent_comms.agent_backend import AgentBackend
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
 from agent_comms.coordination.cohort import next_sealed_assignment
@@ -38,11 +37,14 @@ from agent_comms.execution.drain_failures import (
     drain_failures,
     record_drain_failure,
 )
+from agent_comms.execution.following_input_contracts import FollowingInputRetirement
 from agent_comms.execution.image_input import ImageInput
 from agent_comms.execution.input_effects import InputEffects
+from agent_comms.execution.input_event_source import InputEventSource, InputEventState
 from agent_comms.execution.input_key import InputKey
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.proven_source_coverage import SourcePrefix
+from agent_comms.execution.queue_publication import QueuePublication
 from agent_comms.execution.queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
 from agent_comms.execution.reservation_rules import (
     ReservationRule,
@@ -50,6 +52,14 @@ from agent_comms.execution.reservation_rules import (
     RuleCheck,
 )
 from agent_comms.execution.session_lifecycle import SessionLifecycle
+from agent_comms.execution.session_owner_reads import OwnedSessionLifetime, SessionTaskOwner
+from agent_comms.execution.session_tasks import (
+    BackgroundTask,
+    RunningBackgroundTask,
+    RunningTurnTask,
+    TurnTask,
+    WatchingObservationTask,
+)
 from agent_comms.execution.turn_context import TurnContext, UserFollowupSegment
 from agent_comms.execution.turn_inbox import (
     ClearQueuedInputs,
@@ -77,6 +87,7 @@ from agent_comms.messaging.watched import ChangeSignal, FileLifetimeSource, File
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId, ThreadLookup
 from agent_comms.nominal.lifecycle_capability import Executing
+from agent_comms.planning.goals import GoalDeclaration
 from agent_comms.registry.activity import FailedWakeDiagnostic, StoppedDrainDiagnostic
 from agent_comms.registry.registry_document import RegistryDocument, RegistryEntry
 from agent_comms.registry.registry_store import RegistryEntryRevision
@@ -86,11 +97,6 @@ from agent_comms.storage.locked_store import GoalWakeFile
 from agent_comms.storage.maintenance_barrier import MaintenanceIngress, MaintenanceStatus
 from agent_comms.transport.owner_requests import OwnerRetiredReply, StopOwnerRuntimeRequest
 from agent_comms.transport.runtime_server import RuntimeServer
-
-if TYPE_CHECKING:
-    from agent_comms.following_inputs import OwnerFollowingInputs
-    from agent_comms.planning.goals import GoalDeclaration
-
 
 AGENT_PREFIX = "!agent "
 
@@ -653,80 +659,8 @@ class StartedDrainTurn(AwaitingDrainTurn):
         await Coordination.run_worker(partial(inputs.finish_original_inputs, self.source.keys))
 
 
-class BackgroundTask:
-    """An idle producer; running members own cancellation and joined retirement."""
-
-    @property
-    def busy(self) -> bool:
-        return False
-
-    def owns(self, task: asyncio.Task[object]) -> bool:
-        return False
-
-    def producers(self) -> tuple[asyncio.Task[object], ...]:
-        return ()
-
-    def cancel(self) -> None:
-        pass
-
-    async def stop(self) -> None:
-        self.cancel()
-        await join_retirement(asyncio.gather(*self.producers(), return_exceptions=True))
-
-    def wake(self) -> None:
-        pass
-
-
-@dataclass(frozen=True)
-class RunningBackgroundTask(BackgroundTask):
-    task: asyncio.Task[object]
-
-    @property
-    def busy(self) -> bool:
-        return not self.task.done() and not self.task.cancelling()
-
-    def owns(self, task: asyncio.Task[object]) -> bool:
-        return self.task is task
-
-    def producers(self) -> tuple[asyncio.Task[object], ...]:
-        return (self.task,)
-
-    def cancel(self) -> None:
-        self.task.cancel()
-
-
-@dataclass(frozen=True)
-class WatchingObservationTask(RunningBackgroundTask):
-    watcher: ChangeSignal
-
-    def wake(self) -> None:
-        self.watcher.wake()
-
-
-class TurnTask(BackgroundTask):
-    async def prepare_cancel(self, transition: Callable[[], Awaitable[None]]) -> None:
-        pass
-
-    async def abort(self, backend: AgentBackend) -> None:
-        pass
-
-
-@dataclass(frozen=True)
-class RunningTurnTask(RunningBackgroundTask, TurnTask):
-
-    @property
-    def busy(self) -> bool:
-        return True
-
-    async def prepare_cancel(self, transition: Callable[[], Awaitable[None]]) -> None:
-        await transition()
-
-    async def abort(self, backend: AgentBackend) -> None:
-        await backend.abort(self.task)
-
-
 @dataclass(eq=False)
-class DrainedSession:
+class DrainedSession(SessionTaskOwner, InputEventState):
     """One drained session's state, from its first use until the session ends."""
 
     identifier: AcpSessionId = field(kw_only=True)
@@ -876,7 +810,7 @@ class DrainedSession:
 
 
 @dataclass(eq=False)
-class OwnerSession(DrainedSession):
+class OwnerSession(DrainedSession, OwnedSessionLifetime):
     """Local execution retains its original configuration, never copies its fields."""
 
     configuration: ConfigOptions = field(kw_only=True)
@@ -929,7 +863,7 @@ class OwnerSession(DrainedSession):
         return (*super().producers(), self.auth_observer)
 
 
-class InputDrain(InputObservation):
+class InputDrain(InputObservation, QueuePublication, InputEventSource):
     async def begin_observation(
         self, state: DrainedSession, entry: RegistryEntry,
     ) -> RegistryEntry:
@@ -1100,7 +1034,7 @@ class InputDrain(InputObservation):
         keys.update(
             key
             for turn in self.state(session_id).pending_turns
-            for key in turn.origin.bus_keys(self.dispositions, owner)
+            for key in turn.origin.bus_keys(owner)
         )
         return OwnerQueueInputDeliveryScope(frozenset(keys))
 
@@ -1203,7 +1137,7 @@ class InputDrain(InputObservation):
         await self.root_observer.stop()
         await self.close_sessions(tuple(self.drained.values()))
 
-    async def close_sessions(self, states: tuple[DrainedSession, ...]) -> None:
+    async def close_sessions(self, states: tuple[SessionTaskOwner, ...]) -> None:
         tasks = tuple(task for state in states for task in state.producers())
         for state in states:
             state.retire_producers()
@@ -1236,7 +1170,7 @@ class InputDrain(InputObservation):
         """Commit selected input retirement before turn cleanup finishes."""
         return self.dispositions.settle_unbound(keys)
 
-    async def finish_turn_inputs(self, following: OwnerFollowingInputs) -> None:
+    async def finish_turn_inputs(self, following: FollowingInputRetirement) -> None:
         """Retire the ending turn's existing input owner; retain UNKNOWN only as notices."""
         session_id, inbox = following.session_id, following.inbox
         state = self.state(session_id)
@@ -1250,7 +1184,7 @@ class InputDrain(InputObservation):
             await turn.finish_original(self)
         finally:
             try:
-                await following.pass_on_unread(self.effects.turns)
+                await following.pass_on_unread()
             finally:
                 # Retire only after the old lease ended and live, unwritten
                 # acceptances had their handoff. UNKNOWN rows never grant it.

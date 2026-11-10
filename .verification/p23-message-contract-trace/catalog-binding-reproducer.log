@@ -1,0 +1,2 @@
+class_field: module bindings=2; clean=False
+no_field_control: module bindings=1; clean=True

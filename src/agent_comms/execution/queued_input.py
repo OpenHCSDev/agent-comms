@@ -427,12 +427,12 @@ class DeliveredInput(QueuedInput):
             owner = snapshot.threads[canonical]
             context = QueuedInputContext.capture(owner, snapshot.claimed_identity(canonical))
             document = inputs.dispositions.read(tuple(
-                InputDispositions.bus_key(source.message, owner) for source, _ in accepted
+                source.message.bus_key(owner) for source, _ in accepted
             ))
             with Coordination(str(CoordinationStore.path_in(inputs.comms.root))) as store:
                 for source, assignment in accepted:
                     message = source.message
-                    key = InputDispositions.bus_key(message, owner)
+                    key = message.bus_key(owner)
                     if document.lookup(key).exists:
                         continue
                     rendered = TurnContext.render_segments(

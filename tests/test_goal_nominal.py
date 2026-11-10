@@ -1,11 +1,12 @@
 """Owner pause, goal CAS and goal-control wire contracts."""
 
 import json
+import subprocess
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.agent_events import GoalChanged, GoalUnchanged
+from agent_comms.cli import main
 from agent_comms.comms import wire
 from agent_comms.execution.root_runtime import RootRuntime
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
@@ -21,12 +22,15 @@ from agent_comms.planning.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.planning.goal_states import (
-    OwnerPause,
-    PausedGoal,
-)
+from agent_comms.planning.goal_events import GoalChanged, GoalUnchanged
+from agent_comms.planning.goal_presentation import UnpublishedGoalSnapshot
+from agent_comms.planning.goal_states import OwnerPause, PausedGoal
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.owner_connection import CapturedOwner
+from agent_comms.transport.runtime_request import RuntimeRequest
+from agent_comms.transport.runtime_requests import UpdateGoalRuntimeRequest
 from conftest import installed_comms
 
 
@@ -99,8 +103,6 @@ def test_goal_changed_compares_goal_snapshots(owner):
 
 
 def test_owner_declaration_routes_without_claiming_complete_projection_equality(owner):
-    from agent_comms.planning.goal_presentation import UnpublishedGoalSnapshot
-
     comms, goal = owner
     assert UnpublishedGoalSnapshot().goal_changed(goal)
     published = comms.goals.goal_snapshot("worker")
@@ -122,11 +124,6 @@ def test_unrelated_attempt_commit_requests_a_real_comparison_not_a_second_revisi
 
 def test_original_proxy_decodes_typed_goal_control_at_json_boundary():
     original_goal_id = GoalId.mint()
-    from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-    from agent_comms.transport.owner_connection import CapturedOwner
-    from agent_comms.transport.runtime_request import RuntimeRequest
-    from agent_comms.transport.runtime_requests import UpdateGoalRuntimeRequest
-
     worker = RecordedThreadIncarnation("worker", 12.5)
     payload = UpdateGoalRuntimeRequest.proxy_payload(worker, None, {
         "status": PausedGoalAction, "goal_id": original_goal_id, "expected_revision": 7,
@@ -142,10 +139,6 @@ def test_original_proxy_decodes_typed_goal_control_at_json_boundary():
 
 
 def test_fresh_cli_tool_process_preserves_owner_pause(owner, source_programs):
-    import subprocess
-
-    from agent_comms.cli import main
-
     comms, goal = owner
     paused = comms.goals.update_goal("worker", PausedGoalAction(), actor=OwnerInvocable)
     RootRuntime.publish(comms.root, source_programs.runtime)

@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
+from agent_comms.messaging.assignment_notice import AssignmentNotice
+from agent_comms.messaging.message_reads import MessageDeliveryRead, MessageReferencesRead
+from agent_comms.messaging.notification_contracts import NotificationEvidenceSource, RevisionChanges, RecipientActivityRead
+
+
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -9,7 +15,6 @@ from datetime import datetime
 from functools import cached_property
 from itertools import batched
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms.execution.transcript_sources import AssignedTranscriptSource
 from agent_comms.messaging.channel_targets import CommandTarget
@@ -23,12 +28,14 @@ from agent_comms.messaging.notification_evidence import (
     RecipientLimit,
 )
 from agent_comms.messaging.notification_progress import (
+    AssignmentProgress,
     AssignmentResponse,
     DeliveryProgress,
     HumanReadProgress,
 )
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.messaging.revision_views import NotificationEvidenceView
+from agent_comms.messaging.routing import Routing
 from agent_comms.nominal.field_codec import MessageId, TaggedRecordMember, TaggedUnion, ThreadLookup
 from agent_comms.notification_assignment import (
     AssignmentSource,
@@ -37,18 +44,16 @@ from agent_comms.notification_assignment import (
     NotificationReadMark,
     NotificationSelection,
 )
-from agent_comms.registry.agent_activity import AgentActivity, RecordedRecipientActivity
+from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.registry.agent_activity import AgentActivity
+from agent_comms.registry.namespace_reads import NamespaceRead
+from agent_comms.registry.recipient_activity import RecordedRecipientActivity
+from agent_comms.registry.registration_reads import ActivityRegistration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
+from agent_comms.registry.threads import NativeThread, Thread
 
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-    from agent_comms.messaging.bus import Bus
-    from agent_comms.messaging.bus_publication import Delivered
-    from agent_comms.presentation import WireRevision
-    from agent_comms.registry.agent_activity import RecipientActivity
-    from agent_comms.registry.registration import Registration
-    from agent_comms.registry.registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True)
@@ -108,7 +113,7 @@ class NotificationPass:
     revision decides whether its evidence can have moved; the read ledger and registry are
     decoded at most once per pass, the first time a window needs them."""
 
-    def __init__(self, comms: Comms, revision: WireRevision) -> None:
+    def __init__(self, comms: NotificationEvidenceSource[CapturedNotificationEvidence], revision: RevisionChanges) -> None:
         self.comms = comms
         self.revision = revision
 
@@ -119,11 +124,9 @@ class NotificationPass:
 
     @cached_property
     def evidence(self) -> CapturedNotificationEvidence:
-        reads = self.comms.bus.reads
-        return CapturedNotificationEvidence(
-            self.comms.root, reads, reads.read(), self.comms.registry.snapshot())
+        return self.comms.notification_evidence()
 
-    def changed(self, window: NotificationWindow, earlier: WireRevision) -> bool:
+    def changed(self, window: NotificationWindow, earlier: RevisionChanges) -> bool:
         return (self.revision.changed_since(NotificationEvidenceView(), earlier)
                 and window.changed(self))
 
@@ -145,7 +148,7 @@ class CapturedNotificationEvidence:
 
 
 @dataclass(frozen=True, slots=True)
-class MessageNotification:
+class MessageNotification(AssignmentNotice[DeliveryProgress]):
     """Read-only display of one recipient's durable assignment decision."""
 
     recipient_identity: FrozenRecipient
@@ -154,6 +157,9 @@ class MessageNotification:
     message: Message | None = None
     displayed_to: tuple[ThreadIncarnation, ...] = ()
     changed: bool = False
+
+    def with_state(self, state: DeliveryProgress) -> MessageNotification:
+        return replace(self, state=state)
 
     @property
     def answer(self) -> AssignmentResponse:
@@ -230,8 +236,8 @@ class MessageNotification:
     def references(
         cls,
         root: Path,
-        registry: Registration,
-        log: Bus,
+        registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],
+        log: MessageReferencesRead[Message],
         references: Sequence[MessageReference],
         *,
         viewer: OutcomeViewer,
@@ -240,7 +246,7 @@ class MessageNotification:
     ) -> NotificationWindow:
         """Borrow mounted references in the original bounded delivery windows, as this
         viewer may see them."""
-        def project(sources: Sequence[Delivered]) -> NotificationWindow:
+        def project(sources: Sequence[MessageDeliveryRead[Message]]) -> NotificationWindow:
             read = NotificationAssignment.read(
                 root, NotificationSelection.of(viewer, sources, after=after, limit=limit)
             )
@@ -250,8 +256,8 @@ class MessageNotification:
 
     @classmethod
     def read_references(
-        cls, log: Bus, references: Sequence[MessageReference],
-        project: Callable[[Sequence[Delivered]], NotificationWindow],
+        cls, log: MessageReferencesRead[Message], references: Sequence[MessageReference],
+        project: Callable[[Sequence[MessageDeliveryRead[Message]]], NotificationWindow],
     ) -> NotificationWindow:
         """Share bounded original delivery acquisition across live/recorded cuts."""
         result = {}
@@ -269,7 +275,7 @@ class MessageNotification:
     def delivery_window(
         cls,
         root: Path,
-        registry: Registration,
+        registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],
         assignment_read: NotificationAssignmentRead,
     ) -> NotificationWindow:
         """The captured selection owns original membership and viewer visibility."""
@@ -293,11 +299,11 @@ class MessageNotification:
         )
 
     @classmethod
-    def recorded_delivery_window(
+    def recorded_delivery_window[Member: ThreadIdentitySource, Selection](
         cls,
         root: Path,
-        namespace: RegistryProvenance,
-        sources: Sequence[Delivered],
+        namespace: NamespaceRead[Member, Selection],
+        sources: Sequence[MessageDeliveryRead[Message]],
         *,
         viewer: OutcomeViewer,
         after: RecipientCursor = FirstRecipient(),
@@ -318,11 +324,11 @@ class MessageNotification:
         )
 
     @classmethod
-    def project_delivery_window(
+    def project_delivery_window[Member: ThreadIdentitySource, Selection](
         cls,
         root: Path,
-        snapshot: RegistryProvenance,
-        observations: Mapping[ThreadLookup, RecipientActivity],
+        snapshot: NamespaceRead[Member, Selection],
+        observations: Mapping[ThreadLookup, RecipientActivityRead[AssignmentNotice[DeliveryProgress], AssignmentProgress, DeliveryProgress]],
         *,
         assignment_read: NotificationAssignmentRead,
     ) -> NotificationWindow:
@@ -407,7 +413,7 @@ class MessageNotification:
 
     @classmethod
     def sent_sources(
-        cls, root: Path, registry: Registration, log: Bus, name: str, *, limit: int = 5
+        cls, root: Path, registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion], log: MessageReferencesRead[Message], name: str, *, limit: int = 5
     ):
         """Read up to the requested number of messages sent by this thread."""
         if not 1 <= limit <= NotificationSelection.window_limit:
@@ -423,7 +429,7 @@ class MessageNotification:
     def for_sources(
         cls,
         root: Path,
-        registry: Registration,
+        registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[MessageNotification, ...]:
         """Attach notification outcomes, as the read's viewer sees them, to the public

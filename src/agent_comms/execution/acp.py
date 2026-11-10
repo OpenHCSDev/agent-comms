@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sys
 import time
@@ -26,7 +27,6 @@ from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING
 
 from acp import RequestError
 from acp.agent.connection import AgentSideConnection
@@ -63,6 +63,7 @@ from agent_comms.coordination.cohort_foreground import _accept_visible_deliverie
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import IdentityConflict, Refused
+from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.working_memory_worker import AnnotationWorker
 from agent_comms.execution import manual_compaction_bridge
 from agent_comms.execution.acp_failure import NativeTurnError
@@ -88,14 +89,22 @@ from agent_comms.execution.input_drain import (
 )
 from agent_comms.execution.input_effects import InputEffects
 from agent_comms.execution.launch_root import LaunchRoot, started
+from agent_comms.execution.login import run_login
+from agent_comms.execution.native_arguments import (
+    ConfiguredBinary,
+    InheritedArguments,
+    LaunchArguments,
+    LaunchBinary,
+)
 from agent_comms.execution.queued_input import DeliveredInput
 from agent_comms.execution.runtime import RuntimeProxy
 from agent_comms.execution.selected.actions import BoundSelectedWriteAuthority
 from agent_comms.execution.selected.write_plan import SelectedWritePlans
 from agent_comms.execution.session_effects import SessionEffects
 from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
+from agent_comms.execution.session_reads import SessionClient
 from agent_comms.execution.turn_effects import TurnEffects
-from agent_comms.execution.turn_runner import TurnRunner
+from agent_comms.execution.turn_runner import RELAY_PREFIX, TurnRunner
 from agent_comms.installer.active_route import ActiveRoute
 from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.messaging.message_bus import MessageBus
@@ -113,17 +122,6 @@ from agent_comms.registry.thread_identity import OwnerIdentity
 from agent_comms.registry.threads import Thread
 from agent_comms.transport.owner_connection import socket_path
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
-
-if TYPE_CHECKING:
-    from agent_comms.coordination.tables.assignments import WakeAssignment
-
-from agent_comms.execution.native_arguments import (
-    ConfiguredBinary,
-    InheritedArguments,
-    LaunchArguments,
-    LaunchBinary,
-)
-from agent_comms.execution.turn_runner import RELAY_PREFIX
 from agent_comms.transport.runtime_server import RuntimeServer
 
 
@@ -201,7 +199,7 @@ class SelectedWakeCheck(SchedulesWake):
         return WakeDue()
 
 
-class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
+class SdkSessionConnection(AgentSideConnection, SessionClient):
     """The SDK connection and controller publish one Core acceptance answer."""
 
     async def publish_update(self, *, session_id: AcpSessionId, update: BaseModel) -> bool:
@@ -636,14 +634,10 @@ def main() -> int:
     root = LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
     started()
     if "--login" in sys.argv[1:]:
-        from agent_comms.execution.login import run_login
-
         index = sys.argv.index("--login")
         return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "")
     debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
     if debug_path:
-        import logging
-
         logging.basicConfig(
             level=logging.DEBUG,
             format="%(asctime)s %(name)s %(levelname)s %(message)s",

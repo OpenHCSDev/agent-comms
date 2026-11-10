@@ -31,13 +31,11 @@ from agent_comms.coordination.errors import (
 )
 from agent_comms.coordination.participant_store import ParticipantSnapshot
 from agent_comms.coordination.reason_codes import GivenReasonCode
-from agent_comms.coordination.response import (
-    LiveResponseOwner,
-    ResponseTable,
-)
+from agent_comms.coordination.response import LiveResponseOwner
 from agent_comms.coordination.snapshot import RecoverySnapshot
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import WireOrigin
+from agent_comms.coordination.tables.response_schema import ResponseTable
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.execution.native_arguments import SelectedModel
@@ -48,6 +46,7 @@ from agent_comms.execution.native_input_owner import (
 )
 from agent_comms.execution.native_runtime_input import NativeRuntimeTable
 from agent_comms.execution.pi_events import TurnContextObserved
+from agent_comms.execution.selected.owner_source import RegistryOwnerSource
 from agent_comms.execution.selected.source_batch import (
     SelectedSource,
     SelectedSourceBatch,
@@ -97,7 +96,7 @@ class TriagePublication(MroDispatch):
 
 
 @dataclass
-class SelectedParticipant(MroDispatch):
+class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
     comms: Comms
     bus: MessageBus
     store: Coordination

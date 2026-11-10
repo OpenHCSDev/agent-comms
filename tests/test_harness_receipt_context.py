@@ -26,7 +26,7 @@ from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.notification_evidence import AllOutcomes
 from agent_comms.messaging.notification_progress import HarnessConsumedProgress, UnansweredResponse
 from agent_comms.nominal.field_codec import InputId, TurnId
-from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+from test_coordinated_runtime import _root
 from transcript_record_fixture import transcript_record
 
 

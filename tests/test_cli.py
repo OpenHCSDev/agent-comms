@@ -30,20 +30,13 @@ from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError
-from agent_comms.execution.child_process import (
-    NoProcess,
-    ProcessIdentity,
-)
+from agent_comms.execution.child_process import NoProcess, ProcessIdentity
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.execution.owner_lifecycle import OwnerStartResult
 from agent_comms.execution.pi_vocabulary import ServiceTier
 from agent_comms.execution.restart_scope import OneOwner
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.execution.turn_lease import (
-    ActiveTurn,
-    RecordedGeneration,
-    StoredTurnRecord,
-)
+from agent_comms.execution.turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.channel_management import ArchiveThreadsTagDisposition, TagDisposition
 from agent_comms.messaging.channel_targets import (
@@ -56,16 +49,11 @@ from agent_comms.messaging.channel_targets import (
 from agent_comms.messaging.messages import NoticeRole, SendableRole
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId, compile_decoder
 from agent_comms.nominal.lifecycle_capability import Successful
-from agent_comms.projects.checkouts import (
-    Checkout,
-    LaunchCheckout,
-)
+from agent_comms.projects.checkouts import Checkout, LaunchCheckout
 from agent_comms.registry.activity import ActivityState
 from agent_comms.registry.catalog_document import NoCatalog
-from agent_comms.registry.thread_identity import (
-    TurnIdentity,
-    UserThreadRole,
-)
+from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.registry.thread_identity import TurnIdentity, UserThreadRole
 from agent_comms.registry.thread_model import UndeclaredModel
 from agent_comms.registry.thread_status import (
     ArchivedThreadStatus,
@@ -354,6 +342,7 @@ class TestSelectedTargetActions:
                 owner.require_process(),
                 turn_generation=RecordedGeneration(busy.generation),
             ),
+            registry_type=RegistryStore,
         )
         assert QueueRestartCliCommand.thread_bindings(comms,
             replace(owner, turn_record=record, turn_generation=busy.generation), status, NoChannel(), catalog=NoCatalog())

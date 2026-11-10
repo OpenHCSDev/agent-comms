@@ -33,8 +33,8 @@ from agent_comms.execution.native_prompt_binding import (
 )
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.execution.native_session_files import NativeSessionFiles
-from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.selected.triage import SelectedTriage
+from agent_comms.execution.transcript_sources import NativeTranscript
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -45,6 +45,7 @@ from agent_comms.nominal.field_codec import (
     ThreadLookup,
     WireName,
 )
+from agent_comms.registry.privacy_reads import NativeAnswerRead
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.typed_table import TypedRow
@@ -103,7 +104,7 @@ class FullHistoricalNativeInput(HistoricalNativeInput):
 
 
 @dataclass(frozen=True)
-class HistoricalNativeAnswers:
+class HistoricalNativeAnswers(NativeAnswerRead[MessageReference]):
     """Join retained input proofs to their own bounded transcript output."""
 
     root: Path

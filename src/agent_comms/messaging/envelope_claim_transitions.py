@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from agent_comms.messaging.claim_registry_read import ClaimRegistryRead
+from agent_comms.registry.presence_reads import PresenceThread
+
 import stat
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
@@ -39,7 +42,6 @@ from agent_comms_hooks import ToolRefusedError
 
 if TYPE_CHECKING:
     from agent_comms.coordination.tables.attempts import AttemptRecord
-    from agent_comms.registry.registry_document import RegistrySnapshot
 
 if TYPE_CHECKING:
     pass
@@ -326,7 +328,7 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, ClaimProducer, Projecti
     def claimed(self, resource: str) -> ClaimOwner:
         raise ClaimTransitionError("Release originals do not acquire resources.")
 
-    def apply(self, previous: ClaimProjection, registry: RegistrySnapshot) -> ClaimProjection:
+    def apply[Owner: PresenceThread](self, previous: ClaimProjection, registry: ClaimRegistryRead[Owner]) -> ClaimProjection:
         live = previous.live_in(registry)
         self.require_holders(live)
         # Only registry evidence expires original claims; never accept caller-authored expiry.
@@ -442,8 +444,8 @@ class ReleasedClaims(RecordMember, ClaimTransition):
 
 
 class ResourceClaim:
-    def acquire(
-        self, scope: RecordedScope, registry: RegistrySnapshot, publish: Callable[[], ClaimOwner]
+    def acquire[Owner: PresenceThread](
+        self, scope: RecordedScope, registry: ClaimRegistryRead[Owner], publish: Callable[[], ClaimOwner]
     ) -> ClaimOwner:
         return publish()
 
@@ -458,8 +460,8 @@ class ClaimOwner(AcquiringClaim, ResourceClaim):
     # Built only by Acquisition.claimed from a validated acquisition and one of its own claims.
     resource: Annotated[str, ResourcePathText]
 
-    def acquire(
-        self, scope: RecordedScope, registry: RegistrySnapshot, publish: Callable[[], ClaimOwner]
+    def acquire[Owner: PresenceThread](
+        self, scope: RecordedScope, registry: ClaimRegistryRead[Owner], publish: Callable[[], ClaimOwner]
     ) -> ClaimOwner:
         return self if self.resource_scope.reuses(scope) and self.live(registry) else publish()
 
@@ -467,7 +469,7 @@ class ClaimOwner(AcquiringClaim, ResourceClaim):
         if (self.owner, self.incarnation) != (owner, incarnation):
             raise ClaimConflict(self)
 
-    def live(self, registry: RegistrySnapshot) -> bool:
+    def live[Owner: PresenceThread](self, registry: ClaimRegistryRead[Owner]) -> bool:
         incarnation = RecordedThreadIncarnation(self.owner, float(self.incarnation))
         return any(
             thread.process_alive
@@ -502,7 +504,7 @@ class ClaimProjection(Mapping[str, ClaimOwner], ProjectionSource):
             raise ClaimTransitionError("Previous projection is malformed.")
         object.__setattr__(self, "_claims", MappingProxyType(dict(sorted(self._claims.items()))))
 
-    def live_in(self, registry: RegistrySnapshot) -> ClaimProjection:
+    def live_in[Owner: PresenceThread](self, registry: ClaimRegistryRead[Owner]) -> ClaimProjection:
         """Keep only claims whose recorded owner still holds its registry generation."""
         return ClaimProjection(self.last_seq, {
             resource: owner for resource, owner in self.items() if owner.live(registry)

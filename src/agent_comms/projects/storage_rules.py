@@ -35,6 +35,7 @@ from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.work_branches import WorkBranches
 from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_reads import ThreadCheckoutSource
 from agent_comms.registry.thread_storage import CheckoutReuse, StoragePath, StorageRoots
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.locked_store import DurableFile
@@ -341,7 +342,7 @@ class ScopedDirectory(ValueDirective[Path]):
 
 
 @dataclass(frozen=True)
-class StorageRule(RoomAllocation, DurableFile):
+class StorageRule(RoomAllocation, DurableFile, ThreadCheckoutSource[Thread]):
     filename: ClassVar[str] = "storage.json"
     # Shared Python control host, measured through real three/29-owner journeys.
     host_memory_bytes: ClassVar[int] = 512 * 2**20

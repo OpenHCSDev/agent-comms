@@ -15,7 +15,6 @@ from agent_comms.acp_extension import (
     IdentifiedInputStarted,
     InputDeliveryChangedUpdate,
     InputFailedUpdate,
-    LiveCursorScope,
     LiveQueueScope,
     McpClientAcknowledgementUpdate,
     NoQueueScope,
@@ -40,7 +39,7 @@ from agent_comms.execution.acp_failure import ACPFailure, BackendDeliveryFailure
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.context_reading import UnmeasuredContext
 from agent_comms.execution.pi_wire import McpLiveAcknowledgement
-from agent_comms.execution.transcript_sources import NoDraft
+from agent_comms.execution.transcript_sources import NativeTranscriptCursor
 from agent_comms.execution.turn_context import (
     ContextManifest,
     NextContextTurn,
@@ -68,7 +67,8 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.private_path import MissingFile
-from agent_comms.transcript.transcripts import NativeTranscriptCursor
+from agent_comms.transcript.transcript_drafts import NoDraft
+from agent_comms.transport.attachment_scope import LiveCursorScope
 
 
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
@@ -83,7 +83,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     from agent_comms.acp_extension import NativeOutputCommittedUpdate, NativeRoundCommittedUpdate
     from agent_comms.execution.native_output import AssistantOutput, NativeRecordLocation
     from agent_comms.execution.native_session_reopen import PiSessionId
-    from agent_comms.execution.native_transcript import PresentSessionCut
+    from agent_comms.execution.native_record_file import PresentSessionCut
     from agent_comms.execution.turn_item import NativeItemId
     from agent_comms.messaging.sent_message import AssignedSourceIdentity
     from agent_comms.storage.private_path import FileRevision

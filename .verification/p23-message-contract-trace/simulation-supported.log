@@ -1,0 +1,3 @@
+Reading current source through NRA; no apply path exists in this runner.
+Simulating 26 operations on 49 indexed source files.
+NRA clean=True; projected files=15; applied=False; concurrent changes=0

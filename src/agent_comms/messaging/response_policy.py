@@ -7,16 +7,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import cache
 from types import MappingProxyType
-from typing import TYPE_CHECKING
 
 from agent_comms.execution.input_key import BusInputKey, InputKey, OwnedBusInputKey
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
+from agent_comms.messaging.response_message_source import ResponseMessageSource
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily
-
-if TYPE_CHECKING:
-    from agent_comms.messaging.messages import Message, MessageInput
-    from agent_comms.registry.threads import Thread
+from agent_comms.registry.thread_creation import ThreadCreationSource
 
 NO_ALIASES: Mapping[str, str] = MappingProxyType({})
 """No thread has been renamed: every mention keeps its committed name."""
@@ -47,33 +44,33 @@ class ResponsePolicy(DeclaredFamily, ProjectionSource, affix="Policy"):
 
     @abstractmethod
     def recipients(
-        self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES
+        self, message: ResponseMessageSource, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES
     ) -> tuple[str, ...]:
         """Resolve the channel members who may contribute a response."""
 
     def required_responders(
-        self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES
+        self, message: ResponseMessageSource, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES
     ) -> tuple[str, ...]:
         """Resolve the channel members who owe a reply; a contributor need not owe one."""
         return self.recipients(message, audience, aliases=aliases)
 
     @abstractmethod
-    def guidance(self, message: Message, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:
+    def guidance(self, message: ResponseMessageSource, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:
         """Instructions included in a queued input."""
 
-    def starts_turn_for(self, message: Message, name: str, aliases: Mapping[str, str] = NO_ALIASES) -> bool:
+    def starts_turn_for(self, message: ResponseMessageSource, name: str, aliases: Mapping[str, str] = NO_ALIASES) -> bool:
         return name in self.recipients(message, (name,), aliases=aliases)
 
     def context_peer(self, owner: str, sender: str, target: str) -> str | None:
         return None
 
-    def disposition_key(self, message: MessageInput, owner: Thread) -> InputKey:
+    def disposition_key(self, message: ResponseMessageSource, owner: ThreadCreationSource) -> InputKey:
         return OwnedBusInputKey(message.seq, float(owner.created_at))
 
 
 class NoChannelRecipients(ProjectionSource):
     def recipients(
-        self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES
+        self, message: ResponseMessageSource, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES
     ) -> tuple[str, ...]:
         return ()
 
@@ -86,16 +83,16 @@ class DirectPolicy(NoChannelRecipients, ResponsePolicy):
     starts_turn = True
     separate_turn = True
 
-    def starts_turn_for(self, message: Message, name: str, aliases: Mapping[str, str] = NO_ALIASES) -> bool:
+    def starts_turn_for(self, message: ResponseMessageSource, name: str, aliases: Mapping[str, str] = NO_ALIASES) -> bool:
         return self.starts_turn
 
-    def guidance(self, message: Message, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:
+    def guidance(self, message: ResponseMessageSource, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:
         return "direct; reply to the sender"
 
     def context_peer(self, owner: str, sender: str, target: str) -> str | None:
         return target if sender == owner else sender if target == owner else None
 
-    def disposition_key(self, message: MessageInput, owner: Thread) -> InputKey:
+    def disposition_key(self, message: ResponseMessageSource, owner: ThreadCreationSource) -> InputKey:
         return BusInputKey(message.seq)
 
 
@@ -103,30 +100,30 @@ class CollectivePolicy(ResponsePolicy):
     starts_turn = True
 
     def recipients(
-        self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES
+        self, message: ResponseMessageSource, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES
     ) -> tuple[str, ...]:
         return tuple(dict.fromkeys(audience))
 
-    def guidance(self, message: Message, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:
+    def guidance(self, message: ResponseMessageSource, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:
         return "collective; channel members may respond"
 
 
 class MentionedPolicy(CollectivePolicy):
     def required_responders(
-        self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES
+        self, message: ResponseMessageSource, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES
     ) -> tuple[str, ...]:
         """Only the addressed members owe a reply; the rest of the channel may contribute."""
         mentioned = self.mentioned(message, aliases)
         return tuple(name for name in dict.fromkeys(audience) if name in mentioned)
 
     @staticmethod
-    def mentioned(message: Message, aliases: Mapping[str, str]) -> tuple[str, ...]:
+    def mentioned(message: ResponseMessageSource, aliases: Mapping[str, str]) -> tuple[str, ...]:
         """The committed canonical mentions, under their current names."""
         return tuple(dict.fromkeys(
             aliases.get(mention.thread, mention.thread) for mention in message.mentions
         ))
 
-    def guidance(self, message: Message, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:
+    def guidance(self, message: ResponseMessageSource, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:
         names = ", ".join(f"@{name}" for name in self.mentioned(message, aliases))
         return (
             f"mentioned; addressed especially to: {names}; "
@@ -136,7 +133,7 @@ class MentionedPolicy(CollectivePolicy):
 
 
 class InformationalPolicy(NoChannelRecipients, ResponsePolicy):
-    def guidance(self, message: Message, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:
+    def guidance(self, message: ResponseMessageSource, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:
         return "informational; observe and dismiss without replying"
 
 

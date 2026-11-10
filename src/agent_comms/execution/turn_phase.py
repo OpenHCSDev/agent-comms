@@ -1,21 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import (
-    dataclass,
-    field,
-    replace,
-)
-from typing import (
-    TYPE_CHECKING,
-    ClassVar,
-    Self,
-)
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.agent_events import AgentEvent
+from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.provider_records import ProviderDiagnosticError
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import ToolCallId
-from agent_comms.pi_payloads import ProviderDiagnosticError
 from agent_comms.registry.activity import Activity, ActivityState, ObservedActivity
 
 if TYPE_CHECKING:

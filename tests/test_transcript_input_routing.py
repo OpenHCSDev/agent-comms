@@ -6,8 +6,8 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.execution.native_entries import TranscriptProjection
-from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.transcript_routes import DisplayText, SentInputText
+from agent_comms.execution.transcript_sources import NativeTranscript
 from agent_comms.execution.turn_item import (
     FreshNativeId,
     FreshNativeIdText,

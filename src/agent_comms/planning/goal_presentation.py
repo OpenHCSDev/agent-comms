@@ -1,58 +1,33 @@
 from __future__ import annotations
 
-from abc import (
-    ABC,
-    abstractmethod,
-)
-from collections.abc import (
-    Awaitable,
-    Callable,
-)
-from dataclasses import (
-    dataclass,
-    fields,
-)
-from typing import (
-    TYPE_CHECKING,
-    ClassVar,
-    Self,
-)
+from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, fields
+from typing import ClassVar, Self
 
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import GoalId, NullMember, WireValue
+from agent_comms.nominal.field_codec import NullMember
 from agent_comms.nominal.lifecycle_capability import Active
-from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
+from agent_comms.planning.goal_actions import (
+    ActiveGoalAction,
+    GoalAction,
+    PausedGoalAction,
+    RetryGoalAction,
+)
+from agent_comms.planning.goal_execution import (
+    BlockedExecution,
+    BoundGoalExecution,
+    GoalExecution,
+    WaitingExecution,
+)
+from agent_comms.planning.goal_execution_snapshot import GoalExecutionSnapshot
+from agent_comms.planning.goal_ledger import FailedTurnEvidence
 from agent_comms.planning.goal_states import PauseSource
+from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goals import Goal, GoalCheckpoint, GoalDeclaration
-from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-from agent_comms.registry.thread_presentation import ThreadPresentation
-
-if TYPE_CHECKING:
-    from agent_comms.messaging.bus_publication import Delivered
-    from agent_comms.planning.goal_actions import GoalAction
 
 
-@dataclass(frozen=True, slots=True)
-class GoalWaitTarget(WireValue):
-    incarnation: RecordedThreadIncarnation
-
-    def sent(self, original: Delivered) -> bool:
-        return original.sender_lookup == self.incarnation.lookup
-
-    def to_wire(self) -> dict[str, str | float]:
-        return self.incarnation.to_wire()
-
-    @classmethod
-    def from_wire(cls, data: dict[str, object]) -> GoalWaitTarget:
-        return cls(RecordedThreadIncarnation.from_wire(data))
-
-    @classmethod
-    def schema(cls) -> dict:
-        return RecordedThreadIncarnation.schema()
-
-
-class GoalExecution(DeclaredFamily, affix="Execution"):
-    """The complete execution family consumed by commands, views and the teammate."""
+class GoalExecutionControls(GoalExecution, declared_name=None):
+    """Control behavior for the observed execution, separate from its data contract."""
 
     toggle_label: ClassVar[str] = "Pause"
 
@@ -60,39 +35,14 @@ class GoalExecution(DeclaredFamily, affix="Execution"):
         return False
 
     async def apply_toggle(
-        self,
-        change: Callable[[type[GoalAction]], Awaitable[None]],
+        self, change: Callable[[type[GoalAction]], Awaitable[None]],
         unavailable: Callable[[], None],
     ) -> None:
         unavailable()
 
-    def details_heading(self, heading: str) -> str:
-        return heading
-
-    def waiting_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
-        return ordinary
-
-    def runnable(self) -> bool:
-        return False
-
-    def standby(self) -> bool:
-        return False
-
-    def waiting_for(self, goal: Goal) -> bool:
-        return False
-
-    def unit_blocks(self) -> tuple[BlockedExecution, ...]:
-        return ()
-
-    @abstractmethod
-    def validate_goal(self, goal: GoalCheckpoint) -> None: ...
-
-    @abstractmethod
-    def heading(self, revision: int) -> str: ...
-
 
 @dataclass(frozen=True)
-class IdleGoalExecution(GoalExecution):
+class IdleGoalExecution(GoalExecutionControls):
     def validate_goal(self, goal: GoalCheckpoint) -> None:
         pass
 
@@ -100,34 +50,7 @@ class IdleGoalExecution(GoalExecution):
         return "No current goal"
 
 
-@dataclass(frozen=True)
-class BoundGoalExecution(GoalExecution, declared_name=None):
-    goal_id: GoalId
-    glyph: ClassVar[str] = "✓"
-    @property
-    @abstractmethod
-    def label(self) -> str: ...
-
-    @property
-    def summary(self) -> str:
-        return self.label
-
-    def presentation(self, title: str) -> ThreadPresentation:
-        return ThreadPresentation(title, self.glyph, self.summary)
-
-    def heading(self, revision: int) -> str:
-        return f"Goal · {self.label} · rev {revision}"
-
-    def validate_goal(self, goal: GoalCheckpoint) -> None:
-        goal.require_identity(self.goal_id)
-
-
-class WaitingExecution(BoundGoalExecution, declared_name=None):
-    def waiting_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
-        return self.presentation(ordinary.title)
-
-
-class ControlledExecution(BoundGoalExecution, declared_name=None):
+class ControlledExecution(GoalExecutionControls, BoundGoalExecution, declared_name=None):
     """An execution the owner moves on with one control; the others offer none."""
 
     def can_toggle(self) -> bool:
@@ -148,7 +71,6 @@ class ControlledExecution(BoundGoalExecution, declared_name=None):
 class ActiveExecution(ControlledExecution, declared_name=None):
     @property
     def toggle(self) -> type[GoalAction]:
-        from agent_comms.planning.goal_actions import PausedGoalAction
         return PausedGoalAction
 
 
@@ -157,7 +79,6 @@ class RetryableExecution(ControlledExecution, declared_name=None):
 
     @property
     def toggle(self) -> type[GoalAction]:
-        from agent_comms.planning.goal_actions import RetryGoalAction
         return RetryGoalAction
 
 
@@ -175,7 +96,7 @@ class RunningExecution(ActiveExecution):
 
 
 @dataclass(frozen=True)
-class CompletedExecution(BoundGoalExecution):
+class CompletedExecution(GoalExecutionControls, BoundGoalExecution):
     label = "Completed"
 
 
@@ -187,7 +108,6 @@ class PausedExecution(WaitingExecution, ControlledExecution):
 
     @property
     def toggle(self) -> type[GoalAction]:
-        from agent_comms.planning.goal_actions import ActiveGoalAction
         return ActiveGoalAction
 
 
@@ -215,28 +135,6 @@ class StandbyExecution(ActiveExecution, WaitingExecution):
         return goal.id == self.goal_id and bool(goal.state.items_with(Active, goal))
 
 
-class BlockedExecution(WaitingExecution, declared_name=None):
-    glyph = "!"
-    label = "Blocked"
-
-    @property
-    @abstractmethod
-    def reason(self) -> str: ...
-
-    @property
-    def summary(self) -> str:
-        reason = " ".join(self.reason.split())
-        summary = reason[:157] + "…" if len(reason) > 160 else reason
-        return f"Blocked · {summary}"
-
-    def unit_blocks(self) -> tuple[BlockedExecution, ...]:
-        return (self,)
-
-    def unit_block_line(self, unit: str, orders: tuple[str, ...]) -> str:
-        return (f"BLOCKED {unit}: orders {', '.join(orders)}; goal {self.goal_id}; "
-                f"{self.reason} -> inspect the failed work; never replay")
-
-
 @dataclass(frozen=True)
 class RetryableBlockExecution(BlockedExecution, RetryableExecution):
     block_reason: str
@@ -247,7 +145,7 @@ class RetryableBlockExecution(BlockedExecution, RetryableExecution):
 
 
 @dataclass(frozen=True)
-class AttemptUnresolvedExecution(BlockedExecution):
+class AttemptUnresolvedExecution(GoalExecutionControls, BlockedExecution):
     @property
     def reason(self) -> str:
         return "inspect the unknown attempt; never replay"
@@ -290,9 +188,9 @@ class UnpublishedGoalSnapshot(NullMember, GoalPublicationSnapshot):
 
 
 @dataclass(frozen=True)
-class GoalSnapshot(GoalPublicationSnapshot):
+class GoalSnapshot(GoalPublicationSnapshot, GoalExecutionSnapshot):
     goal: GoalDeclaration
-    execution: GoalExecution
+    execution: GoalExecutionControls
 
     def goal_changed(self, goal: GoalDeclaration) -> bool:
         return self.goal != goal

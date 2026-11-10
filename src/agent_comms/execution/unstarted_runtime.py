@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from agent_comms.agent_backend import AgentBackend, FailedCompaction, RuntimeLocation
 from agent_comms.execution.history_view import ForkOwnHistory
-from agent_comms.transcript.external_transcript import ExternalTranscript
+from agent_comms.execution.transcript_sources import ExternalTranscript
 
 
 @dataclass(frozen=True)

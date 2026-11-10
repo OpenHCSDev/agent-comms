@@ -5,14 +5,17 @@ from __future__ import annotations
 import time
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.display_order import CreatedThreadSort, ThreadSort
+from agent_comms.display_order import ChannelSort, CreatedThreadSort, ThreadSort
 from agent_comms.errors import RelationViolationError
+from agent_comms.messaging.activity_clocks import ChannelActivity
+from agent_comms.messaging.channel_sources import ChannelHistorySource, ChannelMemberSource
 from agent_comms.messaging.channel_targets import ChannelTarget, Tag
+from agent_comms.messaging.display_sources import ChannelSortView, SortedChannel, StoredThreadOrder
 from agent_comms.messaging.history_result import (
     ChannelHistoryPageResult,
     EverythingHistoryPageResult,
@@ -27,21 +30,19 @@ from agent_comms.messaging.read_basis import (
 )
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import CatalogExclude, FieldCodec
+from agent_comms.registry.registry_names import RegistryNames
+from agent_comms.registry.roster_visibility import RosterVisibility
+from agent_comms.registry.tagged_thread_source import TaggedThreadSource
 from agent_comms.transport.tool_result import ToolResult
 
-if TYPE_CHECKING:
-    from agent_comms.registry.registry_document import RosterVisibility
-    from agent_comms.registry.registry_provenance import RegistryProvenance
-    from agent_comms.registry.threads import Thread
 
-
-class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):
+class ChannelMemberIndex[Member: ChannelMemberSource](dict[str, tuple[Member, ...]]):
     """Executable threads indexed once for one roster, including empty tags."""
 
     __slots__ = ("threads",)
 
-    def __init__(self, threads: Iterable[Thread]):
-        by_tag: dict[str, list[Thread]] = defaultdict(list)
+    def __init__(self, threads: Iterable[Member]):
+        by_tag: dict[str, list[Member]] = defaultdict(list)
         executable = []
         for executor in (member for thread in threads for member in thread.role.executor(thread)):
             executable.append(executor)
@@ -50,12 +51,12 @@ class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):
         self.threads = tuple(executable)
         super().__init__((tag, tuple(members)) for tag, members in by_tag.items())
 
-    def __missing__(self, tag: str) -> tuple[Thread, ...]:
+    def __missing__(self, tag: str) -> tuple[Member, ...]:
         return ()
 
 
 @dataclass(frozen=True, slots=True)
-class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, affix="Channel"):
+class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, StoredThreadOrder[type[ThreadSort]], SortedChannel[ChannelSortView[type[ChannelSort]], type[ChannelSort]], affix="Channel"):
     """A captured channel presentation with behavior supplied by its declaration."""
 
     name: str
@@ -92,7 +93,7 @@ class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, affix="Ch
     def matches(self, tags: frozenset[str]) -> bool: ...
 
     @abstractmethod
-    def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]: ...
+    def members[Member: ChannelMemberSource](self, index: ChannelMemberIndex[Member]) -> tuple[Member, ...]: ...
 
     @property
     @abstractmethod
@@ -116,7 +117,7 @@ class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, affix="Ch
     @abstractmethod
     def history_scope(self) -> ChannelDisplayScope: ...
 
-    def display_scope(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
+    def display_scope(self, snapshot: RegistryNames[TaggedThreadSource]) -> ChannelDisplayScope:
         return self.history_scope()
 
     @abstractmethod
@@ -137,6 +138,9 @@ class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, affix="Ch
     @abstractmethod
     def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[type[MembershipTransition], ...]: ...
 
+    def history_activity(self, by_target: Mapping[str, ChannelActivity]) -> ChannelActivity:
+        return ChannelActivity.combine(self.history_scope().target_values(by_target))
+
     def pending_count(self, counts: dict[str, int]) -> int:
         return sum(self.history_scope().target_values(counts))
 
@@ -147,6 +151,9 @@ class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, affix="Ch
 class Channels(dict[str, Channel]):
     """The captured declarations select the channels shown by a roster."""
 
+    def history_activity(self, by_target: Mapping[str, ChannelActivity]) -> Mapping[str, ChannelActivity]:
+        return {name: channel.history_activity(by_target) for name, channel in self.items()}
+
     def visible(self, visibility: RosterVisibility) -> Iterator[Channel]:
         return (channel for channel in self.values() if visibility.archived or not channel.archived)
 
@@ -156,18 +163,14 @@ class PredicateChannel:
 
     __slots__ = ()
 
-    def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]:
+    def members[Member: ChannelMemberSource](self, index: ChannelMemberIndex[Member]) -> tuple[Member, ...]:
         return tuple(thread for thread in index.threads if self.matches(thread.tags))
 
 
-class GroupedChannel:
+class GroupedChannel(ChannelHistorySource):
     """Tag and saved-view declarations share finite history and presentation metadata."""
 
     __slots__ = ()
-
-    @property
-    @abstractmethod
-    def history_targets(self) -> frozenset[str]: ...
 
     def history_scope(self) -> ChannelDisplayScope:
         return ChannelDisplayScope(self.name, self.history_targets)
@@ -338,12 +341,12 @@ class TagChannelIdentity(GroupedChannel, Channel):
 
 @dataclass(frozen=True, slots=True)
 class TagChannel(MembershipChannel, TagChannelIdentity):
-    def display_scope(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
+    def display_scope(self, snapshot: RegistryNames[TaggedThreadSource]) -> ChannelDisplayScope:
         if self.any_mode:
             return MemberActivityDisplayScope.capture(self, snapshot)
         return self.history_scope()
 
-    def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]:
+    def members[Member: ChannelMemberSource](self, index: ChannelMemberIndex[Member]) -> tuple[Member, ...]:
         return index[ChannelTarget.bare_name(self.name)]
 
     def matches(self, tags: frozenset[str]) -> bool:
@@ -357,7 +360,7 @@ class RetiredTagChannel(ReadOnlyChannel, TagChannelIdentity):
         if self.any_mode:
             raise ValueError("Retired channels cannot include member activity.")
 
-    def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]:
+    def members[Member: ChannelMemberSource](self, index: ChannelMemberIndex[Member]) -> tuple[Member, ...]:
         return ()
 
     def matches(self, tags: frozenset[str]) -> bool:

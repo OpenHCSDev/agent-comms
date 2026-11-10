@@ -6,53 +6,55 @@ import asyncio
 from collections.abc import AsyncIterator, Iterable
 from contextlib import aclosing, asynccontextmanager
 from functools import partial
-from typing import TYPE_CHECKING
 
 from acp.schema import (
     ConfigOptionUpdate,
+    SessionConfigOptionBoolean,
     SessionConfigOptionSelect,
     SessionConfigSelectOption,
     SetSessionConfigOptionResponse,
 )
 
-from agent_comms.config_options import CatalogConfigOption, ConfigOptions, InvalidConfigChoice
+from agent_comms.comms import Comms
+from agent_comms.config_options import (
+    CatalogConfigOption,
+    ConfigOptions,
+    ConfigurationChanges,
+    InvalidConfigChoice,
+)
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import Refused
 from agent_comms.execution.child_process import join_retirement
+from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.owner_protocol import IncompatibleOwner
+from agent_comms.execution.pi_commands import SettingCommand
+from agent_comms.execution.runtime import RuntimeProxy
+from agent_comms.execution.session_effects import SessionEffects
+from agent_comms.execution.session_reads import OwnedObservation, SessionConfigurationSource
 from agent_comms.execution.turn_inbox import UseSettings
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.watched import FileSource
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.registry.thread_model import CatalogSelection
 from agent_comms.registry.threads import ChosenModel, NextTurnConfiguration, Thread
-
-if TYPE_CHECKING:
-    from acp.schema import SessionConfigOptionBoolean
-
-    from agent_comms.comms import Comms
-    from agent_comms.execution.controller import SessionUpdateSink
-    from agent_comms.execution.input_drain import OwnerSession
-    from agent_comms.execution.pi_commands import SettingCommand
-    from agent_comms.execution.session_effects import SessionEffects
-    from agent_comms.execution.session_lifecycle import SessionLifecycle
-    from agent_comms.transport.runtime_server import RuntimeServer
+from agent_comms.transport.runtime_server import RuntimeServer
 
 
-class SessionConfigOptions:
+class SessionConfigOptions(ConfigurationChanges[ConfigOptions]):
     """Publish and persist each executing session's original configuration."""
 
     def __init__(
         self,
         comms: Comms,
         runtime: RuntimeServer,
-        sessions: SessionLifecycle,
+        sessions: SessionConfigurationSource[RuntimeProxy | IncompatibleOwner],
         effects: SessionEffects,
     ):
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()
         self.publications: dict[AcpSessionId, ConfigOptionUpdate] = {}
-        self._observed_owners: dict[AcpSessionId, OwnerSession] = {}
+        self._observed_owners: dict[AcpSessionId, OwnedObservation] = {}
         self._tasks: set[asyncio.Task[None]] = set()
         self.observer = self.runtime.background(self._observe_configuration())
         # The stored settings each session's owner last saw, to notice a change.
@@ -138,10 +140,15 @@ class SessionConfigOptions:
         model = state.model.thread_model().require_reported()
         level = state.thinking_level.require_reported(
             NativePiUnavailable("Native configuration did not report a thinking level"))
+        await self.store_configuration(thread, NextTurnConfiguration(
+            model=ChosenModel(model.text), thinking_level=level,
+        ))
+
+    async def store_configuration(
+        self, thread: Thread, change: NextTurnConfiguration,
+    ) -> None:
         await Coordination.run_worker(partial(
-            self.comms.threads.set_thread_configuration, thread, NextTurnConfiguration(
-                model=ChosenModel(model.text), thinking_level=level,
-            ),
+            self.comms.threads.set_thread_configuration, thread, change,
         ))
 
     @staticmethod

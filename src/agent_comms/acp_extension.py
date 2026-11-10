@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Annotated, Callable, ClassVar, Self
+from typing import Annotated, Callable, ClassVar, Self
+
+from acp.schema import AgentMessageChunk, TextContentBlock
 
 from agent_comms.agent_events import CompactionEvent
 from agent_comms.execution.acp_failure import (
@@ -25,8 +27,9 @@ from agent_comms.execution.native_output import NativeOutputScope
 from agent_comms.execution.native_runtime_input import CurrentNativeCursor
 from agent_comms.execution.owner_protocol import IncompatibleOwner
 from agent_comms.execution.pi_wire import McpLiveAcknowledgement
+from agent_comms.execution.queue_publication import QueuePublication
 from agent_comms.execution.reported_turn import ReportedTurn, ReportedTurnState
-from agent_comms.execution.transcript_sources import NoDraft
+from agent_comms.execution.transcript_sources import DraftRow, TranscriptCursor
 from agent_comms.execution.turn_context import ContextManifest
 from agent_comms.execution.turn_inbox import SendNow, TurnInbox
 from agent_comms.execution.turn_lease import TurnState
@@ -34,41 +37,32 @@ from agent_comms.input_attempt import InputAttempt
 from agent_comms.messaging.routing import MessageRoute, NoMessageRoute
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
-    AcceptsNull,
     AcpSessionId,
     AssignmentId,
     ClaimId,
-    ExternalJsonShape,
     FieldCodec,
     InputId,
     MalformedRecord,
     MessageId,
-    RootId,
     TurnId,
     WireName,
     WireOmitDefault,
-    WireValue,
 )
-from agent_comms.planning.goal_presentation import GoalExecution, GoalSnapshot
+from agent_comms.planning.goal_presentation import GoalExecutionControls, GoalSnapshot
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_identity import ClaimedIdentity, ClaimScoped, ThreadIncarnation
-from agent_comms.transcript.external_transcript import DraftRow
+from agent_comms.registry.thread_identity import ClaimedIdentity, ThreadIncarnation
+from agent_comms.transcript.transcript_drafts import NoDraft
 from agent_comms.transcript.transcripts import (
     LivePageSource,
     NativeCommittedPrefix,
     PageSource,
-    TranscriptCursor,
     TranscriptPage,
     TranscriptRead,
     TranscriptReadIdentity,
 )
+from agent_comms.transport.attachment_scope import AttachmentScope, CursorScope, LiveAttachmentScope
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.working_memory.working_memory_labels import ModelLabel
-
-if TYPE_CHECKING:
-    from acp.schema import AgentMessageChunk
-
-    from agent_comms.execution.input_drain import InputDrain
 
 
 class AgentCommsUpdate(DeclaredFamily, affix="Update"):
@@ -82,8 +76,6 @@ class AgentCommsUpdate(DeclaredFamily, affix="Update"):
 
     def acp_chunk(self) -> AgentMessageChunk:
         """Carry this declared observation in its original empty ACP envelope."""
-        from acp.schema import AgentMessageChunk, TextContentBlock
-
         return AgentMessageChunk(
             session_update="agent_message_chunk",
             content=TextContentBlock(type="text", text=""),
@@ -148,7 +140,7 @@ class UpdateMetadata:
 class GoalSnapshotReply(ToolResult, GoalSnapshot):
     """A goal request's reply: the owner's goal snapshot and its turn state."""
 
-    execution: Annotated[GoalExecution, WireName("goalExecution")]
+    execution: Annotated[GoalExecutionControls, WireName("goalExecution")]
     meta: Annotated[UpdateMetadata, WireName("_meta")]
 
 
@@ -168,171 +160,6 @@ def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:
     if not isinstance(extension, dict):
         raise ValueError("Comms metadata must be an object")
     return FieldCodec.decode(UpdateBatch, extension).updates
-
-
-class AttachmentScope(AcceptsNull, ExternalJsonShape, WireValue):
-    """One decoded attachment; JSON null is an absent attachment, not Python None."""
-
-    @classmethod
-    def from_wire(cls, data):
-        return cls.empty_scope() if data is None else FieldCodec.decode_record(cls.record_type(), data)
-
-    @classmethod
-    @abstractmethod
-    def empty_scope(cls): ...
-
-    @classmethod
-    @abstractmethod
-    def record_type(cls): ...
-
-    @classmethod
-    def schema(cls):
-        return {"anyOf": [{"type": "null"}, FieldCodec.record_schema(cls.record_type())]}
-
-    def to_wire(self):
-        return None
-
-    def for_session(self, session_id: AcpSessionId):
-        return self
-
-    def matches_session(self, session_id: AcpSessionId) -> bool:
-        return False
-
-    def foreign_session(self, session_id: AcpSessionId) -> bool:
-        return False
-
-    def relation(self, other: AttachmentScope) -> AttachmentRelation:
-        return AttachmentRelation()
-
-    def relation_from(self, original: LiveAttachmentScope) -> AttachmentRelation:
-        return AttachmentRelation()
-
-    def current_for(self, other: AttachmentScope) -> bool:
-        return self.relation(other).current
-
-    def same_request(self, other: AttachmentScope) -> bool:
-        return self == other or self.current_for(other)
-
-    def require_live(self):
-        raise ValueError('Attachment has no live local owner scope.')
-
-
-class LiveAttachmentScope(AttachmentScope, ClaimScoped):
-    """Logical ACP attachment and executor evidence have separate identities."""
-    session_id: AcpSessionId
-    owner: ProcessIdentity
-
-    @property
-    @abstractmethod
-    def logical_key(self) -> tuple[str, ...]: ...
-
-    @property
-    def owner_created_at(self):
-        return self.claimed_identity.incarnation.require_recorded().created_at
-
-    @property
-    def claimed_generation(self):
-        return self.claimed_identity.claimed_generation
-
-    def to_wire(self):
-        return FieldCodec.encode_record(self)
-
-    def for_session(self, session_id: AcpSessionId):
-        return replace(self, session_id=session_id)
-
-    def matches_session(self, session_id: AcpSessionId) -> bool:
-        return self.session_id == session_id
-
-    def foreign_session(self, session_id: AcpSessionId) -> bool:
-        return self.session_id != session_id
-
-    def require_live(self):
-        return self
-
-    def relation(self, other: AttachmentScope) -> AttachmentRelation:
-        return other.relation_from(self)
-
-    def relation_from(self, original: LiveAttachmentScope) -> AttachmentRelation:
-        return ObservedAttachmentRelation(original, self)
-
-
-class AttachmentRelation:
-    """Absent evidence cannot identify a common live attachment."""
-    foreign = True
-    same_incarnation = False
-    ambiguous = True
-    newer = False
-    older = False
-    current = False
-
-
-@dataclass(frozen=True)
-class ObservedAttachmentRelation(AttachmentRelation):
-    """Compare original scope witnesses once; no state or alias registry."""
-    original: AttachmentScope
-    received: AttachmentScope
-
-    @property
-    def foreign(self):
-        return self.original.logical_key != self.received.logical_key
-
-    @property
-    def same_incarnation(self):
-        return (not self.foreign and self.original.owner_created_at == self.received.owner_created_at)
-
-    @property
-    def ambiguous(self):
-        return (not self.same_incarnation or
-                (self.original.claimed_generation == self.received.claimed_generation
-                 and self.original.owner != self.received.owner))
-
-    @property
-    def newer(self):
-        return self.same_incarnation and self.received.claimed_generation > self.original.claimed_generation
-
-    @property
-    def older(self):
-        return self.same_incarnation and self.received.claimed_generation < self.original.claimed_generation
-
-    @property
-    def current(self):
-        return (self.same_incarnation
-                and self.original.claimed_generation == self.received.claimed_generation
-                and self.original.owner == self.received.owner)
-
-
-class CursorScope(AttachmentScope):
-    @classmethod
-    def empty_scope(cls):
-        return NoCursorScope()
-
-    @classmethod
-    def record_type(cls):
-        return LiveCursorScope
-
-
-@dataclass(frozen=True)
-class NoCursorScope(CursorScope):
-    pass
-
-
-@dataclass(frozen=True)
-class LiveCursorScope(CursorScope, LiveAttachmentScope):
-    session_id: AcpSessionId
-    wire_root_id: RootId
-    owner: ProcessIdentity
-
-    def __post_init__(self):
-        self.claimed_identity.incarnation.require_recorded()
-        if (
-            not self.session_id
-            or self.claimed_identity.claimed_generation <= 0
-        ):
-            raise ValueError("Invalid native cursor scope")
-
-    @property
-    def logical_key(self):
-        return self.session_id, self.wire_root_id
 
 
 class CursorObservation(DeclaredFamily, affix="CursorObservation"):
@@ -442,7 +269,7 @@ class QueueScope(AttachmentScope):
     def validate_scope(self, projection: QueueProjection) -> None:
         projection.without_scope()
 
-    def start_revision(self, inputs: InputDrain, session_id: AcpSessionId) -> int | None:
+    def start_revision(self, inputs: QueuePublication, session_id: AcpSessionId) -> int | None:
         return None
 
     def accepts_request(self, projection: QueueProjection) -> bool:
@@ -481,7 +308,7 @@ class LiveQueueScope(QueueScope, LiveAttachmentScope):
     def validate_scope(self, projection: QueueProjection) -> None:
         pass
 
-    def start_revision(self, inputs: InputDrain, session_id: AcpSessionId) -> int:
+    def start_revision(self, inputs: QueuePublication, session_id: AcpSessionId) -> int:
         return inputs.next_revision(session_id)
 
     def accepts_request(self, projection: QueueProjection) -> bool:
@@ -759,7 +586,7 @@ class PromptRequest(CommsRequest):
     @abstractmethod
     def enqueue_control(self, inbox: TurnInbox, input_id: InputId) -> None: ...
 
-    async def publish_acceptance(self, inputs: InputDrain, session_id: AcpSessionId) -> None:
+    async def publish_acceptance(self, inputs: QueuePublication, session_id: AcpSessionId) -> None:
         await inputs.emit_queue_state(session_id)
 
 

@@ -8,12 +8,12 @@ import pytest
 from agent_comms.acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate
 from agent_comms.comms import Comms
 from agent_comms.coordination.errors import ReloadRequired
-from agent_comms.history_views import HistoryViews
-from agent_comms.messaging.bus_read import (
-    BusRead,
-    OwnerScopedRead,
-    UiRead,
+from agent_comms.execution.transcript_sources import (
+    EarlierThan,
+    NativeTranscriptCursor,
 )
+from agent_comms.history_views import HistoryViews
+from agent_comms.messaging.bus_read import BusRead, OwnerScopedRead, UiRead
 from agent_comms.messaging.message_notification import NotificationPass
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_reads import (
@@ -35,7 +35,7 @@ from agent_comms.nominal.field_codec import FieldCodec, MessageId, OrderId
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
 from agent_comms.presentation import NoRevision, WireRevision
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.registry_provenance import DeletedThread
+from agent_comms.registry.registry_names import DeletedThread
 from agent_comms.registry.thread_identity import (
     AgentThreadRole,
     RecordedThreadIncarnation,
@@ -44,11 +44,7 @@ from agent_comms.registry.thread_identity import (
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.private_path import FileRevision, MissingFile
 from agent_comms.team.team_hud_records import TeammateDetail
-from agent_comms.transcript.transcripts import (
-    EarlierThan,
-    NativeTranscriptCursor,
-    RecordedPageSource,
-)
+from agent_comms.transcript.transcripts import RecordedPageSource
 from agent_comms.transport.request import ToolRequest
 from agent_comms.transport.tool_declaration import NativeRequestTools
 from agent_comms.transport.tools.reads import (

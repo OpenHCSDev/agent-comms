@@ -1,0 +1,82 @@
+[
+  {
+    "variant": "class_field",
+    "sources": {
+      "/home/ts/wt/comms-friction--P17/.verification/p23-message-contract-trace/p108-review/virtual-inputs/pkg/__init__.py": "",
+      "/home/ts/wt/comms-friction--P17/.verification/p23-message-contract-trace/p108-review/virtual-inputs/pkg/relationships.py": "class RelationshipCatalogSource:\n    catalog: object\n\nclass RelationshipStore:\n    pass\n",
+      "/home/ts/wt/comms-friction--P17/.verification/p23-message-contract-trace/p108-review/virtual-inputs/pkg/presentation.py": "from pkg import relationships\n\nclass WireRevision:\n    relationships: int\n    path = lambda self: relationships.RelationshipStore\n"
+    },
+    "plan": {
+      "stages": [
+        {
+          "recipes": [
+            {
+              "recipe_id": "catalog-class-field-scope-reproducer",
+              "operations": [
+                {
+                  "operation": "extract_symbols_to_new_module",
+                  "file_path": "/home/ts/wt/comms-friction--P17/.verification/p23-message-contract-trace/p108-review/virtual-inputs/pkg/relationships.py",
+                  "symbol_qualnames": [
+                    "RelationshipCatalogSource"
+                  ],
+                  "destination_path": "/home/ts/wt/comms-friction--P17/.verification/p23-message-contract-trace/p108-review/virtual-inputs/pkg/catalog_source.py"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "reported_module_bindings": 1,
+    "binding_sites": [
+      {
+        "node": "ImportFrom(module='pkg', names=[alias(name='relationships')], level=0)",
+        "reported_scope": "module"
+      },
+      {
+        "node": "Name(id='relationships', ctx=Store())",
+        "reported_scope": "ClassDef"
+      }
+    ],
+    "is_clean": true,
+    "stages": 1
+  },
+  {
+    "variant": "no_field_control",
+    "sources": {
+      "/home/ts/wt/comms-friction--P17/.verification/p23-message-contract-trace/p108-review/virtual-inputs/pkg/__init__.py": "",
+      "/home/ts/wt/comms-friction--P17/.verification/p23-message-contract-trace/p108-review/virtual-inputs/pkg/relationships.py": "class RelationshipCatalogSource:\n    catalog: object\n\nclass RelationshipStore:\n    pass\n",
+      "/home/ts/wt/comms-friction--P17/.verification/p23-message-contract-trace/p108-review/virtual-inputs/pkg/presentation.py": "from pkg import relationships\n\nclass WireRevision:\n    path = lambda self: relationships.RelationshipStore\n"
+    },
+    "plan": {
+      "stages": [
+        {
+          "recipes": [
+            {
+              "recipe_id": "catalog-class-field-scope-reproducer",
+              "operations": [
+                {
+                  "operation": "extract_symbols_to_new_module",
+                  "file_path": "/home/ts/wt/comms-friction--P17/.verification/p23-message-contract-trace/p108-review/virtual-inputs/pkg/relationships.py",
+                  "symbol_qualnames": [
+                    "RelationshipCatalogSource"
+                  ],
+                  "destination_path": "/home/ts/wt/comms-friction--P17/.verification/p23-message-contract-trace/p108-review/virtual-inputs/pkg/catalog_source.py"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "reported_module_bindings": 1,
+    "binding_sites": [
+      {
+        "node": "ImportFrom(module='pkg', names=[alias(name='relationships')], level=0)",
+        "reported_scope": "module"
+      }
+    ],
+    "is_clean": true,
+    "stages": 1
+  }
+]

@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+from agent_comms.execution.context_assembly import ContextAssembly
+from agent_comms.execution.input_ingress import InputIngressContext
+from agent_comms.execution.input_lookup import InputLookup
+from agent_comms.execution.input_text_context import InputTextContext
+from agent_comms.messaging.notification_contracts import NotificationEvidenceSource
+from agent_comms.messaging.message_notification import CapturedNotificationEvidence
+
 import math
 import time
-from collections.abc import AsyncGenerator, Mapping
+from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import AbstractContextManager, aclosing
 from dataclasses import dataclass
 from functools import cached_property, partial
@@ -18,6 +25,8 @@ from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.owner_lifecycle import OwnerLifecycle
 from agent_comms.execution.transcript_sources import TranscriptSource
 from agent_comms.history_views import HistoryViews
+from agent_comms.input_attempt import InputAttempt
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
 from agent_comms.messaging.agent_inbox import TakenInputStart
 from agent_comms.messaging.channel_management import ChannelManagement
@@ -39,6 +48,7 @@ from agent_comms.registry.route_client import ActivityClient
 from agent_comms.registry.thread_configuration import ThreadConfiguration
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_management import ThreadManagement
+from agent_comms.registry.threads import Thread
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage.private_path import FileRevision
 from agent_comms.transcript.transcripts import Transcripts
@@ -91,7 +101,15 @@ class UntakenCut:
         return self.registry is snapshot and self.key == key
 
 
-class Comms(ActivityClient):
+class Comms(
+    ActivityClient,
+    ContextAssembly,
+    InputIngressContext[Thread],
+    InputTextContext[InputAttempt],
+    NotificationEvidenceSource[CapturedNotificationEvidence],
+):
+    input_dispositions: ClassVar[Callable[[Path], InputLookup[InputAttempt]]] = InputDispositions
+
     def __init__(self, root: CommsRoute) -> None:
         super().__init__(root)
         self.goals = Goals(self.root, self.registry, self.bus, self.agents)
@@ -117,7 +135,12 @@ class Comms(ActivityClient):
             self.goals,
             self.ledger,
         )
-        self.relationships = ThreadRelationships(self.root, self.registry, self.bus, self.views)
+        self.relationships = ThreadRelationships(self.views)
+
+    def notification_evidence(self) -> CapturedNotificationEvidence:
+        reads = self.bus.reads
+        return CapturedNotificationEvidence(
+            self.root, reads, reads.read(), self.registry.snapshot())
 
     async def watch(
         self, name: str, *, after: InboxStart = TakenInputStart(),

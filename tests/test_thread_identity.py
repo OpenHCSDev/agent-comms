@@ -199,7 +199,8 @@ def test_identity_codec_and_counter_domain_are_not_parallel_registries():
 
 
 def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
-    from agent_comms.acp_extension import LiveCursorScope, LiveQueueScope
+    from agent_comms.transport.attachment_scope import LiveCursorScope
+    from agent_comms.acp_extension import LiveQueueScope
     from agent_comms.execution.queued_input import QueuedInputContext
 
     registry = registry_with_owner(tmp_path)

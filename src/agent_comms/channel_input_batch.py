@@ -4,17 +4,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from agent_comms.execution.input_key import InputKey
+from agent_comms.execution.original_inputs import OriginalInputs
 from agent_comms.input_attempt import StoredInput
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.channel_targets import CommandTarget
-
-if TYPE_CHECKING:
-    from agent_comms.input_disposition import InputDocument
-    from agent_comms.messaging.messages import Message
-    from agent_comms.registry.threads import Thread
+from agent_comms.messaging.messages import Message
+from agent_comms.registry.thread_creation import ThreadCreationSource
 
 
 @dataclass(frozen=True)
@@ -44,8 +40,8 @@ class InputBatch(ABC):
         origins: tuple[Message, ...],
         keys: tuple[InputKey, ...],
         prompt: str,
-        owner: Thread,
-        document: InputDocument,
+        owner: ThreadCreationSource,
+        document: OriginalInputs,
     ) -> InputBatch:
         originals = document.originals(keys)
         single = SingleInputBatch(originals)
@@ -57,7 +53,7 @@ class InputBatch(ABC):
         }
         if len(channels) < 2 or tuple(channels.values()) != origins:
             return single
-        expected_keys = tuple(InputDispositions.bus_key(origin, owner) for origin in origins)
+        expected_keys = tuple(origin.bus_key(owner) for origin in origins)
         authorized = ChannelInputBatch(originals)
         return authorized if authorized.keys == expected_keys and authorized.prompt == prompt else single
 

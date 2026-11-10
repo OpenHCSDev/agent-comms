@@ -1,6 +1,10 @@
+from agent_comms.cli_verbs.target_command_bindings import TargetCommandBindings
+from agent_comms.messaging.claim_registry_read import ClaimRegistryRead
+from agent_comms.registry.activity_registry_reads import ActivityRegistryRead
+from agent_comms.registry.presence_reads import PresenceEntry, PresenceSnapshot
+
 """One registry document: thread facts, identity domains and lifecycle behavior."""
 
-from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
@@ -22,8 +26,10 @@ from typing import TYPE_CHECKING, Annotated, Literal, Self
 
 from pydantic import JsonValue
 
+from agent_comms.messaging.delivery_recipients import DeliveryRecipients
 from agent_comms.errors import OutsideRegistrySlice, RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.native_input_owner import NativeOwnerRegistry
 from agent_comms.execution.restart_refusals import (
     OwnerBusyRefusal,
     OwnerChangedBeforeFenceRefusal,
@@ -38,6 +44,7 @@ from agent_comms.execution.turn_lease import (
     TurnLeaseFence,
     TurnRecord,
 )
+from agent_comms.execution.input_ingress import InputRegistry
 from agent_comms.messaging.channel_targets import ResolvedTarget, SurroundingChannel, TeammatesTag
 from agent_comms.messaging.channels import Channel, ChannelMemberIndex
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
@@ -78,12 +85,11 @@ from agent_comms.registry.registration_change import (
     UpdatedRegistration,
 )
 from agent_comms.registry.registry_provenance import (
-    DeletedThread,
     RegisteredRecipient,
-    RegistryNames,
     RegistryProvenance,
     RetiredRecipient,
 )
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
 from agent_comms.registry.thread_creation import CreationTime
 from agent_comms.registry.thread_identity import (
     ClaimedIdentity,
@@ -97,6 +103,7 @@ from agent_comms.registry.thread_identity import (
     TurnIdentity,
 )
 from agent_comms.registry.thread_presentation import ThreadOwnerBinding
+from agent_comms.registry.thread_reads import ThreadOwnerSource
 from agent_comms.registry.thread_status import (
     ActiveThreadPresence,
     ArchivedThreadStatus,
@@ -106,24 +113,11 @@ from agent_comms.registry.thread_status import (
 )
 from agent_comms.registry.thread_text import ForkedParent, NoParent
 from agent_comms.registry.threads import Thread, ThreadWorkState
+from agent_comms.registry.user_thread_lookup import FoundUserThread, NoUserThread, UserThreadLookup
+from agent_comms.registry.registry_names import DeletedThread
+from agent_comms.registry.task_registry import TaskRegistry
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
-
-if TYPE_CHECKING:
-    from agent_comms.cli_verbs.cli_command import CliCommand
-    from agent_comms.comms import Comms
-    from agent_comms.messaging.bus_publication import Delivered
-
-
-@dataclass(frozen=True, slots=True)
-class RosterVisibility:
-    """Which threads a roster shows: the one declaration of its defaults."""
-
-    stopped: bool = True
-    archived: bool = False
-
-
-DEFAULT_ROSTER = RosterVisibility()
 
 
 @dataclass(frozen=True)
@@ -131,8 +125,8 @@ class ResolvedThread(ResolvedTarget):
     thread: Thread
     status: ThreadStatus
 
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel,
+    def bindings[Context, C: TargetCommandBindings[Context, Thread, ThreadStatus, SurroundingChannel, Checkout, RegistrySnapshot, CatalogAccess, ResolvedChannel]](
+        self, declaration: type[C], comms: Context, channel: SurroundingChannel,
         *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
     ) -> tuple[C, ...]:
         return declaration.thread_bindings(
@@ -145,8 +139,8 @@ class ResolvedChannel(ResolvedTarget):
     channel: Channel
     members: tuple[ResolvedThread, ...]
 
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel,
+    def bindings[Context, C: TargetCommandBindings[Context, Thread, ThreadStatus, SurroundingChannel, Checkout, RegistrySnapshot, CatalogAccess, ResolvedChannel]](
+        self, declaration: type[C], comms: Context, channel: SurroundingChannel,
         *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
     ) -> tuple[C, ...]:
         return declaration.channel_bindings(
@@ -190,10 +184,16 @@ class SeveralProjectThreads(TaggedRecordMember, ProjectThreadSelection):
     threads: tuple[Thread, ...]
 
 
-class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thread]):
+class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](
+    TaskRegistry[Thread], NativeOwnerRegistry, ABC,
+):
     """Presence reads shared by the acquired document and its detached cut."""
 
     __slots__ = ()
+
+    def require_member[Kind: Thread](self, name: str, kind: type[Kind]) -> Kind:
+        """The registered declaration, narrowed to the member an operation needs."""
+        return kind.stored(self.require(name))
 
     def __contains__(self, name: str) -> bool:
         """A thread is present under its name or any alias the namespace keeps for it."""
@@ -261,8 +261,6 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
     @abstractmethod
     def owner_generation(self, name: str) -> int: ...
 
-    @abstractmethod
-    def claim_generation(self, name: str) -> int: ...
 
     def entry(self, name: str) -> RegistryEntry:
         thread = self.require(name)
@@ -308,53 +306,6 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
 
     def user_thread(self) -> UserThreadLookup[Thread]:
         return self._human.map(self.require)
-
-class UserThreadLookup[Value](ABC):
-    """The registry's human selection, including a registry with no human yet."""
-
-    @abstractmethod
-    def map[Other](self, resolve: Callable[[Value], Other]) -> UserThreadLookup[Other]: ...
-
-    @abstractmethod
-    def existing(self) -> tuple[Value, ...]: ...
-
-    @abstractmethod
-    def or_create(self, create: Callable[[], Value]) -> Value: ...
-
-    @abstractmethod
-    def require(self, refusal: Exception) -> Value: ...
-
-
-@dataclass(frozen=True, slots=True)
-class FoundUserThread[Value](UserThreadLookup[Value]):
-    value: Value
-
-    def map[Other](self, resolve: Callable[[Value], Other]) -> UserThreadLookup[Other]:
-        return FoundUserThread(resolve(self.value))
-
-    def existing(self) -> tuple[Value, ...]:
-        return (self.value,)
-
-    def or_create(self, create: Callable[[], Value]) -> Value:
-        return self.value
-
-    def require(self, refusal: Exception) -> Value:
-        return self.value
-
-
-@dataclass(frozen=True, slots=True)
-class NoUserThread[Value](UserThreadLookup[Value]):
-    def map[Other](self, resolve: Callable[[Value], Other]) -> UserThreadLookup[Other]:
-        return NoUserThread()
-
-    def existing(self) -> tuple[Value, ...]:
-        return ()
-
-    def or_create(self, create: Callable[[], Value]) -> Value:
-        return create()
-
-    def require(self, refusal: Exception) -> Value:
-        raise refusal
 
 
 class InvalidRegistryDocument(RelationViolationError):
@@ -1160,7 +1111,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryEntry:
+class RegistryEntry(PresenceEntry):
     """Everything the registry records about one thread, and nothing about the others.
 
     The document-wide generation counters are allocation state, not this
@@ -1195,7 +1146,17 @@ class RegistryEntry:
 
 @SnapshotValue.required
 @dataclass(frozen=True, slots=True)
-class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadStatus]], RegistryProvenance, ToolResult):
+class RegistrySnapshot(
+    SnapshotRestored,
+    RegistryPresence[Mapping[str, ThreadStatus]],
+    RegistryProvenance,
+    ToolResult,
+    ThreadOwnerSource[Thread],
+    InputRegistry[Thread],
+    PresenceSnapshot,
+    ActivityRegistryRead,
+    ClaimRegistryRead[Thread],
+):
     purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)]
     threads: Annotated[ThreadRows, SlicePolicy(ThreadRowsSlice)]
     statuses: Annotated[Mapping[str, ThreadStatus], SlicePolicy(MappingRowsSlice)]
@@ -1363,7 +1324,7 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         return thread.role.displayed_recipient_effect(reads, message, thread, self, document)
 
     def recipient(
-        self, recipient: FrozenRecipient, original: Delivered
+        self, recipient: FrozenRecipient, original: DeliveryRecipients
     ) -> RegisteredRecipient | RetiredRecipient:
         """A missing live thread was retired only if the original send names it."""
         lookup = recipient.recipient_lookup

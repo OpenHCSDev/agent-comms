@@ -1,0 +1,474 @@
+diff --git a/nominal_refactor_advisor/declaration_dependencies.py b/nominal_refactor_advisor/declaration_dependencies.py
+index 86a68ec7..f8fe3ad8 100644
+--- a/nominal_refactor_advisor/declaration_dependencies.py
++++ b/nominal_refactor_advisor/declaration_dependencies.py
+@@ -177,6 +177,7 @@ class ModuleNameReferenceSurface(ModuleNameReferenceScope):
+     use: DeclarationDependencyUse
+     binding_phase: ModuleBindingResolutionPhase
+     resolution: LexicalNameResolution = LexicalNameResolution.EXTERNAL
++    binding_scope: ast.AST | None = None
+ 
+     @property
+     def required_reference(self) -> ast.Name:
+@@ -244,6 +245,7 @@ class ModuleLexicalDependencyProjection:
+     name_surfaces: tuple[ModuleNameReferenceSurface, ...]
+     stringized_annotations: tuple[StringizedAnnotationSurface, ...]
+     annotation_count: int
++    name_bindings: tuple[ModuleNameReferenceSurface, ...] = ()
+ 
+     def names_for_use(self, use: DeclarationDependencyUse) -> frozenset[str]:
+         return frozenset(
+@@ -298,6 +300,7 @@ class ModuleLexicalDependencyProjection:
+             name_surfaces=tuple(collector.name_surfaces),
+             stringized_annotations=tuple(collector.stringized_annotation_surfaces),
+             annotation_count=collector.annotation_count,
++            name_bindings=tuple(collector.name_bindings),
+         )
+ 
+     @property
+@@ -498,6 +501,7 @@ class _DeclarationDependencyCollector(
+         self.binding_phase = ModuleBindingResolutionPhase.SOURCE_POSITION
+         self.annotation_count = 0
+         self.name_surfaces: list[ModuleNameReferenceSurface] = []
++        self.name_bindings: list[ModuleNameReferenceSurface] = []
+         self.stringized_annotation_surfaces: list[StringizedAnnotationSurface] = []
+ 
+     def visit_Module(self, node: ast.Module) -> None:
+@@ -511,24 +515,26 @@ class _DeclarationDependencyCollector(
+         if isinstance(node.ctx, ast.Del):
+             self._record_class_binding((node.id,), LexicalNameResolution.EXTERNAL)
+             return
+-        resolution = self._resolve_name(node.id)
+-        self._record_reference(node, resolution)
++        resolution, binding_scope = self._resolve_name_binding(node.id)
++        self._record_reference(node, resolution, binding_scope)
+ 
+     def _record_reference(
+         self,
+         node: ast.Name,
+         resolution: LexicalNameResolution,
++        binding_scope: ast.AST | None,
+     ) -> None:
++        surface = ModuleNameReferenceSurface(
++            owner_classes=self.owner_classes,
++            reference=node,
++            use=self.use,
++            binding_phase=self.binding_phase,
++            resolution=resolution,
++            binding_scope=binding_scope,
++        )
++        self.name_bindings.append(surface)
+         if resolution.is_external_candidate:
+-            self.name_surfaces.append(
+-                ModuleNameReferenceSurface(
+-                    owner_classes=self.owner_classes,
+-                    reference=node,
+-                    use=self.use,
+-                    binding_phase=self.binding_phase,
+-                    resolution=resolution,
+-                )
+-            )
++            self.name_surfaces.append(surface)
+ 
+     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+         self._visit_function(node)
+@@ -563,11 +569,11 @@ class _DeclarationDependencyCollector(
+ 
+     def visit_AugAssign(self, node: ast.AugAssign) -> None:
+         if isinstance(node.target, ast.Name):
++            resolution, binding_scope = self._resolve_name_binding(node.target.id)
+             self._record_reference(
+                 node.target,
+-                self.scopes[-1].augmented_read_resolution(
+-                    self._resolve_name(node.target.id)
+-                ),
++                self.scopes[-1].augmented_read_resolution(resolution),
++                binding_scope,
+             )
+         else:
+             self.visit(node.target)
+diff --git a/nominal_refactor_advisor/lexical_scopes.py b/nominal_refactor_advisor/lexical_scopes.py
+index eeaf1538..72f7e90b 100644
+--- a/nominal_refactor_advisor/lexical_scopes.py
++++ b/nominal_refactor_advisor/lexical_scopes.py
+@@ -268,15 +268,22 @@ class LexicalScopeContext:
+     scopes: list[LexicalScopeABC] = field(default_factory=list)
+ 
+     def _resolve_name(self, name: str) -> LexicalNameResolution:
++        return self._resolve_name_binding(name)[0]
++
++    def _resolve_name_binding(
++        self, name: str,
++    ) -> tuple[LexicalNameResolution, ast.AST | None]:
++        """Return the decision and its determining frame from the same lookup."""
+         class_namespace_visible = True
+         for scope in reversed(self.scopes):
+             resolution = scope.resolve_name(
+                 name, class_namespace_visible=class_namespace_visible
+             )
+             if resolution is not None:
+-                return resolution
++                owner = scope.node if resolution is LexicalNameResolution.INTERNAL else None
++                return resolution, owner
+             class_namespace_visible &= not scope.hides_enclosing_class_namespace
+-        return LexicalNameResolution.EXTERNAL
++        return LexicalNameResolution.EXTERNAL, None
+ 
+     @property
+     def _active_class_scope(self) -> ClassNamespaceScope | None:
+diff --git a/nominal_refactor_advisor/module_node_index.py b/nominal_refactor_advisor/module_node_index.py
+index 981b7078..cae15044 100644
+--- a/nominal_refactor_advisor/module_node_index.py
++++ b/nominal_refactor_advisor/module_node_index.py
+@@ -6,13 +6,22 @@ import ast
+ import unicodedata
+ from collections import Counter, deque
+ from dataclasses import dataclass, field
++from functools import cached_property
+ 
+ from nominal_refactor_advisor.ast_tools import (
+     AstParentIndex,
+     ParsedModule,
+     ParsedModuleFact,
+ )
++from nominal_refactor_advisor.declaration_dependencies import (
++    ModuleLexicalDependencyProjection,
++    ModuleNameReferenceSurface,
++)
+ from nominal_refactor_advisor.lexical_bindings import ImportBoundNameProjection
++from nominal_refactor_advisor.lexical_scopes import (
++    FunctionBindingProjection,
++    ScopeBindingProjection,
++)
+ 
+ _FUNCTION_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+ _COMPREHENSION_SCOPES = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+@@ -35,10 +44,11 @@ class ModuleNodeIndex(ParsedModuleFact):
+     has its own variable of that name, shadowing the module's for its own uses
+     and those of the scopes inside it. `module_scope_names`,
+     `module_scope_bindings` and `module_scope_loads` read only the uses that
+-    resolve to the module's binding. A class body is not a scope here: its
+-    bindings count as the module's, which keeps every check that reads them
+-    conservative."""
++    resolve to the module's binding. Class writes have their own frame; reads
++    use the existing ordered lexical resolver, including class fallback and
++    function/comprehension lookup that skips enclosing class locals."""
+ 
++    module: ast.Module = field(repr=False)
+     imports: tuple[ast.Import | ast.ImportFrom, ...]
+     string_constants: tuple[ast.Constant, ...]
+     calls: tuple[ast.Call, ...]
+@@ -48,9 +58,7 @@ class ModuleNodeIndex(ParsedModuleFact):
+     attribute_bases: frozenset[str]
+     bound_name_counts: Counter[str] = field(repr=False)
+     binding_sites: dict[str, tuple[ast.AST, ...]] = field(repr=False)
+-    declared_global: dict[int, frozenset[str]] = field(repr=False)
+     identifier_text: str = field(repr=False)
+-    _local_names: dict[int, frozenset[str]] = field(repr=False, default_factory=dict)
+ 
+     @classmethod
+     def derive(cls, parsed_module: ParsedModule) -> ModuleNodeIndex:
+@@ -64,7 +72,6 @@ class ModuleNodeIndex(ParsedModuleFact):
+         bound: Counter[str] = Counter()
+         package_heads: set[str] = set()
+         sites: dict[str, list[ast.AST]] = {}
+-        declarations: list[ast.Global | ast.Nonlocal] = []
+         pending: deque[ast.AST] = deque([parsed_module.module])
+         while pending:
+             node = pending.popleft()
+@@ -98,8 +105,6 @@ class ModuleNodeIndex(ParsedModuleFact):
+                     sites.setdefault(name, []).append(node)
+                 case ast.ExceptHandler(name=str() as name):
+                     sites.setdefault(name, []).append(node)
+-                case ast.Global() | ast.Nonlocal():
+-                    declarations.append(node)
+                 case ast.Constant(value=str()):
+                     strings.append(node)
+                 case ast.Call():
+@@ -114,12 +119,8 @@ class ModuleNodeIndex(ParsedModuleFact):
+                 case ast.Attribute(value=ast.Name(id=name)):
+                     attribute_bases.add(name)
+         bound.update(package_heads)
+-        declared_global: dict[int, set[str]] = {}
+-        for declaration in declarations:
+-            if isinstance(declaration, ast.Global):
+-                scope = cls._scope_in(parents, declaration)
+-                declared_global.setdefault(id(scope), set()).update(declaration.names)
+         return cls(
++            module=parsed_module.module,
+             imports=tuple(imports),
+             string_constants=tuple(strings),
+             calls=tuple(calls),
+@@ -129,7 +130,6 @@ class ModuleNodeIndex(ParsedModuleFact):
+             attribute_bases=frozenset(attribute_bases),
+             bound_name_counts=bound,
+             binding_sites={name: tuple(nodes) for name, nodes in sites.items()},
+-            declared_global={key: frozenset(names) for key, names in declared_global.items()},
+             identifier_text=(
+                 parsed_module.source
+                 if parsed_module.source.isascii()
+@@ -193,48 +193,63 @@ class ModuleNodeIndex(ParsedModuleFact):
+         """The scope whose variable a binding of `name` at `site` sets."""
+ 
+         scope = self.scope_of(site)
+-        if scope is not None and name in self.declared_global.get(id(scope), frozenset()):
+-            return None
+-        return scope
+-
+-    def binder_of(self, node: ast.AST, name: str) -> ast.AST | None:
+-        """The scope whose variable `name` at `node` reads or sets."""
+-
+-        scope = self.scope_of(node)
+         while scope is not None:
+-            if name in self.declared_global.get(id(scope), frozenset()):
++            declarations = self.scope_declarations[scope]
++            if name in declarations.global_names:
+                 return None
+-            if name in self.local_names(scope):
++            if name in declarations.nonlocal_names:
++                scope = self.scope_of(scope)
++                while scope is not None:
++                    if not isinstance(scope, ast.ClassDef) and name in self.scope_declarations[scope].local_names:
++                        return scope
++                    scope = self.scope_of(scope)
++                raise ValueError(f"No enclosing function binds nonlocal {name!r}")
++            if name in declarations.local_names:
+                 return scope
+             scope = self.scope_of(scope)
+         return None
+ 
++    def binder_of(self, node: ast.AST, name: str) -> ast.AST | None:
++        """The scope whose variable `name` at `node` reads or sets."""
++
++        reference = self.name_bindings.get(node)
++        if reference is not None:
++            reference.resolution.require_known(name)
++            return reference.binding_scope
++        return self.binding_scope(node, name)
++
+     def local_names(self, scope: ast.AST) -> frozenset[str]:
+         """The names `scope` binds itself, minus those it declares `global`."""
+ 
+-        key = id(scope)
+-        if key not in self._local_names:
+-            for scope_key, names in self._scope_bindings().items():
+-                self._local_names[scope_key] = names
+-        return self._local_names.get(key, frozenset())
+-
+-    def _scope_bindings(self) -> dict[int, frozenset[str]]:
+-        found: dict[int, set[str]] = {}
+-        for name, sites in self.binding_sites.items():
+-            for site in sites:
+-                scope = self.scope_of(site)
+-                if scope is not None and name not in self.declared_global.get(id(scope), frozenset()):
+-                    found.setdefault(id(scope), set()).add(name)
+-        for scope_key in {id(scope) for scope in self.parents.values() if self._is_scope(scope)}:
+-            found.setdefault(scope_key, set())
+-        return {key: frozenset(names) for key, names in found.items()}
+-
+-    @staticmethod
+-    def _is_scope(node: ast.AST) -> bool:
+-        return isinstance(node, (*_FUNCTION_SCOPES, *_COMPREHENSION_SCOPES))
++        return self.scope_declarations[scope].local_names
++
++    @cached_property
++    def name_bindings(self) -> dict[ast.AST, ModuleNameReferenceSurface]:
++        """Project existing lexical decisions, never reconstruct class lookup here."""
++        projection = ModuleLexicalDependencyProjection.from_module(self.module)
++        return {
++            surface.reference: surface
++            for surface in projection.name_bindings
++            if surface.use.is_direct_source
++        }
++
++    @cached_property
++    def scope_declarations(self) -> dict[ast.AST, ScopeBindingProjection]:
++        declarations: dict[ast.AST, ScopeBindingProjection] = {}
++        for scope in self.parents.values():
++            if scope in declarations:
++                continue
++            match scope:
++                case ast.FunctionDef() | ast.AsyncFunctionDef() | ast.Lambda():
++                    declarations[scope] = FunctionBindingProjection.from_function(scope)
++                case ast.ClassDef():
++                    declarations[scope] = ScopeBindingProjection.from_nodes(scope.body, node=scope)
++                case ast.ListComp() | ast.SetComp() | ast.DictComp() | ast.GeneratorExp():
++                    declarations[scope] = FunctionBindingProjection.from_comprehension(scope)
++        return declarations
+ 
+     def scope_of(self, node: ast.AST) -> ast.AST | None:
+-        """The innermost function, lambda or comprehension whose variables
++        """The innermost class, function, lambda or comprehension whose variables
+         `node` belongs to, or `None` for the module's. A function's decorators,
+         defaults and annotations, and a comprehension's first iterable, are
+         evaluated in the enclosing scope; its parameters belong to it."""
+@@ -250,6 +265,9 @@ class ModuleNodeIndex(ParsedModuleFact):
+                 body = current.body if isinstance(current.body, list) else [current.body]
+                 if child in body or (isinstance(node, ast.arg) and child is current.args):
+                     return current
++            elif isinstance(current, ast.ClassDef):
++                if child in current.body:
++                    return current
+             elif isinstance(current, _COMPREHENSION_SCOPES):
+                 first = current.generators[0]
+                 if not (child is first and below is first.iter):
+diff --git a/tests/test_module_binding_class_scope.py b/tests/test_module_binding_class_scope.py
+new file mode 100644
+index 00000000..5a891ba2
+--- /dev/null
++++ b/tests/test_module_binding_class_scope.py
+@@ -0,0 +1,138 @@
++"""Module moves consume the existing ordered class/function lookup decisions."""
++import ast
++from collections.abc import Callable
++from pathlib import Path
++import subprocess
++import sys
++import textwrap
++
++import pytest
++
++from nominal_refactor_advisor.codemod import CodemodPlanRoot, CodemodSourceSnapshot
++from nominal_refactor_advisor.codemod_preflight import CodemodOperationPreflightError
++from nominal_refactor_advisor.module_node_index import ModuleNodeIndex
++
++
++type CapturedModule = Callable[[str], tuple[Path, CodemodSourceSnapshot, ModuleNodeIndex]]
++
++
++@pytest.fixture
++def captured_module(tmp_path: Path) -> CapturedModule:
++    def capture(body: str) -> tuple[Path, CodemodSourceSnapshot, ModuleNodeIndex]:
++        path = tmp_path / "pkg/presentation.py"
++        sources = {
++            str(tmp_path / "pkg/__init__.py"): "",
++            str(tmp_path / "pkg/relationships.py"): (
++                "class RelationshipCatalogSource:\n    pass\n\n"
++                "class RelationshipStore:\n    pass\n"
++            ),
++            str(path): "from pkg import relationships\n" + textwrap.dedent(body),
++        }
++        snapshot = CodemodSourceSnapshot.from_source_mapping(sources, analysis_roots=(tmp_path,))
++        return path, snapshot, snapshot.parsed_module_for_source_path(str(path)).fact(ModuleNodeIndex)
++    return capture
++
++
++@pytest.mark.parametrize("body,loads", (
++    ("class WireRevision:\n    relationships: int\n    value = lambda self: relationships.RelationshipStore\n", 1),
++    ("class WireRevision:\n    relationships: int = 3\n    value = lambda self: relationships.RelationshipStore\n", 1),
++    ("class WireRevision:\n    relationships: int\n    value = relationships.RelationshipStore\n", 1),
++    ("class WireRevision:\n    value = relationships.RelationshipStore\n    relationships = 3\n", 1),
++    ("class WireRevision:\n    relationships = object()\n    value = relationships.attribute\n", 0),
++    ("class WireRevision:\n    relationships = 3\n    def value(self):\n        return relationships.RelationshipStore\n", 1),
++    ("class WireRevision:\n    relationships = 3\n    value = [relationships.RelationshipStore for _ in (1,)]\n", 1),
++    ("class WireRevision:\n    relationships = (1,)\n    value = [item for item in relationships]\n", 0),
++    ("class WireRevision:\n    relationships = relationships.RelationshipStore\n", 1),
++    ("def outer(relationships):\n    class WireRevision:\n        relationships: int\n        value = lambda self: relationships.RelationshipStore\n    return WireRevision\n", 0),
++))
++def test_class_fields_do_not_rebind_module_and_reads_keep_python_lookup(
++    captured_module: CapturedModule, body: str, loads: int,
++) -> None:
++    _, _, index = captured_module(body)
++    assert index.module_scope_bindings("relationships") == 1
++    assert index.module_scope_loads("relationships") == loads
++
++
++@pytest.mark.parametrize("body", (
++    "relationships = object()\n",
++    "class WireRevision:\n    global relationships\n    relationships = object()\n",
++    "def change():\n    global relationships\n    relationships = object()\n",
++))
++def test_true_module_rebindings_remain_counted(captured_module: CapturedModule, body: str) -> None:
++    _, _, index = captured_module(body)
++    assert index.module_scope_bindings("relationships") == 2
++
++
++def test_nonlocal_write_skips_intervening_classes_and_unbound_functions(
++    captured_module: CapturedModule,
++) -> None:
++    _, _, index = captured_module('''
++        def outer():
++            from pkg import relationships
++            class OuterClass:
++                relationships = object()
++                def middle(self):
++                    class InnerClass:
++                        nonlocal relationships
++                        relationships = object()
++    ''')
++    outer = next(node for node in index.parents.values()
++                 if isinstance(node, ast.FunctionDef) and node.name == "outer")
++    assert index.bindings_in("relationships", outer) == 2
++    assert index.module_scope_bindings("relationships") == 1
++
++
++def test_path_dependent_class_read_stays_unproved(captured_module: CapturedModule) -> None:
++    _, _, index = captured_module("class WireRevision:\n    if flag:\n        relationships = object()\n    value = relationships.attribute\n")
++    assert index.module_scope_bindings("relationships") == 1
++    with pytest.raises(ValueError, match="Unproved class namespace binding"):
++        index.module_scope_names("relationships")
++
++
++@pytest.mark.parametrize("member", ("RelationshipCatalogSource", "RelationshipStore"))
++@pytest.mark.parametrize("read", (
++    "value = lambda self: relationships.MEMBER",
++    "def value(self):\n    return relationships.MEMBER",
++    "value = relationships.MEMBER\ndef read(self):\n    return self.value",
++))
++def test_native_move_preserves_class_field_and_actual_module_reads(
++    tmp_path: Path, captured_module: CapturedModule, member: str, read: str,
++) -> None:
++    body = "class WireRevision:\n    relationships: int\n" + textwrap.indent(read.replace("MEMBER", member), "    ") + "\n"
++    path, snapshot, _ = captured_module(body)
++    operation = {
++        "operation": "extract_symbols_to_new_module",
++        "file_path": str(tmp_path / "pkg/relationships.py"),
++        "symbol_qualnames": ["RelationshipCatalogSource"],
++        "destination_path": str(tmp_path / "pkg/catalog_source.py"),
++    }
++    plan = CodemodPlanRoot.from_json_value({"recipes": [{"recipe_id": "class-scope-move", "operations": [operation]}]})
++    result = plan.simulate(snapshot)
++    assert result.is_clean
++    after = result.required_after_snapshot
++    for name, source in after.sources_by_file_path.items():
++        destination = Path(name)
++        destination.parent.mkdir(parents=True, exist_ok=True)
++        destination.write_text(source)
++    expression = "row.read()" if "def read(" in read else "row.value()"
++    subprocess.run([sys.executable, "-c", (
++        "from pkg.presentation import WireRevision\n"
++        "row = WireRevision()\n"
++        f"assert {expression}.__name__ == {member!r}\n"
++        "assert WireRevision.__annotations__['relationships'] is int\n"
++    )], cwd=tmp_path, check=True, capture_output=True, text=True)
++
++
++def test_native_move_still_refuses_real_module_rebinding(
++    tmp_path: Path, captured_module: CapturedModule,
++) -> None:
++    _, snapshot, _ = captured_module("relationships = object()\n")
++    operation = {
++        "operation": "extract_symbols_to_new_module",
++        "file_path": str(tmp_path / "pkg/relationships.py"),
++        "symbol_qualnames": ["RelationshipCatalogSource"],
++        "destination_path": str(tmp_path / "pkg/catalog_source.py"),
++    }
++    plan = CodemodPlanRoot.from_json_value({"recipes": [{"recipe_id": "reject-rebind", "operations": [operation]}]})
++    with pytest.raises(CodemodOperationPreflightError, match="rebind"):
++        plan.simulate(snapshot)
+diff --git a/tests/test_source_scope_effect_collection.py b/tests/test_source_scope_effect_collection.py
+index b50a25f0..f7a92866 100644
+--- a/tests/test_source_scope_effect_collection.py
++++ b/tests/test_source_scope_effect_collection.py
+@@ -242,9 +242,9 @@ def test_module_dependency_consumer_enters_the_same_actual_module_scope(monkeypa
+     scopes = []
+     original = _DeclarationDependencyCollector._record_reference
+ 
+-    def record(self, node, resolution):
++    def record(self, node, resolution, binding_scope):
+         scopes.append(tuple(self.scopes))
+-        return original(self, node, resolution)
++        return original(self, node, resolution, binding_scope)
+ 
+     monkeypatch.setattr(_DeclarationDependencyCollector, "_record_reference", record)
+     dependencies = ModuleLexicalDependencyProjection.from_module(root)

@@ -24,38 +24,36 @@ import struct
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn
+from typing import NoReturn
 
 from agent_comms.coordination.cohort_schema import AcceptanceFrontier, PrivateCoordinatorSchema
-from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import PublicationActivationBlocked
 from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.coordination.schema import CoordinatorTable
 from agent_comms.coordination.tables.participants import Participants
+from agent_comms.coordination.tables.response_schema import ResponseTable
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import Platform
-from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.input_root_authority import InputRootAuthority
+from agent_comms.execution.native_input_owner import NativeOwnerRegistry, RegistryOwner
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
-from agent_comms.execution.private_nk_entrypoint import PrivateNkLaunch, SharedRootLaunch
-from agent_comms.nominal.field_codec import RootId, ThreadLookup
+from agent_comms.execution.private_nk_entrypoint import (
+    PrivateNkLaunch,
+    RootLaunch,
+    SharedRootLaunch,
+)
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.nominal.field_codec import AcpSessionId, RootId, ThreadLookup
+from agent_comms.registry.notification_selection_read import NotificationSelectionRead
+from agent_comms.registry.privacy_reads import CursorMetadataRead, NativeAnswerRead
 from agent_comms.registry.registry_tables import RegistryRevisionMark, RegistryRowStore
 from agent_comms.registry.thread_identity import ClaimedIdentity
 from agent_comms.storage.locked_store import RollbackRetained, WireWakeFile
 from agent_comms.storage.private_path import FileObservation, PrivateFileRole
+from agent_comms.storage.typed_table import TableSchema
+from agent_comms.transport.attachment_scope import CursorScope, LiveCursorScope, NoCursorScope
 
-if TYPE_CHECKING:
-    from agent_comms.acp_extension import CursorAdvancedUpdate, CursorScope
-    from agent_comms.execution.cursor_publication import CursorPublication
-    from agent_comms.execution.historical_native_inputs import HistoricalNativeAnswers
-    from agent_comms.execution.private_nk_entrypoint import RootLaunch
-    from agent_comms.messaging.message_reference import MessageReference
-    from agent_comms.notification_assignment import (
-        NotificationAssignmentRead,
-        NotificationSelection,
-    )
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.storage.typed_table import TableSchema
 
 _MAGIC = b"ACRG"
 
@@ -121,7 +119,7 @@ def _decode(data: bytes, root_id: bytes) -> tuple[int, int, bytes]:
     return seq, phase, digest
 
 
-class RegistryPrivacy(ABC):
+class RegistryPrivacy(InputRootAuthority):
     """What a registry root's protocol marker decides, selected by the registry store."""
 
     def guard_evidence(self, guard: FileObservation, coordinator: FileObservation,
@@ -132,25 +130,20 @@ class RegistryPrivacy(ABC):
         """
         return guard, coordinator
 
-    def native_answered(self, answers: HistoricalNativeAnswers,
+    def native_answered(self, answers: NativeAnswerRead[MessageReference],
                         references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
         """Which of these inputs a native transcript answered, read under this root's privacy."""
         return answers.answered_inputs(references)
 
     @abstractmethod
     def cursor_scope(
-        self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
+        self, snapshot: NativeOwnerRegistry, thread_name: str, session_id: str,
     ) -> CursorScope: ...
 
     @abstractmethod
-    async def cursor_metadata(
-        self, publication: CursorPublication, thread_name: str, session_id: str,
-    ) -> tuple[CursorAdvancedUpdate, ...]: ...
-
-    @property
-    @abstractmethod
-    def namespace(self) -> RootId:
-        """Require the original native namespace; a public registry has none."""
+    async def cursor_metadata[Update](
+        self, publication: CursorMetadataRead[Update], thread_name: str, session_id: AcpSessionId,
+    ) -> tuple[Update, ...]: ...
 
     @abstractmethod
     def write(
@@ -166,9 +159,6 @@ class RegistryPrivacy(ABC):
     def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard: ...
 
     @abstractmethod
-    def require_root(self, root_id: RootId, error: Exception) -> None: ...
-
-    @abstractmethod
     def notification_context_sql(self, connection: sqlite3.Connection) -> str:
         """Context evidence for every row in the captured assignment window ``w``."""
 
@@ -177,9 +167,9 @@ class RegistryPrivacy(ABC):
         """Whether a native input committed ``assignment``'s message to its session context."""
 
     @abstractmethod
-    def missing_notification_assignments(
-        self, selection: NotificationSelection,
-    ) -> NotificationAssignmentRead: ...
+    def missing_notification_assignments[Reply](
+        self, selection: NotificationSelectionRead[Reply],
+    ) -> Reply: ...
 
     @classmethod
     @abstractmethod
@@ -232,24 +222,23 @@ class PublicRegistry(RegistryPrivacy):
         """A public root has no native inputs, so no native context entry."""
         return "0"
 
-    def missing_notification_assignments(
-        self, selection: NotificationSelection,
-    ) -> NotificationAssignmentRead:
+    def missing_notification_assignments[Reply](
+        self, selection: NotificationSelectionRead[Reply],
+    ) -> Reply:
         return selection.read_without_assignments()
 
     def cursor_scope(
-        self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
+        self, snapshot: NativeOwnerRegistry, thread_name: str, session_id: str,
     ) -> CursorScope:
-        from agent_comms.acp_extension import NoCursorScope
 
         return NoCursorScope()
 
-    async def cursor_metadata(
-        self, publication: CursorPublication, thread_name: str, session_id: str,
-    ) -> tuple[CursorAdvancedUpdate, ...]:
+    async def cursor_metadata[Update](
+        self, publication: CursorMetadataRead[Update], thread_name: str, session_id: AcpSessionId,
+    ) -> tuple[Update, ...]:
         return ()
 
-    def native_answered(self, answers: HistoricalNativeAnswers,
+    def native_answered(self, answers: NativeAnswerRead[MessageReference],
                         references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
         """A public root has no native inputs, so no native answers."""
         return frozenset()
@@ -274,7 +263,7 @@ class PublicRegistry(RegistryPrivacy):
         # still owns opening this file, before publishing the private guard.
         # Participants registered while public declared no acceptance; the new
         # root declares it for each, as registration does for later ones.
-        with Coordination(str(CoordinationStore.path_in(registry_path.parent))) as store:
+        with coordinator.Coordination(str(CoordinationStore.path_in(registry_path.parent))) as store:
             PrivateCoordinatorSchema.install(store)
             with store.session.writing() as db:
                 for participant in Participants.select(db):
@@ -303,7 +292,6 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         ).insert_if_absent(db)
 
     def publication_connection(self, connection: sqlite3.Connection) -> sqlite3.Connection:
-        from agent_comms.coordination.response import ResponseTable
 
         NativeRuntimeTable.require_installed(connection)
         ResponseTable.require_installed(connection)
@@ -321,7 +309,7 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
 
     def prepare_runtime(self) -> None:
         PrivateCoordinatorTable.declarations()
-        with Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
+        with coordinator.Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
             PrivateCoordinatorSchema.install(store)
 
     def notification_context_sql(self, connection: sqlite3.Connection) -> str:
@@ -332,9 +320,9 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         members = f"({NativeRuntimeInput.source_membership_sql()})"
         return f"EXISTS (SELECT 1 {NativeRuntimeInput.context_entered_from(members, assignment)})"
 
-    def missing_notification_assignments(
-        self, selection: NotificationSelection,
-    ) -> NotificationAssignmentRead:
+    def missing_notification_assignments[Reply](
+        self, selection: NotificationSelectionRead[Reply],
+    ) -> Reply:
         raise PublicationActivationBlocked("Private notification coordinator is missing")
 
     def __init__(self, registry_path: Path, wire_root_id: RootId):
@@ -370,9 +358,8 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         return RootId(self.root_id.hex())
 
     def cursor_scope(
-        self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
+        self, snapshot: NativeOwnerRegistry, thread_name: str, session_id: str,
     ) -> CursorScope:
-        from agent_comms.acp_extension import LiveCursorScope, NoCursorScope
 
         try:
             owner = RegistryOwner.capture_local(snapshot, thread_name)
@@ -384,9 +371,9 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
             owner=owner.thread.require_process(),
         )
 
-    async def cursor_metadata(
-        self, publication: CursorPublication, thread_name: str, session_id: str,
-    ) -> tuple[CursorAdvancedUpdate, ...]:
+    async def cursor_metadata[Update](
+        self, publication: CursorMetadataRead[Update], thread_name: str, session_id: AcpSessionId,
+    ) -> tuple[Update, ...]:
         return await publication.observed_metadata(thread_name, session_id)
 
     def launch(self, root: Path) -> RootLaunch:
@@ -554,3 +541,6 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
             self._write(fd, 1, _record(self.root_id, 1, _COMMITTED, first[2]))
         finally:
             os.close(fd)
+
+
+import agent_comms.coordination.coordinator as coordinator

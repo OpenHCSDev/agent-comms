@@ -12,20 +12,31 @@ from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
 from threading import Event, RLock
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 from weakref import WeakValueDictionary, finalize
 
 from agent_comms.agent_backend import RuntimeLocation
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.execution.native_entries import NativeEntry
-from agent_comms.execution.native_transcript import SessionCut, record_end, reverse_records
+from agent_comms.execution.native_record_file import (
+    SessionCut,
+    record_end,
+    reverse_records,
+)
+from agent_comms.execution.transcript_cursor_reads import MarksSourceRead
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.messaging.watched import FileSource
-from agent_comms.registry.registry_document import RosterVisibility
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
-from agent_comms.storage.locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
+from agent_comms.registry.threads import Thread
+from agent_comms.storage.locked_store import (
+    PublishedSQLiteFile,
+    RuntimeFile,
+    SQLiteFile,
+)
 from agent_comms.storage.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.storage.store_files import StoreBusy
 from agent_comms.storage.typed_table import (
@@ -43,10 +54,6 @@ from agent_comms.ui_model.unread import (
     ReplyUnread,
     UnreadPresentation,
 )
-
-if TYPE_CHECKING:
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry.threads import Thread
 
 _INDEX_VERSION = 8
 
@@ -458,7 +465,12 @@ class TranscriptReadKeys:
         })
 
 
-class TranscriptReadState(RuntimeFile, PublishedSQLiteFile, ThreadOwnedState):
+class TranscriptReadState(
+    RuntimeFile,
+    PublishedSQLiteFile,
+    ThreadOwnedState,
+    MarksSourceRead[SessionCut],
+):
     """Index only replies after read marks, capped from the newest records.
 
     One disposable suffix index owns reply offsets and scan coverage. No worker

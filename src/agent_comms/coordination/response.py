@@ -24,13 +24,11 @@ from agent_comms.coordination.cohort_schema import ClaimBatchAcknowledgements, C
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (
     IdentityConflict,
-    PublicationActivationBlocked,
     PublicationUncertain,
     StaleFence,
 )
 from agent_comms.coordination.obligation_states import PublishedResponse, PublishingResponse
 from agent_comms.coordination.owner_fence import OwnerFence
-from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.results import AlreadyApplied, Applied
 from agent_comms.coordination.snapshot import RecoverySnapshot
@@ -39,6 +37,7 @@ from agent_comms.coordination.tables.publications import (
     PublicationEvidence,
     PublicationIntents,
 )
+from agent_comms.coordination.tables.response_schema import ResponseTable
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.private_send_rules import RunningTurnRegistryCheck
@@ -60,17 +59,10 @@ from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.typed_table import (
     Column,
     ForeignKey,
-    ImmutableRows,
     SqlValue,
     TypedRow,
     WithoutRowid,
 )
-
-
-class ResponseTable(ImmutableRows, PrivateCoordinatorTable):
-    """An immutable response definition with its write checks and append evidence."""
-
-    schema_error = PublicationActivationBlocked
 
 @dataclass(frozen=True)
 class PublicationAppendDispatches(ResponseTable, WithoutRowid):

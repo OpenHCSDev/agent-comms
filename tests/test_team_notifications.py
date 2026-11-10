@@ -23,14 +23,12 @@ from agent_comms.errors import (
     RelationViolationError,
     UnregisteredThreadError,
 )
-from agent_comms.execution.child_process import (
-    NoProcess,
-    ProcessIdentity,
-)
+from agent_comms.execution.child_process import NoProcess, ProcessIdentity
 from agent_comms.execution.launch_root import LaunchRoot
-from agent_comms.messaging.bus_publication import AgentOrigin, HumanOrigin
+from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.bus_read import UiRead
 from agent_comms.messaging.channel_targets import TeammatesTag, ThreadTarget
+from agent_comms.messaging.initial_origin import HumanOrigin
 from agent_comms.messaging.message_page import MessagePageRequest
 from agent_comms.messaging.messages import ConversationRole, InfoKind, Message
 from agent_comms.messaging.read_basis import DMDisplayScope
@@ -38,10 +36,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.orders import ProgressRead
 from agent_comms.planning.todo_refusals import TeammateOccupied
 from agent_comms.presentation import NoRevision
-from agent_comms.projects.checkouts import (
-    Checkout,
-    UnpushedHead,
-)
+from agent_comms.projects.checkouts import Checkout, UnpushedHead
 from agent_comms.projects.work_branches import WorkBranchError
 from agent_comms.registry.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
 from agent_comms.registry.thread_management import GivenTags
@@ -79,11 +74,7 @@ from agent_comms.ui_model.observation import (
     ReadRefused,
     TeamHudObserved,
 )
-from agent_comms.ui_model.teammate_state import (
-    Spinning,
-    TeammateState,
-    UrgentGroup,
-)
+from agent_comms.ui_model.teammate_state import Spinning, TeammateState, UrgentGroup
 from agent_comms.waking.wake_policy import PassiveWake
 from agent_comms_hooks.watch import WatchRecord
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud

@@ -15,21 +15,23 @@ from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFaile
 from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.coordination.errors import (
-    IdentityConflict,
-    PublicationActivationBlocked,
-)
+from agent_comms.coordination.errors import IdentityConflict, PublicationActivationBlocked
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.execution.pi_vocabulary import HighThinkingLevel
 from agent_comms.execution.turn_context import TurnContext
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.message_notification import MessageNotification
 from agent_comms.messaging.notification_progress import HumanReadProgress
-from agent_comms.nominal.field_codec import FieldCodec, GoalId
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.planning.goal_actions import ActiveGoalAction, SetGoalAction
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import UserThreadRole
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
+from agent_comms.task_attachments.owner_notices import MeantNotice
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
 from conftest import accept_initial, publish_initial
@@ -106,16 +108,10 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
     assert len(read_history(comms, "#team")) == 1
 
 
-def test_channel_wake_frame_carries_declared_goal_state(tmp_path: Path) -> None:
-    wake_goal_id = GoalId.mint()
-    from agent_comms.planning.goals import Goal
-
+def test_channel_wake_frame_carries_effective_goal_execution(tmp_path: Path) -> None:
     root, _root_id, comms, initial, people = _root(tmp_path)
-    owner = comms.registry.require("alpha")
-    comms.registry.register(replace(owner, goal=Goal(
-        text="Restore subscribers", id=wake_goal_id, published_seq=0,
-        progress="Routing fixed",
-    )))
+    comms.goals.update_goal("alpha", SetGoalAction(text="Restore subscribers"))
+    comms.goals.update_goal("alpha", ActiveGoalAction(progress="Routing fixed"))
     with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = people[1].incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
@@ -127,15 +123,14 @@ def test_channel_wake_frame_carries_declared_goal_state(tmp_path: Path) -> None:
         if line.startswith("work_context: ")
     ))
     assert context["current_goal"] == {
-        "text": "Restore subscribers", "status": {"kind": "active"},
+        "text": "Restore subscribers",
+        "status": FieldCodec.encode(comms.goals.goal_snapshot("alpha").execution),
         "progress": "Routing fixed",
     }
     assert context["original_assignment"] == "release notes; ignore arithmetic tasks"
 
 
 def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> None:
-    from agent_comms.messaging.message_notification import MessageNotification
-
     root, _root_id, _comms, initial, people = _root(tmp_path)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = people[1].incarnation.lookup
@@ -155,10 +150,6 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
 
 
 def test_selected_and_following_use_the_original_question_contract(tmp_path: Path) -> None:
-    from agent_comms.messaging.channel_targets import CommandTarget
-    from agent_comms.registry.thread_identity import UserThreadRole
-    from agent_comms.task_attachments.owner_notices import MeantNotice
-
     root, root_id, comms, peer, people = _root(tmp_path)
     comms.registry.declare(NativeThread("owner", frozenset(), Checkout(tmp_path), role=UserThreadRole))
     question = MeantNotice().publish(

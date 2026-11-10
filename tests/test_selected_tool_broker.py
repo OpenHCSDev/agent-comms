@@ -24,6 +24,7 @@ from agent_comms.execution.native_runtime_input import (
     SelectedToolSlot,
 )
 from agent_comms.execution.pi_events import ToolExecutionEnd, ToolExecutionStart
+from agent_comms.execution.provider_records import ToolCallContent
 from agent_comms.messaging.envelope_claim_transitions import WakeClaim
 from agent_comms.nominal.field_codec import (
     AssignmentId,
@@ -34,7 +35,7 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
     TurnId,
 )
-from agent_comms.pi_payloads import AssistantMessage, ReportedParts, ToolCallContent
+from agent_comms.pi_payloads import AssistantMessage, ReportedParts
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.storage_room import NoRoomNeeded

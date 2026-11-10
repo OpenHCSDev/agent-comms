@@ -1,48 +1,32 @@
 from __future__ import annotations
 
-from collections.abc import (
-    Awaitable,
-    Callable,
-    Iterable,
-)
+from collections.abc import Awaitable, Callable, Iterable
 from contextlib import ExitStack
-from dataclasses import (
-    dataclass,
-    replace,
-)
+from dataclasses import dataclass, replace
 from functools import partial
-from typing import TYPE_CHECKING
 
-from acp.schema import (
-    AgentMessageChunk,
-    TextContentBlock,
-)
-from metaclass_registry.mro_dispatch import (
-    MroDispatch,
-    handles,
-)
+from acp.schema import AgentMessageChunk, TextContentBlock
+from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms import agent_events as events
 from agent_comms.acp_extension import LiveQueueScope, TranscriptChangedUpdate, encode_updates
 from agent_comms.agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
+from agent_comms.comms import Comms
 from agent_comms.context_store import UNREAD_CONTEXT, ContextPrior
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.execution.acp_failure import NativeTurnOutcome
+from agent_comms.execution.acp_failure import FailedNativeTurnOutcome, NativeTurnOutcome
 from agent_comms.execution.diagnostics import record_request_progress, record_terminal_failure
 from agent_comms.execution.native_turn_context import ContextObserved
 from agent_comms.execution.publication_measurements import PublicationMeasurements
-from agent_comms.execution.turn_failure import ModelRequestFailed, NoTurnFailure
+from agent_comms.execution.turn_failure import ModelRequestFailed, NoTurnFailure, TurnFailure
 from agent_comms.execution.turn_lease import TurnState
 from agent_comms.execution.turn_phase import NativePhaseChanged, PublishingPhase
+from agent_comms.execution.turn_progress_reads import ProgressGoalAccount, ProgressTurn
 from agent_comms.messaging.messages import AlertKind, NoticeRole
 from agent_comms.messaging.send_result import SendResult
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.registry.thread_identity import ClaimedIdentity
 from agent_comms.transcript.transcript_updates import TurnTranscriptUpdate
-
-if TYPE_CHECKING:
-    from agent_comms.execution.owned_turn import OwnedTurn, TurnGoalAccount
-    from agent_comms.execution.turn_failure import TurnFailure
 
 
 @dataclass(kw_only=True)
@@ -54,19 +38,21 @@ class TurnEventPublication(MroDispatch):
         await self.sync_goal_execution(self.session_id)
 
 
-class TurnProgress(events.AgentEventConsumer):
+
+
+class TurnProgress(events.AgentEventConsumer[Comms]):
     def __init__(
         self,
         *,
-        comms,
+        comms: Comms,
         sessions,
         inputs,
         effects,
         runtime,
         session_id: AcpSessionId,
-        turn: OwnedTurn,
+        turn: ProgressTurn,
         finish_event,
-        goals: TurnGoalAccount,
+        goals: ProgressGoalAccount,
         sync_goals: Callable[[AcpSessionId], Awaitable[None]],
     ):
         self._comms = comms
@@ -214,7 +200,9 @@ class TurnProgress(events.AgentEventConsumer):
                 text="Backend reported success without assistant output or tool activity.",
             )
         event = self.turn.terminal.reported(event)
-        event = event.resolve(self.terminal_error, document, self.original)
+        event = event.resolve(self.terminal_error, partial(
+            FailedNativeTurnOutcome.resolve, document=document, original=self.original,
+        ))
         # Retain the resolved outcome before transport publication. If delivery
         # throws, failure handling must not classify or resolve it a second time.
         self.turn.terminal = event

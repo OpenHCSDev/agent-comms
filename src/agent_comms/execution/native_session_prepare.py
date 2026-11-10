@@ -6,20 +6,20 @@ from collections.abc import Awaitable, Callable, Iterable, Sequence
 from contextlib import aclosing
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms import agent_events as events
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.backend import NativeSession
+from agent_comms.execution.native_child import NativeChildState, PiSessionChild
 from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.native_startup import NativeStartup
 from agent_comms.execution.participant_identity import ParticipantIdentity
 from agent_comms.execution.prompt_state import PreparedSession
+from agent_comms.execution.session_retention import NativeSessionRetention
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.pi_payloads import StateData
 
-if TYPE_CHECKING:
-    from agent_comms.pi_native_backend import PersistentPiSession
 
 
 class NativeSessionPreparation(NativeSession):
@@ -39,7 +39,7 @@ class NativeSessionPreparation(NativeSession):
     @classmethod
     async def open(
         cls,
-        persistent: PersistentPiSession,
+        persistent: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity],
         agent_bin: str,
         agent_args: Sequence[str],
         *,
@@ -59,7 +59,7 @@ class NativeSessionPreparation(NativeSession):
 
     @classmethod
     async def open_acquired(
-        cls, persistent: PersistentPiSession, agent_bin: str, agent_args: Sequence[str], *,
+        cls, persistent: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity], agent_bin: str, agent_args: Sequence[str], *,
         package: VerifiedNativePackage, worktree: str, root: Path, owner: ParticipantIdentity, session_directory: Path,
         environment: dict[str, str], session_file: str,
         observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],

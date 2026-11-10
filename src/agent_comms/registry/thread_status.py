@@ -3,15 +3,8 @@ from __future__ import annotations
 import time
 from abc import abstractmethod
 from collections.abc import Callable
-from dataclasses import (
-    dataclass,
-    replace,
-)
-from typing import (
-    TYPE_CHECKING,
-    ClassVar,
-    Self,
-)
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.errors import RelationViolationError, ThreadNotStoppedError, ThreadNotVisibleError
 from agent_comms.execution.child_process import (
@@ -20,10 +13,22 @@ from agent_comms.execution.child_process import (
     ProcessSighting,
     ProcessState,
 )
-from agent_comms.execution.turn_lease import FinishedTurnFence, NoFinishedTurn
+from agent_comms.execution.turn_item import SourceTurn
+from agent_comms.execution.turn_lease import (
+    FinishedTurnFence,
+    NoFinishedTurn,
+    TurnCompletion,
+    TurnLeaseFence,
+)
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.message_send_reads import PresenceMessageSender
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, TextRepresentation
 from agent_comms.nominal.lifecycle_capability import LifecycleCapability
+from agent_comms.registry.activity import ObservedActivity
+from agent_comms.registry.presence_reads import PresenceEntry, PresenceSnapshot, PresenceThread
+from agent_comms.registry.roster_visibility import RosterVisibility
+from agent_comms.registry.thread_identity import GenerationCounter, OwnerIdentity
 from agent_comms.registry.thread_presentation import (
     InactiveThreadPresentationStatus,
     LiveThreadOwnerBinding,
@@ -31,20 +36,7 @@ from agent_comms.registry.thread_presentation import (
     ThreadPresentation,
     UnavailableThreadOwnerBinding,
 )
-
-if TYPE_CHECKING:
-    from agent_comms.execution.turn_item import SourceTurn
-    from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
-    from agent_comms.messaging.message_reference import MessageReference
-    from agent_comms.messaging.sending import Messaging
-    from agent_comms.registry.activity import ObservedActivity
-    from agent_comms.registry.registry_document import (
-        RegistryEntry,
-        RegistrySnapshot,
-        RosterVisibility,
-    )
-    from agent_comms.registry.thread_identity import GenerationCounter, OwnerIdentity
-    from agent_comms.registry.threads import Thread
+from agent_comms.registry.thread_reads import ThreadOwnerStatus
 
 
 class AlwaysListed:
@@ -72,7 +64,7 @@ class Visible(PublishingPresence):
     """A presence that can be addressed, started and pinned in channels."""
 
     def reply(
-        self, messaging: Messaging, sender: str, target: str, body: str, *,
+        self, messaging: PresenceMessageSender, sender: str, target: str, body: str, *,
         answers: tuple[MessageReference, ...], source_turn: SourceTurn,
     ) -> tuple[MessageReference, ...]:
         return (messaging.send(
@@ -92,7 +84,11 @@ class Visible(PublishingPresence):
 
 @dataclass(frozen=True)
 class ThreadStatus(
-    LifecycleCapability, DeclaredFamily, ProcessFence["ThreadStatus"], affix="ThreadStatus",
+    LifecycleCapability,
+    DeclaredFamily,
+    ProcessFence['ThreadStatus'],
+    ThreadOwnerStatus[PresenceSnapshot, PresenceThread],
+    affix='ThreadStatus',
 ):
     may_be_active: ClassVar[bool] = False
     running: ClassVar[bool] = False
@@ -115,13 +111,13 @@ class ThreadStatus(
         """Whether this lifecycle belongs in the requested executable roster."""
 
     def reply(
-        self, messaging: Messaging, sender: str, target: str, body: str, *,
+        self, messaging: PresenceMessageSender, sender: str, target: str, body: str, *,
         answers: tuple[MessageReference, ...], source_turn: SourceTurn,
     ) -> tuple[MessageReference, ...]:
         """Unavailable recipients retain their answer in the transcript, not a new DM."""
         return ()
 
-    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
+    def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
         return self
 
     def declaration(self) -> ThreadStatus:
@@ -134,7 +130,7 @@ class ThreadStatus(
         """This stored status while its process still binds it; only a stop has a fence."""
         return self
 
-    def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
+    def external_registered(self, thread: PresenceThread, now: float) -> ThreadStatus:
         return NoBridgeThreadStatus().registered(thread, now)
 
     def paused_since(self, last_seen: float) -> tuple[float, ...]:
@@ -190,16 +186,16 @@ class ThreadStatus(
     def changes_owner(self, nxt: ThreadStatus) -> bool:
         return self.starts_owner(nxt) or nxt.starts_owner(self)
 
-    def native_owner_binding(self, snapshot: RegistrySnapshot, thread: Thread) -> ThreadOwnerBinding:
+    def native_owner_binding(self, snapshot: PresenceSnapshot, thread: PresenceThread) -> ThreadOwnerBinding:
         return UnavailableThreadOwnerBinding()
 
-    def restart_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+    def restart_candidates(self, thread: PresenceThread) -> tuple[PresenceThread, ...]:
         return ()
 
-    def deletable_threads(self, thread: Thread) -> tuple[Thread, ...]:
+    def deletable_threads(self, thread: PresenceThread) -> tuple[PresenceThread, ...]:
         return () if thread.process_alive else (thread,)
 
-    def owns_entry(self, entry: RegistryEntry, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
+    def owns_entry(self, entry: PresenceEntry, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
         return False
 
     def completed_turn(self, lease: TurnLeaseFence) -> TurnCompletion:
@@ -249,7 +245,7 @@ class HostBoundPresence:
 
     holds_process: ClassVar[bool] = True
 
-    def restart_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+    def restart_candidates(self, thread: PresenceThread) -> tuple[PresenceThread, ...]:
         return thread.role.executor(thread) if thread.process_alive else ()
 
 
@@ -262,7 +258,7 @@ class ActiveThreadPresence(
     receiving = True
     may_be_active = True
 
-    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
+    def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
         return thread.process_identity.thread_status(self, last_seen)
 
     def process_seen(self, process: ProcessState) -> ThreadStatus:
@@ -280,15 +276,15 @@ class ActiveThreadPresence(
     def withdraw_owner(self, counter: GenerationCounter, name: str) -> None:
         counter.advance(name)
 
-    def native_owner_binding(self, snapshot: RegistrySnapshot, thread: Thread) -> ThreadOwnerBinding:
+    def native_owner_binding(self, snapshot: PresenceSnapshot, thread: PresenceThread) -> ThreadOwnerBinding:
         if not thread.process_alive:
             return super().native_owner_binding(snapshot, thread)
         return LiveThreadOwnerBinding(snapshot.owner_identity(thread.name), thread.require_process())
 
-    def deletable_threads(self, thread: Thread) -> tuple[Thread, ...]:
+    def deletable_threads(self, thread: PresenceThread) -> tuple[PresenceThread, ...]:
         return ()
 
-    def owns_entry(self, entry: RegistryEntry, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
+    def owns_entry(self, entry: PresenceEntry, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
         return (entry.matches_name(owner.incarnation.name)
                 and owner.owns(entry.thread, entry.owner_generation, process))
 
@@ -369,7 +365,7 @@ class StoppedPresence(Visible, ThreadStatus, declared_name=None):
     stopped = True
     vacant = True
 
-    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
+    def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
         """Stopped never keeps a process binding, so a stored stop still bound is a fence
         whose host has not completed the session."""
         return thread.process_identity.stopped_seen(self)
@@ -405,7 +401,7 @@ class CliInboxPresence(AlwaysListed):
 
     may_be_active: ClassVar[bool] = True
 
-    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
+    def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
         return (ConnectedThreadStatus() if thread.process_identity.alive()
                 else NoBridgeThreadStatus())
 
@@ -425,7 +421,7 @@ class DeclaredReaderPresence(CliInboxPresence):
     def declaration(self) -> Self:
         return self
 
-    def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
+    def external_registered(self, thread: PresenceThread, now: float) -> ThreadStatus:
         return self.registered(thread, now)
 
 
@@ -440,7 +436,7 @@ class ConnectedThreadStatus(DeclaredReaderPresence, RunningThreadStatus):
 class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, StoppedPresence):
     """A live session bridge waiting for a Monitor to confirm its probe."""
 
-    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
+    def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
         return self if thread.process_identity.alive() else NoBridgeThreadStatus()
 
     def paused_since(self, last_seen: float) -> tuple[float, ...]:
@@ -475,7 +471,7 @@ class ServiceThreadStatus(PublishingPresence, ThreadStatus):
     def in_view(self, visibility: RosterVisibility) -> bool:
         return False
 
-    def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
+    def external_registered(self, thread: PresenceThread, now: float) -> ThreadStatus:
         return self
 
     def after_heartbeat(self, name: str) -> ThreadStatus:

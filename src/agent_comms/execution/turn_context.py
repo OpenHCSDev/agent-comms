@@ -3,37 +3,27 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from abc import (
-    ABC,
-    abstractmethod,
-)
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import (
-    dataclass,
-    field,
-    replace,
-)
-from importlib.resources import files
+from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import (
-    TYPE_CHECKING,
-    Annotated,
-    ClassVar,
-    Self,
-)
+from typing import Annotated, Self
 
 from pydantic import JsonValue
 
-from agent_comms import instructions
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.annotation_disclosure import (
     PublicInstructionAnnotations,
     WithheldAnnotations,
 )
+from agent_comms.execution.context_owner import ContextOwner
+from agent_comms.execution.context_provenance_source import ContextProvenanceSource
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.turn_item import NativeItemId, PiRequestKey
+from agent_comms.instruction_bytes import InstructionBytes
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -46,23 +36,19 @@ from agent_comms.nominal.field_codec import (
     TurnId,
     WireOmitDefault,
 )
-from agent_comms.peer_relevance import AlwaysListed, GoalShown, PeerRelevance
+from agent_comms.peer_relevance import AlwaysListed, PeerRelevance
+from agent_comms.planning.goal_mutation import GoalContextSource
+from agent_comms.planning.goal_work import GoalWorkSource
 from agent_comms.planning.goals import Goal, NoGoal
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.peer_relation import PeerRelation
 from agent_comms.registry.thread_identity import ThreadIncarnation, TurnIdentity
 from agent_comms.transport.tool_result import DeclaredReply, ToolResult
 from agent_comms.waking.wake_policy import WakePolicy
 
-if TYPE_CHECKING:
-    from agent_comms.context_store import RecordedContextState
-    from agent_comms.input_attempt import StoredInput
-    from agent_comms.presentation import ThreadView
-    from agent_comms.registry.relationships import PeerRelation
-    from agent_comms.registry.threads import Thread
-
 
 @dataclass(frozen=True)
-class Provenance(DeclaredFamily, affix="Provenance"):
+class Provenance(DeclaredFamily, affix="Provenance", discovery_package="agent_comms.cli_bridges.codex_records"):
     """A source coordinate, not permission to execute or replay it."""
 
     @abstractmethod
@@ -114,36 +100,13 @@ class FileProvenance(Provenance):
         return raw.decode("utf-8")
 
 
-@dataclass(frozen=True)
-class CodexRolloutProvenance(Provenance):
-    """Authenticate historical role-record bytes; never current instructions."""
+class HistoricalInstructionProvenance(Provenance, declared_name=None):
+    """A retained instruction from a source session, never current execution authority."""
 
-    path: str
-    offset: int
-    length: int
-    sha256: str
-    instruction: int
-
-    def public_description(self) -> str:
-        return (f"Historical Codex instruction · {self.path} · record bytes "
-                f"{self.offset}:{self.offset + self.length} · item {self.instruction} "
-                "· not current instructions")
-
-    def public_text(self, comms) -> str:
-        from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD
-
-        if min(self.offset, self.length, self.instruction) < 0:
-            raise ValueError("Historical Codex source coordinates must be nonnegative")
-        with Path(self.path).open("rb") as source:
-            source.seek(self.offset)
-            raw = source.read(self.length)
-        if len(raw) != self.length or hashlib.sha256(raw).hexdigest() != self.sha256:
-            raise ValueError("Historical Codex source record changed or is unavailable")
-        try:
-            instruction = ROLLOUT_RECORD.validate_json(raw).instructions()[self.instruction]
-        except IndexError as error:
-            raise ValueError("Historical instruction is outside its original record") from error
-        return instruction.text
+    @abstractmethod
+    def instruction_position(self) -> tuple[int, int]:
+        """Its original record and instruction ordering coordinates."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -282,9 +245,8 @@ class InstructionFile:
 
     @classmethod
     def read(cls, name: str) -> InstructionFile:
-        path = files(instructions) / name
-        raw = path.read_bytes()
-        return cls(raw.decode(), FileProvenance(str(path), hashlib.sha256(raw).hexdigest()))
+        read = InstructionBytes.read(name)
+        return cls(read.text, FileProvenance(str(read.path), hashlib.sha256(read.raw).hexdigest()))
 
     def render(self, values: dict[str, object]) -> str:
         return self.content.format_map(values)
@@ -982,96 +944,6 @@ class SystemLayerSegment(PublicInstructionAnnotations, MeasuredNativeSegment):
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativeMessages:
-    # These are the SDK's exact *provider* messages, including opaque extension
-    # and provider fields. Core does not decode them as its event/message subset.
-    messages: tuple[dict[str, JsonValue], ...]
-
-    @classmethod
-    def recorded_parts(cls, original: SegmentManifest) -> tuple[SegmentManifest, ...]:
-        # SDK capture emits one same-kind child per provider message. A single
-        # message's logical input-range annotations have other declared kinds.
-        if all(part.kind is cls for part in original.contributors):
-            return original.contributors
-        return ()
-
-    def provider_value(self):
-        return list(self.messages)
-
-    def public_text(self) -> str:
-        from agent_comms.pi_payloads import PiMessage
-
-        return "\n".join(PiMessage.from_wire(message).text for message in self.messages)
-
-    def source_ranges(self) -> tuple[ContributionCoordinates, ...]:
-        from agent_comms.pi_payloads import PiMessage
-
-        offset = 0
-        ranges = []
-        parts = self.recorded_parts(self.measured_manifest())
-        for index, message in enumerate(self.messages):
-            text = PiMessage.from_wire(message).text
-            provenance = parts[index].provenance if parts else self.provenance
-            ranges.append(ContributionCoordinates.capture(type(self), provenance, offset, text))
-            offset += len(text.encode("utf-8")) + 1
-        return tuple(ranges)
-
-    def render_into(self, prompt_parts, provider):
-        provider.setdefault("messages", []).extend(self.messages)
-
-
-class NativeAnnotations(NativeMessages):
-    """A transcript span keeps the disclosure policy of its original native message."""
-
-    def disclosure_for(self, span: ContextSpan):
-        from agent_comms.pi_payloads import PiMessage
-
-        for source, message in zip(self.source_ranges(), self.messages, strict=True):
-            if source.contains(span.coordinates):
-                return PiMessage.from_wire(message).disclosure_for(span)
-        raise ValueError("Annotation names no original native message")
-
-
-@dataclass(frozen=True, kw_only=True)
-class TranscriptSegment(NativeAnnotations, MeasuredNativeSegment):
-    keyframe_interval: ClassVar[int] = 32
-
-    @classmethod
-    def record_manifest(
-        cls, original: SegmentManifest, previous: SegmentRecording,
-        *, recording_turn: int = 1,
-    ) -> tuple[RecordedSegmentManifest, tuple[ContextEntryManifest, ...]]:
-        if not original.contributors:
-            return super().record_manifest(original, previous, recording_turn=recording_turn)
-        provenance = tuple(source for source in original.provenance
-                           for source in source.turn_recording())
-        header = replace(original, provenance=provenance, contributors=(), captured_text=())
-        references = tuple(ContextEntryReference.from_sources(child.sources)
-                           for child in original.contributors)
-        if not recording_turn % cls.keyframe_interval:
-            previous = UnrecordedSegment()
-        recorded = previous.record_entries(header, references)
-        entries = tuple(ContextEntryManifest(child)
-                        for child in original.contributors[recorded.inherited_entries:])
-        return recorded, entries
-
-
-@dataclass(frozen=True, kw_only=True)
-class TransformedInputSegment(NativeAnnotations, MeasuredNativeSegment):
-    """SDK values without original-entry correspondence carry no user-entry proof."""
-
-
-@dataclass(frozen=True, kw_only=True)
-class CompactionSummarySegment(PublicInstructionAnnotations, NativeMessages, MeasuredNativeSegment):
-    pass
-
-
-@dataclass(frozen=True, kw_only=True)
-class InjectionMessageSegment(NativeAnnotations, MeasuredNativeSegment):
-    pass
-
-
-@dataclass(frozen=True, kw_only=True)
 class ToolCatalogSegment(MeasuredNativeSegment):
     tools: tuple[dict[str, JsonValue], ...]
 
@@ -1142,13 +1014,13 @@ class PeerState:
     goal: tuple[str, ...]
 
     @classmethod
-    def from_view(cls, view: ThreadView, relation: PeerRelation, goals) -> PeerState:
-        goal = view.thread.goal.active() if relation.relevance.grants(GoalShown) else NoGoal()
+    def from_owner(cls, owner: ContextOwner, relation: PeerRelation, goals) -> PeerState:
+        goal = relation.relevance.context_goal(owner.goal.active, NoGoal)
         return cls(
-            view.thread.name,
+            owner.name,
             relation.relevance,
             relation.note,
-            goal.instructions_for(goals, view.thread.incarnation),
+            goal.instructions_for(goals, owner.incarnation),
         )
 
 
@@ -1169,12 +1041,12 @@ class CoordinationSegment(InstructionSegment):
 
     @classmethod
     def capture(
-        cls, owner: Thread, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...], goals
+        cls, owner: ContextOwner, peer_owners: tuple[ContextOwner, ...], relations: tuple[PeerRelation, ...], goals
     ) -> CoordinationSegment:
         response_instruction = WakePolicy.relevance_instruction()
-        viewed = {view.thread.incarnation: view for view in views}
-        peers = tuple(PeerState.from_view(viewed[r.peer], r, goals)
-                      for r in relations if r.peer in viewed and r.relevance.grants(AlwaysListed))
+        by_incarnation = {peer.incarnation: peer for peer in peer_owners}
+        peers = tuple(PeerState.from_owner(by_incarnation[r.peer], r, goals)
+                      for r in relations if r.peer in by_incarnation and r.relevance.grants(AlwaysListed))
         revision = hashlib.sha256(json.dumps(FieldCodec.encode(peers)).encode()).hexdigest()
         return super().capture(
             (OwnerProvenance(owner.incarnation, revision), response_instruction.source),
@@ -1202,7 +1074,7 @@ class GoalSegment(InstructionSegment):
     progress: str = ""
 
     @classmethod
-    def capture(cls, owner: Thread, goal: Goal, goals) -> GoalSegment:
+    def capture(cls, owner: ContextOwner, goal: Goal, goals: GoalWorkSource) -> GoalSegment:
         todos = goal.order.todos(goals, owner.incarnation, goal.id)
         orders_text = goal.order.instructions(todos)
         progress = goal.order.progress(goal, todos)
@@ -1238,7 +1110,7 @@ class RenderedInput:
 @dataclass(frozen=True)
 class ContextTurn(DeclaredFamily, affix="ContextTurn"):
     @abstractmethod
-    def provenance(self, owner: Thread) -> Provenance: ...
+    def provenance(self, owner: ContextOwner) -> Provenance: ...
 
     def require_recorded(self) -> RecordedContextTurn:
         raise ValueError("A next-context preview cannot be published as a recorded turn")
@@ -1265,7 +1137,7 @@ class RecordedContextTurn(ContextTurn):
         if self.occurrence.generation < 1:
             raise ValueError("Context requires the original authorized turn generation")
 
-    def provenance(self, owner: Thread) -> Provenance:
+    def provenance(self, owner: ContextOwner) -> Provenance:
         return TurnProvenance(owner.incarnation, self.identity)
 
     def require_recorded(self) -> RecordedContextTurn:
@@ -1276,7 +1148,7 @@ class RecordedContextTurn(ContextTurn):
 
 
 class NextContextTurn(ContextTurn):
-    def provenance(self, owner: Thread) -> Provenance:
+    def provenance(self, owner: ContextOwner) -> Provenance:
         return OwnerProvenance(
             owner.incarnation,
             hashlib.sha256(json.dumps(owner.to_wire(), sort_keys=True).encode()).hexdigest(),
@@ -1358,6 +1230,16 @@ class ContextManifestChange(CliResult):
     added: tuple[SegmentManifest, ...]
 
 
+class ContextRecording(ABC):
+    """The original previous context supplies its recording sequence and segments."""
+
+    @abstractmethod
+    def next_recording_turn(self) -> int: ...
+
+    @abstractmethod
+    def segment(self, position: int, original: SegmentManifest) -> SegmentRecording: ...
+
+
 @dataclass(frozen=True)
 class RecordedContextIdentity:
     """The request identity shared by storage and restored context records."""
@@ -1387,7 +1269,7 @@ class RecordedContextManifest(RecordedContextIdentity):
     @classmethod
     def capture(
         cls, manifest: ContextManifest,
-        previous: RecordedContextState,
+        previous: ContextRecording,
     ) -> tuple[RecordedContextManifest, tuple[ContextEntryManifest, ...]]:
         recording_turn = previous.next_recording_turn()
         parts = []
@@ -1421,46 +1303,18 @@ class RecordedContextManifest(RecordedContextIdentity):
 
 
 @dataclass(frozen=True)
-class TurnContext(DeclaredReply):
+class TurnContext(DeclaredReply, GoalContextSource[ContextOwner, GoalWorkSource, "TurnContext"]):
     thread: ThreadIncarnation
     turn: ContextTurn
     segments: tuple[ContextSegment, ...]
 
-    @classmethod
-    def for_inspection(cls, comms, owner: Thread) -> TurnContext:
-        """Preview the Core context that would be added before the next input.
+    def with_goal(self, owner: ContextOwner, goals: GoalWorkSource) -> TurnContext:
+        return owner.goal.active().add_context(
+            self, partial(self.prepend_goal, owner, goals=goals),
+        )
 
-        Use the same context builders as turn preparation. This preview is not
-        a recorded SDK request and does not grant permission to submit input.
-        """
-        relations = comms.relationships.context_relations(owner.name)
-        context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations, comms.goals)
-        return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations)
-
-    def with_goal(self, owner: Thread, goals) -> TurnContext:
-        return owner.goal.active().add_context(self, owner, goals)
-
-    def prepend_goal(self, owner: Thread, goal: Goal, goals) -> TurnContext:
+    def prepend_goal(self, owner: ContextOwner, goal: Goal, goals: GoalWorkSource) -> TurnContext:
         return self.prepend(GoalSegment.capture(owner, goal, goals))
-
-    def with_awareness(
-        self, comms, owner: Thread, relations: tuple[PeerRelation, ...]
-    ) -> TurnContext:
-        """Append what the owner should know without being asked.
-
-        Its relationships, the messages addressed to it and its partners' goal changes.
-        """
-        from agent_comms.context_segments.partner_activity import PartnerActivitySegment
-        from agent_comms.context_segments.relationships import RelationshipsSegment
-
-        context = self
-        for segment in (
-            *RelationshipsSegment.capture(owner, relations),
-            *comms.bus.awareness_segments(owner, relations),
-            *PartnerActivitySegment.capture(owner, relations, comms.goals),
-        ):
-            context = context.append(segment)
-        return context
 
     def require_source(self, source: Provenance) -> Provenance:
         for segment in self.segments:
@@ -1484,14 +1338,14 @@ class TurnContext(DeclaredReply):
     @classmethod
     def for_owner(
         cls,
-        owner: Thread,
+        owner: ContextOwner,
         turn: ContextTurn,
         task: str,
-        views: tuple[ThreadView, ...],
+        peer_owners: tuple[ContextOwner, ...],
         relations: tuple[PeerRelation, ...],
         goals,
         origins: tuple[MessageReference, ...] = (),
-        inputs: tuple[StoredInput, ...] = (),
+        inputs: tuple[ContextProvenanceSource[Provenance], ...] = (),
     ) -> TurnContext:
         source = tuple(WireProvenance(ref) for ref in origins) or (turn.provenance(owner),)
         source += tuple(row.context_provenance() for row in inputs)
@@ -1499,7 +1353,7 @@ class TurnContext(DeclaredReply):
             owner.incarnation,
             turn,
             (
-                CoordinationSegment.capture(owner, views, relations, goals),
+                CoordinationSegment.capture(owner, peer_owners, relations, goals),
                 UserInputSegment(provenance=source, content=task),
             ),
         )

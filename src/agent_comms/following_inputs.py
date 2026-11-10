@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING
 
 from agent_comms.acp_extension import LiveQueueScope
+from agent_comms.agent_events import InputRefused
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.following_input_contracts import (
+    FollowingInputRetirement,
+    FollowingTurnSource,
+)
 from agent_comms.execution.input_drain import InputDrain
 from agent_comms.execution.owned_send import OwnedSend
 from agent_comms.execution.queued_input import DeliveredInput, InputHandoffRefused
@@ -16,11 +20,6 @@ from agent_comms.execution.turn_input_source import AcceptedFollowingInput
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.registry.thread_identity import ClaimedIdentity
 from agent_comms.registry.threads import Thread
-
-if TYPE_CHECKING:
-    from agent_comms.agent_events import InputRefused
-    from agent_comms.execution.tracked_turn import TrackedTurnSession
-    from agent_comms.execution.turn_runner import TurnRunner
 
 
 class FollowingInputs:
@@ -39,7 +38,7 @@ class FollowingInputs:
                 inputs.comms.owners.require_private_launch().wire_root_id, after_seq=after_seq,
             )
 
-    async def open(self, session: TrackedTurnSession) -> None:
+    async def open(self, session: FollowingTurnSource[OwnedSend]) -> None:
         return None
 
     async def started(self, input_id: InputId) -> AcceptedFollowingInput:
@@ -50,7 +49,7 @@ class FollowingInputs:
 
 
 @dataclass
-class OwnerFollowingInputs(FollowingInputs):
+class OwnerFollowingInputs(FollowingInputs, FollowingInputRetirement):
     """The owner's inbox for one selected turn, read by that turn once its first input is in."""
 
     inputs: InputDrain
@@ -68,25 +67,22 @@ class OwnerFollowingInputs(FollowingInputs):
             owner=self.sender.thread.require_process(),
         )
 
-    async def pass_on_unread(self, turns: TurnRunner) -> None:
+    async def pass_on_unread(self) -> None:
         """Inputs the ended turn never read start the next turn or are refused, never replayed."""
+        turns = self.inputs.effects.turns
         for input_id in tuple(self.inputs.state(self.session_id).queued):
-            if await self.pass_on(turns, input_id):
+            inputs, session_id = self.inputs, self.session_id
+            item = inputs.state(session_id).queued.get(input_id)
+            try:
+                if item is None:
+                    raise InputHandoffRefused("The input was retired before its turn read it")
+                await item.dispatch(turns, session_id, self.owner.name)
+            except InputHandoffRefused:
+                await inputs.input_refused(session_id, input_id)
+            else:
                 return  # The next turn owns the remaining live acceptances.
 
-    async def pass_on(self, turns: TurnRunner, input_id: InputId) -> bool:
-        inputs, session_id = self.inputs, self.session_id
-        item = inputs.state(session_id).queued.get(input_id)
-        try:
-            if item is None:
-                raise InputHandoffRefused("The input was retired before its turn read it")
-            await item.dispatch(turns, session_id, self.owner.name)
-        except InputHandoffRefused:
-            await inputs.input_refused(session_id, input_id)
-            return False
-        return True
-
-    async def open(self, session: TrackedTurnSession) -> None:
+    async def open(self, session: FollowingTurnSource[OwnedSend]) -> None:
         inputs = self.inputs
         sender = await Coordination.run_worker(partial(
             session.prompt_send_boundary.following_sender,
@@ -97,7 +93,7 @@ class OwnerFollowingInputs(FollowingInputs):
         session.forward_inbox(self.inbox, sender)
         await self.ready(
             inputs, self.session_id,
-            after_seq=session.prompt_send_boundary.following_after_seq,  # type: ignore[union-attr]
+            after_seq=session.prompt_send_boundary.following_after_seq,
         )
 
     async def started(self, input_id: InputId) -> AcceptedFollowingInput:

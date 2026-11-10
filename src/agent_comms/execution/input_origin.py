@@ -4,27 +4,25 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.controller import NO_CONTROLLER
+from agent_comms.execution.input_ingress import InputIngressContext, InputRegistry
 from agent_comms.execution.input_key import InputKey, InputKeyText
+from agent_comms.execution.input_lookup import InputLookup
+from agent_comms.execution.input_text_context import InputTextContext
 from agent_comms.execution.turn_context import Provenance
 from agent_comms.installer.harness_install import HarnessSession
-from agent_comms.messaging.bus_publication import HumanOrigin
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import RootId
 from agent_comms.planning.goals import GoalCheckpoint
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.task_owner import TaskOwner
+from agent_comms.registry.task_registry import TaskRegistry
 from agent_comms.registry.thread_identity import ClaimedIdentity, ClaimScoped
 from agent_comms.transport.tool_result import ToolResult
-
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-    from agent_comms.input_attempt import StoredInput
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry.threads import Thread
 
 
 class InputDelivery:
@@ -50,14 +48,14 @@ class UndeliveredInput(InputDelivery):
 class InputOrigin(DeclaredFamily, affix="InputOrigin"):
     """The original reservation owns this source through every disposition."""
 
-    def require_ingress(self, comms: Comms, snapshot: RegistrySnapshot,
-                        claim_scope: ClaimedIdentity, controller) -> None:
+    def require_ingress[Owner: TaskOwner](
+        self, comms: InputIngressContext[Owner], snapshot: InputRegistry[Owner],
+        claim_scope: ClaimedIdentity, controller,
+    ) -> None:
         pass
 
-    def retained_fact(self, source: StoredInput):
-        from agent_comms.messaging.retained_task_facts import InputTaskFact
-
-        return InputTaskFact(source)
+    def retained_fact(self, source: input_attempt.StoredInput):
+        return task_facts.InputTaskFact(source)
 
     def require_human(self) -> HumanInputOrigin:
         raise RelationViolationError("Input lacks an original human author witness")
@@ -87,16 +85,14 @@ class InputProvenance(Provenance):
     def public_description(self) -> str:
         return f"Original input {self.key} · {self.origin.declared_name}"
 
-    def public_text(self, comms) -> str:
-        from agent_comms.input_disposition import InputDispositions
-
-        return self.require_original(InputDispositions(comms.root)).source_text
+    def public_text(self, comms: InputTextContext[input_attempt.InputAttempt]) -> str:
+        return self.require_original(comms.input_dispositions(comms.root)).source_text
 
     def require_human_input(self):
         self.origin.require_human()
         return self
 
-    def require_original(self, inputs):
+    def require_original(self, inputs: InputLookup[input_attempt.InputAttempt]) -> input_attempt.StoredInput:
         """Look up the input by key and check its recorded author."""
         return inputs.lookup(self.key).require_original_provenance(self)
 
@@ -142,12 +138,14 @@ class HumanInputOrigin(InputOrigin, ClaimScoped, ToolResult):
     """
 
     root_id: RootId
-    author: HumanOrigin
+    author: initial_origin.HumanOrigin
     project: Checkout
     goal: GoalCheckpoint
 
     @classmethod
-    def capture(cls, comms: Comms, claim_scope: ClaimedIdentity) -> HumanInputOrigin:
+    def capture[Owner: TaskOwner](
+        cls, comms: InputIngressContext[Owner], claim_scope: ClaimedIdentity,
+    ) -> HumanInputOrigin:
         cut = comms.registry.store.snapshot_with_authority()
         owner = cls._require_owner(cut.snapshot, claim_scope)
         root_id = cut.privacy.namespace
@@ -157,12 +155,14 @@ class HumanInputOrigin(InputOrigin, ClaimScoped, ToolResult):
         owner = cls._require_owner(cut.snapshot, claim_scope)
         user = cut.snapshot.user_thread().require(RelationViolationError("User input author was removed"))
         return cls(
-            root_id=root_id, author=HumanOrigin.of(user),
+            root_id=root_id, author=initial_origin.HumanOrigin.of(user),
             claimed_identity=claim_scope, project=owner.worktree, goal=owner.goal.captured,
         )
 
     @staticmethod
-    def _require_owner(snapshot: RegistrySnapshot, claim_scope: ClaimedIdentity) -> Thread:
+    def _require_owner[Owner: TaskOwner](
+        snapshot: InputRegistry[Owner], claim_scope: ClaimedIdentity,
+    ) -> Owner:
         owner = snapshot.require_active(claim_scope.incarnation.name)
         if snapshot.claimed_identity(owner.name) != claim_scope:
             raise RelationViolationError("User input attachment changed before capture")
@@ -186,15 +186,13 @@ class HumanInputOrigin(InputOrigin, ClaimScoped, ToolResult):
         if (self.project, self.goal) != (owner.worktree, owner.goal.captured):
             raise RelationViolationError("User input scope changed before reservation")
 
-    def retained_fact(self, source):
-        from agent_comms.messaging.retained_task_facts import HumanInputTaskFact
-
-        return HumanInputTaskFact(source)
+    def retained_fact(self, source: input_attempt.StoredInput):
+        return task_facts.HumanInputTaskFact(source)
 
     def require_human(self) -> HumanInputOrigin:
         return self
 
-    def applies(self, owner: Thread, snapshot: RegistrySnapshot) -> bool:
+    def applies(self, owner: TaskOwner, snapshot: TaskRegistry[TaskOwner]) -> bool:
         return (self.claimed_identity.incarnation.resolved(snapshot) == owner.incarnation
                 and (self.project, self.goal) == (owner.worktree, owner.goal.captured))
 
@@ -204,3 +202,8 @@ class HumanInputOrigin(InputOrigin, ClaimScoped, ToolResult):
         original = incarnation.require_recorded()
         return (recorded_name == authorized.name
                 and authorized.created_at == original.created_at)
+
+
+import agent_comms.input_attempt as input_attempt
+import agent_comms.messaging.retained_task_facts as task_facts
+from agent_comms.messaging import initial_origin

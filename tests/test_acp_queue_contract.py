@@ -13,7 +13,6 @@ from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import (
     IdentifiedInputStarted,
     InputDeliveryChangedUpdate,
-    LiveCursorScope,
     LiveQueueScope,
     QueueChangedUpdate,
     QueuePromptRequest,
@@ -39,6 +38,7 @@ from agent_comms.registry.thread_identity import (
     RecordedThreadIncarnation,
 )
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.attachment_scope import LiveCursorScope
 from bus_record_fixture import prepare_native_comms
 from stored_inputs import stored_inputs
 

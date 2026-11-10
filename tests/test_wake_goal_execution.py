@@ -21,9 +21,9 @@ from agent_comms.planning.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
+from agent_comms.planning.goal_execution import GoalExecution
 from agent_comms.planning.goal_presentation import (
     CompletedExecution,
-    GoalExecution,
     PausedExecution,
     RetryableBlockExecution,
     RunnableExecution,

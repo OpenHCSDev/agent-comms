@@ -22,18 +22,15 @@ from agent_comms.errors import (
     UnregisteredThreadError,
 )
 from agent_comms.execution.launch_root import LaunchRoot
-from agent_comms.messaging.bus_publication import HumanOrigin
 from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.initial_origin import HumanOrigin
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.messaging.task_sources import TaskAttachment
 from agent_comms.nominal.field_codec import PathText
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_identity import (
-    RecordedThreadIncarnation,
-    UserThreadRole,
-)
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation, UserThreadRole
 from agent_comms.registry.threads import NativeThread
 from bus_record_fixture import prepare_native_comms
 from conftest import accept_initial

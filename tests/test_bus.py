@@ -29,7 +29,7 @@ from agent_comms.messaging.bus import (
     PrivateRecord,
     PublicRecord,
 )
-from agent_comms.messaging.bus_publication import Delivered, HumanOrigin, KeyedPublication
+from agent_comms.messaging.bus_publication import Delivered, KeyedPublication
 from agent_comms.messaging.bus_route_counts import BusRouteCounts
 from agent_comms.messaging.bus_tables import (
     AnsweredSource,
@@ -37,6 +37,7 @@ from agent_comms.messaging.bus_tables import (
     BusSchema,
     MessageIdentitySource,
 )
+from agent_comms.messaging.initial_origin import HumanOrigin
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import (
     BusProjectionTables,

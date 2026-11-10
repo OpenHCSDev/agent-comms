@@ -25,7 +25,7 @@ from agent_comms.nominal.field_codec import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.agent_events import AgentEvent
+    from agent_comms.execution.agent_event import AgentEvent
     from agent_comms.execution.backend import TurnSession
     from agent_comms.execution.turn_usage import UsageAccount
 
