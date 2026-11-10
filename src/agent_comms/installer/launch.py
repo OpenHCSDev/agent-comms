@@ -1,13 +1,12 @@
-"""One install, run from the target revision's own source in a systemd unit of its own.
+"""One install, with checked target packages and a systemd unit of its own.
 
-The installed CLI only fetches, resolves the target and checks its tree out; the install
-itself runs that tree's ``src`` (``python -m agent_comms.installer``), so its carries,
-rehearsal and harness setup are the target's, never the outgoing runtime's.
+The current launcher's bootstrap selects the packages before loading old target code.
+It then becomes the checked target runtime. Carry, rehearsal and harness setup still run
+through the target's own declarations, never the outgoing runtime's.
 """
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -26,7 +25,10 @@ from metaclass_registry.mro_dispatch import (
 
 import agent_comms.installer
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
-from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.launch_runtime import (
+    LaunchRuntime,
+    RunningSource,
+)
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (
     FailureReportPublicationPhase,
@@ -184,7 +186,7 @@ class InstallRun:
               f"diagnostics {self.unit.errors}", file=sys.stderr, flush=True)
         self.unit.start(
             tree.path, (sys.executable, "-m", agent_comms.installer.__name__),
-            os.pathsep.join(map(str, tree.source_paths())), wait=wait,
+            str(RunningSource.current().root), wait=wait,
         )
 
     def launch(self, output: TextIO) -> int:

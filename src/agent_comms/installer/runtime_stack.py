@@ -9,8 +9,14 @@ import hashlib
 import os
 import shutil
 import tempfile
+import json
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from dataclasses import dataclass, field, fields
 from pathlib import Path
+from secrets import token_hex
 
 from agent_comms.execution.child_process import ResidentManager
 from agent_comms.execution.launch_runtime import LaunchRuntime, RestartEnvironment
@@ -31,7 +37,7 @@ from agent_comms.installer.native_package import NativePackageStore, pinned_pack
 from agent_comms.installer.practice import RuntimeHome
 from agent_comms.installer.probes.imports import ClientImportsProbe
 from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
-from agent_comms.installer.probes.resolution import InstalledPackagesProbe, RuntimeResolutionProbe
+from agent_comms.installer.probes.resolution import RuntimeResolutionProbe
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_resolution import (
     ConsoleScriptPackage,
@@ -39,8 +45,10 @@ from agent_comms.installer.runtime_resolution import (
     ResolvedLock,
     RuntimePackage,
     RuntimeResolution,
+    ToadPackage,
 )
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repo import Repo
 from agent_comms.projects.storage_rules import StorageRule
 
 HOME = Path.home()
@@ -107,24 +115,8 @@ class RuntimeStack(Extendable):
 
     @staticmethod
     def build(checkout: Checkout, commands: InstallCommands, home: Path = HOME) -> TargetRuntime:
-        """Resolve current mains once, then sync or reuse their immutable installation.
-
-        Only uv runs here: a probe encodes the operation family, which only the built
-        runtime's own packages can import, so ``complete`` finishes the runtime from inside it.
-        """
-        with BuildPhase().running(commands.clock):
-            source = RuntimeStack(checkout.path, commands, home, runtime=LaunchRuntime.running())
-            source.require_uv()
-            source.resolve()
-            core = commands.git(checkout.path, "rev-parse", "HEAD").strip()
-            resolution = hashlib.sha256(source.lock.read_bytes()).hexdigest()[:16]
-            runtimes = home / ".local/share/agent-comms/runtimes"
-            prefix = runtimes / f"core-{core[:9]}-lock-{resolution}"
-            built = source.extended(
-                TargetRuntime, runtime=LaunchRuntime.at_prefix(prefix),
-                program=TargetProgram(checkout.path / STEPS.parent))
-            RuntimeResolution.recorded(prefix).prepare(built, core)
-            return built
+        """Select and qualify the whole target runtime before its installer starts."""
+        return RuntimeBuild.select(checkout, commands, home).build()
 
     def sync(self) -> None:
         """Install the lock's packages into this runtime's prefix; a failed sync leaves none.
@@ -273,9 +265,7 @@ class WheelRuntime(RuntimeStack):
             raise UpgradeRefused("Candidate preparation requires Core's existing declared uv")
         source = RuntimeResolution.at(self.source_runtime.prefix)
         donor = RuntimeStack(self.checkout, self.commands, self.home, runtime=self.source_runtime)
-        actual = donor.probe(InstalledPackagesProbe(source.core_commit))
-        if actual != source.packages:
-            raise UpgradeRefused("Dependency source differs from its recorded packages")
+        source.require_runtime(donor.observe_resolution(source.core_commit))
         artifacts = tuple(BuildArtifact.capture(wheel) for wheel in self.wheels)
         self.commands.run(self.uv, "--offline", "venv", "--python",
                           self.interpreter.interpreter, prefix)
@@ -302,3 +292,134 @@ class WheelRuntime(RuntimeStack):
             self.sync()
             self.complete()
             return RuntimeResolution.at(self.runtime.prefix)
+
+
+@dataclass(frozen=True)
+class HistoricalRuntime(WheelRuntime, TargetRuntime):
+    """A checked wheel build that also owns the historical target's carry declarations."""
+
+
+@dataclass(frozen=True)
+class RuntimeBuild(ABC):
+    """Choose packages once, check the built runtime, then hand it to the target installer."""
+
+    checkout: Checkout
+    commands: InstallCommands
+    home: Path = HOME
+
+    @property
+    def runtimes(self) -> Path:
+        """The build directory shared by current and historical targets."""
+        return self.home / ".local/share/agent-comms/runtimes"
+
+    @staticmethod
+    def select(checkout: Checkout, commands: InstallCommands, home: Path = HOME) -> RuntimeBuild:
+        target = commands.git(checkout.path, "rev-parse", "HEAD").strip()
+        main = commands.git(checkout.path, "rev-parse", "origin/main").strip()
+        if target != main and Repo.descends(checkout.path, target, main):
+            return HistoricalRuntimeBuild(checkout, commands, home)
+        return MainRuntimeBuild(checkout, commands, home)
+
+    def build(self) -> TargetRuntime:
+        with BuildPhase().running(self.commands.clock):
+            source = RuntimeStack(self.checkout.path, self.commands, self.home,
+                                  runtime=LaunchRuntime.running())
+            source.require_uv()
+            core = self.commands.git(self.checkout.path, "rev-parse", "HEAD").strip()
+            built = self.stage(source, core)
+            built.complete()
+            return built
+
+    @abstractmethod
+    def stage(self, source: RuntimeStack, core: str) -> TargetRuntime:
+        """Each selection keeps the shared preparation and qualification path."""
+        raise NotImplementedError
+
+
+class MainRuntimeBuild(RuntimeBuild):
+    """Current source follows main once; the resolved lock owns the complete build."""
+
+    def stage(self, source: RuntimeStack, core: str) -> TargetRuntime:
+        source.resolve()
+        resolution = hashlib.sha256(source.lock.read_bytes()).hexdigest()[:16]
+        prefix = self.runtimes / f"core-{core[:9]}-lock-{resolution}"
+        built = source.extended(
+            TargetRuntime, runtime=LaunchRuntime.at_prefix(prefix),
+            program=TargetProgram(self.checkout.path / STEPS.parent))
+        RuntimeResolution.recorded(prefix).prepare(built, core)
+        return built
+
+
+class HistoricalRuntimeBuild(RuntimeBuild):
+    """Use the installed dependencies, not an old lock or today's unrelated branch heads."""
+
+    def stage(self, source: RuntimeStack, core: str) -> HistoricalRuntime:
+        donor = LaunchRuntime.installed()
+        recorded = RuntimeResolution.at(donor.prefix)
+        if not Repo.descends(self.checkout.path, recorded.core_commit, core):
+            raise UpgradeRefused(
+                "Historical recovery requires an installed ancestor of the target Core")
+        runtimes = self.runtimes
+        runtimes.mkdir(mode=0o700, parents=True, exist_ok=True)
+        # Explicit wheel builds are never rebound or borrowed from the Core/lock cache.
+        prefix = runtimes / f"core-{core[:9]}-recorded-{token_hex(8)}"
+        with tempfile.TemporaryDirectory(dir=runtimes, prefix="wheel-") as temporary:
+            output = Path(temporary)
+            self.commands.run(source.uv, "build", "--wheel", "--out-dir", output,
+                              "--python", source.python, self.checkout.path)
+            wheels = tuple(output.glob("*.whl"))
+            if len(wheels) != 1:
+                raise UpgradeRefused("Historical Core must produce exactly one wheel")
+            (core_wheel,) = wheels
+            client_wheel = self.client_wheel(source, recorded, core, core_wheel, output)
+            wheels = (core_wheel, client_wheel)
+            built = source.extended(
+                HistoricalRuntime, runtime=LaunchRuntime.at_prefix(prefix),
+                program=TargetProgram(self.checkout.path / STEPS.parent),
+                interpreter=donor, source_runtime=donor, wheels=wheels)
+            built.sync()
+        return built
+
+    def client_wheel(self, source: RuntimeStack, recorded: RuntimeResolution,
+                     core: str, core_wheel: Path, output: Path) -> Path:
+        """Rebuild the recorded client with only Git-proven provider import moves."""
+        commit = ToadPackage.commit(recorded)
+        client = output / ToadPackage.import_root
+        repository = Repo.acquire_github(ToadPackage.repository, client)
+        repository.acquire(commit)
+        self.commands.git(client, "checkout", "--detach", commit)
+        self.repair_client(source, recorded.core_commit, core, core_wheel, client, output)
+        self.commands.run(source.uv, "build", "--wheel", "--out-dir", output,
+                          "--python", source.python, client)
+        built = tuple(path for path in output.glob("*.whl")
+                      if ProjectMetadata.from_wheel(path).name == ToadPackage.distribution)
+        if len(built) != 1:
+            raise UpgradeRefused("Historical client must produce exactly one wheel")
+        return built[0]
+
+
+    def repair_client(self, source: RuntimeStack, previous: str, target: str,
+                      core_wheel: Path, client: Path, output: Path) -> None:
+        """Run NRA from Core's declared dependency, without importing either application."""
+        requirements = tuple(requirement for requirement in ProjectMetadata.from_wheel(core_wheel).requirements
+                             if requirement.name == "nominal-refactor-advisor")
+        if len(requirements) != 1:
+            raise UpgradeRefused("Core must declare exactly one NRA dependency")
+        (requirement,) = requirements
+        plan = output / "client-imports.plan.json"
+        plan.write_text(json.dumps({"recipes": [{
+            "recipe_id": "historical-client-provider-imports",
+            "reason": "Replay the provider's recorded module moves onto the recorded client; preserve its code and dependency set.",
+            "operations": [{
+                "operation": "replay_git_module_imports",
+                "provider_repository": str(self.checkout.path),
+                "source_revision": previous,
+                "target_revision": target,
+                "caller_root": str(client),
+            }],
+        }]}))
+        self.commands.run(source.uv, "tool", "run", "--python", source.python,
+                          "--refresh-package", requirement.name,
+                          "--from", str(requirement),
+                          "nominal-refactor-advisor", client, "--codemod-plan", plan,
+                          "--codemod-apply", "--json")
