@@ -3,7 +3,7 @@ is in agent_comms.transport.tools.served, which only the server imports."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated
 
@@ -64,7 +64,7 @@ from agent_comms.messaging.page_traversal import LatestSequence
 from agent_comms.messaging.send_result import MessagePublished
 from agent_comms.messaging.served_bus import ServedBus, UnidentifiedBus
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import ThreadLookup, WireName
+from agent_comms.nominal.field_codec import AbsolutePathText, ThreadLookup, WireName
 from agent_comms.presentation import WireRevision
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import (
@@ -113,11 +113,21 @@ class ChannelOrderSet(ToolResult):
 
 @dataclass(frozen=True)
 class ContextInspectionRead(ToolResult):
+    """A server registry entry keeps its session binding across transport."""
+
+    registry_root: Annotated[Path, AbsolutePathText]
     entry: RegistryEntry
     page: ContextManifestPage
     source: SessionObservation
     annotations: tuple[ModelLabel, ...]
     imported: tuple[CodexRolloutProvenance, ...]
+
+    def __post_init__(self) -> None:
+        thread = self.entry.thread
+        session = thread.session_file.bound_to(self.registry_root)
+        if session is not thread.session_file:
+            object.__setattr__(self, "entry", replace(
+                self.entry, thread=replace(thread, session_file=session)))
 
 
 @dataclass(frozen=True)
