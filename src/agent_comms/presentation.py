@@ -555,7 +555,7 @@ class WireRevision(ReadState, ToolResult):
     registry: Annotated[
         tuple[FileRevision, ...],
         *revision_source(
-            lambda views: (views.registry.store.path,),
+            lambda views: views.registry.store.source_paths(views.root),
             *StatusSourced.views(),
             RegistrationsView,
             ActivityView,
