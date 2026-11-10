@@ -676,6 +676,7 @@ class RegistryStore(
     def save_unlocked(self, document: RegistryDocument) -> None:
         original = self.read_revision_unlocked()
         original.document.purpose.require_write()
+        document.require_valid_rows(original.document)
         document.threads.bind(self._bind_thread)
         raw = original.source.encoded(document, original.document)
         source = self._commit_unlocked(raw, original.source)

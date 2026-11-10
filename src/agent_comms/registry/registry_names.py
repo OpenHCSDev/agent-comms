@@ -1,7 +1,7 @@
 """Original namespace resolution, below live activity and snapshot assembly."""
 
 import re
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
@@ -53,6 +53,16 @@ class RegistryNames(Generic[Member]):
         """A new declaration cannot replace a current participant or permanent alias."""
         if self.taken(name):
             raise RelationViolationError(f"Thread name {name!r} is already reserved.")
+
+    def has_invalid_aliases(self, names: Iterable[str]) -> bool:
+        """Check the selected alias edges directly against this namespace's declarations."""
+        return any(self.aliases[alias] not in self.threads or alias in self.threads
+                   for alias in names if alias in self.aliases)
+
+    def require_alias_names(self) -> None:
+        """Every alias names one retained declaration and occupies no declaration's name."""
+        if self.has_invalid_aliases(self.aliases):
+            raise RelationViolationError("alias has no exclusive retained owner")
 
     @staticmethod
     def thread_slug(text: str) -> str:

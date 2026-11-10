@@ -837,6 +837,39 @@ class RegistryDocument(RegistryPresence[MutableMapping[str, ThreadStatus]]):
             },
         )
 
+    def require_valid_rows(self, earlier: RegistryDocument | None = None) -> None:
+        """Validate changed memberships against a valid earlier document; cold reads check all."""
+        try:
+            aliases: Iterable[str] = self.aliases
+            if earlier is None:
+                changed = frozenset(self.threads).union(self.statuses)
+            else:
+                membership = self.threads.names().differing(earlier.threads.names())
+                changed = membership
+                for current, before in (
+                    (self.statuses, earlier.statuses),
+                    (self.owners.generations, earlier.owners.generations),
+                    (self.claims.generations, earlier.claims.generations),
+                ):
+                    changed = changed | SharedRowsSlice.owned(current).keyset().differing(
+                        SharedRowsSlice.owned(before).keyset())
+                # Only removal can orphan an unchanged alias target. Added names can
+                # collide with an alias directly, without enumerating other aliases.
+                if all(name in self.threads for name in membership):
+                    aliases = SharedRowsSlice.differing(earlier.aliases, self.aliases) | membership
+            for name in changed:
+                present = name in self.threads
+                if present != (name in self.statuses):
+                    raise MalformedRecord("thread statuses do not match declarations")
+                if present and name not in self.owners.generations:
+                    raise MalformedRecord("missing owner generation")
+                if present and name not in self.claims.generations:
+                    raise MalformedRecord("missing claim_scope generation")
+            if self.has_invalid_aliases(aliases):
+                raise MalformedRecord("alias has no exclusive retained owner")
+        except MalformedRecord as error:
+            raise InvalidRegistryDocument(error) from error
+
     def presented(self, captured: PresenceCapture) -> RegistryDocument:
         """Retain a scoped view; continuing coverage checks inspect new names alone."""
         try:
@@ -904,17 +937,7 @@ class RegistryDocument(RegistryPresence[MutableMapping[str, ThreadStatus]]):
                         earlier_raw.get(plan.key, defaults[plan.key]),
                         plan.current(decoded), plan.current(changed)))
                 document = changed
-            names = set(document.threads)
-            if names != set(document.statuses):
-                raise MalformedRecord("thread statuses do not match declarations")
-            if not names <= document.owners.generations.keys():
-                raise MalformedRecord("missing owner generation")
-            if not names <= document.claims.generations.keys():
-                raise MalformedRecord("missing claim_scope generation")
-            if any(
-                target not in names or alias in names for alias, target in document.aliases.items()
-            ):
-                raise MalformedRecord("alias has no exclusive retained owner")
+            document.require_valid_rows(earlier[1] if earlier is not None else None)
             return document
         except MalformedRecord as error:
             raise InvalidRegistryDocument(error) from error

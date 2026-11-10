@@ -93,11 +93,6 @@ class RegistryProvenance(NamespaceRead[ThreadProvenance, RecipientSelection]):
             raise RelationViolationError("Provenance name differs from its original declaration")
         self.require_alias_names()
 
-    def require_alias_names(self) -> None:
-        names = set(self.threads)
-        if any(target not in names or alias in names for alias, target in self.aliases.items()):
-            raise RelationViolationError("Provenance alias has no exclusive retained owner")
-
     def bound_to(self, root: Path) -> RegistryProvenance:
         """Recorded transcripts resolve under the root this namespace was captured from."""
         threads = {name: replace(thread, session_file=thread.session_file.bound_to(root))
