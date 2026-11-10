@@ -81,3 +81,25 @@ The current Qt package does not already integrate a persistent asyncio UI loop. 
 The upstream qasync source was acquired read-only as a candidate: `d47e582` at inspection. It supports PyQt6, but its README still states Python `<3.14` while current Core requires 3.14; project metadata alone does not settle this difference. No qasync dependency was added, imported into an undeclared environment, or declared working. Its suitability needs source and native execution evidence before phase 2 can be ready.
 
 The name “Formgen” is the shared-form/application goal here. The acquired package owner is Formbridge. A lookup for `OpenHCSDev/FormGen` returned repository-not-found; no separate repository or implementation is assumed from the product name.
+
+## Further source checks and NRA work
+
+The current form/connection/command/navigation traces now have draft phase documents. The form check includes the real `ObjectStateFieldMutationService` bridge caller as well as widgets. Literal and inherited input remain separate because current readers give different answers for empty text, surrounding whitespace and the string `None`.
+
+NRA source used: `5af050d8ed4855f8351751ef7236a31cf914705a`. The report paths cover Toad forms, Formbridge forms plus its ObjectState bridge, and Qt forms; context includes the full Toad, Core, Formbridge, Qt, ObjectState, python-introspect and metaclass-registry source roots. The Core source in this run is the planning branch at `70a3f785eb42a0e7d5d1301f7bde28b84cb6665c`; its Python files are kept unchanged while the run reads them.
+
+The source-index-only command completed with exit 0: 1,537 context files, 43,694 source targets, including 147 class targets in the selected form/bridge files. It is useful for locating original declarations and their base spellings. It does not prove behavior, native class construction, complete findings coverage or a refactor recipe.
+
+The full findings scans stopped at their 20-second and 240-second budgets. Those failed outputs are retained. The same full scan was run again with an 1,800-second budget and **finished with exit 0 in 196.48 seconds**: 6.147 seconds parsing, 189.276 analysis and 1.057 source indexing. Its source map covers 1,537 files and 43,694 targets; it reports three raw findings and no executable recipe (one safety rejection, two without a recipe evaluator). The shorter source-index command did not replace this run. Some cached work was reused; this is a completed run, not a measured speed improvement.
+
+Full report SHA256: `295390c472acd21435ad36f9e9423ebc6feffb7d0bd7421e4654ea40731325db`.
+
+| Finding | Source check and decision |
+|---|---|
+| `09e4d8f59b`: DeclaredField metadata filter supposedly mirrors Core FamilyMember | Rejected as an owner match. `DeclaredField.all_metadata` at `declared_fields.py:170–176` filters foreign annotation metadata with its caller-supplied type. It does not list Core Conversation/DeclaredFamily/Item members. Those unrelated names came from the tool's overlap search, not a required relationship. NRA also refused to synthesize a recipe. Keep this filter. |
+| `4ed767f45b`: five-term form-build readiness condition | A lead, not a demonstrated copy. `FormBuildTransaction._schedule_finalization_if_complete` at `form_init_service.py:337–347` checks that its root is registered, registration/work have drained, no finalize is scheduled and the transaction is active. Preserve its short-circuit behavior and finalization tests; a long condition alone does not justify a new owner. No automatic recipe exists. |
+| `2524e2137e`: raw `computed/project/initial_values` field metadata | The declarations are `ExtractedParameters` at `form_init_service.py:65–86`, consumed by `_extract_parameters` at `:511–531`. This is this package's own field-extraction format, not a duplicate ObjectState value model. The form phase must name a typed extraction-rule owner before changing it; no schema or safe rewrite was proved automatically. |
+
+Read-only sampling during the 240-second run pointed through detector preparation/family collection and product-flow work. Sampling ranks where time went; no unprofiled speed improvement is claimed and no NRA implementation was changed by this assignment.
+
+Scratch artifacts are under `/home/ts/.cache/agent-scratch/comms-toad-selector/`: `formgen-forms-nra-full.json` (20-second incomplete result), `formgen-forms-nra-complete.json` (240-second incomplete result), `formgen-forms-nra-source-index.json` (completed source targets), `formgen-nra-scan.svg` (profile), and `formgen-forms-nra-long.{json,log,exit}` (longer full run). These are investigation evidence, not package inputs or deployment pins.

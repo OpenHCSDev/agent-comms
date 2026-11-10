@@ -8,6 +8,8 @@ The old P142 read-through is evidence of the paths inspected, not an implementat
 
 Target current mains of our own packages. Refresh the sources before deriving a change. The commit IDs in [sources.md](sources.md) record what was checked; they do not pin future development or authorize compatibility wrappers.
 
+The [ownership and import plan](00-ownership-and-imports.md) fixes the package boundaries used by the phases below.
+
 ## Outcome
 
 One application owns connection, conversation, command, history, navigation, form and preference behavior. Textual and Qt inherit that behavior and implement their native controls, layout, input, painting and resource lifetime. A future renderer must not need another copy of the application.
@@ -18,11 +20,11 @@ Existing Core permissions, channel/thread identities, command declarations, mess
 
 | Phase | Complete change | State of the plan |
 |---|---|---|
-| 1. Shared form behavior | Bound fields, concrete/optional/inherited input, validation, finishing, filtering, dirty marking and model following; both native form users migrated | Current declarations and both form paths identified; exact parent/member/caller map still being written |
-| 2. Application runtime and events | Shared event/subscription lifetime and native delivery, with persistent async execution and a defined shutdown order | Current Qt per-operation executor is not a persistent application runtime; Qt-loop option under investigation |
-| 3. Core connection and commands | Original local/remote observation/capture families and command drafts use shared host capabilities without Textual bases | Source flow traced; complete import direction and destination modules not yet admitted |
-| 4. Navigation | Original tab identities, saved order, back/return history and sidebar selection; native focus and widget creation separated | Current logical owners traced; native call closure still needed |
-| 5. Conversations and history | Original send/outcome/page/read-evidence behavior with separate native rendering and actual-paint reports | Wire path traced; renderer-independent representation and full native transcript closure still needed |
+| [1. Shared form behavior](01-fields-and-forms.md) | Bound fields, concrete/optional/inherited input, validation, finishing, filtering, dirty marking and model following; both native form users migrated | Literal/inherited input meanings and validation owner resolved; exact Qt bases, constructors, NRA steps and full caller list still being finished |
+| [2. Application runtime and events](02-runtime-and-publications.md) | Shared event/subscription lifetime and native delivery, with persistent async execution and a defined shutdown order | Current Qt per-operation executor is not a persistent application runtime; Qt-loop option under investigation |
+| [3. Core connection and commands](03-connections-and-commands.md) | Original local/remote observation/capture families and command drafts use shared host capabilities without Textual bases | Source flow traced; module placement decided in the ownership document; full caller changes still being written |
+| [4. Navigation](04-navigation-and-selection.md) | Original tab identities, saved order, back/return history and sidebar selection; native focus and widget creation separated | Current logical owners traced; full list of native calls still needed |
+| 5. Conversations and history | Original send/outcome/page/read-evidence behavior with separate native rendering and actual-paint reports | Wire path traced; shared message representation and complete native transcript changes still needed |
 | 6. Qt application and parity | Qt composes the shared owners, connects its existing widgets and uses the same Core requests; Textual continues using those owners | Starts after the shared families and runtime are settled; no separate app prototype |
 
 Phases are complete caller-family changes, not individual method moves. Forms and runtime investigations can be independent, but their commits must not leave two semantic implementations alive. Later phases may be combined where their source/MRO proof says they must land together.
@@ -31,7 +33,7 @@ Phases are complete caller-family changes, not individual method moves. Forms an
 
 The planning work fills these details from source; they are not homework passed to the implementer:
 
-- The behavior and admitted cases, including failures, late replies, closure and independent future changes.
+- The behavior and supported cases, including failures, late replies, closing views and independent future changes.
 - Existing determining declarations, exact methods and every consumer that changes.
 - Destination modules, public parents, concrete members, capability crossings, constructor order and important lookup winners.
 - Ordered mechanical changes, original bodies to move, caller/import changes and the superseded path to delete.
