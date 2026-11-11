@@ -93,8 +93,6 @@ class ThreadStatus(
     may_be_active: ClassVar[bool] = False
     running: ClassVar[bool] = False
     stopped: ClassVar[bool] = False
-    # Whether a message sent now is read now; each status answers, none by default.
-    receiving: ClassVar[bool] = False
     # Whether the thread has left every new audience and presence; only an archive has.
     archived: ClassVar[bool] = False
     # Whether a role slot in this lifecycle may take a new occupant: no one holds it now.
@@ -255,7 +253,6 @@ class ActiveThreadPresence(
 ):
     """Shared semantics of running and idle owners; not a second state family."""
 
-    receiving = True
     may_be_active = True
 
     def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:

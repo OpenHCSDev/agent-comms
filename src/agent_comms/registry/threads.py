@@ -101,7 +101,7 @@ from agent_comms.registry.thread_presentation import (
     UnavailableThreadOwnerBinding,
 )
 from agent_comms.registry.thread_reads import ThreadCheckoutSource, ThreadOwnerSource
-from agent_comms.registry.thread_status import ServiceThreadStatus, ThreadStatus
+from agent_comms.registry.thread_status import ActiveThreadPresence, ServiceThreadStatus, ThreadStatus
 from agent_comms.registry.thread_storage import (
     AssignedStorageRoots,
     ThreadStorage,
@@ -914,7 +914,7 @@ class SubagentThread(ExternalThread, declared_name="subagent_execution"):
 
     def holds_activity(self, status: ThreadStatus) -> bool:
         """The occupied registration lasts until SubagentStop or SessionEnd retires it."""
-        return status.receiving
+        return isinstance(status, ActiveThreadPresence)
 
     def serving_its_own_session(self) -> ExternalThread:
         """A child works inside its parent's turn and never binds a process of its own, so one
