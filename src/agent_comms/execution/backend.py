@@ -362,10 +362,8 @@ class NativeSession(MroDispatch, WatchdogSessionRead[ProgressWatchdog, StatsRequ
 
     def observe_input_during_abort(self, event):
         if self.accepts_output:
-            self.started_during_abort.extend(
-                events.FollowingInputStarted(id=identity)
-                for identity in self.inputs.mark_started(self, event)
-            )
+            if (identity := self.inputs.mark_started(self, event)) is not None:
+                self.started_during_abort.append(events.FollowingInputStarted(id=identity))
 
     def permits_live_status(self) -> bool:
         """Only tracked, live input may publish an informational package acknowledgement."""
@@ -801,8 +799,8 @@ class TurnSession(NativeSession, PromptSessionCallbacks):
             return self.input_start.started_events
         if self.started_input:
             started = self.inputs.mark_started(self, event)
-            if started:
-                return tuple(events.FollowingInputStarted(id=input_id) for input_id in started)
+            if started is not None:
+                return (events.FollowingInputStarted(id=started),)
             self.inputs.uncertain = True
             self.output.final_assistant_stop = False
             self.output.record_failure(

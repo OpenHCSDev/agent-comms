@@ -121,22 +121,22 @@ class GoalScheduler:
                 return
             try:
                 scheduled = (turn for goal in thread.goal.active()
-                             for turn in self._prepare_declared_goal(goal, thread, snapshot))
+                             if (turn := self._prepare_declared_goal(goal, thread, snapshot)) is not None)
                 return next(iter(scheduled), None)
             except GoalAttemptError:
                 return
 
     def _prepare_declared_goal(self, goal: Goal, thread: NativeThread,
-                               snapshot: RegistrySnapshot) -> tuple[ScheduledTurn, ...]:
+                               snapshot: RegistrySnapshot) -> ScheduledTurn | None:
         if not self.comms.goals.goal_wait(thread.name).allows_routed_input():
-            return ()
+            return None
         if self.pending_goal_origins.get(thread.name) == goal.id:
-            return ()
+            return None
         store = self.comms.goals.open_goal_store()
         generation = store.require_generation(goal.id)
         generation.lifecycle.require_ready()
         self.comms.goals.ready_goal_grant_locked(thread, snapshot.claim_generation(thread.name), generation)
-        return (ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=OneGoal(goal.id)),)
+        return ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=OneGoal(goal.id))
 
     async def set_goal(self, session_id: AcpSessionId, text: str) -> Goal:
         """Commit a UI goal through its executing owner and private launch ledger."""

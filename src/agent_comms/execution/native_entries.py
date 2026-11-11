@@ -575,7 +575,8 @@ class NativeInputEvidenceRead(NativeEvidenceRead):
 
     def decode_rows(self, rows):
         for row in rows:
-            yield from NativeEntry.wire_member(row).input_evidence(row)
+            if (entry := NativeEntry.wire_member(row).input_evidence(row)) is not None:
+                yield entry
 
 
 class NativeEvidenceScope(ExitStack):
@@ -683,15 +684,13 @@ class MessageEntry(NativeEntry):
         return replace(self, message=self.message.preserve_evidence(message))
 
     @classmethod
-    def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
+    def input_evidence(cls, raw: dict) -> NativeEntry | None:
         message = raw.get("message")
         if not isinstance(message, dict):
             raise MalformedRecord("Native message evidence requires an object")
         if message.get("inputId") is not None:
-            # Same strict original user/content/digest decoding, including the
-            # rejection of tracked IDs hidden in another message role.
-            return (cls.from_evidence(raw),)
-        return ()
+            return cls.from_evidence(raw)
+        return None
 
     message: PiMessage
     is_message = True

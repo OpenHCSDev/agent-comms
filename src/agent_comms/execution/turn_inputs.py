@@ -234,20 +234,20 @@ class InputForwarding(MroDispatch, SessionInputsCallbacks):
 
     def mark_started(
         self, session: PromptSessionCallbacks, payload: MessageStart,
-    ) -> tuple[InputId] | tuple[()]:
+    ) -> InputId | None:
         message = payload.message
         for native_id in message.input_id.present():
             if native_id not in self.pending:
-                return ()
+                return None
             command = self.pending[native_id].request
             if not message.matches_input(command.message, native_id):
-                return ()
+                return None
             entry = command.input
             public_id = entry.input_id
             if not session.input_start.following(public_id, native_id, entry.content.text):
-                return ()
+                return None
             self.retire(native_id)
             session.following_started(command)
             self.started = True
-            return (public_id,)
-        return ()
+            return public_id
+        return None

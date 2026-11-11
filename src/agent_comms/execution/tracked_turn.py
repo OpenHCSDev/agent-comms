@@ -461,7 +461,7 @@ class TrackedTurnSession(TurnSession, FollowingTurnSource[OwnedSend]):
         """The original input starts when Pi commits it; any other user message is a later input."""
         if message.matches_input(self.command.message, self.command.input_id):
             return ()
-        for input_id in self.inputs.mark_started(self, event):
+        if (input_id := self.inputs.mark_started(self, event)) is not None:
             source = await self.following.started(input_id)
             self.terminal = source.continue_response(self.terminal, self.output.text_parts)
             self.output.discard_text()
