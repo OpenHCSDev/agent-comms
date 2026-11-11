@@ -104,7 +104,7 @@ from agent_comms.projects.change_report import (
     NoSourceReference,
     RegisteredRoots,
 )
-from agent_comms.projects.checkouts import RepositoryReads
+from agent_comms.projects.checkouts import Checkout, RepositoryReads
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.slop import Slop
@@ -418,7 +418,7 @@ class OrderFile:
         replacement = '\nThis replaces my earlier order on it; drop that one.' if replacing else ''
         storage = context.comms.registry.storage_rule.order_text(
             context.comms.registry.require(unit),
-            [str(LaunchRuntime.at_prefix(repo.checkout / '.venv').interpreter)
+            [str(LaunchRuntime.at_prefix(Checkout(repo.checkout).test_environment).interpreter)
              for repo in context.repos])
         return (instructions + replacement + reassign.note() + '\n' + storage
                 + '\nIf two lines of this order conflict, take the narrower reading, '

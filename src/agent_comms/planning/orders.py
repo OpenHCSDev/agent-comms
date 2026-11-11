@@ -2512,6 +2512,10 @@ class OrderClaim:
         if not self.message.body.strip():
             raise TodoError("A delivery claim needs its report text.")
 
+    def moved_by(self, claim: OrderClaim) -> bool:
+        """Whether ``claim`` is this delivery pushed again: its own pull request, a new head."""
+        return claim.pull_request == self.pull_request and claim.head != self.head
+
     def resumed_by(
         self, pull_request: PullRequestLink, head: str, report: str,
         reviewer: ClaimReviewer = AssignedClaimReviewer(),
@@ -2554,6 +2558,17 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
 
     def team_claims(self) -> tuple[OrderClaim, ...]:
         return (self.claim,)
+
+    def claimed(self, claim: OrderClaim) -> ClaimedProblemOrder:
+        """The holder pushed again: the claim follows its pull request to the new head, so the
+        verdict lands on what is there now. On 2026-11-10 P1446's claim froze on its first head
+        after three more commits landed, and the board kept asking for a verdict on code
+        nobody was shipping."""
+        if not self.claim.moved_by(claim):
+            raise TodoError("Only a pending order can be claimed by its holder; a claimed one "
+                            "takes only a new head of its own pull request, "
+                            f"{self.claim.pull_request}.")
+        return replace(self, claim=claim)
 
     def closed_by_merge(
         self, todo: Todo, pulls: ProgressRead, checkout_base: Path

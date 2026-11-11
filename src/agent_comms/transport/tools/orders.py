@@ -16,6 +16,7 @@ from agent_comms.acp_extension import (
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.service_passes import ServicePassStore
+from agent_comms.errors import TodoError
 from agent_comms.execution.turn_bound import LastTurns, TurnBound, TurnsSince
 from agent_comms.execution.turn_digests import (
     ActivityTurnView,
@@ -457,6 +458,13 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller, TodoChanged], Th
         actor = comms.registry.require(caller.name).incarnation
         generation = todo.held().generation
         todo.require_assignee(actor, generation)
+        reviewer = self.reviewer.identity(todo)
+        if not comms.goals.agents.answers_later(reviewer, comms.registry.snapshot()):
+            raise TodoError(
+                f"@{reviewer.name} will not answer this review: it has no live bridge or process, "
+                "so the claim would wait unjudged. Name a live teammate with `reviewer` "
+                "(its exact name and birth)."
+            )
         # The identical call resumes a retained claim's publication; nothing is claimed again.
         for claim in todo.order.team_claims():
             if claim.resumed_by(self.pull_request, self.head, self.report.text, self.reviewer):

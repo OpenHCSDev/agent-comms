@@ -108,6 +108,14 @@ class RuntimeStack(Extendable):
                 raise UpgradeRefused(f"Fetched {reported.strip()}; {declared.requirement} declared")
             os.replace(fetched, self.uv)
 
+    def sync_test_environment(self, checkout: Checkout) -> None:
+        """The live checkout's test interpreter follows the lock that checkout now holds. On
+        2026-11-10 pyproject declared immutables without a relock: every order's interpreter
+        failed at import, and the rule forbade the one sync that would have fixed it."""
+        self.commands.run(
+            self.uv, "sync", "--locked", "--all-extras", cwd=checkout.path,
+            env={**os.environ, "UV_PROJECT_ENVIRONMENT": str(checkout.test_environment)})
+
     def resolve(self) -> None:
         """Refresh every package the lock records as tracking a branch, transitive ones
         included, while retaining the committed release and revision pins."""
