@@ -480,14 +480,14 @@ class ProcessIdentity(RecordMember, ProcessState):
         if self != process:
             raise RelationViolationError("Only the registered owner may release itself.")
 
-    def held_external_stop(self, release: Callable[[], None], name: str) -> tuple[str, ...]:
+    def held_external_stop(self, release: Callable[[], None], name: str) -> str | None:
         """A live holder (a CLI bridge or the connector's inbox watch) serves no owner runtime to
         retire, so its binding is released for it. A dead holder left a binding the ordinary stop
         finishes."""
         if not self.alive():
-            return (name,)
+            return name
         release()
-        return ()
+        return None
 
     def thread_status[Status](self, presence: ProcessSighting[Status], last_seen: float) -> Status:
         return presence.process_seen(self)

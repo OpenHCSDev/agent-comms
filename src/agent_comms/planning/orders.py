@@ -575,7 +575,7 @@ class CommitDelivery(CommitSourceDelivery, declared_name="delivered_commit"):
         requests = await asyncio.to_thread(PullRequests((todo,)).listed,
                                            todo.repository.github, MergedListedPullRequest, todo)
         for request in requests:
-            for merge in request.delivery_merges(self):
+            if (merge := request.delivery_merges(self)) is not None:
                 return merge
         if self.commit != self.delivered:
             raise TodoError(
@@ -697,8 +697,8 @@ class PullRequest(HeadReviewStatus, OrderLinks, DisclosedRecord, DeclaredFamily,
     def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CommitDelivery:
         raise TodoError(f"Pull request {self.number} is not merged; done checks the merged tree.")
 
-    def delivery_merges(self, delivery: CommitDelivery) -> tuple[DeliveryMerge, ...]:
-        return ()
+    def delivery_merges(self, delivery: CommitDelivery) -> DeliveryMerge | None:
+        return None
 
 
 class UnmergedPullRequest(PullRequest):
@@ -748,13 +748,13 @@ class MergedPullRequest(PullRequest):
         Repo.git(repo, "fetch", "-q", Repo.remote, self.base, f"refs/pull/{self.number}/head")
         return CommitDelivery(commit=self.merge, delivered_commit=self.head, evidence=evidence)
 
-    def delivery_merges(self, delivery: CommitDelivery) -> tuple[DeliveryMerge, ...]:
+    def delivery_merges(self, delivery: CommitDelivery) -> DeliveryMerge | None:
         if self.head != delivery.delivered:
-            return ()
+            return None
         if self.merge != delivery.commit:
-            return ()
+            return None
         return (MainDeliveryMerge() if self.base == WorkBranches.main
-                else BranchDeliveryMerge(self.base, self.merge),)
+                else BranchDeliveryMerge(self.base, self.merge))
 
 
 @dataclass(frozen=True)
@@ -2123,7 +2123,7 @@ class CheckedProblemOrder(CheckCorrectionSource, ProblemOrder, declared_name=Non
         self.finding.require_references(roots, revision)
         self.scope.require_references(roots, revision)
 
-    def check_refusals(self, worktrees: Path) -> tuple[str, ...]:
+    def check_refusals(self, worktrees: Path) -> str | None:
         """Send and correction use the check owner's clean-main acceptance rule."""
         try:
             with MalformedRecord.refusing('order.check'):
@@ -2131,8 +2131,8 @@ class CheckedProblemOrder(CheckCorrectionSource, ProblemOrder, declared_name=Non
                 if self.check.directory.is_dir():
                     self.require_check_acceptance(self.check, worktrees)
         except MalformedRecord as error:
-            return (f'order.check: {error}; fix: supply a focused measurable command',)
-        return ()
+            return f'order.check: {error}; fix: supply a focused measurable command'
+        return None
 
     def require_check_acceptance(self, check: OrderCheck, worktrees: Path) -> None:
         repo = check.directory
@@ -3783,16 +3783,16 @@ class OrderQuote:
     least_words: ClassVar[int] = 4
     rule: ClassVar[str] = f"Quote {least_words}+ words of the order this verdict carries out."
 
-    def word_refusal(self) -> tuple[str, ...]:
+    def word_refusal(self) -> str | None:
         """Whitespace-separated words, so a dotted or CamelCase name counts as one word; the
         count needs no order text, so a verdict reports it beside its other argument refusals."""
         quoted = " ".join(self.quote.split())
         if len(quoted.split()) < self.least_words:
-            return (f"{self.flag} {quoted!r} is {len(quoted.split())} words. {self.rule}",)
-        return ()
+            return f"{self.flag} {quoted!r} is {len(quoted.split())} words. {self.rule}"
+        return None
 
     def require_quote(self, text: str) -> None:
-        for refused in self.word_refusal():
+        if (refused := self.word_refusal()) is not None:
             raise TodoError(refused)
         quoted = " ".join(self.quote.split())
         if quoted not in " ".join(text.split()):
@@ -5277,15 +5277,15 @@ class Todo(TodoStoreRows, TypedTable, GoalAssignment):
 
     def recurrence(
         self, declarations: tuple[Declaration, ...], root: Path, now: float,
-    ) -> tuple[str, ...]:
+    ) -> str | None:
         recent = tuple(order for order in self.order_history
                        if order.recurs_within(declarations, root, now))
         if not recent:
-            return ()
+            return None
         previous = max(recent, key=lambda order: order.at.chronology())
         age = now - previous.at.recorded_at("An earlier order")
         finding = ''.join(f'; {line}' for line in previous.finding.instructions())
-        return (f'{self.id}: {previous.owner.to_wire()} ({age:.0f}s old){finding}',)
+        return f'{self.id}: {previous.owner.to_wire()} ({age:.0f}s old){finding}'
 
     @property
     def held_order_ids(self) -> tuple[OrderId, ...]:
@@ -5333,14 +5333,14 @@ class Todo(TodoStoreRows, TypedTable, GoalAssignment):
         return (self.review_at.recorded_at("A review time")
                 - self.order.checked().at.recorded_at("An order"))
 
-    def timer_up(self, now: float) -> tuple[RecordedEventTime, ...]:
+    def timer_up(self, now: float) -> RecordedEventTime | None:
         """The review round an undelivered order is in at ``now``. Like an item timer it comes
         back every window until the order is delivered; no round strikes or moves anyone."""
         first = self.review_at.recorded_at("A review time")
         if not self.pending or now < first:
-            return ()
+            return None
         rounds = (now - first) // self.review_window
-        return (RecordedEventTime(first + rounds * self.review_window),)
+        return RecordedEventTime(first + rounds * self.review_window)
 
     @property
     def handed_out_on_release(self) -> bool:
@@ -6228,8 +6228,9 @@ class TodoStore(OwnerRequestStore, TodoHistory, GoalAssignments, DirectiveWriter
     def timers_up_in(held: Sequence[Todo], now: float,
                      progress: Mapping[str, OrderProgress]) -> tuple[tuple[Todo, RecordedEventTime], ...]:
         """Review rounds from this read's orders and PR facts, excluding installation waits."""
-        return tuple((todo, up) for todo in held for up in todo.timer_up(now)
-                     if not todo.order.waiting_on_install(todo, progress))
+        return tuple((todo, up) for todo in held
+                     if (up := todo.timer_up(now)) is not None
+                     and not todo.order.waiting_on_install(todo, progress))
 
     def held_by(self, unit: ThreadIncarnation) -> tuple[Todo, ...]:
         """One holder's shared work, independently of historical creators."""
@@ -6241,7 +6242,7 @@ class TodoStore(OwnerRequestStore, TodoHistory, GoalAssignments, DirectiveWriter
     ) -> None:
         declarations = order.scope.recurrence_declarations(order, where, root)
         previous = tuple(line for todo in self.list(Repo.of(root).github)
-                         for line in todo.recurrence(declarations, root, now))
+                         if (line := todo.recurrence(declarations, root, now)) is not None)
         if not previous:
             return
         rejected = []

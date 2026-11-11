@@ -475,21 +475,21 @@ class ClaudeSession:
         self.offered_tools = offered
         return (OfferedToolsObserved(offered),)
 
-    def answered(self, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
+    def answered(self, message: AssistantMessage) -> RuntimeUpdate | None:
         """A model call reports its model and usage once; Claude repeats them on every block."""
         for used in message.usage.context_used.present():
             observation = TranscriptModelUsage(
                 model=ThreadModel.reported(message.model), context_used=used)
             if observation != self.answered_by:
                 self.answered_by = observation
-                return (RuntimeInfoObserved(observation),)
-        return ()
+                return RuntimeInfoObserved(observation)
+        return None
 
-    def located(self, cwd: str) -> tuple[RuntimeUpdate, ...]:
+    def located(self, cwd: str) -> RuntimeUpdate | None:
         if not cwd or cwd == self.project:
-            return ()
+            return None
         self.project = cwd
-        return (SessionFacts(project=cwd),)
+        return SessionFacts(project=cwd)
 
     def started(self, tool: ClaudeToolDraft) -> tuple[RuntimeUpdate, ...]:
         self.tools[tool.call.id] = tool
@@ -780,7 +780,9 @@ class AssistantRecord(ClaudeRecord, TimedRecord, declared_name='assistant'):
         events = tuple(event for block in self.message.content for event in block.events(self))
         if events:
             updates.extend(session.finished(self.uuid, events))
-        return (*updates, *session.answered(self.message))
+        if (answered := session.answered(self.message)) is not None:
+            updates.append(answered)
+        return tuple(updates)
 
     def subagent_progress(self) -> tuple[SubagentProgress, ...]:
         """Its last deciding block, so text before a call reads as the call."""

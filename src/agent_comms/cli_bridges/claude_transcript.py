@@ -70,7 +70,8 @@ class ClaudeJsonLines(JsonLines[ClaudeRecord]):
 
     def record_updates(self, record: ClaudeRecord, state: ClaudeSession, offset: int,
                        raw: bytes) -> Iterator[RuntimeUpdate]:
-        yield from state.located(record.cwd)
+        if (located := state.located(record.cwd)) is not None:
+            yield located
         for update in (*state.version_reported(record.version), *record.updates(state)):
             yield from update.during(state.phase)
 

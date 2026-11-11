@@ -511,8 +511,10 @@ class QuotingVerb(HeadVerdictVerb, declared_name=None):
 
     def edit_problems(self) -> dict[str, str]:
         """An accepted edit always quotes its order."""
-        return super().edit_problems() | {
-            OrderQuote.flag: refused for refused in OrderQuote(self.serves).word_refusal()}
+        problems = super().edit_problems()
+        if (refused := OrderQuote(self.serves).word_refusal()) is not None:
+            problems[OrderQuote.flag] = refused
+        return problems
 
 
 @dataclass(frozen=True, kw_only=True)
