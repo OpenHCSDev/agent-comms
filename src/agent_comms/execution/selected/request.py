@@ -74,7 +74,7 @@ class SelectedRequest:
             return False
         return True
 
-    async def _native_failure(self, error):
+    async def _native_failure(self, error: NativeRequestFailure) -> None:
         if not await self._settle_unknown():
             return
         sent = await Coordination.run_worker(partial(error.publish,

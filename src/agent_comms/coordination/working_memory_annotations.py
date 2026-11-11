@@ -11,12 +11,14 @@ from agent_comms.working_memory.working_memory_labels import (
     CalibrationReport,
     ClassifierVersion,
     HumanLabel,
+    JevResponse,
     ModelLabel,
     QuestionVersion,
 )
 from agent_comms.working_memory.working_memory_requests import (
     CompletedAnnotationOutcome,
     DisclosureRequest,
+    FailedAnnotationOutcome,
     SubmittedAnnotationOutcome,
 )
 
@@ -121,7 +123,7 @@ class WorkingMemoryAnnotations:
             sequence = original.insert(db).lastrowid
             return AnnotationRequestsRow.one(db, id=sequence)
 
-    def complete(self, original: AnnotationRequestsRow, response, label: ModelLabel):
+    def complete(self, original: AnnotationRequestsRow, response: JevResponse, label: ModelLabel):
         if (label.span, label.question, label.classifier) != (
                 original.request.span, original.request.question, original.request.classifier):
             raise ValueError("Classifier label is not an answer to its original disclosed request")
@@ -133,7 +135,7 @@ class WorkingMemoryAnnotations:
             AnnotationRequestsRow.update(db, where="id=?", parameters=(original.id,),
                 outcome=CompletedAnnotationOutcome(response.id, response.model, response.usage))
 
-    def fail(self, original: AnnotationRequestsRow, outcome):
+    def fail(self, original: AnnotationRequestsRow, outcome: FailedAnnotationOutcome):
         with self.session.writing() as db:
             current = AnnotationRequestsRow.one(db, id=original.id)
             if current != original:

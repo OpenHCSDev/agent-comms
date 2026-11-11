@@ -168,3 +168,11 @@ disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = ["xdist.*"]
 follow_untyped_imports = true
+
+[tool.nominal-refactor-advisor]
+# Rows and files nothing else can rebuild: a field-shape move on a class reaching one of
+# these refuses unless the plan carries the stored values.
+durable-bases = [
+    "agent_comms.storage.typed_table:DurableTables",
+    "agent_comms.storage.locked_store:DurableFile",
+]

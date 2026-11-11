@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
+from cutover.carry_annotation_failure_kinds import AnnotationFailureKinds
 
 from agent_comms.comms import wire
 from agent_comms.context_store import (
@@ -32,18 +33,21 @@ from agent_comms.execution.turn_context import (
 )
 from agent_comms.execution.turn_item import PiRequestKey
 from agent_comms.execution.working_memory_disclosure import DisclosureState
+from agent_comms.errors import RelationViolationError
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.practice import PracticeCopy, PracticeMeasurement
+from agent_comms.installer.probes.carry import Carry
 from agent_comms.installer.probes.inputs import SelectedInputsProbe
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.task_sources import AnnotationDisclosureGrant
-from agent_comms.nominal.field_codec import MessageId, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId
 from agent_comms.planning.task_scope import ProjectTaskScope
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, TurnIdentity
+from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.working_memory.working_memory_labels import (
     HumanLabel,
@@ -57,8 +61,10 @@ from agent_comms.working_memory.working_memory_labels import (
 from agent_comms.working_memory.working_memory_questions import KindQuestion, OtherSpan, SpanAnswer
 from agent_comms.working_memory.working_memory_requests import (
     AnnotationBudgetExhausted,
+    ClassifierAnswerRejectedAnnotationOutcome,
+    ClassifierUnreachableAnnotationOutcome,
     DisclosureRequest,
-    FailedAnnotationOutcome,
+    SubmittedAnnotationOutcome,
 )
 from working_memory_fixture import local_system
 
@@ -138,7 +144,7 @@ def annotation_source(tmp_path: Path) -> Iterator[AnnotationSource]:
         requests = tuple(disclosed_request(segment, span, reference) for span in spans)
         store.annotations.reserve(requests[0], grant)
         failed = store.annotations.reserve(requests[1], grant)
-        store.annotations.fail(failed, FailedAnnotationOutcome('recorded external failure'))
+        store.annotations.fail(failed, ClassifierUnreachableAnnotationOutcome())
         model = completed_label(store, requests[2], grant, 'fixture-answer')
         # Stored correction data tests precedence, not human/publication authority.
         correction = HumanLabel.correct(model, OtherSpan, author)
@@ -271,3 +277,35 @@ def test_selected_annotation_materialization_writes_only_the_private_target(
         assert ContextStore.digest(ContextStore.path_in(root)) == contexts_before
     finally:
         gate.clear(held)
+
+
+def test_a_failure_stored_as_an_error_name_carries_to_the_member_that_caught_it(
+    annotation_source: AnnotationSource, tmp_path: Path,
+):
+    """Before the failure family a failed request stored the caught error's class name. The
+    carry places each name under the clause that caught it, also when several rows share one
+    name, and refuses a name it cannot place."""
+    table = AnnotationRequestsRow.declared_name
+    outcome = FieldCodec.field_plan(AnnotationRequestsRow, 'outcome')
+    step = AnnotationFailureKinds(LiveFilesRequest(annotation_source.path.parent), tmp_path / 'spill')
+    with annotation_source.store.session.writing() as db:
+        row_id, other_id = (db.execute(
+            f"SELECT id FROM \"{table}\" WHERE json_extract(outcome, '$.kind') = ? ORDER BY id LIMIT 1",
+            (kind.declared_name,)).fetchone()[0]
+            for kind in (ClassifierUnreachableAnnotationOutcome, SubmittedAnnotationOutcome))
+        Carry.rewrite_stored(db, AnnotationRequestsRow, outcome, [
+            ('{"kind": "failed", "error": "JSONDecodeError"}', stored) for stored in (row_id, other_id)])
+
+    assert step.carry(apply=False).changed == 2
+    step.carry(apply=True)
+
+    with annotation_source.store.session.read():
+        db = annotation_source.store.session._connection
+        carried = tuple(AnnotationRequestsRow.one(db, id=stored).outcome for stored in (row_id, other_id))
+    assert carried == (ClassifierAnswerRejectedAnnotationOutcome(),) * 2
+    assert step.carry(apply=False).changed == 0
+    with annotation_source.store.session.writing() as db:
+        Carry.rewrite_stored(db, AnnotationRequestsRow, outcome,
+                             [('{"kind": "failed", "error": "NoSuchError"}', row_id)])
+    with pytest.raises(RelationViolationError, match="NoSuchError"):
+        step.carry(apply=False)

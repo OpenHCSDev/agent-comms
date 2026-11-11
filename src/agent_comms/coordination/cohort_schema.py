@@ -5,16 +5,20 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
 from agent_comms.coordination.contracts import POLICY_VERSION, RESOLVER_VERSION
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict, SchemaVersionError
 from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.coordination.response_acknowledgement import _canonical
 from agent_comms.coordination.schema import CoordinationFileTable, CoordinatorTable
-from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink, WakeAssignment
+from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.participants import OwnerGenerations, OwnerRecord, Participants
+from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.messaging.audience_manifest import MAX_AUDIENCE_BYTES
+from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.nominal.field_codec import (
     AssignmentId,
     MessageId,
@@ -44,11 +48,6 @@ from agent_comms.storage.typed_table import (
     WithoutRowid,
 )
 from agent_comms.waking.errors import ProjectionUnavailableError
-
-if TYPE_CHECKING:
-    from agent_comms.coordination.coordinator import Coordination
-    from agent_comms.messaging.bus_publication import Delivered
-    from agent_comms.registry.private_registry_guard import RegistryPrivacy
 
 
 class CohortTable(PrivateCoordinatorTable):
@@ -133,11 +132,11 @@ class ClaimBatchAcknowledgements(
 
     @classmethod
     def for_delivery(
-        cls, delivery: Delivered, privacy: RegistryPrivacy, accepted_at_ms: int,
+        cls, delivery: Delivered, namespace: RootId, accepted_at_ms: int,
     ) -> ClaimBatchAcknowledgements:
         """Native acknowledgement facts derive from the actual delivered value."""
         return cls(
-            wire_root_id=privacy.namespace,
+            wire_root_id=namespace,
             wire_seq=delivery.seq,
             message_id=delivery.message_id,
             exact_target=delivery.target,
@@ -152,8 +151,8 @@ class ClaimBatchAcknowledgements(
             accepted_at_ms=accepted_at_ms,
         )
 
-    def require_delivery(self, delivery: Delivered, privacy: RegistryPrivacy) -> None:
-        if replace(self, sealed=False) != self.for_delivery(delivery, privacy, self.accepted_at_ms):
+    def require_delivery(self, delivery: Delivered, namespace: RootId) -> None:
+        if replace(self, sealed=False) != self.for_delivery(delivery, namespace, self.accepted_at_ms):
             raise IdentityConflict("sealed cohort acknowledgement conflicts with committed bus")
 
     def require_selected_claim(self, assignment: WakeAssignment) -> None:
@@ -362,7 +361,10 @@ class AwarenessClaimGenerations(
         if self != expected:
             raise ProjectionUnavailableError("selected source generation provenance changed")
 
-    def require_obligation(self, execution, link, assignment, obligation) -> None:
+    def require_obligation(
+        self, execution: ExecutionRecord, link: ExecutionAssignmentLink,
+        assignment: WakeAssignment, obligation: ResponseObligation,
+    ) -> None:
         """Captured ownership and the reply's original relational key agree."""
         execution.origin.require_obligation()
         original_owner = OwnerGenerations(

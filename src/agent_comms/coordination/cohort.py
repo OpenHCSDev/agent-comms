@@ -75,7 +75,7 @@ class AcceptedCohort:
                 raise IdentityConflict("frozen recipient has no durable participant identity")
         accepted_at = store.session.now()
         expected = _expected_assignments(initial, accepted_at, privacy)
-        ClaimBatchAcknowledgements.for_delivery(initial, privacy, accepted_at).insert(db)
+        ClaimBatchAcknowledgements.for_delivery(initial, privacy.namespace, accepted_at).insert(db)
         for ordinal, assignment in enumerate(expected):
             assignment.insert(db)
             ClaimBatchMembers(
@@ -156,7 +156,7 @@ def _claim_record(
     row = ClaimBatchAcknowledgements.one(db, wire_root_id=namespace, wire_seq=message.seq)
     if row is None or not row.sealed:
         raise IdentityConflict("cohort acknowledgement is absent or unsealed")
-    row.require_delivery(initial, privacy)
+    row.require_delivery(initial, namespace)
     expected = _expected_assignments(initial, row.accepted_at_ms, privacy)
     members = ClaimBatchMembers.select(
         db, where="wire_root_id=? AND wire_seq=?",
