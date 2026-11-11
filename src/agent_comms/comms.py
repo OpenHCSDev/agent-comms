@@ -13,14 +13,12 @@ import math
 import time
 from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import AbstractContextManager, aclosing
-from dataclasses import dataclass
 from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.context_store import ContextStore
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.coordination.database import CoordinationStore
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.owner_lifecycle import OwnerLifecycle
 from agent_comms.execution.transcript_sources import TranscriptSource
@@ -29,6 +27,7 @@ from agent_comms.input_attempt import InputAttempt
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
 from agent_comms.messaging.agent_inbox import TakenInputStart
+from agent_comms.messaging.bus_route_counts import HeldUnseenOldest
 from agent_comms.messaging.channel_management import ChannelManagement
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_page import InboxPage
@@ -42,7 +41,7 @@ from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.collaboration_ledger import CollaborationLedger
 from agent_comms.registry.registration import Registration
-from agent_comms.registry.registry_document import RegistrySnapshot, UnreadRegistry
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.relationships import ThreadRelationships
 from agent_comms.registry.route_client import ActivityClient
 from agent_comms.registry.thread_configuration import ThreadConfiguration
@@ -50,7 +49,6 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_management import ThreadManagement
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
-from agent_comms.storage.private_path import FileRevision
 from agent_comms.transcript.transcripts import Transcripts
 
 
@@ -65,9 +63,7 @@ class InboxActivity(AgentActivity):
     def __init__(self, root: Path, registry: Registration, bus: MessageBus) -> None:
         super().__init__(root, registry)
         self.bus = bus
-        self.coordination = CoordinationStore.path_in(root)
-        self.catalog = ChannelCatalog.at(root).path
-        self.untaken = UntakenCut((), UnreadRegistry(), {})
+        self.untaken = HeldUnseenOldest()
 
     def stalled(self, readers: tuple[str, ...], snapshot: RegistrySnapshot) -> Mapping[str, float]:
         cutoff = time.time() - self.stall_seconds
@@ -75,30 +71,11 @@ class InboxActivity(AgentActivity):
         return {name: at for name in readers if (at := oldest.get(name, math.inf)) < cutoff}
 
     def oldest_untaken(self, snapshot: RegistrySnapshot) -> Mapping[str, float]:
-        """Every claimed reader's oldest untaken message, read again only when something that
-        decides it changed: a bus message, a take or claim in coordination, a channel edit that
-        moves a delivery scope (the catalog), or a registry cut. One observer pass captures
-        activity through several paths; they share this read."""
-        key = (self.bus.bus.revision(), FileRevision.capture(self.coordination),
-               FileRevision.capture(self.coordination.with_name(self.coordination.name + "-wal")),
-               FileRevision.capture(self.catalog))
-        if not self.untaken.answers(key, snapshot):
-            self.untaken = UntakenCut(
-                key, snapshot, self.bus.oldest_untaken(snapshot.claimed_readers(snapshot.threads), snapshot))
+        """Share one routing-owned answer across activity reads and unrelated publications."""
+        self.untaken = self.bus.advanced_oldest_untaken(
+            self.untaken, snapshot.claimed_readers(snapshot.threads), snapshot,
+        )
         return self.untaken.oldest
-
-
-@dataclass(frozen=True)
-class UntakenCut:
-    """The oldest untaken messages read at one bus, coordination and registry cut."""
-
-    key: tuple[object, ...]
-    registry: RegistrySnapshot | UnreadRegistry
-    oldest: Mapping[str, float]
-
-    def answers(self, key: tuple[object, ...], snapshot: RegistrySnapshot) -> bool:
-        """The same cut: the snapshot by identity, since one registry revision decodes one."""
-        return self.registry is snapshot and self.key == key
 
 
 class Comms(
