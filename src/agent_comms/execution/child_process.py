@@ -1765,8 +1765,13 @@ class TimedOutOutcome(InterruptedForkOutcome):
         return False
 
 
+def _graceful_outcome(termination: ChildOutcome) -> ChildOutcome:
+    return termination
+
+
 @dataclass(frozen=True)
-class GracefulStopOutcome(ChildOutcome):
+class ForcedStopOutcome(ChildOutcome):
+    """At least one member required the forced stage, even if leader exited."""
     termination: ChildOutcome
 
     @property
@@ -1776,11 +1781,6 @@ class GracefulStopOutcome(ChildOutcome):
     @property
     def successful(self) -> bool:
         return self.termination.successful
-
-
-@dataclass(frozen=True)
-class ForcedStopOutcome(GracefulStopOutcome):
-    """At least one member required the forced stage, even if leader exited."""
 
     def report_forced(self, report: Callable[[str], None]) -> None:
         report(self.summary)
@@ -1993,14 +1993,14 @@ class ChildProcess(Sealed, ABC):
 
     def _stop_plan(
         self, guard: Callable[[], AbstractContextManager[None]], deadline: float = math.inf,
-    ) -> Generator[tuple[tuple[ProcessIdentity, ...], float], None, type[GracefulStopOutcome]]:
+    ) -> Generator[tuple[tuple[ProcessIdentity, ...], float], None, Callable[[ChildOutcome], ChildOutcome]]:
         with guard():
             self.platform.terminate_group(self.identity)
         grace_deadline = min(time.monotonic() + STOP_GRACE_SECONDS, deadline)
-        stage = GracefulStopOutcome
+        stage: Callable[[ChildOutcome], ChildOutcome] = _graceful_outcome
         while members := self.platform.group_members(self.identity):
             now = time.monotonic()
-            if stage is GracefulStopOutcome and now >= grace_deadline:
+            if stage is _graceful_outcome and now >= grace_deadline:
                 stage = ForcedStopOutcome
                 with guard():
                     self.platform.force_group(self.identity)
@@ -2010,8 +2010,7 @@ class ChildProcess(Sealed, ABC):
                     raise ChildRetirementFailed(f"Process group still alive: {members}")
                 with guard():
                     self.platform.force_group(self.identity)
-            # Re-enumerate after a member exits: a surviving member may have forked.
-            until = grace_deadline if stage is GracefulStopOutcome else deadline
+            until = grace_deadline if stage is _graceful_outcome else deadline
             yield members, max(0, until - now)
         return stage
 
