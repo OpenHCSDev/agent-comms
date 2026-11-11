@@ -54,6 +54,10 @@ from test_todos import order, thread
 pytest_plugins = ("test_todos",)
 
 
+from agent_comms.messaging.channel_targets import CommsTag
+from github_fixture import GitHubFixture
+
+
 @pytest.fixture
 def cited_source(pr_team, proof_build_checkouts):
     """The source the proof fixture built. The colleague declares its repos as plain Repo,
@@ -68,6 +72,9 @@ def held_team(pr_team, cited_source):
     source = pr_team
     worker = thread("worker", source.root, 2.0)
     source.comms.registry.register(worker)
+    worker = source.comms.channels.update_tags(
+        worker.name, add=frozenset({CommsTag.declared_name}),
+    )
     RequestAddVerb(text="Repair the copied order workflow without changing original retained state").run(source)
     colleague = source.comms.registry.require(source.actor_name)
     todo = source.comms.goals.todos.create(
@@ -139,8 +146,6 @@ def merge_two_commit_fix(source, binaries, number, merge_style: str = '--no-ff')
     source.git(checkout, 'commit', '-qm', f'Merge pull request #{number}')
     merge = source.git(checkout, 'rev-parse', 'HEAD').strip()
     source.git(checkout, 'push', '-q', 'origin', 'main', f'{commits[-1]}:refs/pull/{number}/head')
-    from github_fixture import GitHubFixture
-
     GitHubFixture(binaries).put(source.github,
         MergedListedPullRequest(number=number, branch=f'fix/{number}', head=commits[-1],
                                 updated='2026-10-23T12:00:00Z', base=WorkBranches.main,
