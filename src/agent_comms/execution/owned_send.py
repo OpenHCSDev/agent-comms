@@ -110,8 +110,7 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
         OrdinaryContextCheck(
             source=source, owner=current, goal=current.goal, wait=wait, comms=self.comms
         ).require_valid()
-        if not source.bypasses_goal_permit:
-            self.goal_permit.check_grant(self.goal_store)
+        source.require_goal_permit(self.goal_permit, self.goal_store)
 
     def _refusal(self, refusal: ReservationViolationError) -> SendOutcome:
         return AuthorityChangedSend(refusal)
