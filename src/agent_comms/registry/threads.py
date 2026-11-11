@@ -147,7 +147,7 @@ class StartOwnerControl(OwnerLifecycleControl):
 class ArchiveOwnerControl(OwnerLifecycleControl):
     @classmethod
     def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
-        return status.stopped
+        return status.is_stopped()
 
 
 class ConversationPreparation[T](ABC):
