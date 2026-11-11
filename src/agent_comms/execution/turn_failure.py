@@ -236,6 +236,13 @@ class QueuedInputMissing(QueuedInputFailure):
         return bool(inputs.pending)
 
 
+class QueuedInputNotSent(TurnFailure):
+    """A recorded failure: a Pi RPC run ended before a queued user input was written to
+    the native child. Turns no longer end this way (an unwritten follow-up does not fail a
+    completed turn), so nothing raises it; failed_turn_evidence rows recorded earlier still
+    name it, and their table's member CHECK keeps them."""
+
+
 class ModelStalled(TurnFailure):
     pass
 
