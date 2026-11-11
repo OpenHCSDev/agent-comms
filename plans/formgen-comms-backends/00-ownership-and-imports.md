@@ -60,7 +60,7 @@ Target order:
 
 The arrow means “can be used by”; Core does not import Formbridge UI machinery to perform a command. Shared client code may use both Core and Formbridge; Formbridge must not acquire the reverse dependency.
 
-Toad currently lists Textual and its image/diff/server packages as mandatory dependencies. A source import-isolation check does not claim a Qt-only installation without those packages. The final package/entry-point phase must decide the exact optional-backend declaration and installer selections together, preserve the normal `toad` entry, and add the Qt entry using the shared startup/argument behavior. Do not claim a lightweight Qt distribution before that declaration is actually changed and checked.
+Toad currently lists Textual and its image/diff/server packages as mandatory dependencies. A source import-isolation check does not claim a Qt-only installation without those packages. Phase 6 selects the initial full-stack distribution: retain mandatory Textual, add the declared Qt extra/corrected qasync dependency, preserve `toad`, and add `toad-qt` through the one startup factory. The original concrete settings schema and its keyboard-catalog validation stay at their real native boundary; SettingsState and shared effects/application behavior import no native toolkit. This is not a lightweight Qt-only distribution claim; installation must check the actual complete selected stack before carry.
 
 No new environment variable selects meaning or backend behavior. Native entry modules import their own toolkit; common startup must not import both native implementations in order to pick one.
 

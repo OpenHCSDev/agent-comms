@@ -1,8 +1,8 @@
 # One comms application, Textual and Qt backends
 
-## Work in progress
+## Implementation plan and review scope
 
-Tristan asked for a concrete implementation plan, split into phases that can be followed largely mechanically. P144 owns that planning work. The backend is not being implemented yet.
+Tristan asked for a source-backed implementation plan that can be followed largely mechanically. P144 owns this planning work; this PR implements no backend. Named new classes/methods are implementation targets, not existing APIs or successful native runs claimed here. Exact-head review and implementation checks are distinct.
 
 The old P142 read-through is evidence of the paths inspected, not an implementation recipe. Its Qt checkout was stale: **current Qt main already fixes both the conversion-call mismatch and the duplicated nested path. Neither is implementation work here.**
 
@@ -16,16 +16,16 @@ One application owns connection, conversation, command, history, navigation, for
 
 Existing Core permissions, channel/thread identities, command declarations, message pages and read proofs remain authoritative. Existing ObjectState, Formbridge field declarations, nominal families and Qt infrastructure are extended rather than wrapped by a second model or manager.
 
-## Implementation order being resolved
+## Implementation order
 
-| Phase | Complete change | State of the plan |
+| Phase | Complete change | Selected design for exact-head review |
 |---|---|---|
-| [1. Shared form behavior](01-fields-and-forms.md) | Bound fields, concrete/optional/inherited input, validation, finishing, filtering, dirty marking and model following; both native form users migrated | Input distinctions, native editor/form bases, Qt factory/signal/write owners and build lifecycle selected; Qt model-following/paint separation, inline admission, full caller/import map and NRA stages still being finished |
-| [2. Application runtime and events](02-runtime-and-publications.md) | Shared event/subscription lifetime and native delivery, with persistent async execution and a defined shutdown order | qasync selected; context/handle/default-executor owner fixes specified; exact native queue/class/caller graph still being finished |
-| [3. Core connection and commands](03-connections-and-commands.md) | Original local/remote observation/capture families and command drafts use shared host capabilities without Textual bases | Source flow traced; module placement decided in the ownership document; full caller changes still being written |
-| [4. Navigation](04-navigation-and-selection.md) | Original tab identities, saved order, back/return history and sidebar selection; native focus and widget creation separated | Current logical owners traced; full list of native calls still needed |
-| [5. Conversations and history](05-history-and-read-evidence.md) | Original page/source/coverage/read-evidence algorithms with separate native rendering and actual-paint reports | Acknowledgement, refused-proof retirement, native output capture and caller/test surface traced; exact shared fragment bases, geometry and Qt paint admission still needed |
-| [6. Preferences and native application](06-preferences-and-native-application.md) | Original settings/save behavior and shared startup; Qt composes the shared owners and native controls | Store/readers/effect dependencies and entry points traced; pure choice/native effect split, final app MRO, CLI construction and runtime/package checks still needed |
+| [1. Shared form behavior](01-fields-and-forms.md) | Bound fields, literal/optional/inherited input, validation, finishing, filtering and model following | One shared selector/field-only constructor; native field/write/view/creation families and ordered authoring stages |
+| [2. Application runtime and events](02-runtime-and-publications.md) | Shared subscriptions/deliveries with native scheduling and shutdown | Receiver-scoped Qt queue/input barriers, native operation owners and qasync context/handle/executor fixes |
+| [3. Core connection and commands](03-connections-and-commands.md) | Original local/remote observation/capture and command drafts | Host signatures, native touch points and importer closure in the phase document |
+| [4. Navigation](04-navigation-and-selection.md) | Original identities/order/back/return/source lifetime with native views | Native touch points, ordering and importer closure; no second native roster |
+| [5. Conversations and history](05-history-and-read-evidence.md) | Original submission/page/read proof with separate rendering | Member-level fragment/geometry/paint boundary; renderer-valued methods stay native; exact-head source review applies |
+| [6. Preferences and native application](06-preferences-and-native-application.md) | One client application, original concrete schema and native entries | Shared store/effects, common Click startup, native constructor order, full-stack Qt extra and original PTY/Neovim owners |
 
 Phases are complete caller-family changes, not individual method moves. Forms and runtime investigations can be independent, but their commits must not leave two semantic implementations alive. Later phases may be combined where their source/MRO proof says they must land together.
 
