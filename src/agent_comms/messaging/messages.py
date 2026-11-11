@@ -548,7 +548,8 @@ class MessageRoutes(ProjectionOutputs):
         from agent_comms.messaging.bus_tables import AwaitingAnswerSource
         return (BusRouteCounts, BusRouteKeys, AwaitingAnswerSource)
 
-    def is_conversation_message(self) -> bool:
+    @classmethod
+    def is_conversation_message(cls) -> bool:
         return True
 
     @classmethod
@@ -595,7 +596,8 @@ class SendableMessageKind(MessageKind, declared_name=None):
 class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     """A claim-owner record, not a delivery to a reader."""
 
-    def is_conversation_message(self) -> bool:
+    @classmethod
+    def is_conversation_message(cls) -> bool:
         return False
 
     @classmethod
