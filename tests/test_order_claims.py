@@ -281,6 +281,30 @@ def test_self_assigned_claim_selects_a_reviewer_and_retains_its_choice(held_team
     assert comms.bus.bus.revision() == after
 
 
+def test_a_claim_follows_its_pull_request_to_a_new_head(held_team):
+    """A push after delivery moves the claim, so the verdict reads the head that ships."""
+    ctx = held_team
+    comms = ctx.comms
+    todo = self_assigned_order(ctx)
+    reviewer = SelectedClaimReviewer(comms.registry.require(ctx.actor_name).incarnation)
+    request = replace(delivery(
+        ctx, "Killed the frozen-claim slop at orders.py; the verdict reads the shipping head."),
+        problem=todo.id, reviewer=reviewer)
+    ThreadCaller(todo.holder).invoke(request, comms)
+    repo = ctx.repos[0]
+    repo.git(repo.checkout, "commit", "--allow-empty", "-q", "-m", "Pushed again")
+    moved = replace(request, head=repo.git(repo.checkout, "rev-parse", "HEAD").strip())
+    ThreadCaller(todo.holder).invoke(moved, comms)
+    claim = comms.goals.todos.get(todo.id).order.claim
+    assert claim.head == moved.head
+    assert comms.bus.bus.lookup_message(claim.message.message_id).message.target == ctx.actor_name
+    elsewhere = replace(moved, head=request.head,
+                        pull_request=PullRequestLink(moved.pull_request.repo, 2))
+    with pytest.raises(TodoError, match="new head of its own pull request"):
+        ThreadCaller(todo.holder).invoke(elsewhere, comms)
+    assert comms.goals.todos.get(todo.id).order.claim == claim
+
+
 def away_reviewer(ctx: TeamContext) -> NativeThread:
     return NativeThread("away-reviewer", frozenset(),
                         Checkout(ctx.root.parent / "away-reviewer"), created_at=16.0)
