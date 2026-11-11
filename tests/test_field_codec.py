@@ -1319,3 +1319,20 @@ def test_a_compiled_decoder_lookup_is_compiled_once():
         pass
 
     assert ValueDecoder._registered(Looked) is ValueDecoder._registered(Looked)
+
+
+def test_an_unknown_field_hint_walks_each_record_type_once() -> None:
+    """Every level holds the next one twice: 2**24 paths to ``leaf``, one type per level. A
+    per-path cycle guard re-walked each shared type down every branch, and on 2026-11-10
+    printing one such decode failure held Toad's UI thread until it was killed."""
+    from dataclasses import make_dataclass
+
+    from agent_comms.nominal.field_codec import RecordProblems
+
+    level = make_dataclass("Level24", [("leaf", int)], frozen=True)
+    for depth in range(23, -1, -1):
+        level = make_dataclass(f"Level{depth}", [("a", level), ("b", level)], frozen=True)
+    with pytest.raises(RecordProblems) as raised:
+        FieldCodec.decode(level, {"leaf": 1})
+    hint = raised.value.problems["leaf"]
+    assert hint.startswith("leaf belongs under a.") and hint.endswith(".leaf")

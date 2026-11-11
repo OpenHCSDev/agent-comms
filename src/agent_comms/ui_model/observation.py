@@ -2164,6 +2164,9 @@ class LocalObservationPeer(ObservationPeer):
 class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
     """One ordered receive/decode task, loop-owned delivery, and joined retirement."""
 
+    attach_seconds: ClassVar[float] = 10.0
+    """How long a read from another thread waits for attachment already under way."""
+
     @classmethod
     def awaited(cls, route: CommsRoute) -> Self:
         process = cls(LocalRouteObservation(route))
@@ -2174,7 +2177,8 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         """``source`` names who serves the observation: a route locally, a remote UI profile
         across the connector."""
         self._resources = ExitStack()
-        self._delivery: asyncio.AbstractEventLoop | None = None
+        # Resolved once, at attachment, with the loop that delivers answers.
+        self._delivery: Future[asyncio.AbstractEventLoop] = Future()
         self.request_ids = itertools.count(1)
         self.reads: dict[int, PendingRead] = {}
         self.status: ObserverStatus = NoObserverFailure()
@@ -2196,7 +2200,7 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         owner happens to run, including a worker thread, and only attachment runs on the loop
         that will deliver its answers.
         """
-        self._delivery = asyncio.get_running_loop()
+        self._delivery.set_result(asyncio.get_running_loop())
         receiving = asyncio.create_task(self.receive(observed, failed))
         receiving.add_done_callback(partial(self.receive_ended, failed))
         self._reader.push_async_callback(self.stop_receiving, receiving)
@@ -2275,9 +2279,16 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         existing owners. A caller already on that loop would be waiting for itself, so it is
         refused by name instead.
         """
-        delivery = self._delivery
-        if delivery is None:
-            raise ObserverUnattached("This observation process has not attached its reader yet")
+        # A UI makes an observation current and schedules its attachment on the app loop, so a
+        # worker thread can ask in between: on 2026-11-10 Toad's tab restore did, and the launch
+        # failed with this refusal. It waits for the attachment under way, and still refuses
+        # by name when none arrives.
+        try:
+            delivery = self._delivery.result(timeout=self.attach_seconds)
+        except TimeoutError as unattached:
+            raise ObserverUnattached(
+                f"This observation process attached no reader within {self.attach_seconds:g} s"
+            ) from unattached
         try:
             running = asyncio.get_running_loop()
         except RuntimeError:
