@@ -23,7 +23,7 @@ from agent_comms.errors import (
 from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.messaging.audience_manifest import freeze_audience
 from agent_comms.messaging.bus import Bus, BusSnapshot, ClaimRecord, PrivateRecord
-from agent_comms.messaging.bus_record_builder import RecordBuilder
+from agent_comms.messaging.messages import RecordBuilder
 from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
 from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.envelope_claim_transitions import (

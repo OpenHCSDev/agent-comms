@@ -20,7 +20,6 @@ from agent_comms.messaging.activity_clocks import ActivityClocks, ChannelActivit
 from agent_comms.messaging.bus_activity_index import BusActivityIndex
 from agent_comms.messaging.bus_display_index import BusDisplayIndex
 from agent_comms.messaging.bus_publication import Delivered, KeyedPublication
-from agent_comms.messaging.bus_record_builder import RecordBuilder
 from agent_comms.messaging.bus_route_counts import RouteCounts
 from agent_comms.messaging.bus_tables import (
     AnsweredSource,
@@ -47,7 +46,6 @@ from agent_comms.messaging.message_reads import (
     MessageReferencesRead,
 )
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.messaging.message_writer import MessageWriter
 from agent_comms.messaging.messages import (
     Addressed,
     BusCapability,
@@ -60,7 +58,9 @@ from agent_comms.messaging.messages import (
     Message,
     MessageInput,
     MessageKind,
+    MessageWriter,
     PublicRecord,
+    RecordBuilder,
     StoredWireHistory,
 )
 from agent_comms.messaging.read_basis import CursorRow, ReadCursor, RepliesDisplayScope, UnreadQuery

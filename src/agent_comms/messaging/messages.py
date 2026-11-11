@@ -1346,3 +1346,18 @@ class ClaimMessage(Claimed, Message):
         yield task_facts.ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))
 
 import agent_comms.messaging.retained_task_facts as task_facts
+
+
+type RecordBuilder = Callable[[int, sqlite3.Connection], BusRecord]
+"""The original bus append operations used by initial publication."""
+
+
+class MessageWriter(ABC):
+    """The bus append interface used by initial publication origins."""
+    __slots__ = ()
+
+    @abstractmethod
+    def append(self, build: RecordBuilder) -> BusRecord: ...
+
+    @abstractmethod
+    def append_original(self, build: RecordBuilder) -> BusRecord: ...
