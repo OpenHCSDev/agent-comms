@@ -45,6 +45,7 @@ from agent_comms.pi_payloads import (
     NativeContextData,
     PiResponseData,
     QueueClearedData,
+    SteeringInterruptData,
     SessionStatsData,
     SessionSwitchData,
     StateData,
@@ -357,6 +358,17 @@ class Abort(PiCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class InterruptSteering(PiCommand):
+    response_payload = SteeringInterruptData
+
+    def accepted(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+        """Pi declines a Send now as a success with ``interrupted`` false: no run streaming, an
+        interrupt already in flight, or none of these inputs left in its steering queue. Read
+        as success, the button did nothing and said nothing; the decline is an error."""
+        if response.data.require_payload().interrupted:
+            return ()
+        return (events.Error(text="Send now did nothing: Pi had no running turn to interrupt "
+                                  "for these queued inputs, so they stay queued."),)
+
     def rejected(
         self, response: Response, session: TurnSession,
     ) -> Iterable[events.AgentEvent]:
