@@ -44,8 +44,8 @@ class Untagged:
 class ReplyBlock(Tagged, declared_name=None):
     """One content block of a model reply."""
 
-    acts: ClassVar[bool] = False
-    """Whether the model went on to act, which makes the text before it narration."""
+    def acts(self) -> bool:
+        return False
 
     def said(self) -> str:
         return ""
@@ -60,7 +60,8 @@ class TextBlock(ReplyBlock, declared_name="text"):
 
 
 class ToolUseBlock(ReplyBlock, declared_name="tool_use"):
-    acts = True
+    def acts(self) -> bool:
+        return True
 
 
 class OtherBlock(ReplyBlock, Untagged):
@@ -96,7 +97,7 @@ class AssistantRecord(TranscriptRecord, declared_name="assistant"):
 
     @property
     def ends_reply(self) -> bool:
-        return any(block.acts for block in self.message.content)
+        return any(block.acts() for block in self.message.content)
 
     def said(self) -> str:
         return "".join(block.said() for block in self.message.content)

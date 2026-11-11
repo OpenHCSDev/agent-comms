@@ -154,7 +154,7 @@ class OwnerReleaseEvidence(OwnerReleaseStoreRows, ReleasedOwner, OwnerRelease, T
             return False
         if not self.incarnation().current(snapshot) or not self.completion.matches_current(snapshot, self):
             return False
-        return self.after == snapshot.claim_generation(self.name) and snapshot.status(self.name).stopped
+        return self.after == snapshot.claim_generation(self.name) and snapshot.status(self.name).is_stopped()
 
     def retirement(self, snapshot: RegistrySnapshot, original: Thread, before: int) -> OwnerCompletion:
         if not self.current(snapshot, original, before):
