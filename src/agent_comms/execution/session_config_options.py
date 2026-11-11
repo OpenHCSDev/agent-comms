@@ -23,7 +23,7 @@ from agent_comms.config_options import (
     InvalidConfigChoice,
 )
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.coordination.errors import Refused
+from agent_comms.coordination.errors import IdentityConflict, Refused
 from agent_comms.execution.child_process import join_retirement
 from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_failures import NativePiUnavailable
@@ -117,7 +117,7 @@ class SessionConfigOptions(ConfigurationChanges[ConfigOptions]):
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         try:
             await self.effects.inputs.state(session_id).owned().configuration.catalog_for(member).change(self, thread, value)
-        except (NativePiUnavailable, InvalidConfigChoice) as error:
+        except (NativePiUnavailable, InvalidConfigChoice, IdentityConflict) as error:
             raise Refused.invalid_params({"reason": str(error)}) from error
         await self.effects.turns.close_idle_backend(session_id)
         await self.use_stored_settings(session_id, name)
