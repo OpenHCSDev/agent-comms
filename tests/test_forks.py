@@ -33,8 +33,8 @@ from agent_comms.comms import Comms, wire
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.errors import RelationViolationError, TodoError
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.execution.transcript_sources import ExternalTranscript, NativeTranscript
-from agent_comms.execution.turn_bound import TurnsSince
+from agent_comms.execution.transcript_sources import ExternalTranscript, NativeTranscript, StoreRead
+from agent_comms.execution.turn_bound import TurnBound, TurnsSince
 from agent_comms.execution.turn_digests import (
     OrderEditCountRead,
     OrderEditsRead,
@@ -105,7 +105,7 @@ from agent_comms.storage.typed_table import HeldBusFile
 from agent_comms.team.order import MessageNotification, OrderFile, Team, TeamContext
 from agent_comms.team.standing import Unjudged
 from agent_comms.team.team_heartbeat import TeamObservation
-from agent_comms.transcript.transcript_events import ToolStartTranscript
+from agent_comms.transcript.transcript_events import ToolStartTranscript, TurnDigest
 from agent_comms.transport.tool_caller import ForkCaller, SubagentCaller
 from agent_comms.transport.tool_declaration import ToolDeclaration
 from agent_comms.transport.tools.orders import (
@@ -350,10 +350,15 @@ def test_fork_and_parent_judge_show_same_unjudged_edits(fork_bus):
         assert "parent-edit-0" in result.stdout
 
 
-def test_unjudged_reminder_names_each_order_with_edits(fork_bus):
+def test_unjudged_reminder_names_each_order_with_edits(fork_bus, monkeypatch: pytest.MonkeyPatch):
     comms, source, _ = fork_bus
     record_edits(comms, source, Unjudged.limit + 1)
     frame = capture_frame(comms, ProgressRead())
+
+    def reject_full_turns(self: StoreRead, bound: TurnBound) -> tuple[TurnDigest, ...]:
+        raise AssertionError("An external heartbeat count must use the original edit query, not full turns")
+
+    monkeypatch.setattr(StoreRead, "turns", reject_full_turns)
     assert Unjudged.reason(comms, frame) == (
         f"{Unjudged.limit + 1} edits since each order's last head verdict: "
         f"retained P40 {Unjudged.limit + 1}")
