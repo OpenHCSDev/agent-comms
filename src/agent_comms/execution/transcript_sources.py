@@ -242,7 +242,7 @@ class TranscriptTraversal(ABC):
         self, initial: TranscriptCursor, consumed: TranscriptCursor,
     ) -> tuple[TranscriptCursor, TranscriptCursor]: ...
 
-    def round_edges(self, batch: tuple["TranscriptEvent", ...]) -> tuple[set[str], set[str]]:
+    def round_edges(self, batch: tuple[TranscriptEvent, ...]) -> tuple[set[str], set[str]]:
         """The tool-call ids a batch opens and closes, by traversal direction.
 
         A saved tool round is its call record together with its result record;

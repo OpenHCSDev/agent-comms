@@ -38,7 +38,7 @@ class ThreadMention(ProjectionSource):
     end: int
 
     @classmethod
-    def find(cls, body: str, resolve: Callable[[str], str | None]) -> tuple["ThreadMention", ...]:
+    def find(cls, body: str, resolve: Callable[[str], str | None]) -> tuple[ThreadMention, ...]:
         return tuple(
             cls(name, match.start(), match.end())
             for match in _MENTION.finditer(body)
@@ -53,7 +53,7 @@ class MentionQuery:
     prefix: str
 
     @classmethod
-    def at_cursor(cls, text: str, cursor: int) -> "MentionQuery | None":
+    def at_cursor(cls, text: str, cursor: int) -> MentionQuery | None:
         if not 0 <= cursor <= len(text):
             return None
         match = _PENDING.search(text[:cursor])

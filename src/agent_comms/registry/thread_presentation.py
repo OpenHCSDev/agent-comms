@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 
 class SessionLoadPlan(CoordinationWork, DeclaredFamily, affix='SessionLoadPlan'):
     @classmethod
-    def at_ingress(cls, metadata: object) -> 'SessionLoadPlan':
+    def at_ingress(cls, metadata: object) -> SessionLoadPlan:
         return EnsuringSessionLoadPlan() if metadata is None else FieldCodec.decode(cls, metadata)
 
     def metadata(self) -> dict:
@@ -58,7 +58,7 @@ class SessionLoadPlan(CoordinationWork, DeclaredFamily, affix='SessionLoadPlan')
         return EnsuringSessionLoadPlan()
 
     @classmethod
-    def at_response(cls, metadata: object) -> 'SessionLoadPlan':
+    def at_response(cls, metadata: object) -> SessionLoadPlan:
         return cls.witnessed(metadata, "agentCommsLoad", ExistingSessionLoadPlan)
 
     @classmethod
@@ -76,12 +76,12 @@ class SessionLoadPlan(CoordinationWork, DeclaredFamily, affix='SessionLoadPlan')
         """A plan without an owner witness cannot request an observed reload."""
 
     @abstractmethod
-    async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread": ...
+    async def resolve(self, lifecycle: AttachedSessionLifecycle, thread: Thread) -> Thread: ...
 
 
 @dataclass(frozen=True, slots=True)
 class EnsuringSessionLoadPlan(SessionLoadPlan):
-    async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
+    async def resolve(self, lifecycle: AttachedSessionLifecycle, thread: Thread) -> Thread:
         return await self.run_worker(partial(
             lifecycle.comms.owners.ensure_owner, thread.name,
             agent_bin=lifecycle.effects.inputs.configuration.launch.binary,
@@ -110,7 +110,7 @@ class WitnessedSessionLoadPlan(SessionLoadPlan):
 class ExistingSessionLoadPlan(WitnessedSessionLoadPlan):
     binding: thread_presentation.LiveThreadOwnerBinding
 
-    async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
+    async def resolve(self, lifecycle: AttachedSessionLifecycle, thread: Thread) -> Thread:
         entry = (await self.run_worker(partial(
             lifecycle.comms.registry.entry, thread.name,
         ))).entry
@@ -129,7 +129,7 @@ class FailedSessionLoadPlan(WitnessedSessionLoadPlan):
     def failure_metadata(self) -> dict:
         return {"agentCommsLoadFailure": FieldCodec.encode(self)}
 
-    async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
+    async def resolve(self, lifecycle: AttachedSessionLifecycle, thread: Thread) -> Thread:
         raise RelationViolationError("A failed load command cannot be replayed")
 
 
