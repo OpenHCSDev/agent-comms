@@ -58,6 +58,7 @@ from agent_comms.storage.maintenance_barrier import (
 from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lock
 from agent_comms.team.standing_rules import ServicePassFailing
 from agent_comms.transport.connector import (
+    ApprovalAudience,
     ApprovalLink,
     AuthorizationCodeGrant,
     BoundedRoute,
@@ -268,12 +269,25 @@ class ClientLogin:
         return (await issued.json())["access_token"]
 
 
+FUNNEL = {ApprovalAudience.funnel_header: "?1"}
+"""Tailscale's mark on a request that came in from the internet. A test that reads the
+link out of the owner's inbox is testing that arrival: a browser the tailnet admitted
+reads the link from the page and sends nothing (`ApprovalAudience`)."""
+
+
 async def approved_token(client: TestClient, comms: Comms) -> str:
-    """Register, confirm the real owner-message link, and redeem its PKCE-bound code."""
+    """Register, confirm the real owner-message link, and redeem its PKCE-bound code.
+
+    Arriving with tailscale's Funnel header is what makes the link travel over comms: a
+    browser the tailnet already admitted reads it from the page instead, and never sends
+    one (`ApprovalAudience`).
+    """
     login = await ClientLogin.register(client)
     parameters = FieldCodec.encode(login.query)
     assert (await client.head("/authorize", params=parameters, allow_redirects=False)).status == 405
-    waiting = await client.get("/authorize", params=parameters, allow_redirects=False)
+    waiting = await client.get(
+        "/authorize", params=parameters, allow_redirects=False, headers=FUNNEL
+    )
     assert waiting.status == 200
     owner = comms.messaging.user_identity(Checkout(comms.root))
     notice = comms.bus.inbox(owner.name).page.messages[-1]
@@ -410,7 +424,7 @@ async def test_request_log_names_the_route_and_never_its_values(client, store, r
     """Serve actual GET/POST approval secrets, with aiohttp's raw access log off."""
     login = await ClientLogin.register(client)
     assert (await client.get(
-        "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False
+        "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False, headers=FUNNEL
     )).status == 200
     owner = comms.messaging.user_identity(Checkout(comms.root))
     link = urlsplit(comms.bus.inbox(owner.name).page.messages[-1].body.splitlines()[-1])
@@ -833,7 +847,8 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
 async def test_approval_previews_do_not_grant_browser_trust(client, store, comms):
     login = await ClientLogin.register(client)
     assert (await client.get(
-        "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False
+        "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False,
+        headers=FUNNEL,
     )).status == 200
     owner = comms.messaging.user_identity(Checkout(comms.root))
     link = urlsplit(comms.bus.inbox(owner.name).page.messages[-1].body.splitlines()[-1])
@@ -861,7 +876,7 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
     for number in range(ConnectorGrants.waiting_limit):
         query = replace(login.query, state=str(number))
         assert (await client.get(
-            "/authorize", params=FieldCodec.encode(query), allow_redirects=False
+            "/authorize", params=FieldCodec.encode(query), allow_redirects=False, headers=FUNNEL
         )).status == 200
     owner = comms.messaging.user_identity(Checkout(comms.root))
     before = len(comms.bus.inbox(owner.name).page.messages)
@@ -869,7 +884,7 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
     blocked = replace(login.query, state="overflow")
     for _ in range(2):
         refused = await client.get(
-            "/authorize", params=FieldCodec.encode(blocked), allow_redirects=False
+            "/authorize", params=FieldCodec.encode(blocked), allow_redirects=False, headers=FUNNEL
         )
         assert refused.status == 429 and int(refused.headers["Retry-After"]) == CODE_SECONDS
     assert len(store.read().requests) == ConnectorGrants.waiting_limit
@@ -877,18 +892,21 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
     assert len(comms.bus.inbox(owner.name).page.messages) == before
     repeated = replace(login.query, state="0")
     assert (await client.get(
-        "/authorize", params=FieldCodec.encode(repeated), allow_redirects=False
+        "/authorize", params=FieldCodec.encode(repeated), allow_redirects=False, headers=FUNNEL
     )).status == 200
-    assert len(comms.bus.inbox(owner.name).page.messages) == before
+    # A repeat re-issues the secret it minted, so the owner is told the new link; the one
+    # already waiting keeps its place and the queue does not grow.
+    assert len(comms.bus.inbox(owner.name).page.messages) == before + 1
+    assert len(store.read().requests) == ConnectorGrants.waiting_limit
     held = store.read().requests[repeated.request_id]
     store.update(lambda grants: DocumentChange.to(replace(grants, requests=grants.requests | {
         repeated.request_id: replace(held, expires_at=time.time() - 1)
     })))
     assert (await client.get(
-        "/authorize", params=FieldCodec.encode(blocked), allow_redirects=False
+        "/authorize", params=FieldCodec.encode(blocked), allow_redirects=False, headers=FUNNEL
     )).status == 200
     assert len(store.read().requests) == ConnectorGrants.waiting_limit
-    assert len(comms.bus.inbox(owner.name).page.messages) == before + 1
+    assert len(comms.bus.inbox(owner.name).page.messages) == before + 2
 
 
 async def test_owner_browser_approval_lifecycle(client, store, comms):
@@ -929,12 +947,14 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
     query = replace(query, state="untrusted-browser")
     for _ in range(2):
         waiting = await client.get(
-            "/authorize", params=FieldCodec.encode(query), allow_redirects=False
+            "/authorize", params=FieldCodec.encode(query), allow_redirects=False, headers=FUNNEL
         )
         assert waiting.status == 200
         assert "sent to the owner on comms" in await waiting.text()
     notices = comms.bus.inbox(owner.name).page.messages
-    assert len(notices) == 2  # Retry the same waiting query, not the owner's message.
+    # Each call issues the secret it minted, so each one tells the owner its own live link;
+    # a retry that kept the first record left the browser holding a secret nobody stored.
+    assert len(notices) == 3
     link = urlsplit(notices[-1].body.splitlines()[-1])
     assert (await client.get(link.path + "wrong", allow_redirects=False)).status == 400
     expired = replace(store.read().requests[query.request_id], expires_at=time.time() - 1)
@@ -948,14 +968,16 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
     store.update(lambda grants: grants.issued(query.client_id))
     assert not store.read().requests and "expired-code" not in store.read().codes
 
-    waiting = await client.get("/authorize", params=FieldCodec.encode(query))
+    waiting = await client.get("/authorize", params=FieldCodec.encode(query), headers=FUNNEL)
     assert waiting.status == 200
     held = store.read().requests[query.request_id]
     store.update(lambda grants: DocumentChange.to(replace(grants, requests={
         query.request_id: replace(held, expires_at=time.time() - 1)
     })))
     fresh = replace(query, state="fresh-wait")
-    assert (await client.get("/authorize", params=FieldCodec.encode(fresh))).status == 200
+    assert (await client.get(
+        "/authorize", params=FieldCodec.encode(fresh), headers=FUNNEL
+    )).status == 200
     assert query.request_id not in store.read().requests
     assert store.read().requests[fresh.request_id].expires_at <= time.time() + CODE_SECONDS
 
