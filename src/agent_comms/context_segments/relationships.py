@@ -18,9 +18,9 @@ class RelationshipsSegment(InstructionSegment):
         """Every relation ``owner`` has, in the order its peers are listed."""
         records = tuple(record for relation in relations for record in relation.records)
         if not records:
-            return ()
+            return None
         revision = hashlib.sha256(json.dumps(FieldCodec.encode(records)).encode()).hexdigest()
-        return (super().capture((OwnerProvenance(owner.incarnation, revision),), records=records),)
+        return super().capture((OwnerProvenance(owner.incarnation, revision),), records=records)
 
     def values(self):
         return {"records": FieldCodec.compact(FieldCodec.encode(self.records))}

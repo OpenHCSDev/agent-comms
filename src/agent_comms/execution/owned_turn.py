@@ -130,13 +130,14 @@ class TurnGoalAccount(ProgressGoalAccount):
             return
         with self.comms.registry.store.current_snapshot() as cut:
             owner = cut.snapshot.require_member(self.owner.name, NativeThread)
-            claimed = tuple(permit for goal in owner.goal for permit in self._reserve_origin(owner, goal))
+            claimed = tuple(permit for goal in owner.goal
+                           if (permit := self._reserve_origin(owner, goal)) is not None)
         for permit in claimed:
             self._record_origin_usage(permit)
 
-    def _reserve_origin(self, owner: NativeThread, goal: Goal) -> tuple[LaunchPermit, ...]:
+    def _reserve_origin(self, owner: NativeThread, goal: Goal) -> LaunchPermit | None:
         if goal.id in self.originated:
-            return ()
+            return None
         store = self.comms.goals.open_goal_store()
         self.originated[goal.id] = NoLaunchPermit()
         generation = store.require_generation(goal.id)
@@ -149,7 +150,7 @@ class TurnGoalAccount(ProgressGoalAccount):
         )
         self.claims.callback(permit.retire_unverified, store)
         self.originated[goal.id] = permit
-        return (permit,)
+        return permit
 
     def _record_origin_usage(self, permit: LaunchPermit) -> None:
         store = self.comms.goals.open_goal_store()
