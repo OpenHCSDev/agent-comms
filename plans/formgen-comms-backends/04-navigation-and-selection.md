@@ -104,5 +104,3 @@ Delete moved native factories/imports from the shared modules and migrate all or
 Existing tests to preserve: `tests/model/test_tab_scopes.py`, `test_tab_visit_history.py`; `tests/app/test_tab_order.py`, `test_tab_history.py`, `test_channel_tab_sharing.py`; native restore/parking tests `test_stale_tab_restore.py`, `test_parked_tab_arrives_progressively.py`, `test_parked_session_tab_arrives_progressively.py`, plus `test_hidden_session_retirement.py` and command/remote navigation tests.
 
 Add equivalent native Qt controls for rapid repeated Back/Forward, open-before-mount, shared channel tab, user-authored title, old thread birth replaced under the same name, source change during preparation, close during SQLite write, selected/dependent close, virtualized sidebar selection and scroll restore after layout. Keep original source/read objects in those tests; do not build a private-state fixture that bypasses navigation.
-
-Consumer runs retain saved-tab readers and exercise the TabOrder/workspace/selection transitions above in both backends. Selection alone does not establish painting; phase 5 checks the actual painted content.

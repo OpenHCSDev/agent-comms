@@ -130,5 +130,3 @@ Behavioral checks:
 - exclusive replacement, cancellation, completion/error reporting, no lost worker resource;
 - explicit/implicit context forwarding, GUI responsiveness during Core work, close during worker→UI dispatch and no nested event-pump wait;
 - native close with queued callbacks, active reads, timers, worker failure and repeated close requests; no orphan task/helper/listener afterward.
-
-Consumer runs exercise delivery/read/cancellation ordering on the declared Python stack in Textual and Qt. Native close must be exercised with queued callbacks, active resources and repeated close requests; an import-only pass does not cover it.

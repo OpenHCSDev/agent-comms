@@ -170,5 +170,3 @@ Existing tests to retain/run include:
 - `tests/guards/test_thread_action_dispatch.py`: declaration-owned action names, each mixed-target outcome once, Core refusal shown and the action released.
 - `tests/guards/test_core_event_handlers_receive_their_event.py` and phase 2 resource tests.
 - Field/draft tests: empty literal values, stale catalog/confirmation replies, focused pending edits, changed source/view, confirm-then-edit, provider login completion/failure and close during preparation.
-
-Consumer runs exercise real local and connector commands in both views, including stale sources, pending actions, Core refusals and close during preparation.

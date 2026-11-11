@@ -161,5 +161,3 @@ Existing protections to retain:
 Add one shared-family test matrix for the conflicting values in §1.1, with native cases only for events/painting/validators. Exercise both literal and inherited forms with the same backend; a Textual-versus-Qt comparison alone would miss the missing domain distinction. Include a new scalar/choice field and show that only its declaration and irreducible native rendering need additions, with no consumer kind switches or rosters.
 
 UI checks: pending invalid input, optional member feedback, save while focused, reset/undo, replaced/disposed form, model changes during staged mount, no signal echo and no orphan subscription/timer. The generic validation must execute before the state mutation and every authorized write must retain its original notification/transaction ordering.
-
-Consumer runs cover real settings/command forms in both backends, including the conflicting inputs, native MRO/constructors and subscription cleanup above.
