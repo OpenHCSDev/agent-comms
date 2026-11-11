@@ -27,13 +27,19 @@ class AttemptAuthority:
 
 
 @dataclass(frozen=True, slots=True)
-class OwnerFence:
+class AttemptIdentity:
+    """The fields an attempt's fence and start share: one identity, declared once."""
+
     execution_id: str
     attempt_ordinal: int
     owner_lookup: ThreadLookup
     owner_generation: int
-    revision: int
     token: str
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerFence(AttemptIdentity):
+    revision: int
 
     @property
     def authority(self) -> AttemptAuthority:
