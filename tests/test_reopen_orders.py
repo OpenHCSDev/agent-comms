@@ -3,6 +3,7 @@ import os
 from dataclasses import replace
 
 import pytest
+from agent_comms_hooks import ToolRefusedError
 
 from agent_comms.errors import TodoError
 from agent_comms.execution.child_process import ProcessIdentity
@@ -93,7 +94,7 @@ def test_public_reopen_preserves_work_goal_report_and_history(completed_draft, p
     assert restored.order.scope == original.order.scope
     assert restored.order.edits == original.order.edits
     assert restored.order.run == command.review
-    with pytest.raises(TodoError, match="review order"):
+    with pytest.raises(ToolRefusedError, match="merge never closes"):
         restored.order.merged(original.order.sha).require_close()
     assert restored.order.corrections[-1].previous == original.order.check
     assert (restored.request, restored.review_at) == (original.request, original.review_at)
