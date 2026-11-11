@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from agent_comms.cli_bridges.tool_calls import CliToolArguments
 from agent_comms.execution.pi_events import PiEvent
@@ -8,7 +8,7 @@ from agent_comms.installer.probes.carry import Carry
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import Id128, MessageId, NominalSpelling, NominalText
 from agent_comms.planning.order_phase import OrderPhase
-from agent_comms.planning.orders import Todo
+from agent_comms.planning.orders import HeadReviewRecord, Todo
 from agent_comms.planning.phase_artifacts import RecordedArtifact
 from agent_comms.planning.phase_evidence import (
     AllEvidence,
@@ -37,7 +37,7 @@ from agent_comms.planning.phase_tasks import PhaseTask, UnspecifiedPhaseTask
 from agent_comms.planning.plan_reading import PlanReading
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.thread_identity import BirthlessIncarnation
-from agent_comms.storage.store_files import SqliteStore
+from agent_comms.storage.store_files import MultiFileStore, SingleFileStore, SqliteStore
 from agent_comms_hooks.process_claim import ProcessSingleton
 from agent_comms_hooks.queue_bypass import QueueBypassGuard
 
@@ -207,7 +207,7 @@ class ReviewQueuePhase(TeamNativePhase):
 
     after = (RecordPlanePhase,)
     evidence = AllEvidence((
-        ClassDeclared("HeadReviewRecord", ("src/agent_comms/planning/orders.py",)),
+        ClassDeclared(HeadReviewRecord.__name__, ("src/agent_comms/planning/orders.py",)),
         ClassDeclared(QueueBypassGuard.__name__, ("src/agent_comms_hooks/queue_bypass.py",)),
     ))
 
@@ -967,8 +967,8 @@ class ReadWriteMembersPhase(StoreGuardsPhase):
     after = (StoreGuardFamiliesPhase,)
     evidence = AllEvidence(
         (
-            ClassDeclared("SingleFileStore", ("src/agent_comms/storage/store_files.py",)),
-            ClassDeclared("MultiFileStore", ("src/agent_comms/storage/store_files.py",)),
+            ClassDeclared(SingleFileStore.__name__, ("src/agent_comms/storage/store_files.py",)),
+            ClassDeclared(MultiFileStore.__name__, ("src/agent_comms/storage/store_files.py",)),
             PatternAbsent(r"(\.locked|_store_lock|_async_store_lock|ordered)\([^)]*(mode|contention)=",
                           ("src", ":!src/agent_comms/skills/")),
             PatternAbsent(r"def locked\(", ("src", *StoreGuardsPhase.owners)),
