@@ -382,15 +382,21 @@ class WireExportBoundary:
         return asdict(self)
 
 
-@dataclass(frozen=True, slots=True)
-class WireExportProvenance(CliResult, ToolResult):
-    """Artifact provenance, never a delivery or source-session acknowledgement."""
+@dataclass(frozen=True)
+class WireExportConfig:
+    """The four settings every wire export declares: format, scope, limit, boundary."""
 
-    destination: str
     format: WireExportFormat
     scope: WireExportScope
     limit: WireExportLimit
     boundary: WireExportBoundary
+
+
+@dataclass(frozen=True, slots=True)
+class WireExportProvenance(WireExportConfig, CliResult, ToolResult):
+    """Artifact provenance, never a delivery or source-session acknowledgement."""
+
+    destination: str
     source_messages: int
     exported_messages: int
     omitted_messages: int
@@ -488,17 +494,12 @@ class WireExportHeader:
     boundary: WireExportBoundary
 
 
-@dataclass(eq=False, repr=False, kw_only=True)
-class WireTranscriptExporter:
+@dataclass(frozen=True, eq=False, repr=False, kw_only=True)
+class WireTranscriptExporter(WireExportConfig):
     """Stream a fixed wire boundary into one private atomic artifact."""
 
     SCHEMA: ClassVar[str] = "agent-comms/wire-export"
     VERSION: ClassVar[int] = 1
-
-    format: WireExportFormat
-    scope: WireExportScope
-    limit: WireExportLimit
-    boundary: WireExportBoundary
 
     def export(
         self,
