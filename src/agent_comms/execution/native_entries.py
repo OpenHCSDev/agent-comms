@@ -116,7 +116,9 @@ class RecordedEntry(PiPayload):
     parent_id: Annotated[str | RootEntry, WireName("parentId")] = RootEntry()
     def ends_source_import(self) -> bool:
         return False
-    assistant_message: ClassVar[bool] = False
+    @property
+    def assistant_message(self) -> bool:
+        return False
     messages: ClassVar[tuple[PiMessage, ...]] = ()
     final_reply: ClassVar[bool] = False
 
