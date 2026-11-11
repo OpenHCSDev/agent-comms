@@ -13,6 +13,7 @@ from pydantic import JsonValue
 from agent_comms.transport.sync_answer import run_awaited
 from agent_comms.acp_extension import CoordinationChangedUpdate
 from agent_comms.cli_bridges.history import OfflineHistory
+from agent_comms.errors import SourceOutsideImport
 from agent_comms.cli_verbs.archive import ArchiveCliCommand
 from agent_comms.cli_verbs.cli_command import PreparedTargetAction, TargetActionCommand
 from agent_comms.cli_verbs.cli_commands import (
@@ -402,7 +403,7 @@ class ServedCommsImportedSourceTool(CoreRead[ContextSourceText], CommsImportedSo
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ContextSourceText:
         if self.source not in ImportedSessionMetadata.sources_for_owner(comms.registry, self.owner):
-            raise ValueError("Source is outside the original imported snapshot")
+            raise SourceOutsideImport("Source is outside the original imported snapshot")
         return ContextSourceText(self.source.public_description(), self.source.public_text(comms))
 
 
