@@ -289,7 +289,7 @@ class MaxBytesLimit(WireExportLimit):
     value: int
 
     def __post_init__(self) -> None:
-        if isinstance(self.value, bool) or not isinstance(self.value, int) or self.value <= 0:
+        if self.value <= 0:
             raise ValueError("The wire-export byte ceiling must be a positive integer.")
 
     def byte_ceiling(self) -> int:

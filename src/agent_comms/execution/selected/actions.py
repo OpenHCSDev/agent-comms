@@ -157,8 +157,6 @@ class SelectedExistingFileWrite(NoSelectedTools):
     contents: bytes
 
     def __post_init__(self) -> None:
-        if type(self.resource) is not ExistingFileClaim or type(self.contents) is not bytes:
-            raise TypeError("selected write needs an existing-file claim and bytes")
         if len(self.contents) > 1024 * 1024:
             raise ValueError("selected write exceeds 1 MiB")
 

@@ -150,7 +150,7 @@ class PublishedResponse(Successful, ResponseState):
     published = True
 
     def __post_init__(self):
-        if type(self.seq) is not int or self.seq <= 0:
+        if self.seq <= 0:
             raise ValueError("receipt_seq must be positive")
 
     @property
