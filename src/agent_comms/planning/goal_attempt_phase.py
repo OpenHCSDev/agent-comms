@@ -37,8 +37,11 @@ class GoalAttemptPhase(DeclaredFamily, LifecycleState, affix="Attempt"):
         self, conn, reservation, observation, record_observation,
     ) -> None:
         pass
-    verified_progress: ClassVar[bool] = False
-    permits_retirement: ClassVar[bool] = False
+    def has_verified_progress(self) -> bool:
+        return False
+
+    def permits_retirement(self) -> bool:
+        return False
 
     def require_retryable(self) -> None:
         raise UnresolvedAttemptError("Only a blocked, recorded failure may be retried explicitly.")
@@ -63,7 +66,8 @@ class ClaimedAttempt(GoalAttemptPhase):
 
 
 class FailedAttempt(Failed, ReadyAttempt[AttemptResolution], GoalAttemptPhase):
-    permits_retirement: ClassVar[bool] = True
+    def permits_retirement(self) -> bool:
+        return True
 
     def require_retryable(self) -> None:
         pass
@@ -79,7 +83,8 @@ class FailedAttempt(Failed, ReadyAttempt[AttemptResolution], GoalAttemptPhase):
 
 
 class SucceededAttempt(Terminal, ReadyAttempt[str], GoalAttemptPhase):
-    verified_progress = True
+    def has_verified_progress(self) -> bool:
+        return True
 
     def record_ready(
         self, attempt: GoalAttemptTransition, db: Connection, progress_witness: str

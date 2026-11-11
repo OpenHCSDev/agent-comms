@@ -335,7 +335,8 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
 class TurnLease(ABC):
     """A thread's exact local turn lease, or the declared absence of one."""
 
-    leased: ClassVar[bool]
+    @abstractmethod
+    def is_leased(self) -> bool: ...
 
     @abstractmethod
     def require(self, refusal: Exception) -> TurnLeaseFence: ...
@@ -374,7 +375,8 @@ class TurnLease(ABC):
 class NoTurnLease(NullMember, TurnLease):
     """The thread holds no local turn."""
 
-    leased = False
+    def is_leased(self) -> bool:
+        return False
 
     def require(self, refusal: Exception) -> TurnLeaseFence:
         raise refusal
@@ -409,7 +411,8 @@ class TurnLeaseFence(TurnFence, TurnLease):
     """Exact local begin-turn lease and its original record."""
 
     record: StoredTurnRecord = field(kw_only=True)
-    leased = True
+    def is_leased(self) -> bool:
+        return True
 
     def require(self, refusal: Exception) -> TurnLeaseFence:
         return self
