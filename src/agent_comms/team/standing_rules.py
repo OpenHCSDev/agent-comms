@@ -1409,11 +1409,11 @@ class ChurningPullRequest(IdlePullRequest):
         return tuple(rule for rule in found if rule.began() <= now)
 
     def began(self) -> float:
-        return self.opened + self.seconds if any(block.red() for block in self.blocks) else math.inf
+        return self.opened + self.seconds if any(block.red_description() for block in self.blocks) else math.inf
 
     def line(self) -> str:
         held = ", ".join(holder.name for holder in self.holders) or self.unheld
-        red = "; ".join(block.what() for block in self.blocks if block.red())
+        red = "; ".join(desc for block in self.blocks for desc in block.red_description())
         return (f"{self.tag} {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}"
                 f" ({held}): opened {RecordedEventTime(self.opened).stamp()} and still red: {red}."
                 f" busy isn't landing. -> {self.unowned}")

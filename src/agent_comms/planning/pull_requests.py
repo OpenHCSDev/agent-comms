@@ -140,9 +140,8 @@ class MergeBlock(DeclaredFamily, affix="MergeBlock"):
     @abstractmethod
     def remedy(self) -> str: ...
 
-    def red(self) -> bool:
-        """A failed required check, as opposed to one still pending or a merge state."""
-        return False
+    def red_description(self) -> tuple[str, ...]:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -150,8 +149,8 @@ class FailedCheckMergeBlock(MergeBlock):
     """A required check concluded red on the head."""
     name: str
 
-    def red(self) -> bool:
-        return True
+    def red_description(self) -> tuple[str, ...]:
+        return (self.what(),)
 
     def what(self) -> str:
         return f"required check {self.name} failed"
