@@ -434,7 +434,7 @@ class RecoveryMonitorCapability:
         with VerifiedOwnerLoss.observe_owner_release(store, owner, boundary, releases) as loss:
             for source, stage in pending:
                 current = NativeRuntimeInput.require(store.session._connection, input_id=source.input_id)
-                if current.reference.recorded:
+                if current.reference.has_session_proof():
                     continue
                 loss.require_input_loss(current)
                 with boundary.registry_cut.current(), store.session.writing() as db:
