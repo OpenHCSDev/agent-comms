@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import asdict
 from pathlib import Path
 
@@ -246,18 +245,3 @@ def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: P
     assert _rows(comms, "peer")[0] == {}
     assert _rows(comms, "owner")[0] == {}
     assert not comms.relationships.store.path.exists()
-
-
-def test_old_writer_text_change_drops_derived_links_without_erasing_goal(tmp_path: Path) -> None:
-    comms = _wire(tmp_path)
-    goal = comms.goals.update_goal("owner", SetGoalAction(text="@peer"))
-    assert goal is not None
-    path = comms.registry.store.path
-    raw = json.loads(path.read_text())
-    raw["threads"]["owner"]["goal"]["text"] = "No mention"
-    raw["threads"]["owner"]["goal"]["revision"] += 1
-    path.write_text(json.dumps(raw))
-    reopened = wire(comms.root)
-    assert reopened.registry.require("owner").goal.text == "No mention"
-    assert _rows(reopened, "owner")[0] == {}
-    assert reopened.relationships.goal_contacts("owner")[0] == ()

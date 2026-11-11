@@ -16,7 +16,7 @@ from agent_comms.installer.harness_install import CodexHarness
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_payloads import NativeContextData
 from agent_comms.registry.thread_text import AnySession
-from agent_comms.transport.core_access import LocalCoreAccess
+from conftest import ui_core_read
 from agent_comms.transport.tools.sidebar import CommsContextInspectionTool, ContextInspectionRead
 
 
@@ -36,7 +36,7 @@ def imported_inspection(comms, tmp_path):
                               for record in records))
     imported = comms.threads.import_thread(
         OfflineHistory.stored(CodexHarness, source, AnySession()), name="imported")
-    read = LocalCoreAccess(comms).call(CommsContextInspectionTool(owner=imported.thread))
+    read = ui_core_read(comms, CommsContextInspectionTool(owner=imported.thread))
     assert read.imported
     return comms, read
 
@@ -90,8 +90,8 @@ def test_copied_bus_inspection_uses_its_own_session_root(imported_inspection):
     copied_root = comms.root.parent / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied_root)
     copied = wire(copied_root)
-    read = roundtrip(LocalCoreAccess(copied).call(
-        CommsContextInspectionTool(owner=original.entry.thread.name)))
+    read = roundtrip(ui_core_read(
+        copied, CommsContextInspectionTool(owner=original.entry.thread.name)))
     relative = original.entry.thread.session_file.path
     assert read.entry.thread.runtime.path == str(copied_root / relative)
     assert read.entry.thread.incarnation == original.entry.thread.incarnation

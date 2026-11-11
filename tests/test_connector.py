@@ -1274,9 +1274,10 @@ async def remote_answer(client: TestClient, token: str, request):
     return FieldCodec.decode(request.result_type(), reply.result.structured_content)
 
 
-async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(client, comms):
+async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(
+    client, comms, local_core
+):
     """The UI's page request answers in process and through tools/call with one record."""
-    from agent_comms.transport.core_access import LocalCoreAccess
     from agent_comms.transport.tools.sidebar import CommsConversationPageTool
 
     comms.registry.declare(NativeThread(CALLER.name, frozenset(), Checkout(comms.root)))
@@ -1285,7 +1286,7 @@ async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(cl
     project = Checkout(comms.root)
     request = CommsConversationPageTool(conversation=ThreadTarget("worker"), project=project)
 
-    local = LocalCoreAccess(comms).call(request)
+    local = await local_core.call(request)
     assert sent.message_id in [message.message_id for message in local.messages]
     # The UI's project, not the bus root, is the worktree the read proof records.
     assert local.selection.identity.project_path == project.resolved().path
@@ -1297,12 +1298,11 @@ async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(cl
 
 @pytest.mark.parametrize("conversation", [ThreadTarget("worker"), CommandTarget.named("#comms")])
 async def test_a_ui_checks_a_conversation_for_changes_the_same_locally_and_remotely(
-    client, comms, conversation
+    client, comms, local_core, conversation
 ):
     """A revision is what the UI keeps and sends back with its next check, so it must come
     back from the connector as the same record, channel or DM, and settle once nothing
     changed. The latest-sequence bound travels the same way."""
-    from agent_comms.transport.core_access import LocalCoreAccess
     from agent_comms.transport.tools.sidebar import (
     CommsConversationRevisionTool,
     CommsLatestSequenceTool,
@@ -1311,30 +1311,29 @@ async def test_a_ui_checks_a_conversation_for_changes_the_same_locally_and_remot
     comms.registry.declare(NativeThread(CALLER.name, frozenset({"comms"}), Checkout(comms.root)))
     comms.messaging.send_user_message(
         conversation, "check through the boundary", worktree=Checkout(comms.root))
-    local_core, token = LocalCoreAccess(comms), await approved_token(client, comms)
+    token = await approved_token(client, comms)
     first = CommsConversationRevisionTool(conversation=conversation, project=Checkout(comms.root))
 
-    local = local_core.call(first)
+    local = await local_core.call(first)
     remote = await remote_answer(client, token, first)
     assert remote == local
 
     again = replace(first, seen=remote)
     settled = await remote_answer(client, token, again)
-    assert settled == local_core.call(again)
+    assert settled == await local_core.call(again)
     assert not settled.display_changed_since(remote)
 
     latest = CommsLatestSequenceTool()
-    assert await remote_answer(client, token, latest) == local_core.call(latest)
-    assert local_core.call(latest).cursor.sequence == comms.views.latest_sequence()
+    assert await remote_answer(client, token, latest) == await local_core.call(latest)
+    assert (await local_core.call(latest)).cursor.sequence == comms.views.latest_sequence()
 
 
 async def test_an_inbox_read_after_its_place_the_same_locally_and_remotely(
-    client, comms
+    client, comms, local_core
 ):
     """An inbox read crosses the connector with its place and its wait, and
     answers what a local read answers."""
     from agent_comms.messaging.agent_inbox import SecondsWait, TakenInputAfter
-    from agent_comms.transport.core_access import LocalCoreAccess
     from agent_comms.transport.tools.inbox import CommsInboxTool
 
     comms.registry.declare(NativeThread(CALLER.name, frozenset(), Checkout(comms.root)))
@@ -1343,7 +1342,7 @@ async def test_an_inbox_read_after_its_place_the_same_locally_and_remotely(
     request = CommsInboxTool(
         thread="worker", after=TakenInputAfter(first.reference), wait=SecondsWait(1))
 
-    local = LocalCoreAccess(comms).call(request)
+    local = await local_core.call(request)
     remote = await remote_answer(client, await approved_token(client, comms), request)
     assert [m.body for m in remote.messages] == [m.body for m in local.messages] == ["second"]
 
