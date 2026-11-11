@@ -283,7 +283,7 @@ class InputDispositions(DurableStore, CompleteInputReader, InputLookup[InputAtte
 
     @PublishedProperty
     def coordinator_reader(self) -> ReadableStore:
-        return ReadableStore(CoordinationStore.path_in(self.root))
+        return ReadableStore.at(CoordinationStore.path_in(self.root))
 
     def _harness_deliveries(self, owners: tuple[ThreadLookup, ...]) -> tuple[HarnessDelivery, ...]:
         with self.coordinator_reader.reader_snapshot() as db:

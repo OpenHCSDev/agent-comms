@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
+from functools import cached_property
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -464,17 +465,9 @@ class TurnRecord(LifecycleCapability, SubclassUnion, affix=""):
 
     @staticmethod
     def read_all(records: Iterable[TurnRecord]) -> Mapping[StoredTurnRecord, TurnDeclaration]:
-        """Every stored turn among ``records`` from one registry copy per registry, where one
-        read per record copied and decoded the whole registry each time."""
-        by_registry: dict[tuple[Path, type], list[StoredTurnRecord]] = {}
-        for record in records:
-            for stored in record.stored():
-                by_registry.setdefault((stored.registry_path, stored.registry_type), []).append(stored)
-        turns: dict[StoredTurnRecord, TurnDeclaration] = {}
-        for held in by_registry.values():
-            held = list(dict.fromkeys(held))
-            turns.update(zip(held, held[0].registry.read_turns(tuple(held)), strict=True))
-        return turns
+        """Every stored turn among ``records``, read on first use from one registry copy per
+        registry, where one read per record copied and decoded the whole registry each time."""
+        return TurnReads(tuple(stored for record in records for stored in record.stored()))
 
     @abstractmethod
     def without_claim(self) -> None: ...
@@ -660,6 +653,33 @@ class RetiredTurn(LockedTurn):
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> tuple[TurnState, ...]:
         return ()
+
+
+class TurnReads(Mapping["StoredTurnRecord", TurnDeclaration]):
+    """Held turn records, read together the first time any of them is asked for: a goal
+    whose state never consults its turn costs no registry copy."""
+
+    def __init__(self, held: tuple[StoredTurnRecord, ...]) -> None:
+        self.held = tuple(dict.fromkeys(held))
+
+    @cached_property
+    def turns(self) -> Mapping[StoredTurnRecord, TurnDeclaration]:
+        by_registry: dict[tuple[Path, type], list[StoredTurnRecord]] = {}
+        for stored in self.held:
+            by_registry.setdefault((stored.registry_path, stored.registry_type), []).append(stored)
+        turns: dict[StoredTurnRecord, TurnDeclaration] = {}
+        for held in by_registry.values():
+            turns.update(zip(held, held[0].registry.read_turns(tuple(held)), strict=True))
+        return turns
+
+    def __getitem__(self, record: StoredTurnRecord) -> TurnDeclaration:
+        return self.turns[record]
+
+    def __iter__(self) -> Iterator[StoredTurnRecord]:
+        return iter(self.held)
+
+    def __len__(self) -> int:
+        return len(self.held)
 
 
 @dataclass(frozen=True)
