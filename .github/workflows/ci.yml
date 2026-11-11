@@ -37,8 +37,6 @@ jobs:
 
       - name: Install the stack at the latest Toad, Textual and ui-theme mains
         uses: ./.github/actions/install-stack
-        with:
-          upgrade: "true"
 
       - name: Check installed clients
         run: |

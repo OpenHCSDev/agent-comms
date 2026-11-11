@@ -128,10 +128,8 @@ class RuntimeStack(Extendable):
     def resolve(self) -> None:
         """Refresh every package the lock records as tracking a branch, transitive ones
         included, while retaining the committed release and revision pins."""
-        upgrades = tuple(argument for name in ResolvedLock.read(self.lock).tracked()
-                         for argument in ("--upgrade-package", name))
-        self.commands.run(self.uv, "lock", "--project", "stack", *upgrades,
-                          cwd=self.checkout)
+        self.commands.run(self.uv, "lock", "--project", "stack",
+                          *ResolvedLock.read(self.lock).refresh_arguments(), cwd=self.checkout)
 
     @staticmethod
     def build(checkout: Checkout, commands: InstallCommands, home: Path = HOME) -> TargetRuntime:
