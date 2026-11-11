@@ -158,11 +158,13 @@ class MessageBus[Writes: Publisher](PublishedBus[Writes], BusReadSource):
         catalog = self._channels.read()
         deliveries = {delivery.actor: delivery
                       for delivery in (DeliveryScope.capture(name, snapshot, catalog) for name in names)}
+        coordinator = TakenInputCursor.revision(self.bus.path.parent)
         with self.bus.reading() as source:
             with source.observing() as db:
                 taken = TakenInputCursor().attached(db, self.bus.path.parent, self._registry.store.privacy())
             return source.advanced_unseen_oldest(
-                held, snapshot, deliveries, dict.fromkeys(deliveries, taken), source=source.identity,
+                held, snapshot, deliveries, dict.fromkeys(deliveries, taken),
+                source=source.identity, coordinator=coordinator,
             )
 
     async def when_open[Result](self, operation: Callable[[], Result | Awaitable[Result]]) -> Result:
