@@ -965,13 +965,12 @@ class HeartbeatFrame(TeamInputs):
         return self.recent.take(self.turns_for(comms, thread))
 
     def edit_counts(self, comms: Comms) -> Mapping[str, int]:
-        """The count projection shares the frame's workplaces, progress and turn digests."""
+        """Count through each source's own query; retain the answer within this frame."""
         for read in OrderEditCountRead.judgeable(
                 comms.root, self.live, self.pulls.progress(self.todos, comms.registry),
                 self.workplaces):
             if read.todo.id not in self._edit_counts:
-                self._edit_counts[read.todo.id] = read.from_turns(
-                    self.turns_for(comms, read.thread))
+                self._edit_counts[read.todo.id] = read.read()
         for todo in self.todos:
             self._edit_counts.setdefault(todo.id, 0)
         return self._edit_counts
