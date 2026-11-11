@@ -6,6 +6,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Annotated
 
+import agent_comms.input_attempt as input_attempt
 import agent_comms.messaging.retained_task_facts as task_facts
 from agent_comms.errors import RelationViolationError
 from agent_comms.messaging import initial_origin
