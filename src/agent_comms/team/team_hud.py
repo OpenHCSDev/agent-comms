@@ -230,7 +230,7 @@ class TeamHud(TeamLoad):
         ) for phase in PlanPhase.members_with(PlanPhase))
         forks = tuple(fork.incarnation
                       for fork in TeamService.forks(snapshot, TeamService.running(snapshot))
-                      if snapshot.status(fork.name).receiving)
+                      if snapshot.status(fork.name).is_receiving())
         passes = ServicePassStore.at(comms.root).read()
         return cls(teammate=owner, units=tuple(units), phases=phases,
                    load=OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),

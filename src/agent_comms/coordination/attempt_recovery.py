@@ -560,7 +560,7 @@ class RecoveryMonitorCapability:
                     store.session, outcome, evidence.reason_code, boundary
                 )
                 settled = store.get(execution_id)
-                kind = DeferredRecovery if settled.execution.lifecycle.retry else FailedRecovery
+                kind = DeferredRecovery if settled.execution.lifecycle.is_retry() else FailedRecovery
                 RecoveryAudit(
                     execution_id=execution_id,
                     kind=kind,

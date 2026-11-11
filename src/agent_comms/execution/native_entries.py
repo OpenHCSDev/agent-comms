@@ -140,7 +140,7 @@ class RecordedEntry(PiPayload):
 
     @property
     def input_boundary(self):
-        return any(message.user for message in self.messages)
+        return any(message.is_user_message() for message in self.messages)
 
     def require_tracked_user(self) -> MessageEntry:
         raise MalformedRecord("Native publication requires an original tracked input")
@@ -679,7 +679,7 @@ class MessageEntry(NativeEntry):
     def preserve_evidence(self, raw: dict) -> MessageEntry:
         message = raw[FieldCodec.record_key(type(self), "message")]
         # Opaque display roles must not hide a tracked ID from proof readers.
-        if message.get("inputId") is not None and not self.message.user:
+        if message.get("inputId") is not None and not self.message.is_user_message():
             raise MalformedRecord("Tracked native input must belong to a user")
         # The message and its content member preserve their own extension fields.
         return replace(self, message=self.message.preserve_evidence(message))
@@ -724,7 +724,7 @@ class MessageEntry(NativeEntry):
 
     def require_tracked_user(self) -> MessageEntry:
         self.require_input_id()
-        if not self.message.user or not self.message.input_digest.reported:
+        if not self.message.is_user_message() or not self.message.input_digest.reported:
             raise MalformedRecord("Native Pi session has ambiguous tracked user input")
         self.id.require_present()
         Sha256Text.from_text(self.message.input_digest.require())

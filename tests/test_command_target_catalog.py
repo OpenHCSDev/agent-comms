@@ -81,11 +81,11 @@ def test_one_target_stops_a_registered_thread_and_refuses_an_unknown_one(running
     with pytest.raises(ValueError):
         StopCliCommand.execute_target(comms, OneTarget((CommandTarget.named("ghost"),)), {},
                                       project=str(tmp_path))
-    assert not comms.registry.status("first").stopped
+    assert not comms.registry.status("first").is_stopped()
     result = StopCliCommand.execute_target(comms, OneTarget((CommandTarget.named("first"),)), {},
                                            project=str(tmp_path))
     assert result.stopped == "first"
-    assert comms.registry.status("first").stopped
+    assert comms.registry.status("first").is_stopped()
 
 
 def test_target_batch_reports_an_unknown_target_as_a_failed_outcome(running_first, tmp_path):
@@ -94,11 +94,11 @@ def test_target_batch_reports_an_unknown_target_as_a_failed_outcome(running_firs
                                            project=str(tmp_path))
     assert type(missed) is TargetBatchResult and not missed.successful
     assert type(missed.outcomes[0]) is TargetFailed
-    assert not comms.registry.status("first").stopped
+    assert not comms.registry.status("first").is_stopped()
     stopped = StopCliCommand.execute_target(comms, TargetBatch((CommandTarget.named("first"),)), {},
                                             project=str(tmp_path))
     assert stopped.successful and stopped.outcomes[0].result.stopped == "first"
-    assert comms.registry.status("first").stopped
+    assert comms.registry.status("first").is_stopped()
 
 
 def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):

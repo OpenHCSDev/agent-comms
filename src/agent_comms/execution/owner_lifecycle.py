@@ -350,7 +350,7 @@ class OwnerLifecycle:
                     RelationViolationError("Only agent threads can be stopped.")
                 )
                 if thread.process_identity.allows_owner_start():
-                    if not snapshot.status(thread.name).stopped:
+                    if not snapshot.status(thread.name).is_stopped():
                         edit.document.unregister(thread.name)
                 else:
                     owners.append((thread, snapshot.claim_generation(thread.name)))

@@ -152,7 +152,7 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
 
     async def prepare_attempt(self, snapshot: RecoverySnapshot) -> None:
         """Acquire the strictly newer coordinator owner required by a retry."""
-        if snapshot.execution.lifecycle.retry:
+        if snapshot.execution.lifecycle.is_retry():
             participant = self.store.participants.advance_generation(
                 self.lookup,
                 expected_generation=self.identity.generation,

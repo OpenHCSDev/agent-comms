@@ -46,23 +46,26 @@ class AdvancedOrdinal(OrdinalRule):
 
 @dataclass(frozen=True)
 class ExecutionState(CoordinatorVocabulary, LifecycleState, affix="Execution"):
-    retry: ClassVar[bool] = False
-    queued: ClassVar[bool] = False
-    unstarted: ClassVar[bool] = False
-
     @classmethod
     def sql_vocabulary(cls) -> dict[str, str]:
         return dict(
             execution_names=cls.sql_values(cls.names()),
             engaged_execution_names=cls.sql_members(cls.members_with(EngagedExecution)),
-            unstarted_execution_names=cls.sql_members(
-                member for member in cls.members_with(cls) if member.unstarted
-            ),
+            unstarted_execution_names=cls.sql_members(cls.members_with(UnstartedExecution)),
             required_attempt_execution_names=cls.sql_members(cls.members_with(AttemptExecution)),
             optional_attempt_execution_names=cls.sql_members(
                 cls.members_with(InterruptedExecution)
             ),
         )
+
+    def is_retry(self) -> bool:
+        return False
+
+    def require_queued(self) -> None:
+        raise IdentityConflict("only queued executions can become pending")
+
+    def require_unstarted(self) -> None:
+        raise IdentityConflict("unstarted failure requires queued/pending work")
 
     @property
     def current_attempt_ordinal(self) -> int | None:
@@ -120,7 +123,8 @@ class EngagedExecution:
 
 
 class UnstartedExecution(EngagedExecution, ExecutionState):
-    unstarted = True
+    def require_unstarted(self) -> None:
+        pass
 
     @classmethod
     def load(cls, ordinal: int | None) -> ExecutionState:
@@ -130,7 +134,8 @@ class UnstartedExecution(EngagedExecution, ExecutionState):
 
 
 class QueuedExecution(UnstartedExecution):
-    queued = True
+    def require_queued(self) -> None:
+        pass
 
     @classmethod
     def successors(cls):
@@ -215,7 +220,8 @@ class InterruptedExecution(AttemptReference, ExecutionState):
 
 
 class DeferredExecution(StartsAttempt, InterruptedExecution):
-    retry = True
+    def is_retry(self) -> bool:
+        return True
 
     def require_retry_start(self, snapshot: RecoverySnapshot) -> None:
         snapshot.previous_attempt.require_retry(snapshot)

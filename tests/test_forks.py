@@ -294,13 +294,13 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     interim.write_text("The first review is complete; another check remains.")
     posted = command(comms, "order", "say", "#comms", str(interim), "--fork", "fork-one")
     assert posted.returncode == 0, posted.stderr
-    assert comms.registry.status("fork-one").receiving
+    assert comms.registry.status("fork-one").is_receiving()
     assert store.get("P40") == saved
     refused = command(comms, "order", "retire", "--as", "colleague")
     assert refused.returncode != 0 and "Only a teammate fork can retire" in refused.stderr
     retired = command(comms, "order", "retire", "--fork", "fork-one")
     assert retired.returncode == 0, retired.stderr
-    assert not comms.registry.status("fork-one").receiving
+    assert not comms.registry.status("fork-one").is_receiving()
     assert store.get("P40") == saved
     # Ending an issuer changes neither holder occupancy nor holder consent.
     with store.snapshot() as db:
@@ -999,7 +999,7 @@ def test_a_subagent_start_registers_its_fork_and_a_resume_reuses_the_archived_th
     told = json.loads(run(SubagentStartRequest))["hookSpecificOutput"]
     assert "--fork claude-a1" in told["additionalContext"]
     fork = comms.registry.require("claude-a1")
-    assert fork.parent.named("colleague") and comms.registry.status("claude-a1").receiving
+    assert fork.parent.named("colleague") and comms.registry.status("claude-a1").is_receiving()
     assert comms.agents.activity.current(fork.name).state is ActivityState.THINKING
     assert run(ReadGateRequest, tool_name="Bash", tool_input={"command": "pwd"}) == ""
     activity = comms.agents.activity.current(fork.name)
@@ -1011,7 +1011,7 @@ def test_a_subagent_start_registers_its_fork_and_a_resume_reuses_the_archived_th
     assert comms.agents.activity.current(fork.name).state is ActivityState.IDLE
     run(SubagentStartRequest)
     assert comms.registry.require("claude-a1").incarnation == fork.incarnation
-    assert comms.registry.status("claude-a1").receiving
+    assert comms.registry.status("claude-a1").is_receiving()
 
 
 def test_a_hook_registered_fork_stays_its_sessions_child_under_another_recorded_team(
@@ -1038,7 +1038,7 @@ def test_a_subagent_stop_is_refused_until_its_fork_records_then_archives_it(
     comms, run = subagent_hook
     run(SubagentStartRequest)
     assert json.loads(run(SubagentStopRequest, stop_hook_active=False))["decision"] == "block"
-    assert comms.registry.status("claude-a1").receiving
+    assert comms.registry.status("claude-a1").is_receiving()
     found = tmp_path / "found.txt"
     found.write_text("The fork recorded its finding.")
     assert command(comms, "order", "say", "#comms", str(found), "--fork", "claude-a1").returncode == 0
@@ -1112,7 +1112,7 @@ def test_an_untagged_peers_sdk_children_keep_real_ids_and_parent_delegation(
         assert json.loads(run(SubagentStopRequest, agent_id="a2"))["decision"] == "block"
         assert run(SubagentStopRequest, agent_id="a2", stop_hook_active=True) == ""
         assert isinstance(comms.registry.status("claude-a2"), ArchivedThreadStatus)
-        assert comms.registry.status("claude-a3").receiving
+        assert comms.registry.status("claude-a3").is_receiving()
         subagents = transcript.with_suffix("") / "subagents"
         subagents.mkdir(parents=True)
         for agent in ("a2", "a3"):
