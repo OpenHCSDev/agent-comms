@@ -2,14 +2,13 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 
-from agent_comms.execution.child_process import ProcessIdentity, ProcessState
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.planning.goal_failure_owner import ProcessOwner
 from agent_comms.registry.thread_identity import OwnerIdentity, ThreadIncarnation, ThreadRole
 
 
-class PresenceThread(ABC):
-    __slots__ = ()
+class PresenceThread(ProcessOwner, ABC):
     name: str
-    process_identity: ProcessState
     role: type[ThreadRole]
 
     @property
