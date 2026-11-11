@@ -84,6 +84,7 @@ class MutatesSession:
 
 @dataclass(frozen=True, kw_only=True)
 class PiCommand(DeclaredFamily):
+    family_discriminator = "type"  # Pi's RPC names the command in ``type``
     response_payload: ClassVar[type[PiResponseData]] = EmptyData
     # The answering child appends to its own session file (a retained child stays current).
     writes_session: ClassVar[bool] = False
@@ -121,19 +122,15 @@ class PiCommand(DeclaredFamily):
         return {self.family_discriminator: self.response_type().declared_name}
 
     def to_rpc(self) -> dict[str, JsonValue]:
-        data = FieldCodec.encode(self)
-        data["type"] = data.pop("kind")
-        return data
+        return FieldCodec.encode(self)
 
     @classmethod
     def from_wire(cls, value: dict[str, JsonValue]) -> PiCommand:
-        data = dict(value)
-        kind = data.pop("type", None)
         try:
-            cls.member_named(kind)
+            cls.member_named(value.get(cls.family_discriminator))
         except UnknownFamilyMember:
-            return UnknownCommand(id=FieldCodec.field_plan(cls, "id").read(data), wire=value)
-        return FieldCodec.decode(cls, {"kind": kind, **data})
+            return UnknownCommand(id=FieldCodec.field_plan(cls, "id").read(dict(value)), wire=value)
+        return FieldCodec.decode(cls, value)
 
     @classmethod
     def response_owner(cls, name: object) -> type[PiCommand]:

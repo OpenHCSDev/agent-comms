@@ -368,7 +368,7 @@ class RestartQueue(DurableStore):
         """The queue's reader runs current code; each target keeps its own launch runtime."""
         runtime = LaunchRuntime.running()
         return SpawnedProcess.launch(
-            (str(runtime.interpreter), "-m", "agent_comms.execution.restart_queue", str(self.root.resolve())),
+            (str(runtime.interpreter), "-m", __spec__.name, str(self.root.resolve())),
             env=MaintenanceHolder.outside(RestartEnvironment.inherit(os.environ).encode()), runtime=runtime,
             lifetime=OutlivesLauncherLifetime,
         )

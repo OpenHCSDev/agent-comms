@@ -3,7 +3,6 @@
 import argparse
 import asyncio
 import os
-import resource
 import signal
 import sys
 from contextlib import suppress
@@ -14,6 +13,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.execution.launch_root import LaunchRoot, started
 from agent_comms.execution.root_runtime import RootRuntimeStore
+from agent_comms.execution.worker import lower_priority, open_every_file_this_host_may_need
 from agent_comms.installer.active_route import ActiveRoute
 from agent_comms.transport.owner_connection import socket_path
 
@@ -48,30 +48,6 @@ async def run_host(comms: Comms, listener_fd: int) -> None:
     finally:
         # The launcher bound this path before we ran, so a host that dies before serving owns it too.
         socket_path(comms.root, os.getpid()).unlink(missing_ok=True)
-
-
-# Native children inherit the host's background priority, not an interactive UI's.
-OWNER_NICENESS = 10
-
-
-def lower_priority() -> None:
-    current = os.getpriority(os.PRIO_PROCESS, 0)
-    os.setpriority(os.PRIO_PROCESS, 0, max(current, OWNER_NICENESS))
-
-
-def open_every_file_this_host_may_need() -> None:
-    """Take the open-file budget this host's own kernel already allows it.
-
-    One host answers every session on the bus, and each one holds its stores open: a
-    live host sat at 748 descriptors, 157 of them on registry.sqlite3, against the 1024
-    soft limit a login shell happened to hand it, while its hard limit was 524288. The
-    next open() to run out of budget was an unrelated diagnostics file, so the refusal
-    named that file instead of the budget, and the read that failed had nothing to do
-    with the sessions holding the descriptors. The soft limit is this process's to set.
-    """
-    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-    if soft < hard:
-        resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
 
 
 def main() -> int:

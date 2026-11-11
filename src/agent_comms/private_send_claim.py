@@ -23,7 +23,7 @@ from agent_comms.execution.input_drain import InputDrain
 from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_execution import PackagedNativeExecution
-from agent_comms.execution.native_input_owner import ParticipantOwner, RegistryOwner
+from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.native_pi import NativeTurnResult
 from agent_comms.execution.native_prompt_binding import bind_expected_prompt
@@ -100,10 +100,6 @@ class PrivateSendClaim(FollowingPromptBoundary):
     def owner(self) -> RegistryOwner:
         return self.selected.owner
 
-    @property
-    def participant(self) -> ParticipantOwner:
-        return self.selected.identity
-
     @classmethod
     async def reserve(
         cls,
@@ -153,7 +149,7 @@ class PrivateSendClaim(FollowingPromptBoundary):
     ) -> None:
         self.stage.verify(
             store,
-            self.participant,
+            self.selected.identity,
             self.input_id,
             self.token_digest,
             context,
@@ -215,7 +211,7 @@ class PrivateSendClaim(FollowingPromptBoundary):
             def settle(store: Coordination, terminal: NativePiTerminalFailure[NativeContextProof] = error) -> object:
                 self.verify(store, terminal.context, source_reads)
                 return self.stage.fail_terminal(
-                    store, self.participant, self.input_id, self.token_digest,
+                    store, self.selected.identity, self.input_id, self.token_digest,
                     terminal.context, terminal.failure,
                 )
 
@@ -248,13 +244,13 @@ class PrivateSendClaim(FollowingPromptBoundary):
         def acknowledge(store: Coordination) -> None:
             self.verify(store, context, source_reads)
             self.stage.acknowledge_context(
-                store, self.participant, self.input_id, self.token_digest, context,
+                store, self.selected.identity, self.input_id, self.token_digest, context,
             )
         await Coordination.run_async(self.store_path, acknowledge)
 
     def commit(self, store: Coordination, context: NativeContextProof) -> None:
         self.stage.acknowledge_context(
-            store, self.participant, self.input_id, self.token_digest, context,
+            store, self.selected.identity, self.input_id, self.token_digest, context,
         )
 
     def _start_once(self, identity: NativeSessionIdentity) -> None:
@@ -278,7 +274,7 @@ class PrivateSendClaim(FollowingPromptBoundary):
                 registry = cut.snapshot
             with self.measurements.operation("prompt_binding"):
                 authority.enter_context(self.stage.bound_prompt(
-                    store, self.input_id, self.participant, self.wire_root_id,
+                    store, self.input_id, self.selected.identity, self.wire_root_id,
                     self.prompt.text,
                 ))
             with self.measurements.operation("coordinator_exclusive"):
@@ -294,9 +290,9 @@ class PrivateSendClaim(FollowingPromptBoundary):
                     registry, "recipient registry owner changed before native send"
                 )
                 NativeRuntimeTable.require_installed(db)
-                self.participant.require(store, self.stage.recipient_lookup)
+                self.selected.identity.require(store, self.stage.recipient_lookup)
                 reserved = self.stage.require_reservation(
-                    db, self.input_id, self.participant, self.token_digest
+                    db, self.input_id, self.selected.identity, self.token_digest
                 )
                 self.stage.require_claim(store)
             with self.measurements.operation("native_claim_record"):
@@ -318,7 +314,7 @@ class PrivateSendClaim(FollowingPromptBoundary):
 
     @contextmanager
     def prompt_boundary(self, turn: TrackedTurnSession) -> Iterator[None]:
-        with self(turn.native.attestation.require_identity()):
+        with self(turn.native.attestation.identity.require_identity()):
             turn.grant_prompt()
             yield
 

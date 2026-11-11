@@ -30,6 +30,7 @@ from agent_comms.execution.turn_context import (
     ContextSegment,
     ContributionCoordinates,
     Provenance,
+    ProviderContext,
     TurnContext,
 )
 from agent_comms.importing import ThreadImported
@@ -347,13 +348,19 @@ class CoreSegmentText:
     text: str
 
 
-@dataclass(frozen=True)
-class CoreContextInspection(CliResult):
-    """Current core contributors; native_error says why the native base is absent."""
-    scope: str
+@dataclass(frozen=True, kw_only=True)
+class ContextInspectionInput:
+    """The supplied input, core context and segments a context inspection reads."""
+
     input_supplied: bool
     core_context: TurnContext
     segments: tuple[CoreSegmentText, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CoreContextInspection(ContextInspectionInput, CliResult):
+    """Current core contributors; native_error says why the native base is absent."""
+    scope: str
     native_error: str
 
 
@@ -364,15 +371,12 @@ class NativeSourceSpans:
     spans: tuple[ContributionCoordinates, ...]
 
 
-@dataclass(frozen=True)
-class NativeContextInspection(CliResult):
+@dataclass(frozen=True, kw_only=True)
+class NativeContextInspection(ContextInspectionInput, CliResult):
     """The next native base together with the current core contributors."""
     scope: str
-    input_supplied: bool
-    core_context: TurnContext
-    segments: tuple[CoreSegmentText, ...]
     native_manifest: tuple[ContextSegment, ...]
-    native_provider_context: Mapping[str, object]
+    native_provider_context: ProviderContext
     native_source_spans: tuple[NativeSourceSpans, ...]
 
 

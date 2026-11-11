@@ -20,9 +20,15 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 from agent_comms.context_segments.optional_awareness import (
+    BuilderBusy,
     CompleteAwareness,
+    CoordinationUnavailable,
     OmittedAwareness,
     OptionalAwarenessResult,
+    PastDeadline,
+    ProjectionUnavailable,
+    RelationViolated,
+    StoreLocked,
     _OpenObligation,
     _SelectedDecision,
 )
@@ -115,7 +121,7 @@ class OptionalAwarenessProjection:
     ) -> tuple[ContextSegment, ...]:
         deadline = time.monotonic() + self.build_seconds
         if not self._build_slot.acquire(blocking=False):
-            return OmittedAwareness.capture(reason="builder busy").segments(self.max_text_bytes)
+            return OmittedAwareness.capture(reason=BuilderBusy()).segments(self.max_text_bytes)
         try:
             reading = self._reader.submit(self, initial, assignment, owner)
         except RuntimeError:
@@ -129,9 +135,9 @@ class OptionalAwarenessProjection:
                 asyncio.wrap_future(reading), max(0.0, deadline - time.monotonic())
             )
         except TimeoutError:
-            return OmittedAwareness.capture(reason="TimeoutError").segments(self.max_text_bytes)
+            return OmittedAwareness.capture(reason=PastDeadline()).segments(self.max_text_bytes)
         if time.monotonic() > deadline:
-            return OmittedAwareness.capture(reason="TimeoutError").segments(self.max_text_bytes)
+            return OmittedAwareness.capture(reason=PastDeadline()).segments(self.max_text_bytes)
         return result.segments(self.max_text_bytes)
 
     def __post_init__(self) -> None:
@@ -157,15 +163,16 @@ class OptionalAwarenessProjection:
         """
         try:
             return self._build(initial, assignment, owner)
-        except (
-            CoordinationError,
-            ProjectionUnavailableError,
-            RelationViolationError,
-            BlockingIOError,
-        ) as error:
-            # Busy, stale, changed-owner and pending-rename are this read's
-            # named unavailable states. Anything else is a defect and raises.
-            return OmittedAwareness.capture(reason=type(error).__name__)
+        # These are this read's named unavailable states, each its own omission.
+        # Anything else is a defect and raises.
+        except CoordinationError:
+            return OmittedAwareness.capture(reason=CoordinationUnavailable())
+        except ProjectionUnavailableError:
+            return OmittedAwareness.capture(reason=ProjectionUnavailable())
+        except RelationViolationError:
+            return OmittedAwareness.capture(reason=RelationViolated())
+        except BlockingIOError:
+            return OmittedAwareness.capture(reason=StoreLocked())
 
     def _build(
         self, initial: Delivered, assignment: WakeAssignment, owner: NativeThread

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import Comms, wire
+from agent_comms.context_segments.optional_awareness import ProjectionUnavailable
 from agent_comms.coordination.assignment_states import (
     EngagedAssignment,
     FullPendingAssignment,
@@ -485,7 +486,7 @@ def test_full_bounded_awareness_window_keeps_foreground_deadline(tmp_path: Path)
         # One hundred complete claim descriptions exceed the existing 16KiB
         # optional text budget; omission must still fit the actual 250ms gate.
         assert 'Optional awareness omitted' in bounded.render(32768)
-        assert bounded.reason == "ProjectionUnavailableError"
+        assert bounded.reason == ProjectionUnavailable()
         assert elapsed < 0.250
     finally:
         store.close()

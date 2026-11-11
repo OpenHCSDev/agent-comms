@@ -888,14 +888,20 @@ class SubmoduleTransfer:
                  'core.worktree', self.original_worktree)
 
 
-@dataclass(frozen=True)
-class CheckoutTransfer:
-    """The retained Git identity and the paths of one move."""
+@dataclass(frozen=True, kw_only=True)
+class CheckoutMove:
+    """One checkout head moved from a source to a destination."""
 
     source: Path
     destination: Path
-    branch: str
     head: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class CheckoutTransfer(CheckoutMove):
+    """The retained Git identity and the paths of one move."""
+
+    branch: str
 
     def restore(self, common: Path, modules: tuple[SubmoduleTransfer, ...]) -> None:
         self.destination.rename(self.source)

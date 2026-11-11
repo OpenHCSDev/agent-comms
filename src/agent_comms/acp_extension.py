@@ -638,8 +638,16 @@ class SelectedWriteAcceptedUpdate(AgentCommsUpdate):
     claim_id: AssignmentId
 
 
+@dataclass(frozen=True)
+class CommsMetadata:
+    """The ``agentComms`` object inside ACP ``_meta``: exactly one declared request,
+    decoded strictly, so an unknown or missing key refuses by name."""
+
+    request: CommsRequest
+
+
 def encode_request(request: CommsRequest) -> dict:
-    return {"agentComms": {"request": FieldCodec.encode(request)}}
+    return {"agentComms": FieldCodec.encode(CommsMetadata(request))}
 
 
 def decode_request(metadata: object = None, **expanded) -> CommsRequest:
@@ -651,9 +659,7 @@ def decode_request(metadata: object = None, **expanded) -> CommsRequest:
     extension = expanded.get("agentComms", metadata.get("agentComms"))
     if extension is None:
         return QueuePromptRequest()
-    if not isinstance(extension, dict) or set(extension) != {"request"}:
-        raise MalformedRecord("Comms metadata requires one declared request")
-    return FieldCodec.decode(CommsRequest, extension["request"])
+    return FieldCodec.decode(CommsMetadata, extension).request
 
 
 @dataclass(frozen=True)

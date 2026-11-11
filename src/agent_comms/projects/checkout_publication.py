@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.installer.harness_install import replace_link
-from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.checkouts import Checkout, CheckoutMove
 from agent_comms.projects.repo import Repo
 from agent_comms.storage.store_files import StoreGuard
 
@@ -93,16 +93,13 @@ class PublicationFile:
         return tuple(found)
 
 
-@dataclass(frozen=True)
-class CheckoutPublication:
+@dataclass(frozen=True, kw_only=True)
+class CheckoutPublication(CheckoutMove):
     """An immutable new bundle and compare-before-replace publication link."""
 
     checkout: PublishingCheckout
-    source: Path
-    destination: Path
     link: Path
     previous: Path
-    head: str
 
     def publish(self) -> tuple[Path, int]:
         with self.checkout.write_guard(self.checkout.common_dir / "publication"):

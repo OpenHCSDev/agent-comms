@@ -334,8 +334,8 @@ def test_dependency_reply_reads_its_original_sender_identity() -> None:
 
 @pytest.mark.parametrize("first_module", (
     'agent_comms.planning.goal_presentation',
-    "agent_comms.goal_execution",
-    "agent_comms.goal_events",
+    "agent_comms.planning.goal_execution",
+    "agent_comms.planning.goal_events",
     'agent_comms.planning.goal_management',
     "agent_comms.agent_event_updates",
     'agent_comms.execution.goal_scheduler',
@@ -361,7 +361,7 @@ def test_dependency_reply_reads_its_original_sender_identity() -> None:
     "agent_comms.execution.turn_progress_reads",
     'agent_comms.execution.turn_progress',
     ActivityClient.__module__,
-    "agent_comms.task_scope",
+    "agent_comms.planning.task_scope",
     "agent_comms.registry.task_scope_owner",
     ScopedTaskDeclaration.__module__,
     "agent_comms.execution.agent_event",

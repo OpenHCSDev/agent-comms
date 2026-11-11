@@ -682,7 +682,7 @@ class TrackedInputContext:
                 partial(
                     self.proof,
                     turn.launch.session.files(turn.launch.root),
-                    turn.native.attestation.require_identity().session_id,
+                    turn.native.attestation.identity.require_identity().session_id,
                     source_reads,
                 )
             )
@@ -758,7 +758,7 @@ class TurnSession(NativeSession, PromptSessionCallbacks):
                 partial(
                     self.contexts[self.command.input_id].proof,
                     self.launch.session.files(self.launch.root),
-                    self.native.attestation.require_identity().session_id,
+                    self.native.attestation.identity.require_identity().session_id,
                     source_reads,
                 )
             )

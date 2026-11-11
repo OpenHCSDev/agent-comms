@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import BinaryIO, ClassVar
+from typing import BinaryIO, ClassVar, Literal
 
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.errors import ExportDestinationExists
@@ -37,7 +37,7 @@ class WireExportFormat(DeclaredFamily, affix="Format"):
         return FieldCodec.encode(type(self))
 
     @abstractmethod
-    def header(self, metadata: Mapping[str, object]) -> bytes:
+    def header(self, header: WireExportHeader) -> bytes:
         """Render the durable metadata record."""
 
     @abstractmethod
@@ -67,8 +67,8 @@ class JsonlFormat(SelectableWireExportFormat):
     row_prefix: ClassVar[bytes] = b'{"record":"message","message":'
     row_suffix: ClassVar[bytes] = b'}\n'
 
-    def header(self, metadata: Mapping[str, object]) -> bytes:
-        return (self.json_record(metadata) + "\n").encode()
+    def header(self, header: WireExportHeader) -> bytes:
+        return (self.json_record(FieldCodec.encode(header)) + "\n").encode()
 
     def row(self, message: Message) -> bytes:
         return self.row_prefix + self.json_record(Message.from_message(message).to_wire()).encode() + self.row_suffix
@@ -82,10 +82,10 @@ class JsonlFormat(SelectableWireExportFormat):
 
 @dataclass(frozen=True)
 class TextFormat(SelectableWireExportFormat):
-    def header(self, metadata: Mapping[str, object]) -> bytes:
+    def header(self, header: WireExportHeader) -> bytes:
         return (
-            f"# agent-comms wire export v{metadata['version']} (non-importable text view)\n"
-            f"# metadata: {self.json_record(metadata)}\n"
+            f"# agent-comms wire export v{header.version} (non-importable text view)\n"
+            f"# metadata: {self.json_record(FieldCodec.encode(header))}\n"
         ).encode()
 
     def row(self, message: Message) -> bytes:
@@ -470,6 +470,24 @@ class _ArtifactWriter:
         self.observer.advanced(WireExportProgress(self.size, self.messages))
 
 
+@dataclass(frozen=True, kw_only=True)
+class WireExportHeader:
+    """The first record of every export: what wrote it and what it selected.
+
+    FieldCodec writes each field in this order, so the header's bytes are the record's
+    declaration; ``format`` is the member class, which encodes as its bare name."""
+
+    record: Literal["header"] = "header"
+    schema: str
+    version: int
+    source: Literal["agent-comms-wire"] = "agent-comms-wire"
+    format: type[WireExportFormat]
+    importable: bool
+    scope: WireExportScope
+    limit: WireExportLimit
+    boundary: WireExportBoundary
+
+
 @dataclass(eq=False, repr=False, kw_only=True)
 class WireTranscriptExporter:
     """Stream a fixed wire boundary into one private atomic artifact."""
@@ -563,18 +581,11 @@ class WireTranscriptExporter:
         return last_selected.describe_last(first_selected.describe_first(metadata))
 
     def _header(self) -> bytes:
-        metadata = {
-            "record": "header",
-            "schema": self.SCHEMA,
-            "version": self.VERSION,
-            "source": "agent-comms-wire",
-            "format": self.format.declared_name,
-            "importable": self.format.importable,
-            "scope": self.scope.to_wire(),
-            "limit": self.limit.to_wire(),
-            "boundary": self.boundary.to_wire(),
-        }
-        return self.format.header(metadata)
+        return self.format.header(WireExportHeader(
+            schema=self.SCHEMA, version=self.VERSION, format=type(self.format),
+            importable=self.format.importable, scope=self.scope, limit=self.limit,
+            boundary=self.boundary,
+        ))
 
     def _bounded(self, messages: Iterable[Message]) -> Iterator[Message]:
         previous_sequence = -1

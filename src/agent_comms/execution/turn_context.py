@@ -34,6 +34,7 @@ from agent_comms.nominal.field_codec import (
     SingleFieldValue,
     SubclassUnion,
     TurnId,
+    WireName,
     WireOmitDefault,
 )
 from agent_comms.peer_relevance import AlwaysListed, PeerRelevance
@@ -738,6 +739,7 @@ class ContextSegment(
 
     def render_into(self, prompt_parts, provider):
         prompt_parts.append(self.text())
+        return provider
 
     def manifest(self, tokens: int) -> SegmentManifest:
         raw = self.text().encode()
@@ -940,7 +942,7 @@ class SystemLayerSegment(PublicInstructionAnnotations, MeasuredNativeSegment):
         return self.content
 
     def render_into(self, prompt_parts, provider):
-        provider["systemPrompt"] = self.content
+        return replace(provider, system_prompt=self.content)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -961,7 +963,7 @@ class ToolCatalogSegment(MeasuredNativeSegment):
         return tuple(spans)
 
     def render_into(self, prompt_parts, provider):
-        provider["tools"] = list(self.tools)
+        return replace(provider, tools=self.tools)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1100,10 +1102,24 @@ class ReplyRouteSegment(InstructionSegment):
         return dict(targets=", ".join(self.targets))
 
 
+@dataclass(frozen=True, kw_only=True)
+class ProviderContext:
+    """Pi's provider context for one native turn, in the shape its provider request
+    carries it: the system prompt, the tool catalog and the native messages. Each
+    segment fills its own field; an unfilled field is absent from the wire."""
+
+    system_prompt: Annotated[str, WireName("systemPrompt"), WireOmitDefault()] = ""
+    tools: Annotated[tuple[dict[str, JsonValue], ...], WireOmitDefault()] = ()
+    # Native messages accumulate across segments, so the record owns one list each
+    # segment extends: one copy per message, never a recopy of the prefix.
+    messages: Annotated[list[dict[str, JsonValue]], WireOmitDefault()] = field(
+        default_factory=list)
+
+
 @dataclass(frozen=True)
 class RenderedInput:
     text: str
-    provider: dict[str, JsonValue]
+    provider: ProviderContext
     contributions: tuple[InputContributionCoordinates, ...] = ()
 
 
@@ -1374,12 +1390,12 @@ class TurnContext(DeclaredReply, GoalContextSource[ContextOwner, GoalWorkSource,
     @staticmethod
     def render_segments(segments: tuple[ContextSegment, ...], *, images=()) -> RenderedInput:
         prompt_parts: list[str] = []
-        provider: dict[str, JsonValue] = {}
+        provider = ProviderContext()
         contributions: list[InputContributionCoordinates] = []
         offset = 0
         for segment in segments:
             start = len(prompt_parts)
-            segment.render_into(prompt_parts, provider)
+            provider = segment.render_into(prompt_parts, provider)
             if len(prompt_parts) > start:
                 contribution = segment.contribution(offset, "".join(prompt_parts[start:]), images)
                 contributions.append(contribution)
