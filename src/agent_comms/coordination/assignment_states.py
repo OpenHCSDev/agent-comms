@@ -153,7 +153,7 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, UnengagedDefaults, 
         raise IdentityConflict("full wake frame requires the current response obligation")
 
     def requires_selected_triage(self) -> bool:
-        if isinstance(self.mode, BoundedTriageWake):
+        if self.mode.triage:
             raise IdentityConflict("pending claim wake decision is not executable")
         return False
 

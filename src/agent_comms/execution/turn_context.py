@@ -433,6 +433,8 @@ _NO_CONTEXT_RECORDS: Mapping[int, RecordedContextManifest] = MappingProxyType({}
 class ContextPredecessor(SubclassUnion, affix="ContextPredecessor"):
     """An absent predecessor or the position that owns its lookup."""
 
+    @abstractmethod
+    def is_direct(self) -> bool: ...
 
     @abstractmethod
     def predecessors(self, offset: int) -> tuple[int, ...]: ...
@@ -462,6 +464,9 @@ class ContextPredecessor(SubclassUnion, affix="ContextPredecessor"):
 
 @dataclass(frozen=True)
 class NoContextPredecessor(NullMember, ContextPredecessor):
+    def is_direct(self) -> bool:
+        return True
+
     def predecessors(self, offset: int) -> tuple[int, ...]:
         return ()
 
@@ -492,6 +497,9 @@ class NoContextPredecessor(NullMember, ContextPredecessor):
 class RecordedContextPredecessor(SingleFieldValue, ContextPredecessor):
     record_id: int
 
+    def is_direct(self) -> bool:
+        return False
+
     def predecessors(self, offset: int) -> tuple[int, ...]:
         if not 0 <= self.record_id < offset:
             raise ValueError("Context predecessor is not an earlier record")
@@ -514,7 +522,7 @@ class RecordedContextPredecessor(SingleFieldValue, ContextPredecessor):
             prior = records[self.record_id].segments[position]
         except (KeyError, IndexError) as error:
             raise ValueError("Recorded segment predecessor is missing") from error
-        if isinstance(prior.previous, RecordedContextPredecessor):
+        if not prior.previous.is_direct():
             raise ValueError("Recorded segment predecessor is not a direct keyframe")
         if prior.manifest.kind is not kind:
             raise ValueError("Recorded segment predecessor has a different kind")
@@ -542,7 +550,7 @@ class RecordedSegmentManifest:
     def __post_init__(self) -> None:
         if self.entries and self.manifest.contributors:
             raise ValueError("Recorded segment cannot inline and reference contributors")
-        if self.inherited_entries < 0 or (self.inherited_entries and isinstance(self.previous, NoContextPredecessor)):
+        if self.inherited_entries < 0 or (self.inherited_entries and self.previous.is_direct()):
             raise ValueError("Recorded transcript prefix requires its predecessor")
 
     def predecessors(self, offset: int) -> tuple[int, ...]:

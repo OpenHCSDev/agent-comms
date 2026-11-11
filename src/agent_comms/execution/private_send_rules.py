@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.execution.native_input_record import NativeInputIdentity, NativeInputRecord, NativeInputReference
+from agent_comms.execution.native_input_record import NativeInputIdentity, NativeInputRecord
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.reservation_rules import ReservationRule, RuleCheck
 from agent_comms.execution.turn_goal_permission import GoalPermission
@@ -208,7 +208,7 @@ class NativeAlreadyProvenRule(ReservationRule):
     explanation = "The native input already has a proven session result."
 
     def violated(self, check: NativeReservationCheck) -> bool:
-        return isinstance(check.row.reference, NativeInputReference)
+        return check.row.reference.recorded
 
 
 class NativeAlreadyDecidedRule(ReservationRule):

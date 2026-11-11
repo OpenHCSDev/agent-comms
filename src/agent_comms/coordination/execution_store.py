@@ -10,7 +10,6 @@ from agent_comms.coordination.execution_states import (
     FailedExecution,
     PendingExecution,
     QueuedExecution,
-    UnstartedExecution,
 )
 from agent_comms.coordination.obligation_states import FailedResponse, PendingResponse
 from agent_comms.coordination.reason_codes import GivenReasonCode, NoReasonCode
@@ -153,7 +152,7 @@ class ExecutionStore(RecoveryReader):
             snapshot = self.get(execution_id)
             if snapshot.execution.revision != expected_revision:
                 raise StaleRevision("execution revision changed")
-            if not isinstance(snapshot.execution.lifecycle, QueuedExecution):
+            if not snapshot.execution.lifecycle.queued:
                 raise IdentityConflict("only queued executions can become pending")
             ExecutionRecord.update(
                 db,
@@ -178,7 +177,7 @@ class ExecutionStore(RecoveryReader):
             execution = before.execution
             if execution.revision != expected_revision:
                 raise StaleRevision("execution revision changed")
-            if not isinstance(execution.lifecycle, UnstartedExecution):
+            if not execution.lifecycle.unstarted:
                 raise IdentityConflict("unstarted failure requires queued/pending work")
             now = self.session.now(execution.updated_at_ms)
             ExecutionRecord.update(

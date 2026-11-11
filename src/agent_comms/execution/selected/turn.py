@@ -15,7 +15,6 @@ from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.coordination.assignment_states import CompletedAssignment
 from agent_comms.coordination.attempt_start import AttemptStart
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.coordination.execution_states import QueuedExecution
 from agent_comms.coordination.durable_turn import DurableTurn
 from agent_comms.coordination.errors import (
     CoordinationError,
@@ -143,7 +142,7 @@ class SelectedAttempt:
         execution_id = participant.batch.execution_id
         if snapshot.execution.execution_id != execution_id:
             raise IdentityConflict("selected attempt differs from its created batch execution")
-        if isinstance(snapshot.execution.lifecycle, QueuedExecution):
+        if snapshot.execution.lifecycle.queued:
             snapshot = store.mark_pending(
                 execution_id,
                 expected_revision=snapshot.execution.revision,

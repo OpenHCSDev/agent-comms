@@ -55,6 +55,7 @@ class AttemptState(CoordinatorVocabulary, LifecycleState, affix="Attempt"):
     preserve_check: ClassVar[bool] = True
     allows_tool_claim: ClassVar[bool] = False
     succeeded: ClassVar[bool] = False
+    starting: ClassVar[bool] = False
     running: ClassVar[bool] = False
     settling: ClassVar[bool] = False
     has_model_context: ClassVar[bool] = False
@@ -154,6 +155,7 @@ class TerminalAttempt(Terminal, AttemptState):
 
 class PromptStartingAttempt(LiveAttempt):
     allows_tool_claim = True
+    starting = True
 
     @classmethod
     def successors(cls):

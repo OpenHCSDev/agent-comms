@@ -48,6 +48,8 @@ class ServedEndpoint(ABC):
 
     target: ServedTarget
 
+    offers_profiles: ClassVar[bool] = False
+    """Whether reaching this URL is itself the authority for being given a UI profile."""
 
     @abstractmethod
     def label(self) -> str:
@@ -59,6 +61,7 @@ class TailnetServed(ServedEndpoint):
     """Served to this tailnet only: tailscale admitted the caller's machine first."""
 
     target: ServedTarget
+    offers_profiles = True
 
     def label(self) -> str:
         return f"{self.target.url} · tailnet only"
@@ -137,7 +140,7 @@ class ServedEndpoints(ProbedCommand):
         its own port and is given the endpoints that reach it, with the one that can offer a
         profile at the head."""
         return tuple(sorted((endpoint for endpoint in served if endpoint.target.behind(port)),
-                            key=lambda endpoint: not isinstance(endpoint, TailnetServed)))
+                            key=lambda endpoint: not endpoint.offers_profiles))
 
     @classmethod
     def served(cls) -> tuple[ServedEndpoint, ...]:
@@ -160,7 +163,7 @@ class ServedEndpoints(ProbedCommand):
         says so: the first tailnet-only endpoint in front of it, or everything that is."""
         behind = cls.behind(served, port)
         return next((OfferedByTailnet(endpoint) for endpoint in behind
-                     if isinstance(endpoint, TailnetServed)), NothingTailnetOnly(port, behind))
+                     if endpoint.offers_profiles), NothingTailnetOnly(port, behind))
 
     @classmethod
     def offered(cls, port: int) -> ProfileOffer:

@@ -571,6 +571,7 @@ class InputObservation(BusSessionsRuntime, ABC):
 class DrainTurn(ABC):
     """The drained turn owns its inbox lifetime and captured original together."""
 
+    is_open = False
     has_source = False
     @property
     def keys(self) -> tuple[str, ...]:
@@ -621,6 +622,7 @@ class NoDrainTurn(DrainTurn):
 @dataclass(frozen=True)
 class AwaitingDrainTurn(DrainTurn):
     inbox: TurnInbox
+    is_open = True
 
     async def finish_original(self, inputs: InputDrain) -> None:
         pass
@@ -770,7 +772,7 @@ class DrainedSession(SessionTaskOwner, InputEventState):
         self.repeat_observation = False
 
     def turn_open(self) -> bool:
-        return isinstance(self.turn, AwaitingDrainTurn)
+        return self.turn.is_open
 
     def observing(self) -> bool:
         return self.observer.busy
@@ -1178,7 +1180,7 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
         session_id, inbox = following.session_id, following.inbox
         state = self.state(session_id)
         turn = state.retire_turn(inbox)
-        if not isinstance(turn, AwaitingDrainTurn):
+        if not turn.is_open:
             return
         self.sessions.config.settings_in_use.pop(session_id, None)
         while not inbox.empty():

@@ -46,12 +46,18 @@ class AdvancedOrdinal(OrdinalRule):
 
 @dataclass(frozen=True)
 class ExecutionState(CoordinatorVocabulary, LifecycleState, affix="Execution"):
+    retry: ClassVar[bool] = False
+    queued: ClassVar[bool] = False
+    unstarted: ClassVar[bool] = False
+
     @classmethod
     def sql_vocabulary(cls) -> dict[str, str]:
         return dict(
             execution_names=cls.sql_values(cls.names()),
             engaged_execution_names=cls.sql_members(cls.members_with(EngagedExecution)),
-            unstarted_execution_names=cls.sql_members(cls.members_with(UnstartedExecution)),
+            unstarted_execution_names=cls.sql_members(
+                member for member in cls.members_with(cls) if member.unstarted
+            ),
             required_attempt_execution_names=cls.sql_members(cls.members_with(AttemptExecution)),
             optional_attempt_execution_names=cls.sql_members(
                 cls.members_with(InterruptedExecution)
@@ -114,6 +120,8 @@ class EngagedExecution:
 
 
 class UnstartedExecution(EngagedExecution, ExecutionState):
+    unstarted = True
+
     @classmethod
     def load(cls, ordinal: int | None) -> ExecutionState:
         if ordinal is not None:
@@ -122,6 +130,8 @@ class UnstartedExecution(EngagedExecution, ExecutionState):
 
 
 class QueuedExecution(UnstartedExecution):
+    queued = True
+
     @classmethod
     def successors(cls):
         return PendingExecution, FailedExecution
@@ -205,6 +215,7 @@ class InterruptedExecution(AttemptReference, ExecutionState):
 
 
 class DeferredExecution(StartsAttempt, InterruptedExecution):
+    retry = True
 
     def require_retry_start(self, snapshot: RecoverySnapshot) -> None:
         snapshot.previous_attempt.require_retry(snapshot)
