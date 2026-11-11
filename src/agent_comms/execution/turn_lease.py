@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -454,6 +454,28 @@ class TurnRecord(LifecycleCapability, SubclassUnion, affix=""):
         """A value-backed turn has no file to decode or retain."""
         return self.read()
 
+    def stored(self) -> tuple[StoredTurnRecord, ...]:
+        """The turn files this record reads; a value-backed turn reads none."""
+        return ()
+
+    def read_in(self, turns: Mapping[StoredTurnRecord, TurnDeclaration]) -> TurnDeclaration:
+        """This turn from one capture of many records; a value-backed turn needs none."""
+        return self.read()
+
+    @staticmethod
+    def read_all(records: Iterable[TurnRecord]) -> Mapping[StoredTurnRecord, TurnDeclaration]:
+        """Every stored turn among ``records`` from one registry copy per registry, where one
+        read per record copied and decoded the whole registry each time."""
+        by_registry: dict[tuple[Path, type], list[StoredTurnRecord]] = {}
+        for record in records:
+            for stored in record.stored():
+                by_registry.setdefault((stored.registry_path, stored.registry_type), []).append(stored)
+        turns: dict[StoredTurnRecord, TurnDeclaration] = {}
+        for held in by_registry.values():
+            held = list(dict.fromkeys(held))
+            turns.update(zip(held, held[0].registry.read_turns(tuple(held)), strict=True))
+        return turns
+
     @abstractmethod
     def without_claim(self) -> None: ...
 
@@ -669,6 +691,12 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
     def registry(self) -> TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]:
         """Construct the original registry provider bound by its declaration."""
         return self.registry_type(self.registry_path)
+
+    def stored(self) -> tuple[StoredTurnRecord, ...]:
+        return (self,)
+
+    def read_in(self, turns: Mapping[StoredTurnRecord, TurnDeclaration]) -> TurnDeclaration:
+        return turns[self]
 
     def bound_to(
         self, registry_path: Path, identity: TurnIdentity, *,

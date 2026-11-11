@@ -53,7 +53,7 @@ async def drain_failures(
     """Record and propagate failures; the observation owner waits for real change."""
     snapshot = await Coordination.run_worker(comms.registry.snapshot)
     observed = await Coordination.run_worker(partial(
-        comms.agents.activity_of, thread, snapshot=snapshot,
+        comms.agents.drain_observation, thread, snapshot=snapshot,
     ))
 
     try:

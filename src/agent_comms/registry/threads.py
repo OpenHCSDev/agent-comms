@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
@@ -26,6 +26,8 @@ from agent_comms.execution.session_file import NoSessionFile, SessionFile
 from agent_comms.execution.turn_lease import (
     FinishedTurn,
     NoTurnRecord,
+    StoredTurnRecord,
+    TurnDeclaration,
     TurnLease,
     TurnLeaseFence,
     TurnRecord,
@@ -568,7 +570,8 @@ class Thread(
         """An executing native turn keeps its last activity current."""
         return self.executing
 
-    def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
+    def project_activity(self, activity: ObservedActivity,
+                         turns: Mapping[StoredTurnRecord, TurnDeclaration]) -> ObservedActivity:
         """External participants report their own activity events."""
         return activity
 
@@ -850,9 +853,10 @@ class NativeThread(Thread):
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
         return status.native_presentation(self.process_identity, ordinary, binding)
 
-    def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
+    def project_activity(self, activity: ObservedActivity,
+                         turns: Mapping[StoredTurnRecord, TurnDeclaration]) -> ObservedActivity:
         """A running native owner displays its current turn phase."""
-        return self.turn_record.read().project_activity(activity)
+        return self.turn_record.read_in(turns).project_activity(activity)
 
 
 class ExternalThread(Thread):

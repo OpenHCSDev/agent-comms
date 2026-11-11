@@ -75,7 +75,7 @@ from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.planning.orders import TodoStore
 from agent_comms.registry import relationships
 from agent_comms.registry.activity import Activity, ActivityData, ActivityState, ObservedActivity
-from agent_comms.registry.agent_activity import AgentActivity
+from agent_comms.registry.agent_activity import ActivityAnswers, AgentActivity, CapturedActivity
 from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
@@ -169,7 +169,7 @@ class ReadThrough(ChannelReadMark):
 class BusPresentation:
     def __init__(
         self, bus: BusReadSource, registry: Registration, catalog: ChannelCatalog,
-        agents: AgentActivity, goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot],
+        agents: AgentActivity, goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot, ActivityAnswers],
     ):
         self.bus = bus
         self.registry = registry
@@ -341,7 +341,7 @@ class ThreadRecord(CliResult):
 
     @classmethod
     def read(cls, snapshot: RegistrySnapshot, agents: AgentActivity,
-             goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot], threads: Iterable[Thread],
+             goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot, ActivityAnswers], threads: Iterable[Thread],
              pending: Mapping[str, InboxCount]) -> tuple[ThreadRecord, ...]:
         """Only active threads are observed; the rest show the absent activity."""
         threads = tuple(threads)
@@ -381,7 +381,7 @@ class ThreadView(ThreadRecord):
     @classmethod
     def roster(
         cls, snapshot: RegistrySnapshot, agents: AgentActivity,
-        goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot],
+        goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot, ActivityAnswers],
         visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> tuple[ThreadView, ...]:
         threads = tuple(snapshot.visible_threads(visibility, names=names))
@@ -389,12 +389,19 @@ class ThreadView(ThreadRecord):
             return ()
         runtime = agents.runtime_info.for_threads(thread.name for thread in threads)
         waits = partial(GoalWaits.for_goal, rows=goals.waits.read())
-        activities = agents.all_activity(threads, snapshot=snapshot)
+        # A standby goal asks whether its wait targets work; one capture of the rows and
+        # their goals' targets answers both, where each target once re-read its own.
+        targets = {snapshot.canonical_name(target.incarnation.name)
+                   for thread in threads for goal in thread.goal for target in waits(goal).targets}
+        captured = {thread.name: thread for thread in threads} | {
+            name: snapshot.threads[name] for name in targets if name in snapshot.threads}
+        activity = CapturedActivity(agents.all_activity(captured.values(), snapshot=snapshot))
+        executions = goals.snapshots_for(threads, snapshot, waits, activity)
         return tuple(cls(
-            thread, snapshot.status(thread.name), activities[thread.name],
-            goals.snapshot_for(thread, snapshot, waits).execution, runtime[thread.name],
+            thread, snapshot.status(thread.name), activity.observed[thread.name],
+            goal.execution, runtime[thread.name],
             snapshot.seen_at(thread.name), snapshot.owner_binding(thread.name),
-        ) for thread in threads)
+        ) for thread, goal in zip(threads, executions, strict=True))
 
     @property
     def presentation(self) -> ThreadPresentation:
@@ -443,7 +450,7 @@ class CoordinationSnapshot:
         cls, root: Path, registry: RegistrySnapshot, catalog: CatalogDocument,
         agents: AgentActivity, declarations: Channels,
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
-        goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot], unread: Mapping[str, int], channel_unread: Mapping[str, int],
+        goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot, ActivityAnswers], unread: Mapping[str, int], channel_unread: Mapping[str, int],
         visibility: RosterVisibility, read_marker_notice: ReadNotice = NoReadNotice(),
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""

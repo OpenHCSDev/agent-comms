@@ -8,6 +8,7 @@ from agent_comms.messaging.assignment_notice import AssignmentNotice
 from agent_comms.messaging.delivery_recipients import DeliveryRecipients
 
 import logging
+from abc import ABC, abstractmethod
 import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
@@ -22,8 +23,11 @@ from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.runtime_info import AgentRuntimeInfo, RuntimeInfo, RuntimeInfoStore
 from agent_comms.execution.turn_lease import (
     NoFinishedTurn,
+    StoredTurnRecord,
     TurnCompletion,
+    TurnDeclaration,
     TurnLeaseFence,
+    TurnRecord,
     TurnState,
 )
 from agent_comms.execution.turn_phase import IdlePhase, PreparingPhase, TurnPhase
@@ -71,25 +75,12 @@ class LiveRecipientActivity(RecipientActivity):
         state = (WorkingTakenProgress if self.activity.state.busy else TakenProgress)(progress)
         return notification.with_state(state)
 
-class AgentActivity(RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):
-    def __init__(self, root: Path, registry: ActivityRegistration[Thread, NativeThread, ActivityRegistryRead, StorageRule, Routing, TurnLeaseFence, TurnCompletion]):
-        self.registry = registry
-        self.activity = ActivityStore(root)
-        self.runtime_info = RuntimeInfoStore.at(root)
+class ActivityAnswers(ABC):
+    """Liveness and work answers derived from one thread's observed activity. A live store
+    reads it per question; a captured read answers a whole roster from one capture."""
 
-    def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:
-        """Declare a thread's current activity (thinking/working/idle)."""
-        if state.retires_thread:
-            raise RelationViolationError("Only permanent thread deletion retires its activity.")
-        self._emit_activity(Activity.create(self.registry.require(thread).name, state, detail))
-
-    def enter_phase(self, thread: str, phase: TurnPhase) -> None:
-        """Native turns, bridges and seated subagents publish the phase's own activity."""
-        self.set_activity(thread, phase.activity_state, " ".join(phase.activity_detail.split()))
-
-    def activity_of(self, thread: str, *, snapshot: ActivityRegistryRead) -> ObservedActivity:
-        participant = snapshot.require(thread)
-        return self.all_activity((participant,), snapshot=snapshot)[participant.name]
+    @abstractmethod
+    def activity_of(self, thread: str, *, snapshot: ActivityRegistryRead) -> ObservedActivity: ...
 
     def is_live(self, incarnation: ThreadIncarnation, snapshot: ActivityRegistryRead) -> bool:
         """The registered presence owns liveness for this exact incarnation."""
@@ -109,10 +100,41 @@ class AgentActivity(RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):
             snapshot.canonical_name(incarnation.name), snapshot=snapshot,
         ).state.busy
 
-    def _observed(self, participant: Thread, owner: OwnerIdentity,
-                  event: Activity) -> ObservedActivity:
+
+@dataclass(frozen=True, slots=True)
+class CapturedActivity(ActivityAnswers):
+    """Every registered thread's activity from one capture, answering a whole roster."""
+
+    observed: Mapping[str, ObservedActivity]
+
+    def activity_of(self, thread: str, *, snapshot: ActivityRegistryRead) -> ObservedActivity:
+        return self.observed[snapshot.require(thread).name]
+
+
+class AgentActivity(ActivityAnswers, RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):
+    def __init__(self, root: Path, registry: ActivityRegistration[Thread, NativeThread, ActivityRegistryRead, StorageRule, Routing, TurnLeaseFence, TurnCompletion]):
+        self.registry = registry
+        self.activity = ActivityStore(root)
+        self.runtime_info = RuntimeInfoStore.at(root)
+
+    def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:
+        """Declare a thread's current activity (thinking/working/idle)."""
+        if state.retires_thread:
+            raise RelationViolationError("Only permanent thread deletion retires its activity.")
+        self._emit_activity(Activity.create(self.registry.require(thread).name, state, detail))
+
+    def enter_phase(self, thread: str, phase: TurnPhase) -> None:
+        """Native turns, bridges and seated subagents publish the phase's own activity."""
+        self.set_activity(thread, phase.activity_state, " ".join(phase.activity_detail.split()))
+
+    def activity_of(self, thread: str, *, snapshot: ActivityRegistryRead) -> ObservedActivity:
+        participant = snapshot.require(thread)
+        return self.all_activity((participant,), snapshot=snapshot)[participant.name]
+
+    def _observed(self, participant: Thread, owner: OwnerIdentity, event: Activity,
+                  turns: Mapping[StoredTurnRecord, TurnDeclaration]) -> ObservedActivity:
         activity = ObservedActivity.acquire(event, owner)
-        return participant.project_activity(activity)
+        return participant.project_activity(activity, turns)
 
     def all_activity(self, threads: Iterable[Thread], *, snapshot: ActivityRegistryRead) -> Mapping[str, ObservedActivity]:
         return self.captured(threads, snapshot=snapshot).activity
@@ -122,14 +144,12 @@ class AgentActivity(RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):
         requested = {thread.name: thread for thread in threads}
         if not requested:
             return ActivityCapture.empty()
-        events = self.activity.captured_for(
-            requested,
-            active=frozenset(name for name, thread in requested.items()
-                             if thread.holds_activity(snapshot.status(name))),
-        )
+        events = self._events(requested, snapshot)
         claims = self.registry.storage_rule.room_ledger.claims(
             self.registry.store.path.parent, requested.values())
-        observed = {name: self._observed(thread, snapshot.owner_identity(name), events.activity[name])
+        turns = TurnRecord.read_all(thread.turn_record for thread in requested.values())
+        observed = {name: self._observed(thread, snapshot.owner_identity(name), events.activity[name],
+                                         turns)
                     for name, thread in requested.items()}
         for name, claim in claims.items():
             observed[name] = claim.phase.project(observed[name], claim.work)
@@ -137,6 +157,23 @@ class AgentActivity(RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):
             observed[name] = replace(
                 observed[name], readiness=observed[name].readiness.stalled(oldest))
         return ActivityCapture(observed, events.expires_at)
+
+    def _events(self, requested: Mapping[str, Thread],
+                snapshot: ActivityRegistryRead) -> ActivityCapture[Activity]:
+        return self.activity.captured_for(
+            requested,
+            active=frozenset(name for name, thread in requested.items()
+                             if thread.holds_activity(snapshot.status(name))),
+        )
+
+    def drain_observation(self, thread: str, *, snapshot: ActivityRegistryRead) -> DrainObservation:
+        """The drain diagnostic recorded for this thread's owner. Only the recorded event
+        carries it: a stall never replaces a recorded diagnostic and reports none of its
+        own, so a drain reads the event, not the whole activity capture with its inbox scan."""
+        participant = snapshot.require(thread)
+        event = self._events({participant.name: participant}, snapshot).activity[participant.name]
+        return ObservedActivity.acquire(
+            event, snapshot.owner_identity(participant.name)).readiness.source_diagnostic()
 
     def stalled(self, readers: tuple[str, ...], snapshot: ActivityRegistryRead) -> Mapping[str, float]:
         """Each claimed reader that stopped taking its inbox, by when. A store without the bus
@@ -191,7 +228,8 @@ class AgentActivity(RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):
         participant = snapshot.threads[owner.incarnation.name]
 
         def record(event: Activity) -> Activity | None:
-            current = self._observed(participant, owner, event)
+            current = self._observed(participant, owner, event,
+                                     TurnRecord.read_all((participant.turn_record,)))
             if current.readiness.source_diagnostic() == diagnostic:
                 return None
             return replace(current.source_event(), diagnostic=diagnostic, timestamp=time.time())
@@ -199,7 +237,7 @@ class AgentActivity(RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):
         return self.activity.update(participant.name, record)
 
     async def recover_drain(
-        self, thread: str, owner: OwnerIdentity, observed: ObservedActivity,
+        self, thread: str, owner: OwnerIdentity, expected: DrainObservation,
     ) -> bool:
         """Clear only the original failure observed before a successful drain.
 
@@ -207,7 +245,6 @@ class AgentActivity(RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):
         work. A later occurrence of the same error also has its own original
         observation time; neither may be cleared by this earlier operation.
         """
-        expected = observed.readiness.source_diagnostic()
         if not expected.recorded_by(owner):
             return False
         return await Coordination.run_worker(partial(self._recover_drain, thread, owner, expected))
@@ -221,7 +258,8 @@ class AgentActivity(RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):
         participant = snapshot.threads[owner.incarnation.name]
 
         def recover(event: Activity) -> Activity | None:
-            current = self._observed(participant, owner, event)
+            current = self._observed(participant, owner, event,
+                                     TurnRecord.read_all((participant.turn_record,)))
             diagnostic = current.readiness.source_diagnostic()
             if not diagnostic.same_occurrence(expected):
                 return None
@@ -238,7 +276,7 @@ class AgentActivity(RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):
         if thread.turn_lease != lease or thread.backend != backend:
             return False
         owner = snapshot.owner_identity(thread.name)
-        diagnostic = self.activity_of(thread.name, snapshot=snapshot).readiness.source_diagnostic()
+        diagnostic = self.drain_observation(thread.name, snapshot=snapshot)
         if not diagnostic.recorded_before(lease.record.read().started_at):
             return False
         return self._recover_drain(thread.name, owner, diagnostic)
