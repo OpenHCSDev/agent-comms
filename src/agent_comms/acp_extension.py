@@ -287,8 +287,6 @@ class NoQueueScope(QueueScope):
 
 @dataclass(frozen=True)
 class LiveQueueScope(QueueScope, LiveAttachmentScope):
-    session_id: AcpSessionId
-    owner: ProcessIdentity
 
     @property
     def logical_key(self):

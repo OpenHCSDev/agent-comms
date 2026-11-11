@@ -77,6 +77,13 @@ class DocumentChange[D, R]:
         return cls(document, document)
 
 
+class InstallableFile:
+    """A bus file with install behavior: either retained across installations (durable)
+    or rewritten by its running owner (runtime)."""
+
+    __slots__ = ()
+
+
 class RootFile:
     """A declared bus-file location, independent of its value or I/O constructor."""
 
@@ -88,7 +95,7 @@ class RootFile:
         """A declared file is either retained across installations or rewritten by its
         running owner; a declaration that is neither has no install behaviour at all."""
         super().__init_subclass__(**kwargs)
-        if "filename" in vars(cls) and not issubclass(cls, (DurableFile, RuntimeFile)):
+        if "filename" in vars(cls) and not issubclass(cls, InstallableFile):
             raise TypeError(f"{cls.__qualname__} declares {cls.filename!r} but is neither "
                             "a DurableFile nor a RuntimeFile")
 
@@ -640,7 +647,7 @@ class PatternFile(RootFile):
             path for path in root.glob(str(store_lock_path(cls.pattern()))) if path.is_file())
 
 
-class DurableFile(RootFile):
+class DurableFile(InstallableFile, RootFile):
     """Bus state retained across installations, with conversion owned by its store."""
 
     __slots__ = ()
@@ -670,7 +677,7 @@ class RollbackRetained(DurableFile):
                          for path in owner.rollback_files(directory))
 
 
-class WrittenFile(RootFile, ABC):
+class WrittenFile(InstallableFile, RootFile, ABC):
     """A file whose kind declares when maintenance permits its writers."""
 
     __slots__ = ()

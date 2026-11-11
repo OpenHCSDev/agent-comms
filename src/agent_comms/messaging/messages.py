@@ -571,8 +571,7 @@ class MessageKind(DeclaredFamily, MessageRoutes, ProjectionSource, affix="Kind")
 
     @classmethod
     def require_sendable(cls) -> None:
-        if not issubclass(cls, SendableMessageKind):
-            raise ValueError(f"Message kind {cls.declared_name!r} is not generically sendable")
+        raise ValueError(f"Message kind {cls.declared_name!r} is not generically sendable")
 
     @classmethod
     def require_publishable(cls, message: Message, roots: SourceRoots) -> None:
@@ -586,6 +585,10 @@ class MessageKind(DeclaredFamily, MessageRoutes, ProjectionSource, affix="Kind")
 
 class SendableMessageKind(MessageKind, declared_name=None):
     """The declared kinds accepted by generic message commands."""
+
+    @classmethod
+    def require_sendable(cls) -> None:
+        pass
 
 
 class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
