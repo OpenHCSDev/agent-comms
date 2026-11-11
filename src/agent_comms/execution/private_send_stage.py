@@ -14,7 +14,6 @@ from agent_comms.coordination.assignment_states import (
     FailedAssignment,
     TriagePendingAssignment,
 )
-from agent_comms.coordination.attempt_states import PromptStartingAttempt
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.durable_turn import DurableTurn
 from agent_comms.coordination.errors import IdentityConflict, RetryScheduled, StaleFence
@@ -475,7 +474,7 @@ class FullNativeSend(NativeSendStage):
         current.lifecycle.require_engagement()
         if (
             not snapshot.execution.lifecycle.items_with(Active, snapshot.execution)
-            or not isinstance(attempt.lifecycle, PromptStartingAttempt)
+            or not attempt.lifecycle.starting
             or attempt.lifecycle.backend_done
             or attempt.lifecycle.process_dead
         ):

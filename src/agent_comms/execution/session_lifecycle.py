@@ -66,7 +66,7 @@ from agent_comms.registry.thread_presentation import (
     FailedSessionLoadPlan,
     SessionLoadPlan,
 )
-from agent_comms.registry.thread_status import ActiveThreadPresence, RunningThreadStatus
+from agent_comms.registry.thread_status import ActiveThreadPresence
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.team.pi_rule_gate import PiRedeal
@@ -422,7 +422,7 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
             if (
                 name != cached_name
                 or not thread.process_identity.runs_here()
-                or not isinstance(entry.status, RunningThreadStatus)
+                or not entry.status.running
             ):
                 await self.effects.turns.close_idle_backend(session_id)
             current = PublishedSession.of(thread)

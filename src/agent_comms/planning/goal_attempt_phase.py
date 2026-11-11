@@ -33,6 +33,7 @@ class ReadyAttempt[Evidence](ABC):
 
 @dataclass(frozen=True)
 class GoalAttemptPhase(DeclaredFamily, LifecycleState, affix="Attempt"):
+    launched: ClassVar[bool] = False
     verified_progress: ClassVar[bool] = False
     permits_retirement: ClassVar[bool] = False
 
@@ -47,6 +48,7 @@ class ReservedAttempt(GoalAttemptPhase):
 
 
 class ClaimedAttempt(GoalAttemptPhase):
+    launched = True
 
     @classmethod
     def successors(cls) -> tuple[type[GoalAttemptPhase], ...]:

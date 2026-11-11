@@ -99,6 +99,7 @@ class UnchangedInput(InputTransition):
 class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, affix="Input"):
     exists: ClassVar[bool] = False
     accepts_reservation: ClassVar[bool] = False
+    has_started: ClassVar[bool] = False
     has_native_binding: ClassVar[bool] = False
     cancellation_feedback: ClassVar[str] = (
         "Delivery unconfirmed. Inspect delivery before deciding whether to send a new message."
@@ -457,6 +458,7 @@ class ClearedNativeInput(ClearedInputState, SentInput):
 
 
 class StartedInput(KnownInputState, SentInput):
+    has_started = True
     public_status = "started"
     cancellation_feedback = "Native input started; turn cancelled."
 

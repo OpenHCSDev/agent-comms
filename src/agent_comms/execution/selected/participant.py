@@ -15,7 +15,6 @@ from metaclass_registry.mro_dispatch import (
 
 from agent_comms.agent_events import CompactionEvent
 from agent_comms.comms import Comms
-from agent_comms.coordination.execution_states import DeferredExecution
 from agent_comms.context_store import (
     UNREAD_CONTEXT,
     ContextPrior,
@@ -153,7 +152,7 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
 
     async def prepare_attempt(self, snapshot: RecoverySnapshot) -> None:
         """Acquire the strictly newer coordinator owner required by a retry."""
-        if isinstance(snapshot.execution.lifecycle, DeferredExecution):
+        if snapshot.execution.lifecycle.retry:
             participant = self.store.participants.advance_generation(
                 self.lookup,
                 expected_generation=self.identity.generation,

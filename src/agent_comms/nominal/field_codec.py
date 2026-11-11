@@ -716,6 +716,7 @@ class FieldPlan(ViewColumn):
     declared: Field
     _annotation: object
     directives: ClassVar[tuple[type[ValueDirective], ...]] = ()
+    records: ClassVar[bool] = True
     _plans: ClassVar[list[type[FieldPlan]]] = []
 
     def __init_subclass__(cls):
@@ -938,6 +939,7 @@ class TransientFieldPlan(DeclaredFieldPlan):
     """A process-local field never enters a record or compiles a wire decoder."""
 
     directives = (WireTransient,)
+    records = False
 
 
 class NullDefaultFieldPlan(DeclaredFieldPlan):
@@ -3103,7 +3105,7 @@ class FieldCodec(MroDispatch, Sealed):
             cls._field_plan(item, hints[item.name])(declared=item, _annotation=hints[item.name])
             for item in fields(record)
         )
-        declared = tuple(plan for plan in declarations if plan.declared.init and not isinstance(plan, TransientFieldPlan))
+        declared = tuple(plan for plan in declarations if plan.declared.init and plan.records)
         if any(not isinstance(plan.key, str) or not plan.key for plan in declared):
             raise TypeError("Wire field names must be nonempty strings.")
         entries = tuple(
@@ -3145,7 +3147,7 @@ class FieldCodec(MroDispatch, Sealed):
         """One column source for native tables and plain-text views."""
         return (
             *(plan for plan in cls.field_plans(declaration)
-              if not isinstance(plan, TransientFieldPlan) and not plan.excluded_in(view)),
+              if plan.records and not plan.excluded_in(view)),
             *cls.projections(declaration, view).values(),
         )
 

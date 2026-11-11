@@ -66,7 +66,7 @@ from agent_comms.planning.orders import (
 from agent_comms.planning.owner_requests import OwnerRequestId, RequestDirective
 from agent_comms.planning.plan_phase_base import PlanPhase
 from agent_comms.planning.plan_reading import PlanReading, PlanReadings
-from agent_comms.planning.pull_requests import FailedCheckMergeBlock, MergeBlock
+from agent_comms.planning.pull_requests import MergeBlock
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.projects.repo import Repo
@@ -1409,11 +1409,11 @@ class ChurningPullRequest(IdlePullRequest):
         return tuple(rule for rule in found if rule.began() <= now)
 
     def began(self) -> float:
-        return self.opened + self.seconds if any(isinstance(block, FailedCheckMergeBlock) for block in self.blocks) else math.inf
+        return self.opened + self.seconds if any(block.red() for block in self.blocks) else math.inf
 
     def line(self) -> str:
         held = ", ".join(holder.name for holder in self.holders) or self.unheld
-        red = "; ".join(block.what() for block in self.blocks if isinstance(block, FailedCheckMergeBlock))
+        red = "; ".join(block.what() for block in self.blocks if block.red())
         return (f"{self.tag} {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}"
                 f" ({held}): opened {RecordedEventTime(self.opened).stamp()} and still red: {red}."
                 f" busy isn't landing. -> {self.unowned}")

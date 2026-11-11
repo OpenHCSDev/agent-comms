@@ -18,7 +18,6 @@ from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
-from agent_comms.registry.thread_status import RunningThreadStatus
 from agent_comms.execution import pi_events as pi
 from agent_comms.execution.context_reading import ContextUsage
 from agent_comms.execution.controller import Controller
@@ -96,7 +95,7 @@ class ProjectResumeCheck(BackgroundWake, OwnerTurnScheduleCheck):
             self.require_valid()
         except ReservationViolationError:
             return
-        if isinstance(entry.status, RunningThreadStatus) and entry.thread.owes_project_resume:
+        if entry.status.running and entry.thread.owes_project_resume:
             resume = ScheduledTurn.resuming_in_project(entry.thread.worktree)
             pending = inputs.state(session_id).pending_turns
             if resume not in pending:

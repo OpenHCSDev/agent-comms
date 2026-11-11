@@ -11,7 +11,7 @@ from collections.abc import Collection, Mapping, MutableMapping
 from types import MappingProxyType
 from typing import Self
 
-from agent_comms.nominal.field_codec import FieldCodec, FieldPlan, MalformedRecord, SlicePolicy, TransientFieldPlan
+from agent_comms.nominal.field_codec import FieldCodec, FieldPlan, MalformedRecord, SlicePolicy
 from agent_comms.storage.row_mapping import RowMapping, SnapshotRows
 
 
@@ -68,7 +68,7 @@ class ThreadSlice[Value](ABC):
     def required[Document: type](cls, document: Document) -> Document:
         """Refuse, at class definition, a document field without a slice kind."""
         for plan in FieldCodec.field_plans(document):
-            if plan.declared.init and not isinstance(plan, TransientFieldPlan):
+            if plan.declared.init and plan.records:
                 cls.of(plan)
         return document
 

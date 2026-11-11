@@ -86,7 +86,6 @@ from agent_comms.registry.thread_presentation import (
     ThreadOwnerBinding,
     ThreadPresentation,
     UnavailableThreadOwnerBinding,
-    WorkingThreadPresentationStatus,
 )
 from agent_comms.registry.thread_status import ActiveThreadPresence, ThreadStatus, ThreadStatusName
 from agent_comms.registry.threads import Thread
@@ -491,7 +490,7 @@ class CoordinationSnapshot:
             member for name in view.members
             if (person := self.threads.get(name)) is not None
             for member in person.status.items_with(ActiveThreadPresence, person)
-            if isinstance(member.presentation.status, WorkingThreadPresentationStatus)
+            if member.presentation.status.working
         )
 
     def mention_candidates(self, channel: str) -> tuple[MentionCandidate, ...]:

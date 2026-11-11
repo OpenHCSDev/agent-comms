@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from agent_comms.execution.turn_failure import TurnFailure
     from agent_comms.execution.turn_input_source import OriginalTurnInput
     from agent_comms.input_disposition import InputDocument
-    from agent_comms.pi_payloads import NativeMessageFailureSource, ProviderTransportFailureDiagnostic
+    from agent_comms.pi_payloads import NativeMessageFailureSource
 
 
 class FailureSource(DeclaredFamily, affix="FailureSource"):
@@ -328,7 +328,7 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
 class ProviderConnectionFailure(ACPFailure):
     @classmethod
     def matches(cls, code, detail, diagnostics=()) -> bool:
-        return any(isinstance(diagnostic, ProviderTransportFailureDiagnostic) for diagnostic in diagnostics)
+        return any(diagnostic.provider_connection_failure for diagnostic in diagnostics)
 
     @property
     def title(self) -> str:
@@ -339,7 +339,7 @@ class ProviderConnectionFailure(ACPFailure):
         known = "\n".join(
             diagnostic.description
             for diagnostic in self.diagnostics
-            if isinstance(diagnostic, ProviderTransportFailureDiagnostic)
+            if diagnostic.provider_connection_failure
         )
         return "\n".join(part for part in (self.detail, known) if part)
 

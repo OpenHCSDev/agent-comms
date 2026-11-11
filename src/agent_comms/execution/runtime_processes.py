@@ -40,6 +40,9 @@ class RuntimeReference(DeclaredFamily, ABC, affix="Reference"):
     def describes(self) -> str:
         """This reference in one phrase, for the line its process reports."""
 
+    def names_installation(self) -> bool:
+        """Whether this is about the installation at all."""
+        return True
 
     def hidden(self, identity: ProcessIdentity,
                error: Exception) -> tuple[RuntimeProcessOutcome, ...]:
@@ -121,6 +124,8 @@ class ForeignReference(RuntimeReference):
     def describes(self) -> str:
         return "a path outside the installation"
 
+    def names_installation(self) -> bool:
+        return False
 
     def hidden(self, identity: ProcessIdentity,
                error: Exception) -> tuple[RuntimeProcessOutcome, ...]:
@@ -302,7 +307,7 @@ class RuntimeProcesses:
                  environment.get("VIRTUAL_ENV", ""))
         references = (RuntimeReference.to(Path(value), directory) for value in named if value)
         return tuple(ImportingRuntimeProcess(identity.pid, reference)
-                     for reference in references if not isinstance(reference, ForeignReference))
+                     for reference in references if reference.names_installation())
 
     @classmethod
     def observe(cls, target: LaunchRuntime, proc: Path = Path("/proc")) -> RuntimeProcesses:
@@ -332,7 +337,7 @@ class RuntimeProcesses:
             # when it was launched by a system interpreter from somewhere else entirely.
             outcomes.extend(cls.imports(platform, identity, directory, command))
             if not command.held():
-                if not isinstance(command, ForeignReference):
+                if command.names_installation():
                     outcomes.append(UnattributedRuntimeProcess(pid, command))
                 continue
             runtime = LaunchRuntime.from_interpreter(interpreter)

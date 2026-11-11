@@ -31,6 +31,7 @@ from agent_comms.planning.goal_mutation import (
 
 @dataclass(frozen=True)
 class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
+    ready: ClassVar[bool] = False
 
     def resume_status(self, active_turn: bool) -> None:
         if not self.allows_resume(active_turn):
@@ -91,6 +92,7 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
 
 @dataclass(frozen=True)
 class ReadyGeneration(GenerationState):
+    ready = True
 
     def execution[Execution](self, source: GoalGenerationProjection[Execution]) -> Execution:
         return source.runnable()

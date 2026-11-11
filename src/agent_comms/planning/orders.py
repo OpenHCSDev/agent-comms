@@ -1558,6 +1558,10 @@ class OrderProgress(DisclosedRecord, DeclaredFamily, affix="Progress"):
         """The held order this progress leaves waiting on the fleet's install."""
         return ()
 
+    @property
+    def judgeable(self) -> bool:
+        """Whether a head verdict can still gate this order's work: until its PR merges."""
+        return True
 
     def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
         """Linked merges this progress incorrectly reports as no commit."""
@@ -1638,6 +1642,10 @@ class MergedProgress(FoundProgress):
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         return (todo,)
 
+    @property
+    def judgeable(self) -> bool:
+        """A merged head has nothing left for a verdict to gate."""
+        return False
 
 
 @dataclass(frozen=True)
@@ -1716,6 +1724,9 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def check_base(self, repo: Path) -> str:
         raise TodoError("This problem has no active checked order.")
 
+    def occupies_holder(self) -> bool:
+        """Whether this order still has work for the unit holding it."""
+        return True
 
     def corrected(self, correction: CorrectOrderTodo) -> ProblemOrder:
         raise TodoError("Only an active checked order takes a correction.")
@@ -2337,6 +2348,9 @@ class AwaitingInstallationProblemOrder(OpenProblemOrder, declared_name=None):
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return (todo,)
 
+    def occupies_holder(self) -> bool:
+        return False
+
     def orphan_clearing(self, todo: Todo) -> str:
         return (f"its work is done and waits on install; once installed, close it with "
                 f"`order close {todo.id} --works WHAT-RAN --artifact FILE`")
@@ -2440,7 +2454,7 @@ class DeliverableProblemOrder(FreshMainCheck, OpenProblemOrder, declared_name=No
 
     def writes_source(self, todo: Todo, read: dict[str, OrderProgress]) -> bool:
         """Until its PR merges; a merged order's proof run writes no source."""
-        return not isinstance(read[todo.id], MergedProgress)
+        return read[todo.id].judgeable
 
     def sent_back(self, reason: StrikeReason) -> PendingProblemOrder:
         return self.fresh_order(time.time(), (*self.edits, reason.text))
@@ -3075,10 +3089,10 @@ class IncomingWork:
         work the unit files for itself never asks (SelfFiledWork).
         Assignment owns consent for changing the work already inside this group.
         Creator and previous assigner confer no rank. Work waiting only on install
-        holds no unit (AwaitingInstallationProblemOrder never occupies)."""
+        holds no unit, as ProblemOrder.occupies_holder answers."""
         held = TransactionTodoHistory(db).attach(TodoStore.held_in(db, '1', (), unit=unit))
         if other := tuple(todo for todo in held
-                          if not isinstance(todo.order, AwaitingInstallationProblemOrder) and not self.covers(todo)):
+                          if todo.order.occupies_holder() and not self.covers(todo)):
             raise TeammateOccupied(
                 f"{unit.name} already holds orders "
                 + ", ".join(f"{todo.id} (assigned by {todo.held().parent})" for todo in other)
@@ -3087,7 +3101,7 @@ class IncomingWork:
     def idle(self, db: sqlite3.Connection, snapshot: RegistrySnapshot) -> str:
         """Running candidates with no occupying order, including the requesting colleague."""
         occupied = {thread.name for todo in TodoStore._open(db, "assignment IS NOT NULL", ())
-                    if not isinstance(todo.order, AwaitingInstallationProblemOrder)
+                    if todo.order.occupies_holder()
                     for thread in todo.held().holder_in(snapshot)}
         return ", ".join(sorted(
             candidate.name

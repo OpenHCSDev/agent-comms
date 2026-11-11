@@ -613,7 +613,7 @@ class NativeTranscript(ReadsNativeInputs, TranscriptSource):
             sources = []
             for raw in stream:
                 entry = NativeEntry.read(raw)
-                if isinstance(entry, MessageEntry):
+                if entry.is_message:
                     break
                 sources.extend(entry.imported_sources())
         if FileRevision.from_stat(self.path.stat()) != revision:
