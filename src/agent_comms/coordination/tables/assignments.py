@@ -238,7 +238,7 @@ class WakeAssignment(
     )
     wake_mode: ClassVar[Generated] = Generated(
         str,
-        FrozenColumn(generated="({assignment_mode})", check="wake_mode IS NULL OR wake_mode IN ({wake_names})", nullable=True),
+        FrozenColumn(generated="({assignment_mode})", check="wake_mode IN ({wake_names})"),
     )
     triage_verdict: ClassVar[Generated] = Generated(
         str,
