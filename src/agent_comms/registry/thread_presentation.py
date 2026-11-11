@@ -137,20 +137,20 @@ class FailedSessionLoadPlan(WitnessedSessionLoadPlan):
 class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus"):
     """Display activity and warnings, not registry presence or turn authority."""
 
-    working: ClassVar[bool] = False
     details: tuple[str, ...] = ()
+
+    def is_working(self) -> bool:
+        return False
 
     def when_idle(self, ordinary: ThreadPresentation,
                   present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
         """Compose idle-only explanations without replacing genuine work."""
-        if self.working:
-            return ordinary
         shown = present(replace(ordinary, status=replace(self, details=())))
         return shown.status.with_attention(*self.details).present_attention(shown)
 
     def present_attention(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         """Warnings change idle paint, never the summary of real work."""
-        if self.details and not self.working:
+        if self.details:
             ordinary = replace(ordinary, marker="!", summary=self.details[0])
         return replace(ordinary, status=self)
 
@@ -158,7 +158,7 @@ class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus")
         return self.present_attention(ThreadPresentation(title, "✓", "Ready", status=self))
 
     def require_activity_detail(self, detail: str) -> None:
-        if detail and not self.working:
+        if detail:
             raise RelationViolationError("Idle activity cannot carry a detail.")
 
     def with_attention(self, *details: str) -> ThreadPresentationStatus:
@@ -190,7 +190,18 @@ class InactiveThreadPresentationStatus(IdleThreadPresentationStatus):
 
 @dataclass(frozen=True, slots=True)
 class WorkingThreadPresentationStatus(ThreadPresentationStatus):
-    working: ClassVar[bool] = True
+    def is_working(self) -> bool:
+        return True
+
+    def when_idle(self, ordinary: ThreadPresentation,
+                  present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
+        return ordinary
+
+    def present_attention(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        return replace(ordinary, status=self)
+
+    def require_activity_detail(self, detail: str) -> None:
+        pass
 
     def activity_presentation(self, title: str, activity: str, detail: str) -> ThreadPresentation:
         summary = activity.title()
