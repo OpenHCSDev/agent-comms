@@ -588,7 +588,7 @@ class AlarmSection:
         oldest = min(self.pings, key=lambda ping: ping.since.chronology())
         words = oldest.text.partition(FoldedRule.arrow)[0].split(" ")
         named = " ".join(words[:14]) + (" …" if len(words) > 14 else "")
-        counts = ", ".join(f"{len(pings)} {kind.display_name().lower()}"
+        counts = ", ".join(f"{len(pings)} {kind.display_label().lower()}"
                            for kind, pings in self.by_kind().items())
         return f"{self.heading()}: {counts}. Oldest, {oldest.since.age(now)}: {named}"
 

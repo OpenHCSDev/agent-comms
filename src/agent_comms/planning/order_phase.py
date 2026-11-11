@@ -28,7 +28,7 @@ class UnplannedPhase(OrderPhase):
         if ready:
             return (
                 "Plan phases are ready: "
-                + ", ".join(phase.display_name() for phase in ready)
+                + ", ".join(phase.display_label() for phase in ready)
                 + ". Name a phase, or provide an explicit unplanned_reason of 8+ words."
             )
         return None

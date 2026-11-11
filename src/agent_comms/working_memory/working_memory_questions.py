@@ -16,7 +16,7 @@ class SpanAnswer(DeclaredFamily, affix="Answer"):
 
     @classmethod
     def public_title(cls) -> str:
-        return cls.display_name()
+        return cls.display_label()
 
 
 class SpanKind(SpanAnswer):
@@ -104,7 +104,7 @@ class SpanQuestion(DeclaredFamily, affix="Question"):
 
     @classmethod
     def public_title(cls) -> str:
-        return cls.display_name()
+        return cls.display_label()
 
     @classmethod
     def declaration(cls):
