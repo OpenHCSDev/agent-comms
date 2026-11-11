@@ -47,6 +47,7 @@ from agent_comms.execution.turn_failure import (
 from agent_comms.execution.turn_output import TurnOutput
 from agent_comms.execution.turn_usage import UsageAccount
 from agent_comms.execution.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog
+from agent_comms.execution.pi_events import ContextCommitted, InputCommitted
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, InputId
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation

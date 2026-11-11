@@ -37,6 +37,8 @@ from agent_comms.storage.locked_store import (
     RuntimeFile,
     SQLiteFile,
 )
+from agent_comms.registry.registry_document import RegistrySnapshot, RosterVisibility
+from agent_comms.storage.locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
 from agent_comms.storage.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.storage.store_files import StoreBusy
 from agent_comms.storage.typed_table import (

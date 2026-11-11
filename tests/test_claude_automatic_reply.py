@@ -32,6 +32,11 @@ from agent_comms.comms import Comms
 from agent_comms.coordination.errors import CoordinationBeginUnavailable
 from agent_comms.execution.turn_bound import LastTurns
 from agent_comms.execution.turn_item import NamedSourceTurn, NativeTurnId
+from agent_comms.transport.connector import ConnectorSendTool
+from agent_comms.execution.turn_item import (
+    NamedSourceTurn,
+    NativeTurnId,
+)
 from agent_comms.messaging.bus_tables import AuthoredAnswers
 from agent_comms.messaging.channel_targets import TeammatesTag, ThreadTarget
 from agent_comms.messaging.messages import (
@@ -50,7 +55,6 @@ from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread
 from agent_comms.team.standing_rules import DirectiveUnacted
-from agent_comms.transport.connector import ConnectorSendTool
 from agent_comms.transport.connector_caller import DirectorCaller
 
 

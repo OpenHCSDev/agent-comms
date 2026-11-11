@@ -1,0 +1,93 @@
+{
+  "stages": [
+    {
+      "recipes": [
+        {
+          "recipe_id": "stage-1-ensure_import",
+          "operations": [
+            {
+              "operation": "ensure_import",
+              "file_path": "/home/ts/wt/comms-friction--P23--toad/tests/native/test_native_goal_bar.py",
+              "rationale": "",
+              "import_source": "from agent_comms.execution.turn_lease import ActiveTurn\nfrom agent_comms.planning.attempt_resolution import DecidedResolution, VerifiedTurnDecision\nfrom agent_comms.planning.goal_attempt_phase import ResolvedAttempt\nfrom agent_comms.planning.goal_presentation import AttemptFailedExecution, RunningExecution\n"
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "stage-2-patch_target",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "async def test_failed_ledger_repaints_retry_then_active_without_rewriting_goal(",
+                  "new_source": "async def test_failed_ledger_repaints_retry_then_its_live_successor_without_rewriting_goal("
+                },
+                {
+                  "old_source": "    def reply(_request, number):\n",
+                  "new_source": "    productive_turns: list[ActiveTurn] = []\n\n    def reply(_request, number):\n"
+                },
+                {
+                  "old_source": "        if number == 2:\n",
+                  "new_source": "        if number == 2:\n            productive_turns.append(comms.registry.require(session).turn_record.read().require_active())\n"
+                },
+                {
+                  "old_source": "provider = ControlledProvider(reply=reply, request_budget=4)",
+                  "new_source": "provider = ControlledProvider(reply=reply, request_budget=4, expected_disconnects=frozenset({4}))"
+                },
+                {
+                  "old_source": "        await pilot.click(goal_control(bar, HistoryInteraction))\n",
+                  "new_source": "        failed_snapshot = await agent.get_goal_snapshot()\n        assert isinstance(failed_snapshot.execution, AttemptFailedExecution)\n        await pilot.click(goal_control(bar, HistoryInteraction))\n"
+                },
+                {
+                  "old_source": "        await ui.until(lambda: \"Active\" in str(details.query_one(CurrentHeading).render()),\n                       why=\"the already-open details following productive settlement\")\n",
+                  "new_source": "        await ui.until(provider.entered.is_set, seconds=30,\n                       why=\"the next autonomous request is held at the provider\")\n        productive, = productive_turns\n        resolved = comms.goals.open_goal_store().read_attempt(failed_snapshot.execution.evidence.attempt_id)\n        assert resolved.resolved_as(ResolvedAttempt(), DecidedResolution(VerifiedTurnDecision(productive.id)))\n        owner = comms.registry.require(session)\n        held = owner.turn_record.read().require_active()\n        assert held.id != productive.id and held.turn_generation != productive.turn_generation\n        assert held.owner == owner.process_identity and held.owner.alive()\n        observed = await agent.get_goal_snapshot()\n        assert observed.goal == first and observed.execution == RunningExecution(first.id)\n        assert owner.turn_record.read().require_active() == held\n        await ui.until(lambda: details.execution == observed.execution\n                       and details.goal_display == observed.goal,\n                       why=\"the open details agree with the actual held successor snapshot\")\n        assert str(details.query_one(CurrentHeading).render()) == observed.goal.details_heading(observed.execution)\n"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-friction--P23--toad/tests/native/test_native_goal_bar.py",
+              "target_qualname": "test_failed_ledger_repaints_retry_then_active_without_rewriting_goal",
+              "rationale": "The productive turn resolves the exact failed attempt before a distinct autonomous successor becomes live. Assert the original ledger resolution, held successor identity and process, unchanged goal and exact owner snapshot before checking the existing Pause control and draft. Never label an executing owner idle."
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    },
+    {
+      "recipes": [
+        {
+          "recipe_id": "stage-3-patch_target",
+          "operations": [
+            {
+              "operation": "patch_target",
+              "replacements": [
+                {
+                  "old_source": "view.goal_display.snapshot == expected_goal",
+                  "new_source": "view.goal_display == expected_goal"
+                }
+              ],
+              "file_path": "/home/ts/wt/comms-friction--P23--toad/tests/support/native_steps.py",
+              "target_qualname": "goal_on_real_owner",
+              "rationale": "Require the real available owner projection, not an unavailable wrapper that merely retains the same previous snapshot."
+            }
+          ],
+          "architecture_guards": [],
+          "reason": "",
+          "authority_claims": []
+        }
+      ],
+      "architecture_guards": []
+    }
+  ]
+}

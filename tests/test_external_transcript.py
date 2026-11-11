@@ -110,6 +110,7 @@ async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
     turn_turn_id = NativeTurnId('turn')
     from agent_comms.execution.transcript_sources import TurnDraftPublication
     from agent_comms.messaging.watched import ChangeSignal, FileSource
+    from agent_comms.execution.transcript_sources import TurnDraftPublication
 
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread('cli', frozenset(), Checkout(tmp_path)))
@@ -136,6 +137,7 @@ def test_turn_owned_draft_refuses_maintenance_without_changing_the_saved_draft(t
         MaintenanceBarrier,
         MaintenanceOperator,
     )
+    from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
     comms = wire(tmp_path / 'wire')
     comms.registry.declare(NativeThread('cli', frozenset(), Checkout(tmp_path)))

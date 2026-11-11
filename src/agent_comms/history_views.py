@@ -13,6 +13,7 @@ from typing import Annotated
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.errors import UnknownChannelError
+from agent_comms.execution.transcript_sources import TranscriptCursor
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.activity_clocks import ChannelActivity
 from agent_comms.messaging.channel_management import ChannelManagement
@@ -51,6 +52,28 @@ from agent_comms.messaging.notification_evidence import (
     RecipientCursor,
     RecipientLimit,
 )
+from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
+from agent_comms.messaging.sent_message import AssignedSourceIdentity
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, PresenceExclude, WireForm
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import ActivityCapture, ObservedActivity
+from agent_comms.registry.agent_activity import AgentActivity
+from agent_comms.registry.catalog_store import ChannelCatalog
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import (
+    DEFAULT_ROSTER,
+    RegistrySnapshot,
+    RosterVisibility,
+)
+from agent_comms.registry.shared_ledger import LedgerDocument
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
+from agent_comms.registry.view_unread import transcript_read_state
+from agent_comms.transcript.transcripts import Transcripts
+from agent_comms.transport.tool_result import ToolResult
+
+from agent_comms.registry.registry_names import DeletedThread
 from agent_comms.messaging.page_traversal import LiveCursor
 from agent_comms.messaging.read_basis import (
     AnonymousViewer,
@@ -59,11 +82,7 @@ from agent_comms.messaging.read_basis import (
     NamedViewer,
 )
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
-from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
 from agent_comms.messaging.sending import Messaging
-from agent_comms.messaging.sent_message import AssignedSourceIdentity
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import FieldCodec, PresenceExclude, WireForm
 from agent_comms.planning.goal_management import Goals
 from agent_comms.presentation import (
     BusPresentation,
@@ -77,29 +96,17 @@ from agent_comms.presentation import (
     ThreadView,
     WireRevision,
 )
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.activity import ActivityCapture, ObservedActivity
-from agent_comms.registry.agent_activity import AgentActivity
-from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.collaboration_ledger import CollaborationLedger
-from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_names import DeletedThread
 from agent_comms.registry.relationships import RelationshipSource
 from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
-from agent_comms.registry.shared_ledger import LedgerDocument
-from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_presentation import (
     NoThreadPresentation,
     ThreadPresentation,
 )
-from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
-from agent_comms.registry.view_unread import transcript_read_state
 from agent_comms.storage.private_path import FileRevision
-from agent_comms.execution.transcript_sources import TranscriptCursor
-from agent_comms.transcript.transcripts import Transcripts
 from agent_comms.transport.progress import WireExportObserver
-from agent_comms.transport.tool_result import ToolResult
 
 _LOG = logging.getLogger(__name__)
 
