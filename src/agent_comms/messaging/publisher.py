@@ -37,7 +37,6 @@ from agent_comms.messaging.envelope_claim_transitions import (
 )
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.initial_origin import InitialOrigin
-from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.messages import BusRecord, ClaimNoticeKind, Message
 from agent_comms.messaging.wake import OrdinaryControl, resolve_wake_cohort
 from agent_comms.nominal.field_codec import ClaimId
@@ -46,7 +45,6 @@ from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
 from agent_comms.storage.private_path import FileRevision
 
 
@@ -93,17 +91,13 @@ class Publisher:
     ) -> Message:
         message.require_task_publication(sender, snapshot, original_source)
 
-        def resolve_mention(name: str) -> str | None:
-            return next((thread.name for thread in
-                         snapshot.visible_threads(DEFAULT_ROSTER, names=(name,))), None)
-
         return replace(
             message,
             sender=sender,
             target=target.name,
             seq=sequence,
             sender_role=snapshot.threads[sender].role,
-            mentions=ThreadMention.find(message.body, resolve_mention),
+            mentions=snapshot.mentions(message.body),
         )
 
 

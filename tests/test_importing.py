@@ -79,7 +79,7 @@ from agent_comms.registry.thread_text import (
 )
 from agent_comms.registry.threads import ExternalThread, NativeThread, ThreadProvenance
 from agent_comms.transcript.transcript_events import TextTranscript
-from agent_comms.transport.core_access import LocalCoreAccess
+from conftest import ui_core_read
 from agent_comms.transport.tools.sidebar import CommsImportedSourceTool
 from agent_comms.ui_model.message_category import (
     AgentCategory,
@@ -321,11 +321,10 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
     entry = NativeEntry.from_wire(saved[1])
     assert isinstance(entry, ImportedMetadataEntry)
     assert entry.to_wire() == saved[1]
-    core = LocalCoreAccess(comms)
-    assert core.call(CommsImportedSourceTool(
+    assert ui_core_read(comms, CommsImportedSourceTool(
         owner=original_owner, source=refs[1])).text == "Historical developer λ.\n"
     with pytest.raises(ValueError):
-        core.call(CommsImportedSourceTool(owner=original_owner, source=replace(refs[1], instruction=999)))
+        ui_core_read(comms, CommsImportedSourceTool(owner=original_owner, source=replace(refs[1], instruction=999)))
     with pytest.raises(ValueError):
         ImportedSessionMetadata.sources_for_owner(
             comms.registry, replace(original_owner, created_at=RecordedCreationTime(original_owner.created_at + 1)))
