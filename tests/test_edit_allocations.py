@@ -8,8 +8,10 @@ from agent_comms.nominal.field_codec import GoalId, OrderId
 from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from agent_comms.planning.orders import (
     Assignment,
+    ChangeTodoState,
     IncomingWork,
     TodoConflict,
+    TodoState,
 )
 from agent_comms.planning.todo_refusals import SharedWorktreeRefusal
 from agent_comms.projects.checkouts import Checkout
@@ -50,9 +52,22 @@ def issue(comms, source, template, name, problem):
     return comms.goals.todos.get(problem)
 
 
-def test_shared_launch_base_admits_distinct_unmaterialized_allocations_and_not_source_writes(allocation_bus):
+@pytest.fixture(params=tuple(state for state in TodoState.members_with(TodoState) if state.open))
+def first_allocation(allocation_bus, request):
     comms, source, template = allocation_bus
-    first = issue(comms, source, template, 'first', 'P41')
+    current = issue(comms, source, template, 'first', 'P41')
+    actor = comms.registry.require('first').incarnation
+    return comms.goals.change_problem(
+        current.id, ChangeTodoState(current.revision, request.param, actor, current.held().generation),
+        actor,
+    )
+
+
+def test_shared_launch_base_admits_distinct_unmaterialized_allocations_and_not_source_writes(
+    allocation_bus, first_allocation,
+):
+    comms, source, template = allocation_bus
+    first = first_allocation
     second = issue(comms, source, template, 'second', 'P42')
     one, two = (comms.registry.require(name) for name in ('first', 'second'))
     assert set(one.home_checkouts).intersection(two.home_checkouts)
@@ -80,9 +95,11 @@ def test_shared_launch_base_admits_distinct_unmaterialized_allocations_and_not_s
             WriteStorageEffect(first_path / 'declaration.py'),))
 
 
-def test_physical_alias_refuses_public_creation_without_partial_goal_or_todo(allocation_bus):
+def test_physical_alias_refuses_public_creation_without_partial_goal_or_todo(
+    allocation_bus, first_allocation,
+):
     comms, source, template = allocation_bus
-    first = issue(comms, source, template, 'first', 'P41')
+    first = first_allocation
     rule = StorageRule.load(comms.root)
     one, two = (comms.registry.require(name) for name in ('first', 'second'))
     original = rule.order_checkout(rule.roots_of(one), first.id)

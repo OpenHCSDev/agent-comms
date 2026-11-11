@@ -5941,7 +5941,7 @@ class TodoStore(OwnerRequestStore, TodoHistory, GoalAssignments, DirectiveWriter
         if not proposed:
             return self
         snapshot = self.registry_cut()
-        held = self.held_orders(state=OpenTodoState)
+        held = self.held_orders()
         workplaces = EditWorkplaces.for_assignment(self.root, snapshot, held, proposed,
                                                    AssignedBoundaryRead(RepositoryReads()))
         return PreparedTodoStore(self.root, workplaces)
