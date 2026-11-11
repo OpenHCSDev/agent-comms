@@ -27,6 +27,7 @@ from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.installer.probes.native import PrepareProducerDigestsProbe
 from agent_comms.installer.runtime_home import TestHome
+from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.runtime_stack import RuntimeStack
 from agent_comms.installer.upgrade import (
     CarriedRehearsal,
@@ -282,6 +283,7 @@ class Fault(Carry):
     assert subprocess.check_output(["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip() == current
     MaintenanceBarrier(RegistryStore.at(comms.root).path).read().phase.new_sends.require_open()
     assert comms.registry.require("worker").name == "worker"
+    assert_development_matches_runtime(checkout, home, outgoing)
 
 
 def test_failed_publication_restores_absent_route_without_store_changes(
@@ -333,6 +335,21 @@ def test_failed_publication_restores_absent_route_without_store_changes(
     MaintenanceBarrier(RegistryStore.at(installed_comms.root).path).read().phase.new_sends.require_open()
 
 
+def assert_development_matches_runtime(checkout: Path, home: Path, prefix: Path) -> None:
+    runtime = LaunchRuntime.at_prefix(prefix)
+    development = LaunchRuntime.at_prefix(Checkout(checkout).test_environment)
+    with InstallCommands() as commands:
+        stack = RuntimeStack(checkout, commands, home, runtime=runtime)
+        expected = commands.run(stack.uv, "pip", "freeze", "--python", runtime.interpreter,
+                                "--exclude", CorePackage.distribution)
+        actual = commands.run(stack.uv, "pip", "freeze", "--python", development.interpreter,
+                              "--exclude", CorePackage.distribution)
+        assert actual == expected
+        core = commands.run(development.interpreter, "-I", "-c",
+                            "import agent_comms; print(agent_comms.__file__)")
+        assert Path(core.strip()).is_relative_to(checkout)
+
+
 @pytest.mark.parametrize("fresh, live_kind", ((False, CarriedRun), (True, CreatedRun)),
                          ids=("retained-bus", "fresh-bus"))
 def test_installed_entry_reports_completion_after_target_source_retirement(
@@ -370,3 +387,5 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
     if not fresh:
         assert history[0].body.startswith("Install starting")
     assert scratch.is_dir() and not tuple(scratch.iterdir())
+    assert_development_matches_runtime(
+        install_checkout, home, (home / ".local/share/agent-comms/current").resolve())
