@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterable
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from sqlite3 import Connection
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from agent_comms.errors import StaleAttemptError
 from agent_comms.execution.native_arguments import SelectedModel
@@ -234,14 +234,6 @@ class QueuedInputMissing(QueuedInputFailure):
     @classmethod
     def pending(cls, inputs: TerminalInputsRead) -> bool:
         return bool(inputs.pending)
-
-
-class QueuedInputNotSent(QueuedInputFailure):
-    default_text = "Pi RPC run ended before a queued user input was written to the native child."
-
-    @classmethod
-    def pending(cls, inputs: TerminalInputsRead) -> bool:
-        return bool(inputs.unwritten_inputs)
 
 
 class ModelStalled(TurnFailure):

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
@@ -71,7 +70,8 @@ class InputForwarding(MroDispatch, SessionInputsCallbacks):
 
     @property
     def settled(self) -> bool:
-        return not self.uncertain and not self.unresolved
+        """Every input written by this run started; unwritten work stays in its inbox."""
+        return not self.uncertain and not self.pending
 
     def retire(self, native_id: InputId) -> InputRequest:
         """Remove one exact native identity from the sole pending index."""
