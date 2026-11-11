@@ -210,7 +210,7 @@ class DeclaredFamily(FamilyMember, ABC, metaclass=FamilyMeta):
         return cls.declared_name
 
     @classmethod
-    def display_name(cls) -> str:
+    def display_label(cls) -> str:
         """Human-readable label derived from the wire name; override per member when it differs."""
         return cls.declared_name.replace("_", " ").replace("-", " ").title()
 

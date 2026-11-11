@@ -686,7 +686,7 @@ class ContextSegment(
 
     @classmethod
     def public_title(cls) -> str:
-        return cls.display_name()
+        return cls.display_label()
 
     def public_description(self) -> str:
         return self.public_title()
