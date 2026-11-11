@@ -25,6 +25,7 @@ from agent_comms.execution.turn_failure import QueuedInputMissing
 from agent_comms.execution.turn_watchdog import ModelWait
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import InputId
+from agent_comms.pi_payloads import UserMessage
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.store_files import RegistryLocking
@@ -155,7 +156,7 @@ async def test_agent_settled_preserves_unwritten_input_for_the_next_run(
             following = await native.run(steering_input.content.text)
             assert following[-1].ok, following[-1]
             assert native.provider.posts == 2 and len(native.starts) == 2
-            assert sum(message["content"] == steering_input.content.text
+            assert sum(UserMessage.from_wire(message).original_text() == steering_input.content.text
                        for message in native.saved_inputs()) == 1
         finally:
             task.cancel()
