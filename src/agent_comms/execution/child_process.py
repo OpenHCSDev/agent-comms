@@ -1675,7 +1675,6 @@ class NoCountYetPrinted(NoIntegerPrinted):
 
 
 class ChildOutcome(DeclaredFamily, affix="Outcome"):
-    interrupted: ClassVar[bool] = False
 
     def report_shutdown(self, report_timeout: Callable[[], None]) -> None:
         pass
@@ -1734,7 +1733,6 @@ class InterruptedForkOutcome(ChildOutcome):
 
 @dataclass(frozen=True)
 class SignaledOutcome(InterruptedForkOutcome):
-    interrupted: ClassVar[bool] = True
     signal_number: int
 
     def report_stopped(self, report: Callable[[], None], stop_exits: frozenset[int]) -> None:
