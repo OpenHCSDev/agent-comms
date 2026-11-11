@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import sqlite3
 
 from agent_comms.coordination.assignment_states import EngagedAssignment
 from agent_comms.coordination.errors import IdentityConflict, StaleRevision
@@ -19,10 +19,8 @@ from agent_comms.coordination.snapshot import RecoverySnapshot
 from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination.tables.executions import ExecutionProvenance, ExecutionRecord
 from agent_comms.coordination.tables.responses import ResponseObligation
+from agent_comms.execution.selected.source_batch import SelectedSource
 from agent_comms.nominal.field_codec import ThreadLookup
-
-if TYPE_CHECKING:
-    from agent_comms.execution.selected.source_batch import SelectedSource
 
 
 class ExecutionStore(RecoveryReader):
@@ -56,8 +54,16 @@ class ExecutionStore(RecoveryReader):
                 raise StaleRevision("original claims changed after proved native settlement")
             return self._create(db, execution_id, origin, owner_lookup, max_attempts, sources, assignments)
 
-    def _create(self, db, execution_id, origin, owner_lookup,
-                max_attempts, sources, assignments):
+    def _create(
+        self,
+        db: sqlite3.Connection,
+        execution_id: str,
+        origin: type[ExecutionProvenance],
+        owner_lookup: ThreadLookup,
+        max_attempts: int,
+        sources: tuple[SelectedSource, ...],
+        assignments: tuple[WakeAssignment, ...],
+    ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
         """The single creation algorithm, under its caller's owning transaction."""
         for source in sources:
             if source.store is not self.assignments:

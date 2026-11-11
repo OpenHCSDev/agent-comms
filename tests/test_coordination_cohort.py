@@ -327,7 +327,7 @@ def test_wrong_and_partial_db_receipt_never_accepts_one_n_member(tmp_path: Path)
     proof = comms.bus.bus.delivery(sent.seq)
     with store.session.writing() as db:
         ClaimBatchAcknowledgements.for_delivery(
-            proof, comms.registry.store.privacy(), 8,
+            proof, comms.registry.store.privacy().namespace, 8,
         ).insert(db)
     with pytest.raises(IdentityConflict):
         accept_initial(comms.bus, root_id, sent.seq, store)

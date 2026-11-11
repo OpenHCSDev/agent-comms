@@ -5098,7 +5098,7 @@ class DeliverTodo(TodoOperation, declared_name=None):
             raise
         return replace(self, delivery=delivered)
 
-    def changed(self, current):
+    def changed(self, current: Todo) -> Todo:
         self.delivery.at.require_delivery()
         return current.order.checked().scope.completed(current, self.delivery)
 
@@ -5115,7 +5115,7 @@ class CloseOrderTodo(TodoOperation, declared_name=None):
         super().require_current(current)
         current.require_maintainer(self.actor)
 
-    def changed(self, current):
+    def changed(self, current: Todo) -> Todo:
         return DoneTodoState.closed(current, self.closed(current))
 
 
@@ -5159,7 +5159,7 @@ class ChangeTodoState(TodoOperation):
         self.state.prepare_change(goals, current)
         return self
 
-    def changed(self, current):
+    def changed(self, current: Todo) -> Todo:
         return current.state.change(current, self)
 
 

@@ -56,7 +56,8 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(
         caller_project = base / "caller-project"
         project.mkdir()
         caller_project.mkdir()
-        # Headless execution requires a private bus root (worker.py); its owner prepares one.
+        # The worker refuses to run without a private bus root
+        # (comms.owners.require_private_launch); its owner prepares one.
         comms = prepare_native_comms(wire(base / "wire"))
         comms.registry.declare(NativeThread('headless', frozenset(), Checkout(project)))
         # A host only starts through its owner, which hands it the bound listener.

@@ -10,6 +10,7 @@ from typing import ClassVar, Literal
 from urllib.request import Request, urlopen
 
 from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.execution.turn_context import ContextSpan
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
@@ -273,8 +274,6 @@ class JevClassifier(Classifier):
 
     @classmethod
     async def classify(cls, request, api_key: str):
-        from agent_comms.coordination.coordinator import Coordination
-
         def send():
             external = Request(cls.endpoint, data=json.dumps(request.payload()).encode(),
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -283,4 +282,4 @@ class JevClassifier(Classifier):
                 return cls.decode(json.load(response), request)
 
         # The existing resource worker joins cancellation through HTTP close.
-        return await Coordination.run_worker(send)
+        return await CoordinationWork.run_worker(send)

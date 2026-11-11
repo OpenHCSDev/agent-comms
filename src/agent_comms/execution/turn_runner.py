@@ -59,6 +59,7 @@ from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.messaging.channels import AllChannel
 from agent_comms.messaging.messages import Message
 from agent_comms.messaging.routing import NoTurnRouting, Routing, ScheduledTurn
+from agent_comms.messaging.send_result import SendResult
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId, InputId, TurnId
 from agent_comms.pi_payloads import NativeContextData, StateData
 from agent_comms.planning.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction
@@ -302,7 +303,7 @@ class TurnRunner(OwnedTurnRunner):
                     agent_task = text.strip()
                 if relay_text:
                     target, body = parse_target(relay_text)
-                    sent = await Coordination.run_worker(partial(
+                    sent: SendResult = await Coordination.run_worker(partial(
                         self.comms.messaging.send, thread_name, target, body,
                     ))
                     for notice in sent.notices:

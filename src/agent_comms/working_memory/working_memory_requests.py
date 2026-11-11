@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Literal
+from http.client import HTTPException
+from typing import ClassVar, Literal
+from urllib.error import HTTPError
 
 from agent_comms.execution.turn_context import ContextSpan
 from agent_comms.execution.working_memory_disclosure import DisclosureState
@@ -69,11 +71,49 @@ class CompletedAnnotationOutcome(AnnotationOutcome):
 
 
 @dataclass(frozen=True)
-class FailedAnnotationOutcome(AnnotationOutcome):
-    error: str
+class FailedAnnotationOutcome(AnnotationOutcome, declared_name=None):
+    """The classifier was asked and gave no authorized answer. Each member is one kind of
+    error that stops it, and nothing resends the request."""
+
+    caught: ClassVar[type[Exception]]
+    said: ClassVar[str]
 
     def public_description(self) -> str:
-        return f"Classifier did not produce an authorized answer: {self.error}. Not automatically resent."
+        return f"Classifier did not produce an authorized answer: {self.said}. Not automatically resent."
+
+    @classmethod
+    def caught_errors(cls) -> tuple[type[Exception], ...]:
+        return tuple(member.caught for member in cls.members_with(FailedAnnotationOutcome))
+
+    @classmethod
+    def for_error(cls, error: type[BaseException]) -> FailedAnnotationOutcome:
+        """The member whose caught error comes first in the raised error's MRO."""
+        caught = {member.caught: member for member in cls.members_with(FailedAnnotationOutcome)}
+        return next(caught[kind] for kind in error.__mro__ if kind in caught)()
+
+
+@dataclass(frozen=True)
+class ClassifierUnreachableAnnotationOutcome(FailedAnnotationOutcome):
+    caught = OSError
+    said = "the classifier could not be reached"
+
+
+@dataclass(frozen=True)
+class ClassifierHttpStatusAnnotationOutcome(FailedAnnotationOutcome):
+    caught = HTTPError
+    said = "the classifier answered with an HTTP error status"
+
+
+@dataclass(frozen=True)
+class ClassifierProtocolAnnotationOutcome(FailedAnnotationOutcome):
+    caught = HTTPException
+    said = "the classifier's HTTP response was malformed"
+
+
+@dataclass(frozen=True)
+class ClassifierAnswerRejectedAnnotationOutcome(FailedAnnotationOutcome):
+    caught = ValueError
+    said = "the classifier's answer was refused as invalid"
 
 
 class AnnotationBudgetExhausted(ValueError):
