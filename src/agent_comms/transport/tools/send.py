@@ -15,7 +15,7 @@ from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import InfoKind, MessageKind, SendableMessageKind
 from agent_comms.messaging.send_result import MessagePublished
-from agent_comms.messaging.task_sources import NoTaskAttachment, TaskAttachment
+from agent_comms.messaging.task_attachment import NoTaskAttachment, TaskAttachment
 from agent_comms.nominal.field_codec import WireChoices, WireName
 from agent_comms.projects.change_report import NoChangeReport, ReportEvidence
 from agent_comms.transport.native_tools import CommunicationCall

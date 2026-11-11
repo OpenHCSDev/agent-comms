@@ -45,7 +45,7 @@ from agent_comms.messaging.response_policy import (
     ResponseEligibility,
     ResponsePolicy,
 )
-from agent_comms.messaging.task_sources import NoTaskAttachment, TaskAttachment
+from agent_comms.messaging.task_attachment import NoTaskAttachment, TaskAttachment
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -1047,6 +1047,10 @@ class Message(MessageInput, TurnOrigin['Message'], MessageReferenceRead):
         source = Message.from_message(self)
         yield from self.sender_role.user_task_facts(source)
         yield from self.task.retained_task_facts(source)
+
+    def default_user_source_fact(self) -> object:
+        """The user-source fact a USER message produces when its task has no override."""
+        return task_facts.UserSourceTaskFact(self)
 
     def __post_init__(self) -> None:
         if not self.sender:

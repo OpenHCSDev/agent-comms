@@ -210,7 +210,7 @@ def test_attachment_names_decode_in_a_process_that_never_imported_their_module()
     """A heartbeat on the bus decodes before anything imports its member module."""
     probe = (
         "import sys\n"
-        "from agent_comms.messaging.task_sources import TaskAttachment\n"
+        "from agent_comms.messaging.task_attachment import TaskAttachment\n"
         "assert 'agent_comms.task_attachments.team_pings' not in sys.modules\n"
         "print(TaskAttachment.member_named('team_decisions').__module__)\n"
     )

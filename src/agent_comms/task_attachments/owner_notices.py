@@ -23,7 +23,7 @@ from agent_comms.messaging.messages import (
     NoticeRole,
 )
 from agent_comms.messaging.projection_source import ProducedRow
-from agent_comms.messaging.task_sources import TaskAttachment
+from agent_comms.messaging.task_attachment import TaskAttachment
 from agent_comms.registry.thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
