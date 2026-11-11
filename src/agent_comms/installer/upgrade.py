@@ -1272,7 +1272,6 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                                 self.installed.commands.git(
                                     self.checkout, "reset", "-q", "--keep", self.current)
                                 Checkout(self.checkout).update_submodules()
-                                self.installed.sync_test_environment(Checkout(self.checkout))
                         self.installed.publish(self.root)
                         self.installed.require_opens(self.root)
                     holder.close()
@@ -1281,6 +1280,9 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                           "original runtime selected; owners start on it; "
                           f"backup: {backup.description}",
                           file=sys.stderr)
+                    # Only after the bus is back: the restored lock may itself fail to sync,
+                    # and a test interpreter must never stop the original bus from reopening.
+                    self.installed.sync_test_environment(Checkout(self.checkout))
                     raise InstallRolledBack(
                         error, backup.description,
                         runtime=self.installed.runtime) from error
