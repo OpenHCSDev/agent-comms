@@ -61,13 +61,9 @@ if TYPE_CHECKING:
     from agent_comms.registry.recipient_activity import RecipientActivity
 
 
-@dataclass(frozen=True)
-class PendingDecision:
-    mode: WakePolicy
-
-    def __post_init__(self):
-        if not self.mode.items_with(Active, self.mode):
-            raise CoordinationError("passive decision cannot be deferred or failed")
+class UnengagedDefaults:
+    """The 3 pre-engagement answers: no verdict, no execution, no target. Declared once;
+    both PendingDecision and AssignmentState inherit them."""
 
     @property
     def verdict(self):
@@ -83,7 +79,16 @@ class PendingDecision:
 
 
 @dataclass(frozen=True)
-class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment"):
+class PendingDecision(UnengagedDefaults):
+    mode: WakePolicy
+
+    def __post_init__(self):
+        if not self.mode.items_with(Active, self.mode):
+            raise CoordinationError("passive decision cannot be deferred or failed")
+
+
+@dataclass(frozen=True)
+class AssignmentState(CoordinatorVocabulary, LifecycleState, UnengagedDefaults, affix="Assignment"):
     def source_settlement(
         self, evidence: tuple[HistoricalNativeInput, ...], policy: WakePolicy, claim_id: AssignmentId,
     ) -> SourceSettlement:
@@ -199,18 +204,6 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment")
     @property
     @abstractmethod
     def mode(self) -> WakePolicy: ...
-
-    @property
-    def verdict(self):
-        return None
-
-    @property
-    def execution_id(self):
-        return None
-
-    @property
-    def exact_target(self):
-        return None
 
     @classmethod
     def build(cls, mode: WakePolicy, execution_id: str | None, target: str | None) -> Self:
