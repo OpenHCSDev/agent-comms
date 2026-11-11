@@ -256,7 +256,10 @@ class UnknownField:
 
     def describe(self) -> str:
         name = self.path[-1]
-        destinations = sorted(set(self.owner.field_paths(name)) - {self.path})
+        # One visited set for the whole walk: each record type is expanded once. A set copied
+        # per path re-walked every shared type down every branch, and on 2026-11-10 printing
+        # one decode failure held Toad's UI thread until it was killed.
+        destinations = sorted(set(self.owner.field_paths(name, set())) - {self.path})
         if not destinations:
             return 'Unknown fields; fix: remove this field'
         parents = ' or '.join('.'.join(path[:-1]) or 'the top level' for path in destinations)
@@ -748,7 +751,7 @@ class FieldPlan(ViewColumn):
         """Known and unknown problems together, for a decoder with no plan to enclose them."""
         problems.update(refused.located(self.key, self.fix))
 
-    def field_paths(self, key: str, seen: frozenset[type]) -> tuple[tuple[str, ...], ...]:
+    def field_paths(self, key: str, seen: set[type]) -> tuple[tuple[str, ...], ...]:
         direct = ((self.key,),) if self.key == key else ()
         return direct + tuple((self.key, *path) for path in self.value.field_paths(key, seen))
 
@@ -1019,7 +1022,7 @@ class InlineFieldPlan(DeclaredFieldPlan):
 
     directives = (WireInline,)
 
-    def field_paths(self, key: str, seen: frozenset[type]) -> tuple[tuple[str, ...], ...]:
+    def field_paths(self, key: str, seen: set[type]) -> tuple[tuple[str, ...], ...]:
         return _RecordDecoder(self.inlined).field_paths(key, seen)
 
     def unknown_under(self, refused: MalformedRecord, owner: DecoderPlan) -> tuple[UnknownField, ...]:
@@ -1178,7 +1181,7 @@ class DecoderPlan(ABC):
         """Stored-value predicates; the SQL owner quotes its column and constants."""
         return ()
 
-    def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
+    def field_paths(self, key: str, seen: set[type]) -> tuple[tuple[str, ...], ...]:
         """Scalars declare no fields; containers and records own their traversal."""
         return ()
 
@@ -1411,7 +1414,7 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     def accepts_null(self) -> bool:
         return self.wire_structure.accepts_null
 
-    def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
+    def field_paths(self, key: str, seen: set[type]) -> tuple[tuple[str, ...], ...]:
         return self.wire_structure.field_paths(key, seen)
 
     @boundary_decoder
@@ -3482,7 +3485,7 @@ class UnionDecoder[T](_ContextDecoder[T]):
             "(" + " AND ".join(f"({check})" for check in checks) + ")"
             for checks in alternatives),)
 
-    def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
+    def field_paths(self, key: str, seen: set[type]) -> tuple[tuple[str, ...], ...]:
         return tuple(path for member in self.alternatives for path in member.field_paths(key, seen))
 
 
@@ -3584,7 +3587,7 @@ class _ArrayDecoder[T: Iterable[object]](ValueDecoder[T]):
     container: ClassVar[type]
     items: tuple[ValueDecoder[object], ...]
 
-    def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
+    def field_paths(self, key: str, seen: set[type]) -> tuple[tuple[str, ...], ...]:
         return tuple(('[]', *path) for item in self.items for path in item.field_paths(key, seen))
 
     def fits_wire(self, data: object) -> bool:
@@ -3724,7 +3727,7 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
     arguments: tuple[object, object]
     origins = (dict, Mapping, MutableMapping)
 
-    def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
+    def field_paths(self, key: str, seen: set[type]) -> tuple[tuple[str, ...], ...]:
         return tuple(('*', *path) for path in self.value.field_paths(key, seen))
 
     @staticmethod
@@ -3838,7 +3841,7 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
 
     target: type[Member]
 
-    def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
+    def field_paths(self, key: str, seen: set[type]) -> tuple[tuple[str, ...], ...]:
         return tuple(path for member in self.target.members_with(self.target)
                      for path in _member_decoders[member].field_paths(key, seen))
 
@@ -3961,12 +3964,12 @@ class _RecordDecoder[T](_ContextDecoder[T]):
         for entry in self.compared_fields:
             entry.value.compile_comparison(compiled)
 
-    def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
+    def field_paths(self, key: str, seen: set[type]) -> tuple[tuple[str, ...], ...]:
         if self.target in seen:
             return ()
-        visited = seen | {self.target}
+        seen.add(self.target)
         return tuple(path for entry in self.plan.bindings
-                     for path in entry.field_paths(key, visited))
+                     for path in entry.field_paths(key, seen))
 
     def missing_fields(self, data: dict) -> dict[str, str]:
         return {key: f"Missing required fields for {self.target.__name__}: {key}; "
