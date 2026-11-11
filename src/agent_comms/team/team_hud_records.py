@@ -21,7 +21,7 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.planning.order_story import OrderStory
 from agent_comms.planning.orders import OrderProgress, PullRequest
-from agent_comms.planning.plan_phases import Plan, PlanPhase
+from agent_comms.planning.plan_phase_base import Plan, PlanPhase
 from agent_comms.planning.progress_readings import ProgressPoint
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.recorded_time import RecordedEventTime

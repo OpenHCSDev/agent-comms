@@ -86,7 +86,7 @@ from agent_comms.planning.orders import (
     WithdrawTodo,
 )
 from agent_comms.planning.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
-from agent_comms.planning.plan_phases import PlanPhase
+from agent_comms.planning.plan_phase_base import PlanPhase
 from agent_comms.planning.problem_findings import (
     ExpectedProblem,
     LocatedProblemFinding,

@@ -56,7 +56,7 @@ from agent_comms.planning.orders import (
     UnmergedListedPullRequest,
 )
 from agent_comms.planning.owner_requests import OwnerRequestId
-from agent_comms.planning.plan_phases import PlanPhase
+from agent_comms.planning.plan_phase_base import PlanPhase
 from agent_comms.planning.plan_reading import PlanReading
 from agent_comms.planning.work_dispatch import ReusedWorkDispatch, WorkDispatch
 from agent_comms.projects.head_review import PullRequestHead
