@@ -4,8 +4,8 @@ import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-import agent_comms.messaging.bus_record_builder as bus_record_builder
-import agent_comms.messaging.message_writer as message_writer
+
+
 from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
 from agent_comms.messaging.message_directions import MessageDirections
 from agent_comms.messaging.message_reads import MessageIdentityRead
@@ -32,7 +32,7 @@ class InitialOrigin(ABC):
         """Check the sender and message ID on the actual append connection."""
 
     @abstractmethod
-    def append(self, bus: message_writer.MessageWriter, build: bus_record_builder.RecordBuilder) -> messages.BusRecord:
+    def append(self, bus: messages.MessageWriter, build: messages.RecordBuilder) -> messages.BusRecord:
         """Commit the record, reporting failure as this origin requires."""
 
     @abstractmethod
@@ -85,7 +85,7 @@ class HumanOrigin(OwnerVoiceOrigin):
             raise HumanSendRefusedError(RelationViolationError(
                 "Human message identity was already published."))
 
-    def append(self, bus: message_writer.MessageWriter, build: bus_record_builder.RecordBuilder) -> messages.BusRecord:
+    def append(self, bus: messages.MessageWriter, build: messages.RecordBuilder) -> messages.BusRecord:
         try:
             return bus.append(build)
         except (CommittedMessageError, HumanSendRefusedError):
