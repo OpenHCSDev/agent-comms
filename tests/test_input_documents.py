@@ -156,7 +156,7 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
     )
     _insert_raw(store, OLD_KEY, saved)
     row = store.lookup(OLD_KEY)
-    assert isinstance(row, BoundUnknownInput) and not row.accepts_reservation
+    assert isinstance(row, BoundUnknownInput) and not row.accepts_reservation()
     assert row.reviewed_for_goal(goal_id)
     assert FieldCodec.encode(row) == saved
     assert store.in_turn(TURN).rows == {OLD_KEY: row}
@@ -305,7 +305,7 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
     store = InputDispositions(tmp_path)
     missing = stored_inputs(store.root).lookup(MISSING_KEY)
     assert isinstance(missing, MissingInput)
-    assert not missing.exists and not missing.accepts_reservation and not missing.has_started
+    assert not missing.is_stored() and not missing.accepts_reservation() and not missing.counts_as_started()
     assert not store.bind(
         MISSING_KEY,
         claim_scope=1,
@@ -318,7 +318,7 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
         INPUT_KEY, seq=None, owner="owner", claim_scope=4, target="owner", text="keep"
     )
     reserved = stored_inputs(store.root).lookup(INPUT_KEY)
-    assert isinstance(reserved, ReservedInput) and reserved.exists and reserved.accepts_reservation
+    assert isinstance(reserved, ReservedInput) and reserved.is_stored() and reserved.accepts_reservation()
     assert reserved.matches_owner(RecordedThreadIncarnation("owner", 10.0))
     # Existing input rows attest name/claim_scope only, never a historical birth.
     assert reserved.matches_owner(RecordedThreadIncarnation("owner", 20.0))
@@ -327,7 +327,7 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
     unsent = store.settle_unbound((INPUT_KEY,)).lookup(INPUT_KEY)
     unsent.require(Unresolved, ValueError("review required"))
     assert isinstance(unsent, NotSentInput)
-    assert not unsent.accepts_reservation
+    assert not unsent.accepts_reservation()
     assert not store.bind(
         INPUT_KEY,
         claim_scope=4,
@@ -437,7 +437,7 @@ def test_started_delivery_and_original_ingress_use_distinct_owned_relations(
         native_id=InputId("a" * 32),
         text="wrapped input",
     )
-    assert stored_inputs(store.root).lookup(key).has_started
+    assert stored_inputs(store.root).lookup(key).counts_as_started()
     original = stored_inputs(store.root)
     # Routing cannot be rewritten by recording another target at the original
     # key. That ownership belongs to first durable acceptance, not start proof.
@@ -446,7 +446,7 @@ def test_started_delivery_and_original_ingress_use_distinct_owned_relations(
     )
     assert stored_inputs(store.root) == original
     assert stored_inputs(store.root).lookup(key).target == target
-    assert stored_inputs(store.root).lookup(key).has_started
+    assert stored_inputs(store.root).lookup(key).counts_as_started()
 
 
 def test_reads_select_only_the_rows_their_index_names(tmp_path):

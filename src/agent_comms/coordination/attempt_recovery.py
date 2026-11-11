@@ -361,7 +361,7 @@ class RecoveryMonitorCapability:
         uncertain = False
         if (CoordinationStore.path_in(root)).is_file():
             with Coordination(str(CoordinationStore.path_in(root))) as store:
-                uncertain = any(attempt.lifecycle.preserve_check
+                uncertain = any(attempt.lifecycle.preserves_check()
                                 for attempt in AttemptRecord.select(store.session._connection))
         inputs = InputDispositions(root)
         if inputs.path.is_file():

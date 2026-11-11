@@ -90,4 +90,4 @@ def test_plural_originals_preserve_order_and_bind_without_partial_transition(tmp
         text="first\n\nsecond",
     )
     assert stored_inputs(inputs.root) == before
-    assert stored_inputs(inputs.root).lookup(keys[0]).accepts_reservation
+    assert stored_inputs(inputs.root).lookup(keys[0]).accepts_reservation()

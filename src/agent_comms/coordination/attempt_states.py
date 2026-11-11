@@ -54,17 +54,23 @@ class AttemptState(CoordinatorVocabulary, LifecycleState, affix="Attempt"):
         """Only a live attempt can support the execution's current pointer."""
         return False
 
-    preserve_check: ClassVar[bool] = True
     allows_tool_claim: ClassVar[bool] = False
-    succeeded: ClassVar[bool] = False
+
     def advance_on_accepted(self, advance: Callable[[type[AttemptState]], None]) -> None:
         pass
 
     def require_starting(self) -> None:
         raise StaleFence("full execution is not running before native send")
-    running: ClassVar[bool] = False
-    settling: ClassVar[bool] = False
-    has_model_context: ClassVar[bool] = False
+
+    def is_succeeded(self) -> bool:
+        return False
+
+    def preserves_check(self) -> bool:
+        return True
+
+    @property
+    def has_model_context(self) -> bool:
+        return False
 
     def observed(self, phase, *, backend_done: bool, process_dead: bool, progress: bool):
         if phase is not type(self) and not issubclass(phase, self.successors()):
@@ -136,7 +142,8 @@ class TerminalAttempt(Terminal, AttemptState):
     @abstractmethod
     def disposition(self, snapshot, attempt): ...
 
-    preserve_check = False
+    def preserves_check(self) -> bool:
+        return False
 
     @property
     def lease_expires_at_ms(self):
@@ -200,12 +207,13 @@ class PromptAcceptedAttempt(BeforeModelRun, LiveAttempt):
 class ContextualAttempt(LiveAttempt):
     """A live phase reached only after the tracked model context was observed."""
 
-    has_model_context = True
+    @property
+    def has_model_context(self) -> bool:
+        return True
 
 
 class ModelRunningAttempt(ContextualAttempt):
     allows_tool_claim = True
-    running = True
 
     @classmethod
     def successors(cls):
@@ -240,8 +248,6 @@ class CompactionAttempt(BeforeModelRun, ContextualAttempt):
 class SettlingAttempt(ContextualAttempt):
     def require_silent_completion(self) -> None:
         pass
-
-    settling = True
 
     @property
     def publication_ready(self) -> bool:
@@ -308,7 +314,8 @@ class SucceededAttempt(TerminalAttempt):
         snapshot.require_nonpublication_response()
         return CompletedExecution(attempt.attempt_ordinal), SilentResponse()
 
-    succeeded = True
+    def is_succeeded(self) -> bool:
+        return True
 
 
 class UnsuccessfulTerminal(Failed, TerminalAttempt):

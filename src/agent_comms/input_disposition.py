@@ -84,7 +84,7 @@ class InputDocument(OriginalInputs, InputLookup[InputAttempt]):
     rows: dict[InputKey, StoredInput] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if any(not row.exists or key != row.key for key, row in self.rows.items()):
+        if any(not row.is_stored() or key != row.key for key, row in self.rows.items()):
             raise ValueError("Input document key differs from its attempt")
 
     def lookup(self, key: InputKey | None) -> InputAttempt:
@@ -133,7 +133,7 @@ class InputDocument(OriginalInputs, InputLookup[InputAttempt]):
     def shared_state(self, keys: tuple[InputKey, ...]) -> type[InputAttempt] | None:
         """Project only a complete, homogeneous durable observation."""
         states = {type(self.lookup(key)) for key in keys}
-        if len(states) == 1 and all(self.lookup(key).exists for key in keys):
+        if len(states) == 1 and all(self.lookup(key).is_stored() for key in keys):
             return states.pop()
         return None
 

@@ -78,7 +78,7 @@ class DurableTurn(MroDispatch):
 
     @property
     def model_started(self):
-        return self.current.has_model_context
+        return self.attempts.require_fence(self.fence)[1].lifecycle.has_model_context
 
     def advance(self, state):
         if state is self.current:

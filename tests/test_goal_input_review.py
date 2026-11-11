@@ -104,7 +104,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     for message, key in zip(messages, keys, strict=True):
         row = stored_inputs(ledger.root).rows[InputKeyText.from_text(key)]
         row.require(Unresolved, ValueError("review required"))
-        assert row.accepts_reservation
+        assert row.accepts_reservation()
         assert row.source_text == message.body
         assert row.claim_generation == claim_scope and row.reviewed_for_goal(goal.id)
     assert not stored_inputs(ledger.root).rows[OWNER_INPUT_KEY].goal_reviews
