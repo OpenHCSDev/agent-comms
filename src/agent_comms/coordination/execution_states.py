@@ -197,7 +197,7 @@ class CompletedExecution(Complete, Terminal, AttemptExecution):
         return CompletedAssignment
 
     def accepts_attempt(self, phase):
-        return phase.succeeded
+        return phase.is_succeeded()
 
     def validate_snapshot(self, snapshot, authorized):
         for row in snapshot.obligations:

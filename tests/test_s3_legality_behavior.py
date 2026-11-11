@@ -6,7 +6,7 @@ from itertools import product
 import pytest
 
 from agent_comms.coordination.assignment_states import AssignmentState, BoundAssignment
-from agent_comms.coordination.attempt_states import AttemptState, LiveAttempt
+from agent_comms.coordination.attempt_states import AttemptState, LiveAttempt, SucceededAttempt
 from agent_comms.coordination.errors import CoordinationError
 from agent_comms.coordination.execution_states import (
     AttemptExecution,
@@ -308,7 +308,7 @@ def test_snapshot_retry_terminal_coupling(active):
         failed = terminal_snapshot(active, FailedExecution, phase, response, replay_safe=False)
         assert not failed.can_retry
     for owner in members(ExecutionState, Complete):
-        for phase in (c for c in members(AttemptState) if c.succeeded):
+        for phase in members(AttemptState, SucceededAttempt):
             for response in responses:
                 if response in ResponseState.members_with(Successful):
                     assert not terminal_snapshot(
