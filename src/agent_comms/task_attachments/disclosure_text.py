@@ -137,7 +137,6 @@ class ViewTable[R]:
     record: type[R]
     view: type[ViewExclusion]
     records: tuple[R, ...]
-    show_header: ClassVar[bool] = True
     row_separator: ClassVar[tuple[str, ...]] = ()
 
     @cached_property
@@ -267,7 +266,6 @@ class ViewTable[R]:
 class StackedViewTable[R](ViewTable[R]):
     """One native transport cell retains every declared label/value and original record."""
 
-    show_header = False
     row_separator = ("",)
 
     @property

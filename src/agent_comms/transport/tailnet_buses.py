@@ -72,7 +72,6 @@ class PeerBus(DeclaredFamily, ABC, affix="Peer"):
     """
 
     peer: TailnetPeer
-    openable: ClassVar[bool] = False
 
     @abstractmethod
     def label(self) -> str:
@@ -100,7 +99,6 @@ class PeerHoldsBus(ProbedPeer, PeerBus):
 
     peer: TailnetPeer
     threads: int
-    openable = True
 
     def label(self) -> str:
         return f"{self.peer.name} · {self.threads} threads"
@@ -119,7 +117,6 @@ class NamedHost(PeerBus):
     """
 
     peer: TailnetPeer
-    openable = True
 
     def label(self) -> str:
         return self.peer.name
