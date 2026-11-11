@@ -222,7 +222,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#e06e80266e773da13029f1fae3d7f76f6de92709" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#3d12f0076208473dd8bb0dffef06b4fbe6e9c333" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "agent-comms" },
@@ -678,7 +678,7 @@ wheels = [
 [[package]]
 name = "nominal-refactor-advisor"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?branch=main#b70c0aac3a13294a2bcc712079286b34fcc21999" }
+source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?branch=main#bd428c013057b89bbe1eef8bf9c92819bc7db8c2" }
 dependencies = [
     { name = "metaclass-registry" },
     { name = "tree-sitter" },
@@ -1081,7 +1081,7 @@ wheels = [
 [[package]]
 name = "textual"
 version = "8.2.8"
-source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#98fc4b3e5de2e9eda80c5ac5d5a88a6622b6db74" }
+source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#f1b192edebe3bf79868404649256afc59135396f" }
 dependencies = [
     { name = "markdown-it-py", extra = ["linkify"] },
     { name = "mdit-py-plugins" },
@@ -1465,7 +1465,7 @@ wheels = [
 [[package]]
 name = "ui-theme"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/ui-theme.git?branch=main#458ba2588e1f002398374316b3d34033fc59f3b0" }
+source = { git = "https://github.com/OpenHCSDev/ui-theme.git?branch=main#6318aab0eb74f3f332dffaf9ba4295774fd07ac7" }
 dependencies = [
     { name = "metaclass-registry" },
     { name = "terminaltexteffects" },
