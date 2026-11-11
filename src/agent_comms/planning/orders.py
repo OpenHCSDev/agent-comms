@@ -4668,9 +4668,6 @@ class ReviewedOrderRun(ApplicationOrderRun):
     def merged_line(self, state: str) -> str:
         return f"{OrderRun.merged_line(self, state)}, awaiting review"
 
-    def require_merge_close(self) -> None:
-        raise TodoError("A partial publication never closes a review order; record the requested review.")
-
 
 @dataclass(frozen=True)
 class ReopenTodo(RestoreHolderTodo, TodoOperation, StoryEvent):
