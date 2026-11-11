@@ -118,7 +118,7 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
                 yield update
             stream = ItemStream(self.thread)
             async for notification in codex.notifications():
-                for update in stream.receive(notification):
+                if (update := stream.receive(notification)) is not None:
                     yield update
 
     async def earlier(self, request: EarlierItems) -> None:
