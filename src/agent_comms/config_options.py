@@ -330,7 +330,7 @@ class ConfigOptions:
         self, session_id: AcpSessionId, publish: Callable[[AcpSessionId], Awaitable[object]],
     ) -> None:
         """The session retires this configuration's watch with its other producers."""
-        async with aclosing(Bus.watch_sources(FileSource(self.launch.configuration.native_config / "auth.json"))) as observations:
+        async with aclosing(Bus.watch_sources(FileSource(self.launch.configuration.auth_file))) as observations:
             async for _ in observations:
                 await publish(session_id)
 
