@@ -1354,7 +1354,7 @@ class CliBridge(
         """Before its durable begin the message is held, never skipped: a store busy while the
         begin is still being acquired waits and reacquires for the same message. After the
         begin, the attempt is exactly as stored; contention leaves it uncertain, never re-sent."""
-        conversation = message.type.conversation_message
+        conversation = message.type.is_conversation_message()
         outcome = UnconfirmedOutcome if conversation else FilteredOutcome
 
         async def begin() -> bool:

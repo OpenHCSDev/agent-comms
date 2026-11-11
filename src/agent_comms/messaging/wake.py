@@ -52,7 +52,7 @@ def _validated_context(
 ) -> tuple[NamedTarget, frozenset[str]]:
     _require_stored(message)
     target = CommandTarget.named(message.target)
-    if message.type.conversation_message:
+    if message.type.is_conversation_message():
         target.require_frozen_recipients(message)
     return target, target.effective_mentions(message)
 
@@ -64,7 +64,7 @@ def _member_decision(
     target: NamedTarget,
     effective_mentions: frozenset[str],
 ) -> RecipientDecision:
-    if not message.type.conversation_message:
+    if not message.type.is_conversation_message():
         return NoWakeDecision(recipient.recipient_lookup)
     mode = message.role.wake_mode(target, recipient, effective_mentions, control)
     audience = target.wake_audience(effective_mentions)
