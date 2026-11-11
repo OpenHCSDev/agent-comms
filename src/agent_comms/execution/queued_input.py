@@ -605,7 +605,7 @@ class DeliveredInput(QueuedInput):
         document = await Coordination.run_worker(
             partial(inputs.finish_original_inputs, (self.key,))
         )
-        if document.lookup(self.key).has_native_binding:
+        if document.lookup(self.key).is_natively_bound():
             return  # Written without a proved start: it stays paused, never resent.
         await self.settle(inputs, self.assignment.lifecycle.mode.initial_state())
 

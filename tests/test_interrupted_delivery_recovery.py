@@ -58,7 +58,7 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
     assert paused.lifecycle.execution_id is None
 
     row = stored_inputs(agent.inputs.dispositions.root).lookup(item.key)
-    assert not row.has_native_binding
+    assert not row.is_natively_bound()
     if native_bound:
         leased = comms.agents.begin_turn(owner.name, TurnId('9c4c7984ba66b4cb4fc11ce230b963d3'))
         assert agent.inputs.dispositions.bind(

@@ -97,11 +97,17 @@ class UnchangedInput(InputTransition):
 
 @dataclass(frozen=True)
 class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, affix="Input"):
-    exists: ClassVar[bool] = False
-    accepts_reservation: ClassVar[bool] = False
     def counts_as_started(self) -> bool:
         return False
-    has_native_binding: ClassVar[bool] = False
+
+    def is_stored(self) -> bool:
+        return False
+
+    def is_natively_bound(self) -> bool:
+        return False
+
+    def accepts_reservation(self) -> bool:
+        return False
     cancellation_feedback: ClassVar[str] = (
         "Delivery unconfirmed. Inspect delivery before deciding whether to send a new message."
     )
@@ -303,7 +309,8 @@ class HistoricalInput(UnresolvedInput):
 class StoredInput(InputAttempt, ContextProvenanceSource[input_origin.InputProvenance]):
     """The recorded owner name and input generation, without inventing a thread identity."""
 
-    exists = True
+    def is_stored(self) -> bool:
+        return True
 
     def source_text_or(self, fallback: str) -> str:
         return self.source_text
@@ -387,7 +394,8 @@ class RecoverableUnboundInput(StoredInput):
 class ReservedInput(Unresolved, RecoverableUnboundInput):
     public_status = "unknown"
 
-    accepts_reservation = True
+    def accepts_reservation(self) -> bool:
+        return True
 
     def queued_for(self, owner: ThreadIncarnation, claim_scope: int, text: str) -> bool:
         return (
@@ -419,7 +427,8 @@ class ReservedInput(Unresolved, RecoverableUnboundInput):
 
 @dataclass(frozen=True)
 class SentInput(StoredInput):
-    has_native_binding = True
+    def is_natively_bound(self) -> bool:
+        return True
     turn_id: Annotated[TurnId, PublicExclude(), WireRequired()]
     native_id: Annotated[
         InputId, PublicExclude(), WireRequired()
