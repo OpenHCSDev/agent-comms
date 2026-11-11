@@ -371,6 +371,7 @@ def test_dependency_reply_reads_its_original_sender_identity() -> None:
     "agent_comms.registry.thread_identity_source",
     ExactTaskFact.__module__,
     'agent_comms.messaging.sending',
+    'agent_comms.transport.tools.repositories',
 ))
 def test_goal_publication_contracts_resolve_cold(first_module: str) -> None:
     completed = subprocess.run(
