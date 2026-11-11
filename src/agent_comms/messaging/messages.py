@@ -1169,8 +1169,6 @@ class Message(MessageInput, TurnOrigin['Message'], MessageReferenceRead):
         return ((self.reference,)
                 if self.role.response_policy(self).starts_turn_for(self, recipient) else ())
 
-    autonomous: ClassVar[bool] = False
-
     @property
     def separate_turn(self) -> bool:
         return self.role.response_policy(self).separate_turn
