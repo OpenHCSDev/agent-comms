@@ -45,7 +45,8 @@ from agent_comms.messaging.response_policy import (
     ResponseEligibility,
     ResponsePolicy,
 )
-from agent_comms.messaging.task_sources import NoTaskAttachment, TaskAttachment
+import agent_comms.messaging.retained_task_facts as task_facts
+from agent_comms.messaging.task_attachment import NoTaskAttachment, TaskAttachment
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -1048,6 +1049,10 @@ class Message(MessageInput, TurnOrigin['Message'], MessageReferenceRead):
         yield from self.sender_role.user_task_facts(source)
         yield from self.task.retained_task_facts(source)
 
+    def default_user_source_fact(self) -> object:
+        """The user-source fact a USER message produces when its task has no override."""
+        return task_facts.UserSourceTaskFact(self)
+
     def __post_init__(self) -> None:
         if not self.sender:
             raise RelationViolationError("Message sender cannot be empty.")
@@ -1344,8 +1349,6 @@ class ClaimMessage(Claimed, Message):
     def retained_task_facts(self) -> Iterator[task_facts.ExactTaskFact]:
         yield from super().retained_task_facts()
         yield task_facts.ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))
-
-import agent_comms.messaging.retained_task_facts as task_facts
 
 
 type RecordBuilder = Callable[[int, sqlite3.Connection], BusRecord]

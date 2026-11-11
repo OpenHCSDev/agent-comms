@@ -6,7 +6,9 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Annotated
 
+import agent_comms.messaging.retained_task_facts as task_facts
 from agent_comms.errors import RelationViolationError
+from agent_comms.messaging import initial_origin
 from agent_comms.execution.controller import NO_CONTROLLER
 from agent_comms.execution.input_ingress import InputIngressContext, InputRegistry
 from agent_comms.execution.input_key import InputKey, InputKeyText
@@ -204,6 +206,3 @@ class HumanInputOrigin(InputOrigin, ClaimScoped, ToolResult):
                 and authorized.created_at == original.created_at)
 
 
-import agent_comms.input_attempt as input_attempt
-import agent_comms.messaging.retained_task_facts as task_facts
-from agent_comms.messaging import initial_origin

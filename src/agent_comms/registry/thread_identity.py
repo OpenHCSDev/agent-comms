@@ -870,4 +870,5 @@ class UserThreadRole(NonExecutingThreadRole, ThreadRole):
 
     @classmethod
     def user_task_facts(cls, message: Message) -> Iterable[object]:
-        return message.task.user_task_facts(message)
+        task_facts = message.task.user_task_facts(message)
+        return task_facts if task_facts else (message.default_user_source_fact(),)
