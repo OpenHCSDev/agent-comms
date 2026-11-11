@@ -376,12 +376,11 @@ class BusReader(
         self, references: Iterable[MessageReference],
     ) -> tuple[Message, ...]:
         references = tuple(references)
+        reference_set = frozenset(references)
         with self.reading() as source:
             records = source.records(reference.seq for reference in references)
             messages = tuple(message for record in records for message in record.messages())
-        if tuple(message.reference for message in messages) != references:
-            raise RelationViolationError("Message reference does not match its bus record")
-        return messages
+        return tuple(m for m in messages if m.reference in reference_set)
 
     def input_messages_for_references(
         self, references: Iterable[MessageReference],
