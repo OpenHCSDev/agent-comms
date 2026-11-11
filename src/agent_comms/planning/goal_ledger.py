@@ -545,8 +545,7 @@ class NoAttempt(MissingAttempt):
     def retire(
         self, conn: sqlite3.Connection, lifecycle: GenerationState, goal_id: GoalId, generation: int
     ) -> None:
-        if not lifecycle.permits_retirement_without_attempt():
-            raise errors.StaleAttemptError("Goal or attempt is no longer eligible for retirement.")
+        lifecycle.require_retirement_without_attempt()
 
 
 @dataclass(frozen=True)
