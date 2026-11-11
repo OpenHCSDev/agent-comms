@@ -36,7 +36,6 @@ from agent_comms.execution.turn_bound import (
 from agent_comms.execution.turn_context import (
     JournalProvenance,
     SegmentManifest,
-    TranscriptSegment,
     UserInputSegment,
     WireProvenance,
 )
