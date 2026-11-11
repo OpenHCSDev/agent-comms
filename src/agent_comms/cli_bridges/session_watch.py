@@ -123,12 +123,12 @@ class WatchClaim(SessionEndpoint):
     def has_reader(self) -> bool:
         return self.reader_claim.held_elsewhere()
 
-    def deaf(self) -> tuple[DeafWatch, ...]:
+    def deaf(self) -> DeafWatch | None:
         """A running bridge whose reader claim nobody holds; a session with no bridge is
         not deaf, it never bound one."""
         if self.claim.held_elsewhere() and not self.has_reader():
-            return (DeafWatch("now (no Monitor holds its reader claim)"),)
-        return ()
+            return DeafWatch("now (no Monitor holds its reader claim)")
+        return None
 
     def state(self) -> WatchState:
         held = self.claim.held_elsewhere()

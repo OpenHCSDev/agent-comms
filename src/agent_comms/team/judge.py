@@ -372,8 +372,8 @@ class ReasonText(BoundedText):
 
     @classmethod
     def from_text(cls, value: str) -> str:
-        if refused := VerdictReason.wording_refusal(super().from_text(value)):
-            raise MalformedRecord(" ".join(refused))
+        if (refused := VerdictReason.wording_refusal(super().from_text(value))) is not None:
+            raise MalformedRecord(refused)
         return value
 
 
