@@ -68,7 +68,22 @@ class ConnectorCaller(ToolCaller):
 class ThreadConnectorCaller(ConnectorCaller, ThreadCaller):
     """A registered thread calling through MCP with its own grant."""
 
+    def ensure_registered(self, comms: Comms) -> None:
+        """Auto-declare this caller's thread if missing from the registry.
+
+        A bus rebuild or store reset can leave the registry without this thread;
+        the connector's grant is the authority, not a pre-existing registry entry.
+        """
+        if self.name not in comms.registry:
+            from agent_comms.projects.checkouts import Checkout
+            from agent_comms.registry.threads import ExternalThread
+
+            comms.registry.declare(
+                ExternalThread(self.name, frozenset(), Checkout(comms.root))
+            )
+
     def prepare_call(self, comms: Comms, acting: ToolCaller) -> None:
+        self.ensure_registered(comms)
         self.identity(comms)
         acting.join(comms, self.own_thread())
 
