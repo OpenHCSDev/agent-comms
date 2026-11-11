@@ -1227,10 +1227,10 @@ class HarnessDeliveryRecords(WaitsOnBusyStore, ABC):
         return await self.coordinator_read(lambda db: tuple(HarnessDelivery.select(
             db, bridge=self.delivery_kind, recipient_lookup=self.recipient_lookup, message_id=message_id)))
 
-    async def message(self, reference: MessageReference) -> Message:
-        message, = await self.comms.bus.when_open(
+    async def message(self, reference: MessageReference) -> Message | None:
+        messages = await self.comms.bus.when_open(
             partial(self.comms.bus.bus.messages_for_references, (reference,)))
-        return message
+        return messages[0] if messages else None
 
     @contextmanager
     def uncertain_on_contention(self, message_id: MessageId) -> Iterator[None]:
@@ -1766,6 +1766,8 @@ class BridgeInputObserved(DeliveredInput, HiddenItem):
         references: list[MessageReference] = []
         for delivery in attempts:
             message = await bridge.message(delivery.reference)
+            if message is None:
+                continue
             if self.text != IncomingFrame(message).text:
                 raise RelationViolationError("Observed bus input differs from its original delivery")
             await bridge.finish(delivery, partial(replace, outcome=DeliveredOutcome))
