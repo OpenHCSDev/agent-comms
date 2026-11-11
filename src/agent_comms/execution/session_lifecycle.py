@@ -422,7 +422,7 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
             if (
                 name != cached_name
                 or not thread.process_identity.runs_here()
-                or not entry.status.running
+                or not entry.status.answers_later
             ):
                 await self.effects.turns.close_idle_backend(session_id)
             current = PublishedSession.of(thread)

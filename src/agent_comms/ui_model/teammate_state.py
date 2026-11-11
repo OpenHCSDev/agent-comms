@@ -286,7 +286,7 @@ class TeammateState(UndatedStandingRule, FamilyScan, ObservedTeammate, declared_
         eligible.update(
             reading.thread.incarnation
             for reading in candidates
-            if reading.thread.role.executor(reading.thread) and reading.presence.receiving
+            if reading.thread.role.executor(reading.thread) and reading.presence.is_receiving()
         )
         return tuple(reading for reading in readings if reading.thread.incarnation in eligible)
 
