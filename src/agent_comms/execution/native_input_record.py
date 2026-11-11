@@ -407,7 +407,11 @@ class NativeInputIdentity:
 class NativeContextReference(DeclaredFamily, affix="Reference"):
     """Recorded context or an original row with no recorded context."""
 
-    recorded = False
+    def require_transcript_identity(self, session_entry_id, user) -> None:
+        pass
+
+    def has_session_proof(self) -> bool:
+        return False
 
     def require_recorded(self) -> NativeInputReference:
         raise UnrecordedNativeContext("Native input has no recorded context")
@@ -436,7 +440,12 @@ class NativeInputReference(NativeContextReference, PositiveNativeIntegerBounds):
     session_id: PiSessionId
     request_generation: int
 
-    recorded = True
+    def require_transcript_identity(self, session_entry_id, user) -> None:
+        if not session_entry_id.holds(user.id):
+            raise IdentityConflict("Native transcript input conflicts with its original entry")
+
+    def has_session_proof(self) -> bool:
+        return True
 
     def __post_init__(self) -> None:
         self.require_integer(self.request_generation, "Native reference generation")

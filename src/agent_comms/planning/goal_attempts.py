@@ -582,12 +582,9 @@ class GoalAttemptStore(
             ready_grant = self._ready_grants.get((goal_id, expected_generation))
         if ready_grant is None:
             current = self.snapshot(goal_id)
-            if (
-                current is None
-                or current.number != expected_generation
-                or not current.lifecycle.ready
-            ):
+            if current is None or current.number != expected_generation:
                 raise ReservationConflictError("Goal generation is not ready or already reserved.")
+            current.lifecycle.require_ready()
             raise errors.UnresolvedAttemptError(
                 "No acknowledged ready grant; explicit recovery is required."
             )
@@ -660,8 +657,7 @@ class GoalAttemptStore(
         current = self.snapshot(goal_id)
         if current is None or current.number != expected_generation:
             raise errors.StaleAttemptError("Goal generation changed before resume.")
-        if not current.lifecycle.ready:
-            raise errors.UnresolvedAttemptError("Explicit attempt resolution is required before resume.")
+        current.lifecycle.require_ready()
         self.ready_grant(goal_id, expected_generation)
         return current
 

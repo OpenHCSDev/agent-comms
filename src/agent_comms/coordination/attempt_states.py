@@ -7,6 +7,7 @@ that phase. Native turn ownership remains S2's; these are durable observations.
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
@@ -15,6 +16,7 @@ from agent_comms.coordination.errors import (
     CoordinationError,
     RecoveryBlocked,
     ResponseClaimBlocked,
+    StaleFence,
 )
 from agent_comms.coordination.execution_states import (
     CompletedExecution,
@@ -55,7 +57,11 @@ class AttemptState(CoordinatorVocabulary, LifecycleState, affix="Attempt"):
     preserve_check: ClassVar[bool] = True
     allows_tool_claim: ClassVar[bool] = False
     succeeded: ClassVar[bool] = False
-    starting: ClassVar[bool] = False
+    def advance_on_accepted(self, advance: Callable[[type[AttemptState]], None]) -> None:
+        pass
+
+    def require_starting(self) -> None:
+        raise StaleFence("full execution is not running before native send")
     running: ClassVar[bool] = False
     settling: ClassVar[bool] = False
     has_model_context: ClassVar[bool] = False
@@ -155,7 +161,12 @@ class TerminalAttempt(Terminal, AttemptState):
 
 class PromptStartingAttempt(LiveAttempt):
     allows_tool_claim = True
-    starting = True
+
+    def advance_on_accepted(self, advance: Callable[[type[AttemptState]], None]) -> None:
+        advance(PromptAcceptedAttempt)
+
+    def require_starting(self) -> None:
+        pass
 
     @classmethod
     def successors(cls):

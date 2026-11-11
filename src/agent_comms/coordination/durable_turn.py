@@ -19,7 +19,6 @@ from agent_comms.coordination.attempt_states import (
     AttemptFailedAttempt,
     CompactionAttempt,
     ModelRunningAttempt,
-    PromptAcceptedAttempt,
     SettlingAttempt,
     ToolRunningAttempt,
 )
@@ -94,15 +93,13 @@ class DurableTurn(MroDispatch):
 
     @handles(PromptAccepted)
     def accepted(self, event):
-        if self.current.starting:
-            self.advance(PromptAcceptedAttempt)
+        self.current.advance_on_accepted(self.advance)
 
     @handles(pi.ContextCommitted)
     def context(self, event):
         if event.input_id != self.input_id or self.model_started:
             return
-        if self.current.starting:
-            self.advance(PromptAcceptedAttempt)
+        self.current.advance_on_accepted(self.advance)
         self.advance(ModelRunningAttempt)
 
     def record_response_fact(self, fact: ReplayFact) -> None:

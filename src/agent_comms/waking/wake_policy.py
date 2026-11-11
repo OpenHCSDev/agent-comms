@@ -155,7 +155,8 @@ class BoundedTriageEngagement(Engagement):
 
 @dataclass(frozen=True)
 class WakePolicy(LifecycleCapability, CoordinatorVocabulary, SourceProofRequirement, affix="Wake"):
-    triage: ClassVar[bool] = False
+    def require_not_triage(self) -> None:
+        pass
 
     @classmethod
     def sql_vocabulary(cls) -> dict[str, str]:
@@ -202,7 +203,9 @@ class PassiveWake(NoSourceProof, WakePolicy):
 
 
 class BoundedTriageWake(Active, TriageSourceProof, WakePolicy):
-    triage = True
+    def require_not_triage(self) -> None:
+        from agent_comms.coordination.errors import IdentityConflict
+        raise IdentityConflict("pending claim wake decision is not executable")
 
     @classmethod
     def engagement_type(cls) -> type[Engagement]:

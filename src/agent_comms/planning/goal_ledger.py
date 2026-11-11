@@ -187,7 +187,7 @@ class Generation(GoalLedgerTable, TypedTable, GoalGenerationRead, GenerationFail
         ), NoFailedTurnEvidence[FailedTurnEvidence]())
 
     def has_ready_grant(self, number: int, digest: str) -> bool:
-        return self.lifecycle.ready and self.number == number and self.ready_digest == digest
+        return self.lifecycle.has_ready_grant(self.number == number and self.ready_digest == digest)
 
     def __post_init__(self) -> None:
         self.lifecycle.validate_attempt(self.attempt_id)
@@ -272,8 +272,7 @@ class Reservation(
             ) or not attempt.phase.may_become(FailedAttempt()):
                 raise late
             attempt.advance(conn, FailedAttempt(), resolution=diagnostic)
-            if observation is not None and attempt.phase.launched:
-                record_observation(conn, reservation, observation)
+            attempt.phase.record_launched_observation(conn, reservation, observation, record_observation)
             return goal.advance(
                 conn,
                 Generation(

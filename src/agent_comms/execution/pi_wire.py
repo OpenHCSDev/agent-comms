@@ -296,7 +296,8 @@ class PiUsage(PiPayload):
 
 @dataclass(frozen=True)
 class PiDiagnostic(OpenPayload, ModelFailureDiagnostic, affix='Diagnostic'):
-    provider_connection_failure: ClassVar[bool] = False
+    def connection_failure_description(self) -> tuple[str, ...]:
+        return ()
 
     def refine_model_request_failure(self, failure):
         return failure
