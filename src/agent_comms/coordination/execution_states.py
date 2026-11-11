@@ -46,7 +46,6 @@ class AdvancedOrdinal(OrdinalRule):
 
 @dataclass(frozen=True)
 class ExecutionState(CoordinatorVocabulary, LifecycleState, affix="Execution"):
-    queued: ClassVar[bool] = False
     unstarted: ClassVar[bool] = False
 
     @classmethod
@@ -129,8 +128,6 @@ class UnstartedExecution(EngagedExecution, ExecutionState):
 
 
 class QueuedExecution(UnstartedExecution):
-    queued = True
-
     @classmethod
     def successors(cls):
         return PendingExecution, FailedExecution

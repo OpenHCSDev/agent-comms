@@ -152,7 +152,7 @@ class ExecutionStore(RecoveryReader):
             snapshot = self.get(execution_id)
             if snapshot.execution.revision != expected_revision:
                 raise StaleRevision("execution revision changed")
-            if not snapshot.execution.lifecycle.queued:
+            if not isinstance(snapshot.execution.lifecycle, QueuedExecution):
                 raise IdentityConflict("only queued executions can become pending")
             ExecutionRecord.update(
                 db,
