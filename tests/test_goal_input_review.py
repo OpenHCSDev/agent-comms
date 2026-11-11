@@ -109,7 +109,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         assert row.claim_generation == claim_scope and row.reviewed_for_goal(goal.id)
     assert not stored_inputs(ledger.root).rows[OWNER_INPUT_KEY].goal_reviews
     generation = comms.goals.open_goal_store().snapshot(goal.id)
-    assert generation is not None and generation.lifecycle.ready
+    assert generation is not None and generation.lifecycle.has_ready_grant(True)
     assert generation.attempt_id.present() == ()
     reopened = wire(comms.root)
     reopened.goals.update_goal("worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))))

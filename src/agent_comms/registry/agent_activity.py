@@ -84,7 +84,7 @@ class ActivityAnswers(ABC):
 
     def is_live(self, incarnation: ThreadIncarnation, snapshot: ActivityRegistryRead) -> bool:
         """The registered presence owns liveness for this exact incarnation."""
-        return incarnation.current(snapshot) and self.presence(incarnation, snapshot).running
+        return incarnation.current(snapshot) and self.presence(incarnation, snapshot).is_running()
 
     def answers_later(self, incarnation: ThreadIncarnation, snapshot: ActivityRegistryRead) -> bool:
         """Whether a wait on this exact incarnation is answered once it reads its inbox."""

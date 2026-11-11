@@ -1037,7 +1037,7 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
         """Derive delivery notices from existing owner queues; never create new authority."""
         entry = (await self._own_entry(session_id)).entry
         owner = entry.thread
-        if not owner.process_identity.runs_here() or not entry.status.running:
+        if not owner.process_identity.runs_here() or not entry.status.is_running():
             return UNOBSERVED_DELIVERY_SCOPE
         keys = set(self.input_keys(session_id))
         keys.update(
