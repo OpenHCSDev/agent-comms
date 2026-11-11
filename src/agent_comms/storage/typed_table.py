@@ -2471,7 +2471,6 @@ class TypedTable(
     family_discriminator: ClassVar[str] = "row"
     unique: ClassVar[tuple[tuple[str, ...], ...]] = ()
     checks: ClassVar[tuple[str, ...]] = ()
-    without_rowid: ClassVar[bool] = False
     renamed_from: ClassVar[tuple[str, ...]] = ()
     """Table names this row's rows were stored under before; the writer renames the one it
     finds, so a renamed declaration needs no hand-written step."""
@@ -2525,7 +2524,7 @@ class TypedTable(
         fields = cls._fields_named(columns) if columns else cls._columns
         keys = tuple(item.name for item in fields if item.column.primary_key)
         auto_keys = tuple(item.name for item in fields if item.column.auto_increment)
-        if auto_keys and (auto_keys != keys or len(keys) != 1 or cls.without_rowid):
+        if auto_keys and (auto_keys != keys or len(keys) != 1 or issubclass(cls, WithoutRowid)):
             raise TypeError("AUTOINCREMENT requires one rowid primary key")
         for item in fields:
             column = item.column
@@ -2545,14 +2544,14 @@ class TypedTable(
             definitions.append(sql)
         if keys and not auto_keys:
             definitions.append(f"PRIMARY KEY ({cls._column_list(keys)})")
-        elif cls.without_rowid:
+        elif issubclass(cls, WithoutRowid):
             raise TypeError("WITHOUT ROWID requires a declared primary key")
         definitions.extend(f"UNIQUE ({cls._column_list(group)})" for group in cls.unique)
         definitions.extend(f"CHECK ({cls._sql(check)})" for check in cls.checks)
         definitions.extend(reference.sql(cls) for reference in cls.references())
         table = _identifier(cls.declared_name)
         return (f"CREATE TABLE {existence}{table} ({', '.join(definitions)}) STRICT"
-                + (", WITHOUT ROWID" if cls.without_rowid else ""))
+                + (", WITHOUT ROWID" if issubclass(cls, WithoutRowid) else ""))
 
 
     @classmethod
@@ -3650,7 +3649,6 @@ class RowidSequenced(TypedTable, declared_name=None):
 class WithoutRowid(TypedTable, declared_name=None):
     """The table is stored directly by its declared primary key."""
 
-    without_rowid = True
     row_reference_label = "key"
 
     @classmethod
