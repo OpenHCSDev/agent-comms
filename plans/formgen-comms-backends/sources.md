@@ -12,7 +12,8 @@ Do not reproduce the stale P142 comparison by reading an old pinned OpenHCS chil
 
 | Source | Revision read | Role |
 |---|---|---|
-| agent-comms | `7edd87580ffa41dd0e2a50f694f630c7145ff199` | Current main base of planning branch |
+| agent-comms | `7edd87580ffa41dd0e2a50f694f630c7145ff199` | Initial inspected planning main |
+| agent-comms | `df39479a45e257cf35df3d05de0818d7e3dce036` | Refreshed main used for the Qt field/write-boundary checkpoint |
 | Toad | `cdc6a761b476bd0b25bd323d88860cf5f7d56fe4` | Freshly fetched main |
 | PyQtReactive | `b11a218ebffc992bf7ed1a3798bc6a609c48d7f3` | Refreshed main, including native Formbridge migration |
 | Formbridge | `0547625fd956077b3130fb1bad9e942f38783149` | Refreshed main |
@@ -135,3 +136,15 @@ The historical pair baseline is **reported**, not independently rerun by this pl
 The common [completion contract](README.md#completion-contract) is owned by README; the phase documents retain their distinct consumer checks.
 
 The Textual form follow-up reads original `forms/editors.py:38–313`, Formbridge `declared_fields.py:61–90`, current Textual `widget.py:3734–3778`, and Qt `widget_creation_types.py:65–90`. Phase 1 now records intended native Textual base lists, abstract/native metaclass composition, original constructor order and feedback/option/held-member primitives. It does not claim that those not-yet-implemented classes were instantiated. The bridge source at `bridge/object_state.py:498–510` also keeps reset_parameter distinct from update_parameter(converted_None), including the reset receipt; that distinction must survive the shared input-family move.
+
+## Qt field/write-boundary follow-up
+
+The next owned dependency fetch completed with exit 0: PyQtReactive HEAD and origin/main are both b11a218ebffc992bf7ed1a3798bc6a609c48d7f3; Formbridge HEAD and origin/main are both 0547625fd956077b3130fb1bad9e942f38783149. No source/test differences were reported. Receipt: `p144-qt-source-refresh.log/exit` in the scratch directory above. Core was fetched and the planning branch rebased onto df39479a45e257cf35df3d05de0818d7e3dce036, retaining the uncommitted documentation through Git's autostash (`p144-qt-rebase.log/exit`). No dependency source checkout, submodule gitlink, environment or running application was changed.
+
+The new field-binding decision follows Formbridge `declared_fields.py:140–262`, Qt `parameter_form_manager.py:764–881`, `widget_creation_config.py:1013–1082` and `field_change_dispatcher.py:38–131,352–389`. Calling DeclaredField.edit and then Qt dispatch would write twice, with the first write outside Qt's before_mutation check. Phase 1 instead selects native QtDeclaredField/QtOptionalMemberField specializations and one commit_field_value owner shared by the existing manager and creation pipeline. The optional member must retain the Qt writer while inheriting the original narrowed annotation. These are planned declarations, not implemented or runtime-verified APIs.
+
+The retained native constructor/build map comes from `parameter_form_manager.py:161–166,314–600,727–760,1027–1045` and `widget_creation_config.py:441–573,573–813,973–1082`. It retains the same ObjectState, canonical field_id, root build transaction, native registry/build stages and root-only subscriptions. Literal/inherited subclass selection still must propagate through the existing nested construction owner; that remaining choice is explicit.
+
+The metaclass read distinguishes the opposite orders at `widget_creation_types.py:70` and `protocols/widget_adapters.py:40`, including the latter's no-Qt fallback. The selected native owner is the existing PyQtWidgetMeta, not a new generic metaclass. The source search also finds the _CombinedMeta copies in status_indicator, abstract_manager_widget and zmq_server_browser_widget, plus the actual control/import/test consumers listed in phase 1. This is not a native SIP/ABC execution result. Conditional classes remain outside any claimed resolved runtime family.
+
+NRA operation constructors/proof scopes were read at the same inspected 5af050d8 source: class_member_authority_codemod.py:1234,1645; codemod.py:1058,1091,2516,2538; module_move_codemod.py:922–931. Phase 1 now names the supported whole-member/import operations and the precise unsupported fragment/receiver and native-metaclass/write-policy obligations. No new codemod preflight, simulation, application or native test is claimed. The earlier full form scan does not supply those missing proofs.

@@ -1,6 +1,6 @@
 # 1. Shared fields and forms
 
-**Planning status:** the input meanings and validation owner below are settled. The shared-parent extraction, complete class and caller list, Qt constructors and method lookup, and exact NRA steps still need completion before this whole phase is ready. This is not authorization to implement the backend.
+**Planning status:** input meanings, validation, the Qt field/write boundary and the retained Qt manager/build lifecycle are specified. The concrete Qt literal/inherited editor and form subclasses, complete caller/import map, native method lookup and exact NRA stages still need completion. This is not authorization to implement the backend.
 
 ## Outcome
 
@@ -100,13 +100,68 @@ The shared primitive signatures are `display_feedback(text: str) -> None`, `clea
 
 OptionalEditing retains the actual member editor as ValueEditing, not another value record. Its native primitives are `set_member_shown(held: bool) -> None` and `paint_held(held: bool) -> None`; the latter changes the native checkbox without echo. Native held_changed decodes the checkbox event and calls shared `change_held(held: bool)`, retaining the original silent-member-clear/send-None sequence. Model None, optional membership and inherited fallback remain the different meanings in §1.1; this declared/literal matrix does not authorize sending an inherited reset through the wrong field contract.
 
+### Qt field binding and the single write boundary
+
+The shared editor calls `field.edit(value)` once. Do not call the current `DeclaredField.edit` and then notify Qt: `DeclaredField.edit` already writes ObjectState (`declared_fields.py:247–251`), so that sequence would write twice and perform the first write before Qt authorization.
+
+Add these native declarations in `pyqt_reactive/forms/declared_fields.py`. These are selected implementation targets, not APIs claimed to exist today:
+
+| Declaration | Bases and constructor | Own behavior |
+|---|---|---|
+| `QtDeclaredField` | `DeclaredField`; `__init__(manager: ParameterFormManagerABC, path: DottedFieldPath)` | Retain this view's manager and initialize the original field with `manager.state` and the original path. Inherit declaration, annotation, metadata, value, default and validation. `edit(value: object) -> None` validates through the inherited owner, then calls `manager.commit_field_value(path.field_name, value)`; it does not write ObjectState itself or pass a literal value through the inherited converter. |
+| `QtOptionalMemberField` | `OptionalMemberField, QtDeclaredField`; inherit the same constructor | The original OptionalMemberField supplies its narrowed annotation; QtDeclaredField supplies edit. No copied optional declaration or separate value. |
+| `QtDeclaredField.member` | An override of the existing property | Return `QtOptionalMemberField(manager, path)`. The base property returns a plain OptionalMemberField and would otherwise lose the Qt authorization/notification path. |
+
+Extend the existing `widget_creation_types.ParameterFormManager` contract with `state: ObjectState` and abstract `commit_field_value(param_name: str, value: ParameterValue) -> None`; import ObjectState and the existing ParameterValue contract there at runtime. QtDeclaredField imports that original ABC as ParameterFormManagerABC, never the concrete parameter_form_manager module. The dependency is concrete manager → native creation/editor → Qt declared field → original manager contract → ObjectState/Formbridge. The contract imports none of those consumers, so this binding does not require a TYPE_CHECKING or local import. The selected native creation module constructs the field after it has the manager and its original DottedFieldPath. An optional field's unchecked operation uses the outer field; the member editor uses the narrower QtOptionalMemberField, so None is not incorrectly validated against the member annotation.
+
+Add `ParameterFormManager.commit_field_value(param_name: str, value: ParameterValue) -> None` at the existing Qt manager. Its input is already converted/validated by its caller. Move the original atomic/FieldChangeEvent/dispatch block out of `update_parameter` (`parameter_form_manager.py:859–881`) into this method, unchanged in ordering. Call it from:
+
+1. `update_parameter`, after its existing inherited conversion and native widget assignment;
+2. `WidgetCreationPipeline.on_widget_change`, after `_convert_widget_value`, replacing its second atomic/dispatch block (`widget_creation_config.py:1068–1082`);
+3. `QtDeclaredField.edit`, after declared-field validation, with no inherited empty/sentinel conversion.
+
+The first two callers remain inherited-value entry points; the third is the declared/literal entry point. This is not a boolean mode or a callback to a second writer. Each sends one original FieldChangeEvent through the existing manager, with the same root, source and atomic scope. Remove the two old dispatch-block copies when the owner method replaces them (IMPL-12; paper1 Theorem 4.6). This extraction has no executable NRA recipe in the retained scan; its member/call-site rewrite remains an explicit tool gap until preflight proves the exact move.
+
+Retain this actual dispatcher order (`field_change_dispatcher.py:352–389`): enter the source guard; reject a reset-blocked echo; obtain one FieldDispatchContext/DottedFieldPath; run SourceStateUpdateStage; sibling placeholder refresh; live-context notification; enabled styling; root/cross-window signals; release the guard in finally. SourceStateUpdateStage (`:99–131`) calls `before_mutation` before ObjectState, defers live invalidations for an ordinary edit, then synchronizes the source widget. Keep failure-time invalidation flushing and re-raise. Do not move a validation or write behind the signal stage. Reset retains its original separate reset operation and receipt; this new ordinary-edit method does not redefine it.
+
+### Retained Qt construction and lifecycle
+
+Keep the existing native form/build family rather than building an unrelated Qt form application around the shared editor:
+
+| Existing declaration | Bases / signature retained | Owner of the native work |
+|---|---|---|
+| `widget_creation_types.ParameterFormManager` | `ABC`, presently `metaclass=_CombinedMeta` | Required manager methods, including update/reset, nested creation, ownership and build-completion registration; this is not a QWidget or another state store. |
+| `parameter_form_manager.ParameterFormManager` | `QWidget, ParameterFormManagerABC, FlashMixin, ConfigTreeFlashManager`; `__init__(state: ObjectState, config: FormManagerConfig | None = None)` | The one native form and existing chrome/tree/build owners. Do not pass a copied ObjectState into an added form wrapper. |
+| `WidgetCreationConfig` | `ABC`, `metaclass=AutoRegisterMeta` | The original ParameterInfo-MRO registry and create/layout/store/reset/structure methods. This non-widget family does not need a SIP metaclass. |
+| `RegularWidgetCreation` | `WidgetCreationConfig`, registered for `ParameterInfo` | Responsive row, actual editor creation, field label/help, reset button, signal connection and read-only native policy. |
+| `NestedWidgetCreation` | `WidgetCreationConfig`, registered for `DirectDataclassInfo` | Existing nested form, group chrome, layout and help/provenance behavior. |
+| `InlineWidgetCreation` | `NestedWidgetCreation`, registered for `InlineDataclassWidgetInfo` | Only the existing inline container/editor differences. |
+| `OptionalNestedWidgetCreation` | `NestedWidgetCreation`, registered for `OptionalDataclassInfo` | Existing optional title/presence controls and nested lifecycle; it is not the scalar OptionalMemberField. |
+| `WidgetCreationPipeline` | Existing native coordinator; `__init__(manager: ParameterFormManager, param_info: ParameterInfo)` and `run() -> QWidget` | Select creation behavior once, then container → content-update context → configure/layout/title → main widget → placement/reset → structure connection → store/connect editor → label styling. Share its mutation block through commit_field_value, not through another pipeline. |
+
+Preserve the concrete manager constructor sequence from `parameter_form_manager.py:314–600`: resolve configuration and the canonical field_id/target; initialize QWidget once with the native parent; bind the original state and parent manager; share the root FormBuildTransaction with nested managers; derive scoped parameters/types from that state; initialize the actual widget/tree/chrome indexes and view flags; install the existing services/creation owner and root visual-update state; build the UI; connect native signals; subscribe the root to resolved/materialized state changes; only then finish initial load. Do not dispatch an edit while these indexes or authorization fields are unfinished.
+
+Nested creation at `parameter_form_manager.py:727–760` retains the same state, canonical nested field_id, parent manager, visual scope, function target and before_mutation callback. A declared-editor family must propagate through this creation owner; leaving the hard-coded inherited constructor at `:746` unchanged would silently change input meaning inside a declared form. The exact literal/inherited native subclass selection remains listed below as unfinished, rather than pretending the current constructor already propagates it.
+
+Disposal stays at the existing `dispose() -> None` (`:1027–1045`): mark the manager disposed; cancel root deferred construction; disconnect registry/root state subscriptions; release the existing hierarchy registration. Late deferred work must be rejected by the existing build transaction before it touches a replaced widget. No per-editor copy of the form subscription is added.
+
+### Qt metaclass owner
+
+The current form contract uses `_CombinedMeta(ABCMeta, type(QWidget))` at `widget_creation_types.py:70`, while native controls use `PyQtWidgetMeta(type(QObject), ABCMeta)` declared inside `protocols/widget_adapters.py:40`; the no-Qt branch replaces the latter with ABCMeta. These are different current declarations, not proof that a proposed combination runs.
+
+Use the existing native owner `pyqt_reactive.protocols.widget_adapters.PyQtWidgetMeta`, retaining its QObject/SIP-before-ABC order. The form contract and concrete manager import it directly and remove their `_CombinedMeta` declaration/import. These native modules already require PyQt6; the no-Qt fallback is not a working native metaclass and is not used to certify construction. No extra metaclass module or replacement implementation is needed. Do not make Formbridge or its shared editing parents import this Qt owner.
+
+The same native metaclass copy occurs in `widgets/status_indicator.py:19`, `widgets/shared/abstract_manager_widget.py:94` and `widgets/shared/zmq_server_browser_widget.py:49`; migrate those native ABCs with the form contract rather than keeping extra answers to the same native capability. Existing PyQtWidgetMeta users are widget_strategies, no_scroll_spinbox, enhanced_path_widget, sectioned_dataclass_editor, clickable_help_components and widget_adapters' controls; tests include test_inline_dataclass_chrome and test_scoped_table_widget. Direct those imports to the existing owner, check the complete sibling import graph, then remove only the protocols package's PyQtWidgetMeta re-export. Do not move these control bodies or change their identities merely to import their metaclass.
+
+This is a selected owner/move, not a verified native metaclass repair. Implementation must instantiate the real controls and manager on the declared Qt stack, reject an incomplete ABC, and check actual method winners and destruction. A static C3 calculation cannot prove SIP construction or abstract enforcement. The retained NRA report supplies no proof for changing the metaclass order of the form contract; record that bounded gap rather than claiming a codemod or runtime result.
+
 ### Remaining native composition
 
 - Textual retains the `toad.forms.editors` and `toad.forms.form_view` native modules. Moving a name does not justify leaving a re-export shim.
 - The native `ValueEditor` keeps `DeclaredViews` before its widget base so `shows=` is consumed before Textual sees it. Preserve the intentional non-inheritance of `DeclaredViews.shows` from parent to child.
 - A boolean editor composes value editing and the checkbox; a line editor composes line editing and native input; an optional editor composes held/member behavior and a native container. A multiline editor keeps its framing/paint capabilities. These crossings stay parents, not constructor flags.
 - Qt must compose the same literal/inherited semantic parents with its real controls. Do not call the current inherited `ParameterFormManager` a declared comms form without changing its input family.
-- **Still to finish:** exact Qt concrete class/base lists, their constructor order and the generic mutation/notification hook boundary. Existing `ParameterFormManager`, `WidgetCreationConfig` and its regular/nested/inline/optional members must be included, not wrapped behind a new unrelated Qt form application.
+- **Still to finish:** the concrete Qt literal/inherited editor and form subclass lists, their selected native control bases and nested propagation. The retained manager/build bases, constructor sequence, metaclass destination and ordinary mutation boundary are specified above; the final editor composition must use them rather than wrapping them in another form application.
 - For each composed class, check the actual runtime MRO and method winner for initialization, field validation, read/finish, model write, paint and close. Source simulation alone does not execute Qt/Textual metaclasses.
 
 ## 1.4 Callers that change
@@ -142,6 +197,15 @@ Read the complete class list and imported parents before approving the final cla
 
 The native NRA CLI exposes source-index/target selectors, preflight, ordered plan simulation, projected findings/source indexes and revision-checked application. Those are available mechanisms, **not a promise that this extraction has a recipe**. The operation-specific constructors and proof scope must be read before filling this section with exact stages.
 
+The operation-source check at NRA `5af050d8ed4855f8351751ef7236a31cf914705a` bounds the new Qt steps more precisely. This is an API/proof-scope read, not a completed simulation or permission to apply a plan:
+
+| Move | Existing NRA owner and limit |
+|---|---|
+| Promote original whole editor methods to their selected shared parent | `PromoteClassMembersToAncestorOperation` (`class_member_authority_codemod.py:1645`) takes a source class target, a destination SourceRewriteTarget and member_names. It requires an existing nominal ancestor. Declare/reindex that ancestor first; the current tree does not contain ValueEditing/LineEditing. Do not claim this operation creates those parents or certifies a changed method body. |
+| Fold the two Qt atomic/dispatch blocks into commit_field_value | Whole-member promotion is not this move: the blocks are inside update_parameter and on_widget_change, and the latter belongs to an unrelated native coordinator. `PromoteExactLeafMethodsToAncestorOperation` (`:1234`) also requires its proved exact leaf-method component. The retained scan supplies none. Fragment extraction plus manager-receiver/call migration remains a specific operation gap; do not copy an authored body and call it a proved promotion. |
+| Change a native metaclass or introduce QtDeclaredField's different writer | `ClassBaseMutationOperationABC` (`codemod.py:1058`) concerns direct bases; it does not establish equivalence of a metaclass keyword or the new authorization/dispatch policy. `PatchTargetOperation` (`:1091`) can select an exact source patch, but that is source targeting, not native behavioral proof. Keep the selected design and its native checks; no admitted automatic recipe is claimed. |
+| Migrate imports after a proved declaration move | `EnsureImportOperation` (`codemod.py:2516`) takes import_source; `RemoveImportNamesOperation` (`:2538`) takes module_name/import_names. They mutate imports, not the complete caller graph. A whole-module symbol relocation is available through RelocateSymbolsToModuleOperation/RelocateSymbolsToNewModuleOperation (`module_move_codemod.py:922–931`), but neither replaces the member extraction or proves a changed write path. Resolve all bindings and the original export contract before choosing it. |
+
 Unresolved tool obligations:
 
 1. Select original methods/classes and move shared implementations to the named destination parents without replacing them with independently authored bodies.
@@ -157,6 +221,10 @@ Existing protections to retain:
 - Toad settings and command tests: finish the focused editor before collecting values; retain command availability/confirmation and setting-effect ownership.
 - Formbridge declaration/view/toolkit-import tests and bridge tests: one annotation/metadata owner, view-family selection, exact mutate/reset receipt and authorization.
 - Qt annotation-choice, field mutation authorization, form build transaction, form tree index and `test_widgets.py` cases. Keep `test_nested_dispatch_uses_one_state_address_for_mutation_and_signals` as protection of the already-correct path, not new path-repair work.
+
+Add native binding cases in the planned `tests/test_declared_qt_fields.py`: a refused before_mutation callback leaves state/undo history unchanged; one accepted edit produces one state mutation and the original notification order; a member edit retains the Qt writer and narrowed annotation; outer optional None is accepted without calling reset; parent-state edits remain one atomic undo step. Exercise the real constructor/build/dispose owner rather than assigning manager internals. Extend the native widget tests with incomplete-ABC rejection and actual manager/control construction after the metaclass change.
+
+On the declared Qt implementation stack, from the PyQtReactive checkout, run `PYTHONPATH=src python -m pytest -q -p no:xdist -o faulthandler_timeout=60 tests/test_declared_qt_fields.py tests/test_field_mutation_authorization.py tests/test_form_build_transaction.py tests/test_parameter_form_tree_index.py tests/test_annotation_choice_fields.py tests/test_inline_dataclass_chrome.py tests/test_scoped_table_widget.py tests/test_widgets.py`. The first file is a required implementation addition, not an existing passing test. This planning change does not create a Qt environment or run that command.
 
 Add one shared-family test matrix for the conflicting values in §1.1, with native cases only for events/painting/validators. Exercise both literal and inherited forms with the same backend; a Textual-versus-Qt comparison alone would miss the missing domain distinction. Include a new scalar/choice field and show that only its declaration and irreducible native rendering need additions, with no consumer kind switches or rosters.
 
