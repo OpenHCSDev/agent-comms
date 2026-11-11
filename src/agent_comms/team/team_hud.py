@@ -25,7 +25,7 @@ from agent_comms.nominal.field_codec import (
     WireTransient,
     projected,
 )
-from agent_comms.planning.plan_phases import Plan, PlanPhase
+from agent_comms.planning.plan_phase_base import Plan, PlanPhase
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.locked_store import JsonDocument
 from agent_comms.task_attachments.disclosure_text import ViewFacts, ViewSectionFacts, ViewTable
