@@ -1,6 +1,11 @@
 # 5. Conversations, history and actual painted reads
 
-**Planning status:** page/proof ownership, acknowledgement order, source retirement and the caller set below are traced. The exact shared fragment bases, pixel-versus-row position contract and Qt paint admission still need resolution. This phase is not ready to execute as a whole.
+**Planning status:** page/proof ownership, acknowledgement order, source retirement and the caller set are traced. §5.8 decides the three remaining declarations, read against Toad main `1421d01d4`:
+- **Fragment base:** every member of the five fragment classes, classified shared or native.
+- **Position contract.**
+- **Qt paint admission:** on `QAbstractScrollArea` viewport painting.
+
+There is no `toad/qt/` on main yet, so the Qt view is chosen here, not found. Its admission rules must be proven by the native controls in §5.7 before the backend is reported working; that is execution, not open design.
 
 ## Outcome
 
@@ -58,7 +63,7 @@ Required behavior from the actual source:
 
 The current native base list is `WireHistory(VisibleReadMarking, ReadMarkedHistory, ConversationHistory[ViewT])`. `ReadMarkedHistory` currently inherits native `LineHistory`, so moving its import alone leaves Textual in the shared contract. The extraction must separate that dependency before both native histories inherit the shared methods.
 
-**Remaining declaration work:** list the exact common fragment base, its original message/key/evidence fields, native Textual and Qt fragment bases, dataclass initialization order and read-host signatures. `WireFragment` currently inherits `TranscriptFragment` and contains both evidence and LineBlock rendering; `MessageFragment` additionally crosses `BusMessageFragment`. Preserve those role/notification meanings without a second message record or a dict keyed by kind. No native-free fragment hierarchy is claimed yet.
+The fragment base, its fields, the native Textual and Qt bases, the dataclass initialization order and the read-host signatures are declared in §5.8. `WireFragment` currently inherits `TranscriptFragment` and holds both evidence and LineBlock rendering; `MessageFragment` also crosses `BusMessageFragment`. §5.8 keeps those role and notification meanings, with no second message record and no dict keyed by kind.
 
 ## 5.4 Actual paint stays native
 
@@ -74,7 +79,7 @@ Keep `PaintedTranscriptRow` and the accepted publication immutable with respect 
 
 Qt must report the original fragment/proof from the body drawing operation and its native exposed/clipped content. Merely receiving a `QPaintEvent`, finding an item within a scroll rectangle, completing model insertion, or calling `processEvents` is insufficient. Header-only and overlay-covered cases must remain unread.
 
-The exact native page/view class, paint callback, clipping/overlay admission and completion hook are **not yet selected and checked**. Finish that source/native investigation before calling phase 5 executable. The hook must capture the rendered body and original proof before later layout mutates them, then enter the shared acknowledgement owner. It must not maintain a second read ledger or translate a terminal row count into pixels.
+The native view class, paint callback, clipping and overlay admission, and completion hook are selected in §5.8. They are checked by the §5.7 native controls when the view is built. The hook must capture the rendered body and original proof before later layout mutates them, then enter the shared acknowledgement owner. It must not maintain a second read ledger or translate a terminal row count into pixels.
 
 Reader anchoring likewise keeps logical fragment identity separate from native geometry. The exact generic position contract must be resolved against `HistoryWindow`, `ReaderPosition`, fragment locations and Qt scrolling; sharing their current terminal units unchanged is not a plan. Check the retained content/fragment position and page origins as well as scroll_y: layout compensation can legitimately change the native absolute offset. A test that aborts on an offset before checking painted rows has not yet established reader drift; do not port a guessed one-row correction into Qt.
 
@@ -114,3 +119,95 @@ Migrate moved logical imports to their shared owners. Native modules import thei
 Existing required tests include `tests/textual/test_read_held_frame.py`, `test_divider_only_viewport_stays_unread.py`, `test_painted_read_retry.py`, `test_painted_read_maintenance.py`, `test_saved_history_coverage.py`, `test_wire_source.py`, `test_message_notification_title.py`, `test_channel_scrolling.py`, `test_app_close_order.py`, plus the changed-name consumers above. `test_painted_read_recovers_when_scope_changes_before_ack` delays the real acknowledgement, changes channel scope and checks that the refused proof is submitted only once before fresh evidence succeeds. Keep that real Core path; do not replace it with a private-field fixture.
 
 Required Qt controls: real body/partial body/header-only/covered-body/blank-body painting; held output plus pending reflow; source replacement during acknowledgement; scope change and ReadAgain; hide/park/close during source work; new paint under the same key before an older reply returns; maintenance refusal; read during a connector outage and recovery. Sends with unknown outcomes remain unknown and are never replayed by any of these controls.
+
+## 5.8 The three remaining declarations
+
+Read on Toad main `1421d01d4`.
+
+### Fragment family
+
+Every member of `CursorRest` (`widgets/transcript_fragments.py:387`), `TranscriptFragment` (:431), `BusMessageFragment` (:662), `WireFragment` (`wire_history.py:221`) and `MessageFragment` (:316) was classified by whether its body names a native type. That means a Textual or Rich type, `LineHistory`, `LineBlock`, `Lines`, row acquisition, `HistoryWindow` or a cursor block.
+
+The split falls cleanly along identity versus rendering:
+
+| Shared (`toad/client/fragments.py`) | Native (stays in Textual, and has a Qt counterpart) |
+|---|---|
+| **`CursorRest`:** `rested`, `clipboard_text`, `block_menu`, `expandable`, `expanded` | **`TextualCursorRest`:** `drawn_in`, `selects`, `placement_in`, `show_in`, `show_head` |
+| **`HistoryFragment(CursorRest)`**, the identity half of `TranscriptFragment`. Fields: `events`, `part_position`, `starts_agent_activity`, `shown`, `has_details`. Answers: `source_identity`, `key`, `details_link`, `arrival_position`, `shown_live_by`, `notification_references`, `notification_identity`, `queue_entries`, `draws`, `text_parts`, `outgoing_sources`, `capture_part`, `sticky_header`, `request_show`, `categories`, `timestamp`, `shown_in`, `retained_bytes` | **`TextualFragmentRows`:** fields `_lines`, `_plain`; members `text_rows`, `consumed`, `blocks`, `line_blocks`, `link_place`, `lines_for`, `retains_lines`, `invalidate_lines`, `row_change`, `hold_lines`, `stand_in_lines` |
+| **`BusMessageHistoryFragment(HistoryFragment)`:** every `BusMessageFragment` member. None names a native type. | none |
+| **`EvidencedFragment(HistoryFragment, ABC)`**, the evidence half of `WireFragment`: `evidence`, `checks_notifications`, `_roles`, `__init_subclass__`, `of`, `from_message`, `message`, `timestamp`, `clipboard_text` | **`TextualWireRows`:** `shown`, `leading`, `trailing`, `text`, `text_rows` |
+
+The native Textual classes keep their names and their consumers:
+
+```python
+class TranscriptFragment(HistoryFragment, TextualCursorRest, TextualFragmentRows): ...
+class BusMessageFragment(BusMessageHistoryFragment, TranscriptFragment): ...
+class WireFragment(EvidencedFragment, TextualWireRows, TranscriptFragment, ABC): ...
+class MessageFragment(BusMessageFragment, WireFragment, roles=(ConversationRole, NoticeRole)): ...
+```
+
+The shared parent comes first in each base list, so every shared answer resolves to the shared body. The native mixins come before `TranscriptFragment`, so a native override still wins over the row default. `MessageFragment` keeps its original base order and `roles` keyword. The `roles` registry is `__init_subclass__` on the shared `EvidencedFragment`, so membership is unchanged.
+
+Qt declares the same shape: `QtFragmentRows` and `QtWireRows` own its laid-out text runs, and `QtCursorRest` owns its placement. Each Qt fragment inherits the same shared parent, so a message is the same `key` and `evidence` in both backends.
+
+**Initialization order:** `_lines` and `_plain` are `field(..., init=False)` today. Moving them into a native dataclass mixin adds no constructor parameter, and the shared fields keep their current order. So every existing `TranscriptFragment(...)`, `WireFragment.of(...)` and `from_message(...)` call keeps its arguments.
+
+Two members are classified native only because they name a type imported from `toad/widgets`:
+- `WireFragment.shown` uses `MessageShown`.
+- `TranscriptFragment.consumed` uses `AgentActivityPresentation`.
+
+If either type is itself native-free, its member moves to the shared side with it. Read both declarations in the first execution step. Neither case changes the base lists.
+
+`NO_REST = CursorRest()` is read by `block_navigation.py` and `transcript_fragments.py`. With the split, the Textual cursor needs `TextualCursorRest` answers, so `NO_REST` is constructed from `TextualCursorRest` in the native module, and Qt has its own. The shared `CursorRest` is never instantiated.
+
+### Read host
+
+`ReadMarkedHistory` (`read_marked_history.py:9`) inherits `LineHistory` only to sit in the native history's MRO. Its one subclass is `WireHistory(VisibleReadMarking, ReadMarkedHistory, ConversationHistory[ViewT])`, which already gets `LineHistory` through `ConversationHistory`. So the shared `ReadMarkedHistory(ABC)` drops that base, and `WireHistory`'s resolved members are unchanged.
+
+`ReadMarkedHistory(ABC)` declares the read-host contract:
+- `page_source: ReplaceablePageSource`
+- `undrawn` (property)
+- `async source_is_current(snapshot: HistorySourceSnapshot) -> bool`
+- `async _mark_read(snapshot: HistorySourceSnapshot) -> None`
+
+It also takes the §5.3 bodies (`retain_painted`, `retire_painted`, `read_fragments`, `read_visible`, `_mark_read`, `_mark_page`, `reload_notification_source`) and the one pending map. The `ReadMarkedHistory` annotations in `wire_history.py:423, 525, 528` keep working unchanged, because they name the contract and not `LineHistory`.
+
+### Position contract
+
+`ReaderPosition` (`widgets/history_anchor.py:169`) already names the message the reader is on, plus `ranges: tuple[PageFragmentRange, ...]`. Its native coupling is narrower:
+- every method takes the Textual `HistoryWindow`;
+- offsets travel as `rows: float` (`moved`, `shifted`), which are terminal rows.
+
+The contract:
+- **Shared:** message identity, the `ranges`, and the family's logic (`TailPosition`, `OffsetPosition`, `UnshownReader`, `ParkedPosition`, `joined_tail`, `left_tail`, `arrived`, `placed`). They move to `toad/client/reader_position.py` with `window` typed as the shared reader-window contract: `follows_tail`, `top_page()`, `placements(...)`, `history_change`.
+- **Native:** the offset becomes a native distance type, declared by each backend's window: `TerminalRows` for Textual, `ViewPixels` for Qt. `moved(window, distance)` and `shifted(distance)` take that type. The shared family stores it and hands it back to the same window; it never does arithmetic across backends, and no conversion between rows and pixels exists. A Qt window never receives a Textual position, because a parked position is restored only by the window that captured it.
+- **`bodies(window) -> tuple[Widget, ...]`** becomes the window's own placement query on its native items. The shared method returns the fragment keys, and the window resolves them to its native items.
+
+This is the §5.4 rule made structural: logical fragment identity is shared, and geometry is not.
+
+### Qt paint admission
+
+The Qt history is a `QAbstractScrollArea` that paints its own viewport. It is not a `QListView` or another item view: an item view paints items through delegates with no per-glyph exposure report, so it cannot tell a header-only row from a painted body.
+
+Its `paintEvent(event)` paints the fragments its layout places inside `event.rect()`, in z-order. For each fragment it records which **body** text runs were drawn with non-blank glyphs inside the region left visible after overlay widgets (the sticky header, the jump-to-latest control). It uses the painter's clip region minus each overlay's mapped geometry.
+
+When the paint finishes, it builds one `PaintedRead` for that frame: the original fragment objects, their `evidence`, and the admitted body runs. It hands that to the shared `ReadMarkedHistory.retain_painted`, the same call Textual makes. This mirrors `RenderedTranscriptRows.admit` (`widgets/wire_history.py:51–55`), which admits a cropped strip only if it has non-blank text.
+
+Header-only, divider-only, fully covered and blank-body exposures admit nothing. A later layout does not change an admitted frame, because the `PaintedRead` holds the fragment objects of that paint and is never read back from the widget.
+
+Completion uses the persistent loop from phase 2. Acknowledgement is scheduled after `paintEvent` returns, through `schedule_ui`, never inline in the paint.
+
+`QPaintEvent` arrival, model insertion and `processEvents` are not admission. Only the paint's own recorded body runs are. The §5.7 Qt controls prove each case against a real `QApplication` when the view is built.
+
+### NRA operations
+
+All available in the installed NRA:
+- **New parents:** create `HistoryFragment`, `BusMessageHistoryFragment`, `EvidencedFragment`, the shared `CursorRest` and the native mixins with `insert_before_target`. This is extract-new-base, which NRA does not have yet (it is queued with claude-k-nra), so the creation is the labelled stage. Then `promote_class_members_to_ancestor` moves the classified members up, and `insert_class_member` adds them to the native mixins. Finally `patch_target` sets each class's base list, in the order above.
+- **`ReadMarkedHistory`:** `patch_target` drops `LineHistory` from its bases, and `promote_class_members_to_ancestor` moves the §5.3 bodies from `WireHistory`.
+- **Relocation:** `relocate_symbols_to_module` moves the shared declarations to `toad/client/`, and `relocate_module_to_new_module` moves `read_marked_history.py` whole. Every importer is rewritten.
+
+### Finish check
+
+- **No native imports:** `toad/client/fragments.py`, `reader_position.py` and `history_reads.py` import with Textual and Qt blocked.
+- **MRO check:** for every member listed above, the resolved owner on `TranscriptFragment`, `BusMessageFragment`, `WireFragment`, `MessageFragment` and `WireHistory` is the same body as on main, either the shared parent or the original native one. Check it by importing and comparing `cls.__mro__` winners before and after.
+- **Behaviour:** the §5.7 tests pass, including `test_divider_only_viewport_stays_unread.py` and `test_painted_read_retry.py`.
