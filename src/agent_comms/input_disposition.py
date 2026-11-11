@@ -138,12 +138,12 @@ class InputDocument(OriginalInputs, InputLookup[InputAttempt]):
         return None
 
     def all_started(self, keys) -> bool:
-        return all(self.lookup(key).has_started for key in keys)
+        return all(self.lookup(key).counts_as_started() for key in keys)
 
     def started_for(self, owners: frozenset[str]) -> frozenset[InputKey]:
         """Keys these owners' turns already took in; a delivered input needs no review."""
         return frozenset(
-            key for key, row in self.rows.items() if row.has_started and row.owner in owners)
+            key for key, row in self.rows.items() if row.counts_as_started() and row.owner in owners)
 
     def unknown(self, owners: frozenset[str]) -> tuple[StoredInput, ...]:
         return tuple(
