@@ -10,7 +10,7 @@ from agent_comms.errors import TodoError
 from agent_comms.execution.finish_signal import EventFinishSignal
 from agent_comms.execution.finish_signal import FinishSignal
 from agent_comms.execution.finish_signal import NoFinishSignal
-from agent_comms.execution.input_drain import DrainedSession
+from agent_comms.execution.input_drain import AwaitingDrainTurn, DrainedSession
 from agent_comms.execution.native_child import NoInputForwarder
 from agent_comms.execution.native_session_reopen import NoSessionRetention
 from agent_comms.execution.native_startup import (
@@ -57,7 +57,7 @@ def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
     state.to_turn(item)
     assert inbox.get_nowait() is item
     # A duplicate/stale cleanup cannot retire the next turn's inbox or source.
-    assert not state.retire_turn(TurnInbox()).is_open
+    assert not isinstance(state.retire_turn(TurnInbox()), AwaitingDrainTurn)
     assert state.require_inbox() is inbox and state.require_first_source() is original
     retired = state.retire_turn(inbox)
     assert retired.require_source() is original
