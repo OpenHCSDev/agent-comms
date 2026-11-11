@@ -21,7 +21,7 @@ Existing Core permissions, channel/thread identities, command declarations, mess
 | Phase | Complete change | State of the plan |
 |---|---|---|
 | [1. Shared form behavior](01-fields-and-forms.md) | Bound fields, concrete/optional/inherited input, validation, finishing, filtering, dirty marking and model following; both native form users migrated | Literal/inherited input meanings and validation owner resolved; exact Qt bases, constructors, NRA steps and full caller list still being finished |
-| [2. Application runtime and events](02-runtime-and-publications.md) | Shared event/subscription lifetime and native delivery, with persistent async execution and a defined shutdown order | Current Qt per-operation executor is not a persistent application runtime; Qt-loop option under investigation |
+| [2. Application runtime and events](02-runtime-and-publications.md) | Shared event/subscription lifetime and native delivery, with persistent async execution and a defined shutdown order | qasync selected; context/handle/default-executor owner fixes specified; exact native queue/class/caller graph still being finished |
 | [3. Core connection and commands](03-connections-and-commands.md) | Original local/remote observation/capture families and command drafts use shared host capabilities without Textual bases | Source flow traced; module placement decided in the ownership document; full caller changes still being written |
 | [4. Navigation](04-navigation-and-selection.md) | Original tab identities, saved order, back/return history and sidebar selection; native focus and widget creation separated | Current logical owners traced; full list of native calls still needed |
 | [5. Conversations and history](05-history-and-read-evidence.md) | Original page/source/coverage/read-evidence algorithms with separate native rendering and actual-paint reports | Acknowledgement, refused-proof retirement, native output capture and caller/test surface traced; exact shared fragment bases, geometry and Qt paint admission still needed |
@@ -42,7 +42,9 @@ The planning work fills these details from source; they are not homework passed 
 - Package declarations and data-reader consequences, if any. No version negotiation between our own components.
 - A finish that can be checked from the code and behavior, rather than a count of files or green syntax checks.
 
-A phase is ready only when its remaining work is execution and verification. An unresolved architectural decision is named beside that phase and prevents a ready claim. A change in main triggers a focused recheck of affected declarations, not a frozen old package set or a ritual full audit after every edit.
+A phase plan is ready only when its remaining work is execution and verification. An unresolved architectural decision is named beside that phase and prevents a ready claim. P144's completion check is an exact-head source-backed walk of the instructions: original declarations, destination/bases/signatures, every caller/import/deletion, actual NRA operation preflights or bounded refusals, and concrete test/native-run recipes. File counts and a ready label cannot replace that walk.
+
+Implementation completion is separate: the written moves, code and native checks must actually run before the backend is reported working. Those checks remain required; running an unwritten backend is not a prerequisite for completing this documentation-only task. A change in main triggers a focused recheck of affected declarations, not a frozen old package set or a ritual full audit after every edit.
 
 ## Settled boundaries
 

@@ -50,7 +50,7 @@ The shared application runs its asynchronous work on the native UI thread, with 
 
 Blocking Core/helper preparation remains at its original bounded worker/process owner. A persistent application loop does not move CPU work onto the UI thread or allow a blocking wait for a worker result.
 
-For Qt, qasync is the current candidate loop integration. It is **not yet verified on Python 3.14**. Its thread-safe context forwarding, executor teardown and native close behavior need the checks in phase 2 before that phase is executable. Never replace that missing proof with a per-operation loop, a nested `processEvents` wait or an extra background application.
+For Qt, use `qasync.QEventLoop` through an `asyncio.Runner` loop factory. Phase 2 specifies required fixes at qasync's owner for caller context/cancellable handles, inherited executor ownership and repeated executor shutdown. The inspected source is **not verified working on Python 3.14**. Those owner changes and native controls are required implementation steps before the Qt backend ships, not a demand that this documentation-only task build an unwritten application. Never replace them with a per-operation loop, a nested `processEvents` wait or an extra background application.
 
 ## Imports and package declarations
 

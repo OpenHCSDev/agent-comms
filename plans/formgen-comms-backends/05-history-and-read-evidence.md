@@ -76,7 +76,7 @@ Qt must report the original fragment/proof from the body drawing operation and i
 
 The exact native page/view class, paint callback, clipping/overlay admission and completion hook are **not yet selected and checked**. Finish that source/native investigation before calling phase 5 executable. The hook must capture the rendered body and original proof before later layout mutates them, then enter the shared acknowledgement owner. It must not maintain a second read ledger or translate a terminal row count into pixels.
 
-Reader anchoring likewise keeps logical fragment identity separate from native geometry. The exact generic position contract must be resolved against `HistoryWindow`, `ReaderPosition`, fragment locations and Qt scrolling; sharing their current terminal units unchanged is not a plan.
+Reader anchoring likewise keeps logical fragment identity separate from native geometry. The exact generic position contract must be resolved against `HistoryWindow`, `ReaderPosition`, fragment locations and Qt scrolling; sharing their current terminal units unchanged is not a plan. Check the retained content/fragment position and page origins as well as scroll_y: layout compensation can legitimately change the native absolute offset. A test that aborts on an offset before checking painted rows has not yet established reader drift; do not port a guessed one-row correction into Qt.
 
 ## 5.5 Source work, parking and shutdown
 
@@ -115,4 +115,6 @@ Existing required tests include `tests/textual/test_read_held_frame.py`, `test_d
 
 Required Qt controls: real body/partial body/header-only/covered-body/blank-body painting; held output plus pending reflow; source replacement during acknowledgement; scope change and ReadAgain; hide/park/close during source work; new paint under the same key before an older reply returns; maintenance refusal; read during a connector outage and recovery. Sends with unknown outcomes remain unknown and are never replayed by any of these controls.
 
-**Ready/done:** the remaining native/fragment contracts are concrete; both backends execute the original shared methods; moved copies and old imports are gone; the native controls establish genuine painted-read behavior against Core. These are implementation checks, not runs claimed by this documentation change.
+**Plan ready:** exact native/fragment bases, paint-admission and geometry contracts, constructor/lookup order, caller/import changes and NRA moves/refusals are supplied, with concrete native/Core control recipes. The unresolved fragment/paint decisions above still prevent this claim.
+
+**Implementation done:** both backends execute the original shared methods; moved copies and old imports are gone; actual native controls establish genuine painted-read behavior against Core. These are required implementation checks, not runs claimed by this documentation change.

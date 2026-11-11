@@ -1,6 +1,6 @@
 # 2. Runtime, publications and resource lifetime
 
-**Planning status:** the shared/native split, ordering rules and close sequence are decided below. The Qt loop dependency has not been verified on Python 3.14, and the full handler, caller and import changes are unfinished. This phase is not executable yet.
+**Planning status:** the shared/native split, persistent qasync loop and required loop-owner fixes are selected below. Native Python-3.14 validation is an implementation check, not a claim made here. The full handler/caller/import graph, native queue and exact class construction are still unfinished, so this phase is not executable yet.
 
 ## Outcome
 
@@ -75,21 +75,30 @@ The generic operation owner controls start, replacement/cancellation and retirem
 
 **Open before ready:** list each original WorkerGroup subclass/caller and the exact generic/native operation classes and constructor hooks. The available generic API must not be invented from a `run_worker` spelling match.
 
-## 2.4 Qt loop: selected shape, dependency proof outstanding
+## 2.4 Qt loop: qasync, with fixes at its owner
 
-Use one Qt UI-thread asyncio integration for the application lifetime. The current candidate is upstream qasync at the read receipt in [sources.md](sources.md). Its README says Python `<3.14` while its project metadata has no upper bound. Neither statement proves current Core's Python 3.14 behavior.
+Use `qasync.QEventLoop` on the Qt UI thread, for the application lifetime, through Python's `asyncio.Runner(loop_factory=...)`. The factory creates that loop for the already-created QApplication and installs it as the current loop. Do not use a second application thread, a per-operation loop or a replacement asyncio implementation. qasync is selected; its unmodified inspected source is **not** declared working on Python 3.14.
 
-The source read found concrete obligations:
+The first runtime implementation change is at qasync's owner, `src/qasync/__init__.py`, not a Toad wrapper around every callback. Preserve its public executor and loop behavior while fixing these traced contracts:
 
-1. `qasync/src/qasync/__init__.py:680–682`: `call_soon_threadsafe(..., context=None)` accepts a context but its signal emits only callback/args. Test explicit ContextVar forwarding and the implicit caller-context contract. Fix a missing contract at the loop integration's owner, not with callback wrappers at every caller.
-2. `:345,481–482,702–711`: qasync keeps its own default executor and synchronously shuts it down in `close`. Establish how Python 3.14 Runner shutdown and application-owned worker retirement interact. A UI-thread join must not wait for a worker still awaiting that UI thread.
-3. `asyncClose` at `:837–851` spins `QApplication.processEvents` until a task completes. Do not use this nested wait as the application's close mechanism.
-4. `asyncSlot` at `:855–891` holds tasks in a module-global set. Shared view/source lifetime must own comms tasks; do not substitute that global set for operation ownership.
-5. `run_until_complete` at `:414–440` performs a final native event pass. Queued callbacks must already be revoked or drained so this pass cannot mutate a closed/replaced view.
+| Required fix | Complete source path | Change and required control |
+|---|---|---|
+| Thread-safe context and cancellation | `_QEventLoop.__init__:352–357` makes a signal of callback/args; `call_soon_threadsafe:680–682` emits only those values and returns None; the receiver calls `call_soon:541–543`, which creates a Handle later on the GUI thread | Create the appropriate cancellable handle at the calling thread, retaining explicit context or copying that caller's context, carry that same handle through the signal and return it. Native delivery schedules the existing handle, not a second callback/handle with GUI context. Preserve Python-3.14 thread-safe cancellation/run behavior; do not invent another locking implementation. Require distinct GUI/worker ContextVar values, an explicit third context, cancellation before delivery, closed-loop refusal and exactly-once execution |
+| One default-executor owner | qasync writes `__default_executor` at `:345,702–711` and joins it in `close:481–482`. Python 3.14 BaseEventLoop initializes `_default_executor` at `base_events.py:426`; inherited `shutdown_default_executor:596–629` reads that other field | Use the inherited executor owner instead of two fields. Retain QThreadExecutor/default and explicitly supplied executor behavior, apply the inherited shutdown-admission check, and let Runner's async shutdown join off the UI thread while Qt can still answer authorized callbacks. Remove the second synchronous GUI-thread join, not just its symptom. Test default and explicit executors, to_thread, close without prior executor use and a worker awaiting an owner-thread callback during shutdown |
+| Executor repeated shutdown | `QThreadExecutor.shutdown:191–204` currently raises after its first shutdown; BaseEventLoop's async shutdown joins and later `close:748–751` calls shutdown again with wait=False | Make the executor meet repeated-shutdown semantics: signal its workers once, allow later shutdown calls, and let a later wait=True still join. Test wait=False then wait=True, repeated close and actual worker retirement. Do not hide the second call with an app-specific catch |
 
-These are API checks identified from the source, not a claim that every item is a reproduced bug. No qasync dependency or backend implementation has been added. Existing configured Qt Python is 3.12 with older Formbridge/ObjectState packages; existing inspected Python 3.14 environments have no Qt/qasync. Reusing the old Qt environment does not prove the current stack, and P144 forbids creating a new virtualenv or smuggling undeclared dependencies into another interpreter.
+This is a source trace: explicit context and the returned handle are lost in the inspected method; the qasync and inherited executor fields are distinct. It is not a native-run result or a promise of an automatic NRA recipe. Upstream's supported Python/binding combinations remain required checks for that owner change; do not silently drop them to fit Toad.
 
-A native Python 3.14 test run or an already declared suitable environment is still needed before selecting the exact package/owner change. Keep this limit beside phase readiness; do not quietly switch to a second application thread or per-operation loops.
+The native runtime then uses the corrected qasync declaration through its package dependency/lock. Record the source/version actually built, not a hand-installed patch in a shared interpreter. The package-selection recipe belongs in phase 6; a package that fails its Python-3.14 native controls does not ship the Qt backend.
+
+Keep these additional integration requirements:
+
+- Do not use `asyncClose:837–851`, which spins `QApplication.processEvents`, as application cleanup.
+- Do not use `asyncSlot:855–891`'s module-global task set instead of the phase-2 view/source operation owner.
+- `run_until_complete:414–440` performs a final native event pass. Revoke or drain deliveries before teardown so that pass cannot mutate closed views.
+- Let the application coroutine finish its owned retirement while the Qt loop is still running; Runner then closes async generators/default executor/loop before QApplication is released.
+
+Existing configured Qt Python is 3.12 with older Formbridge/ObjectState packages; inspected Python-3.14 environments have no Qt/qasync. No dependency, environment or native backend was created by this planning work. Native checks run on the declared implementation stack once built. Their absence is recorded evidence still owed, not a reason to invent a different architecture or demand that this documentation-only task implement the backend first.
 
 ## 2.5 Close sequence
 
@@ -122,4 +131,6 @@ Behavioral checks:
 - explicit/implicit context forwarding, GUI responsiveness during Core work, close during worker→UI dispatch and no nested event-pump wait;
 - native close with queued callbacks, active reads, timers, worker failure and repeated close requests; no orphan task/helper/listener afterward.
 
-**Ready/done:** the exact shared and native class/caller/MRO graph and NRA stages are recorded; the Qt dependency and queue barrier obligations are resolved; the original Textual run and a separate Qt run demonstrate the same delivery/read/cancellation ordering. An import-only pass or a queued callback test cannot certify the native close sequence.
+**Plan ready:** the exact shared/native classes, intended MRO/constructors, caller changes and NRA stages are recorded; a specific Qt-loop owner and queue/input design are selected; required owner fixes and native test recipes have exact targets and outcomes. The open design work above still prevents this claim.
+
+**Implementation done:** those owner fixes and moves are applied, and the original Textual run plus a separate Qt run demonstrate the required delivery/read/cancellation ordering on the declared Python stack. An import-only pass or queued-callback test cannot certify native close. Those runs remain mandatory implementation evidence; this documentation-only task must specify them, not pretend the backend already exists.

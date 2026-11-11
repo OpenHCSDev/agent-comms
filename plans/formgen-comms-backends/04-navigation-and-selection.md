@@ -105,4 +105,6 @@ Existing tests to preserve: `tests/model/test_tab_scopes.py`, `test_tab_visit_hi
 
 Add equivalent native Qt controls for rapid repeated Back/Forward, open-before-mount, shared channel tab, user-authored title, old thread birth replaced under the same name, source change during preparation, close during SQLite write, selected/dependent close, virtualized sidebar selection and scroll restore after layout. Keep original source/read objects in those tests; do not build a private-state fixture that bypasses navigation.
 
-**Ready/done:** the exact shared/native entry and view bases, factory methods and caller changes are listed; saved format readers are preserved; no native types remain in shared contracts; both native runs use the original TabOrder/workspace/selection algorithms and preserve the transition checks above. Native paint remains a separate required check, not an implication of successful selection.
+**Plan ready:** exact shared/native entry and view bases, constructor/factory methods, caller changes, saved-format readers and removed bodies are listed; the ordered moves and transition/native check recipes require no further architecture choice. The outstanding factory/base work above still prevents this claim.
+
+**Implementation done:** native types are absent from shared contracts; saved readers still work; both native runs use the original TabOrder/workspace/selection algorithms and preserve the transitions above. Native paint remains a separate required implementation check, not an implication of successful selection.
