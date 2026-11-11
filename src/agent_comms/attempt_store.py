@@ -72,7 +72,7 @@ class AttemptStore(RecoveryReader):
         db, execution = self.session._connection, snapshot.execution
         for obligation in snapshot.obligations:
             obligation.lifecycle.resume_response(self.session, obligation, request.execution_id)
-        if execution.lifecycle.retry:
+        if execution.lifecycle.is_retry():
             for assignment in snapshot.assignments:
                 WakeAssignment.update(
                     db,
