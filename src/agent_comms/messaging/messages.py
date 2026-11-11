@@ -494,9 +494,7 @@ class BusCapability(TypedRow, ProjectionSource):
         header = BusRow.qualified("seq")
         found = {row.seq: record for row, record in BusCapability.stored_records(
             db, f"{header} IN ({','.join('?' for _ in sequences)})", sequences)}
-        if missing := [seq for seq in sequences if seq not in found]:
-            raise RelationViolationError(f"Unknown bus sequences: {missing}")
-        return tuple(found[seq] for seq in sequences)
+        return tuple(found[seq] for seq in sequences if seq in found)
 
     @staticmethod
     def stored_records(
