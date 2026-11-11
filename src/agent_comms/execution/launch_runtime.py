@@ -406,13 +406,15 @@ class RestartEnvironment(EnvironmentRecord):
         )
         return {key: encoded[key] for key in native}
 
-    def auth_revision(self) -> tuple[int, int]:
-        """Observe this owner's credentials, never an ambient or fork directory.
+    @property
+    def auth_file(self) -> Path:
+        """This owner's Pi provider credentials, never an ambient or fork directory."""
+        return self.native_config / "auth.json"
 
-        No credentials file yet is setup state, observed as a size no file has.
-        """
+    def auth_revision(self) -> tuple[int, int]:
+        """No credentials file yet is setup state, observed as a size no file has."""
         try:
-            info = (self.native_config / "auth.json").stat()
+            info = self.auth_file.stat()
         except FileNotFoundError:
             return 0, -1
         return info.st_mtime_ns, info.st_size

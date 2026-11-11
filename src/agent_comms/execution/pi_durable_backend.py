@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
@@ -13,6 +14,7 @@ from pydantic import JsonValue
 
 from agent_comms.agent_backend import AgentBackend, CompactionOutcome, Compacts, RuntimeLocation
 from agent_comms.agent_events import Error
+from agent_comms.execution.launch_runtime import RestartEnvironment
 from agent_comms.execution.native_child import PiChild
 from agent_comms.execution.native_entries import StoredEntry
 from agent_comms.execution.native_records import StoredRecord
@@ -222,7 +224,7 @@ class PiDurableBackend(AgentBackend, Compacts):
                         cwd=thread.worktree.path, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
                 async with child.failures():
                     model = thread.model.set_model(SetModel)
-                    await child.request(Open(str(path), str(thread.worktree), model.provider, model.model_id, thread.thinking_level, str(Path.home() / '.pi/agent/auth.json')))
+                    await child.request(Open(str(path), str(thread.worktree), model.provider, model.model_id, thread.thinking_level, str(RestartEnvironment.inherit(os.environ).auth_file)))
                     await child.request(Resume())
                 self.child = child
             return self.child
