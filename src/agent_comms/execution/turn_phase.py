@@ -46,6 +46,9 @@ class ClosingTurn:
     def accepts_followup(self) -> bool:
         return False
 
+    def can_cancel(self) -> bool:
+        return False
+
     def observed(self, phase: TurnPhase) -> Self:
         return self
 
@@ -77,6 +80,9 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
         return False
 
     def accepts_followup(self) -> bool:
+        return True
+
+    def can_cancel(self) -> bool:
         return True
 
     def keeps_project_resume(self) -> bool:
@@ -161,6 +167,9 @@ class IdlePhase(ActivityWord, TurnPhase):
     busy = False
 
     def accepts_followup(self) -> bool:
+        return False
+
+    def can_cancel(self) -> bool:
         return False
     activity_state = ActivityState.IDLE
     label = "Ready"
