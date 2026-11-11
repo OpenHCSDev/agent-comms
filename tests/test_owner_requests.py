@@ -5,37 +5,38 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.nominal.field_codec import GoalId
-from agent_comms.change_report import FileLine, MainRevision
-from agent_comms.channel_targets import TeammatesTag
-from agent_comms.team.order import Team
-from agent_comms.team.standing import RequestStalled
-from agent_comms.team.request import main as request_main
 from agent_comms.comms import Comms
-from agent_comms.connector import ConnectorSendTool
-from agent_comms.connector_caller import CALLER, DirectorCaller
+from agent_comms.transport.connector import ConnectorSendTool
 from agent_comms.errors import RelationViolationError
-from agent_comms.goals import OrderCheck
-from agent_comms.order_runs import MechanicalOrderRun
-from agent_comms.owner_requests import NewestOpenRequest
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry.registry_document import RegisteredTeamProject
-from agent_comms.repo import Checkout, Repo
-from agent_comms.repository_name import RepositoryName
-from agent_comms.team.standing_rules import DirectiveUnacted
-from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import (
+from agent_comms.messaging.channel_targets import TeammatesTag
+from agent_comms.nominal.field_codec import GoalId
+from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.order_runs import MechanicalOrderRun
+from agent_comms.planning.orders import (
     ClaimOrder,
     OrderClaim,
     PendingProblemOrder,
-    PullRequestLink,
     TodoStore,
     TriageScope,
     WithdrawTodo,
 )
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.transport.tools.send import CommsSendTool
+from agent_comms.planning.owner_requests import NewestOpenRequest
+from agent_comms.planning.pull_requests import PullRequestLink
+from agent_comms.projects.change_report import FileLine, MainRevision
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.registry.registry_document import RegisteredTeamProject
+from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.team.order import Team
+from agent_comms.team.request import main as request_main
+from agent_comms.team.standing import RequestStalled
+from agent_comms.team.standing_rules import DirectiveUnacted
+from agent_comms.transport.connector_caller import CALLER, DirectorCaller
+from agent_comms.transport.tool_caller import ThreadCaller
+from agent_comms.transport.tools.send import CommsSendTool
 
 
 def test_retired_team_requests_follow_peer_authority(

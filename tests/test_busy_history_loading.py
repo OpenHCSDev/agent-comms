@@ -1,6 +1,5 @@
 """Source contention retains a viewer read, never manufactures an input failure."""
 
-from agent_comms.repo import Checkout
 import asyncio
 import json
 import subprocess
@@ -11,14 +10,19 @@ import pytest
 
 from agent_comms.acp_extension import TranscriptSnapshotUpdate
 from agent_comms.comms import wire
-from agent_comms.notification_reads import LiveNotificationRead
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.messaging.notification_reads import LiveNotificationRead
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import UnrecordedThreadIncarnation
+from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.ui_model.observation import (
-    LocalRouteObservation, ObservationProcess, ReadBusy, ReadNotifications, ReadTranscript,
+    LocalRouteObservation,
+    ObservationProcess,
+    ReadBusy,
+    ReadNotifications,
+    ReadTranscript,
 )
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.thread_identity import UnrecordedThreadIncarnation
-from agent_comms.registry.threads import NativeThread
 
 
 def saved_history(tmp_path):
@@ -156,6 +160,7 @@ def test_observer_start_failure_releases_both_real_pipe_endpoints(comms, monkeyp
 
 def test_viewer_reset_with_unread_observations_ends_the_service(comms):
     import multiprocessing
+
     from agent_comms.ui_model.observation import ObservationService, RevisionObserved
 
     connection, viewer = multiprocessing.get_context("spawn").Pipe()

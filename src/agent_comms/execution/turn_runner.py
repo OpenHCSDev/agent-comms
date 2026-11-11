@@ -1,0 +1,566 @@
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Awaitable, Callable
+from contextlib import AsyncExitStack
+from dataclasses import dataclass
+from functools import partial
+
+from acp.exceptions import RequestError
+from acp.schema import PromptResponse
+from metaclass_registry.mro_dispatch import MroDispatch, handles
+from pydantic import JsonValue
+
+from agent_comms import agent_events as events
+from agent_comms.agent_backend import AgentBackend
+from agent_comms.agent_event_updates import AcpEventConsumer, TurnEventConsumer
+from agent_comms.comms import Comms
+from agent_comms.coordinated_runtime import SelectedExecution
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution import pi_events as pi
+from agent_comms.execution.context_reading import ContextUsage
+from agent_comms.execution.controller import Controller
+from agent_comms.execution.goal_scheduler import GoalScheduler
+from agent_comms.execution.image_input import ImageInput
+from agent_comms.execution.input_drain import (
+    BackgroundWake,
+    DrainTurn,
+    InputDrain,
+    SessionScheduleCheck,
+    WakeScheduleCheck,
+)
+from agent_comms.execution.input_key import InputKey
+from agent_comms.execution.input_origin import InputOrigin, UnattributedInputOrigin
+from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.owned_turn import OwnedTurn
+from agent_comms.execution.owned_turn_runner import OwnedTurnRunner
+from agent_comms.execution.pi_commands import (
+    AgentCommsInspectContext,
+    AgentCommsInspectContextSegment,
+    NativeQuery,
+)
+from agent_comms.execution.pi_events import CancelledUiChoice, DialogUiRequest, ExtensionUiChoice
+from agent_comms.execution.queued_input import InitialInput
+from agent_comms.execution.reservation_rules import ReservationRule, ReservationViolationError
+from agent_comms.execution.session_lifecycle import SessionLifecycle
+from agent_comms.execution.session_owner_reads import SessionTaskOwner
+from agent_comms.execution.turn_context import SegmentManifest
+from agent_comms.execution.turn_effects import TurnEffects
+from agent_comms.execution.turn_input_source import (
+    InputDependency,
+    NoInputDependency,
+    TurnAcceptance,
+)
+from agent_comms.execution.turn_lease import TurnLeaseFence, TurnState
+from agent_comms.execution.turn_phase import CancellingPhase, TurnPhase
+from agent_comms.following_inputs import OwnerFollowingInputs
+from agent_comms.messaging.channel_targets import NamedTarget
+from agent_comms.messaging.channels import AllChannel
+from agent_comms.messaging.messages import Message
+from agent_comms.messaging.routing import NoTurnRouting, Routing, ScheduledTurn
+from agent_comms.nominal.field_codec import AcpSessionId, GoalId, InputId, TurnId
+from agent_comms.pi_payloads import NativeContextData, StateData
+from agent_comms.planning.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.registry.threads import Thread
+from agent_comms.team.pi_rule_gate import PiRedeal
+from agent_comms.transcript.transcript_updates import TurnTranscriptUpdate
+from agent_comms.transport.runtime_server import RuntimeServer, SubscriberClosed
+
+AGENT_PREFIX = "!agent "
+
+
+RELAY_PREFIX = "!relay "
+
+
+@dataclass(frozen=True, kw_only=True)
+class OwnerTurnScheduleCheck(SessionScheduleCheck):
+    turns: TurnRunner
+
+
+class ProjectResumeCheck(BackgroundWake, OwnerTurnScheduleCheck):
+    """Start the turn the registry records as due after a project change.
+
+    The registry entry is the only record, so an owner started later reads
+    the same state and starts that turn too.
+    """
+
+    async def schedule(self) -> None:
+        inputs, session_id = self.inputs, self.session_id
+        try:
+            self.require_valid()
+            entry = (await inputs._own_entry(session_id)).entry
+            self.require_valid()
+        except ReservationViolationError:
+            return
+        if entry.status.running and entry.thread.owes_project_resume:
+            resume = ScheduledTurn.resuming_in_project(entry.thread.worktree)
+            pending = inputs.state(session_id).pending_turns
+            if resume not in pending:
+                pending.append(resume)
+            WakeScheduleCheck(session_id=session_id, inputs=inputs).schedule()
+
+
+class OccupiedOwnerTurnRule(ReservationRule):
+    check_type = OwnerTurnScheduleCheck
+    explanation = "The session still owns a running turn."
+
+    def violated(self, check):
+        return check.turns.inputs.state(check.session_id).turn_task.busy
+
+
+class NativeInboxOwnerTurnRule(ReservationRule):
+    check_type = OwnerTurnScheduleCheck
+    explanation = "A live native inbox still owns pending input."
+
+    def violated(self, check):
+        return check.inputs.state(check.session_id).turn_open()
+
+
+class PendingTurnOwnerTurnRule(ReservationRule):
+    check_type = OwnerTurnScheduleCheck
+    explanation = "Already queued turns have priority over a turn the owner starts itself."
+
+    def violated(self, check):
+        return bool(check.inputs.state(check.session_id).pending_turns)
+
+
+class CompactionObservation(MroDispatch):
+    """All selected/native compaction callers update the existing turn owner."""
+    def __init__(
+        self, runner: TurnRunner, session_id: AcpSessionId,
+        lease: TurnLeaseFence, phase: TurnPhase,
+    ) -> None:
+        self.runner, self.session_id, self.lease, self.phase = runner, session_id, lease, phase
+
+    async def publish(self, phase: TurnPhase) -> None:
+        await self.runner.transition_turn(self.session_id, self.lease, phase)
+
+    @handles(events.CompactionStart)
+    async def start(self, event: events.CompactionStart) -> None:
+        await self.publish(self.phase.compacting())
+
+    @handles(events.CompactionFinish)
+    async def end(self, event: events.CompactionFinish) -> None:
+        await self.publish(self.phase.compaction_ended())
+
+
+class TurnRunner(OwnedTurnRunner):
+    """Own session turn locks/tasks and each session's agent backend."""
+
+    def __init__(
+        self,
+        comms: Comms,
+        runtime: RuntimeServer,
+        effects: TurnEffects,
+    ):
+        self.comms = comms
+        self.runtime = runtime
+        self.effects = effects
+        # One backend per ACP session, of the bound thread's declared kind.
+        self.persistent_backends: dict[AcpSessionId, AgentBackend] = {}
+        self.goals = GoalScheduler(comms, effects)
+
+    def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
+        self.sessions = sessions
+        self.inputs = inputs
+        self.goals.bind(sessions, inputs)
+
+    def owner_schedule_check(
+        self, session_id: AcpSessionId, inputs: InputDrain,
+    ) -> OwnerTurnScheduleCheck:
+        return OwnerTurnScheduleCheck(session_id=session_id, inputs=inputs, turns=self)
+
+    def project_resume_check(
+        self, session_id: AcpSessionId, inputs: InputDrain,
+    ) -> ProjectResumeCheck:
+        return ProjectResumeCheck(session_id=session_id, inputs=inputs, turns=self)
+
+    def session_busy(self, session_id: AcpSessionId) -> bool:
+        return self.inputs.state(session_id).turn_task.busy or self.turn_state(session_id).active.phase.busy
+
+    def turn_state(self, session_id: AcpSessionId) -> TurnState:
+        if session_id not in self.sessions.published:
+            return TurnState()
+        return self.comms.registry.require(self.sessions.require(session_id)).turn_state
+
+    def owns_turn(self, session_id: AcpSessionId, turn_id: TurnId) -> bool:
+        state = self.turn_state(session_id)
+        return state.active.phase.busy and state.active.id == turn_id
+
+    async def transition_turn(
+        self, session_id: AcpSessionId, lease: TurnLeaseFence, phase: TurnPhase,
+    ) -> None:
+        states = await Coordination.run_worker(partial(
+            self.comms.agents.transition_turn, lease, phase
+        ))
+        for state in states:
+            await TurnEventConsumer(self.effects, session_id, self.runtime, lease.turn_id).dispatch(
+                TurnTranscriptUpdate(state=state)
+            )
+
+    async def on_published_thread(
+        self, session_id: AcpSessionId, observe: Callable[[Thread], Awaitable[None]],
+    ) -> None:
+        """Hand a published session's thread to `observe`; an unpublished session has none."""
+        if session_id not in self.sessions.published:
+            return
+        await observe(await Coordination.run_worker(partial(
+            self.comms.registry.require, self.sessions.require(session_id))))
+
+    async def observe_compaction(
+        self, session_id: AcpSessionId, event: events.CompactionEvent,
+    ) -> None:
+        await self.on_published_thread(session_id, partial(self.compacted, session_id, event))
+
+    async def compacted(
+        self, session_id: AcpSessionId, event: events.CompactionEvent, thread: Thread,
+    ) -> None:
+        await Coordination.run_worker(partial(self.deal_rules, thread, event))
+        for lease in thread.turn_lease.held():
+            await CompactionObservation(
+                self, session_id, lease, thread.turn_record.read().phase,
+            ).dispatch(event)
+
+    async def observe_context(
+        self, session_id: AcpSessionId, usage: ContextUsage,
+    ) -> None:
+        """Pi's own context-use report deals the rules again at each declared share left."""
+        await self.on_published_thread(session_id, partial(self.context_used, usage))
+
+    async def context_used(self, usage: ContextUsage, thread: Thread) -> None:
+        await Coordination.run_worker(partial(PiRedeal.of(self.comms, thread).observe_context, usage))
+
+    def deal_rules(self, thread: Thread, event: events.CompactionEvent) -> None:
+        """Every compaction Core observes, Pi's own or one it asked for, deals the thread the
+        rules its role follows; its tool transports refuse other calls until they are read."""
+        event.deal_rules(PiRedeal.of(self.comms, thread))
+
+    def backend_for(self, session_id: AcpSessionId, thread: Thread) -> AgentBackend:
+        """This session's backend, created for the thread's declared backend on first use."""
+        backend = thread.runtime.backend
+        current = self.persistent_backends.get(session_id)
+        if current is None:
+            current = backend.for_worker(self, session_id)
+            self.persistent_backends[session_id] = current
+        elif type(current) is not backend:
+            raise RelationViolationError(
+                f"Session {session_id!r} holds a {type(current).__name__}, but "
+                f"thread {thread.name!r} declares {thread.backend.declared_name}"
+            )
+        return current
+
+    async def observe_selected_preparation(
+        self, session_id: AcpSessionId, thread: Thread, state: StateData, info: events.AgentInfo,
+    ) -> None:
+        """Publish this attested saved owner through the shared info consumer."""
+        state.model.require_selection(thread.model)
+        await events.AgentEventConsumer(comms=self.comms, thread_name=thread.name).dispatch(info)
+        await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(info)
+
+    async def inspect_context(self, session_id: AcpSessionId, thread: Thread) -> NativeContextData:
+        return await self.inspect_native_request(session_id, thread, AgentCommsInspectContext())
+
+    async def inspect_context_segment(
+        self, session_id: AcpSessionId, thread: Thread, manifest: SegmentManifest,
+    ) -> str:
+        request = AgentCommsInspectContextSegment.for_manifest(manifest)
+        context = await self.inspect_native_request(session_id, thread, request)
+        return context.recorded_public_text(manifest)
+
+    async def inspect_native_request(
+        self, session_id: AcpSessionId, thread: Thread, request: NativeQuery,
+    ) -> NativeContextData:
+        response = await self.backend_for(session_id, thread).inspect(thread, request)
+        context = response.require_context()
+        return context.require_session_file(thread.runtime.path)
+
+    async def prompt_owned(
+        self,
+        session_id: AcpSessionId,
+        *,
+        text: str,
+        images: tuple[ImageInput, ...],
+        display_text: str | None = None,
+        input_id: InputId,
+        origin: InputOrigin = UnattributedInputOrigin(),
+    ) -> PromptResponse:
+        async with self.inputs.state(session_id).own_turn_task():
+            try:
+                thread_name = await self.sessions.sync_identity(session_id)
+                await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
+                agent_task: str | None = None
+                relay_text: str | None = None
+                if text.startswith(AGENT_PREFIX):
+                    agent_task = text[len(AGENT_PREFIX) :].strip()
+                elif text.startswith(RELAY_PREFIX):
+                    relay_text = text[len(RELAY_PREFIX) :].strip()
+                elif NamedTarget.leads(text):
+                    relay_text = text
+                else:
+                    agent_task = text.strip()
+                if relay_text:
+                    target, body = parse_target(relay_text)
+                    sent = await Coordination.run_worker(partial(
+                        self.comms.messaging.send, thread_name, target, body,
+                    ))
+                    for notice in sent.notices:
+                        await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(
+                            events.Notice(text=notice)
+                        )
+                self.effects._debug_log(
+                    f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'}"
+                )
+                if images or agent_task:
+                    await InitialInput.run(self.inputs,
+                        session_id,
+                        thread_name,
+                        agent_task or "",
+                        images=images,
+                        display_text=display_text,
+                        input_id=input_id,
+                        origin=origin,
+                    )
+                self.effects._debug_log("prompt:returning")
+                return PromptResponse(stop_reason="end_turn")
+            except asyncio.CancelledError:
+                self.effects._debug_log("prompt:cancelled")
+                return PromptResponse(stop_reason="cancelled")
+
+    def pause_active_goal(self, thread: Thread) -> None:
+        for goal in thread.goal.active():
+            self.comms.goals.update_goal(
+                thread.name, PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))),
+                actor=OwnerInvocable,
+            )
+
+    async def cancel(self, session_id: AcpSessionId, **kwargs: JsonValue) -> None:
+        if session_id in self.sessions.proxies:
+            await self.sessions.proxies[session_id].request("cancel")
+            return
+        names = (self.sessions.require(session_id),) if session_id in self.sessions.published else ()
+        for name in names:
+            thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+            await Coordination.run_worker(partial(self.pause_active_goal, thread))
+        async def cancelling() -> None:
+            leases = ()
+            for name in names:
+                current = await Coordination.run_worker(partial(self.comms.registry.require, name))
+                leases = current.turn_lease.held()
+            for lease in leases:
+                await self.transition_turn(session_id, lease, CancellingPhase())
+        task = self.inputs.state(session_id).turn_task
+        await task.prepare_cancel(cancelling)
+        await task.stop()
+        # Selected handling may be the original inbox task. Retire only that
+        # cancelled turn, then let the same drain owner select independent work.
+        # Neither cancellation nor unbound input proves the whole inbox handled.
+        self.inputs.ensure_live_drain(session_id)
+
+    async def extension_ui_permission(
+        self,
+        session_id: AcpSessionId,
+        turn_id: TurnId,
+        controller: Controller,
+        request: DialogUiRequest,
+    ) -> ExtensionUiChoice:
+        """Project one bounded Pi UI dialog to exactly the turn's ACP controller.
+
+        No ACP response updates package configuration, launch trust or call grants.
+        The backend revalidates this result before replying to the same Pi child.
+        """
+        if not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
+            return CancelledUiChoice()
+        permission = request.permission(turn_id)
+        if permission is None:
+            return CancelledUiChoice()
+        try:
+            outcome = await controller.request_ui_permission(self, session_id, permission)
+        except (TimeoutError, SubscriberClosed, RequestError):
+            # A timed-out, departed or explicitly refusing controller grants no permission.
+            # Unexpected decoder and transport defects propagate.
+            return CancelledUiChoice()
+        if not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
+            return CancelledUiChoice()
+        if controller.departed(self.runtime, session_id):
+            return CancelledUiChoice()
+        return outcome.answer(request)
+
+    def acquire_turn(
+        self, resources: AsyncExitStack, session_id: AcpSessionId, thread_name: str,
+        turn_id: TurnId, detail: str, routing: Routing = NoTurnRouting(),
+    ) -> RegistryOwner:
+        """Bind the exact installed lease to cleanup before worker delivery.
+
+        The worker may claim the turn before its awaiting caller is
+        cancelled. Register on the caller's stack here, while it still owns
+        this operation; no delivered result is needed to retire that lease.
+        """
+        owner = self.comms.agents.begin_turn(thread_name, turn_id, detail, routing)
+        resources.push_async_callback(
+            self.settle_turn, session_id, owner.turn_lease,
+        )
+        return owner
+
+    def finish_turn(
+        self, resources: AsyncExitStack, session_id: AcpSessionId, lease: TurnLeaseFence,
+    ) -> TurnTranscriptUpdate:
+        """Release the original CAS lease and retain its waiter cleanup."""
+        terminal_fence = self.comms.agents.finish_turn(lease)
+        resources.push_async_callback(
+            Coordination.run_worker,
+            partial(self.comms.goals.release_waits_after_terminal_turn, terminal_fence),
+        )
+        return self.current_turn_update(session_id)
+
+    async def settle_turn(
+        self,
+        session_id: AcpSessionId,
+        lease: TurnLeaseFence,
+    ) -> None:
+        """Settle after terminal publication, releasing waiters even if the UI fails.
+
+        Native output completion is not lifecycle settlement. Keep the exact
+        lease until Done, durable input retirement and relay publication finish.
+        """
+        async with AsyncExitStack() as resources:
+            update = await Coordination.run_worker(partial(
+                self.finish_turn, resources, session_id, lease,
+            ))
+            await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(update)
+
+    def current_turn_update(self, session_id: AcpSessionId):
+        return TurnTranscriptUpdate(state=self.turn_state(session_id))
+
+    async def publish_turn_state(self, consumer: AcpEventConsumer) -> None:
+        """Publish the registry owner's current turn to this explicit recipient."""
+        update = await Coordination.run_worker(
+            partial(self.current_turn_update, consumer.session_id)
+        )
+        await consumer.dispatch(update)
+
+    async def active_backend_turn(self, session_id: AcpSessionId) -> DrainTurn:
+        name = self.sessions.require(session_id)
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        return self.inputs.state(session_id).turn.for_owner(thread)
+
+    async def close_idle_backend(self, session_id: AcpSessionId) -> None:
+        """Retire only the backend already held by this idle session.
+
+        The turn lock excludes new input while the backend's own close_idle
+        serializes child retirement. Cleanup never acquires execution or creates
+        a backend, and needs no thread declaration to close its original child.
+        """
+        persistent = self.persistent_backends.get(session_id)
+        if persistent is None:
+            return
+        lock = self.inputs.state(session_id).turn_lock
+        if lock.locked():
+            return
+        async with lock:
+            if not await Coordination.run_worker(partial(self.session_busy, session_id)):
+                await persistent.close_idle()
+
+    async def run_selected(self, session_id: AcpSessionId, execution: SelectedExecution):
+        """Selected work and fresh ACP input share this session's one turn lifetime.
+
+        Only the live inbox transfers to the next native turn. Durable UNKNOWN
+        rows never create input, and selected failure/cancellation retires the
+        inbox without pretending that its pending prompts reached the model.
+        """
+        async with self.inputs.state(session_id).turn_lock:
+            async with self.inputs.state(session_id).own_turn_task():
+                owner = await Coordination.run_worker(partial(
+                    self.comms.registry.require, execution.owner_name,
+                ))
+                following = OwnerFollowingInputs(
+                    self.inputs, session_id, owner, self.inputs.bind_native_turn(session_id, owner),
+                )
+                try:
+                    result = await execution.run(
+                        publication=AcpEventConsumer(self.effects, session_id, self.runtime),
+                        pi_session=self.backend_for(session_id, owner),
+                        following=following,
+                    )
+                    return result
+                finally:
+                    try:
+                        await self.inputs.finish_turn_inputs(following)
+                    finally:
+                        # SelectedParticipant closed the registry lease while unwinding
+                        # execution. Publish that canonical end on success and failure.
+                        await self.publish_turn_state(
+                            AcpEventConsumer(self.effects, session_id, self.runtime)
+                        )
+
+    async def run_agent_turn(
+        self,
+        session_id: AcpSessionId,
+        thread_name: str,
+        task: str,
+        *,
+        origins: tuple[Message, ...] = (),
+        images: tuple[ImageInput, ...] = (),
+        original_keys: tuple[InputKey, ...] = (),
+        initial_display_text: str | None = None,
+        autonomous_goal: bool = False,
+        original_owner_input: bool = False,
+        original_goal_id: GoalId | None = None,
+        acceptance: TurnAcceptance,
+        dependency: InputDependency = NoInputDependency(),
+    ) -> None:
+        await OwnedTurn(
+            self,
+            session_id=session_id,
+            thread_name=thread_name,
+            task=task,
+            origins=origins,
+            images=images,
+            original_keys=original_keys,
+            initial_display_text=initial_display_text,
+            autonomous_goal=autonomous_goal,
+            original_owner_input=original_owner_input,
+            original_goal_id=original_goal_id,
+            acceptance=acceptance,
+            dependency=dependency,
+        ).run()
+
+    async def close(self) -> None:
+        await self.close_sessions(tuple(
+            owner for state in self.inputs.drained.values() for owner in state.executors()
+        ))
+
+    async def close_sessions(self, owners: tuple[SessionTaskOwner, ...]) -> None:
+        """Retire only these sessions; sibling turns and native children keep running."""
+        tasks = {
+            owner.identifier: owner.retire_turn_task()
+            for owner in owners
+        }
+        await asyncio.gather(*(task.stop() for task in tasks.values()))
+        # A relay-only turn never created a backend, so it has no runtime work to stop.
+        await asyncio.gather(
+            *(task.abort(self.persistent_backends[session_id])
+              for session_id, task in tasks.items() if session_id in self.persistent_backends),
+            return_exceptions=True,
+        )
+        for session_id in self.persistent_backends.keys() & tasks.keys():
+            await self.persistent_backends.pop(session_id).close_idle()
+
+
+def parse_target(text: str) -> tuple[str, str]:
+    """Split a leading target prefix off a prompt.
+
+    ``@name body`` -> DM; ``#channel body`` -> channel; empty body with a
+    bare target composes nothing; otherwise the global channel. The prefix
+    is consumed, never broadcast.
+    """
+    stripped = text.strip()
+    sigils = "".join(NamedTarget.sigils())
+    for kind in NamedTarget.__subclasses__():
+        if stripped.startswith(kind.sigil) and len(stripped) > len(kind.sigil):
+            parts = stripped[len(kind.sigil):].split(maxsplit=1)
+            name = parts[0].rstrip(sigils)
+            if name and len(parts) == 2 and parts[1].strip():
+                return kind.address(name), parts[1].strip()
+    return AllChannel.address(), stripped

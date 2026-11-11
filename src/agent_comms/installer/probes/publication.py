@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agent_comms.active_route import RouteFile, RouteFileSelection, active_route_path
+from agent_comms.installer.active_route import RouteFile, RouteFileSelection, active_route_path
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 
 

@@ -3,7 +3,10 @@ import os
 import sys
 from pathlib import Path
 
-from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
+from agent_comms.execution.child_process import (
+    ForkedProcessPool,
+    SpawnedProcess,
+)
 from process_tree_fixture import TREE
 
 if __name__ == "__main__":

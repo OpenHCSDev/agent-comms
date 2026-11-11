@@ -44,14 +44,14 @@ from mypy.config_parser import parse_config_file
 from mypy.options import Options
 from nominal_refactor_advisor import audit
 
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import boundary_decoder
-from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.runtime_resolution import CorePackage, ProjectMetadata, StackSources
 from agent_comms.installer.runtime_wire import ClientImport, CrossesRuntimes
-from agent_comms.repo import Repo
-from agent_comms.repository_name import RepositoryName
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import boundary_decoder
+from agent_comms.projects.head_review import BaseSide, HeadSide, IntegrationInput, Side
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = "agent_comms"

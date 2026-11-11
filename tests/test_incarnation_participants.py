@@ -1,4 +1,3 @@
-from agent_comms.repo import Checkout
 from dataclasses import replace
 
 import pytest
@@ -6,11 +5,15 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import IntegrityViolationError, ParticipantNotRegistered
+from agent_comms.coordination.participant_store import ParticipantStore
 from agent_comms.coordination.session import CoordinationSession
 from agent_comms.coordination.tables.participants import Participants
-from agent_comms.participant_store import ParticipantStore
-from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import (
+    AgentThreadRole,
+    UserThreadRole,
+)
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
 from bus_record_fixture import UNRELATED_LOOKUP
 

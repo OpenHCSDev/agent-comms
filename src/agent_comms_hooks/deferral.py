@@ -1,6 +1,6 @@
 """The resident session owner judges the model's stop."""
 
-from .watch import SessionHookProgram
+from agent_comms_hooks.watch import SessionHookProgram
 
 
 class DeferralGuard(SessionHookProgram):

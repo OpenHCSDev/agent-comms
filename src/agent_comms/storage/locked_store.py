@@ -19,31 +19,39 @@ from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
 from threading import local
-from weakref import finalize
 from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Self, TypeVar
+from weakref import finalize
 
 from pydantic import JsonValue
 
 import agent_comms
-
-from ..child_process import Platform
-from ..coordination.errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import FieldCodec, MalformedRecord, PathText
-from ..errors import RelationViolationError
-from .private_path import FileObservation, FileRevision, MissingFile, PrivateDirectoryRole, PrivateFileRole
-from .store_files import (
-    AtomicFile,
+from agent_comms.coordination.errors import (
+    CoordinationBeginUnavailable,
+    CoordinationReadUnavailable,
+)
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import Platform
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText
+from agent_comms.storage.private_path import (
+    FileObservation,
+    FileRevision,
+    MissingFile,
+    PrivateDirectoryRole,
+    PrivateFileRole,
+)
+from agent_comms.storage.store_files import (
     DEFAULT_ISOLATION,
     DEFAULT_STORE_CONTENTION,
+    AtomicFile,
     DrainedWriters,
+    FileTransactions,
+    RankedStoreLock,
     SqliteStore,
     StoreContention,
     StoreLock,
     StoreLockFile,
     StoreLockOwner,
-    FileTransactions,
-    RankedStoreLock,
     StoreOwner,
     is_store_lock,
     store_lock_path,
@@ -748,36 +756,6 @@ class GoalWakeFile(WireWakeFile):
         )
 
 
-class RegistryFile(RollbackRetained, GoalWakeFile):
-    """Registry location usable by record types without importing their decoder."""
-
-    __slots__ = ()
-    filename = "registry.json"
-
-    @classmethod
-    def execution_paths(cls, root: Path) -> tuple[Path, ...]:
-        # Its captured owner declaration selects the session; a phase edit does not.
-        return ()
-
-    @classmethod
-    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
-        """The copy names no live process: a signal, stop or wake aimed through it would reach
-        the source root's units."""
-        from ..registry.registry_store import RegistryStore
-
-        registry = RegistryStore(source)
-        with registry.guarded_read():
-            copied = frozenset(path for path in registry.cut_paths if path.exists())
-            for path in copied:
-                destination = target.parent / path.relative_to(source.parent)
-                destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-                cls.copy_file(path, destination)
-        RegistryStore(target).retire_processes()
-        return copied
-
-
-
-
 class SQLiteReadConnection:
     """A thread's read handle, retired with its store or when the file is replaced."""
 
@@ -893,8 +871,16 @@ class SQLiteStorage(RootFile, SqliteStore):
     def read_snapshot(
         cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
     ) -> sqlite3.Connection:
-        """Open and acquire one consistent read-only snapshot with SQLite's busy handler."""
-        return cls._acquire_snapshot(cls._open_reader(path, contention))
+        """Open and acquire one consistent read-only snapshot with SQLite's busy handler.
+
+        A refusal names the store and SQLite's own error, so a reader of the reported
+        traceback knows which database was busy and why without reproducing it."""
+        try:
+            return cls._acquire_snapshot(cls._open_reader(path, contention))
+        except sqlite3.OperationalError as error:
+            error.add_note(f"SQLite store: {path}; SQLite error: "
+                           f"{error.sqlite_errorname} ({error.sqlite_errorcode})")
+            raise
 
     @classmethod
     def recovering_snapshot(cls, path: Path) -> sqlite3.Connection:
@@ -1106,6 +1092,44 @@ class PublishedSQLiteFile(SQLiteFile):
             raise StoreCommittedError(
                 f"Committed {path}, but change notification failed: {error}"
             ) from error
+
+
+
+
+class RegistryFile(RollbackRetained, PublishedSQLiteFile, GoalWakeFile):
+    """Registry location usable by record types without importing their decoder. Its rows signal
+    each commit through the published change file, so every waker watches that, never the
+    database a WAL commit leaves untouched."""
+
+    __slots__ = ()
+    filename = "registry.sqlite3"
+
+    @classmethod
+    def execution_paths(cls, root: Path) -> tuple[Path, ...]:
+        # Its captured owner declaration selects the session; a phase edit does not.
+        return ()
+
+    @classmethod
+    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
+        """The copy names no live process: a signal, stop or wake aimed through it would reach
+        the source root's units."""
+        from agent_comms.registry.registry_store import RegistryStore
+
+        registry = RegistryStore(source)
+        with registry.guarded_read():
+            # The rows copy as a SQLite backup, which carries their WAL; the guard and turn files
+            # beside them are plain root files.
+            copied = frozenset(path for path in registry.cut_paths if path.exists())
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            if source in copied:
+                cls.copy_file(source, target)
+            for path, owner in registry.companion_files.items():
+                if path in copied:
+                    destination = target.parent / path.relative_to(source.parent)
+                    destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                    owner.copy_file(path, destination)
+        RegistryStore(target).retire_processes()
+        return copied
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,0 +1,117 @@
+{
+ "stages": [
+  {
+   "recipes": [
+    {
+     "recipe_id": "runtime-request-declarations-drop-ctx",
+     "operations": [
+      {
+       "operation": "drop_type_parameters",
+       "parameters": [
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_server.py",
+          "target_qualname": "RuntimeRequest"
+         },
+         "parameter": "Ctx"
+        },
+        {
+         "target": {
+          "file_path": "src/agent_comms/runtime_server.py",
+          "target_qualname": "ResultRuntimeRequest"
+         },
+         "parameter": "Ctx"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "recipes": [
+    {
+     "recipe_id": "declarations-from-runtime_server",
+     "operations": [
+      {
+       "operation": "relocate_symbols_to_new_module",
+       "file_path": "src/agent_comms/runtime_server.py",
+       "symbol_qualnames": [
+        "RuntimeRequest",
+        "AttachedRuntimeRequest",
+        "ResultRuntimeRequest",
+        "AttachedResultRuntimeRequest"
+       ],
+       "destination_path": "src/agent_comms/transport/runtime_request.py"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "recipes": [
+    {
+     "recipe_id": "declarations-from-runtime_requests",
+     "operations": [
+      {
+       "operation": "relocate_symbols_to_new_module",
+       "file_path": "src/agent_comms/runtime_requests.py",
+       "symbol_qualnames": [
+        "SubscribeRuntimeRequest",
+        "FreshSubscribeRuntimeRequest",
+        "PromptRuntimeRequest",
+        "CancelRuntimeRequest",
+        "QueueActionRuntimeRequest",
+        "SendNowRuntimeRequest",
+        "ClearQueueRuntimeRequest",
+        "SetConfigOptionRuntimeRequest",
+        "CompactRuntimeRequest",
+        "DismissHistoricalInputsRuntimeRequest",
+        "GoalHistoryRuntimeRequest",
+        "GoalSnapshotResultRuntimeRequest",
+        "GoalRevisionRuntimeRequest",
+        "GoalTextRuntimeRequest",
+        "EditGoalRuntimeRequest",
+        "UpdateGoalRuntimeRequest",
+        "RetryGoalRuntimeRequest",
+        "SetGoalRuntimeRequest",
+        "ContextRuntimeRequest",
+        "ContextSourceRuntimeRequest",
+        "ContextCoreRuntimeRequest",
+        "ContextCoreSourceRuntimeRequest",
+        "RecordedContextRuntimeRequest",
+        "ContextReferenceRuntimeRequest",
+        "ContextRecordedSegmentRuntimeRequest",
+        "ContextAnnotationsRuntimeRequest",
+        "ContextAnnotationCorrectionRuntimeRequest"
+       ],
+       "destination_path": "src/agent_comms/transport/runtime_requests.py"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "recipes": [
+    {
+     "recipe_id": "declarations-from-owner_launch",
+     "operations": [
+      {
+       "operation": "relocate_symbols_to_new_module",
+       "file_path": "src/agent_comms/owner_launch.py",
+       "symbol_qualnames": [
+        "RetainedOwnerLaunch",
+        "OwnerRetiredReply",
+        "ReadHostResourcesRuntimeRequest",
+        "ReadOwnerLaunchRuntimeRequest",
+        "StartOwnerRuntimeRequest",
+        "StopOwnerRuntimeRequest"
+       ],
+       "destination_path": "src/agent_comms/transport/owner_requests.py"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -12,11 +12,10 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.coordination.session import CoordinationSession
 from agent_comms.errors import RelationViolationError
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage.typed_table import Column, Index
 from agent_comms_hooks import ToolRefusedError
-
-from ...storage.locked_store import RegistryFile
 
 if TYPE_CHECKING:
     from agent_comms.coordination.coordinator import Coordination

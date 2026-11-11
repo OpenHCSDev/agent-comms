@@ -6,7 +6,6 @@ import pytest
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.session_watch import LiveWatch, WatchClaim
-from agent_comms_hooks.watch import WatchRecord
 from agent_comms.cli_bridges.shared import (
     Binding,
     BindingAddress,
@@ -17,8 +16,9 @@ from agent_comms.cli_bridges.shared import (
     Watch,
 )
 from agent_comms.errors import UnregisteredThreadError
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms_hooks.watch import WatchRecord
 
 
 @pytest.mark.asyncio

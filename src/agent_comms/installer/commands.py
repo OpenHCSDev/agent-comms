@@ -13,15 +13,14 @@ from pathlib import Path
 from threading import Lock
 from typing import BinaryIO
 
-from agent_comms.native_build_inputs import ConfiguredChildStdio
-from agent_comms.child_process import SpawnedProcess, SynchronousProcess
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.execution.child_process import SpawnedProcess, SynchronousProcess
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.interpreter_operation import (
     CommandPhase,
     GitPhase,
     InstallClock,
-    InstallPhase,
     InstalledProgram,
+    InstallPhase,
     PhaseTiming,
     ProbeProgram,
     ProbeReply,
@@ -30,10 +29,12 @@ from agent_comms.installer.interpreter_operation import (
     RuntimeWorkerClosePhase,
     WorkerClosePhase,
 )
+from agent_comms.installer.native_build_inputs import ConfiguredChildStdio
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
 from agent_comms.storage.maintenance_barrier import MaintenanceHolder
-from agent_comms.repo import GitCommandError, Repo
 
 
 @dataclass(frozen=True)
@@ -170,10 +171,10 @@ class InstallCommands:
         print("=", measured.line(), file=sys.stderr, flush=True)
 
     def run(self, *command: str | Path, cwd: Path = Path(),
-            env: Mapping[str, str] = os.environ) -> str:
+            env: Mapping[str, str] = os.environ, pass_fds: tuple[int, ...] = ()) -> str:
         argv = tuple(map(str, command))
         with self.timing(CommandPhase(argv)):
-            completed = subprocess.run(argv, cwd=cwd, env=env,
+            completed = subprocess.run(argv, cwd=cwd, env=env, pass_fds=pass_fds,
                                        capture_output=True, text=True)
         if completed.returncode:
             raise UpgradeRefused(f"{command[0]} failed: {completed.stdout.strip()}\n"

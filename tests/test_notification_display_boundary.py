@@ -2,8 +2,8 @@
 
 from dataclasses import replace
 
-from agent_comms.notification_reads import RecordedNotificationRead
-from agent_comms.notification_evidence import AllOutcomes
+from agent_comms.messaging.notification_evidence import AllOutcomes
+from agent_comms.messaging.notification_reads import RecordedNotificationRead
 from agent_comms.ui_model.observation import ReadNotifications
 from test_notification_display_viewer import ArchivedReaders, archived_readers  # noqa: F401
 

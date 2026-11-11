@@ -25,35 +25,36 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .history_view import OwnHistory
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import AcpSessionId, InputId
-from .native_input_proof import NativeContextProof
-from .pi_counts import PiCount
-from .thread_model import ThreadModel, UndeclaredModel
-from .pi_commands import NativeQuery
-from .pi_payloads import PiResponseData
-from .pi_vocabulary import CompactionReason
-from .rule_deal import DealDelivery
-from .session_revision import NoSessionObservation, SessionObservation
-from .turn_inbox import InputContent
-from .tool_result import DeclaredReply
-from .turn_outcome import TurnOutcome
+from agent_comms.execution.history_view import OwnHistory
+from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.execution.pi_commands import NativeQuery
+from agent_comms.execution.pi_vocabulary import CompactionReason
+from agent_comms.execution.session_revision import NoSessionObservation, SessionObservation
+from agent_comms.execution.transcript_cursor_reads import TranscriptRuntime
+from agent_comms.execution.turn_inbox import InputContent
+from agent_comms.execution.turn_outcome import TurnOutcome
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import AcpSessionId, InputId
+from agent_comms.pi_counts import PiCount
+from agent_comms.pi_payloads import PiResponseData
+from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
+from agent_comms.team.rule_deal import DealDelivery
+from agent_comms.transport.tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from .agent_events import AgentEvent
-    from .launch_runtime import LaunchRuntime
-    from .execution.owned_turn import TurnDelivery
-    from .registry.threads import Thread
-    from .transcript_sources import TranscriptSource
-    from .turn_runner import TurnRunner
+    from agent_comms.execution.agent_event import AgentEvent
+    from agent_comms.execution.launch_runtime import LaunchRuntime
+    from agent_comms.execution.owned_turn import TurnDelivery
+    from agent_comms.execution.transcript_sources import TranscriptSource
+    from agent_comms.execution.turn_runner import TurnRunner
+    from agent_comms.registry.threads import Thread
 
 
 class BackendDeclarationError(TypeError):
     """A backend declaration is incomplete; the message names every missing piece."""
 
 
-class RuntimeLocation(DeclaredFamily, affix="Runtime"):
+class RuntimeLocation(DeclaredFamily, TranscriptRuntime, affix='Runtime'):
     """Runtime behavior derived once by the owning thread record."""
 
     path: str

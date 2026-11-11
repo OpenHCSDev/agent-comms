@@ -9,11 +9,11 @@ import json
 from dataclasses import dataclass
 from typing import ClassVar
 
-from ..nominal.field_codec import FieldCodec
-from ..goal_history import GoalHistoryEntry
-from ..goals import GoalPeerChange
-from ..peer_relevance import Informed
-from ..turn_context import InstructionSegment, OwnerProvenance
+from agent_comms.execution.turn_context import InstructionSegment, OwnerProvenance
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.peer_relevance import Informed
+from agent_comms.planning.goal_history import GoalHistoryEntry
+from agent_comms.planning.goals import GoalPeerChange
 
 
 @dataclass(frozen=True)

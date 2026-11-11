@@ -1,9 +1,6 @@
 """Fresh production bootstrap wakes a real native owner before and after restart."""
 
 
-from agent_comms.repo import Checkout
-from bus_history import read_history
-from agent_comms.pi_vocabulary import OffThinkingLevel
 import json
 import os
 import sqlite3
@@ -16,9 +13,12 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.pi_vocabulary import OffThinkingLevel
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
+from bus_history import read_history
 from test_coordinated_runtime import tmp_path as private_root_fixture
-from agent_comms.thread_model import DeclaredModel
 
 # The native package executes against only the loopback model declared below.
 tmp_path = private_root_fixture

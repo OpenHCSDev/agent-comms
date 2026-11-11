@@ -1,26 +1,25 @@
 """Current subscription contract exercised across an actual owner Unix socket."""
 
-from agent_comms.repo import Checkout
 import asyncio
 import json
-import os
 import logging
+import os
 import sqlite3
 
 import pytest
 
-from agent_comms.owner_connection import NoControllerToken
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.acp import CommsAgent
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import CoordinationReadUnavailable
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.owner_protocol import OwnerAnnouncement
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.nominal.field_codec import AcpSessionId, MalformedRecord
-from agent_comms.owner_protocol import OwnerAnnouncement
-from agent_comms.storage.private_path import PrivateSocketRole
-from agent_comms.owner_connection import socket_path
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.private_path import PrivateSocketRole
+from agent_comms.transport.owner_connection import NoControllerToken, socket_path
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 
@@ -43,7 +42,7 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
     proxy = client._create_runtime_proxy(thread, AcpSessionId(thread.name))
     holder = sqlite3.connect(database, isolation_level=None)
     try:
-        with caplog.at_level(logging.ERROR, logger="agent_comms.runtime"):
+        with caplog.at_level(logging.ERROR, logger="agent_comms.execution.runtime"):
             # Hold the coordinator's actual exclusive transaction. The real
             # subscription must refuse its transcript read before ready; that
             # read runs in the observation process, which reports its own

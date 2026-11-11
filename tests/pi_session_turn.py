@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-
-from agent_comms.repo import Checkout
 from contextlib import AsyncExitStack, aclosing
 from pathlib import Path
 
-import agent_comms.backend as backend
-from agent_comms.comms import wire
-from agent_comms.cursor_publication import CursorDelivery
+import agent_comms.execution.backend as backend
 from agent_comms.agent_backend import NoInputStartListener
-from agent_comms.pi_native_backend import PersistentPiSession
-from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.selected_actions import NoSelectedTools
+from agent_comms.comms import wire
+from agent_comms.execution.cursor_publication import CursorDelivery
+from agent_comms.execution.selected.actions import NoSelectedTools
+from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.execution.persistent_pi_session import PersistentPiSession
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 
 

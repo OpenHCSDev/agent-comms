@@ -2,20 +2,20 @@
 
 
 
-from agent_comms.repo import Checkout
-from bus_history import read_history
-from delivery_owner_fixture import qualified_owner_launch, start_headless_owner  # noqa: F401
 import asyncio
 
 import pytest
 
-from agent_comms.nominal.field_codec import AcpSessionId
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.owner_protocol import OwnerLine, OwnerUpdate
-from agent_comms.runtime_server import SocketClient
+from agent_comms.execution.owner_protocol import OwnerLine, OwnerUpdate
+from agent_comms.nominal.field_codec import AcpSessionId
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.runtime_server import SocketClient
+from bus_history import read_history
+from delivery_owner_fixture import qualified_owner_launch, start_headless_owner  # noqa: F401
 
 
 @pytest.fixture

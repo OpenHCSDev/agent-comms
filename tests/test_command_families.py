@@ -1,4 +1,5 @@
 import sys
+
 """External contracts and adding commands without editing any consumer catalog."""
 
 import json
@@ -6,26 +7,27 @@ import json
 import pytest
 from acp.schema import PromptRequest, TextContentBlock
 
-from agent_comms.cli import build_parser, CliInvocation
+from agent_comms.cli import CliInvocation, build_parser
 from agent_comms.comms import wire
-from agent_comms.history_result import (
-    ChannelHistoryPageResult,
-    DmHistoryPageResult,
-    EverythingHistoryPageResult,
-)
-from agent_comms.messages import InfoKind
-from agent_comms.native_arguments import (
+from agent_comms.execution.native_arguments import (
     ConfiguredBinary,
     GivenArguments,
     GivenBinary,
     InheritedArguments,
 )
+from agent_comms.execution.pi_vocabulary import ServiceTier
+from agent_comms.messaging.history_result import (
+    ChannelHistoryPageResult,
+    DmHistoryPageResult,
+    EverythingHistoryPageResult,
+)
+from agent_comms.messaging.messages import InfoKind
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.pi_vocabulary import ServiceTier
-from agent_comms.repo import Checkout, Repo
-from agent_comms.runtime_server import RuntimeRequest
-from agent_comms.runtime_requests import PromptRuntimeRequest
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repo import Repo
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.runtime_request import RuntimeRequest
+from agent_comms.transport.runtime_requests import PromptRuntimeRequest
 
 
 def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_path):

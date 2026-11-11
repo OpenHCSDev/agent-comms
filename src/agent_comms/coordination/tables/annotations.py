@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 from typing import Annotated, ClassVar, Self
 
 from agent_comms.coordination.schema import CoordinatorRow
-from agent_comms.message_reference import MessageReference
-from agent_comms.turn_context import ContextSpan, SegmentManifest
+from agent_comms.execution.turn_context import ContextSpan, SegmentManifest
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.storage.typed_table import (
     LOCAL_TABLE_SOURCE,
     AttachedPracticeRebuild,
@@ -23,9 +23,9 @@ from agent_comms.storage.typed_table import (
     UnallocatedRowId,
     sql_literal,
 )
-from agent_comms.working_memory_labels import Classifier, ModelLabel, SpanLabel
-from agent_comms.working_memory_questions import SpanQuestion
-from agent_comms.working_memory_requests import AnnotationOutcome, DisclosureRequest
+from agent_comms.working_memory.working_memory_labels import Classifier, ModelLabel, SpanLabel
+from agent_comms.working_memory.working_memory_questions import SpanQuestion
+from agent_comms.working_memory.working_memory_requests import AnnotationOutcome, DisclosureRequest
 
 
 class ContextSpanRows(TypedTable, declared_name=None):

@@ -1,9 +1,12 @@
 """Original selected-turn instruction contributors, acquired by the family."""
 from __future__ import annotations
+
 from dataclasses import dataclass
-from ..selected_participant import SelectedParticipant
-from ..selected_triage import SelectedTriage
-from ..turn_context import InstructionFile, InstructionSegment
+
+from agent_comms.execution.selected.participant import SelectedParticipant
+from agent_comms.execution.selected.triage import SelectedTriage
+from agent_comms.execution.turn_context import InstructionFile, InstructionSegment
+
 
 @dataclass(frozen=True, kw_only=True)
 class SelectedTriageSegment(InstructionSegment):

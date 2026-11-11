@@ -1,8 +1,4 @@
 """A published native reply automatically reaches the original channel sender."""
-from agent_comms.repo import Checkout
-from agent_comms.controller import SessionUpdateSink
-
-
 import asyncio
 import json
 import os
@@ -16,7 +12,7 @@ from pathlib import Path
 import pytest
 from acp.schema import SessionNotification, TextContentBlock
 
-from agent_comms.acp import CommsClient
+from agent_comms.execution.acp import CommsClient
 from agent_comms.acp_extension import (
     CursorAdvancedUpdate,
     TurnChangedUpdate,
@@ -24,15 +20,17 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.comms import wire
-from agent_comms.launch_runtime import RestoredRuntime
-from agent_comms.lifecycle_capability import Executing
-from agent_comms.native_input_record import TriageNativeExecution
-from agent_comms.owner_cutover import PreserveOwnerRuntime
-from agent_comms.owner_restart import OwnerRestartRequest
-from agent_comms.pi_vocabulary import OffThinkingLevel
-from agent_comms.restart_scope import OwnersNamed
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.turn_lease import NoTurnRecord
+from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.launch_runtime import RestoredRuntime
+from agent_comms.execution.native_input_record import TriageNativeExecution
+from agent_comms.execution.owner_cutover import PreserveOwnerRuntime
+from agent_comms.execution.owner_restart import OwnerRestartRequest
+from agent_comms.execution.pi_vocabulary import OffThinkingLevel
+from agent_comms.execution.restart_scope import OwnersNamed
+from agent_comms.execution.turn_lease import NoTurnRecord
+from agent_comms.nominal.lifecycle_capability import Executing
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
 from bus_history import read_history
 from bus_record_fixture import configure_local_native, prepare_native_comms, start_source_owner
@@ -64,10 +62,10 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 assert len(requests) <= (8 if broadcast else 2 + seed_count + restart_after_reply + 3 * reject_triage), "Reply observation caused replay or ping-pong"
                 # The current original native reservation owns stage. Join its
                 # exact ID to the saved input; prompt prose is not a stage codec.
-                from agent_comms.coordination.tables.assignments import WakeAssignment
                 from agent_comms.coordination.coordinator import Coordination
-                from agent_comms.native_runtime_input import NativeRuntimeInput
-                from agent_comms.native_transcript import NativeTranscript
+                from agent_comms.coordination.tables.assignments import WakeAssignment
+                from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+                from agent_comms.execution.transcript_sources import NativeTranscript
 
                 # Pi commits each tracked input in a request's context (session
                 # entry, generation, context digest) right before sending it
@@ -240,8 +238,8 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             "questioner", "#team", "ROUNDTRIP_QUESTION" if broadcast else "@answerer ROUNDTRIP_QUESTION"
         ).message
         if broadcast:
-            from agent_comms.coordination.tables.assignments import WakeAssignment
             from agent_comms.coordination.coordinator import Coordination
+            from agent_comms.coordination.tables.assignments import WakeAssignment
 
             await until(lambda: len(read_history(comms, "#team")) == 3,
                         "Both independent native replies published")
@@ -360,9 +358,9 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             "Canonical reply and any rejected-result alert published",
         )
         if reject_triage:
-            from agent_comms.assignment_states import FailedAssignment
+            from agent_comms.coordination.assignment_states import FailedAssignment
             from agent_comms.coordination.coordinator import Coordination
-            from agent_comms.historical_native_inputs import read_historical_native_inputs
+            from agent_comms.execution.historical_native_inputs import read_historical_native_inputs
 
             with Coordination(str(comms.root / "coordination.sqlite3")) as store:
                 rejected = read_historical_native_inputs(

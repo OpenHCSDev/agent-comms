@@ -1,0 +1,556 @@
+"""The source inventory and pinned identity of a native package build."""
+
+from __future__ import annotations
+
+import asyncio
+import getopt
+import hashlib
+import json
+import os
+import platform
+import shutil
+import subprocess
+import sys
+from abc import ABC, abstractmethod
+from collections.abc import Iterator, Mapping
+from contextlib import AbstractContextManager, contextmanager
+from contextvars import Context, ContextVar
+from dataclasses import dataclass
+from functools import cache
+from pathlib import Path
+from tempfile import TemporaryFile
+from time import monotonic
+from typing import IO, ClassVar, TypedDict, Unpack, cast
+
+INPUTS_PREFIX = "# agent-comms-native-inputs-v1 "
+
+
+PREPARATION_SCHEME = "sealed-native-store-v1"
+
+
+@dataclass(frozen=True)
+class GitOptions:
+    values: list[tuple[str, str]]
+    arguments: list[str]
+
+
+class NamedProgram:
+    """Program capabilities compose their declared names before registration."""
+
+    names: ClassVar[frozenset[str]] = frozenset()
+
+    def __init_subclass__(cls, *, names: frozenset[str] = frozenset()) -> None:
+        cls.names = cls.names | names
+        super().__init_subclass__()
+        cls.register_names(names)
+
+    @classmethod
+    def register_names(cls, names: frozenset[str]) -> None:
+        """Launch-only programs need no shell decoder registration."""
+
+
+class Executable(NamedProgram):
+    """A child-launch capability declares its executable name."""
+
+    program: ClassVar[str]
+
+    def __init_subclass__(cls, *, names: frozenset[str] = frozenset()) -> None:
+        cls.names = cls.names | frozenset((cls.program,))
+        super().__init_subclass__(names=names)
+
+
+class StdioOptions(TypedDict, total=False):
+    """Only provided Popen selectors; omitted endpoints inherit their real descriptors."""
+
+    stdin: int | IO[bytes] | IO[str]
+    stdout: int | IO[bytes] | IO[str]
+    stderr: int | IO[bytes] | IO[str]
+
+
+class AsyncStdioOptions(StdioOptions, total=False):
+    limit: int
+
+
+class ChildStdio(ABC):
+    """Launch endpoints shared by stdlib construction and Core's gated children."""
+
+    @property
+    @abstractmethod
+    def streams(self) -> StdioOptions: ...
+
+    @property
+    def options(self) -> AsyncStdioOptions:
+        return {**self.streams}
+
+
+class ConfiguredChildStdio(ChildStdio):
+    def __init__(self, **provided: Unpack[StdioOptions]) -> None:
+        self.provided = provided
+
+    @property
+    def streams(self) -> StdioOptions:
+        return self.provided
+
+
+class DetachedChildStdio(ConfiguredChildStdio):
+    """Detached launches keep their original quiet input/output and merged errors."""
+
+    def __init__(self, **provided: Unpack[StdioOptions]) -> None:
+        defaults: StdioOptions = {
+            "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.STDOUT,
+        }
+        defaults.update(provided)
+        super().__init__(**defaults)
+
+
+class GitAcquisitionCancelled(asyncio.CancelledError):
+    """Shutdown interrupted an explicitly cancellable Git acquisition, not a Git failure."""
+
+
+class GitOpening:
+    """Stdlib bootstrap constructor; Core binds identity ownership in its work context."""
+
+    @contextmanager
+    def opening(
+        self, command: tuple[str, ...], *, env: Mapping[str, str], stdio: ChildStdio,
+    ) -> Iterator[subprocess.Popen[bytes]]:
+        with subprocess.Popen[bytes](command, env=env, **stdio.streams) as process:
+            try:
+                yield process
+            except BaseException:
+                process.kill()
+                process.wait()
+                raise
+
+    @contextmanager
+    def bound(self) -> Iterator[None]:
+        token = _git_opening.set(self)
+        try:
+            yield
+        finally:
+            _git_opening.reset(token)
+
+    @contextmanager
+    def acquiring(self) -> Iterator[None]:
+        """Standalone construction has no connector shutdown to borrow."""
+        yield
+
+    def enter_phase(self) -> None:
+        """A standalone operation has no connector phase gate."""
+
+
+_git_opening: ContextVar[GitOpening] = ContextVar("git_opening", default=GitOpening())
+
+
+@dataclass(frozen=True, order=True)
+class GitVersion:
+    """A Git release by its numeric components; ``git --version`` reports its spelling."""
+
+    major: int
+    minor: int
+    patch: int = 0
+
+    reported_prefix: ClassVar[str] = "git version "
+
+    @classmethod
+    def reported(cls, line: str) -> GitVersion:
+        """Decode Git's own report, such as "git version 2.44.0 (Apple Git-1)"."""
+        if not line.startswith(cls.reported_prefix):
+            raise ValueError(f"Not a Git version report: {line!r}")
+        components = line.removeprefix(cls.reported_prefix).split()[0].split(".")[:3]
+        try:
+            return cls(*(int(component) for component in components))
+        except (TypeError, ValueError) as unread:
+            raise ValueError(f"Unreadable Git version report: {line!r}") from unread
+
+    def __str__(self) -> str:
+        return f"{self.major}.{self.minor}.{self.patch}"
+
+
+class GitVersionUnsupported(RuntimeError):
+    """The Git on PATH predates an option this repository's reads need; nothing drops it."""
+
+    def __init__(self, program: Path, found: GitVersion, required: GitVersion) -> None:
+        self.program, self.found, self.required = program, found, required
+        super().__init__(
+            f"{program} is Git {found}; reading a partial clone needs Git {required} or later "
+            "(its reads pass --no-lazy-fetch)."
+        )
+
+
+class CloneShape(ABC):
+    """Whether a checkout's repository can fetch missing objects while it is read."""
+
+    @abstractmethod
+    def read_options(self, program: Path) -> tuple[str, ...]:
+        """The Git options every read of this repository passes."""
+
+    promisor_settings: ClassVar[str] = r"^(remote\..+\.promisor|extensions\.partialclone)$"
+    shapes: ClassVar[dict[Path, CloneShape]] = {}
+
+    @classmethod
+    def of(cls, checkout: Path) -> CloneShape:
+        """Git reads a repository as partial when a remote is a promisor or extensions.partialClone
+        names one; `clone --filter` writes the first. Git answers 1 when no setting matches."""
+        if checkout in cls.shapes:
+            return cls.shapes[checkout]
+        probe = GitLaunch._run(checkout, "config", "--type=bool-or-str", "--get-regexp",
+                               cls.promisor_settings)
+        if probe.returncode not in (0, 1):
+            return UnreadableClone()
+        settings = (line.split(maxsplit=1) for line in probe.stdout.decode().splitlines())
+        shape = PartialClone() if any(value != "false" for _, value in settings) else FullClone()
+        cls.shapes[checkout] = shape
+        return shape
+
+
+class UnreadableClone(CloneShape):
+    """Git could not read the checkout's configuration. The read itself then fails through its
+    caller's own Git failure, and the next read probes again instead of remembering this."""
+
+    def read_options(self, program: Path) -> tuple[str, ...]:
+        return ()
+
+
+class FullClone(CloneShape):
+    """Every object is local, so a read can never fetch: reads pass nothing, on any Git."""
+
+    def read_options(self, program: Path) -> tuple[str, ...]:
+        return ()
+
+
+class PartialClone(CloneShape):
+    """A promisor remote supplies missing objects. Only explicit acquisition may fetch them,
+    so every read refuses lazy fetches with --no-lazy-fetch, first shipped in Git 2.44."""
+
+    minimum_version: ClassVar[GitVersion] = GitVersion(2, 44)
+
+    def read_options(self, program: Path) -> tuple[str, ...]:
+        found = GitLaunch.version(program)
+        if found < self.minimum_version:
+            raise GitVersionUnsupported(program, found, self.minimum_version)
+        return ("--no-lazy-fetch",)
+
+
+class GitLaunch(Executable):
+    """One Git child boundary, also usable by the isolated stdlib bootstrap."""
+
+    command_timeout: ClassVar[float] = 60.0
+    program: ClassVar[str] = "git"
+    chdir_option: ClassVar[str] = "-C"
+    directory_options: ClassVar[frozenset[str]] = frozenset(
+        {chdir_option, "--git-dir", "--work-tree"}
+    )
+    value_options: ClassVar[tuple[str, ...]] = (
+        *sorted(directory_options),
+        "-c",
+        "--config-env",
+        "--namespace",
+        "--list-cmds",
+        "--attr-source",
+        "--super-prefix",
+    )
+    optional_options: ClassVar[tuple[str, ...]] = ("--exec-path",)
+    switch_options: ClassVar[tuple[str, ...]] = (
+        "-v",
+        "-h",
+        "-p",
+        "-P",
+        "--version",
+        "--help",
+        "--no-pager",
+        "--paginate",
+        "--html-path",
+        "--man-path",
+        "--info-path",
+        "--no-replace-objects",
+        "--bare",
+        "--literal-pathspecs",
+        "--glob-pathspecs",
+        "--noglob-pathspecs",
+        "--icase-pathspecs",
+        "--no-optional-locks",
+        "--no-lazy-fetch",
+        "--no-advice",
+    )
+
+    @classmethod
+    def options(cls, args: list[str]) -> GitOptions:
+        short = "".join(name[1:] + ":" for name in cls.value_options if len(name) == 2)
+        short += "".join(name[1:] for name in cls.switch_options if len(name) == 2)
+        long = [name[2:] + "=" for name in cls.value_options if name.startswith("--")]
+        long.extend(name[2:] for name in cls.switch_options if name.startswith("--"))
+        long.extend(name[2:] + "=?" for name in cls.optional_options)
+        values, arguments = getopt.getopt(args, short, long)
+        return GitOptions(values, arguments)
+
+    @classmethod
+    def command(cls, checkout: Path | str, *args: str) -> tuple[str, ...]:
+        return cls.program, cls.chdir_option, str(checkout), *args
+
+    @staticmethod
+    @cache
+    def _version(program: Path, modified_ns: int) -> GitVersion:
+        """The binary's own version report; its stamp keys this immutable answer."""
+        probe = GitLaunch.completed(
+            (str(program), "--version"),
+            stdio=ConfiguredChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+            env={name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+            | {"LC_ALL": "C"}, timeout=10,
+        )
+        probe.check_returncode()
+        return GitVersion.reported(probe.stdout.decode().strip())
+
+    @classmethod
+    def version(cls, program: Path) -> GitVersion:
+        return cls._version(program, program.stat().st_mtime_ns)
+
+    @classmethod
+    def located(cls, source: Mapping[str, str]) -> Path:
+        """The git a launch with this environment runs."""
+        match shutil.which(cls.program, path=source.get("PATH", os.defpath)):
+            case str(executable):
+                return Path(executable)
+            case _:
+                raise FileNotFoundError(cls.program)
+
+    @staticmethod
+    @cache
+    def _local_environment(program: Path, modified_ns: int) -> frozenset[str]:
+        """Git declares local selectors; the binary's stamp keys this immutable answer."""
+        command = (str(program), "rev-parse", "--local-env-vars")
+        probe = GitLaunch.completed(
+            command, stdio=ConfiguredChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+            env={name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+            | {"LC_ALL": "C"}, timeout=10,
+        )
+        probe.check_returncode()
+        return frozenset(probe.stdout.decode().splitlines())
+
+    @classmethod
+    def environment(cls, source: Mapping[str, str]) -> dict[str, str]:
+        """The checkout selects the repository; inherit auth and command configuration."""
+        program = cls.located(source)
+        local = cls._local_environment(program, program.stat().st_mtime_ns)
+        # GIT_CONFIG_* carries command configuration, including auth and fixture
+        # identity; GIT_CONFIG instead selects an alternate configuration file.
+        return {
+            name: value
+            for name, value in source.items()
+            if name not in local or name.startswith("GIT_CONFIG_")
+        } | {"LC_ALL": "C"}
+
+    @staticmethod
+    def opening(
+        command: tuple[str, ...], *, env: Mapping[str, str], stdio: ChildStdio,
+    ) -> AbstractContextManager[subprocess.Popen[bytes]]:
+        return _git_opening.get().opening(command, env=env, stdio=stdio)
+
+    @staticmethod
+    def acquiring() -> AbstractContextManager[None]:
+        return _git_opening.get().acquiring()
+
+    @staticmethod
+    def enter_phase() -> None:
+        _git_opening.get().enter_phase()
+
+    @staticmethod
+    def in_context(context: Context) -> Context:
+        """Carry this constructor capability through an explicitly isolated worker context."""
+        context.run(_git_opening.set, _git_opening.get())
+        return context
+
+    @classmethod
+    def completed(
+        cls, command: tuple[str, ...], *, env: Mapping[str, str], stdio: ChildStdio,
+        timeout: float, input: bytes = b"",
+    ) -> subprocess.CompletedProcess[bytes]:
+        with cls.opening(command, stdio=stdio, env=env) as process:
+            stdout, stderr = process.communicate(input=input, timeout=timeout)
+            return subprocess.CompletedProcess(command, process.wait(), stdout, stderr)
+
+    @classmethod
+    def _run(
+        cls, checkout: Path | str, *args: str, timeout: float = command_timeout, input: bytes = b""
+    ) -> subprocess.CompletedProcess[bytes]:
+        return cls.completed(
+            cls.command(checkout, *args), env=cls.environment(os.environ), timeout=timeout,
+            input=input, stdio=ConfiguredChildStdio(
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+        )
+
+    @classmethod
+    def _pipe(cls, checkout: Path | str, producer: tuple[str, ...], consumer: tuple[str, ...],
+              *, timeout: float = command_timeout, input: bytes = b'') -> subprocess.CompletedProcess[bytes]:
+        """Stream Git output between children; capture only the final, bounded answer."""
+        environment = cls.environment(os.environ)
+        producer_command = cls.command(checkout, *producer)
+        consumer_command = cls.command(checkout, *consumer)
+        started = monotonic()
+        # Only revision names and diagnostics are spooled. The potentially enormous patch
+        # stream stays in the kernel pipe, and every child is retired on success or failure.
+        with TemporaryFile() as source, TemporaryFile() as errors:
+            source.write(input)
+            source.seek(0)
+            with cls.opening(producer_command, stdio=ConfiguredChildStdio(
+                    stdin=source, stdout=subprocess.PIPE, stderr=errors), env=environment) as first:
+                assert first.stdout, "Git PIPE producer has no output stream"
+                with cls.opening(consumer_command, stdio=ConfiguredChildStdio(
+                        stdin=first.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+                        env=environment) as last:
+                    first.stdout.close()
+                    output, error = last.communicate(
+                        timeout=max(0, timeout - (monotonic() - started)))
+                result = first.wait(timeout=max(0, timeout - (monotonic() - started)))
+                if result:
+                    errors.seek(0)
+                    return subprocess.CompletedProcess(producer_command, result, b'', errors.read())
+                return subprocess.CompletedProcess(consumer_command, last.wait(), output, error)
+
+
+def built_tree_pin(manifest: Path) -> str:
+    """Name the prepared artifact by its scheme and committed file/tree contents.
+
+    Recipe-only edits retain an artifact; a new preparation scheme cannot borrow one
+    prepared under the old scheme, even when its content commitment is unchanged.
+    """
+    built = "".join(
+        line
+        for line in manifest.read_text().splitlines(keepends=True)
+        if not line.startswith(INPUTS_PREFIX)
+    )
+    return hashlib.sha256((PREPARATION_SCHEME + "\n" + built).encode()).hexdigest()[:16]
+
+
+@dataclass(frozen=True)
+class PackageFile:
+    source: str
+    target: str
+
+    @classmethod
+    def of(cls, record: Mapping[str, str]) -> PackageFile:
+        return cls(**record)
+
+
+@dataclass(frozen=True)
+class McpClientSource:
+    root: str
+    install: tuple[str, ...]
+    files: tuple[str, ...]
+    trees: tuple[str, ...]
+
+    @classmethod
+    def of(cls, record: Mapping[str, object]) -> McpClientSource:
+        # JSON enters the declared constructor here; post-init normalizes its arrays.
+        return cls(**record)  # type: ignore[arg-type]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "install", tuple(self.install))
+        object.__setattr__(self, "files", tuple(self.files))
+        object.__setattr__(self, "trees", tuple(self.trees))
+
+
+@dataclass(frozen=True)
+class NativeRepositoryInputs:
+    package_files: tuple[PackageFile, ...]
+    mcp_client: McpClientSource
+    compaction_instruction: str
+
+    @classmethod
+    def of(cls, root: Path) -> NativeRepositoryInputs:
+        return cls(**json.loads((root / "stack/native/repository-inputs.json").read_text()))
+
+    def __post_init__(self) -> None:
+        records = cast(tuple[Mapping[str, str], ...], self.package_files)
+        object.__setattr__(self, "package_files", tuple(PackageFile.of(item) for item in records))
+        object.__setattr__(
+            self, "mcp_client", McpClientSource.of(cast(Mapping[str, object], self.mcp_client))
+        )
+
+    def pathspecs(self) -> tuple[str, ...]:
+        return (
+            *(item.source for item in self.package_files),
+            *(
+                f"{self.mcp_client.root}/{name}"
+                for name in (
+                    *self.mcp_client.install,
+                    *self.mcp_client.files,
+                    *self.mcp_client.trees,
+                )
+            ),
+            self.compaction_instruction,
+        )
+
+
+@dataclass(frozen=True)
+class NativeBuildInputs(GitLaunch):
+    root: Path
+
+    def paths(self) -> tuple[Path, ...]:
+        """The files the recipe in stack/native reads: that directory and the
+        repository inputs it declares.
+        """
+        tracked = self._run(
+            self.root,
+            "ls-files",
+            "-z",
+            "--cached",
+            "--",
+            "stack/native",
+            *NativeRepositoryInputs.of(self.root).pathspecs(),
+        )
+        tracked.check_returncode()
+        paths = tracked.stdout.decode()
+        return tuple(sorted(self.root / path for path in paths.split("\0") if path))
+
+    def digest(self, manifest: Path) -> str:
+        digest = hashlib.sha256()
+        for path in self.paths():
+            digest.update(str(path.relative_to(self.root)).encode() + b"\0")
+            digest.update((path.stat().st_mode & 0o111).to_bytes(2, "big"))
+            digest.update(hashlib.sha256(path.read_bytes()).digest())
+        for line in manifest.read_text().splitlines():
+            if line.startswith("# agent-comms-native-stock-v1 "):
+                digest.update(line.encode())
+        return digest.hexdigest()
+
+    def require_pinned(self, manifest: Path) -> None:
+        if INPUTS_PREFIX + self.digest(manifest) not in manifest.read_text().splitlines():
+            raise ValueError("Native build inputs changed; rebuild with --update-pins")
+
+    def preparation_digest(
+        self, manifest: Path, node: str, npm: str, dependency_package: str = ""
+    ) -> str:
+        """Hash the recipe, pin, toolchain and supplied MCP input, never our output."""
+        dependency_digest = ""
+        if dependency_package:
+            dependency_digest = subprocess.check_output(
+                [
+                    str(self.root / "stack/native/native-source"),
+                    sys.executable,
+                    "digest",
+                    dependency_package,
+                ],
+                text=True,
+            ).strip()
+        digest = hashlib.sha256()
+        for value in (
+            self.digest(manifest),
+            built_tree_pin(manifest),
+            manifest.read_text(),
+            node,
+            npm,
+            sys.version,
+            sys.platform,
+            platform.machine(),
+            dependency_digest,
+        ):
+            digest.update(value.encode() + b"\0")
+        return digest.hexdigest()
+
+
+if __name__ == "__main__":
+    inputs = NativeBuildInputs(Path(sys.argv[1]))
+    manifest = inputs.root / "stack/pi-native.sha256"
+    print(built_tree_pin(manifest), inputs.preparation_digest(manifest, *sys.argv[2:]))

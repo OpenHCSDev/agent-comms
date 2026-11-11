@@ -2,9 +2,9 @@
 
 from dataclasses import replace
 
+from agent_comms.execution.selected.claim import publish_selected_resource_claim
+from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.nominal.field_codec import ClaimId
-from agent_comms.selected_claim import publish_selected_resource_claim
-from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from test_claim_bus_read import claim_originals, settle_failed
 
 pytest_plugins = ("test_claim_bus_read",)

@@ -3,12 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.checkout_publication import PublishingCheckout
-from agent_comms.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize
+from agent_comms.projects.checkout_publication import PublishingCheckout
 from agent_comms.registry.threads import Thread
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tool_caller import ThreadCaller
 
 
 @dataclass(frozen=True, kw_only=True)

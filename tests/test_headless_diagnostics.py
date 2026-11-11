@@ -3,9 +3,9 @@
 import json
 import os
 
-from agent_comms.diagnostics import record_terminal_failure
+from agent_comms.execution.diagnostics import record_terminal_failure
+from agent_comms.execution.turn_failure import NativePreflightTimeout
 from agent_comms.nominal.field_codec import TurnId
-from agent_comms.turn_failure import NativePreflightTimeout
 
 
 def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):

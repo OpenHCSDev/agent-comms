@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.team.teammate_talk import Ceremony, TeammateTalk
-from agent_comms.thread_identity import RecordedThreadIncarnation
 
 TEAMMATE = RecordedThreadIncarnation("install-speed", 1792869186.2298183)
 

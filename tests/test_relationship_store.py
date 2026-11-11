@@ -6,8 +6,8 @@ import stat
 
 import pytest
 
-from agent_comms.relationships import RelationshipEdit
 from agent_comms.comms import wire
+from agent_comms.registry.relationships import RelationshipEdit
 from test_relationships import setup_wire
 
 

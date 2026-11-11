@@ -1,16 +1,19 @@
 """The declared run and assignment history stay with their original records."""
-from dataclasses import replace
 import time
+from dataclasses import replace
 
 import pytest
 
-from agent_comms.change_report import FileLine
-from agent_comms.goal_actions import OrderGoalAction
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import Todo, TodoStore
-from agent_comms.order_runs import ApplicationOrderRun
+from agent_comms.planning.goal_actions import OrderGoalAction
+from agent_comms.planning.order_runs import ApplicationOrderRun
+from agent_comms.planning.orders import (
+    Todo,
+    TodoStore,
+)
+from agent_comms.projects.change_report import FileLine
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms_hooks import ToolRefusedError
 from test_forks import fork_bus  # noqa: F401
 from test_todos import order, thread

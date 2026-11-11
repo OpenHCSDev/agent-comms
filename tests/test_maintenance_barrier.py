@@ -1,8 +1,8 @@
 import sys
+
 """Provider-free disposable checks of the default-off maintenance claim seam."""
 
 
-from agent_comms.repo import Checkout
 import asyncio
 import json
 import multiprocessing as mp
@@ -10,13 +10,21 @@ import os
 from pathlib import Path
 
 import pytest
-from agent_comms.lifecycle_capability import Executing
 
-from agent_comms.send_outcome import GrantedSend, HeldSend
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.send_outcome import GrantedSend, HeldSend
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
+from agent_comms.nominal.lifecycle_capability import Executing
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import (
     HOLDER_NONCE,
     DrainingPhase,
@@ -30,20 +38,17 @@ from agent_comms.storage.maintenance_barrier import (
     PausedPhase,
     ReadyPhase,
 )
-from agent_comms.registry.registration import Registration
 from agent_comms.storage.store_files import (
     ExclusiveLock,
     StoreGuard,
     _async_store_lock,
     _store_lock,
 )
-from agent_comms.registry.threads import NativeThread
-from agent_comms.turn_item import NativeItemId, NativeTurnId
 
 
 def test_nested_holds_restore_the_previous_authority_on_failure(tmp_path, monkeypatch):
     monkeypatch.delenv(HOLDER_NONCE, raising=False)
-    gates = tuple(MaintenanceBarrier(tmp_path / name / "registry.json")
+    gates = tuple(MaintenanceBarrier(tmp_path / RegistryFile.path_in(name))
                   for name in ("first", "second"))
     first, second = (gate.begin(MaintenanceOperator.current()) for gate in gates)
     with first.holding():
@@ -68,7 +73,7 @@ def test_maintenance_operator_rejects_invalid_external_text(text: object) -> Non
 
 
 def test_draining_lends_existing_turn_but_holds_new_prompt(tmp_path: Path) -> None:
-    gate = MaintenanceBarrier(tmp_path / 'wire' / 'registry.json')
+    gate = MaintenanceBarrier(RegistryFile.path_in(tmp_path / 'wire'))
     hold = gate.begin(MaintenanceOperator.current())
     assert hold.phase is DrainingPhase
     with gate.read().phase.send_new(None) as new:
@@ -95,7 +100,7 @@ def test_phase_owner_is_default_off_and_clear_is_exact(tmp_path: Path) -> None:
 
 
 def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> None:
-    from agent_comms.owner_cutover import MaintainedOwnerCutover, PreserveOwnerRuntime
+    from agent_comms.execution.owner_cutover import MaintainedOwnerCutover, PreserveOwnerRuntime
 
     class ScratchCutover(MaintainedOwnerCutover):
         def require_selection(self, snapshot, owners):
@@ -109,11 +114,11 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
     cutover = ScratchCutover()
     cutover.maintenance_hold = hold
     cutover.require_restart_phase(comms.owners)
-    from agent_comms.restart_refusals import OwnerMaintenancePendingRefusal
+    from agent_comms.execution.restart_refusals import OwnerMaintenancePendingRefusal
 
     with pytest.raises(OwnerMaintenancePendingRefusal) as refused:
         PreserveOwnerRuntime().require_restart_phase(comms.owners)
-    from agent_comms.lifecycle_capability import Pending
+    from agent_comms.nominal.lifecycle_capability import Pending
 
     assert refused.value.queue_state().items_with(Pending, refused.value)
     comms.owners.maintenance.clear(hold)
@@ -179,7 +184,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
 def test_state_generation_requires_exact_matching_positive_int(
     tmp_path: Path, generation: object
 ) -> None:
-    gate = MaintenanceBarrier(tmp_path / "wire" / "registry.json")
+    gate = MaintenanceBarrier(RegistryFile.path_in(tmp_path / "wire"))
     assert gate.read().phase is ReadyPhase  # Fresh roots remain default OFF.
     gate.begin(MaintenanceOperator.current())
     state = json.loads(gate.state_path.read_text())
@@ -205,7 +210,7 @@ def test_state_generation_requires_exact_matching_positive_int(
     ["missing-state", "missing-marker", "corrupt-state", "stale-generation", "symlink-state"],
 )
 def test_enabled_witness_damage_never_restores_default_off(tmp_path: Path, fault: str) -> None:
-    gate = MaintenanceBarrier(tmp_path / "wire" / "registry.json")
+    gate = MaintenanceBarrier(RegistryFile.path_in(tmp_path / "wire"))
     gate.begin(MaintenanceOperator.current())
     if fault == "missing-state":
         gate.state_path.unlink()
@@ -240,7 +245,7 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
     proc.join(10)
     assert proc.exitcode == 0
     assert q.get(timeout=2)[0] == "denied"
-    async with MaintenanceBarrier(root / "registry.json").ingress_async() as status:
+    async with MaintenanceBarrier(RegistryFile.path_in(root)).ingress_async() as status:
         with status.phase.send_new(None, None, "native", "original") as outcome:
             assert isinstance(outcome, HeldSend)
     assert comms.owners.maintenance.read() == hold
@@ -293,11 +298,11 @@ async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: P
     entered = asyncio.Event()
 
     async def native_write():
-        async with MaintenanceBarrier(root / "registry.json").ingress_async() as status:
+        async with MaintenanceBarrier(RegistryFile.path_in(root)).ingress_async() as status:
             with status.phase.send_running(None, None, "native", "original"):
                 entered.set()
 
-    async with _async_store_lock(root / 'registry.json', ExclusiveLock(), StoreGuard.contention):
+    async with _async_store_lock(RegistryFile.path_in(root), ExclusiveLock(), StoreGuard.contention):
         send = asyncio.create_task(native_write())
         try:
             # The original exclusive owner must resume on the same loop while
@@ -314,7 +319,7 @@ async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: P
 
 def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     root = tmp_path / "wire"
-    gate = MaintenanceBarrier(root / "registry.json")
+    gate = MaintenanceBarrier(RegistryFile.path_in(root))
     control = gate
     # The same lock spans final state check, delegate and fake stdin write.
     import threading
@@ -324,7 +329,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     changed = threading.Event()
 
     async def fake_send() -> None:
-        async with MaintenanceBarrier(root / "registry.json").ingress_async() as status:
+        async with MaintenanceBarrier(RegistryFile.path_in(root)).ingress_async() as status:
             with status.phase.send_running(None, None, "id", "text"):
                 entered.set()
                 assert release.wait(5)
@@ -343,15 +348,15 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     sender.join(5)
     closer.join(5)
     assert changed.is_set()
-    with _store_lock(root / 'registry.json', ExclusiveLock(), StoreGuard.contention), pytest.raises(RelationViolationError):
+    with _store_lock(RegistryFile.path_in(root), ExclusiveLock(), StoreGuard.contention), pytest.raises(RelationViolationError):
         gate.assert_open_unlocked()
 
 
 def test_activity_updates_runtime_state_without_publication_while_draining(tmp_path: Path, capsys) -> None:
     """Derived activity remains writable; maintenance still holds new bus publication."""
-    from agent_comms.activity import ActivityState, ActivityStore
-    from agent_comms.bus import Bus
     from agent_comms.cli import CliInvocation
+    from agent_comms.messaging.bus import Bus
+    from agent_comms.registry.activity import ActivityState, ActivityStore
 
     def cli(*argv: str) -> tuple[int, str]:
         code = CliInvocation().invoke(['--root', str(tmp_path), *argv], sys.stdout)
@@ -361,14 +366,14 @@ def test_activity_updates_runtime_state_without_publication_while_draining(tmp_p
     for name in ('a', 'b'):
         assert cli('register', '--name', name, '--worktree', '/wt')[0] == 0
     before = bus.revision()
-    registry_before = (tmp_path / "registry.json").read_bytes()
-    gate = MaintenanceBarrier(tmp_path / 'registry.json')
+    registry_before = (RegistryFile.path_in(tmp_path)).read_bytes()
+    gate = MaintenanceBarrier(RegistryFile.path_in(tmp_path))
     hold = gate.begin(MaintenanceOperator.current())
     code, out = cli('activity', '--name', 'a', '--state', 'working')
     assert code == 0, out
     assert ActivityStore(tmp_path).current('a').state is ActivityState.WORKING
     assert bus.revision() == before
-    assert (tmp_path / 'registry.json').read_bytes() == registry_before
+    assert RegistryFile.path_in(tmp_path).read_bytes() == registry_before
     gate.clear(hold)
     assert cli('send', '--from', 'a', '--to', 'b', '--body', 'hi')[0] == 0
 
@@ -376,10 +381,16 @@ def test_activity_updates_runtime_state_without_publication_while_draining(tmp_p
 async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> None:
     turn_turn_id = NativeTurnId('turn')
     from functools import partial
-    from agent_comms.runtime_updates import AppendDraftItem, StartedItem, TextDraft, ThreadOutput
-    from agent_comms.turn_phase import ModelWaitPhase
-    from agent_comms.recorded_time import RecordedEventTime
-    from agent_comms.transcript_events import AssistantTranscript
+
+    from agent_comms.cli_bridges.runtime_updates import (
+        AppendDraftItem,
+        StartedItem,
+        TextDraft,
+        ThreadOutput,
+    )
+    from agent_comms.execution.turn_phase import ModelWaitPhase
+    from agent_comms.storage.recorded_time import RecordedEventTime
+    from agent_comms.transcript.transcript_events import AssistantTranscript
 
     comms = wire(tmp_path)
     comms.registry.declare(NativeThread('cli', frozenset(), Checkout(tmp_path)))
@@ -423,9 +434,9 @@ def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path:
     """The installer stops only its owners; the connector, bridges and forks keep running, so the
     registry itself refuses their writes during a hold, and the holder's own writes still land."""
     from agent_comms.coordination.errors import ParticipantNotRegistered
+    from agent_comms.coordination.participant_store import ParticipantStore
     from agent_comms.coordination.session import CoordinationSession
     from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
-    from agent_comms.participant_store import ParticipantStore
 
     comms = wire(tmp_path)
     comms.registry.declare(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
@@ -477,8 +488,8 @@ def test_the_goal_ledger_refuses_other_writers_once_the_drained_hold_is_retarget
     """Install 11 rolled back on "Carries changed files no step names: goal_attempts.sqlite3":
     the ledger committed for a non-holder after the install captured the bus. Draining owners
     still settle their turns in it; once retargeted, only the holder commits."""
+    from agent_comms.execution.launch_runtime import LaunchRuntime
     from agent_comms.nominal.field_codec import GoalId
-    from agent_comms.launch_runtime import LaunchRuntime
     from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
 
     comms = wire(tmp_path)
@@ -500,8 +511,8 @@ def test_a_ledger_created_after_the_drain_is_refused_and_leaves_no_file(
         tmp_path: Path, monkeypatch) -> None:
     """Creation publishes the ledger by link before any store transaction exists, so it asks
     the same drain-settled policy its writes inherit, and the carry check meets no new file."""
-    from agent_comms.goal_attempts import GoalAttemptStore
-    from agent_comms.launch_runtime import LaunchRuntime
+    from agent_comms.execution.launch_runtime import LaunchRuntime
+    from agent_comms.planning.goal_attempts import GoalAttemptStore
     from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
 
     comms = wire(tmp_path)

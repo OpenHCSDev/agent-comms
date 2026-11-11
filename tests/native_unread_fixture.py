@@ -1,8 +1,8 @@
 """Await actual native index preparation; tests declare their own registry threads."""
 
 from agent_comms.comms import wire
-from agent_comms.registry.registry_document import DEFAULT_ROSTER
-from agent_comms.view_unread import TranscriptReadState
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
+from agent_comms.registry.view_unread import TranscriptReadState
 
 
 def native_reader(path):

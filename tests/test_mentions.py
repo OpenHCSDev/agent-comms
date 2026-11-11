@@ -1,21 +1,27 @@
 
-from agent_comms.repo import Checkout
-from bus_history import read_history
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.messages import NoticeRole
 import pytest
-from agent_comms.tool_caller import NoThreadCaller
 
-from agent_comms.mentions import MentionQuery
 from agent_comms.comms import wire
-from conftest import installed_comms
-from agent_comms.mentions import MentionCandidate, ThreadMention
-from agent_comms.messages import Message, AlertKind, InfoKind
-from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedPolicy
-from agent_comms.routing import ScheduledTurn
-from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.errors import MentionOutsideChannelError
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.mentions import MentionCandidate, MentionQuery, ThreadMention
+from agent_comms.messaging.messages import AlertKind, InfoKind, Message, NoticeRole
+from agent_comms.messaging.response_policy import (
+    CollectivePolicy,
+    InformationalPolicy,
+    MentionedPolicy,
+)
+from agent_comms.messaging.routing import ScheduledTurn
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import (
+    AgentThreadRole,
+    UserThreadRole,
+)
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.tool_caller import NoThreadCaller
+from bus_history import read_history
+from conftest import installed_comms
 
 
 def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
@@ -52,6 +58,20 @@ def test_aliases_resolve_but_emails_paths_and_unknown_names_are_plain_text(tmp_p
     assert len(message.mentions) == 1
     assert message.mentions[0].thread == "renamed"
     assert message.body[message.mentions[0].start : message.mentions[0].end] == "@alpha"
+
+
+def test_a_channel_post_naming_a_live_thread_outside_the_channel_is_refused(tmp_path):
+    """On 2026-11-10 two #comms send-backs @-named an untagged cloud session: it was dropped from
+    the mentions, the posts reached 22 other threads, and its PR stayed "ready" over them."""
+    comms = installed_comms(tmp_path)
+    comms.registry.declare(NativeThread("member", frozenset({"team"}), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread("outsider", frozenset(), Checkout(tmp_path)))
+    with pytest.raises(MentionOutsideChannelError, match="@outsider not in #team"):
+        comms.messaging.send("member", "#team", "@outsider your PR is back")
+    assert not read_history(wire(tmp_path), "#team")
+    comms.channels.update_tags("outsider", add=frozenset({"team"}), remove=frozenset())
+    sent = comms.messaging.send("member", "#team", "@outsider your PR is back").message
+    assert [item.message_id for item in comms.bus.inbox("outsider").page.messages] == [sent.message_id]
 
 
 def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collective(tmp_path):
@@ -162,7 +182,7 @@ def test_completion_uses_the_model_syntax_at_the_cursor():
 
 
 def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
-    from agent_comms.messages import AlertKind
+    from agent_comms.messaging.messages import AlertKind
 
     comms = installed_comms(tmp_path)
     for name in ("sender", "owner"):
@@ -178,8 +198,9 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
 
 def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch):
     from functools import partial
+
+    from agent_comms.transport.tool_caller import ThreadCaller
     from agent_comms.transport.tools.served import invoke_tool
-    from agent_comms.tool_caller import ThreadCaller
 
     invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
 
@@ -256,12 +277,6 @@ def test_committed_channel_mention_follows_recipient_renames_without_expanding_a
         in ScheduledTurn.incoming(message, aliases=aliases).prompt
     )
     assert message.mentions[0].thread == "alpha"  # Original wire record is unchanged.
-    outside = comms.messaging.send_user_message(CommandTarget.named('#team'), "@outsider review", worktree=Checkout(tmp_path))
-    comms.registry.rename("outsider", "outside-renamed")
-    assert not comms.bus.inbox("outside-renamed").page.messages
-    assert (
-        outside.response_eligibility(
-            ("final", "observer"), aliases=comms.registry.snapshot().aliases
-        ).recipients
-        == ("final", "observer")
-    )
+    with pytest.raises(MentionOutsideChannelError, match="@outsider not in #team"):
+        comms.messaging.send_user_message(CommandTarget.named('#team'), "@outsider review", worktree=Checkout(tmp_path))
+    assert not comms.bus.inbox("outsider").page.messages

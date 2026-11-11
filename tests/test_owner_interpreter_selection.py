@@ -1,18 +1,18 @@
 """Restart captures the original per-session launch over the real owner socket."""
 
+import sys
 from dataclasses import replace
 from functools import partial
-import sys
 
 import pytest
 from xdist.remote import setproctitle
 
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
-from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from delivery_owner_fixture import canonical_agent, start_headless_owner
 
 

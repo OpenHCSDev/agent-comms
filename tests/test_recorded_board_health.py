@@ -7,25 +7,25 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.team_hud import TeamFrame
+from agent_comms.coordination.service_passes import ServicePassStore
+from agent_comms.nominal.field_codec import ToolCallId
+from agent_comms.planning.orders import ProgressRead
+from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.team.team_heartbeat import TeamHeartbeat, TeamObservation
+from agent_comms.team.team_hud import TeamFrame
+from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.orders import (
     CommsBoardTool,
     CommsHudTool,
     CommsTeamLoadTool,
     CommsUnjudgedTool,
 )
-from agent_comms_hooks import ToolRefusedError
-from agent_comms.nominal.field_codec import ToolCallId
-from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.transport.tools.reads import TeammateRead
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.service_passes import ServicePassStore
-from agent_comms.todos import ProgressRead
-from agent_comms.tool_caller import ThreadCaller
 from agent_comms.ui_model.observation import ReadOperation
 from agent_comms.ui_model.teammate_state import TeammateState
+from agent_comms_hooks import ToolRefusedError
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame
 
 pytest_plugins = ('test_forks',)
@@ -157,10 +157,10 @@ def test_missing_frame_reports_recorded_failure_without_fabricating_a_board(fork
 
 def test_one_unreadable_source_preserves_the_other_original_edit(
         published_board, fork_bus, configured_repository, tmp_path):
-    from agent_comms.repo import Checkout
-    from agent_comms.repository_name import RepositoryName
+    from agent_comms.projects.checkouts import Checkout
+    from agent_comms.projects.repository_name import RepositoryName
+    from agent_comms.registry.thread_model import DeclaredModel
     from agent_comms.registry.threads import ExternalThread
-    from agent_comms.thread_model import DeclaredModel
     from source_revision_fixture import SourceRepository
     from test_edit_allocations import issue
 

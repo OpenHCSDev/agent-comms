@@ -1,33 +1,57 @@
 """The requests a display sends to Core: their fields, wire names and results. Serving them
-is in agent_comms.tools, which only the server imports."""
+is in agent_comms.transport.tools.served, which only the server imports."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated
 
 from pydantic import JsonValue
 
-from agent_comms.channel_targets import ChannelSelection, CommandTarget, NamedTarget, NoChannel
-
-from ...acp_extension import CoordinationChangedUpdate
-from ...channels import Channel
-from ...child_process import ProcessIdentity
-from ...cli_command import PreparedTargetAction, TargetAction, TargetEdit
-from ...cli_result import TargetEditResult
-from ...context_store import (
+from agent_comms.acp_extension import CoordinationChangedUpdate
+from agent_comms.cli_bridges.codex_records import CodexRolloutProvenance
+from agent_comms.cli_verbs.cli_command import (
+    PreparedTargetAction,
+    TargetAction,
+    TargetEdit,
+)
+from agent_comms.cli_verbs.cli_result import TargetEditResult
+from agent_comms.context_store import (
     LATEST_CONTEXT,
     CapturedContext,
     ContextManifestCursor,
     ContextManifestPage,
     ContextManifestReference,
 )
-from ...display_order import ChannelSort, ThreadSort
-from ...display_references import ReferenceNames
-from ...exporting import WireExportFormat, WireExportLimit, WireExportProvenance, WireExportScope
-from ...harness_install import Harness
-from ...historical_views import (
+from agent_comms.display_order import ChannelSort, ThreadSort
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_origin import HumanInputOrigin
+from agent_comms.execution.session_revision import SessionObservation
+from agent_comms.execution.transcript_sources import TranscriptCursor
+from agent_comms.execution.turn_context import (
+    ContextSourceText,
+    Provenance,
+    SegmentManifest,
+)
+from agent_comms.history_views import RetiredViews
+from agent_comms.importing import ThreadImported
+from agent_comms.installer.harness_install import Harness
+from agent_comms.messaging.channel_targets import (
+    ChannelSelection,
+    CommandTarget,
+    NamedTarget,
+    NoChannel,
+)
+from agent_comms.messaging.channels import Channel
+from agent_comms.messaging.display_references import ReferenceNames
+from agent_comms.messaging.exporting import (
+    WireExportFormat,
+    WireExportLimit,
+    WireExportProvenance,
+    WireExportScope,
+)
+from agent_comms.messaging.historical_views import (
     AllHistoricalSenders,
     ConversationObservation,
     ConversationRevision,
@@ -35,36 +59,42 @@ from ...historical_views import (
     HistoricalThread,
     UnobservedConversation,
 )
-from ...history_views import RetiredViews
-from ...importing import ThreadImported
-from ...input_origin import HumanInputOrigin
-from ...message_page import NEWEST_PAGE, MessagePage, PageBounds
-from ...nominal.declared_family import DeclaredFamily
-from ...nominal.field_codec import ThreadLookup, WireName
-from ...page_traversal import LatestSequence
-from ...presentation import WireRevision
-from ...registry.registry_document import (
+from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
+from agent_comms.messaging.page_traversal import LatestSequence
+from agent_comms.messaging.send_result import MessagePublished
+from agent_comms.messaging.served_bus import ServedBus, UnidentifiedBus
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import AbsolutePathText, ThreadLookup, WireName
+from agent_comms.presentation import WireRevision
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_document import (
     ProjectThreadSelection,
     RegistryEntry,
     RegistrySlice,
     RegistrySnapshot,
 )
-from ...registry.threads import Thread
-from ...relationships import SortableRelationshipGroup, ThreadCommsSnapshot
-from ...repo import Checkout
-from ...runtime_server import RuntimeRequest
-from ...send_result import MessagePublished
-from ...served_bus import ServedBus, UnidentifiedBus
-from ...session_revision import SessionObservation
-from ...thread_identity import ClaimedIdentity, ThreadIncarnation
-from ...thread_management import ImportDirectory, ProjectChangeResult, RenameThreadResult
-from ...thread_presentation import ThreadPresentation
-from ...thread_text import ExpectedSession
-from ...tool_result import ToolResult
-from ...transcripts import TranscriptCursor
-from ...turn_context import CodexRolloutProvenance, ContextSourceText, Provenance, SegmentManifest
-from ...working_memory_labels import ModelLabel
-from ..request import ObservedRequest, ReadRequest, ToolRequest, tool_field
+from agent_comms.registry.relationships import (
+    SortableRelationshipGroup,
+    ThreadCommsSnapshot,
+)
+from agent_comms.registry.thread_identity import ClaimedIdentity, ThreadIncarnation
+from agent_comms.registry.thread_management import (
+    ImportDirectory,
+    ProjectChangeResult,
+    RenameThreadResult,
+)
+from agent_comms.transcript.transcripts import NotifiedThreadPresentation
+from agent_comms.registry.thread_text import ExpectedSession
+from agent_comms.registry.threads import Thread
+from agent_comms.transport.request import (
+    ObservedRequest,
+    ReadRequest,
+    ToolRequest,
+    tool_field,
+)
+from agent_comms.transport.runtime_request import RuntimeRequest
+from agent_comms.transport.tool_result import ToolResult
+from agent_comms.working_memory.working_memory_labels import ModelLabel
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -83,11 +113,21 @@ class ChannelOrderSet(ToolResult):
 
 @dataclass(frozen=True)
 class ContextInspectionRead(ToolResult):
+    """A server registry entry keeps its session binding across transport."""
+
+    registry_root: Annotated[Path, AbsolutePathText]
     entry: RegistryEntry
     page: ContextManifestPage
     source: SessionObservation
     annotations: tuple[ModelLabel, ...]
     imported: tuple[CodexRolloutProvenance, ...]
+
+    def __post_init__(self) -> None:
+        thread = self.entry.thread
+        session = thread.session_file.bound_to(self.registry_root)
+        if session is not thread.session_file:
+            object.__setattr__(self, "entry", replace(
+                self.entry, thread=replace(thread, session_file=session)))
 
 
 @dataclass(frozen=True)
@@ -525,8 +565,12 @@ class CommsThreadConfigurationTool(ReadRequest[CoordinationChangedUpdate]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadPresentationTool(ReadRequest[ThreadPresentation]):
-    """One thread's published presentation, as the sidebar and session header show it."""
+class CommsThreadPresentationTool(ReadRequest[NotifiedThreadPresentation]):
+    """One thread's published presentation, as the sidebar and session header show it.
+
+    The result is the published NotifiedThreadPresentation, with its notifications and read
+    identity: a read answered across a pipe decodes as the declared type, and on 2026-11-10
+    declaring the parent made every local Toad read refuse those two fields as unknown."""
 
     label = "Thread presentation"
     description = "Read one thread's published presentation."

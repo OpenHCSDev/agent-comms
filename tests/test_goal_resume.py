@@ -1,20 +1,18 @@
 """Same-ID, explicitly requested goal resume through the public tool boundary."""
-from pathlib import Path
-
-
-from agent_comms.repo import Checkout
 import os
 from functools import partial
 from hashlib import sha256
+from pathlib import Path
 
 import pytest
 
-from agent_comms.transport.tools.served import invoke_tool
-from agent_comms.turn_failure import FailedTurnResolution
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.reported_turn import ReportedTurn
+from agent_comms.execution.turn_failure import BackendFailed, FailedTurnResolution
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
-from agent_comms.goal_actions import (
+from agent_comms.nominal.lifecycle_capability import Active
+from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
     ClearGoalAction,
@@ -24,16 +22,27 @@ from agent_comms.goal_actions import (
     RetryGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_attempts import GoalAttemptStore
-from agent_comms.goal_generation import BlockedGeneration, CancelledGeneration, CompletedGeneration
-from agent_comms.goals import Goal, NoGoal
-from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal
-from agent_comms.lifecycle_capability import Active
-from agent_comms.reported_turn import ReportedTurn
+from agent_comms.planning.goal_attempts import GoalAttemptStore
+from agent_comms.planning.goal_generation import (
+    BlockedGeneration,
+    CancelledGeneration,
+    CompletedGeneration,
+)
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_states import (
+    ActiveGoal,
+    BlockedGoal,
+    CompletedGoal,
+)
+from agent_comms.planning.goals import (
+    Goal,
+    NoGoal,
+)
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.goal_scope import OneGoal
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.turn_failure import BackendFailed
+from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.transport.tool_caller import ThreadCaller
+from agent_comms.transport.tools.served import invoke_tool
 
 # Every case in this module exercises the explicitly declared owner.
 invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
@@ -313,13 +322,13 @@ def test_exhausted_goal_revision_refuses_transition_without_write(comms):
         NativeThread(name='owner', tags=frozenset(), worktree=Checkout(Path('/wt')), goal=Goal('work', goal_id,
             published_seq=0, revision=(1 << 63) - 1))
     )
-    before = (comms.root / "registry.json").read_bytes()
+    before = (RegistryFile.path_in(comms.root)).read_bytes()
     with pytest.raises(ValueError):
         comms.goals.update_goal(
             "owner",
             BlockedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal_id)), progress="do not write"),
         )
-    assert (comms.root / "registry.json").read_bytes() == before
+    assert (RegistryFile.path_in(comms.root)).read_bytes() == before
 
 
 def test_a_blocked_goal_is_retried_by_its_holder_or_team_and_authorize_retry_guards_each(comms, monkeypatch):

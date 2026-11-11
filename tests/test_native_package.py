@@ -11,16 +11,16 @@ from pathlib import Path
 
 import pytest
 
-import agent_comms.native_package as native_package
-from agent_comms.bus import Bus
-from agent_comms.core_stamp import WheelStamp
-from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
-from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.native_package import (
+import agent_comms.installer.native_package as native_package
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.installer.core_stamp import WheelStamp
+from agent_comms.installer.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
+from agent_comms.installer.native_package import (
     NativePackageError,
     NativePackageStore,
     package_tree_digest,
 )
+from agent_comms.messaging.bus import Bus
 from agent_comms.package_stamp import STAMP
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX native package filesystem")
@@ -93,7 +93,7 @@ def test_sealed_tree_is_published_as_a_store_link(tmp_path):
 
 
 def load_resource_module(path):
-    spec = importlib.util.spec_from_file_location('agent_comms.resource_fixture', path)
+    spec = importlib.util.spec_from_file_location(f'{native_package.__package__}.resource_fixture', path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     try:
@@ -107,31 +107,20 @@ def load_resource_module(path):
 def test_installed_resource_lookup_never_guesses_adjacent_stack(tmp_path, include_resources):
     installed = tmp_path / "site-packages/agent_comms"
     installed.mkdir(parents=True)
-    module = installed / "native_package.py"
-    shutil.copy2(native_package.__file__, module)
     if not include_resources:
         with pytest.raises(ValueError):
-            load_resource_module(module)
+            native_package.resource_root(installed)
         return
     resources = installed / "_native"
     resources.mkdir()
-    (resources / "pi-native.sha256").write_text("packaged pin")
-    namespace = load_resource_module(module)
-    assert namespace["MANIFEST"] == resources / "pi-native.sha256"
+    assert native_package.resource_root(installed) == resources
 
 
 def test_checkout_resources_remain_owned_by_stack_when_build_artifacts_exist(tmp_path):
     source = tmp_path / "src/agent_comms"
-    source.mkdir(parents=True)
-    module = source / "native_package.py"
-    shutil.copy2(native_package.__file__, module)
-    artifacts = source / "_native"
-    artifacts.mkdir()
-    (artifacts / "core_stamp.py").write_text("# unrelated build metadata\n")
-    namespace = load_resource_module(module)
-    assert namespace["MANIFEST"] == tmp_path / "stack/pi-native.sha256"
-    assert namespace["OWNER_INSTRUCTIONS"] == tmp_path / "stack/AGENTS.md"
-    assert namespace["SYSTEM_PROMPT"] == tmp_path / "stack/SYSTEM_PROMPT.md"
+    (source / "_native").mkdir(parents=True)
+    (source / "_native/core_stamp.py").write_text("# unrelated build metadata\n")
+    assert native_package.resource_root(source) == tmp_path / "stack"
 
 
 def stamp_prepared(stack, env):
@@ -143,7 +132,7 @@ def stamp_prepared(stack, env):
         env.get("PI_MCP_DEPENDENCY_PACKAGE", ""),
     )
     prepared = NativePackageStore.at_home(Path.home()).package_for(manifest).parents[2]
-    namespace = load_resource_module(stack.parent / "src/agent_comms/native_package.py")
+    namespace = load_resource_module(stack.parent / "src/agent_comms/installer/native_package.py")
     namespace["VerifiedNativePackage"].prepare(prepared / native_package.PACKAGE_LAYOUT)
     (prepared / ".prepared-inputs.sha256").write_text(stamp + "\n")
 
@@ -212,7 +201,7 @@ def launcher(tmp_path, monkeypatch):
 @pytest.mark.skipif(not shutil.which("node"), reason="Local Node fixture only")
 def test_qualified_build_uses_only_verified_copied_bootstrap(launcher, tmp_path):
     stack, root = launcher
-    namespace = load_resource_module(stack.parent / "src/agent_comms/native_package.py")
+    namespace = load_resource_module(stack.parent / "src/agent_comms/installer/native_package.py")
     package = namespace["VerifiedNativePackage"].qualify(root)
     marker = tmp_path / "untrusted-ran"
     preload = tmp_path / "untrusted.mjs"

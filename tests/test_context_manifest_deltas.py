@@ -1,66 +1,82 @@
 """Recorded context reuses source-bound text and transcript prefixes."""
-from agent_comms.context_store import UNREAD_CONTEXT
-from dataclasses import replace
 import hashlib
+import json
+import sqlite3
 import sys
-from pathlib import Path
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
+from pathlib import Path
+from typing import get_type_hints
 
 import pytest
 
+from agent_comms.context_segments.native_messages import TranscriptSegment
 from agent_comms.context_store import (
-    CapturedContext, ContextEntry, ContextManifestReference, ContextRequest, ContextSegmentVersion,
-    ContextStore, ContextStoreIdentity, ContextStoreInfo,
+    UNREAD_CONTEXT,
+    CapturedContext,
+    ContextEntry,
+    ContextManifestReference,
+    ContextPriorSupersededError,
+    ContextRequest,
+    ContextSegmentVersion,
+    ContextStore,
+    ContextStoreIdentity,
+    ContextStoreInfo,
 )
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
+from agent_comms.execution.turn_context import (
+    ContextManifest,
+    ContextRecording,
+    JournalProvenance,
+    NativeProvenance,
+    ObservedDispatchRequest,
+    RecordedContextManifest,
+    RecordedContextPredecessor,
+    RecordedContextTurn,
+    RecordedSegmentManifest,
+    SegmentManifest,
+    SystemLayerSegment,
+    ToolCatalogSegment,
+)
+from agent_comms.execution.turn_item import PiRequestKey
 from agent_comms.installer.practice import PracticeCopy
-from agent_comms.storage.typed_table import RowNotFoundError, SQLitePageSize
-import json
-import sqlite3
-
 from agent_comms.nominal.field_codec import ContextStoreId, FieldCodec, TurnId
-from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.thread_identity import TurnIdentity
-from agent_comms.turn_context import ObservedDispatchRequest
-from agent_comms.turn_context import (
-    ContextManifest, JournalProvenance, NativeProvenance, RecordedContextPredecessor,
-    RecordedContextTurn, RecordedSegmentManifest,
-    SegmentManifest, SystemLayerSegment, ToolCatalogSegment, TranscriptSegment,
-)
+from agent_comms.registry.thread_identity import TurnIdentity
+from agent_comms.storage.typed_table import RowNotFoundError, SQLitePageSize
 from bus_record_fixture import context_comms
-from agent_comms.turn_item import PiRequestKey
-from agent_comms.native_session_reopen import PiSessionId
 
 
-from agent_comms.context_store import ContextStoreInfo
-from agent_comms.errors import RelationViolationError
-from concurrent.futures import ThreadPoolExecutor
-from agent_comms.context_store import ContextPriorSupersededError
+def test_manifest_reads_the_original_recording_contract() -> None:
+    assert get_type_hints(RecordedContextManifest.capture)["previous"] is ContextRecording
+    assert issubclass(CapturedContext, ContextRecording)
+
 
 def context(owner, path, count, turn):
     native = NativeSessionIdentity(PiSessionId('manifest-delta'), str(path / 'history.jsonl'))
     provenance = (NativeProvenance(native, 1, 'a' * 64),)
     def segment(kind, text, sources=provenance, contributors=()):
         raw = text.encode()
-        return SegmentManifest(kind, sources, hashlib.sha256(raw).hexdigest(),
-                               len(raw), 100, contributors=contributors, captured_text=(text,))
+        return SegmentManifest(kind=kind, provenance=sources, sha256=hashlib.sha256(raw).hexdigest(),
+                               utf8_bytes=len(raw), tokens=100, contributors=contributors, captured_text=(text,))
     contributors = tuple(segment(TranscriptSegment, f'Entry {i}',
         (*provenance, JournalProvenance(native.session_file, (f'entry-{i}',))))
         for i in range(count))
     transcript = segment(TranscriptSegment, '\n'.join(f'Entry {i}' for i in range(count)),
                          contributors=contributors)
     return ContextManifest(
-        owner.incarnation,
-        RecordedContextTurn(
+        thread=owner.incarnation,
+        turn=RecordedContextTurn(
             TurnId(f"{turn:032x}"), TurnIdentity(owner.incarnation, turn)
         ),
-        (
+        segments=(
             segment(SystemLayerSegment, 's' * 27000),
             segment(ToolCatalogSegment, 't' * 64000),
             transcript,
         ),
-        'counter',
-        ObservedDispatchRequest(PiRequestKey(f'request-{turn}')),
+        counter='counter',
+        request_id=ObservedDispatchRequest(PiRequestKey(f'request-{turn}')),
     )
 
 

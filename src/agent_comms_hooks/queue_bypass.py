@@ -21,12 +21,8 @@ from typing import ClassVar, Self
 from urllib.parse import unquote, urlsplit
 
 from agent_comms_hooks import BashRefusal, HookRecord, HookRefused
-
-from .shell_commands import (
-    Program,
-    ShellCommand,
-)
-from .watch import SessionHookProgram
+from agent_comms_hooks.shell_commands import Program, ShellCommand
+from agent_comms_hooks.watch import SessionHookProgram
 
 
 class MergeTargetUnreadable(HookRefused):

@@ -7,12 +7,11 @@ from dataclasses import dataclass, field, replace
 
 from pydantic import JsonValue
 
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.input_attempt import HistoricalInput, UnresolvedInput
 from agent_comms.input_disposition import DeliveryOverview
-from agent_comms.thread_presentation import ThreadPresentationStatus
-from agent_comms.thread_presentation import ThreadPresentation
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.registry.thread_presentation import ThreadPresentation, ThreadPresentationStatus
 
 
 class InputDeliveryReadState(DeclaredFamily, affix="InputDeliveryReadState"):

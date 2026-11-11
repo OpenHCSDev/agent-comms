@@ -14,8 +14,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from agent_comms.native_build_inputs import ConfiguredChildStdio, GitLaunch, GitOpening
-from agent_comms.child_process import GitChildren, OwnedGitOpening, SpawnedProcess
+from agent_comms.execution.child_process import (
+    GitChildren,
+    OwnedGitOpening,
+    SpawnedProcess,
+)
+from agent_comms.installer.native_build_inputs import ConfiguredChildStdio, GitLaunch, GitOpening
 
 
 def inherited_stdio(owned: bool) -> None:

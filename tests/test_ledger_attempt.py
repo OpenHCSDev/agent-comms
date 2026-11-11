@@ -11,18 +11,18 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.attempt_resolution import GoalCleared
 from agent_comms.errors import StaleAttemptError
 from agent_comms.nominal.field_codec import AttemptId, GoalId, NoAttemptId
-from agent_comms.goal_attempt_identity import GoalAttemptIdentity
-from agent_comms.goal_attempt_phase import ReservedAttempt, ResolvedAttempt
-from agent_comms.goal_attempts import (
-    AttemptRecord,
-    GoalAttemptStore,
-    NoAttempt,
-    StorageUncertainError,
+from agent_comms.planning.attempt_resolution import GoalCleared
+from agent_comms.planning.goal_attempt_identity import GoalAttemptIdentity
+from agent_comms.planning.goal_attempt_phase import ReservedAttempt, ResolvedAttempt
+from agent_comms.planning.goal_attempts import GoalAttemptStore, LaunchPermit
+from agent_comms.planning.goal_generation import (
+    CancelledGeneration,
+    ReadyGeneration,
+    ReservedGeneration,
 )
-from agent_comms.goal_generation import CancelledGeneration, ReadyGeneration, ReservedGeneration
+from agent_comms.planning.goal_ledger import AttemptRecord, NoAttempt, StorageUncertainError
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX owner-private ledger root.")
 
@@ -63,7 +63,7 @@ def test_a_missing_attempt_refuses_every_question_and_cannot_be_retired(store):
     reservation = store.reserve(goal_id, 1)
     attempt = read(store, AttemptId("0" * 32))
     with pytest.raises(StorageUncertainError, match="0" * 32):
-        attempt.stopped_permit()
+        attempt.stopped_permit(LaunchPermit)
     with pytest.raises(StaleAttemptError):
         attempt.reserved_by(reservation, StaleAttemptError("absent"))
     with pytest.raises(StaleAttemptError):

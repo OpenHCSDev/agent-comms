@@ -1,0 +1,51 @@
+"""Restart preflight refusals own whether an unsignalled request may wait."""
+
+from abc import abstractmethod
+from typing import ClassVar
+
+from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.declared_family import DeclaredFamily
+
+
+class RestartRefusal(RelationViolationError, DeclaredFamily, affix="Refusal"):
+    message: ClassVar[str]
+
+    def __init__(self):
+        super().__init__(self.message)
+
+    @abstractmethod
+    def queue_state(self): ...
+
+
+class WaitForIdle:
+    def queue_state(self):
+        from agent_comms.execution.restart_queue import PendingRestart
+
+        return PendingRestart()
+
+
+class ChangedSelection:
+    def queue_state(self):
+        from agent_comms.execution.restart_queue import StaleRestart
+
+        return StaleRestart(reason=str(self))
+
+
+class OwnerMaintenancePendingRefusal(WaitForIdle, RestartRefusal):
+    message = "Maintenance is holding new owner restarts."
+
+
+class OwnerBusyRefusal(WaitForIdle, RestartRefusal):
+    message = "Wait until the owner is idle before restart."
+
+
+class OwnerChangedBeforeFenceRefusal(WaitForIdle, RestartRefusal):
+    message = "Idle owner changed before restart fence."
+
+
+class OwnerGenerationChangedRefusal(ChangedSelection, RestartRefusal):
+    message = "Owner claim_scope generation changed before restart."
+
+
+class OwnerSelectionChangedRefusal(ChangedSelection, RestartRefusal):
+    message = "Owner selection changed before restart."

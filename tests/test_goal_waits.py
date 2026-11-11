@@ -1,12 +1,16 @@
-from dataclasses import replace
 import sqlite3
+from dataclasses import replace
 
 from agent_comms.nominal.field_codec import GoalId
-from agent_comms.goal_presentation import GoalWaitTarget
-from agent_comms.planning.goal_waits import GoalWaits, GoalWaitTargetRow, RecordedGoalWait
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.storage.typed_table import ReconciledFile, WriterOwnedFile
-from test_goal_standby_liveness import _finish, _waiting
+from agent_comms.planning.goal_wait_target import GoalWaitTarget
+from agent_comms.planning.goal_waits import GoalWaits
+from agent_comms.planning.goal_waits import GoalWaitTargetRow
+from agent_comms.planning.goal_waits import RecordedGoalWait
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.storage.typed_table import ReconciledFile
+from agent_comms.storage.typed_table import WriterOwnedFile
+from test_goal_standby_liveness import _finish
+from test_goal_standby_liveness import _waiting
 
 
 def test_schema_carry_rederives_target_index_without_changing_saved_waits(tmp_path):

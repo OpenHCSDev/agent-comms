@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Self
 
-from agent_comms.team.package import TeamPackage
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, boundary_decoder
+from agent_comms.team.package import TeamPackage
 
 
 @dataclass(frozen=True)

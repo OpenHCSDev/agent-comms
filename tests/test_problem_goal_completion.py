@@ -1,40 +1,40 @@
 """Real assignment history keeps a finished problem Goal addressable."""
 
+import sqlite3
 from contextlib import closing
 from dataclasses import dataclass, replace
 from pathlib import Path
-import sqlite3
 
 import pytest
 
-from agent_comms.cli_commands import ReconciledStoresResult
+from agent_comms.cli_verbs.cli_commands import ReconciledStoresResult
 from agent_comms.comms import Comms
 from agent_comms.errors import GoalRefused
-from agent_comms.goal_actions import (
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
+from agent_comms.planning.goal_actions import (
     CompletedGoalAction,
     CreateProblemGoalAction,
     GoalPrecondition,
     OrderGoalAction,
 )
-from agent_comms.goal_scope import OneGoal
-from agent_comms.goal_states import CompletedGoal
-from agent_comms.goals import Goal
-from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.repo import Checkout
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.todos import (
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_states import CompletedGoal
+from agent_comms.planning.goals import Goal
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
     AssignTodo,
     DeliverTodo,
     InstallTodo,
     OperationDelivery,
     ReleaseTodo,
-    StrikeReason,
     StoredOrderStory,
     Todo,
     TodoStore,
 )
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.storage.recorded_time import RecordedEventTime
 from conftest import installed_comms, maintenance_held
 from source_revision_fixture import SourceRepository
 from test_reconcile_stores import reconcile

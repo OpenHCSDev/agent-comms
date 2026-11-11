@@ -1,13 +1,12 @@
 """Shared Core inbox delivery and process lifetime for external CLI adapters."""
 from __future__ import annotations
 
-from agent_comms.send_request import SendRequest
-
 import argparse
 import asyncio
 import io
 import json
 import os
+import secrets
 import signal
 import socket
 import sqlite3
@@ -17,7 +16,14 @@ import traceback
 from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
-from contextlib import AbstractContextManager, ExitStack, aclosing, closing, contextmanager, suppress
+from contextlib import (
+    AbstractContextManager,
+    ExitStack,
+    aclosing,
+    closing,
+    contextmanager,
+    suppress,
+)
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
@@ -26,73 +32,43 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, T
 
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
-from agent_comms.nominal import field_codec
-from agent_comms import messages
-from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
-from agent_comms.bus import Bus
-from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.native_build_inputs import DetachedChildStdio
-from agent_comms.child_process import (
-    OutlivesLauncherLifetime,
-    Platform,
-    ProcessIdentity,
-    SpawnedProcess,
+from agent_comms.agent_runtime import ExternalRuntime, PublishesTranscript
+from agent_comms.cli_bridges.cli_arguments import CliArguments
+from agent_comms.cli_bridges.cli_protocol import CoreError, EarlierItems, TaggedWire
+from agent_comms.cli_bridges.harness_delivery_states import (
+    DeliveredOutcome,
+    EmittedOutcome,
+    FilteredOutcome,
+    MismatchedMonitor,
+    MonitorEvidence,
+    ObservedMonitor,
+    Outcome,
+    TakingLedger,
+    UnconfirmedOutcome,
 )
-from agent_comms.cli_arguments import CliArguments
-from agent_comms.cli_protocol import CoreError, EarlierItems, TaggedWire
-from agent_comms.harness_delivery_states import (
-    DeliveredOutcome, EmittedOutcome, FilteredOutcome, MismatchedMonitor, MonitorEvidence,
-    ObservedMonitor, Outcome, TakingLedger, UnconfirmedOutcome,
+from agent_comms.cli_bridges.monitor import (
+    BRIDGE_FAILURES,
+    BridgeExit,
+    InspectSession,
+    MonitorPeer,
+    PauseSession,
+    PeerGone,
+    RequestFailure,
+    SessionInformation,
+    SessionReady,
+    SessionRefused,
+    SessionReply,
+    SessionRequest,
+    VerifySession,
+    read_monitor,
 )
-from agent_comms.comms import Comms, wire
-from agent_comms.coordination.errors import (
-    CoordinationBeginUnavailable, CoordinationReadUnavailable, DeferredRead,
+from agent_comms.cli_bridges.runtime_updates import (
+    HiddenItem,
+    ReplyingThreadOutput,
+    RuntimeUpdate,
+    ThreadOutput,
 )
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.declared_verb import DeclaredOptions
-from agent_comms_hooks.watch import SessionCommandError
-from agent_comms.coordination.database import CoordinationStore
-from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.nominal.field_codec import FieldCodec, MessageId, PathText, SubclassUnion, ThreadLookup
-from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.launch_runtime import LaunchRuntime, RunningSource
-from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
-from agent_comms.storage.private_path import PrivateDirectoryRole, PrivateFileRole, TrustedAncestorRole
-from agent_comms.storage.store_files import ExclusiveDirectoryAtomicFile
-from agent_comms.message_reference import (
-    BridgeBeginning,
-    BridgePosition,
-    BridgeStart,
-    InboxStart,
-    MessageReference,
-)
-from agent_comms.registry.registration import Registration
-from agent_comms.runtime_updates import HiddenItem, ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
-from agent_comms.transcript_publication import PublishesToBus, WaitsOnBusyStore
-from agent_comms.turn_item import NoSourceTurn, SourceTurn
-from agent_comms.send_result import SendResult
-from agent_comms.registry.threads import ExternalThread
-from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.task_attachments.team_pings import TeamUpdate
-from agent_comms.thread_status import ThreadStatus
-from agent_comms.thread_text import AbsentText, GivenText, TextChoice
-from agent_comms.repo import Checkout
-from agent_comms.storage.typed_table import (
-    DurableTables,
-    TableSchema,
-    DerivedColumn,
-    StoredRowDerivation,
-    TypedTable,
-    ExternalStore,
-    WriterOwnedFile,
-    WriterOwnedResource,
-    WriterOwnedStore,
-)
-from agent_comms.wire_models import WireModel
-
-from .session_watch import (
+from agent_comms.cli_bridges.session_watch import (
     HeldClaim,
     SessionConnectionClosed,
     SessionFailure,
@@ -100,28 +76,88 @@ from .session_watch import (
     WatchClaim,
     WatchRecord,
 )
-from ..storage.locked_store import FilesRequest, RegistryFile, SQLiteFile
-from agent_comms.harness_install import HarnessSession
-from .monitor import (
-    BRIDGE_FAILURES,
-    BridgeExit,
-    InspectSession,
-    MonitorPeer,
-    PauseSession,
-    SessionInformation,
-    SessionRequest,
-    VerifySession,
-    read_monitor,
+from agent_comms.cli_bridges.wire_models import WireModel
+from agent_comms.cli_verbs.declared_verb import DeclaredOptions
+from agent_comms.cli_verbs.send_request import SendRequest
+from agent_comms.comms import Comms, wire
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import (
+    CoordinationBeginUnavailable,
+    CoordinationReadUnavailable,
+    DeferredRead,
 )
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.execution.child_process import (
+    OutlivesLauncherLifetime,
+    Platform,
+    ProcessIdentity,
+    SpawnedProcess,
+)
+from agent_comms.execution.delivers_input import DeliversInput
+from agent_comms.execution.launch_runtime import LaunchRuntime, RunningSource
+from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
+from agent_comms.installer.harness_install import HarnessSession
+from agent_comms.installer.native_build_inputs import DetachedChildStdio
+from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.bus_tables import MessageIdentitySource
+from agent_comms.messaging.message_reference import (
+    BridgeBeginning,
+    BridgePosition,
+    BridgeStart,
+    InboxStart,
+    MessageReference,
+)
+from agent_comms.messaging.messages import Message
+from agent_comms.messaging.send_result import SendResult
+from agent_comms.nominal import field_codec
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    MessageId,
+    PathText,
+    SubclassUnion,
+    ThreadLookup,
+)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_status import (
+    ConnectedThreadStatus,
+    PausedBridgeThreadStatus,
+    ThreadStatus,
+)
+from agent_comms.registry.thread_text import AbsentText, GivenText, TextChoice
+from agent_comms.registry.threads import ExternalThread
+from agent_comms.storage.locked_store import FilesRequest, RegistryFile, SQLiteFile
+from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
+from agent_comms.storage.private_path import (
+    PrivateDirectoryRole,
+    PrivateFileRole,
+    TrustedAncestorRole,
+)
+from agent_comms.storage.store_files import ExclusiveDirectoryAtomicFile
+from agent_comms.storage.typed_table import (
+    DerivedColumn,
+    DurableTables,
+    ExternalStore,
+    StoredRowDerivation,
+    TableSchema,
+    TypedTable,
+    WriterOwnedFile,
+    WriterOwnedResource,
+    WriterOwnedStore,
+)
+from agent_comms.task_attachments.team_pings import TeamUpdate
+from agent_comms.transcript.transcript_publication import PublishesToBus, WaitsOnBusyStore
+from agent_comms_hooks.watch import SessionCommandError
 
-import secrets
-from agent_comms.nominal.field_codec import MalformedRecord
-from agent_comms.messages import Message
-from agent_comms.thread_status import ConnectedThreadStatus, PausedBridgeThreadStatus
-from .monitor import PeerGone, RequestFailure, SessionReady, SessionRefused, SessionReply
 if TYPE_CHECKING:
-    from agent_comms.assignment_store import AssignmentStore
-    from .claude_protocol import ReadResultObserved
+    from agent_comms.cli_bridges.claude_protocol import ReadResultObserved
+    from agent_comms.coordination.assignment_store import AssignmentStore
 
 
 class ReaderState:
@@ -1108,7 +1144,7 @@ class Enrol(Operation):
 
 @dataclass(frozen=True)
 class IncomingFrame(ABC):
-    message: messages.Message
+    message: Message
 
     @property
     def text(self) -> str:
@@ -1154,7 +1190,7 @@ class HarnessDeliveryRecords(WaitsOnBusyStore, ABC):
     def delivery_kind(self) -> type[HarnessSession]:
         """The harness route an attempt is keyed by."""
 
-    def attempt(self, message: messages.Message, outcome: type[Outcome]) -> HarnessDelivery:
+    def attempt(self, message: Message, outcome: type[Outcome]) -> HarnessDelivery:
         reference = message.reference
         return HarnessDelivery(self.delivery_kind, self.recipient_lookup, reference.message_id,
                                reference.seq, outcome)
@@ -1191,7 +1227,7 @@ class HarnessDeliveryRecords(WaitsOnBusyStore, ABC):
         return await self.coordinator_read(lambda db: tuple(HarnessDelivery.select(
             db, bridge=self.delivery_kind, recipient_lookup=self.recipient_lookup, message_id=message_id)))
 
-    async def message(self, reference: MessageReference) -> messages.Message:
+    async def message(self, reference: MessageReference) -> Message:
         message, = await self.comms.bus.when_open(
             partial(self.comms.bus.bus.messages_for_references, (reference,)))
         return message
@@ -1213,7 +1249,14 @@ class HarnessDeliveryRecords(WaitsOnBusyStore, ABC):
 
 
 @dataclass(eq=False, repr=False)
-class CliBridge(HarnessDeliveryRecords, ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOptions], declared_name=None):
+class CliBridge(
+    HarnessDeliveryRecords,
+    ExternalRuntime,
+    DeliversInput[Message],
+    HarnessSession,
+    Generic[BridgeOptions],
+    declared_name=None,
+):
     """Core delivery and lifetime shared by CLI-specific transports."""
 
     state_directory: ClassVar[Path]
@@ -1299,15 +1342,15 @@ class CliBridge(HarnessDeliveryRecords, ExternalRuntime, DeliversInput, HarnessS
     async def prepare_delivery(self) -> None:
         """A transport may prepare its harness after the operation bound its reader."""
 
-    async def deliver_board(self, update: TeamUpdate, message: messages.Message) -> type[Outcome]:
+    async def deliver_board(self, update: TeamUpdate, message: Message) -> type[Outcome]:
         """Every transport honors the packet's wake decision; passive display is not input."""
         return await update.wake(self, message)
 
-    async def wake(self, message: messages.Message) -> type[Outcome]:
+    async def wake(self, message: Message) -> type[Outcome]:
         """The packet already owns its HUD text; every harness receives that original message."""
         return await self.deliver(message)
 
-    async def accept(self, message: messages.Message) -> None:
+    async def accept(self, message: Message) -> None:
         """Before its durable begin the message is held, never skipped: a store busy while the
         begin is still being acquired waits and reacquires for the same message. After the
         begin, the attempt is exactly as stored; contention leaves it uncertain, never re-sent."""
@@ -1591,11 +1634,8 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
         refusal = RelationViolationError(f'Message export directory {parent} is not private')
         PrivateDirectoryRole.make_parents(parent)
         TrustedAncestorRole.require_path(parent.parent, refusal)
-        directory = PrivateDirectoryRole.read(parent, refusal)
-        try:
+        with PrivateDirectoryRole.reading(parent, refusal) as directory:
             yield directory
-        finally:
-            os.close(directory)
 
     def export(self, lines: tuple[str, ...]) -> None:
         """Publish the message's lines once. A file already at this path must
@@ -1607,8 +1647,8 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
             try:
                 ExclusiveDirectoryAtomicFile(path, directory=directory).write_bytes(data)
             except FileExistsError:
-                with os.fdopen(PrivateFileRole.read(path.name, refusal, dir_fd=directory),
-                               'rb') as existing:
+                with (PrivateFileRole.reading(path.name, refusal, dir_fd=directory) as fd,
+                      os.fdopen(fd, 'rb', closefd=False) as existing):
                     if existing.read() != data:
                         raise refusal from None
 
@@ -1851,7 +1891,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
             MonitorBridgeSwapping.announce, Serve.relaunch,
         )
 
-    async def accept(self, message: messages.Message) -> None:
+    async def accept(self, message: Message) -> None:
         try:
             await super().accept(message)
         except (BrokenPipeError, ConnectionResetError) as error:
@@ -1894,10 +1934,10 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     def new_attachment(self, peer: MonitorPeer, token: str) -> MonitorAttachment:
         return MonitorAttachment(peer, MonitorProbe(session=self.binding.thread, token=token))
 
-    async def deliver(self, message: messages.Message) -> type[Outcome]:
+    async def deliver(self, message: Message) -> type[Outcome]:
         return await self.reader.deliver(self, message)
 
-    async def deliver_to(self, attachment: MonitorAttachment, message: messages.Message) -> type[Outcome]:
+    async def deliver_to(self, attachment: MonitorAttachment, message: Message) -> type[Outcome]:
         frame = self.incoming_frame(message)
         receiving = partial(replace, monitor=frame.shown_evidence(TakingLedger()))
         attempt = self.attempt(message, UnconfirmedOutcome)

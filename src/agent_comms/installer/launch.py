@@ -1,13 +1,12 @@
-"""One install, run from the target revision's own source in a systemd unit of its own.
+"""One install, with checked target packages and a systemd unit of its own.
 
-The installed CLI only fetches, resolves the target and checks its tree out; the install
-itself runs that tree's ``src`` (``python -m agent_comms.installer``), so its carries,
-rehearsal and harness setup are the target's, never the outgoing runtime's.
+The current launcher's bootstrap selects the packages before loading old target code.
+It then becomes the checked target runtime. Carry, rehearsal and harness setup still run
+through the target's own declarations, never the outgoing runtime's.
 """
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -19,11 +18,17 @@ from pathlib import Path
 from traceback import extract_tb
 from typing import Annotated, TextIO
 
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
+
 import agent_comms.installer
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
-from agent_comms.installer.request import InstallRequest
-from agent_comms.nominal.field_codec import FieldCodec, PathText
-from agent_comms.installer.logs import InstallLogs, InstallUnit
+from agent_comms.execution.launch_runtime import (
+    LaunchRuntime,
+    RunningSource,
+)
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (
     FailureReportPublicationPhase,
@@ -35,6 +40,7 @@ from agent_comms.installer.interpreter_operation import (
     TargetCheckoutPreparePhase,
     TreeClosePhase,
 )
+from agent_comms.installer.logs import InstallLogs, InstallUnit
 from agent_comms.installer.probes.harnesses import HarnessesProbe, InstallResult
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.reporting import (
@@ -42,10 +48,11 @@ from agent_comms.installer.reporting import (
     InstallOutcome,
     ReportPublication,
     RootWriter,
-    UnfinishedInstall,
     UnattemptedPublication,
+    UnfinishedInstall,
     UnpostedWriter,
 )
+from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import (
     FinishedInstall,
@@ -57,13 +64,9 @@ from agent_comms.installer.upgrade import (
     TargetTree,
     upgrade,
 )
-from agent_comms.repo import Repo
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.storage_rules import StorageRule
-from metaclass_registry.mro_dispatch import (
-    MroDispatch,
-    handles,
-)
+from agent_comms.nominal.field_codec import FieldCodec, PathText
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.storage_rules import StorageRule
 
 
 @dataclass
@@ -183,7 +186,7 @@ class InstallRun:
               f"diagnostics {self.unit.errors}", file=sys.stderr, flush=True)
         self.unit.start(
             tree.path, (sys.executable, "-m", agent_comms.installer.__name__),
-            os.pathsep.join(map(str, tree.source_paths())), wait=wait,
+            str(RunningSource.current().root), wait=wait,
         )
 
     def launch(self, output: TextIO) -> int:

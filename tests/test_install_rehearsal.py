@@ -10,8 +10,6 @@ records a distinct incoming revision while retaining every declared carry depend
 """
 from __future__ import annotations
 
-
-from agent_comms.repo import Checkout
 import json
 import os
 import sqlite3
@@ -22,14 +20,13 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.storage.locked_store import LiveFilesRequest
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.history_result import ChannelHistoryPageResult
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.root_runtime import RootRuntime
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.installer.probes.native import PrepareProducerDigestsProbe
-from agent_comms.installer.practice import TestHome
+from agent_comms.installer.runtime_home import TestHome
 from agent_comms.installer.runtime_stack import RuntimeStack
 from agent_comms.installer.upgrade import (
     CarriedRehearsal,
@@ -40,16 +37,17 @@ from agent_comms.installer.upgrade import (
     UncopiedRehearsal,
     Upgrade,
 )
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
-from agent_comms.messages import TeamUpdatePosition, Message
+from agent_comms.messaging.history_result import ChannelHistoryPageResult
+from agent_comms.messaging.messages import Message, TeamUpdatePosition
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.projects.checkouts import Checkout, ScratchCheckout
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.repo import ScratchCheckout
-from agent_comms.root_runtime import RootRuntime
-from agent_comms.storage_rules import StorageRule
+from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import LiveFilesRequest
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage.typed_table import ReconciledFile
 from conftest import declare_test_bus, publish_initial
-from agent_comms.registry.threads import NativeThread
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 
@@ -120,7 +118,7 @@ def test_runtime_producer_digests_ignore_foreign_source(installed_home, tmp_path
     home = Path(installed_home["HOME"])
     runtime = LaunchRuntime((home / ".local/share/agent-comms/current").resolve() / "bin/python")
     foreign = shared_clone(tmp_path / "review").path
-    source = foreign / "src/agent_comms/messages.py"
+    source = foreign / "src/agent_comms/messaging/messages.py"
     # A producer digest covers column declarations, not reader source (P978), so the
     # dirty review retypes one projection column.
     declared = '    teammate_lookup: ThreadLookup\n    indexes = (Index(("teammate_lookup", "seq")),)\n'
@@ -139,7 +137,7 @@ def test_runtime_producer_digests_ignore_foreign_source(installed_home, tmp_path
 import json
 import agent_comms
 from agent_comms import cli
-from agent_comms.messages import BusProjectionTables
+from agent_comms.messaging.messages import BusProjectionTables
 from agent_comms.package_stamp import STAMP
 from agent_comms.storage.typed_table import ProjectionProducer
 rows = BusProjectionTables.projection_rows()

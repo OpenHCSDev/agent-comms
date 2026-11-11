@@ -4,12 +4,14 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.nominal.field_codec import OrderId
-from agent_comms.nominal_census import NominalCensus
-from agent_comms.plan_reading import PlanReading
-from agent_comms.phase_evidence import MainTree
-from agent_comms.plan_phases import BusWriterPhase, PlanPhase
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import ReleaseTodo, StoredOrderStory, StrikeReason
+from agent_comms.planning.nominal_census import NominalCensus
+from agent_comms.planning.order_phase import UnplannedPhase
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import ReleaseTodo, StoredOrderStory
+from agent_comms.planning.phase_evidence import MainTree
+from agent_comms.planning.plan_phases import BusWriterPhase, PlanPhase
+from agent_comms.planning.plan_reading import PlanReading
+from agent_comms.storage.recorded_time import RecordedEventTime
 from test_todo_stories import recorded_problem
 
 
@@ -54,23 +56,17 @@ def unavailable_plan() -> tuple[type[PlanPhase], ...]:
 
 
 def test_explicit_unplanned_reason_needs_no_plan_acquisition():
-    from agent_comms.plan_phases import UnplannedPhase
-
     reason = "This repair keeps the order tool usable before the planned work resumes."
     assert UnplannedPhase.order_refusals(unavailable_plan, reason) == ()
 
 
 @pytest.mark.parametrize("reason", ("", "A short reason"))
 def test_missing_unplanned_reason_still_requires_plan_evidence(reason):
-    from agent_comms.plan_phases import UnplannedPhase
-
     with pytest.raises(OSError, match="team plan missing"):
         UnplannedPhase.order_refusals(unavailable_plan, reason)
 
 
 def test_ready_phases_refuse_an_order_with_no_phase_or_reason():
-    from agent_comms.plan_phases import UnplannedPhase
-
     assert UnplannedPhase.order_refusals(lambda: (BusWriterPhase,), "") == (
         f"Plan phases are ready: {BusWriterPhase.declared_name}. "
         "Name a phase, or provide an explicit unplanned_reason of 8+ words.",)

@@ -1,23 +1,27 @@
 
-from agent_comms.repo import Checkout
-from agent_comms.transport.tools.served import invoke_tool
-from bus_history import read_history
 import json
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.registry.registry_document import RosterVisibility
-from agent_comms.relationships import (
-    ChildrenRelationshipGroup, CollaboratingRelationshipGroup, InboundRelationshipGroup,
-    OutboundRelationshipGroup, ParentRelationshipGroup, RelationshipEdit,
-)
 from agent_comms.comms import wire
-from conftest import installed_comms
 from agent_comms.display_order import LastActivityThreadSort
-from agent_comms.thread_text import ForkedParent, NoParent
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.relationships import (
+    ChildrenRelationshipGroup,
+    CollaboratingRelationshipGroup,
+    InboundRelationshipGroup,
+    OutboundRelationshipGroup,
+    ParentRelationshipGroup,
+    RelationshipEdit,
+)
+from agent_comms.registry.roster_visibility import RosterVisibility
+from agent_comms.registry.thread_text import ForkedParent, NoParent
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.tools.served import invoke_tool
+from bus_history import read_history
+from conftest import installed_comms
 
 
 def add_peer(root, peer):
@@ -46,7 +50,7 @@ def setup_wire(tmp_path):
 
 
 def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkeypatch):
-    from agent_comms.tool_caller import ThreadCaller
+    from agent_comms.transport.tool_caller import ThreadCaller
     comms = setup_wire(tmp_path)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     before = comms.registry.snapshot()
@@ -276,7 +280,7 @@ def test_live_alias_resolves_but_deleted_alias_does_not_erase_note(tmp_path, mon
         "owner", RelationshipEdit.member_named("add"), "peer", "Review before rename"
     )
     monkeypatch.setenv("AGENT_COMMS_THREAD", "peer")
-    from agent_comms.tool_caller import ThreadCaller
+    from agent_comms.transport.tool_caller import ThreadCaller
 
     comms.threads.rename_self("reviewer", caller=ThreadCaller("peer"))
     assert collaboration_rows(comms)[0].target == "reviewer"
@@ -288,7 +292,7 @@ def test_live_alias_resolves_but_deleted_alias_does_not_erase_note(tmp_path, mon
 
 
 def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path):
-    from agent_comms.goal_actions import SetGoalAction
+    from agent_comms.planning.goal_actions import SetGoalAction
 
     comms = setup_wire(tmp_path)
     peer = comms.registry.require("peer")
@@ -323,8 +327,9 @@ def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path
 
 def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.relationships import (
-        InboundRelationshipGroup, SortableRelationshipGroup,
+    from agent_comms.registry.relationships import (
+        InboundRelationshipGroup,
+        SortableRelationshipGroup,
     )
 
     class SortedInboundRelationshipGroup(SortableRelationshipGroup, InboundRelationshipGroup):

@@ -7,19 +7,21 @@ from functools import partial
 from pathlib import Path
 from typing import AsyncIterator
 
-from agent_comms.bus import Bus
+from agent_comms.cli_bridges import (
+    hook_requests,  # Register the resident event declarations before serving the socket.
+)
+from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
+from agent_comms.cli_bridges.claude_transcript import RecentClaudeWindow, RunningClaude
+from agent_comms.cli_bridges.history import ClaudeHistory
+from agent_comms.cli_bridges.hook_session import SessionHook
+from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate
+from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms.cli_bridges.shared import Enrol, LineMonitorBridge, Options, Watch, run_bridge
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.watched import FileSource
 from agent_comms.storage.private_path import FileRevision
-from agent_comms.runtime_updates import RuntimeUpdate
-from agent_comms.watched import FileSource
 from agent_comms_hooks.shell_commands import ConnectCommand
 
-from .history import ClaudeHistory
-from .claude_protocol import ClaudeMonitorFrame
-from .claude_transcript import RecentClaudeWindow, RunningClaude
-from .hook_session import SessionHook
-from .session_watch import WatchClaim
-from .shared import Enrol, LineMonitorBridge, Options, Watch, run_bridge
-from . import hook_requests  # Register the resident event declarations before serving the socket.
 
 class ClaudeBridge(RecentClaudeWindow, ClaudeHistory, LineMonitorBridge):
     """Follow the Claude session and deliver the original waking HUD through its native frame.

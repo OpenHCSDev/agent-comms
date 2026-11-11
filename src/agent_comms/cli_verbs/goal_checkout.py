@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from agent_comms.cli_commands import CheckoutGrant
-from agent_comms.cli_commands import GoalCheckoutGrant
-from agent_comms.cli_support.prepared_checkout import PreparedCheckoutCliCommand
-from agent_comms.comms import Comms
-from agent_comms.nominal.field_codec import Argument
-from agent_comms.repo import RepositorySource
-from agent_comms.storage_rules import StorageRule
-from agent_comms.registry.threads import Thread
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
+
+from agent_comms.cli_support.prepared_checkout import PreparedCheckoutCliCommand
+from agent_comms.cli_verbs.cli_commands import CheckoutGrant, GoalCheckoutGrant
+from agent_comms.comms import Comms
+from agent_comms.nominal.field_codec import Argument
+from agent_comms.projects.repository_sources import RepositorySource
+from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.registry.threads import Thread
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -1,47 +1,53 @@
 import ast
-import json
 import gc
+import json
 import weakref
 from pathlib import Path
 
 import pytest
+from nominal_refactor_advisor.audit.findings import GodFunction
 
-from agent_comms.plan_reading import PlanReading
+import fixture_git
+from agent_comms.planning.nominal_census import NominalCensus
 from agent_comms.planning.phase_artifacts import RecordedArtifact
-from agent_comms.phase_evidence import (
+from agent_comms.planning.phase_evidence import (
     AllEvidence,
+    ClassChecks,
     ClassDeclared,
     ClassFlagsAbsent,
-    ClassChecks,
     ClassRostersAbsent,
     CommitMerged,
+    DocumentPatternPresent,
     FunctionDeclared,
     MainTree,
     ModuleBindings,
-    QualifiedName,
     NoAbsenceProbes,
     NoExactCopies,
     NoGodFunction,
     OwnClassChecksAbsent,
-    SourceFacts,
     ParentsShared,
     PathsAbsent,
-    DocumentPatternPresent,
     PatternAbsent,
     PatternPresent,
     PhaseEvidence,
+    QualifiedName,
     RestatedMembersAbsent,
+    SourceFacts,
     UnreadableEvidenceError,
 )
-from nominal_refactor_advisor.audit.findings import GodFunction
-
-from agent_comms.nominal_census import NominalCensus
-from agent_comms.plan_phases import BusDeletionPhase, FLAG, ExternalBoundariesPhase, ModuleMapPhase, PlanPhase, RostersPhase
-from agent_comms.repo import Repo
-from agent_comms.repository_name import RepositoryName
-from agent_comms.work_branches import WorkBranches
-import fixture_git
-
+from agent_comms.planning.plan_phases import (
+    FLAG,
+    BusDeletionPhase,
+    ExternalBoundariesPhase,
+    MessagingOwnersPhase,
+    ModuleMapPhase,
+    PlanPhase,
+    RostersPhase,
+)
+from agent_comms.planning.plan_reading import PlanReading
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.work_branches import WorkBranches
 
 git = fixture_git.run
 
@@ -65,6 +71,24 @@ def test_evidence_reads_origin_main_and_never_the_worktree(tmp_path):
     assert not reading.holds(PatternAbsent("flag = True"))
     assert reading.holds(PatternAbsent("flag = True", ("src", ":!src/kept.py")))
     assert not reading.holds(AllEvidence((CommitMerged(sha), PathsAbsent(("src/kept.py",)))))
+
+
+@pytest.mark.parametrize("source", [
+    "from agent_comms.messaging.bus import Bus\n",
+    "import agent_comms.messaging.bus\n",
+    "from agent_comms.messaging import initial_origin\n",
+    "from agent_comms.messaging import activity_clocks\n",
+    "from agent_comms.messaging_extra import Other\n",
+])
+def test_messaging_phase_accepts_replacement_package_imports(tmp_path, source):
+    reading = main_of(tmp_path, {"src/consumer.py": source})
+    assert MessagingOwnersPhase.done(reading)
+
+
+@pytest.mark.parametrize("path", MessagingOwnersPhase.evidence.paths)
+def test_messaging_phase_rejects_a_restored_old_module(tmp_path, path):
+    reading = main_of(tmp_path, {path: ""})
+    assert not MessagingOwnersPhase.done(reading)
 
 
 def test_boundary_evidence_ignores_its_declaration_and_exception_groups(tmp_path):
@@ -117,8 +141,8 @@ def main_of(tmp_path, files):
 def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry(tmp_path):
     source = Path(__file__).parents[1] / "src/agent_comms"
     reading = main_of(tmp_path, {
-        "src/phase_evidence.py": (source / "phase_evidence.py").read_text(),
-        "src/plan_phases.py": (source / "plan_phases.py").read_text(),
+        "src/phase_evidence.py": (source / "planning" / "phase_evidence.py").read_text(),
+        "src/planning/plan_phases.py": (source / "planning" / "plan_phases.py").read_text(),
         "src/producer.py": "PI_0_85_1_EVENT_KINDS = frozenset({'alpha', 'beta'})\n"
                            "class Runtime:\n    event_kinds = PI_0_85_1_EVENT_KINDS\n",
         "src/unrelated.py": "class OtherOwner:\n    members = {}\n"
@@ -130,11 +154,11 @@ def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry
         ("src/remaining.py", "class Backend:\n    serves_threads = True\n"),
         ("src/remaining.py", "class Backend:\n    serves_new_threads: ClassVar[bool] = True\n"),
         ("src/agent_comms/installer/probes/carry.py", "class Carry:\n    declared: ClassVar[dict] = {}\n"),
-        ("src/agent_comms/private_registry_guard.py", "class RegistryPrivacy:\n    kinds = {}\n"),
-        ("src/agent_comms/thread_identity.py", "class BirthlessIncarnation:\n    members = {}\n"),
-        ("src/agent_comms/tool_calls.py", "class CliToolArguments:\n    types = {}\n"),
-        ("src/agent_comms/pi_events.py", "class PiEvent:\n    _start_phases = {}\n"),
-        ("src/agent_comms/pi_events.py", "class PiEvent:\n    _end_events = {}\n"),
+        ("src/agent_comms/registry/private_registry_guard.py", "class RegistryPrivacy:\n    kinds = {}\n"),
+        ("src/agent_comms/registry/thread_identity.py", "class BirthlessIncarnation:\n    members = {}\n"),
+        ("src/agent_comms/cli_bridges/tool_calls.py", "class CliToolArguments:\n    types = {}\n"),
+        ("src/agent_comms/execution/pi_events.py", "class PiEvent:\n    _start_phases = {}\n"),
+        ("src/agent_comms/execution/pi_events.py", "class PiEvent:\n    _end_events = {}\n"),
     ):
         remaining_file = tmp_path / path
         remaining_file.parent.mkdir(parents=True, exist_ok=True)
@@ -269,7 +293,7 @@ def test_changed_paths_between_commits_and_of_a_commit_against_itself(tmp_path):
 
 def test_bus_deletion_evidence_reads_uses_without_matching_its_own_declaration(tmp_path):
     reading = main_of(tmp_path, {
-        "src/phase.py": "from agent_comms.phase_evidence import BusStorageAbsent\n"
+        "src/phase.py": "from agent_comms.planning.phase_evidence import BusStorageAbsent\n"
                         "evidence = BusStorageAbsent()\n"
                         "# Delete bus.jsonl and bus_meta once the carry is accepted.\n"
                         "def documentation():\n    'bus.jsonl'\n",
@@ -424,9 +448,9 @@ def test_roster_expression_answers_preserve_admitted_syntax(
 
 def test_roster_relation_is_exempt_only_below_the_family_by_qualified_name(tmp_path):
     reading = main_of(tmp_path, {
-        "src/agent_comms/plan_phases.py": "class PlanPhase:\n    pass\n",
+        "src/agent_comms/planning/plan_phases.py": "class PlanPhase:\n    pass\n",
         "src/decoy.py": "class PlanPhase:\n    pass\n",
-        "src/phases.py": "from agent_comms.plan_phases import PlanPhase\n"
+        "src/phases.py": "from agent_comms.planning.plan_phases import PlanPhase\n"
                          "from decoy import PlanPhase as Spoofed\n"
                          "class A:\n    pass\nclass B:\n    pass\n"
                          "class Real(PlanPhase):\n    after = (A, B)\n"

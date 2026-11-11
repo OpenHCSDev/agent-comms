@@ -18,7 +18,7 @@ class ClientImportsProbe(TargetProbe, RuntimeProbe[None]):
         package = import_module(root)
         for module in walk_packages(package.__path__, f"{root}.", onerror=self.refuse):
             import_module(module.name)
-        import_module("agent_comms.acp")
+        import_module("agent_comms.execution.acp")
 
     @staticmethod
     def refuse(name: str) -> NoReturn:

@@ -4,12 +4,19 @@ import pytest
 from cutover.carry_team_plan_frames import TeamPlanFrames
 
 from agent_comms.nominal.field_codec import FieldCodec, RecordProblems
-from agent_comms.plan_phases import ReviewQueuePhase
+from agent_comms.planning.plan_phases import ReviewQueuePhase
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.storage.locked_store import LiveFilesRequest
+from agent_comms.team.team_hud import (
+    CodexUsage,
+    TeamFrame,
+    TeamHud,
+    TeamPlan,
+    TeamPlanDocument,
+    UnreadableUsage,
+)
+from agent_comms.team.team_hud_records import TeamPhase
 from agent_comms.team.vibe_check import OverloadDegradation
-from agent_comms.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, TeamPlanDocument, UnreadableUsage
-from agent_comms.team_hud_records import TeamPhase
-from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
 def test_a_frame_written_with_its_own_phases_moves_them_to_the_team_plan(tmp_path):

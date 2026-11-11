@@ -1,23 +1,37 @@
 """Claude turn identity applies equally to complete items and activity."""
+import json
 from contextlib import nullcontext
 
 import pytest
 
-import json
-
-from transcript_record_fixture import transcript_record
-
-from agent_comms.turn_item import NativeItemId, NativeTurnId
-from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
-from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.cli_bridges.claude_protocol import (
-    ApiError, CatchUp, ClaudeSession, ClaudeToolDraft, KnownTurn, Live, ReadResultObserved,
-    RedactedThinking, TimedRecord, ToolUse, UnmodelledSystemEvent, UserRecord,
+    ApiError,
+    CatchUp,
+    ClaudeSession,
+    ClaudeToolDraft,
+    KnownTurn,
+    Live,
+    ReadResultObserved,
+    RedactedThinking,
+    TimedRecord,
+    ToolUse,
+    UnmodelledSystemEvent,
+    UserRecord,
 )
-from agent_comms.recorded_time import EventTime
-from agent_comms.runtime_updates import ActiveItem, FinishedItem, StartedItem
-from agent_comms.tool_calls import ToolCall
-from agent_comms.transcript_events import AssistantTranscript
+from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
+from agent_comms.cli_bridges.runtime_updates import ActiveItem, FinishedItem, StartedItem
+from agent_comms.cli_bridges.tool_calls import ToolCall
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
+from agent_comms.execution.turn_phase import (
+    ModelWaitPhase,
+    ToolRunningPhase,
+)
+from agent_comms.storage.recorded_time import EventTime
+from agent_comms.transcript.transcript_events import AssistantTranscript
+from transcript_record_fixture import transcript_record
 
 
 @pytest.mark.parametrize('question', ('finished', 'result', 'thinking', 'tool'))
@@ -55,7 +69,7 @@ def test_prompt_identifies_finished_and_active_items_with_the_same_turn():
     result = TimedRecord(uuid=transcript_record('result'), timestamp='2026-10-18T00:00:01Z', position=18)
     completed, active, read = session.tool_result('call', 'done', True, result)
     assert isinstance(read, ReadResultObserved) and read.source_turn.require_id() == turn_id_turn_id
-    assert completed == FinishedItem(turn_id_turn_id, NativeItemId('call'), (
+    assert completed == FinishedItem(turn_id=turn_id_turn_id, item_id=NativeItemId('call'), events=(
         call.started(prompt.position, prompt.timestamp),
         call.ended('done', True, result.position, result.timestamp),
     ))

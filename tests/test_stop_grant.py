@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.acp import CommsAgent
-from agent_comms.attempt_recovery import RecoveryMonitorCapability
-from agent_comms.attempt_states import UnknownOutcomeAttempt
-from agent_comms.coordination.errors import RecoveryBlocked, StaleFence
+from agent_comms.execution.acp import CommsAgent
+from agent_comms.coordination.attempt_recovery import RecoveryMonitorCapability
+from agent_comms.coordination.attempt_states import UnknownOutcomeAttempt
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.coordination.errors import RecoveryBlocked, StaleFence
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.private_send_claim import PrivateSendClaim
 from test_native_failure_recovery import prepared_native_input

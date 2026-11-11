@@ -2,11 +2,24 @@
 from dataclasses import replace
 
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.todos import (
-    BranchDeliveryMerge, CheckedCommitDelivery, CommitDelivery, DeliveryMerge, DraftListedPullRequest,
-    DraftPullRequest, ListedPullRequest,
-    MainDeliveryMerge, MergedListedPullRequest, MergedPullRequest, OrderDelivery, PullRequestCommit,
-    UnmergedDeliveryMerge, UnmergedListedPullRequest, UnmergedPullRequest,
+from agent_comms.planning.orders import (
+    CheckedCommitDelivery,
+    CommitDelivery,
+    DraftListedPullRequest,
+    DraftPullRequest,
+    ListedPullRequest,
+    MergedListedPullRequest,
+    MergedPullRequest,
+    OrderDelivery,
+    UnmergedListedPullRequest,
+    UnmergedPullRequest,
+)
+from agent_comms.planning.pull_requests import (
+    BranchDeliveryMerge,
+    DeliveryMerge,
+    MainDeliveryMerge,
+    PullRequestCommit,
+    UnmergedDeliveryMerge,
 )
 
 
@@ -48,7 +61,7 @@ def test_pr_merge_record_requires_both_the_source_head_and_checked_merge():
 
 
 def test_draft_query_row_preserves_membership_without_review_or_git_reads(tmp_path):
-    from agent_comms.work_branches import WorkBranches
+    from agent_comms.projects.work_branches import WorkBranches
 
     original = DraftListedPullRequest(44, 'fix/draft', 'c' * 40,
         updated='2026-10-19T12:00:01Z', base='main',

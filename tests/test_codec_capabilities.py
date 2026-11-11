@@ -7,9 +7,27 @@ import pytest
 from pydantic import TypeAdapter
 
 from agent_comms.cli_bridges.claude_protocol import AssistantBlock, ResultPart, UserBlock
+from agent_comms.cli_bridges.cli_protocol import TextWire
 from agent_comms.cli_bridges.codex_protocol import UserInput
 from agent_comms.cli_bridges.opencode_parts import Part
-from agent_comms.cli_protocol import TextWire
+from agent_comms.execution.native_startup import NativeStartupPolicy
+from agent_comms.execution.pi_events import PiEvent
+from agent_comms.execution.pi_vocabulary import CompactionReason, PiStopReason
+from agent_comms.execution.pi_wire import PiDiagnostic, PiPayload, UnknownPayload
+from agent_comms.execution.provider_records import (
+    PiContent,
+    TextContent,
+    UnknownContent,
+)
+from agent_comms.execution.turn_output import TurnOutput
+from agent_comms.execution.turn_phase import (
+    ModelWaitPhase,
+    PromptAcceptancePhase,
+)
+from agent_comms.execution.turn_watchdog import (
+    ModelWait,
+    ProgressWatchdog,
+)
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     AcceptsNull,
@@ -21,15 +39,16 @@ from agent_comms.nominal.field_codec import (
     Id128Text,
     MalformedRecord,
 )
-from agent_comms.native_startup import NativeStartupPolicy
-from agent_comms.pi_events import PiEvent
-from agent_comms.pi_wire import PiDiagnostic, PiPayload
-from agent_comms.pi_wire import UnknownPayload
-from agent_comms.pi_payloads import ContentDelta, NativeToolDetails, PiContent, PiDelta, PiMessage, PiResponseData, SessionSwitchData, StateData, TextContent, UnknownContent, UnknownData
-from agent_comms.pi_vocabulary import CompactionReason, PiStopReason
-from agent_comms.turn_output import TurnOutput
-from agent_comms.turn_phase import ModelWaitPhase, PromptAcceptancePhase
-from agent_comms.turn_watchdog import ModelWait, ProgressWatchdog
+from agent_comms.pi_payloads import (
+    ContentDelta,
+    NativeToolDetails,
+    PiDelta,
+    PiMessage,
+    PiResponseData,
+    SessionSwitchData,
+    StateData,
+    UnknownData,
+)
 
 
 class CapabilityRepresentation(DeclaredFamily, FieldRepresentation, affix="Representation"):
@@ -103,7 +122,7 @@ def test_open_payload_derives_unknown_selection_from_each_family(family, wire):
 
 
 def test_opaque_entry_and_tool_data_keep_the_original_external_shape():
-    from agent_comms.native_entries import NativeEntry
+    from agent_comms.execution.native_entries import NativeEntry
 
     for family, wire in (
         (NativeEntry, {"type": "future_entry", "timestamp": "2026-10-21T00:00:00Z", "extra": [1]}),
@@ -143,6 +162,12 @@ async def test_delta_siblings_share_progress_and_inherit_default_emission():
 
 
 def test_external_fields_use_their_declared_type_not_their_parent_or_field_name():
+    from agent_comms.execution.pi_vocabulary import (
+        CompactionReason,
+        OverflowCompactionReason,
+        PiStopReason,
+        StopStopReason,
+    )
     from agent_comms.pi_payloads import (
         AbsentMessage,
         MissingToolResult,
@@ -150,12 +175,6 @@ def test_external_fields_use_their_declared_type_not_their_parent_or_field_name(
         PiModel,
         PiToolResult,
         UnreportedModel,
-    )
-    from agent_comms.pi_vocabulary import (
-        CompactionReason,
-        OverflowCompactionReason,
-        PiStopReason,
-        StopStopReason,
     )
 
     @dataclass(frozen=True)
@@ -207,7 +226,7 @@ def test_external_name_families_derive_one_default_without_accepting_invalid_val
 
 @pytest.mark.parametrize("value", [None, False, "3", {}, 1.5, 0, -1, 2])
 def test_measured_totals_share_one_declared_integer_policy(value):
-    from agent_comms.pi_wire import PiUsage
+    from agent_comms.execution.pi_wire import PiUsage
     from agent_comms.pi_payloads import PiContextUsage
 
     totals = (PiUsage.from_wire({"totalTokens": value}).total_tokens,
@@ -217,7 +236,7 @@ def test_measured_totals_share_one_declared_integer_policy(value):
 
 @pytest.mark.parametrize("value", [False, "3", {}, 1.5])
 def test_retained_totals_reject_values_only_external_ingress_may_treat_as_unreported(value):
-    from agent_comms.pi_wire import PiUsage
+    from agent_comms.execution.pi_wire import PiUsage
     from agent_comms.pi_payloads import PiContextUsage
 
     for family, key in ((PiUsage, "totalTokens"), (PiContextUsage, "tokens")):
@@ -227,8 +246,10 @@ def test_retained_totals_reject_values_only_external_ingress_may_treat_as_unrepo
 
 @pytest.mark.parametrize("command", ["switch_session", "watch", "compact_durable"])
 def test_exact_response_capability_covers_sdk_and_durable_commands(command):
-    from agent_comms import pi_durable_backend  # Registers the actual host command family.
-    from agent_comms.pi_events import Response
+    from agent_comms.execution import (
+        pi_durable_backend,  # Registers the actual host command family.
+    )
+    from agent_comms.execution.pi_events import Response
 
     wire = {"id": "proof", "type": "response", "command": command,
             "success": False, "error": "failed"}
@@ -281,8 +302,8 @@ def test_external_collections_produce_resolved_members(annotation, wire):
 
 
 def test_response_command_owns_data_decoding_without_redecoding_its_identity():
-    from agent_comms.pi_commands import PiCommand
-    from agent_comms.pi_events import Response
+    from agent_comms.execution.pi_commands import PiCommand
+    from agent_comms.execution.pi_events import Response
 
     seen = []
 
@@ -314,7 +335,7 @@ def test_response_command_owns_data_decoding_without_redecoding_its_identity():
 
 @pytest.mark.parametrize("command", [None, False, 1, {}])
 def test_malformed_response_commands_are_not_unknown_commands(command):
-    from agent_comms.pi_events import Response
+    from agent_comms.execution.pi_events import Response
 
     with pytest.raises(MalformedRecord):
         Response.from_wire({"type": "response", "command": command})
@@ -342,7 +363,7 @@ def test_native_delta_records_are_not_normalized_as_the_null_union_member(wire):
 
 
 def test_exact_envelope_derives_additional_response_fields():
-    from agent_comms.pi_events import Response
+    from agent_comms.execution.pi_events import Response
 
     @dataclass(frozen=True, kw_only=True)
     class HeaderProofResponse(Response):

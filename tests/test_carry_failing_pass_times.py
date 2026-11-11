@@ -4,8 +4,8 @@ import json
 
 from cutover.carry_failing_pass_times import FailingPassTimes
 
+from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.storage.locked_store import LiveFilesRequest
-from agent_comms.service_passes import ServicePassStore
 
 
 def test_carry_gives_a_stored_failure_its_first_failure_time_once(tmp_path):

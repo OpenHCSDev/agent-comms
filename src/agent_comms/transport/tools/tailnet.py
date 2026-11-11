@@ -3,11 +3,11 @@
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.connector_profile import UiGrantId
-from agent_comms.tailnet_buses import PeerBus
-from agent_comms.tailnet_profiles import AskedPeer
-from agent_comms.tool_result import ToolResult
+from agent_comms.transport.connector_profile import UiGrantId
 from agent_comms.transport.request import ReadRequest, ToolRequest, tool_field
+from agent_comms.transport.tailnet_buses import PeerBus
+from agent_comms.transport.tailnet_profiles import AskedPeer
+from agent_comms.transport.tool_result import ToolResult
 
 
 @dataclass(frozen=True)

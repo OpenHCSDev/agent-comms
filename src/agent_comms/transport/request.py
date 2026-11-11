@@ -1,5 +1,5 @@
 """Tool requests as the wire declares them: fields, names, schemas, results and how a remote
-caller posts them. Nothing here serves a request; agent_comms.tool_request composes this
+caller posts them. Nothing here serves a request; agent_comms.transport.tool_request composes this
 declaration with ServedRequest for the Core that runs it, so a client imports no Core."""
 
 from __future__ import annotations
@@ -7,15 +7,14 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from types import get_original_bases
-from typing import Self, Annotated, ClassVar, ParamSpec, TypeVar, cast, get_args, get_origin
-
-from typing_extensions import TypeVarTuple
+from typing import Annotated, ClassVar, ParamSpec, Self, TypeVar, cast, get_args, get_origin
 
 from pydantic import JsonValue
+from typing_extensions import TypeVarTuple
 
-from .progress import WireExportObserver
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
+from agent_comms.coordination.errors import CoordinationReadUnavailable
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     ArgumentsExclude,
     ContextSource,
     DefaultNonNull,
@@ -27,9 +26,10 @@ from ..nominal.field_codec import (
     WireName,
     WireTransient,
 )
-from ..storage.maintenance_barrier import FreshIngress
-from ..tool_declaration import ToolDeclaration
-from ..tool_result import ToolResult
+from agent_comms.storage.maintenance_barrier import FreshIngress
+from agent_comms.transport.progress import WireExportObserver
+from agent_comms.transport.tool_declaration import ToolDeclaration
+from agent_comms.transport.tool_result import ToolResult
 
 
 class ArgumentTool:
@@ -90,7 +90,7 @@ class ToolRequest[Result: ToolResult = ToolResult](
     FreshIngress, ArgumentTool, ToolDeclaration, declared_name=None
 ):
     """A tool request as the wire declares it: its fields, name, schema and result. Serving it
-    (decoding a call, running apply under a caller) is ServedRequest's, in agent_comms.tool_request."""
+    (decoding a call, running apply under a caller) is ServedRequest's, in agent_comms.transport.tool_request."""
 
     description: ClassVar[str]
     read_only_hint: ClassVar[bool] = False
@@ -128,6 +128,10 @@ class ToolRequest[Result: ToolResult = ToolResult](
         """A call that may change the bus is never sent twice: Core may already have run it, so
         the caller hears the connection failed."""
         raise dropped
+
+    def unavailable(self, error: OSError) -> dict[str, JsonValue]:
+        """A failed transport does not establish whether a write ran."""
+        raise error
 
     @classmethod
     def result_type(cls) -> type[Result]:
@@ -202,6 +206,19 @@ class ReadRequest[Result: ToolResult = ToolResult](ToolRequest[Result], declared
     def dropped(self, remote: RequestPoster, dropped: ConnectionDropped) -> dict[str, JsonValue]:
         """A read changes nothing, so it is asked once more on a fresh connection."""
         return remote.exchange(self)
+
+    def unavailable(self, error: OSError) -> dict[str, JsonValue]:
+        """The source answered no read; retain its last value until it recovers."""
+        raise RemoteReadUnavailable(str(error)) from error
+
+
+class RemoteReadUnavailable(CoordinationReadUnavailable, ConnectionError):
+    """A remote read acquired no answer; its transport failure remains its cause."""
+
+    def __new__(cls, *args: object) -> Self:
+        # The ConnectionError role owns OSError's native allocation layout.
+        # RuntimeError.__new__ rejects it when Python's unpickler calls it.
+        return ConnectionError.__new__(cls, *args)
 
 
 @dataclass(frozen=True, kw_only=True)

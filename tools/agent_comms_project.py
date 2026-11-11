@@ -30,24 +30,28 @@ from module_layers import PACKAGE, ClientSources, MaterializedClients, StackClie
 from nominal_refactor_advisor import audit
 
 import agent_comms
-from agent_comms_hooks import process_claim
 from agent_comms.coordination import schema as coordination_schema
-from agent_comms.storage import locked_store, store_files, typed_table
-from agent_comms.nominal import field_codec
-from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
-from agent_comms.launch_runtime import RestoredRuntime
-from agent_comms.core_stamp import WheelStamp
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import boundary_decoder
-from agent_comms.head_review import Side as CutSide
-from agent_comms.installer.carry import STEPS
+from agent_comms.execution.child_process import (
+    ForkedProcessPool,
+    SpawnedProcess,
+)
+from agent_comms.execution.launch_runtime import RestoredRuntime
+from agent_comms.installer.core_stamp import WheelStamp
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.installer.runtime_resolution import StackSources
-from agent_comms.nominal_census import NominalCensus
-from agent_comms.plan_reading import PlanReading
-from agent_comms.phase_evidence import MainTree
-from agent_comms.plan_phases import PlanPhase
-from agent_comms.repo import Checkout, Repo
+from agent_comms.installer.target_tree import STEPS
+from agent_comms.nominal import field_codec
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import boundary_decoder
+from agent_comms.planning.nominal_census import NominalCensus
+from agent_comms.planning.phase_evidence import MainTree
+from agent_comms.planning.plan_phases import PlanPhase
+from agent_comms.planning.plan_reading import PlanReading
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.head_review import Side as CutSide
+from agent_comms.projects.repo import Repo
+from agent_comms.storage import locked_store, store_files, typed_table
+from agent_comms_hooks import process_claim
 
 SOURCES = Path(inspect.getfile(agent_comms)).parents[1]
 REPOSITORY = SOURCES.parent

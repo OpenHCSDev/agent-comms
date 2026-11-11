@@ -4,14 +4,26 @@
 
 import pytest
 
-from agent_comms.turn_inbox import ClearQueue, FollowUpInputPolicy, InputContent, InputRequest, SendNow, TurnInbox, TurnInboxItem, UseSettings
-from agent_comms.native_session_prepare import NativeSessionPreparation
-from agent_comms.pi_vocabulary import OffThinkingLevel
-from agent_comms.thread_model import UndeclaredModel
-from agent_comms.turn_failure import QueuedInputMissing, QueuedInputNotSent
-from native_response_fixture import native_response_session
+from agent_comms.execution.native_session_prepare import NativeSessionPreparation
+from agent_comms.execution.pi_vocabulary import OffThinkingLevel
+from agent_comms.execution.turn_failure import (
+    QueuedInputMissing,
+    QueuedInputNotSent,
+)
+from agent_comms.execution.turn_inbox import (
+    ClearQueuedInputs,
+    FollowUpInputPolicy,
+    InputContent,
+    InputRequest,
+    SendNow,
+    TurnInbox,
+    TurnInboxItem,
+    UseSettings,
+)
+from agent_comms.execution.turn_inputs import InputForwarding
 from agent_comms.nominal.field_codec import InputId
-from agent_comms.turn_inputs import InputForwarding
+from agent_comms.registry.thread_model import UndeclaredModel
+from native_response_fixture import native_response_session
 
 
 def test_inbox_owns_ready_work_and_retains_parked_input():
@@ -32,7 +44,7 @@ def test_inbox_owns_ready_work_and_retains_parked_input():
 
 
 @pytest.mark.parametrize("control", (
-    ClearQueue((InputId.mint(),)),
+    ClearQueuedInputs((InputId.mint(),)),
     SendNow((InputId.mint(),)),
     UseSettings(model=UndeclaredModel(), thinking_level=OffThinkingLevel),
 ))

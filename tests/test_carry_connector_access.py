@@ -1,27 +1,40 @@
 """Credential carry controls use selected retained files, never the live HOME store."""
 
-from contextlib import ExitStack
 import os
-from pathlib import Path
 import time
+from contextlib import ExitStack
+from pathlib import Path
 
 import pytest
-
-from agent_comms.connector_caller import CALLER, ForkingCaller, GrantRefusedError
-from agent_comms.connector_store import (
-    CALLBACK, AccessLabel, AuthorizationQuery, AuthorizationRequest, ConnectorAccess,
-    ConnectorCredentialsFile, ConnectorGrants, ConnectorStore, ExistingDirectorAccess, IssuedCode,
-    RegisteredClient, TrustedBrowser, digest,
+from cutover.carry_connector_access import (
+    ConnectorAccessCarry,
+    PreviousConnectorGrants,
+    PreviousIssuedAccess,
+    PreviousThreadGrant,
 )
+
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.practice import PracticeCopy
-from agent_comms.storage.locked_store import LiveFilesRequest, RetainedCopyRequest
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
+from agent_comms.storage.locked_store import LiveFilesRequest, RetainedCopyRequest
 from agent_comms.storage.private_path import PrivateDirectoryRole
 from agent_comms.storage.store_files import AtomicFile, ExclusiveLock, store_lock_path
-from cutover.carry_connector_access import (
-    ConnectorAccessCarry, PreviousConnectorGrants, PreviousIssuedAccess, PreviousThreadGrant,
+from agent_comms.transport.connector_caller import CALLER, ForkingCaller, GrantRefusedError
+from agent_comms.transport.connector_store import (
+    CALLBACK,
+    AccessLabel,
+    AuthorizationQuery,
+    AuthorizationRequest,
+    ConnectorAccess,
+    ConnectorCredentialsFile,
+    ConnectorGrants,
+    ConnectorStore,
+    ExistingDirectorAccess,
+    IssuedCode,
+    RegisteredClient,
+    TrustedBrowser,
+    digest,
 )
 
 

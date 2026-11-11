@@ -1,25 +1,18 @@
 from __future__ import annotations
 
-from agent_comms.comms import Comms
-
-from agent_comms import cli as comms_cli
-from agent_comms.cli_command import CliCommand
-from agent_comms.nominal.field_codec import Argument
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.nominal.field_codec import Normalize
-from agent_comms.tool_caller import NoThreadCaller
-from agent_comms.tool_caller import ThreadCaller
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Annotated
 import dataclasses
 import json
 import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Annotated
 
-from ..transport.tools.served import (
-    ToolReplyResult,
-    invoke_tool,
-)
+from agent_comms import cli as comms_cli
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.comms import Comms
+from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize
+from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.transport.tools.served import ToolReplyResult, invoke_tool
 
 
 @dataclass(frozen=True, kw_only=True)

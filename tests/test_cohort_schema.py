@@ -8,13 +8,13 @@ from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
-from bus_record_fixture import OWNER_LOOKUP, RECIPIENT_LOOKUP, SENDER_LOOKUP
 
-from agent_comms.cohort_schema import CohortDeliveries, CohortTable
-from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, ThreadLookup
-from agent_comms.coordination.tables.participants import Participants
+from agent_comms.coordination.cohort_schema import CohortDeliveries, CohortTable
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.tables.participants import Participants
+from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, ThreadLookup
+from bus_record_fixture import OWNER_LOOKUP, RECIPIENT_LOOKUP, SENDER_LOOKUP
 
 A, B, C = SENDER_LOOKUP, RECIPIENT_LOOKUP, OWNER_LOOKUP
 ROOT = "a" * 32
@@ -282,6 +282,7 @@ def test_delivery_kind_carry_preserves_consistent_rows_and_refuses_disagreement(
     private_comms, tmp_path: Path, selected: bool, stored_kind: str | None,
 ) -> None:
     from cutover.carry_cohort_delivery_kind import CohortDeliveryKind
+
     from agent_comms.errors import RelationViolationError
     from agent_comms.storage.locked_store import LiveFilesRequest
 

@@ -16,9 +16,9 @@ import pytest
 from aiohttp import ClientSession
 
 from agent_comms.comms import Comms
-from agent_comms.connector_store import ConnectorStore
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.connector_store import ConnectorStore
 from connector_readiness import ConnectorReadiness
 from connector_shutdown_fixture import ShutdownReadTool, ShutdownWriteTool
 from watch_shutdown_fixture import ShutdownWatch

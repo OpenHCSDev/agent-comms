@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.child_process import IdentityMismatchError, ProcessIdentity
+from agent_comms.execution.child_process import IdentityMismatchError, ProcessIdentity
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 
 

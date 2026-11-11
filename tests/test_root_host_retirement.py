@@ -2,25 +2,28 @@
 on 2026-11-04 that read stopped the live install, after the outgoing runtime had already retired
 the host. Only a running host needs its owners read."""
 
-import json
 import os
 from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.storage.private_path import FileIdentity
-from agent_comms.recorded_bus import RecordedBus
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.root_runtime import (
+    NoRootHost,
+    RecordedRootHost,
+    RootRuntime,
+    RootRuntimeStore,
+)
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.recorded_bus import RecordedBus
 from agent_comms.registry.registry_document import InvalidRegistryDocument
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.root_runtime import NoRootHost, RecordedRootHost, RootRuntime, RootRuntimeStore
+from agent_comms.storage.private_path import FileIdentity
 
 
-def older_registry(root: Path) -> None:
-    """A stored form this decoder refuses, as an install finds it before its carries."""
-    RegistryStore(root / "registry.json").carry_text(json.dumps({
-        "version": 1, "commander_project": "retired", "threads": {}}))
+def unreadable_registry(root: Path) -> None:
+    """Corrupt the current document: a retired host must not try to decode it."""
+    RegistryStore.at(root).rewrite_stored(lambda raw: {**raw, "version": None})
 
 
 def store_with(root: Path, process: ProcessIdentity) -> RootRuntimeStore:
@@ -34,7 +37,7 @@ def store_with(root: Path, process: ProcessIdentity) -> RootRuntimeStore:
 
 
 def test_a_retired_host_needs_no_registry(tmp_path):
-    older_registry(tmp_path)
+    unreadable_registry(tmp_path)
     store = RootRuntimeStore.at(tmp_path)
     store.replace(RootRuntime(tmp_path / "prefix"))
     store.retire_host().require_retired(tmp_path)
@@ -42,13 +45,13 @@ def test_a_retired_host_needs_no_registry(tmp_path):
 
 
 def test_a_dead_recorded_host_needs_no_registry(tmp_path):
-    older_registry(tmp_path)
+    unreadable_registry(tmp_path)
     store_with(tmp_path, ProcessIdentity(os.getpid(), 1)).retire_host().require_retired(tmp_path)
 
 
 def test_a_running_host_still_answers_to_its_owners(tmp_path):
     """Refused loudly and left running: an unreadable registry never stops a live host."""
-    older_registry(tmp_path)
+    unreadable_registry(tmp_path)
     running = ProcessIdentity.capture(os.getpid())
     store = store_with(tmp_path, running)
     with pytest.raises(InvalidRegistryDocument):

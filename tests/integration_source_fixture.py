@@ -1,29 +1,38 @@
 """One real Git/forge/Todo setup for matched source capture and promotion controls."""
 
+import sys
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-import sys
-import time
 from typing import Self
 
 import pytest
+from module_layers import MaterializedClients
 
-from agent_comms.team.order import Team, TeamContext
 from agent_comms.comms import Comms
-from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.head_review import CombinedInput, IntegrationInput, IntegrationSource, PullRequestHead
-from agent_comms.integration import IntegrationCheckout, IntegrationRun
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Repo
-from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import DraftListedPullRequest, PullRequests, RecordPullRequest
-from agent_comms.tool_caller import PeerCaller
+from agent_comms.projects.integration import IntegrationCheckout, IntegrationRun
+from agent_comms.planning.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.orders import (
+    DraftListedPullRequest,
+    PullRequests,
+    RecordPullRequest,
+)
+from agent_comms.projects.head_review import (
+    CombinedInput,
+    IntegrationInput,
+    IntegrationSource,
+    PullRequestHead,
+)
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.team.order import Team, TeamContext
+from agent_comms.transport.tool_caller import PeerCaller
 from agent_comms.transport.tools.orders import CommsTodoCreateTool
 from fixture_git import ENVIRONMENT
 from github_fixture import GitHubFixture
 from source_revision_fixture import SourceRepository
-from module_layers import MaterializedClients
 
 
 @dataclass(frozen=True)

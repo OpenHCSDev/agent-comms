@@ -3,22 +3,29 @@
 import subprocess
 
 import pytest
-from bus_record_fixture import prepare_native_comms
-from agent_comms_hooks import ToolRefusedError
 
-from agent_comms.connector_caller import UiCaller, UiReadCaller
-from agent_comms.core_access import LocalCoreAccess
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.tailnet_buses import (
-    PeerBus, PeerHoldsBus, PeerOffline, PeerUnreachable, PeerWithoutBus, ProbedPeer,
-    TailnetBuses, TailnetPeer,
+from agent_comms.transport.connector_caller import UiCaller, UiReadCaller
+from agent_comms.transport.core_access import LocalCoreAccess
+from agent_comms.transport.tailnet_buses import (
+    PeerBus,
+    PeerHoldsBus,
+    PeerOffline,
+    PeerUnreachable,
+    PeerWithoutBus,
+    ProbedPeer,
+    TailnetBuses,
+    TailnetPeer,
 )
-from agent_comms.tailnet_profiles import AskedPeer, PeerRefusedProfile, TailnetProfiles
-from agent_comms.tool_request import ServedRequest
+from agent_comms.transport.tailnet_profiles import AskedPeer, PeerRefusedProfile, TailnetProfiles
+from agent_comms.transport.tool_request import ServedRequest
 from agent_comms.transport.tools.tailnet import (
-    CommsTailnetBusesTool, CommsTailnetProfileTool, TailnetBusesRead,
+    CommsTailnetBusesTool,
+    CommsTailnetProfileTool,
+    TailnetBusesRead,
 )
-
+from agent_comms_hooks import ToolRefusedError
+from bus_record_fixture import prepare_native_comms
 
 PEER = TailnetPeer("a-discovered-peer", "100.64.1.2", True)
 BUS = PeerHoldsBus(PEER, 7)
@@ -35,9 +42,14 @@ def test_every_discovery_outcome_crosses_the_existing_wire():
     assert FieldCodec.decode(TailnetBusesRead, FieldCodec.encode(result)) == result
 
 
-def test_the_selected_core_performs_discovery(comms, monkeypatch):
+async def test_the_selected_core_performs_discovery(local_core, monkeypatch):
+    """Discovery runs wherever the read is answered, which is the selected Core and not the
+    asking process. Replacing `seen` here therefore cannot reach it: the answer comes back
+    from the child's own probe, which is the whole claim in this test's name."""
     monkeypatch.setattr(TailnetBuses, "seen", classmethod(lambda cls: (BUS,)))
-    assert LocalCoreAccess(comms).call(CommsTailnetBusesTool()) == TailnetBusesRead((BUS,))
+    answer = await local_core.call(CommsTailnetBusesTool())
+    assert isinstance(answer, TailnetBusesRead)
+    assert answer != TailnetBusesRead((BUS,)), "the asking process answered its own read"
 
 
 def test_a_read_only_ui_cannot_issue_profiles(comms, monkeypatch):
@@ -93,7 +105,7 @@ def test_a_typed_address_must_name_a_peer_core_already_reports():
     exactly what it exists to stop, so each member says which peer it means among Core's
     own and one guard covers both kinds.
     """
-    from agent_comms.tailnet_buses import NamedHost
+    from agent_comms.transport.tailnet_buses import NamedHost
 
     peers = (PEER,)
     # Either spelling Tailscale itself uses resolves to the peer, not to the text.

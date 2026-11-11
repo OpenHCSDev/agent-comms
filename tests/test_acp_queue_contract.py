@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.repo import Checkout
 import os
 from pathlib import Path
 
@@ -10,33 +9,36 @@ import pytest
 from acp import RequestError
 from acp.schema import TextContentBlock
 
-from agent_comms.nominal.field_codec import AcpSessionId
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import (
-    InputDeliveryChangedUpdate,
     IdentifiedInputStarted,
-    UnidentifiedInputStarted,
-    LiveCursorScope,
+    InputDeliveryChangedUpdate,
     LiveQueueScope,
     QueueChangedUpdate,
     QueuePromptRequest,
     SteerPromptRequest,
     UnavailableQueueProjection,
+    UnidentifiedInputStarted,
     decode_updates,
     encode_request,
     encode_updates,
 )
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import InputId, RootId, TurnId
-from agent_comms.input_key import AcpInputKey
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_key import AcpInputKey
+from agent_comms.execution.queued_input import QueuedInput, QueuedInputContext
+from agent_comms.execution.runtime import present_session
+from agent_comms.execution.transcript_routes import NoDisplayText
 from agent_comms.input_attempt import ReservedInput
-from agent_comms.queued_input import QueuedInput, QueuedInputContext
-from agent_comms.runtime import present_session
-from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
+from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId, TurnId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import (
+    ClaimedIdentity,
+    RecordedThreadIncarnation,
+)
 from agent_comms.registry.threads import NativeThread
-from agent_comms.transcript_routes import NoDisplayText
+from agent_comms.transport.attachment_scope import LiveCursorScope
 from bus_record_fixture import prepare_native_comms
 from stored_inputs import stored_inputs
 
@@ -140,8 +142,11 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
     (17, "x" * 4096),
 ], ids=["long-unicode", "many-inputs", "large-total"])
 async def test_queue_preview_preserves_long_input_identity_body_and_actions(tmp_path, count, text):
-    from agent_comms.turn_inbox import ClearQueue, SendNow
     from agent_comms.acp_extension import AvailableQueueProjection, QueueItem
+    from agent_comms.execution.turn_inbox import (
+        ClearQueuedInputs,
+        SendNow,
+    )
 
     agent, inbox = held_owner(tmp_path)
     requests = [QueuePromptRequest(text) for _ in range(count)]
@@ -160,7 +165,7 @@ async def test_queue_preview_preserves_long_input_identity_body_and_actions(tmp_
     await agent.inputs.send_now(BETA)
     assert inbox.get_nowait() == SendNow(tuple(r.input_id for r in requests))
     await agent.inputs.clear_queued_inputs(BETA)
-    assert inbox.get_nowait() == ClearQueue(tuple(r.input_id for r in requests))
+    assert inbox.get_nowait() == ClearQueuedInputs(tuple(r.input_id for r in requests))
     assert not agent.inputs.state(BETA).queued
     assert (await agent.inputs.queue_state(BETA)).projection.status == "available"
 
@@ -215,12 +220,20 @@ async def test_ending_a_drained_session_leaves_no_state_for_it(tmp_path):
 
 async def test_original_queued_and_routed_starts_own_their_input_identity(tmp_path):
     from agent_comms.channel_input_batch import SingleInputBatch
+    from agent_comms.execution.input_key import BusInputKey
+    from agent_comms.execution.queued_input import AcceptedTurn
+    from agent_comms.execution.turn_goal_permission import (
+        InactiveGoalPermission,
+        TurnGoalPermission,
+    )
+    from agent_comms.execution.turn_input_source import (
+        NoInputDependency,
+        NoTurnAcceptance,
+        OwnerOriginalInput,
+        RoutedOriginalInput,
+    )
     from agent_comms.input_attempt import StartedInput
-    from agent_comms.input_key import BusInputKey
-    from agent_comms.text_digest import TextDigest
-    from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
-    from agent_comms.queued_input import AcceptedTurn
-    from agent_comms.turn_input_source import NoInputDependency, NoTurnAcceptance, OwnerOriginalInput, RoutedOriginalInput
+    from agent_comms.nominal.text_digest import TextDigest
 
     _, agent, incarnation, generation = _owner(tmp_path)
     input_id, native_id = InputId.mint(), InputId.mint()

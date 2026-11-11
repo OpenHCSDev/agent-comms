@@ -1,14 +1,15 @@
 """Android's actual app-data ancestry through the registry and path owners."""
 import os
-from pathlib import Path
 import stat
 import sys
+from pathlib import Path
 
 import pytest
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import RootId
-from agent_comms.private_registry_guard import PrivateRegistryGuard
+from agent_comms.registry.private_registry_guard import PrivateRegistryGuard
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.private_path import TrustedAncestorRole
 
 
@@ -35,7 +36,7 @@ def test_android_registry_accepts_the_actual_termux_app_data_ancestors(android, 
         root: directory(0o700, 10257, 10257),
     }
     monkeypatch.setattr(Path, 'lstat', lambda path: observed[path])
-    guard = PrivateRegistryGuard(root / 'registry.json', RootId('00' * 16))
+    guard = PrivateRegistryGuard(RegistryFile.path_in(root), RootId('00' * 16))
     guard._trusted_root()
     TrustedAncestorRole.require_path(root, ValueError('Untrusted Android ancestor'))
 

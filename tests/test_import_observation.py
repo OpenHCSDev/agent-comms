@@ -1,9 +1,9 @@
 """An actual importer and sidebar reader must finish, not lock each other out."""
 import os
-from pathlib import Path
 import signal
 import subprocess
 import sys
+from pathlib import Path
 
 
 def test_import_and_sidebar_observation_complete_on_a_real_private_bus(tmp_path):

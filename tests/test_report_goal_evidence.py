@@ -7,16 +7,16 @@ import pytest
 
 from agent_comms.coordination.errors import Refused
 from agent_comms.errors import GoalRefused
+from agent_comms.execution.owner_protocol import OwnerFailure, OwnerLine
+from agent_comms.execution.turn_context import FileProvenance
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.owner_protocol import OwnerFailure, OwnerLine
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goals import ProblemGoalOrder
-from agent_comms.progress_claims import ProgressClaim, ReportClaim
-from agent_comms.repo import Checkout
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.goals import ProblemGoalOrder
+from agent_comms.planning.progress_claims import ProgressClaim, ReportClaim
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.goals import CommsGoalTool
-from agent_comms.turn_context import FileProvenance
 
 
 @pytest.fixture

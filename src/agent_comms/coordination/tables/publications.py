@@ -13,14 +13,14 @@ from agent_comms.coordination.contracts import (
     validate_execution_id,
 )
 from agent_comms.coordination.errors import CoordinationError, IntegrityViolationError
+from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.errors import RelationViolationError
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, MessageId, WireName
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
-from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.storage.typed_table import (
     Column,
     ExactStorage,
@@ -33,7 +33,7 @@ from agent_comms.storage.typed_table import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.bus import BusReader
+    from agent_comms.messaging.bus import BusReader
 
 
 @dataclass(frozen=True, slots=True)

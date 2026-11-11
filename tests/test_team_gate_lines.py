@@ -1,15 +1,22 @@
 """Only a heartbeat line the team can dispose of locks its writing verbs."""
 
 from agent_comms.heartbeat_subjects import TeamHistory, TeammateSubject
-from agent_comms.build_identity import InstalledCommitInstallation, MissingCommitInstallation, RecordedBuildIdentity
+from agent_comms.installer.build_identity import (
+    InstalledCommitInstallation,
+    MissingCommitInstallation,
+    RecordedBuildIdentity,
+)
+from agent_comms.nominal.text_digest import TextDigest
+from agent_comms.planning.order_runs import ApplicationOrderRun, MechanicalOrderRun
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.team_pings import RulePing, TeammatePing
-from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
-from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.team.standing_rules import OrderlessUnreviewedHead
-from agent_comms.text_digest import TextDigest
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.ui_model.teammate_state import AwaitingApplicationRun, DeliveredUnclosed, TeammateState
-
+from agent_comms.ui_model.teammate_state import (
+    AwaitingApplicationRun,
+    DeliveredUnclosed,
+    TeammateState,
+)
 
 RUN = "The real application shows the merged fix working after a restart."
 

@@ -7,21 +7,30 @@ from typing import Annotated, ClassVar
 
 import pytest
 
-from agent_comms.storage.locked_store import LiveFilesRequest, RetainedCopyRequest
-from agent_comms.channel_targets import ChannelTarget, CommandTarget
+from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget
 from agent_comms.cli import build_parser
 from agent_comms.cli_verbs.planned_reconcile import PlannedReconcileCliCommand
-from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.probes.carry import Carried, Carry, WriterOwnedOpeningProbe
-from agent_comms.storage.locked_store import RootFile, SQLiteFile
-from agent_comms.storage.typed_table import (
-    Column, DurableTables, SharedFileTables, TableSchema, TypedTable,
-    WithoutRowid, WriterOwnedFile, WriterOwnedStore,
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.storage.locked_store import (
+    LiveFilesRequest,
+    RetainedCopyRequest,
+    RootFile,
+    SQLiteFile,
 )
-
+from agent_comms.storage.typed_table import (
+    Column,
+    DurableTables,
+    SharedFileTables,
+    TableSchema,
+    TypedTable,
+    WithoutRowid,
+    WriterOwnedFile,
+    WriterOwnedStore,
+)
 
 BARE_TARGET = '{"name":"#comms"}'
 

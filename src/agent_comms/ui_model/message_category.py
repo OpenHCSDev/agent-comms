@@ -1,7 +1,8 @@
 """Frontend-neutral message categories and agent-output grouping."""
 
 from abc import abstractmethod
-from ..nominal.declared_family import DeclaredFamily
+
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 
 class MessageCategory(DeclaredFamily, affix="Category"):

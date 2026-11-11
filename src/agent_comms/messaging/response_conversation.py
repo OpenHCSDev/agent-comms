@@ -1,0 +1,115 @@
+"""A response's immutable recipients derive from its original committed cohorts."""
+
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass, replace
+
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.response_acknowledgement import (
+    KeyedResponseAcknowledgement,
+    public_envelope_digest,
+)
+from agent_comms.coordination.tables.responses import ResponseObligation
+from agent_comms.messaging.audience_manifest import freeze_audience
+from agent_comms.messaging.bus import KeyedPrivateRecord
+from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.delivery_policy import ResponseDeliveryPolicy
+from agent_comms.messaging.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
+from agent_comms.messaging.wake import OrdinaryControl
+from agent_comms.registry.private_registry_guard import RegistryPrivacy
+
+
+@dataclass(frozen=True)
+class ResponseConversation:
+    responder: FrozenRecipient
+    obligation: ResponseObligation
+    sources: tuple[Delivered, ...]
+    privacy: RegistryPrivacy
+
+    @classmethod
+    def source_references(cls, snapshot, obligation: ResponseObligation) -> tuple[MessageReference, ...]:
+        """The selected original messages belonging to this exact reply route."""
+        if obligation.execution_id != snapshot.execution.execution_id:
+            raise IdentityConflict("Response obligation belongs to another execution")
+        originals = tuple(
+            assignment.source for assignment in snapshot.assignments
+            if assignment.lifecycle.exact_target == obligation.exact_target
+        )
+        if not originals:
+            raise IdentityConflict("Response obligation has no original conversation")
+        return originals
+
+    @classmethod
+    def answer_references(
+        cls, snapshot, obligation: ResponseObligation, following: tuple[MessageReference, ...]
+    ) -> tuple[MessageReference, ...]:
+        return tuple(dict.fromkeys((*cls.source_references(snapshot, obligation), *following)))
+
+    @classmethod
+    def capture(cls, bus, snapshot, obligation: ResponseObligation, privacy: RegistryPrivacy, registry):
+        originals = cls.source_references(snapshot, obligation)
+        sources = bus.bus.deliveries_for_references(originals)
+        if len(sources) != len(originals):
+            raise IdentityConflict("Response obligation has no complete original conversation")
+        if {source.message.reference for source in sources} != set(originals):
+            raise IdentityConflict("Response conversation lost an original source")
+        if any(source.message.exact_reply_target != obligation.exact_target for source in sources):
+            raise IdentityConflict("Response obligation differs from its original routes")
+        return cls(
+            FrozenRecipient(snapshot.execution.owner_lookup, registry.born(snapshot.execution.owner_lookup).name),
+            obligation,
+            sources,
+            privacy,
+        )
+
+    def audience(self, message: Message):
+        if message.sender != self.responder.canonical_thread:
+            raise IdentityConflict("Response conversation sender changed")
+        if message.target != self.obligation.exact_target:
+            raise IdentityConflict("Response conversation route changed")
+        members = {}
+        for source in self.sources:
+            if source.message.exact_reply_target != self.obligation.exact_target:
+                raise IdentityConflict("Response conversation differs from original route")
+            participants = list(source.recipients)
+            participants.extend(source.message.sender_role.executor(
+                FrozenRecipient(source.sender_lookup, source.sender)
+            ))
+            if not any(member.recipient_lookup == self.responder.recipient_lookup
+                       for member in source.recipients):
+                raise IdentityConflict("Responder was not in original frozen audience")
+            for member in participants:
+                # Names belong to these original envelopes. A participant can
+                # have been renamed between sources without changing identity.
+                members.setdefault(member.recipient_lookup, member)
+        members.pop(self.responder.recipient_lookup, None)
+        recipients = CommandTarget.named(self.obligation.exact_target).response_recipients(tuple(members.values()))
+        revision = hashlib.sha256(
+            "\n".join(source.digest for source in self.sources).encode()
+        ).hexdigest()
+        return freeze_audience(
+            message,
+            recipients,
+            revision,
+            sender_lookup=self.responder.recipient_lookup,
+            sender_name=self.responder.canonical_thread,
+        )
+
+    def record(self, seq: int, message: Message, intent) -> KeyedPrivateRecord:
+        stored = replace(message, seq=seq)
+        audience = self.audience(stored)
+        decisions = ResponseDeliveryPolicy.resolve(
+            audience, OrdinaryControl,
+        )
+        return KeyedPrivateRecord.from_message(
+            audience, decisions=decisions,
+            control=OrdinaryControl.declared_name,
+            acknowledgement=KeyedResponseAcknowledgement(
+                self.privacy.namespace, intent.execution_id, intent.publication_key,
+                public_envelope_digest(stored.to_wire()),
+            ),
+        )

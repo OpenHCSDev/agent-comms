@@ -2,93 +2,67 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Mapping
-from dataclasses import (
-    dataclass,
-    field,
-    replace,
-)
+from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import Annotated
 
-from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
-from .reads import (
-    InputDeliveryRead,
-    OwnerGoalRead,
-    TeammateRead,
-    TranscriptPageRead,
-)
-from ..request import tool_field
-from ...acp_extension import (
+from agent_comms.acp_extension import (
     GoalSnapshotReply,
     TurnChangedUpdate,
     UpdateMetadata,
 )
-from ...bus_read import (
+from agent_comms.comms import Comms
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.service_passes import ServicePassStore
+from agent_comms.errors import TodoError
+from agent_comms.execution.turn_bound import LastTurns, TurnBound, TurnsSince
+from agent_comms.execution.turn_digests import (
+    ActivityTurnView,
+    OrderEditsRead,
+    ThreadTurns,
+    TurnView,
+    UnavailableOrderEdits,
+    UnjudgedEdits,
+)
+from agent_comms.input_attempt import UNOBSERVED_DELIVERY_SCOPE
+from agent_comms.input_disposition import DeliveryOverview
+from agent_comms.messaging.bus_read import (
     CapturesTranscriptPage,
-    OwnerLiveRead,
     OwnerScopedRead,
     UiRead,
 )
-from ...channel_targets import CommsTag
-from ...comms import Comms
-from ...coordination.coordinator import Coordination
-from ...goal_actions import (
-    CompliedGoalAction,
-    CreateProblemGoalAction,
-    OrderGoalAction,
-    OwnerInvocable,
-)
-from ...goals import (
-    Goal,
-    OrderCheck,
-)
-from ...head_review import (
-    HeadReviewOrder,
-    PreparedHeadReview,
-    PullRequestHead,
-)
-from ...held_orders import HeldOrders
-from ...input_attempt import UNOBSERVED_DELIVERY_SCOPE
-from ...input_disposition import DeliveryOverview
-from ...nominal.field_codec import (
+from agent_comms.messaging.channel_targets import CommsTag
+from agent_comms.messaging.read_basis import ReadAuthority
+from agent_comms.messaging.send_result import MessagePublished
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     MessageId,
     OrderId,
     RecordProblems,
     ToolCallId,
 )
-from ...order_story import (
-    OrderStory,
-    TeamStory,
+from agent_comms.planning.delivery_evidence import TodoProblems
+from agent_comms.planning.goal_actions import (
+    CompliedGoalAction,
+    CreateProblemGoalAction,
+    OrderGoalAction,
+    OwnerInvocable,
 )
-from ...order_work import OrderWork
-from ...plan_phases import OrderPhase
-from ...problem_number import ProblemNumber
-from ...progress_claims import ProgressClaim
-from ...read_basis import ReadAuthority
-from ...runtime_server import AttachedRuntimeRequestContext
-from ...send_result import MessagePublished
-from ...service_passes import ServicePassStore
-from ...team_hud import (
-    TeamFrame,
-    TeamHud,
-    TeamLoad,
-)
-from ...team_hud_records import (
-    TeamOrderDetail,
-    Teammate,
-    TeammateDetail,
-)
-from ...thread_identity import ThreadIncarnation
-from ...todos import (
+from agent_comms.planning.goals import Goal, OrderCheck
+from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.order_phase import OrderPhase
+from agent_comms.planning.order_story import OrderStory, TeamStory
+from agent_comms.planning.order_words import DeliveryReport, PlainText, StrikeReason
+from agent_comms.planning.order_work import OrderWork
+from agent_comms.planning.orders import (
     AssignedClaimReviewer,
     ClaimOrder,
     ClaimReviewer,
     CorrectCheckTodo,
     CorrectRunTodo,
-    DeliveryReport,
+    DeliverTodo,
     HeadReviewed,
     HeadVerdict,
     InstallTodo,
@@ -98,45 +72,48 @@ from ...todos import (
     OrderClaim,
     OrderCompletion,
     OrderProgress,
-    PlainText,
     ProgressRead,
     ProgressSource,
-    PullRequestLink,
     ResumeClaimOrder,
     ServeTodo,
-    StrikeReason,
     Todo,
     TodoOperation,
-    TodoProblems,
     ToolCallVerdict,
     WaivedVerdict,
 )
-from ...tool_caller import (
-    ThreadCaller,
-    ToolCaller,
+from agent_comms.planning.problem_number import ProblemNumber
+from agent_comms.planning.progress_claims import ProgressClaim
+from agent_comms.planning.pull_requests import PullRequestLink
+from agent_comms.projects.head_review import (
+    HeadReviewOrder,
+    PreparedHeadReview,
+    PullRequestHead,
 )
-from ...tool_declaration import EditCall
-from ...tool_request import (
+from agent_comms.projects.work_branches import WorkBranchError
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.team.team_hud import TeamFrame, TeamHud, TeamLoad
+from agent_comms.team.team_hud_records import Teammate, TeammateDetail, TeamOrderDetail
+from agent_comms.transcript.transcripts import TranscriptRead
+from agent_comms.transport.request import tool_field
+from agent_comms.transport.runtime_server import AttachedRuntimeRequestContext
+from agent_comms.transport.serving.served_requests import OwnedRead, OwnerLiveRead
+from agent_comms.transport.tool_caller import ThreadCaller, ToolCaller
+from agent_comms.transport.tool_declaration import EditCall
+from agent_comms.transport.tool_request import (
     NativeToolRequest,
     PublishingToolRequest,
     ReadTool,
     ThreadReadTool,
     ThreadToolRequest,
 )
-from ...tool_result import ToolResult
-from ...transcripts import TranscriptRead
-from ...turn_digests import (
-    ActivityTurnView,
-    LastTurns,
-    OrderEditsRead,
-    ThreadTurns,
-    TurnBound,
-    TurnView,
-    TurnsSince,
-    UnavailableOrderEdits,
-    UnjudgedEdits,
+from agent_comms.transport.tool_result import ToolResult
+from agent_comms.transport.tools.reads import (
+    InputDeliveryRead,
+    OwnerGoalRead,
+    TeammateRead,
+    TranscriptPageRead,
 )
-from ...work_branches import WorkBranchError
+from agent_comms_hooks import ToolRefusedError
 
 
 @dataclass(frozen=True)
@@ -284,7 +261,7 @@ class CommsUnjudgedTool(ThreadReadTool):
         passes = ServicePassStore.at(comms.root).read()
         edits: list[EditCall] = []
         unavailable: list[UnavailableOrderEdits] = []
-        for read in OrderEditsRead.for_team(comms, owner.name):
+        for read in OrderEditsRead.for_team(comms.goals, owner.name):
             try:
                 edits.extend(read.read())
             except (WorkBranchError, OSError) as error:
@@ -481,6 +458,13 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller, TodoChanged], Th
         actor = comms.registry.require(caller.name).incarnation
         generation = todo.held().generation
         todo.require_assignee(actor, generation)
+        reviewer = self.reviewer.identity(todo)
+        if not comms.goals.agents.answers_later(reviewer, comms.registry.snapshot()):
+            raise TodoError(
+                f"@{reviewer.name} will not answer this review: it has no live bridge or process, "
+                "so the claim would wait unjudged. Name a live teammate with `reviewer` "
+                "(its exact name and birth)."
+            )
         # The identical call resumes a retained claim's publication; nothing is claimed again.
         for claim in todo.order.team_claims():
             if claim.resumed_by(self.pull_request, self.head, self.report.text, self.reviewer):
@@ -522,7 +506,18 @@ class CommsOrderDoneTool(CommsTodoTool):
         return {"delivery": comms.goals.todos.get(problem).order.checked().scope.delivery_class}
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
-        return self.delivery.operation(todo, actor, comms, self.order_id, self.claims)
+        todo.require_maintainer(actor)
+        todo.state.require_open(todo)
+        order = todo.order.checked()
+        order.require_delivery(self.order_id)
+        problems = self.delivery.preparation_problems(todo)
+        if problems:
+            raise TodoProblems(problems)
+        delivery = self.delivery.resolved_delivery(todo)
+        required = order.scope.required_claims(
+            delivery, self.delivery.completion_claims(delivery, order, self.claims))
+        verified = ProgressClaim.require_all(required, comms, order.check.directory)
+        return DeliverTodo(todo.revision, actor, delivery, self.order_id, verified_claims=verified)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -609,7 +604,7 @@ class CommsTurnsTool(ThreadReadTool):
                        detail=self.detail)
 
 
-class ServedInputDeliveryRead(OwnerScopedRead, InputDeliveryRead):
+class ServedInputDeliveryRead(OwnedRead, InputDeliveryRead):
     """Serving the delivery projection: the owner's queue when observed, else the stored one."""
 
     def unavailable(self, comms: Comms, owner: ThreadIncarnation) -> DeliveryOverview:
@@ -796,7 +791,7 @@ class CommsEmergencyReleaseTool(ThreadToolRequest, declared_name="comms_emergenc
         waived: list[WaivedEdits] = []
         unreadable: list[UnavailableOrderEdits] = []
         verdicts: list[JudgedCall] = []
-        for read in OrderEditsRead.for_team(comms, caller.name):
+        for read in OrderEditsRead.for_team(comms.goals, caller.name):
             try:
                 edits = read.read()
             except (WorkBranchError, OSError) as error:

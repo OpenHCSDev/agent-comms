@@ -9,26 +9,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Self
 
+from agent_comms.transport.connector import LOOPBACK, PORT, ConnectorOptions, ConnectorVerb, ServeVerb
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ResidentManager
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.host_services import ServiceNotServingError, SystemdUserService
+from agent_comms.installer.active_route import ActiveRoute
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.recorded_bus import RecordedBusIdentity
+from agent_comms.nominal.field_codec import Argument, FieldCodec, MalformedRecord, PathText
+from agent_comms.transport.connector_store import ConnectorStore, ReadServiceAccess
+from agent_comms.transport.mcp import ToolsCallMessage, ToolsCallReply
+from agent_comms.transport.tools.channels import CommsChannelsTool
 from agent_comms_hooks import ToolRefusedError
-
-from ..active_route import ActiveRoute
-from ..bus import Bus
-from ..child_process import ResidentManager
-from ..connector import (
-    LOOPBACK,
-    PORT,
-    ConnectorOptions,
-    ConnectorVerb,
-    ServeVerb,
-)
-from ..connector_store import ConnectorStore, ReadServiceAccess
-from ..errors import RelationViolationError
-from ..nominal.field_codec import Argument, FieldCodec, MalformedRecord, PathText
-from ..launch_root import LaunchRoot
-from ..recorded_bus import RecordedBusIdentity
-from ..transport.mcp import ToolsCallMessage, ToolsCallReply
-from ..transport.tools.channels import CommsChannelsTool
-from . import ServiceNotServingError, SystemdUserService
 
 
 @dataclass(frozen=True)

@@ -1,27 +1,39 @@
 """Target families never disguise a broken binding as an unavailable command."""
 
-from pathlib import Path
-from agent_comms.repo import Checkout
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import pytest
 
-from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, ProjectTarget
-from agent_comms.cli_command import (
-    TargetActionCommand,
-    CliCommand, OneTarget, TargetBatch, TargetBatchResult, TargetCompleted, TargetFailed,
-)
-from agent_comms.cli_commands import ThreadStoppedResult
-from agent_comms.cli_result import ResultShower
 from agent_comms.cli_verbs.archive import ArchiveCliCommand
+from agent_comms.cli_verbs.cli_command import (
+    CliCommand,
+    OneTarget,
+    TargetActionCommand,
+    TargetBatch,
+    TargetBatchResult,
+    TargetCompleted,
+    TargetFailed,
+)
+from agent_comms.cli_verbs.cli_commands import ThreadStoppedResult
+from agent_comms.cli_verbs.cli_result import ResultShower
 from agent_comms.cli_verbs.new import NewThreadCliCommand
 from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
 from agent_comms.cli_verbs.restart import RestartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
+from agent_comms.messaging.channel_targets import (
+    CommandTarget,
+    IncarnationThreadTarget,
+    ProjectTarget,
+)
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.thread_status import (
-    ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus, ThreadStatus,
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_status import (
+    ArchivedThreadStatus,
+    RunningThreadStatus,
+    StoppedThreadStatus,
+    ThreadStatus,
 )
 from agent_comms.registry.threads import NativeThread
 

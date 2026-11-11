@@ -1,12 +1,13 @@
 """Read real persisted notification assignments without scheduling a model."""
-from agent_comms.notification_assignment import NotificationSelection
-from agent_comms.notification_evidence import AllOutcomes
-from agent_comms.repo import Checkout
 from dataclasses import replace
-from test_coordinated_runtime import _root, tmp_path  # noqa: F401
-from conftest import installed_comms
+
+from agent_comms.messaging.notification_evidence import AllOutcomes
 from agent_comms.nominal.field_codec import TurnId
+from agent_comms.notification_assignment import NotificationSelection
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from conftest import installed_comms
+from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 
 def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F811
@@ -31,7 +32,7 @@ def test_new_reader_has_no_fabricated_receipts(tmp_path):  # noqa: F811
 
 
 def test_live_turn_never_presents_ready_between_activity_events(tmp_path):  # noqa: F811
-    from agent_comms.activity import ActivityState
+    from agent_comms.registry.activity import ActivityState
 
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     lease = comms.agents.begin_turn('beta', TurnId('3c5469ccca7ada4828e500d32e2025e7')).turn_lease
@@ -47,8 +48,8 @@ def test_live_turn_never_presents_ready_between_activity_events(tmp_path):  # no
 
 
 def test_individual_view_keeps_alias_goal_and_active_owner_semantics(tmp_path):  # noqa: F811
-    from agent_comms.activity import ActivityState
-    from agent_comms.goal_actions import SetGoalAction
+    from agent_comms.planning.goal_actions import SetGoalAction
+    from agent_comms.registry.activity import ActivityState
 
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     comms.goals.update_goal('beta', SetGoalAction(text='Finish native delivery'))
@@ -73,7 +74,7 @@ def test_individual_view_keeps_alias_goal_and_active_owner_semantics(tmp_path): 
 
 def test_a_live_batch_beyond_one_window_chunk_keeps_every_message(tmp_path):  # noqa: F811
     """The live operation reads every 120-reference chunk into one window; no batch cap."""
-    from agent_comms.notification_reads import LiveNotificationRead
+    from agent_comms.messaging.notification_reads import LiveNotificationRead
 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     messages = [initial.message, *(

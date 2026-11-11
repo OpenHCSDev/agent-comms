@@ -2,9 +2,9 @@
 
 import sys
 
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.runtime_processes import RuntimeProcesses
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.runtime_processes import RuntimeProcesses
 
 if __name__ == "__main__":
     print(FieldCodec.compact(FieldCodec.encode(RuntimeProcesses.observe(

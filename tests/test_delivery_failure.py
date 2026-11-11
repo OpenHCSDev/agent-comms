@@ -7,11 +7,11 @@ from agent_comms.acp_extension import (
     decode_updates,
     encode_updates,
 )
-from agent_comms.delivery_failure import delivery_failure
 from agent_comms.errors import (
     HumanClaimBlockedError,
     HumanSendRefusedError,
 )
+from agent_comms.messaging.delivery_failure import delivery_failure
 
 
 @pytest.mark.parametrize(

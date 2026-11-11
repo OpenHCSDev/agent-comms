@@ -1,13 +1,14 @@
 """Compare consecutive recorded context manifests."""
 
 from __future__ import annotations
+
+from itertools import islice
 from typing import ClassVar
 
-from agent_comms.comms import Comms
-from agent_comms.turn_context import ContextManifestChange
-from itertools import islice
-
 from agent_comms.cli_support.context_option import ContextOptionCliCommand
+from agent_comms.comms import Comms
+from agent_comms.execution.turn_context import ContextManifestChange
+
 
 class DiffContextCliCommand(ContextOptionCliCommand):
     context_diff: ClassVar[bool] = True

@@ -16,7 +16,7 @@ from typing import ClassVar
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.storage.store_files import AtomicFile
-from agent_comms.team_frame_file import TeamFrameFile, TeamPlanFile
+from agent_comms.team.team_frame_file import TeamFrameFile, TeamPlanFile
 
 
 class TeamPlanFrames(Carry, declared_name="team_plan_frames"):

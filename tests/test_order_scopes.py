@@ -1,38 +1,46 @@
 """Order scope is decoded once and owns its allowed delivery all the way to storage."""
-from agent_comms.repo import Checkout, Repo
-from pathlib import Path
-from dataclasses import replace
 import json
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
+from agent_comms.errors import MissingSourceLine
+from agent_comms.execution.check_root import CheckRoot
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
+from agent_comms.planning.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.orders import (
+    CommitDelivery,
+    DoneTodoState,
+    OrderScope,
+    PendingProblemOrder,
+    ReportDelivery,
+    ReportedProblemOrder,
+    TodoStore,
+    TriageScope,
+)
+from agent_comms.planning.problem_findings import FixShape
+from agent_comms.planning.pull_requests import PullRequestHeadRevision
+from agent_comms.projects.change_report import FileLine
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.registry.registry_document import NoTeamProject, RegisteredTeamProject
+from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.team.order import OrderFile
+from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.orders import (
     CommsOrderDoneTool,
     CommsProblemNumberTool,
     CommsTodoCreateTool,
 )
-from order_scope_fixture import FIX_SCOPE
-from test_todos import order
-from source_revision_fixture import SourceRepository
-from agent_comms.todos import PullRequestHeadRevision
-from agent_comms.change_report import FileLine
-from agent_comms.goals import OrderCheck
-from agent_comms.registry.registry_document import NoTeamProject, RegisteredTeamProject
-from agent_comms.errors import MissingSourceLine
-from agent_comms.check_root import CheckRoot
-from agent_comms.team.order import OrderFile
 from cli_command import core
-from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
-from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.held_orders import HeldOrders
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repository_name import RepositoryName
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.todos import (
-    CommitDelivery, DoneTodoState, FixShape, OrderScope,
-    PendingProblemOrder, ReportDelivery, ReportedProblemOrder, TodoStore, TriageScope,
-)
-from agent_comms.registry.threads import NativeThread
+from order_scope_fixture import FIX_SCOPE
+from source_revision_fixture import SourceRepository
+from test_todos import order
 
 
 @pytest.mark.parametrize('scope', (TriageScope(), FIX_SCOPE))
@@ -77,7 +85,7 @@ def requested(comms, scope, source, problem='P1', edits=('Fix the problem',), ow
         problem=problem, order=replace(order(source), scope=scope, edits=edits), request=request,
         review_at=RecordedEventTime(1000),
         assigner=comms.registry.require('colleague').incarnation,
-        repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'),
+        repo=source.github,
         text='Classify the source without changing it',
     )).apply(comms, caller)
     return caller, comms.goals.todos.get(problem)

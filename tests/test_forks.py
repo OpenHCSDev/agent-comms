@@ -1,114 +1,116 @@
 """Team forks use registered identity and the original Todo assignment."""
 
-from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.cli_bridges.hook_forks import SessionSubagents
-from agent_comms.cli_bridges.session_watch import WatchClaim
-from agent_comms.transport.tools.orders import (
-    CommsHudTool,
-    CommsTeamLoadTool,
-    CommsTodoListTool,
-)
-from agent_comms_hooks.watch import WatchRecord
-from agent_comms.cli_bridges.hook_requests import ReadGateRequest, SubagentStartRequest, SubagentStopRequest
-
-from agent_comms.team.order import Team, MessageNotification
-from agent_comms.coordination.errors import CoordinationReadUnavailable
-from agent_comms.repo import Checkout
 import asyncio
 import io
-from collections.abc import Iterator
-from contextlib import nullcontext
-from functools import partial
 import json
 import os
 import subprocess
 import sys
 import time
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 import pytest
-
-
-from agent_comms.change_report import FileLine, NamedRepository
-from agent_comms.channel_targets import TeammatesTag
-from agent_comms.team.order import TeamContext, OrderFile
-from agent_comms.team.standing import Unjudged
-from agent_comms.team_heartbeat import TeamObservation
+from cli_command import team
+from hook_session_fixture import resident_hook, resident_session, resident_stdout
+from source_revision_fixture import SourceRepository
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame
-from agent_comms.ui_model.teammate_state import TeammateState
+
+from agent_comms.cli_bridges.claude import ClaudeBridge
+from agent_comms.cli_bridges.hook_forks import SessionSubagents
+from agent_comms.cli_bridges.hook_requests import (
+    ReadGateRequest,
+    SubagentStartRequest,
+    SubagentStopRequest,
+)
+from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import Comms, wire
-from agent_comms.errors import (
-    RelationViolationError,
-    TodoError,
+from agent_comms.coordination.errors import CoordinationReadUnavailable
+from agent_comms.errors import RelationViolationError, TodoError
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.transcript_sources import (
+    ExternalTranscript,
+    NativeTranscript,
 )
-from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.nominal.field_codec import (
-    FieldCodec,
-    GoalId,
-    OrderId,
-    ToolCallId,
-)
-from agent_comms.goal_actions import OrderGoalAction, SetGoalAction
-from agent_comms.goals import CountCheckResult, GoalConsentRequired, OrderCheck
-from agent_comms.held_orders import HeldOrders
-from agent_comms.native_transcript import NativeTranscript
-from agent_comms.repository_name import RepositoryName
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.storage_rules import StorageRule
-from agent_comms.todos import (
-    EditWorkplaces,
-    TodoConflict,
-)
-from agent_comms.turn_digests import OrderEditsRead, OrderEditCountRead, TurnsSince
+from agent_comms.execution.turn_bound import TurnsSince
+from agent_comms.execution.turn_digests import OrderEditCountRead, OrderEditsRead
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.storage.maintenance_barrier import (
-    MaintenanceBarrier,
-    MaintenanceOperator,
+from agent_comms.messaging.channel_targets import TeammatesTag
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId, ToolCallId
+from agent_comms.planning.goal_actions import (
+    OrderGoalAction,
+    ReissuedOrderGoalAction,
+    SetGoalAction,
 )
-from agent_comms.order_runs import MechanicalOrderRun
-from agent_comms.problem_number import ProblemNumber
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop
-from agent_comms.registry.threads import ExternalThread, NativeThread, ForkThread
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
-from agent_comms.thread_text import ForkedParent, SubagentRole
-from agent_comms.todos import (
+from agent_comms.planning.goals import CountCheckResult, GoalConsentRequired, OrderCheck
+from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.order_runs import MechanicalOrderRun
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
     Assignment,
     DraftListedPullRequest,
-    ExpectedProblem,
+    EditWorkplaces,
     FixScope,
-    FixShape,
     IncomingWork,
-    LocatedProblemFinding,
+    MergedProgress,
+    NoCommitProgress,
     PendingProblemOrder,
     ProblemAllocation,
     ProgressRead,
     PullRequests,
-    PullRequestLink,
     ReleaseTodo,
-    StrikeReason,
     SupersededVerdict,
     Todo,
+    TodoConflict,
+)
+from agent_comms.planning.problem_findings import (
+    ExpectedProblem,
+    FixShape,
+    LocatedProblemFinding,
     UnlocatedProblemFinding,
 )
-from agent_comms.tool_caller import ForkCaller, SubagentCaller
-from agent_comms.activity import ActivityState
-from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.planning.problem_number import ProblemNumber
+from agent_comms.planning.pull_requests import PullRequestLink
+from agent_comms.projects.change_report import FileLine, NamedRepository
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.slop import DeclarationDerivation, ExistingLine, Slop
+from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.registry.activity import ActivityState
+from agent_comms.registry.thread_identity import (
+    CoreWatcherIncarnation,
+    RecordedThreadIncarnation,
+)
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_status import ArchivedThreadStatus, StoppedThreadStatus
+from agent_comms.registry.thread_text import ForkedParent, SubagentRole
+from agent_comms.registry.threads import ExternalThread, ForkThread, NativeThread
+from agent_comms.storage.maintenance_barrier import (
+    MaintenanceBarrier,
+    MaintenanceOperator,
+)
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.storage.typed_table import HeldBusFile
+from agent_comms.team.order import MessageNotification, OrderFile, Team, TeamContext
+from agent_comms.team.standing import Unjudged
+from agent_comms.team.team_heartbeat import TeamObservation
+from agent_comms.transcript.transcript_events import ToolStartTranscript
+from agent_comms.transport.tool_caller import ForkCaller, SubagentCaller
+from agent_comms.transport.tool_declaration import ToolDeclaration
+from agent_comms.transport.tools.orders import (
+    CommsHudTool,
+    CommsTeamLoadTool,
+    CommsTodoListTool,
+)
+from agent_comms.ui_model.teammate_state import TeammateState
 from agent_comms_hooks import forks
-from hook_session_fixture import resident_hook, resident_session, resident_stdout
-from cli_command import team
-from source_revision_fixture import SourceRepository
-from agent_comms.goal_actions import ReissuedOrderGoalAction
-from agent_comms.thread_identity import CoreWatcherIncarnation
-from agent_comms.todos import MergedProgress, NoCommitProgress
+from agent_comms_hooks.watch import WatchRecord
 
 
 @pytest.fixture
@@ -357,11 +359,12 @@ def test_edits_under_a_merged_order_are_nobodys_review(fork_bus):
 
     comms, source, _ = fork_bus
     record_edits(comms, source, 3)
-    holds = HeldOrders.read(comms).live
+    held = HeldOrders.read(comms)
+    holds = held.live
     open_order = {hold.todo.id: NoCommitProgress() for hold in holds}
     merged = {hold.todo.id: MergedProgress("a" * 40) for hold in holds}
     workplaces = EditWorkplaces.capture(
-        comms, comms.registry.snapshot(), holds, ProgressRead())
+        comms.goals, comms.registry.snapshot(), held.holders, ProgressRead())
     assert [read.read() for read in OrderEditCountRead.judgeable(
         comms.root, holds, open_order, workplaces)] == [3]
     assert tuple(OrderEditCountRead.judgeable(comms.root, holds, merged, workplaces)) == ()
@@ -383,9 +386,9 @@ def edit_sources(fork_bus, tmp_path, configured_repository):
 
 def edit_workplaces(comms):
     snapshot = comms.registry.snapshot()
-    holds = HeldOrders.of(comms.goals.todos, snapshot).live
+    held = HeldOrders.of(comms.goals.todos, snapshot)
     history = comms.goals.todos.board_history()
-    return holds, EditWorkplaces.capture(comms, snapshot, holds, ProgressRead(history))
+    return held.live, EditWorkplaces.capture(comms.goals, snapshot, held.holders, ProgressRead(history))
 
 
 def save_edit_order(comms, todo):

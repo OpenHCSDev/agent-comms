@@ -1,27 +1,25 @@
 """Current registration declarations, incarnation and saved relationship ownership."""
 import os
+from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Annotated
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.comms import wire
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.coordination.response import LiveResponseOwner
-
-from agent_comms.repo import Checkout
-from typing import Annotated
-from dataclasses import dataclass, replace
-
-from agent_comms.nominal.field_codec import TurnId
-from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.pi_vocabulary import HighThinkingLevel
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.turn_lease import NoTurnLease
 from agent_comms.nominal import field_codec
-from agent_comms.comms import wire
-from agent_comms.pi_vocabulary import HighThinkingLevel
-from agent_comms.registration_inheritance import PredicateInheritance
-from agent_comms.registry.threads import Thread, NativeThread
-from agent_comms.thread_text import GivenThreadText
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.turn_lease import NoTurnLease
+from agent_comms.nominal.field_codec import TurnId
+from agent_comms.nominal.registration_inheritance import PredicateInheritance
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_text import GivenThreadText
+from agent_comms.registry.threads import NativeThread, Thread
 
 
 def test_unchanged_registration_retains_creation_allocation():

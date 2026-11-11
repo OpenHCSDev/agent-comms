@@ -1,0 +1,18 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "p23-registry-presence-generic-abc-anchor",
+      "reason": "Actual parent MRO evidence shows RegistryPresence must retain RegistryNames before ABC and ABC before Generic to agree with RegistryProvenance. Merely reversing its two capability bases would put ABC before RegistryNames. Restore TaskRegistry then NativeOwnerRegistry and explicitly anchor their inherited ABC after both, ahead of PEP-695's implicit Generic. This supplies the required precedence edge without dropping either capability, changing metaclasses, copying methods, or changing stored fields and constructors.",
+      "operations": [
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_document.py",
+          "replacements": [
+            {"old_source":"from abc import abstractmethod","new_source":"from abc import ABC, abstractmethod"},
+            {"old_source":"    NativeOwnerRegistry, TaskRegistry[Thread],","new_source":"    TaskRegistry[Thread], NativeOwnerRegistry, ABC,"}
+          ]
+        }
+      ]
+    }
+  ]
+}

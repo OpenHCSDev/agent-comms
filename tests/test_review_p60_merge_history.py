@@ -1,6 +1,6 @@
 """Independent P60 control for the heartbeat's mechanical-merge writer."""
 
-from agent_comms.goal_states import CompletedGoal
+from agent_comms.planning.goal_states import CompletedGoal
 from test_problem_goal_completion import AssignedProblems, assigned_problems
 
 

@@ -8,14 +8,13 @@ from pathlib import Path
 from typing import Annotated
 
 from agent_comms.comms import Comms
-from agent_comms.connector import ServeVerb
-from agent_comms.connector_store import ConnectorStore
+from agent_comms.transport.connector import ServeVerb
+from agent_comms.execution.launch_root import LaunchRoot, started
 from agent_comms.nominal.field_codec import PathText
-from agent_comms.launch_root import LaunchRoot, started
-from agent_comms.tool_caller import ToolCaller
-from agent_comms.tool_request import ReadTool
-from agent_comms.transport.request import ToolRequest
-from agent_comms.tool_result import ToolResult
+from agent_comms.transport.connector_store import ConnectorStore
+from agent_comms.transport.tool_caller import ToolCaller
+from agent_comms.transport.tool_request import ReadTool, ServedRequest
+from agent_comms.transport.tool_result import ToolResult
 
 
 @dataclass(frozen=True)
@@ -46,13 +45,13 @@ class HeldCall:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ShutdownReadTool(ReadTool, HeldCall, ToolRequest):
+class ShutdownReadTool(ReadTool, HeldCall, ServedRequest):
     label = "Held shutdown read"
     description = "A controlled read with no bus mutation."
 
 
 @dataclass(frozen=True, kw_only=True)
-class ShutdownWriteTool(HeldCall, ToolRequest):
+class ShutdownWriteTool(HeldCall, ServedRequest):
     label = "Held shutdown write"
     description = "A controlled write that publishes only after release."
 

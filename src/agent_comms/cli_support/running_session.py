@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-from agent_comms.cli_bridges.history import DefaultAddress
-from agent_comms.cli_bridges.history import HarnessAddress
-from agent_comms.cli_bridges.history import OnlineHistory
-from agent_comms.cli_command import CliCommand
-from agent_comms.nominal.field_codec import Argument
-from agent_comms.nominal.field_codec import Editor
-from agent_comms.harness_install import Harness
-from agent_comms.target_fields import ChoiceTargetField
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
+
+from agent_comms.cli_bridges.history import DefaultAddress, HarnessAddress, OnlineHistory
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.target_fields import ChoiceTargetField
+from agent_comms.installer.harness_install import Harness
+from agent_comms.nominal.field_codec import Argument, Editor
 
 
 @dataclass(frozen=True, kw_only=True)

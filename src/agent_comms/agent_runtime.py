@@ -6,19 +6,15 @@ acts through its hooks and tools. What a runtime can do is a capability mixin sh
 branches; a runtime without a capability does not inherit it, and Core asks the capability, never
 which runtime it is talking to.
 
-This module is light: runtimes import it, it imports no runtime.
+Runtimes implement these capabilities; callbacks name their shared value types directly.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from .harness_delivery_states import Outcome
-    from .messages import Message
-    from .runtime_updates import RuntimeUpdate
+from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate
 
 
 class AgentRuntime:
@@ -46,11 +42,3 @@ class PublishesTranscript(ABC):
     @abstractmethod
     def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         """Observe the runtime's output without submitting inputs or executing tools."""
-
-
-class DeliversInput(ABC):
-    """Places a bus message in front of the runtime's model."""
-
-    @abstractmethod
-    async def deliver(self, message: Message) -> type[Outcome]:
-        """Return the runtime's evidence of delivery; the caller owns completion."""

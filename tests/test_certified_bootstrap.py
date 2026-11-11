@@ -1,18 +1,17 @@
 """Fresh roots refuse unproven source coverage and unconfigured native owners."""
 
-from agent_comms.repo import Checkout
-from agent_comms.channel_targets import CommandTarget
-
 import pytest
 
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.comms import wire
-from agent_comms.channels import AnyChannel
-from conftest import accept_initial
 from agent_comms.coordination.errors import IdentityConflict, PublicationActivationBlocked
-from agent_comms.proven_source_coverage import SourceCoverage
-from agent_comms.cursor_owner import UnstartedCursor
+from agent_comms.execution.cursor_owner import UnstartedCursor
+from agent_comms.execution.proven_source_coverage import SourceCoverage
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.channels import AnyChannel
+from agent_comms.projects.checkouts import Checkout
 from bus_record_fixture import prepare_native_comms
+from conftest import accept_initial
 from test_private_human_ingress import _root
 
 

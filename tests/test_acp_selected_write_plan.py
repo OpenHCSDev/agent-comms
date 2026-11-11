@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-
-from agent_comms.repo import Checkout
-from bus_record_fixture import prepare_native_comms
-from conftest import responder
-
 import asyncio
 import json
 import os
@@ -17,25 +12,28 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.acp import CommsAgent
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import (
     SelectedWriteAcceptedUpdate,
     SelectedWriteRequest,
     decode_updates,
     encode_request,
 )
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import wire
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.coordination.assignment_states import TriagePendingAssignment
 from agent_comms.coordination.cohort import sealed_cohort_assignments
-from agent_comms.assignment_states import TriagePendingAssignment
-from agent_comms.envelope_claim_transitions import UnclaimedResource
+from agent_comms.coordination.cohort_foreground import _accept_visible_deliveries
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.thread_model import DeclaredModel
-from native_backend_fixture import native_backend_fixture
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+from agent_comms.messaging.envelope_claim_transitions import UnclaimedResource
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
+from bus_record_fixture import prepare_native_comms
+from conftest import responder
+from native_backend_fixture import native_backend_fixture
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux" or Path("/var").is_symlink() or Path("/var/tmp").is_symlink(),

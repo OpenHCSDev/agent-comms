@@ -3,21 +3,20 @@
 Real registry and coordination stores in temporary directories. The native
 test runs the real Pi child against a local provider.
 """
-from agent_comms.repo import Checkout
 import asyncio
 import json
 import os
 
-
-from agent_comms.coordination.tables.executions import NoPointedExecution
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.tables.executions import NoPointedExecution
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.turn_phase import CancellingPhase
+from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.messages import Message, InfoKind
-from agent_comms.turn_phase import CancellingPhase
-from native_backend_fixture import native_backend_fixture
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from native_backend_fixture import native_backend_fixture
 
 
 def declared_owner(tmp_path):

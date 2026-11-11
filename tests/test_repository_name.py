@@ -5,8 +5,11 @@ import subprocess
 import pytest
 
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.repository_name import READ_ATTEMPTS, READ_TIMEOUT_SECONDS, RepositoryName
-from agent_comms.todos import PullRequests, UnmergedListedPullRequest
+from agent_comms.planning.orders import (
+    PullRequests,
+    UnmergedListedPullRequest,
+)
+from agent_comms.projects.repository_name import READ_ATTEMPTS, READ_TIMEOUT_SECONDS, RepositoryName
 from github_fixture import GitHubFixture
 
 

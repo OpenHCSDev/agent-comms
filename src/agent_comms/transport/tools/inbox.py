@@ -6,24 +6,23 @@ and has no other caller; the page it returns is `InboxPageRead`.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated
-
-from agent_comms.agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.channels import AnyChannel
-from agent_comms.input_attempt import UnresolvedInputReference
-from agent_comms.message_page import DisplayedMessagePage, InboxPage, PageBounds
-from agent_comms.messages import Message
-from agent_comms.nominal.field_codec import GoalId, NullMember, WireOmitDefault
-from agent_comms.planning.goal_waits import NoStandbyReview, StandbyReview
-from agent_comms.tool_caller import ToolCaller
-from agent_comms.tool_request import NativeToolRequest
-from agent_comms.tool_result import ToolResult
-from agent_comms.transport.request import tool_field
-from agent_comms_hooks import ToolRefusedError
-
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Annotated
+
+from agent_comms.input_attempt import UnresolvedInputReference
+from agent_comms.messaging.agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.channels import AnyChannel
+from agent_comms.messaging.message_page import DisplayedMessagePage, InboxPage, PageBounds
+from agent_comms.messaging.messages import Message
+from agent_comms.nominal.field_codec import GoalId, NullMember, WireOmitDefault
+from agent_comms.planning.goal_waits import NoStandbyReview, StandbyReview
+from agent_comms.transport.request import tool_field
+from agent_comms.transport.tool_caller import ToolCaller
+from agent_comms.transport.tool_request import NativeToolRequest
+from agent_comms.transport.tool_result import ToolResult
+from agent_comms_hooks import ToolRefusedError
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms

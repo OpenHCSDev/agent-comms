@@ -1,0 +1,139 @@
+"""Runtime info: declaration and persistence owners."""
+
+from __future__ import annotations
+
+from agent_comms.execution.runtime_info_projection import RuntimeInfoProjection
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
+
+from abc import abstractmethod
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING, Annotated, ClassVar
+
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.context_reading import ContextReading, UnmeasuredContext
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, SingleFieldValue, WireName, WireRequired
+from agent_comms.pi_counts import PiCount, UnreportedCount
+from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
+from agent_comms.registry.thread_owned_state import ThreadOwnedState
+from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.storage.maintenance_barrier import CarriedDocument
+from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
+
+
+
+
+class RuntimeInfo(DeclaredFamily, affix="RuntimeInfo"):
+    """A runtime-info read is observed or explicitly unobserved."""
+
+    @abstractmethod
+    def context_reading(self) -> ContextReading: ...
+
+    model: ThreadModel
+    context_used: PiCount
+    context_size: PiCount
+
+
+@dataclass(frozen=True, slots=True)
+class UnobservedRuntimeInfo(RuntimeInfo):
+    """No observation exists; do not invent a model or observation timestamp."""
+
+    def context_reading(self) -> ContextReading:
+        return UnmeasuredContext()
+
+    model = UndeclaredModel()
+    context_used = context_size = UnreportedCount()
+
+
+@dataclass(frozen=True, slots=True)
+class AgentRuntimeInfo(RuntimeInfo):
+    """Declares mutable runtime metadata for one registered thread."""
+
+    thread: str
+    model: ThreadModel = UndeclaredModel()
+    context_used: PiCount = field(default_factory=UnreportedCount)
+    context_size: PiCount = field(default_factory=UnreportedCount)
+    timestamp: Annotated[
+        float, WireName("ts"), WireRequired()
+    ] = field(kw_only=True)
+
+    def __post_init__(self) -> None:
+        FieldCodec.decode(float, self.timestamp)
+        if not self.thread:
+            raise RelationViolationError("Runtime-info thread cannot be empty.")
+
+    def context_reading(self) -> ContextReading:
+        return self.context_size.reading(self.context_used)
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeInfoDocument(SingleFieldValue):
+    """Typed observations with the existing flat root-name wire form."""
+
+    observations: dict[str, AgentRuntimeInfo] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeInfoStore(SingleFileStore, ThreadOwnedState, CarriedDocument[RuntimeInfoDocument], DependentStateTier):
+    """Latest observations, independently committed from the registry/log."""
+
+    filename: ClassVar[str] = "runtime_info.json"
+    json_indent = 2
+
+    record_type = RuntimeInfoDocument
+
+    def empty(self) -> RuntimeInfoDocument:
+        return RuntimeInfoDocument()
+
+    def for_thread(self, thread: str) -> RuntimeInfo:
+        return self.for_threads((thread,))[thread]
+
+    def for_threads(self, names: Iterable[str]) -> dict[str, RuntimeInfo]:
+        values = self.read().observations
+        resolved = {}
+        for name in names:
+            try:
+                resolved[name] = values[name]
+            except KeyError:
+                resolved[name] = UnobservedRuntimeInfo()
+        return resolved
+
+    def observe(self, thread: str, timestamp: float, observation: RuntimeInfoProjection[AgentRuntimeInfo]) -> None:
+        """Apply only this observation's fields in the original store transaction."""
+
+        def apply(
+            document: RuntimeInfoDocument,
+        ) -> DocumentChange[RuntimeInfoDocument, RuntimeInfoDocument]:
+            values = document.observations
+            current = values.get(thread)
+            if current is None:
+                current = AgentRuntimeInfo(thread=thread, timestamp=timestamp)
+            observed = observation.project_runtime_info(replace(current, timestamp=timestamp))
+            return DocumentChange.to(RuntimeInfoDocument({**values, thread: observed}))
+
+        self.update(apply)
+
+    def remove_threads(self, threads: Sequence[ThreadIdentitySource]) -> None:
+        names = {thread.name for thread in threads}
+        self.update(
+            lambda document: DocumentChange.to(
+                RuntimeInfoDocument({name: value for name, value in document.observations.items() if name not in names})
+                if names & document.observations.keys()
+                else document
+            )
+        )
+
+    def rename_thread(self, old_name: str, new_name: str) -> None:
+        def rename(
+            document: RuntimeInfoDocument,
+        ) -> DocumentChange[RuntimeInfoDocument, RuntimeInfoDocument]:
+            values = document.observations
+            if old_name not in values or old_name == new_name:
+                return DocumentChange.to(document)
+            return DocumentChange.to(RuntimeInfoDocument({
+                **{name: value for name, value in values.items() if name != old_name},
+                new_name: replace(values[old_name], thread=new_name),
+            }))
+
+        self.update(rename)

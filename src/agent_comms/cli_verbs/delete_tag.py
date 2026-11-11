@@ -1,21 +1,19 @@
 from __future__ import annotations
 
-from agent_comms.cli_command import TargetActionCommand
-from agent_comms.channel_management import KeepThreadsTagDisposition
-from agent_comms.channel_management import TagChangeResult
-from agent_comms.channel_management import TagDisposition
-from agent_comms.cli_command import MultipleTargets
-from agent_comms.cli_support.exact_tag import ExactTagCliCommand
-from agent_comms.comms import Comms
-from agent_comms.nominal.field_codec import Argument
-from agent_comms.nominal.field_codec import Editor
-from agent_comms.nominal.field_codec import TargetBound
-from agent_comms.target_fields import ChoiceTargetField
-from dataclasses import dataclass
-from dataclasses import replace
-from typing import Annotated
-from typing import Self
 import dataclasses
+from dataclasses import dataclass, replace
+from typing import Annotated, Self
+
+from agent_comms.cli_support.exact_tag import ExactTagCliCommand
+from agent_comms.cli_verbs.cli_command import MultipleTargets, TargetActionCommand
+from agent_comms.cli_verbs.target_fields import ChoiceTargetField
+from agent_comms.comms import Comms
+from agent_comms.messaging.channel_management import (
+    KeepThreadsTagDisposition,
+    TagChangeResult,
+    TagDisposition,
+)
+from agent_comms.nominal.field_codec import Argument, Editor, TargetBound
 
 
 @dataclass(frozen=True, kw_only=True)

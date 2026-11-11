@@ -1,31 +1,36 @@
 """Restoration changes visibility without replay or transferring live ownership."""
 
-from agent_comms.repo import Checkout
-from agent_comms.channel_targets import CommandTarget
-
-
-from bus_record_fixture import prepare_native_comms
-from conftest import installed_comms
-
 import os
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.nominal.field_codec import TurnId
-from agent_comms.assignment_states import FullPendingAssignment, TriagePendingAssignment
-from agent_comms.registry.registry_document import ThreadRows
-
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.coordination.tables.executions import NoPointedExecution
-from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.coordination.assignment_states import (
+    FullPendingAssignment,
+    TriagePendingAssignment,
+)
+from agent_comms.coordination.tables.executions import NoPointedExecution
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.errors import RelationViolationError
-from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
-from agent_comms.turn_lease import NoTurnRecord
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.turn_lease import NoTurnRecord
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.nominal.field_codec import TurnId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_document import ThreadRows
+from agent_comms.registry.thread_status import (
+    ArchivedThreadStatus,
+    StoppedThreadStatus,
+)
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
+from bus_record_fixture import prepare_native_comms
+from conftest import installed_comms
 
 
 def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity(tmp_path):
@@ -127,8 +132,8 @@ def test_catalog_restore_preserves_current_preferences_and_historical_channels(t
 def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     tmp_path, repair_existing
 ):
-    from conftest import accept_initial
     from agent_comms.coordination.coordinator import Coordination
+    from conftest import accept_initial
 
     old, current = wire(tmp_path / "old"), prepare_native_comms(wire(tmp_path / "current"))
     live = NativeThread('live', frozenset({'comms'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))

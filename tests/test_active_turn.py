@@ -1,25 +1,25 @@
-from agent_comms.repo import Checkout
 import os
 import time
 
-from agent_comms.activity import (
-    Activity,
-    ActivityState,
-)
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.nominal.field_codec import (
-    ToolCallId,
-    TurnId,
-)
-from agent_comms.registry.threads import NativeThread
-from agent_comms.turn_phase import (
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.turn_phase import (
     CompactionPhase,
     IdlePhase,
     ModelWaitPhase,
     ProviderRetryPhase,
     ToolRunningPhase,
 )
+from agent_comms.nominal.field_codec import (
+    ToolCallId,
+    TurnId,
+)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import (
+    Activity,
+    ActivityState,
+)
+from agent_comms.registry.threads import NativeThread
 
 
 def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):

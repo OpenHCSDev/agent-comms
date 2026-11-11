@@ -7,14 +7,12 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from agent_comms.child_process import ProcessIdentity, SpawnedProcess
-from agent_comms.installer.runtime_retention import (
-    RefusedRetirement,
-    RuntimeRetention,
-    SweptRetirement,
+from agent_comms.execution.child_process import (
+    ProcessIdentity,
+    SpawnedProcess,
 )
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.runtime_processes import (
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.runtime_processes import (
     ImportingRuntimeProcess,
     PointerReference,
     RuntimeApplication,
@@ -23,6 +21,11 @@ from agent_comms.runtime_processes import (
     UnattributedRuntimeProcess,
     UnreadableRuntimeProcess,
     UnretiredRuntimeProcess,
+)
+from agent_comms.installer.runtime_retention import (
+    RefusedRetirement,
+    RuntimeRetention,
+    SweptRetirement,
 )
 
 

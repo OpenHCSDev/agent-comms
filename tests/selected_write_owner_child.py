@@ -8,12 +8,12 @@ import signal
 import sys
 from pathlib import Path
 
-from agent_comms.active_route import ActiveRoute
 from agent_comms.comms import wire
-from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.launch_root import LaunchRoot
-from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
+from agent_comms.installer.active_route import ActiveRoute
 from agent_comms.nominal.field_codec import AcpSessionId
 from delivery_owner_fixture import canonical_agent, reply_turn_finished, start_headless_owner
 from native_backend_fixture import NativeBackendFixture

@@ -1,7 +1,6 @@
 """SessionStart alone loads Core; its console script runs the actual startup owner."""
 from agent_comms.cli_bridges.hook_session import SessionHook
-
-from . import ClaudeHookProgram
+from agent_comms_hooks import ClaudeHookProgram
 
 
 class SessionStarted(SessionHook, ClaudeHookProgram):

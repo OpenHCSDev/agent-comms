@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from agent_comms.behaviour_patterns import BehaviourPattern
+from agent_comms.team.behaviour_patterns import BehaviourPattern
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -22,7 +22,7 @@ def test_behaviour_catalog_members_name_existing_checks_and_generate_the_file():
 
 def test_catalog_command_needs_no_team_installation_or_bus(tmp_path):
     generated = subprocess.run(
-        [sys.executable, "-X", "faulthandler", "-m", "agent_comms.behaviour_patterns"],
+        [sys.executable, "-X", "faulthandler", "-m", "agent_comms.team.behaviour_patterns"],
         cwd=tmp_path,
         env=os.environ | {"HOME": str(tmp_path), "PYTHONPATH": str(ROOT / "src")},
         capture_output=True,

@@ -1,20 +1,27 @@
 """The reads a display constructs: their fields, wire names and results. Serving them is in
-agent_comms.order_tools, which only the server imports."""
+agent_comms.transport.tools.orders, which only the server imports."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Annotated
 
-from ...acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate
-from ...input_disposition import DeliveryOverview
-from ...nominal.field_codec import OrderId
-from ...team_hud_records import TeammateDetail
-from ...thread_identity import ThreadIncarnation
-from ...transcripts import (
-    AtFrontier, LatestPage, LivePageSource, PageLimit, PagePosition, PageSource,
+from agent_comms.acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate
+from agent_comms.execution.transcript_sources import (
+    AtFrontier,
+    LatestPage,
+    PageLimit,
+    PagePosition,
 )
-from ..request import ReadRequest, ThreadReadRequest, tool_field
+from agent_comms.input_disposition import DeliveryOverview
+from agent_comms.nominal.field_codec import OrderId
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.team.team_hud_records import TeammateDetail
+from agent_comms.transcript.transcripts import (
+    LivePageSource,
+    PageSource,
+)
+from agent_comms.transport.request import ReadRequest, ThreadReadRequest, tool_field
 
 
 @dataclass(frozen=True, kw_only=True)

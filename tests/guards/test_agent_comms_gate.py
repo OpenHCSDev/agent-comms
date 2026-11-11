@@ -16,14 +16,18 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
-
-from agent_comms.child_process import DetachedChildStdio, ObservedProcess, SpawnedProcess
-from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms_project import AgentCommsProject, ClientTypeErrors
+from module_layers import StackClient
 from nominal_refactor_advisor import audit
 from nominal_refactor_advisor.json_reports import json_report_object
+
 import fixture_git
-from module_layers import StackClient
+from agent_comms.execution.child_process import (
+    ObservedProcess,
+    SpawnedProcess,
+)
+from agent_comms.installer.native_build_inputs import DetachedChildStdio
+from agent_comms.nominal.field_codec import FieldCodec
 from process_tree_fixture import TREE, identities, ready
 
 pytestmark = pytest.mark.refactor_guard

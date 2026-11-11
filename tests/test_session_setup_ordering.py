@@ -3,15 +3,15 @@
 
 import asyncio
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from acp import spawn_agent_process
 from acp.connection import StreamDirection, StreamEvent
 
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.execution.launch_root import LaunchRoot
 from bus_record_fixture import prepare_native_comms
 
 
@@ -56,7 +56,7 @@ async def test_new_response_precedes_updates_and_load_replays_before_response(tm
                        AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config))
     try:
         async with spawn_agent_process(
-            packets, sys.executable, "-m", "agent_comms.acp",
+            packets, sys.executable, "-m", "agent_comms.execution.acp",
             *LaunchRoot.from_path(comms.root).arguments(),
             env=environment, cwd=project, observers=[packets.record], use_unstable_protocol=True,
         ) as (client, _process):

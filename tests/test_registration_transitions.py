@@ -1,21 +1,29 @@
 """Transition-family consequences on the actual canonical registry and locks."""
 
-from agent_comms.repo import Checkout
 import os
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.nominal.field_codec import TurnId
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.turn_lease import (
+    ActiveTurn,
+    NoFinishedTurn,
+)
+from agent_comms.nominal.field_codec import TurnId
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
-from agent_comms.thread_identity import ReportedTools, ToolName, UnreportedTools
-from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.turn_lease import ActiveTurn, NoFinishedTurn
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.registry.thread_identity import (
+    ReportedTools,
+    ToolName,
+    UnreportedTools,
+)
+from agent_comms.registry.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 
 
 def _metadata(registry, leased, lease, tmp_path):
@@ -49,7 +57,7 @@ def _new_turn(registry, leased, lease, tmp_path):
 def test_registration_transition_preserves_or_revokes_exact_lease(
     tmp_path, transition, advances_owner, preserves_record,
 ):
-    registry = Registration(tmp_path / 'registry.json')
+    registry = Registration(RegistryFile.path_in(tmp_path))
     thread = NativeThread('owner', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     registry.register(thread)
     leased, _ = registry.lease_local_turn('owner', TurnId('9b473845f684444f80a26586ae298d2b'))
@@ -82,7 +90,7 @@ def tools(version, *names):
     ('new-owner', UnreportedTools('1'), UnreportedTools('2'), ('runtime 1 -> 2, tool set unreported',)),
 ])
 def test_owner_restart_compares_tools_with_last_real_record(tmp_path, restart, before, after, lost):
-    registry = Registration(tmp_path / 'registry.json')
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path)))
     registry.observe_offered_tools(registry.require('owner').incarnation, before)
     stops = restart.count('stop')
@@ -96,7 +104,7 @@ def test_owner_restart_compares_tools_with_last_real_record(tmp_path, restart, b
 
 
 def test_rename_preserves_exact_turn_release_but_not_reused_identity(tmp_path):
-    registry = Registration(tmp_path / 'registry.json')
+    registry = Registration(RegistryFile.path_in(tmp_path))
     thread = NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     registry.register(thread)
     leased, _ = registry.lease_local_turn('owner', TurnId('058be655fae2a4c37a21d2c091ba7661'))
@@ -110,7 +118,7 @@ def test_rename_preserves_exact_turn_release_but_not_reused_identity(tmp_path):
 
 
 def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
-    registry = Registration(tmp_path / 'registry.json')
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path)))
     original = registry.snapshot()
     expected = original.threads['owner']
@@ -131,7 +139,7 @@ def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
 
 
 def test_batch_idle_fence_refuses_busy_second_without_partial_commit(tmp_path):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     for name in ("first", "second"):
         registry.register(NativeThread(name, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     before = registry.snapshot()
@@ -145,7 +153,7 @@ def test_batch_idle_fence_refuses_busy_second_without_partial_commit(tmp_path):
 
 
 def test_restart_fence_ends_a_wedged_turn_the_way_stop_does(tmp_path, monkeypatch):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread("owner", frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     registry.lease_local_turn("owner", TurnId("c9bc072f4fa8189466c2a8f2c36a56a4"))
     busy = registry.snapshot()

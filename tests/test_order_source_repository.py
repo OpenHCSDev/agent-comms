@@ -7,18 +7,20 @@ from typing import get_type_hints
 import pytest
 
 from agent_comms.errors import TodoError
-from agent_comms.team.order import Team
-from github_fixture import GitHubFixture
-from agent_comms.todos import (
-    MainDeliveryMerge,
-    NoDeliveryEvidence,
+from agent_comms.planning.delivery_evidence import NoDeliveryEvidence
+from agent_comms.planning.orders import (
     MergedListedPullRequest,
-    PullRequestCommit,
-    PullRequestLink,
     PullRequests,
 )
-from agent_comms.repository_name import RepositoryName
-from agent_comms.work_branches import WorkBranches
+from agent_comms.planning.pull_requests import (
+    MainDeliveryMerge,
+    PullRequestCommit,
+    PullRequestLink,
+)
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.work_branches import WorkBranches
+from agent_comms.team.order import Team
+from github_fixture import GitHubFixture
 from test_held_problem_orders import merge_two_commit_fix
 from test_todos import adopt_pr, pr_order
 

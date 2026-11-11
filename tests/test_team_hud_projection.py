@@ -1,30 +1,48 @@
 """Root-owned controls for the shared heartbeat and native HUD presentation."""
 
-from agent_comms.nominal.field_codec import HudExclude
-
 from dataclasses import replace
 
-from agent_comms.team.standing_rules import ServicePassFailing
-from agent_comms.team.vibe_check import OverloadDegradation
-from agent_comms.team_hud import TeamHud, CodexUsage, UnreadableUsage
-from agent_comms.team_hud_records import TeamOrder, Teammate, HudRecord
-from agent_comms.disclosure_text import (
-    DisclosureText, EntityKey, FieldKey, IdentifiedRecordText, MappingText, SequenceText, ViewTable,
+from agent_comms.nominal.field_codec import DisclosureIdentity, FieldCodec, HudExclude, OrderId
+from agent_comms.planning.orders import OpenPrProgress
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.task_attachments.disclosure_text import (
+    DisclosureText,
+    EntityKey,
+    FieldKey,
+    IdentifiedRecordText,
+    MappingText,
+    SequenceText,
+    ViewTable,
 )
-from agent_comms.nominal.field_codec import DisclosureIdentity, FieldCodec, OrderId
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.task_attachments.team_pings import TeamDecisions, FoldedRule, RulePing
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.todos import OpenPrProgress
+from agent_comms.task_attachments.team_pings import (
+    AlarmSection,
+    FoldedRule,
+    NewAlarms,
+    RulePing,
+    TeamDecisions,
+    WatchingAlarms,
+)
+from agent_comms.team.standing_rules import ServicePassFailing
+from agent_comms.team.team_hud import CodexUsage, TeamHud, UnreadableUsage
+from agent_comms.team.team_hud_records import HudRecord, Teammate, TeamOrder
+from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.ui_model.hud_groups import (
-    IdleGroup, InProgressGroup, ProblemsGroup, ReadyToTestGroup, UrgentGroup,
+    IdleGroup,
+    InProgressGroup,
+    ProblemsGroup,
+    ReadyToTestGroup,
+    UrgentGroup,
 )
 from agent_comms.ui_model.teammate_state import (
-    AwaitingApplicationRun, Idle, Moving, NoPendingClock, PendingClock, Stuck,
+    AwaitingApplicationRun,
+    Idle,
+    Moving,
+    NoPendingClock,
+    PendingClock,
+    Stuck,
 )
 
-
-from agent_comms.task_attachments.team_pings import AlarmSection, NewAlarms, WatchingAlarms
 
 def example_hud() -> TeamHud:
     """Controlled source example; no provider call or claim about the installed fleet."""

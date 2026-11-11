@@ -26,7 +26,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import agent_comms
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.registry.threads import Thread

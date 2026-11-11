@@ -1,35 +1,102 @@
 """Held-order recovery and unanswered DMs on an independently copied bus."""
-from pathlib import Path
-
-
-from agent_comms.repo import Checkout
 import asyncio
 import json
-from contextlib import nullcontext
 import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from dataclasses import replace
 from functools import partial
+from pathlib import Path
 
 import pytest
 
 from agent_comms import agent_events as events
-from agent_comms.bus_publication import AgentOrigin, HumanOrigin
-from agent_comms.channel_targets import CommandTarget, ThreadTarget
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.channel_targets import TeammatesTag, CommsTag
-from agent_comms.messaging import TeamReceipts
-from agent_comms.team.standing_rules import (
-    OwedAnswer,
-    StandingRule,
+from agent_comms.comms import wire
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.service_passes import ServicePassStore
+from agent_comms.errors import (
+    CommittedMessageError,
+    HumanSendRefusedError,
+    RelationViolationError,
+    TodoError,
 )
-from agent_comms.todos import (
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_key import AcpInputKey
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.native_arguments import GivenBinary
+from agent_comms.execution.turn_digests import OrderEditCountRead
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.installer.backup import StoreBackup
+from agent_comms.messaging.bus_publication import AgentOrigin
+from agent_comms.messaging.channel_targets import (
+    CommandTarget,
+    CommsTag,
+    TeammatesTag,
+    ThreadTarget,
+)
+from agent_comms.messaging.initial_origin import HumanOrigin
+from agent_comms.messaging.message_page import MessagePageRequest
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import (
+    ConversationRole,
+    InfoKind,
+    Message,
+    NoticeRole,
+    QuestionKind,
+)
+from agent_comms.messaging.read_basis import DMDisplayScope, RepliesDisplayScope
+from agent_comms.messaging.sending import TeamReceipts
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    GoalId,
+    InputId,
+    MessageId,
+    OrderId,
+    RecordProblems,
+    TurnId,
+)
+from agent_comms.planning.goal_actions import (
+    CreateProblemGoalAction,
+    ReissuedOrderGoalAction,
+    SetGoalAction,
+)
+from agent_comms.planning.goal_presentation import RunnableExecution
+from agent_comms.planning.goal_states import ActiveGoal
+from agent_comms.planning.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.order_runs import MechanicalOrderRun
+from agent_comms.planning.order_story import TeamStory
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
+    ClaimOrder,
+    CorrectLinkTodo,
+    CorrectMergedLinkTodo,
     DoneTodoState,
+    DraftListedPullRequest,
+    OrderClaim,
+    OrderMessage,
+    PendingProblemOrder,
+    ProgressRead,
+    ReleaseTodo,
+    ResumeClaimOrder,
     TodoConflict,
 )
-from agent_comms.team.order import Team, ListedProblems, OrderFile, SayVerb, SendVerb
+from agent_comms.planning.owner_requests import NewestOpenRequest, RequestDirective
+from agent_comms.planning.problem_findings import ExpectedProblem
+from agent_comms.planning.pull_requests import MergedLink, PullRequestLink
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.registry.heartbeat_delivery import OnHeartbeatDelivery
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_status import StoppedThreadStatus
+from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
+from agent_comms.task_attachments.owner_notices import ChokeholdNotice, VibeCheckNotice
+from agent_comms.task_attachments.team_pings import TeamUpdate
+from agent_comms.team.order import ListedProblems, OrderFile, SayVerb, SendVerb, Team
 from agent_comms.team.questions import UnansweredTeammateAsks
 from agent_comms.team.standing import (
     HeartbeatNotStarted,
@@ -38,82 +105,20 @@ from agent_comms.team.standing import (
     MissedHeartbeat,
     UnitAskUnanswered,
 )
-from agent_comms.team_heartbeat import TeamHeartbeat
+from agent_comms.team.standing_rules import OwedAnswer, StandingRule
+from agent_comms.team.team_heartbeat import TeamHeartbeat
+from agent_comms.team.team_hud import TeamFrame
 from agent_comms.team.vibe_check import ChokeholdUnanswered, VibeCheckUnanswered
-from agent_comms.team_hud import TeamFrame
-from agent_comms.task_attachments.team_pings import TeamUpdate
-from agent_comms.task_attachments.owner_notices import ChokeholdNotice, VibeCheckNotice
-from agent_comms.comms import wire
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.errors import (
-    CommittedMessageError,
-    HumanSendRefusedError,
-    RelationViolationError,
-    TodoError,
-)
-from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, MessageId, OrderId, RecordProblems, TurnId
-from agent_comms.goal_actions import (
-    CreateProblemGoalAction,
-    ReissuedOrderGoalAction,
-    SetGoalAction,
-)
-from agent_comms.goal_presentation import RunnableExecution
-from agent_comms.goal_states import ActiveGoal
-from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
-from agent_comms.transport.tools.orders import (
-    CommsTeamStoryTool,
-    CommsTodoListTool,
-    TodoList,
-)
-from team_heartbeat_fixture import capture_frame
-from agent_comms.held_orders import HeldOrders
-from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
-from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_key import AcpInputKey
-from agent_comms.installer.backup import StoreBackup
-from agent_comms.launch_root import LaunchRoot
-from agent_comms.message_page import MessagePageRequest
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import ConversationRole, InfoKind, Message, NoticeRole, QuestionKind
-from agent_comms.native_arguments import GivenBinary
-from agent_comms.order_runs import MechanicalOrderRun
-from agent_comms.order_story import TeamStory
-from agent_comms.owner_requests import NewestOpenRequest, RequestDirective
-from agent_comms.read_basis import DMDisplayScope, RepliesDisplayScope
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repository_name import RepositoryName
-from agent_comms.service_passes import ServicePassStore
-from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.registry.threads import NativeThread
-from agent_comms.todos import (
-    ClaimOrder,
-    DraftListedPullRequest,
-    CorrectLinkTodo,
-    CorrectMergedLinkTodo,
-    MergedLink,
-    PullRequestLink,
-    ReleaseTodo,
-    ResumeClaimOrder,
-    StrikeReason,
-    ExpectedProblem,
-    OrderClaim,
-    OrderMessage,
-    PendingProblemOrder,
-    ProgressRead,
-)
-from agent_comms.tool_caller import ForkCaller, NoThreadCaller, PeerCaller
-from agent_comms.connector import ConnectorSendTool
-from agent_comms.connector_caller import DirectorCaller
-from agent_comms.turn_digests import OrderEditCountRead
+from agent_comms.transport.connector import ConnectorSendTool
+from agent_comms.transport.connector_caller import DirectorCaller
+from agent_comms.transport.tool_caller import ForkCaller, NoThreadCaller, PeerCaller, ThreadCaller
+from agent_comms.transport.tools.orders import CommsTeamStoryTool, CommsTodoListTool, TodoList
 from agent_comms.ui_model.teammate_state import AwaitingTeam, Blocked, Detached, TeammateState
 from cli_command import team
-from conftest import team_as, declare_test_bus
+from conftest import declare_test_bus, team_as
+from goal_owner_fixture import GoalTurnOwners
 from native_backend_fixture import native_backend_fixture, wait_for
-from test_goal_execution import SESSION, acquired_turn, bound_owner
-
+from team_heartbeat_fixture import capture_frame
 
 UNRESOLVED_INPUT_KEY = AcpInputKey(InputId.mint())
 
@@ -306,20 +311,15 @@ def unanswered(comms):
         comms, observed=TeammateState.current(comms, frame), frame=frame)
 
 
-def blocked_holder(comms, native):
-    """Settle a real failed turn and leave its owner bound, as a live holder's is; never
-    manufacture a stored backend block."""
+async def blocked_holder(comms, owners: GoalTurnOwners):
+    """Settle a real failed turn; keep its owner alive for the test's observations."""
     owner = comms.registry.require("worker")
     comms.registry.register(replace(owner, process_identity=ProcessIdentity.capture(os.getpid())))
-
-    async def fail_turn():
-        agent = await bound_owner(comms, native)
-        async with acquired_turn(agent, SESSION, comms) as turn:
-            permit, = turn.goal_permit.claims
-            await turn.progress.done(events.Done("The previous attempt failed", False))
-        return permit.reservation
-
-    return asyncio.run(fail_turn())
+    turns = await owners.for_bus(comms)
+    async with turns(comms) as turn:
+        permit, = turn.goal_permit.claims
+        await turn.progress.done(events.Done("The previous attempt failed", False))
+    return permit.reservation
 
 
 def test_an_active_goal_with_an_unresolved_attempt_is_reported_never_retried(held_bus):
@@ -374,7 +374,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     assert set(named.split(", ")) == {"P1 worker", "P2 worker", "P3 outsider"}
     listed = FieldCodec.decode(TodoList, board_read(CommsTodoListTool, comms, NoThreadCaller()))
     assert {"P1", "P2", "P3"} <= {todo.id for todo in listed.todos} and listed.progress == {}
-    assert tuple(OrderEditCountRead.for_team(comms, "colleague")) == ()
+    assert tuple(OrderEditCountRead.for_team(comms.goals, "colleague")) == ()
     with pytest.raises(ValueError, match="pass --artifact FILE"):
         comms.goals.todos.get("P2").order.closing_artifact()
 
@@ -415,8 +415,11 @@ def test_an_order_rule_observation_compares_its_cited_repositories(held_bus):
     assert HolderGone(first).observation_key() != HolderGone(second).observation_key()
 
 
-def test_failed_holder_is_reported_without_reissuing_orders_or_replaying_unknown(held_bus, native_runtime_package):
-    blocked_holder(held_bus, native_runtime_package)
+@pytest.mark.asyncio
+async def test_failed_holder_is_reported_without_reissuing_orders_or_replaying_unknown(
+    held_bus, goal_turn_owners,
+):
+    await blocked_holder(held_bus, goal_turn_owners)
     goal = held_bus.registry.require("worker").goal.require()
     store = held_bus.goals.open_goal_store()
     generation = store.require_generation(goal.id)
@@ -433,8 +436,11 @@ def test_failed_holder_is_reported_without_reissuing_orders_or_replaying_unknown
     assert state_cards(held_bus, Blocked) == (violation,)
 
 
-def test_an_owner_approved_order_to_a_blocked_goal_activates_it_and_keeps_its_group(held_bus, native_runtime_package):
-    blocked_holder(held_bus, native_runtime_package)
+@pytest.mark.asyncio
+async def test_an_owner_approved_order_to_a_blocked_goal_activates_it_and_keeps_its_group(
+    held_bus, goal_turn_owners,
+):
+    await blocked_holder(held_bus, goal_turn_owners)
     before = held_bus.registry.require("worker").goal.require()
     todo = held_bus.goals.todos.get("P1")
     other = held_bus.goals.todos.get("P2")
@@ -1027,11 +1033,12 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     assert not tuple(worktrees.iterdir())
 
 
-def test_one_state_per_teammate_even_when_blocked_and_detached(held_bus, native_runtime_package):
+@pytest.mark.asyncio
+async def test_one_state_per_teammate_even_when_blocked_and_detached(held_bus, goal_turn_owners):
     held_bus.registry.register(held_bus.registry.require("worker"), StoppedThreadStatus())
     detached, = state_cards(held_bus, Detached)
     assert detached.unit.name == "worker" and set(detached.orders) == {"P1", "P2"}
-    blocked_holder(held_bus, native_runtime_package)
+    await blocked_holder(held_bus, goal_turn_owners)
     blocked, = state_cards(held_bus, Blocked)
     frame = capture_frame(held_bus, ProgressRead())
     states = TeammateState.current(held_bus, frame)
@@ -1040,8 +1047,9 @@ def test_one_state_per_teammate_even_when_blocked_and_detached(held_bus, native_
         held_bus, observed=states, frame=frame)
 
 
-def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, native_runtime_package):
-    blocked_holder(held_bus, native_runtime_package)
+@pytest.mark.asyncio
+async def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, goal_turn_owners):
+    await blocked_holder(held_bus, goal_turn_owners)
     question = publish(held_bus, "worker", "colleague", time.time() - 901)
     expected = tuple(rule.line() for rule in (
         *state_cards(held_bus, Blocked), *unanswered(held_bus),
@@ -1051,7 +1059,7 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, 
     held_bus.registry.register(replace(colleague, process_identity=ProcessIdentity.capture(os.getpid())))
     # The assertion reads the published board message; publication is off by default.
     held_bus.threads.set_heartbeat_delivery("colleague", OnHeartbeatDelivery)
-    asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
+    await heartbeat.run(lambda: nullcontext(held_bus))
     saved, = TeamUpdate.latest(held_bus, colleague.incarnation)
     assert saved.handled
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
@@ -1196,18 +1204,21 @@ def test_naming_one_line_of_a_burst_answers_the_burst_at_the_gate(held_bus):
     assert all(rule.answered_by((checks[0], holds[1])) for rule in (*vibe, *hold))
 
 
-def test_a_compliant_answer_resumes_a_held_teammate_whose_attempt_was_interrupted(held_bus, native_runtime_package):
+@pytest.mark.asyncio
+async def test_a_compliant_answer_resumes_a_held_teammate_whose_attempt_was_interrupted(
+    held_bus, goal_turn_owners,
+):
     """A held teammate whose last attempt failed refuses a status-only resume; the chokehold's
     release continues its generation the way a fresh order does, so one such teammate neither stays
     paused nor stops the release of the others (the heartbeat died on it, 2026-10-21 22:43)."""
-    from agent_comms.goal_actions import (
+    from agent_comms.planning.goal_actions import (
         ActiveGoalAction,
         ChokeholdPausedGoalAction,
         CompliedGoalAction,
         OwnerInvocable,
     )
 
-    blocked_holder(held_bus, native_runtime_package)
+    await blocked_holder(held_bus, goal_turn_owners)
     held_bus.goals.update_goal("worker", ChokeholdPausedGoalAction())
     with pytest.raises(ValueError, match="unresolved"):
         held_bus.goals.update_goal("worker", ActiveGoalAction(), actor=OwnerInvocable)
@@ -1219,12 +1230,13 @@ def test_a_compliant_answer_resumes_a_held_teammate_whose_attempt_was_interrupte
 def test_a_compliant_answer_resumes_a_held_teammate_whose_problems_closed_during_the_hold(held_bus):
     """The heartbeat died on every pass from 13:08 on 2026-10-24: a teammate whose problems were
     withdrawn while the chokehold held it refused the release, so no teammate after it resumed."""
-    from agent_comms.goal_actions import (
+    from agent_comms.planning.goal_actions import (
         ChokeholdPausedGoalAction,
         CompliedGoalAction,
         OwnerInvocable,
     )
-    from agent_comms.todos import ReleaseTodo, StrikeReason, WithdrawTodo
+    from agent_comms.planning.order_words import StrikeReason
+    from agent_comms.planning.orders import ReleaseTodo, WithdrawTodo
 
     held_bus.goals.update_goal("worker", ChokeholdPausedGoalAction())
     colleague = held_bus.registry.require("colleague").incarnation

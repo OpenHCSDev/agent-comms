@@ -7,17 +7,19 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .activity import ObservedActivity
-from .notification_assignment import NotificationAssignment
-from agent_comms.message_notification import (
-    NoNotificationWindow, NotificationPass, NotificationWindow,
+from agent_comms.messaging.message_notification import (
+    NoNotificationWindow,
+    NotificationPass,
+    NotificationWindow,
 )
-from .registry_provenance import DeletedThread
-from .revision_views import ActivityView, NotificationEvidenceView
+from agent_comms.messaging.revision_views import ActivityView, NotificationEvidenceView
+from agent_comms.notification_assignment import NotificationAssignment
+from agent_comms.presentation import WireRevision
+from agent_comms.registry.activity import ObservedActivity
+from agent_comms.registry.registry_names import DeletedThread
 
-from .presentation import WireRevision
 if TYPE_CHECKING:
-    from .comms import Comms
+    from agent_comms.comms import Comms
 
 
 @dataclass(frozen=True)

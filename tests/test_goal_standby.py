@@ -1,14 +1,13 @@
 """Declared goal dependencies control scheduling."""
 
-from agent_comms.repo import Checkout
 import os
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import GoalWaitId, TurnId
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
     OwnerInvocable,
@@ -16,12 +15,14 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goal_presentation import RunnableExecution, StandbyExecution, GoalWaitTarget
-from agent_comms.planning.goal_waits import GoalWaits
-from goal_owner_fixture import canonical_goal_wire
-from agent_comms.planning.goal_waits import RecordedGoalWait, NoGoalWait
+from agent_comms.planning.goal_presentation import RunnableExecution, StandbyExecution
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_wait_target import GoalWaitTarget
+from agent_comms.planning.goal_waits import GoalWaits, NoGoalWait, RecordedGoalWait
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_status import PausedBridgeThreadStatus
 from agent_comms.registry.threads import NativeThread
-from agent_comms.goal_scope import OneGoal
+from goal_owner_fixture import canonical_goal_wire
 
 
 def live_wire(tmp_path, *names, working=()):
@@ -102,7 +103,8 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
     assert carol_thread.executing
     record = carol_thread.require_turn_lease().record
     record.begin(record.registry_path, record.identity,
-                 replace(record.read().require_active(), owner=ProcessIdentity(999999999, 1)))
+                 replace(record.read().require_active(), owner=ProcessIdentity(999999999, 1)),
+                 registry_type=record.registry_type)
     comms.registry.register(
         replace(carol_thread, process_identity=ProcessIdentity(999999999, 1)),
         comms.registry.status("carol"),
@@ -195,8 +197,6 @@ def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, read
 
 @pytest.mark.parametrize("bridge_alive", [True, False])
 def test_standby_on_a_paused_bridge_waits_only_while_its_process_lives(tmp_path, bridge_alive):
-    from agent_comms.thread_status import PausedBridgeThreadStatus
-
     comms = live_wire(tmp_path, "waiter")
     teammate = NativeThread("teammate", frozenset(), Checkout(tmp_path))
     if bridge_alive:

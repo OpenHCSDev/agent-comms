@@ -9,8 +9,11 @@ from pathlib import Path
 import pytest
 
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import ListedPullRequest, UnmergedListedPullRequest
+from agent_comms.planning.orders import (
+    ListedPullRequest,
+    UnmergedListedPullRequest,
+)
+from agent_comms.projects.repository_name import RepositoryName
 from github_cli_stub import hold, store
 
 

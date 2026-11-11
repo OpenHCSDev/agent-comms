@@ -1,11 +1,7 @@
 """Pi's own compaction engine, seen through Core's turn path: pinned Pi + localhost provider."""
 
 from __future__ import annotations
-from agent_comms.nominal.field_codec import InputId
-from agent_comms.controller import SessionUpdateSink
 
-from agent_comms.lifecycle_capability import Unresolved
-from agent_comms.queued_input import InitialInput
 import asyncio
 import json
 import os
@@ -20,21 +16,25 @@ from uuid import uuid4
 import pytest
 
 import agent_comms.agent_events as ae
-import agent_comms.backend as backend
-from agent_comms.acp import CommsAgent
+import agent_comms.execution.backend as backend
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import CompactionChangedUpdate, decode_updates
-from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
-from agent_comms.launch_root import LaunchRoot
-from agent_comms.launch_runtime import RestartEnvironment
-from agent_comms.pi_native_backend import PersistentPiSession
-from agent_comms.selected_actions import NoSelectedTools
-from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
-from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.launch_runtime import RestartEnvironment
+from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
+from agent_comms.execution.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
+from agent_comms.execution.queued_input import InitialInput
+from agent_comms.execution.selected.actions import NoSelectedTools
+from agent_comms.nominal.field_codec import InputId
+from agent_comms.nominal.lifecycle_capability import Unresolved
+from agent_comms.execution.persistent_pi_session import PersistentPiSession
+from agent_comms.registry.activity import ActivityState
 from bus_record_fixture import prepare_native_comms
-from stored_inputs import stored_inputs
 from conftest import answer_rules
 from native_backend_fixture import AnnouncedInputStart, NativeBackendFixture
+from stored_inputs import stored_inputs
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="native Pi uses POSIX fsync")
 

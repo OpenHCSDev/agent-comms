@@ -7,24 +7,13 @@ meaning (unread kinds, activity, labels) itself.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, replace
-
-from agent_comms.read_ledger import NoReadNotice, ReadNotice
 from typing import NoReturn
 
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
-from agent_comms.presentation import CoordinationSnapshot, ThreadView
-from agent_comms.registry.threads import ConversationPreparation
-from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.thread_model import ThreadModel
-from agent_comms.thread_presentation import SessionDisconnected, ThreadPresentationStatus
-from agent_comms.thread_status import ActiveThreadPresence
-from agent_comms.ui_model.changes import KeyedModel
-from agent_comms.ui_model.unread import UnreadPresentation, UnobservedUnread
-
-from ..display_references import (
+from agent_comms.messaging.display_references import (
     PendingReferences,
     RetiredThreadReference,
     ThreadDisplayReference,
@@ -33,6 +22,15 @@ from ..display_references import (
     ThreadReferenceReader,
     UnavailableReferences,
 )
+from agent_comms.messaging.read_ledger import NoReadNotice, ReadNotice
+from agent_comms.presentation import CoordinationSnapshot, ThreadView
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_model import ThreadModel
+from agent_comms.registry.thread_presentation import SessionDisconnected, ThreadPresentationStatus
+from agent_comms.registry.thread_status import ActiveThreadPresence
+from agent_comms.registry.threads import ConversationPreparation
+from agent_comms.ui_model.changes import KeyedModel
+from agent_comms.ui_model.unread import UnobservedUnread, UnreadPresentation
 
 
 @dataclass(frozen=True)

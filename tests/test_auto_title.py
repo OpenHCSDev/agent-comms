@@ -1,8 +1,8 @@
 import pytest
 
-from agent_comms.acp import CommsAgent
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.native_arguments import GivenArguments
+from agent_comms.execution.acp import CommsAgent
+from agent_comms.execution.native_arguments import GivenArguments
+from agent_comms.transport.tool_caller import ThreadCaller
 
 
 async def test_new_pi_thread_requests_one_concise_title(

@@ -10,12 +10,12 @@ from pathlib import Path
 import pytest
 from xdist import is_xdist_worker
 
-from agent_comms.storage_rules import StorageRule
-from agent_comms.test_lease import (
+from agent_comms.execution.test_lease import (
     InheritedTestRun,
     LeaseStart,
     TestLease,
 )
+from agent_comms.projects.storage_rules import StorageRule
 
 
 class TestSession(ExitStack):
@@ -35,7 +35,7 @@ class TestSession(ExitStack):
         return cls(start, lease)
 
     def acquire(self) -> None:
-        self.enter_context(self.lease.held(self.start))
+        self.start = self.enter_context(self.lease.held(self.start))
 
     def prepare(self) -> None:
         self.acquire()
@@ -92,3 +92,9 @@ def pytest_configure(config: pytest.Config) -> None:
 @pytest.hookimpl(tryfirst=True)
 def pytest_sessionstart(session: pytest.Session) -> None:
     session.config.stash[_SESSION].confirm(session)
+
+
+@pytest.fixture
+def integration_lease(pytestconfig: pytest.Config) -> LeaseStart:
+    """The controller lends its existing kernel claim to a nested test runner."""
+    return pytestconfig.stash[_SESSION].start

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.repo import Checkout
 import multiprocessing
 from collections.abc import Callable, Sequence
 from contextlib import ExitStack
@@ -11,18 +10,18 @@ from multiprocessing.synchronize import Event
 from pathlib import Path
 from typing import Any
 
-
 import agent_comms.storage.store_files as store_files
-from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
+from agent_comms.messaging.message_page import PageBounds
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.message_page import PageBounds
 from agent_comms.pi_counts import PiCount
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import ActivityState
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.threads import NativeThread
 from bus_history import read_history
 from conftest import installed_comms
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.registry.threads import NativeThread
 
 
 def _send_messages(root: str, sender: str, count: int, start: Event) -> None:

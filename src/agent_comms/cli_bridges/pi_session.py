@@ -5,15 +5,20 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from agent_comms.cli_bridges.history import OfflineHistory, PiHistory
-from agent_comms.importing import ImportLimits, KeptPiSession
-from agent_comms.native_entries import (
+from agent_comms.cli_bridges.runtime_updates import (
+    HiddenItem,
+    RuntimeUpdate,
+    SessionFacts,
+)
+from agent_comms.execution.imported_conversation import KeptPiSession
+from agent_comms.execution.imported_messages import ImportLimits
+from agent_comms.execution.native_entries import (
     NativeEntry,
     NativeEvidenceRead,
     SessionEntry,
     TranscriptProjection,
 )
 from agent_comms.nominal.field_codec import StoredSessionId
-from agent_comms.runtime_updates import HiddenItem, RuntimeUpdate, SessionFacts
 
 
 class PiSession(PiHistory, OfflineHistory):

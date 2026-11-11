@@ -1,9 +1,17 @@
 """Native Pi arguments come from one declared default, or from the environment when set."""
 
 
-from agent_comms.native_arguments import ConfiguredBinary, GivenArguments, InheritedArguments, NativeArguments
-from agent_comms.pi_vocabulary import OffThinkingLevel
-from agent_comms.thread_model import DeclaredModel, ThreadModel
+from agent_comms.execution.native_arguments import (
+    ConfiguredBinary,
+    GivenArguments,
+    InheritedArguments,
+    NativeArguments,
+)
+from agent_comms.execution.pi_vocabulary import OffThinkingLevel
+from agent_comms.registry.thread_model import (
+    DeclaredModel,
+    ThreadModel,
+)
 
 
 def test_native_arguments_configured_has_one_default(monkeypatch):

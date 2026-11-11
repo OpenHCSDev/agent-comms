@@ -7,8 +7,8 @@ from typing import Annotated
 
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.schema import CoordinatorRow
+from agent_comms.execution.participant_identity import ParticipantIdentity
 from agent_comms.nominal.field_codec import ThreadLookup
-from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.storage.typed_table import (
     Column,
     ColumnGuard,

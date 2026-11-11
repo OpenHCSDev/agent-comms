@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.cli_command import CliCommand
-from agent_comms.cli_result import CliResult
-from agent_comms.cli_support.target_arguments import TargetArguments
-from agent_comms.comms import Comms
-from agent_comms.nominal.field_codec import Argument
-from dataclasses import dataclass
-from pydantic import JsonValue
-from typing import Annotated
 import dataclasses
+from dataclasses import dataclass
+from typing import Annotated
+
+from pydantic import JsonValue
+
+from agent_comms.cli_support.target_arguments import TargetArguments
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.comms import Comms
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.nominal.field_codec import Argument
 
 
 @dataclass(frozen=True, kw_only=True)

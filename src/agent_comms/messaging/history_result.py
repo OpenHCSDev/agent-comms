@@ -1,0 +1,53 @@
+"""History result declarations own their wire keys and target context."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, ClassVar, Self
+
+from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.messaging.messages import Message
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.transport.tool_result import ToolResult
+
+if TYPE_CHECKING:
+    from agent_comms.messaging.page_traversal import PageCursor
+
+
+@dataclass(frozen=True)
+class HistoryPageResult(CliResult, ToolResult):
+    messages_key: ClassVar[str] = "messages"
+    messages: tuple[Message, ...]
+    has_older: bool
+
+    @classmethod
+    def for_target(cls, name: str, messages: tuple[Message, ...], has_older: bool) -> Self:
+        return cls(messages, has_older)
+
+    @property
+    def before(self) -> PageCursor | None:
+        return self.messages[-1].view_cursor if self.messages else None
+
+    def to_wire(self) -> dict[str, object]:
+        return {self.messages_key: [{**m.to_wire(), **m.display_metadata} for m in self.messages],
+                "before": FieldCodec.encode(self.before), "has_older": self.has_older}
+
+
+class DmHistoryPageResult(HistoryPageResult):
+    messages_key = "dm"
+
+
+class EverythingHistoryPageResult(HistoryPageResult):
+    messages_key = "everything"
+
+
+@dataclass(frozen=True)
+class ChannelHistoryPageResult(HistoryPageResult):
+    channel: str
+
+    @classmethod
+    def for_target(cls, name: str, messages: tuple[Message, ...], has_older: bool) -> Self:
+        return cls(messages, has_older, name)
+
+    def to_wire(self) -> dict[str, object]:
+        return {**super().to_wire(), "channel": self.channel}

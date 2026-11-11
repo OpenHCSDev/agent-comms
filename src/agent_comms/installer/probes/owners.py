@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Sequence
+from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
 from typing import Annotated, TextIO
 
-from agent_comms.cli_command import TargetBatchResult
+from agent_comms.cli_verbs.cli_command import TargetBatchResult
 from agent_comms.comms import wire
-from agent_comms.nominal.field_codec import FieldCodec, PathText
+from agent_comms.execution.owner_restart import OwnerRestartRequest
 from agent_comms.installer.interpreter_operation import RuntimeProbe
-from agent_comms.installer.probes.commands import CliCommandProbe
 from agent_comms.installer.owner_starts import OwnerStart
-from agent_comms.owner_restart import OwnerRestartRequest
+from agent_comms.installer.probes.commands import CliCommandProbe
+from agent_comms.nominal.field_codec import FieldCodec, PathText
 
 
 class OwnerActionsProbe(CliCommandProbe):

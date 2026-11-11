@@ -1,31 +1,37 @@
 """A saved native owner answers a fresh DM through its bus-owned proof resource."""
-from agent_comms.repo import Checkout
 import asyncio
 import json
-from pathlib import Path
+import signal
 from contextlib import AsyncExitStack, suppress
 from dataclasses import replace
-import signal
+from pathlib import Path
 
-import agent_comms.native_package as native_package
 import pytest
 
-from agent_comms.turn_inbox import ClearQueue, InputContent, InputRequest, SteerInputPolicy, TurnInbox
-from agent_comms.backend import NativeSession
-from agent_comms.child_process import Platform
+import agent_comms.installer.native_package as native_package
+from agent_comms.execution.backend import NativeSession
+from agent_comms.execution.child_process import Platform
+from agent_comms.execution.native_arguments import NativeInputProofArgument
+from agent_comms.execution.native_input_proof import NativeContextJournal
+from agent_comms.execution.transcript_sources import NativeTranscript
+from agent_comms.execution.turn_inbox import (
+    ClearQueuedInputs,
+    InputContent,
+    InputRequest,
+    SteerInputPolicy,
+    TurnInbox,
+)
+from agent_comms.execution.turn_watchdog import ModelWait
+from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import InputId
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.store_files import RegistryLocking
-from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.turn_watchdog import ModelWait
-from agent_comms.native_arguments import NativeInputProofArgument
-from agent_comms.native_input_proof import NativeContextJournal
-from native_proof_cases import read_context_proof
-from agent_comms.native_transcript import NativeTranscript
 from bus_history import read_history
 from delivery_owner_fixture import reply_turn_finished
 from native_backend_fixture import native_backend_fixture, wait_for
 from native_package_acquisition_fixture import PackageTrace
+from native_proof_cases import read_context_proof
 
 
 async def test_saved_owner_dm_replies_and_core_reads_exact_native_proof(tmp_path, native_runtime_package):
@@ -91,7 +97,7 @@ async def test_written_following_input_settles_after_native_queue_decision(
             await wait_for(lambda: bool(running.inputs.pending))
             await running.native.reader.pending.before_settlement()
             if clear:
-                inbox.put_nowait(ClearQueue((following.input_id,)))
+                inbox.put_nowait(ClearQueuedInputs((following.input_id,)))
                 await wait_for(lambda: not running.inputs.pending)
             native.provider.response_gate.set()
             result = await task

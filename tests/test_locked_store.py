@@ -11,18 +11,31 @@ from dataclasses import dataclass, field, replace
 
 import pytest
 
-from agent_comms.storage.locked_store import DocumentBytes, DocumentChange, LockedStore
-from agent_comms.storage.private_path import FileRevision, MissingFile
-from agent_comms.coordination.errors import ContendedRead, CoordinationReadUnavailable, StaleRevision
+from agent_comms.coordination.errors import (
+    ContendedRead,
+    CoordinationReadUnavailable,
+    StaleRevision,
+)
+from agent_comms.execution.child_process import Platform
+from agent_comms.execution.runtime_info import (
+    AgentRuntimeInfo,
+    RuntimeInfoDocument,
+    RuntimeInfoStore,
+)
 from agent_comms.pi_counts import PiCount
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeInfoStore
-from agent_comms.child_process import Platform
+from agent_comms.storage.locked_store import (
+    DocumentBytes,
+    DocumentChange,
+    LockedStore,
+    RegistryFile,
+)
+from agent_comms.storage.private_path import FileRevision, MissingFile
 from agent_comms.storage.store_files import (
     ExclusiveLock,
+    StoreGuard,
     StoreLockBusyError,
     StoreLockContention,
-    StoreGuard,
     _store_lock,
 )
 
@@ -84,7 +97,7 @@ def _record(path, start, prefix):
 
 
 def _replace_captured_documents(root):
-    RegistryStore(root / "registry.json").mark_historical()
+    RegistryStore(RegistryFile.path_in(root)).mark_historical()
     for name in ("first", "second"):
         record(RuntimeInfoStore(root / name), observation("successor"))
 
@@ -231,7 +244,7 @@ def test_related_snapshots_keep_their_cut_and_release_writers_before_decode(tmp_
     second = RuntimeInfoStore(tmp_path / "second")
     for store in (first, second):
         record(store, observation("original"))
-    registry = RegistryWithConcurrentDecoder(tmp_path / "registry.json")
+    registry = RegistryWithConcurrentDecoder(RegistryFile.path_in(tmp_path))
     snapshot, left, right = registry.snapshot_with_pair(first, second)
     snapshot.purpose.require_write()
     assert left.observations == right.observations == {"original": observation("original")}
@@ -339,7 +352,7 @@ def test_invalid_boundary_is_not_overwritten(tmp_path):
 @pytest.mark.skipif(os.name != "posix", reason="POSIX flock contention contract")
 def test_registry_wait_expires_and_names_the_writer(tmp_path):
     """The multi-file guard refuses a held writer at its declared bound."""
-    registry = RegistryStore(tmp_path / "registry.json")
+    registry = RegistryStore(RegistryFile.path_in(tmp_path))
     ready, release = event(), event()
     with process(_hold_store_write, RegistryStore, registry.path, ready, release) as writer:
         try:

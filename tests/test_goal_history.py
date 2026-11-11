@@ -2,39 +2,41 @@
 
 from __future__ import annotations
 
-
-from agent_comms.repo import Checkout
 import json
 import os
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.child_process import Platform
 from agent_comms.comms import Comms, wire
+from agent_comms.execution.child_process import Platform
 from agent_comms.nominal.field_codec import FieldCodec
-from conftest import installed_comms
-from test_locked_store import _hold_lock, event, process
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     ClearGoalAction,
     CompletedGoalAction,
     GoalPrecondition,
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_history import (
+from agent_comms.planning.goal_history import (
     BaselineRevision,
     GoalHistoryStore,
     ObservedGapRevision,
     TransitionRevision,
 )
-from agent_comms.goal_scope import OneGoal
-from agent_comms.goals import NoGoal
-from agent_comms.storage.store_files import ExclusiveLock
-from agent_comms.goal_states import ActiveGoal, PausedGoal
-from agent_comms.transport.request import ToolRequest
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_states import (
+    ActiveGoal,
+    PausedGoal,
+)
+from agent_comms.planning.goals import NoGoal
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.store_files import ExclusiveLock
+from agent_comms.transport.request import ToolRequest
+from agent_comms.transport.tool_caller import ThreadCaller
+from conftest import installed_comms
+from test_locked_store import _hold_lock, event, process
 
 
 def _wire(tmp_path) -> Comms:

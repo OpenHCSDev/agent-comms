@@ -1,44 +1,55 @@
 """S5 identity boundaries: process, turn, provenance and saved-data preservation."""
 
-from agent_comms.repo import Checkout
 import json
 import os
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.channel_targets import ThreadTarget
-from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.turn_lease import (
+    FinishedTurnFence,
+    NoFinishedTurn,
+    NoTurnLease,
+)
+from agent_comms.messaging.channel_targets import ThreadTarget
+from agent_comms.messaging.read_basis import Conversation
+from agent_comms.messaging.read_ledger import ReadDocument
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, RootId, TurnId
-from agent_comms.read_basis import Conversation
-from agent_comms.read_ledger import ReadDocument
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.thread_identity import (
+from agent_comms.registry.thread_identity import (
     ClaimedIdentity,
     GenerationCounter,
     RecordedThreadIncarnation,
     TurnIdentity,
 )
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_status import (
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_status import (
     ArchivedThreadStatus,
     ConnectedThreadStatus,
     IdleThreadStatus,
     RunningThreadStatus,
     StoppedThreadStatus,
 )
-from agent_comms.thread_text import GivenThreadText, NoThreadText
-from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn, NoTurnLease
+from agent_comms.registry.thread_text import (
+    GivenThreadText,
+    NoThreadText,
+)
+from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 from bus_record_fixture import OWNER_LOOKUP
 from conftest import installed_comms
 
 
 def registry_with_owner(tmp_path):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     return registry
 
@@ -188,8 +199,9 @@ def test_identity_codec_and_counter_domain_are_not_parallel_registries():
 
 
 def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
-    from agent_comms.acp_extension import LiveCursorScope, LiveQueueScope
-    from agent_comms.queued_input import QueuedInputContext
+    from agent_comms.transport.attachment_scope import LiveCursorScope
+    from agent_comms.acp_extension import LiveQueueScope
+    from agent_comms.execution.queued_input import QueuedInputContext
 
     registry = registry_with_owner(tmp_path)
     snapshot = registry.snapshot()
@@ -311,7 +323,7 @@ def test_withdrawal_revokes_only_an_existing_owner(tmp_path, withdrawals, status
 
 
 def test_external_unregister_revokes_owner_while_bridge_remains_connected(tmp_path):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(ExternalThread(
         "owner", frozenset(), Checkout(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid())))

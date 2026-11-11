@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import select
-
-import agent_comms
 import subprocess
 import sys
 from contextlib import ExitStack, contextmanager
@@ -11,13 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus
-from agent_comms.native_build_inputs import ConfiguredChildStdio
-from agent_comms.child_process import SpawnedProcess
+import agent_comms
+from agent_comms.execution.child_process import SpawnedProcess
+from agent_comms.installer.native_build_inputs import ConfiguredChildStdio
+from agent_comms.messaging.bus import Bus
+from agent_comms.planning.orders import TodoStore
 from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.storage.store_files import SingleFileStore
-from agent_comms.todos import TodoStore
-
 from agent_comms_hooks.process_claim import (
     ClaimHeldError,
     ProcessSingleton,

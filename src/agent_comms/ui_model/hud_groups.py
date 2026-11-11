@@ -17,7 +17,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from agent_comms.disclosure_text import AccentTone, ErrorTone, ViewHeading, WarningTone
+from agent_comms.task_attachments.disclosure_text import (
+    AccentTone,
+    ErrorTone,
+    ViewHeading,
+    WarningTone,
+)
 
 
 class ExpandedHudGroup:

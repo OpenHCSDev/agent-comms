@@ -1,6 +1,5 @@
 """Presence behavior across persisted lifecycle changes and current UI consumers."""
 
-from agent_comms.repo import Checkout
 import json
 import os
 import subprocess
@@ -10,31 +9,33 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
-from conftest import installed_comms
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.presentation import CountedRead, ThreadView
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import Activity, ActivityState
 from agent_comms.registry.registration import Registration
-from agent_comms.registry.registry_document import DEFAULT_ROSTER
-from agent_comms.thread_status import (
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
+from agent_comms.registry.thread_status import (
     ArchivedThreadStatus,
     ConnectedThreadStatus,
     DeletingThreadStatus,
-    NoBridgeThreadStatus,
     HeartbeatThreadStatus,
     IdleThreadStatus,
+    NoBridgeThreadStatus,
     ProcessThreadStatus,
     RunningThreadStatus,
     StoppedThreadStatus,
     ThreadStatus,
 )
-from agent_comms.thread_text import GivenThreadText
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.registry.threads import OwnerLifecycleControl, NativeThread
+from agent_comms.registry.thread_text import GivenThreadText
+from agent_comms.registry.threads import NativeThread, OwnerLifecycleControl
+from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.transport.tool_caller import ThreadCaller
+from conftest import installed_comms
 
 
 def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_path):
@@ -74,8 +75,8 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
             edit.document.last_seen[thread.name] = time.time() - age
             edit.commit()
         before = comms.registry.snapshot()
-        saved = comms.registry.store.path.read_bytes()
-        raw = json.loads(saved)
+        saved = comms.registry.store.rows.mark()
+        raw = comms.registry.store.stored()
         assert FieldCodec.decode(ThreadStatus, raw["statuses"]["owner"]) == status.declaration()
         assert raw["threads"]["owner"]["created_at"] == 12.5
         reopened = Registration(comms.registry.store.path)
@@ -98,7 +99,6 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
             assert individual.read_identity.thread.incarnation == thread.incarnation
             assert individual.same_status(visible[0].presentation)
         else:
-            from agent_comms.registry.registry_document import RosterVisibility
             if expected.in_view(RosterVisibility(archived=True)):
                 assert individual.require("owner") is individual
             else:
@@ -111,7 +111,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
         expected = status.declaration().registered(thread, before.seen_at(thread.name))
         assert reopened.status("owner") == expected
         assert comms.agents.is_live(thread.incarnation, reopened.snapshot()) == expected.running
-        assert comms.registry.store.path.read_bytes() == saved
+        assert comms.registry.store.rows.mark() == saved
     finally:
         child.kill()
         child.wait(timeout=5)
@@ -119,7 +119,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
 
 @pytest.mark.parametrize("status", [RunningThreadStatus(), IdleThreadStatus()])
 def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path, status):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(
         NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         status,
@@ -137,7 +137,7 @@ def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path
 
 @pytest.mark.parametrize("status", [StoppedThreadStatus(), ArchivedThreadStatus()])
 def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path, status):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(
         NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         status,
@@ -152,7 +152,7 @@ def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path
 
 
 def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_path):
-    registry = Registration(tmp_path / "registry.json")
+    registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path)), StoppedThreadStatus())
     registry.begin_delete("owner")
     before = registry.store.path.read_bytes()
@@ -166,7 +166,7 @@ def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_pat
 
 @pytest.mark.parametrize("status", [StoppedThreadStatus(), ArchivedThreadStatus()])
 def test_inactive_owner_survives_a_refused_viewer(tmp_path, status):
-    from agent_comms.thread_presentation import SessionDisconnected
+    from agent_comms.registry.thread_presentation import SessionDisconnected
     from agent_comms.ui_model.status import ThreadStatusModel
 
     comms = wire(tmp_path)
@@ -191,8 +191,6 @@ def test_inactive_owner_survives_a_refused_viewer(tmp_path, status):
     (DeletingThreadStatus(), False, False),
 ])
 def test_presence_owns_roster_membership_and_self_rename(status, listed, rename):
-    from agent_comms.registry.registry_document import RosterVisibility
-
     assert status.in_view(RosterVisibility(stopped=False)) == listed
     if rename:
         status.require_self_rename()
@@ -204,8 +202,8 @@ def test_presence_owns_roster_membership_and_self_rename(status, listed, rename)
 @pytest.mark.parametrize("status", [RunningThreadStatus(), IdleThreadStatus()])
 def test_tier_only_tool_changes_next_catalog_without_changing_active_request(tmp_path, status):
     from agent_comms.cli_verbs.tools import ToolsCliCommand
-    from agent_comms.pi_vocabulary import ServiceTier
-    from agent_comms.thread_model import DeclaredModel
+    from agent_comms.execution.pi_vocabulary import ServiceTier
+    from agent_comms.registry.thread_model import DeclaredModel
     from agent_comms.transport.tools.served import invoke_tool
 
     comms = wire(tmp_path)
@@ -237,9 +235,9 @@ def test_tier_only_tool_changes_next_catalog_without_changing_active_request(tmp
 
 
 def test_roster_and_controls_keep_archived_threads_dormant():
-    from agent_comms.transport.tools.served import CommsStartTool
+    from agent_comms.execution.child_process import NoProcess
     from agent_comms.transport.request import ToolRequest
-    from agent_comms.child_process import NoProcess
+    from agent_comms.transport.tools.served import CommsStartTool
 
     archived = ArchivedThreadStatus()
     assert archived.restored() == archived

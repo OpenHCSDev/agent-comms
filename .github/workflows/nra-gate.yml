@@ -74,7 +74,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/job-sources" --workflow-output "$GITHUB_OUTPUT"
+          PYTHONPATH=src python -m agent_comms.projects.integration --resolve-ci-inputs "$RUNNER_TEMP/job-sources" --workflow-output "$GITHUB_OUTPUT"
           --runner-root "$RUNNER_TEMP" --repository "${{ github.repository }}" --tested-commit "${{ github.sha }}" --event-name "${{ github.event_name }}" --event-path "$GITHUB_EVENT_PATH"
       # The head's tested sources stay pending until the `tested` job sees every job green.
       - name: This head's tested sources are pending
@@ -133,7 +133,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/paired-sources"
+          PYTHONPATH=src python -m agent_comms.projects.integration --resolve-ci-inputs "$RUNNER_TEMP/paired-sources"
           --runner-root "$RUNNER_TEMP" --repository "${{ github.repository }}" --tested-commit "${{ github.sha }}" --event-name "${{ github.event_name }}" --event-path "$GITHUB_EVENT_PATH"
       - name: Build the one common checker environment
         run: PYTHONPATH=src:tools python tools/checker_stack.py --ci-inputs "$RUNNER_TEMP/paired-sources" --runner-root "$RUNNER_TEMP"
@@ -165,7 +165,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          PYTHONPATH=src python -m agent_comms.integration --revalidate-ci-inputs "$RUNNER_TEMP/paired-sources"
+          PYTHONPATH=src python -m agent_comms.projects.integration --revalidate-ci-inputs "$RUNNER_TEMP/paired-sources"
           --runner-root "$RUNNER_TEMP" --repository "${{ github.repository }}" --tested-commit "${{ github.sha }}" --event-name "${{ github.event_name }}" --event-path "$GITHUB_EVENT_PATH"
 
   native-scripts:
@@ -197,7 +197,7 @@ jobs:
       - name: Run every native script
         if: needs.base.outputs.reused != 'true'
         run: |
-          export PI_NATIVE_PACKAGE_DIR="$(python -c 'from agent_comms.native_package import pinned_native_package; print(pinned_native_package())')"
+          export PI_NATIVE_PACKAGE_DIR="$(python -c 'from agent_comms.installer.native_package import pinned_native_package; print(pinned_native_package())')"
           for script in stack/test-*; do
             printf '\nRunning %s\n' "$script"
             "$script" || { status=$?; printf 'FAILED: %s (exit %s)\n' "$script" "$status" >&2; exit "$status"; }
@@ -312,7 +312,7 @@ jobs:
       # An ordinary source owes only its own head's verdict, read by the next step.
       - name: A captured combined carrier proves its members
         run: >-
-          PYTHONPATH=src python -m agent_comms.integration --check-merge-inputs "$RUNNER_TEMP/merge-inputs"
+          PYTHONPATH=src python -m agent_comms.projects.integration --check-merge-inputs "$RUNNER_TEMP/merge-inputs"
           --runner-root "$RUNNER_TEMP" --repository "${{ github.repository }}" --tested-commit "${{ github.sha }}" --event-name "${{ github.event_name }}" --event-path "$GITHUB_EVENT_PATH"
       # A verdict names the pull request head, not the merge group's own commit.
       - name: The commander's verdict on the queued head is success
@@ -405,7 +405,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/paired-sources"
+          PYTHONPATH=src python -m agent_comms.projects.integration --resolve-ci-inputs "$RUNNER_TEMP/paired-sources"
           --runner-root "$RUNNER_TEMP" --repository "${{ github.repository }}" --tested-commit "${{ github.sha }}" --event-name "${{ github.event_name }}" --event-path "$GITHUB_EVENT_PATH"
 
       - name: Build the one common checker environment
@@ -440,7 +440,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          PYTHONPATH=src python -m agent_comms.integration --revalidate-ci-inputs "$RUNNER_TEMP/paired-sources"
+          PYTHONPATH=src python -m agent_comms.projects.integration --revalidate-ci-inputs "$RUNNER_TEMP/paired-sources"
           --runner-root "$RUNNER_TEMP" --repository "${{ github.repository }}" --tested-commit "${{ github.sha }}" --event-name "${{ github.event_name }}" --event-path "$GITHUB_EVENT_PATH"
 
       # The whole verdict on the pull request, one comment per kind; the action owns its shape.

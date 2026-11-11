@@ -1,33 +1,42 @@
 """A board prepares off-loop, publishes once, and follows store revisions without beats."""
 
 import asyncio
+import os
+import threading
 from contextlib import nullcontext
 from dataclasses import replace
 from multiprocessing import Pipe
-import os
-import threading
+from pathlib import Path
 
 import pytest
 
-from agent_comms.team.standing_rules import StandingRule
-from test_holder_standing_rules import held_bus  # noqa: F401
-
 from agent_comms.cli_bridges.codex_connection import CodexConnection
-from agent_comms.presentation import WireRevision
-from agent_comms.revision_views import TeamBoardView
-from agent_comms.service_passes import ServicePassStore
-from agent_comms.task_attachments.team_pings import TeamUpdateStore
-from pathlib import Path
-
-from agent_comms.child_process import NoProcess, ProcessIdentity
-from agent_comms.team_frame_file import TeamPlanFile
-from agent_comms.team_heartbeat import TeamBoardRead, TeamHeartbeat, TeamObservation
-from agent_comms.team_hud import CodexUsage, TeamFrame, TeamPlan, UnreadableUsage
-from agent_comms.todos import ProgressRead, TodoStore
-from agent_comms.ui_model.observation import (
-    ObservationService, ObserveTeamHud, ObserveThreads, StopTeamHud,
-    TeamHudObserved, TeamHudUnreadable, ThreadsObserved,
+from agent_comms.coordination.service_passes import ServicePassStore
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
 )
+from agent_comms.messaging.revision_views import TeamBoardView
+from agent_comms.planning.orders import (
+    ProgressRead,
+    TodoStore,
+)
+from agent_comms.presentation import WireRevision
+from agent_comms.task_attachments.team_pings import TeamUpdateStore
+from agent_comms.team.standing_rules import StandingRule
+from agent_comms.team.team_frame_file import TeamPlanFile
+from agent_comms.team.team_heartbeat import TeamBoardRead, TeamHeartbeat, TeamObservation
+from agent_comms.team.team_hud import CodexUsage, TeamFrame, TeamPlan, UnreadableUsage
+from agent_comms.ui_model.observation import (
+    ObservationService,
+    ObserveTeamHud,
+    ObserveThreads,
+    StopTeamHud,
+    TeamHudObserved,
+    TeamHudUnreadable,
+    ThreadsObserved,
+)
+from test_holder_standing_rules import held_bus  # noqa: F401
 
 
 async def receive(client, kind):
@@ -108,7 +117,9 @@ async def test_live_observer_serves_while_preparation_blocks_then_updates_withou
                 ready = await receive(client, TeamHudObserved)
                 while not ready.huds:
                     ready = await receive(client, TeamHudObserved)
-            assert TeamFrame.read_all(held_bus.root) == ready.huds
+            # The prepared board is the observer's view: the heartbeat's retained frames have
+            # one writer, and no heartbeat ran here.
+            assert TeamFrame.read_all(held_bus.root) == ()
             assert ServicePassStore.at(held_bus.root).read() == before_passes
             assert len(builds) == 1
 
@@ -214,8 +225,17 @@ def test_a_pass_that_throws_leaves_the_boards_it_could_not_replace(held_bus, acc
     with pytest.raises(RuntimeError, match="promisor remote"):
         asyncio.run(TeamHeartbeat().run(lambda: nullcontext(held_bus)))
 
-    assert on_disk() == retained, (
-        "a failing merge check replaced Tristan's boards and plan with its own empty fragment"
+    # What the pass may not do is unlink a board or replace the plan. A board it finished
+    # before the merge check threw is complete (pass_body builds every board before
+    # reconcile reads git) and is kept, newer, by retention.keep; so frames are compared by
+    # presence and the plan, which keep never writes, by its bytes.
+    after = on_disk()
+    plan = TeamPlanFile.path_in(held_bus.root)
+    assert after.keys() == retained.keys(), (
+        "a failing merge check unlinked boards Tristan's reads still need"
+    )
+    assert after.get(plan) == retained.get(plan), (
+        "a failing merge check replaced Tristan's plan with its own empty fragment"
     )
 
     # The other half, so the fix cannot degrade into never retaining at all: a pass that

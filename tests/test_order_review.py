@@ -1,11 +1,14 @@
 """The colleague's first review of an order is measured from retained deliveries."""
 
-import pytest
 from dataclasses import replace
 
-from agent_comms.recorded_time import RecordedEventTime
+import pytest
 
-from agent_comms.todos import MeasuredReview, TodoStore
+from agent_comms.planning.orders import (
+    MeasuredReview,
+    TodoStore,
+)
+from agent_comms.storage.recorded_time import RecordedEventTime
 from test_team_problem_orders import order
 
 

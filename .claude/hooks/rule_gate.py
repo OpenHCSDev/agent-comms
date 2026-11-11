@@ -355,7 +355,7 @@ class CarriedDeal:
 
     def write(self) -> None:
         sys.path.insert(0, str(checkout() / "src"))
-        from agent_comms.deal_prompt import CloudDealPrompt
+        from agent_comms.installer.deal_prompt import CloudDealPrompt
         from agent_comms_hooks.skill import DeckReader
         prompt = CloudDealPrompt.render()
         self.style_file.parent.mkdir(parents=True, exist_ok=True)
@@ -463,7 +463,7 @@ def own_background_jobs() -> int:
     import subprocess
 
     return jobs_among([line.split(None, 2) for line in subprocess.run(
-        ["ps", "-eo", "pid=,ppid=,args="], capture_output=True, text=True).stdout.splitlines()], os.getpid())
+        ["ps", "-ww", "-eo", "pid=,ppid=,args="], capture_output=True, text=True).stdout.splitlines()], os.getpid())
 
 
 def jobs_among(rows: list[list[str]], pid: int) -> int:

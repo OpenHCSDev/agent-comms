@@ -7,8 +7,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, replace
 from typing import Annotated, ClassVar, Self
 
-from agent_comms.assignment_states import AssignmentState, EngagedAssignment
-from agent_comms.frozen_recipient import FrozenRecipient
+from agent_comms.coordination.assignment_states import AssignmentState, EngagedAssignment
 from agent_comms.coordination.contracts import (
     MAX_IDENTIFIER_CHARS,
     POLICY_VERSION,
@@ -23,9 +22,17 @@ from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.participants import Participants
 from agent_comms.coordination.tables.responses import ResponseObligation
-from agent_comms.envelope_claim_transitions import AssignmentBinding
-from agent_comms.nominal.field_codec import AssignmentId, MessageId, SnapshotExclude, ThreadLookup, WireName, projected
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.envelope_claim_transitions import AssignmentBinding
+from agent_comms.messaging.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.nominal.field_codec import (
+    AssignmentId,
+    MessageId,
+    SnapshotExclude,
+    ThreadLookup,
+    WireName,
+    projected,
+)
 from agent_comms.storage.typed_table import (
     LOCAL_TABLE_SOURCE,
     Column,
@@ -46,7 +53,7 @@ from agent_comms.storage.typed_table import (
     TableSource,
     WriteOnceColumns,
 )
-from agent_comms.wake_policy import (
+from agent_comms.waking.wake_policy import (
     MessageAudience,
     WakeDecision,
 )

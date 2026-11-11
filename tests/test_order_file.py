@@ -1,18 +1,18 @@
 """The override scan and the order file at the real order CLI boundary."""
 
-from dataclasses import replace
 import json
-from pathlib import Path
 import time
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.planning.goals import OrderCheck
+from agent_comms.projects.repo import Repo
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.order import OrderFile, forwarders_added, main, overrides
 from agent_comms.team.request import RequestAddVerb
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.goals import OrderCheck
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Repo
 from test_todos import order, thread
 
 pytest_plugins = ("test_todos",)

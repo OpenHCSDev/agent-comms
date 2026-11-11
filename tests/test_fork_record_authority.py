@@ -5,21 +5,29 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.channel_targets import TeammatesTag, CommandTarget
 from agent_comms.cli_bridges.claude_protocol import (
-    ClaudeUserHeader, HumanPrompt, TaskNotification, TaskUserRecord,
+    ClaudeUserHeader,
+    HumanPrompt,
+    TaskNotification,
+    TaskUserRecord,
 )
-from agent_comms.team.order import TeamContext
 from agent_comms.errors import UnreceivedAnswerError
-from agent_comms.head_review import PullRequestHead
-from agent_comms.messaging import TeamReceipts
-from agent_comms.repo import Checkout
+from agent_comms.messaging.channel_targets import CommandTarget, TeammatesTag
+from agent_comms.messaging.sending import TeamReceipts
+from agent_comms.planning.order_words import VerdictReason
+from agent_comms.planning.orders import (
+    NoHeadOrder,
+    ReviewedHeadVerdict,
+    VerdictAudience,
+)
+from agent_comms.planning.owner_requests import RequestDirective
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.head_review import PullRequestHead
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import ExternalThread, SubagentThread
+from agent_comms.team.order import TeamContext
 from agent_comms.team.standing_rules import DirectiveUnacted
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.todos import NoHeadOrder, RequestDirective, ReviewedHeadVerdict, VerdictAudience, VerdictReason
-from agent_comms.tool_caller import ForkCaller, PeerCaller
-
+from agent_comms.transport.tool_caller import ForkCaller, PeerCaller
 from test_forks import command, fork_bus  # noqa: F401  (fixture)
 
 REASON = VerdictReason("The existing class owns this behavior without another copy")

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import NameArgument
-from agent_comms.cli_commands import ThreadArchivedResult
-from agent_comms.comms import Comms
-from agent_comms.tool_caller import SubagentCaller
 from dataclasses import dataclass
+
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_commands import NameArgument, ThreadArchivedResult
+from agent_comms.comms import Comms
+from agent_comms.transport.tool_caller import SubagentCaller
 
 
 @dataclass(frozen=True, kw_only=True)

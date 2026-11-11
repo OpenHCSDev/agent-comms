@@ -4,20 +4,21 @@ import asyncio
 from dataclasses import dataclass
 
 from aiohttp.test_utils import TestServer
-from bus_record_fixture import prepare_native_comms
 from yarl import URL
 
 from agent_comms.comms import Comms
-from agent_comms.connector import Connector
-from agent_comms.connector_store import ConnectorStore, UiReadAccess
-from agent_comms.remote_core import ConnectorClient, ObservationRetired
-from agent_comms.ui_model.observation import ConnectionClosed
-from agent_comms.repo import Checkout
+from agent_comms.transport.connector import Connector
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.transport.connector_profile import EndpointRoute, ResolvedRoute
+from agent_comms.transport.connector_store import ConnectorStore, UiReadAccess
+from agent_comms.transport.remote_core import ConnectorClient, ObservationRetired
 from agent_comms.ui_model.observation import (
+    ConnectionClosed,
     ObservationProcess,
     ObserveSidebar,
     SidebarResult,
 )
+from bus_record_fixture import prepare_native_comms
 
 
 @dataclass(frozen=True)
@@ -32,11 +33,12 @@ class Credential:
 
 @dataclass(frozen=True)
 class TestConnectorSource(ConnectorClient):
-    """The peer reads only the endpoint, credential and TLS trust; the test server is plain
+    """The peer reads only the endpoint, credential, route and TLS trust; the test server is plain
     HTTP, which the owner's HTTPS profile refuses, so the test names them directly."""
 
     endpoint: Endpoint
     credential: Credential
+    route: EndpointRoute = ResolvedRoute()
 
 
 async def test_an_observation_process_receives_its_sidebar_from_a_remote_core(tmp_path, comms: Comms) -> None:

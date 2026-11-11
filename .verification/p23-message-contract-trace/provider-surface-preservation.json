@@ -1,0 +1,137 @@
+{
+  "scope": "NRA-parsed AST declarations only, not executed decoder/MRO semantics",
+  "providers": [
+    {
+      "file": "activity_clocks.py",
+      "class": "ActivityClocks",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "messaging/published_bus.py",
+      "class": "BusResources",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "history_views.py",
+      "class": "HistoryViews",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "channel_management.py",
+      "class": "ChannelManagement",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "messaging/channels.py",
+      "class": "Channel",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "presentation.py",
+      "class": "ChannelView",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "registry/threads.py",
+      "class": "Thread",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "registry/threads.py",
+      "class": "ThreadProvenance",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "planning/goals.py",
+      "class": "GoalDeclaration",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "planning/goals.py",
+      "class": "Goal",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "planning/goals.py",
+      "class": "NoGoal",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "planning/orders.py",
+      "class": "Todo",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": [
+        "goal_instructions"
+      ]
+    },
+    {
+      "file": "planning/orders.py",
+      "class": "TodoStore",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "planning/orders.py",
+      "class": "ProblemOrder",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "planning/orders.py",
+      "class": "FoldedProblemOrder",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "goal_ledger.py",
+      "class": "Generation",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "goal_ledger.py",
+      "class": "AttemptRecord",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    },
+    {
+      "file": "goal_ledger.py",
+      "class": "LedgerAttempt",
+      "original_field_assignments_unchanged": true,
+      "original_methods_unchanged": true,
+      "added_methods": []
+    }
+  ],
+  "protected_source_bytes_unchanged": {
+    "goal_mutation.py": true,
+    "execution/turn_context.py": true
+  }
+}

@@ -9,8 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.native_session_reopen import NativeReopenError, NativeSessionIdentity
-from agent_comms.native_session_reopen import PiSessionId
+from agent_comms.execution.native_entries import NativeEvidenceScope
+from agent_comms.execution.native_session_reopen import (
+    NativeReopenError,
+    NativeSessionIdentity,
+    PiSessionId,
+)
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="Disposable Linux canonical native fixture"
@@ -51,7 +55,7 @@ def test_saved_identity_preserves_bytes_and_strips_preload(saved, tmp_path, monk
         f"writeFileSync({json.dumps(str(marker))},'unsafe');"
     )
     monkeypatch.setenv("NODE_OPTIONS", f"--import={preload.as_uri()}")
-    observed = NativeSessionIdentity.locate(str(file))
+    observed = NativeEvidenceScope.locate_session(str(file))
     assert observed == NativeSessionIdentity(PiSessionId(identity), str(file))
     assert file.read_bytes() == before and not marker.exists()
     with pytest.raises(NativeReopenError):
@@ -74,7 +78,7 @@ def test_invalid_disk_never_repaired(saved, tmp_path, mutation):
         file = alias
     before = file.read_bytes() if file.exists() else None
     with pytest.raises(NativeReopenError):
-        NativeSessionIdentity.locate(str(file))
+        NativeEvidenceScope.locate_session(str(file))
     assert (file.read_bytes() if file.exists() else None) == before
 
 
@@ -93,9 +97,9 @@ def test_native_loader_rejects_invalid_history_without_repair(saved, mutation):
     # startup still owns full ancestry validation before any provider input.
     if mutation == "tail":
         with pytest.raises(NativeReopenError):
-            NativeSessionIdentity.locate(str(file))
+            NativeEvidenceScope.locate_session(str(file))
     else:
-        assert NativeSessionIdentity.locate(str(file)) == NativeSessionIdentity(
+        assert NativeEvidenceScope.locate_session(str(file)) == NativeSessionIdentity(
             PiSessionId(identity), str(file)
         )
     result = subprocess.run([

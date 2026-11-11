@@ -1,4 +1,3 @@
-from agent_comms.bus_tables import AuthoredAnswers
 import ast
 import json
 import os
@@ -11,30 +10,43 @@ from collections.abc import Callable
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from agent_comms.repo import Checkout
 
 import pytest
 
-from agent_comms.bus import (
+import fixture_git
+from agent_comms.coordination.response_acknowledgement import canonical_publication_key
+from agent_comms.coordination.tables.publications import PublicationIntents
+from agent_comms.errors import (
+    CommittedMessageError,
+    HumanSendRefusedError,
+    RelationViolationError,
+    UnclaimedError,
+)
+from agent_comms.messaging.bus import (
     Bus,
     BusRecord,
     KeyedPrivateRecord,
     PrivateRecord,
     PublicRecord,
 )
-from agent_comms.bus_route_counts import BusRouteCounts
-from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
-from agent_comms.bus_tables import AnsweredSource, BusSchema, MessageIdentitySource
-from agent_comms.task_attachments.team_pings import TeamUpdateNotice, TeamUpdate
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.messages import (
+from agent_comms.messaging.bus_publication import Delivered, KeyedPublication
+from agent_comms.messaging.bus_route_counts import BusRouteCounts
+from agent_comms.messaging.bus_tables import (
+    AnsweredSource,
+    AuthoredAnswers,
+    BusSchema,
+    MessageIdentitySource,
+)
+from agent_comms.messaging.initial_origin import HumanOrigin
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import (
     BusProjectionTables,
     BusRow,
     BusTables,
-    TeamUpdatePosition,
     Claimed,
     ClaimHistoryKind,
     ClaimNoticeKind,
+    ConversationActivity,
     HandoffKind,
     InfoKind,
     MembershipTransition,
@@ -43,20 +55,12 @@ from agent_comms.messages import (
     MessageRoleWire,
     MessageRoutes,
     NoticeRole,
+    TeamUpdatePosition,
 )
-from agent_comms.coordination.tables.publications import PublicationIntents
-from agent_comms.errors import (
-    CommittedMessageError,
-    HumanSendRefusedError,
-    RelationViolationError,
-    UnclaimedError,
-)
+from agent_comms.messaging.read_basis import RepliesDisplayScope
 from agent_comms.nominal.field_codec import GitCommitText, MessageId, MessageIdText
-from agent_comms.message_reference import MessageReference
-from agent_comms.read_basis import RepliesDisplayScope
-from agent_comms.response_acknowledgement import (
-    canonical_publication_key,
-)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.storage.typed_table import (
     ProducedTable,
     ProjectionProducer,
@@ -65,8 +69,8 @@ from agent_comms.storage.typed_table import (
     TypedTable,
     WriterOwnedFile,
 )
+from agent_comms.task_attachments.team_pings import TeamUpdate, TeamUpdateNotice
 from bus_record_fixture import publication_processes, record_from
-import fixture_git
 
 
 @dataclass(frozen=True)
@@ -119,11 +123,16 @@ def projection_source_digest(source: Path) -> str:
     ).stdout.strip()
 
 
+def source_file(source: Path, owner: type) -> Path:
+    """The private source's copy of the module that declares `owner`."""
+    return source.joinpath(*owner.__module__.split(".")[1:]).with_suffix(".py")
+
+
 def edit_inside(
     source: Path, owner: type, member: str, change: Callable[[ast.stmt], None],
 ) -> None:
     """Change an actual declaration in the private source, never a digest return value."""
-    path = source.joinpath(*owner.__module__.split(".")[1:]).with_suffix(".py")
+    path = source_file(source, owner)
     module = ast.parse(path.read_text())
     declaration, = (node for node in module.body
                      if isinstance(node, ast.ClassDef) and node.name == owner.__name__)
@@ -166,18 +175,18 @@ import importlib, inspect, json, sys
 startup = sys.argv[1]
 if startup != "table-first":
     importlib.import_module(startup)
-from agent_comms.messages import TeamUpdatePosition
+from agent_comms.messaging.messages import TeamUpdatePosition
 if startup == "table-first":
     # The cold direct call: nothing has completed the writer family yet.
-    from agent_comms.projection_source import ProjectionSource
+    from agent_comms.messaging.projection_source import ProjectionSource
     ProjectionSource.writers_for(TeamUpdatePosition)
 if startup == "agent_comms.cli_verbs.reconcile_stores":
     from agent_comms.producer_stamp import stamped_digests
     first = stamped_digests()[TeamUpdatePosition.declared_name]
 else:
     first = TeamUpdatePosition.producer_digest()
-from agent_comms.messages import BusRecord
-from agent_comms.projection_source import ProjectionSource
+from agent_comms.messaging.messages import BusRecord
+from agent_comms.messaging.projection_source import ProjectionSource
 writers = ProjectionSource.writers_for(TeamUpdatePosition)
 print(json.dumps(dict(
     first=first, source=inspect.getfile(TeamUpdatePosition),
@@ -185,7 +194,7 @@ print(json.dumps(dict(
 )))
 """
 STARTUPS = (
-    "table-first", "agent_comms.task_attachments.team_pings", "agent_comms.worker",
+    "table-first", "agent_comms.task_attachments.team_pings", "agent_comms.execution.worker",
     "agent_comms.cli_verbs.reconcile_stores",
 )
 
@@ -290,7 +299,7 @@ def test_activity_source_changes_only_sent_activity(
     pristine_projection: PristineProjection, projection_source: Path,
 ) -> None:
     before = json.loads(pristine_projection.digest)
-    path = projection_source / "messages.py"
+    path = source_file(projection_source, ConversationActivity)
     original = path.read_text()
     old = "return (SentActivity(message.sender, message.timestamp),)"
     assert original.count(old) == 1
@@ -306,7 +315,7 @@ def test_display_import_does_not_add_projection_producers(
     before = pristine_projection.digest
     path = projection_source / "producer_stamp.py"
     original = path.read_text()
-    declaration = "from agent_comms.bus import Bus as Bus"
+    declaration = "from agent_comms.messaging.bus import Bus as Bus"
     assert original.count(declaration) == 1
     path.write_text(original.replace(declaration, declaration + "\nfrom agent_comms import cli"))
     assert projection_source_digest(projection_source) == before
@@ -904,8 +913,9 @@ def test_moving_a_producer_module_to_another_package_keeps_every_producer_digest
     checkout = projection_source.parents[1]
     # The codemod moves with `git mv`, so the copy's files are tracked first.
     subprocess.run(("git", "-C", str(checkout), "add", "-A"), check=True, capture_output=True)
+    package = ConversationActivity.__module__.split(".")[1]
     subprocess.run((sys.executable, str(Path(__file__).resolve().parents[1] / "tools" /
-                    "move_flat_modules.py"), str(checkout), "relocated", "messages"),
+                    "move_flat_modules.py"), str(checkout), "relocated", package),
                    check=True, capture_output=True, timeout=120)
-    assert (projection_source / "relocated" / "messages.py").exists()
+    assert source_file(projection_source / "relocated", ConversationActivity).exists()
     assert projection_source_digest(projection_source) == pristine_projection.digest

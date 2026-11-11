@@ -1,24 +1,26 @@
 """Boundary declarations reject malformed records without inventing another shape."""
-from dataclasses import replace
 import hashlib
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
-
 from agent_comms_project import AgentCommsProject
 from nominal_refactor_advisor import audit
 
-from agent_comms.channel_coding_tools import CodingToolRequest
-from agent_comms.thread_identity import UnobservedTools
-from agent_comms.input_key import BusInputKey
 from agent_comms.cli_bridges.claude_protocol import ClaudeHeader
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.execution.channel_coding_tools import CodingToolRequest
+from agent_comms.execution.input_key import BusInputKey
 from agent_comms.input_attempt import (
-    HistoricalInput, OwnerQueueInputDeliveryScope, UnobservedInputDeliveryScope, UnresolvedInput,
+    HistoricalInput,
+    OwnerQueueInputDeliveryScope,
+    UnobservedInputDeliveryScope,
+    UnresolvedInput,
 )
 from agent_comms.input_disposition import DeliveryOverview
-from agent_comms.native_package import NativeSourceDeclaration
-from agent_comms.tool_denial import SelectedToolDenied
+from agent_comms.installer.native_package import NativeSourceDeclaration
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.registry.thread_identity import UnobservedTools
+from agent_comms.transport.tool_denial import SelectedToolDenied
 from agent_comms.ui_model.delivery import DeliveryView
 
 

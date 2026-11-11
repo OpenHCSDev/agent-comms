@@ -2,16 +2,20 @@
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.session_load import (
+from agent_comms.registry.thread_identity import (
+    OwnerIdentity,
+    RecordedThreadIncarnation,
+)
+from agent_comms.registry.thread_presentation import (
     EnsuringSessionLoadPlan,
     ExistingSessionLoadPlan,
     FailedSessionLoadPlan,
+    LiveThreadOwnerBinding,
     SessionLoadPlan,
+    UnavailableThreadOwnerBinding,
 )
-from agent_comms.thread_identity import OwnerIdentity, RecordedThreadIncarnation
-from agent_comms.thread_presentation import LiveThreadOwnerBinding, UnavailableThreadOwnerBinding
 
 
 def test_default_load_metadata_keeps_its_original_shape():

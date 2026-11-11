@@ -1,9 +1,12 @@
 """The context verb owns its option selection."""
 from __future__ import annotations
+
 import argparse
 from dataclasses import dataclass
 from typing import ClassVar, Self
-from agent_comms.cli_context import CurrentContextCliCommand, ContextSelection
+
+from agent_comms.cli_verbs.cli_context import ContextSelection, CurrentContextCliCommand
+
 
 @dataclass(frozen=True, kw_only=True)
 class ContextCliCommand(CurrentContextCliCommand):

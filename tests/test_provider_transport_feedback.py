@@ -8,21 +8,31 @@ import pytest
 from acp import RequestError
 
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates, encode_updates
-from agent_comms.acp_failure import ACPFailure, RequestFailure, ProviderConnectionFailure, RequestACPFailure
-from agent_comms.input_attempt import StartedInput
-from agent_comms.pi_counts import PiCount
-from agent_comms.pi_events import MessageEnd
-from agent_comms.pi_payloads import (
-    AfterMessageStreamStartStage,
+from agent_comms.execution.acp_failure import (
+    ACPFailure,
+    ProviderConnectionFailure,
+    RequestACPFailure,
+    RequestFailure,
+)
+from agent_comms.execution.pi_events import MessageEnd
+from agent_comms.execution.pi_rpc import PiRpcChannel
+from agent_comms.execution.pi_vocabulary import ErrorStopReason
+from agent_comms.execution.provider_records import (
     CodedProviderDiagnosticError,
     CodelessProviderDiagnosticError,
+)
+from agent_comms.execution.turn_failure import (
+    ModelRequestFailed,
+    ProviderTransportFailed,
+    RetryableProviderFailure,
+)
+from agent_comms.input_attempt import StartedInput
+from agent_comms.pi_counts import PiCount
+from agent_comms.pi_payloads import (
+    AfterMessageStreamStartStage,
     RequestBytes,
     UnrecognizedTransportStage,
 )
-from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.pi_vocabulary import ErrorStopReason
-from agent_comms.turn_failure import ModelRequestFailed, ProviderTransportFailed, RetryableProviderFailure
-
 
 FIXTURE = Path(__file__).with_name("fixtures") / "native_provider_transport_1011.json"
 

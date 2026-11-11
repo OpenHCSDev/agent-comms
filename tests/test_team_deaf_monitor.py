@@ -8,22 +8,31 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.channel_targets import CommsTag
-from agent_comms.child_process import NoProcess, ProcessIdentity
-from agent_comms.cli_bridges.session_watch import WatchClaim
-from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
-from agent_comms.task_attachments.team_pings import TeamUpdate
-from agent_comms.task_attachments.owner_notices import TeamNotice
 from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.cli_bridges.shared import MonitorService
 from agent_comms.cli_bridges.monitor import AttachMonitor, SessionReady
-from agent_comms.cli_bridges.shared import Binding, MonitorProbe, Options, Serve, StoredBinding
-from agent_comms.team_heartbeat import TeamHeartbeat
+from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms.cli_bridges.shared import (
+    Binding,
+    MonitorProbe,
+    MonitorService,
+    Options,
+    Serve,
+    StoredBinding,
+)
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
+from agent_comms.messaging.channel_targets import CommsTag
+from agent_comms.messaging.messages import Addressed
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.messages import Addressed
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.heartbeat_delivery import OnHeartbeatDelivery
+from agent_comms.registry.thread_status import ConnectedThreadStatus
 from agent_comms.registry.threads import ExternalThread
-from agent_comms.thread_status import ConnectedThreadStatus
+from agent_comms.task_attachments.owner_notices import TeamNotice
+from agent_comms.task_attachments.team_pings import TeamUpdate
+from agent_comms.team.team_heartbeat import TeamHeartbeat
 
 pytest_plugins = ("test_holder_standing_rules",)
 

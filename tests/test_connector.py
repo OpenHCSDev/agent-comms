@@ -1,19 +1,19 @@
 """The claude.ai connector: OAuth in front of an MCP transport over the ToolRequest family."""
 
 
-from agent_comms.bus_read import UiRead
-from agent_comms.team.standing_rules import ServicePassFailing
-from agent_comms.transcripts import EarlierThan
-from agent_comms.repo import Checkout
 import asyncio
 import base64
 import errno
 import hashlib
-import os
-import secrets
 import json
 import logging
+import os
 import re
+import secrets
+import site
+import socket
+import subprocess
+import sys
 import threading
 import time
 from contextlib import contextmanager, suppress
@@ -22,80 +22,122 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from aiohttp import ClientSession, CookieJar, web
+from aiohttp.test_utils import TestClient, TestServer
+from yarl import URL
+
+from agent_comms.comms import Comms, wire
+from agent_comms.execution.transcript_sources import EarlierThan, NativeTranscript
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import TranscriptChanged
+from agent_comms.coordination.service_passes import ServicePassStore
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.watch_passes import WatchPass
+from agent_comms.host_services.connector import ConnectorService
+from agent_comms.installer.backup import StoreBackup
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.bus_identity import BusIdentityStore
+from agent_comms.messaging.bus_read import UiRead
+from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.messaging.send_result import MessagePublished
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RecordProblems, RootId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_errors import FailedGitCommand
+from agent_comms.registry.thread_identity import UserThreadRole
+from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import DocumentChange, RegistryFile
+from agent_comms.storage.maintenance_barrier import (
+    InstallingPhase,
+    MaintenanceBarrier,
+    MaintenanceHeldError,
+    MaintenanceOperator,
+    PausedPhase,
+    ReadyPhase,
+)
+from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lock
+from agent_comms.team.standing_rules import ServicePassFailing
+from agent_comms.transport.connector import (
+    ApprovalAudience,
+    ApprovalLink,
+    AuthorizationCodeGrant,
+    BoundedRoute,
+    Connector,
+    ConnectorSendTool,
+    ConnectorVerb,
+    GrantUiVerb,
+    LongLivedRoute,
+    RevokeVerb,
+    RunningRequest,
+    ServeVerb,
+)
+from agent_comms.transport.connector_caller import (
+    CALLER,
+    GrantRefusedError,
+    ReadOnlyConnectorCaller,
+    ScopedUiCaller,
+    UiCaller,
+    UiReadCaller,
+)
+from agent_comms.transport.connector_profile import (
+    OBSERVE_PATH,
+    HttpsMcpEndpoint,
+    UiConnectionProfile,
+    UiGrantId,
+    UiGrantSummary,
+)
+from agent_comms.transport.connector_store import (
+    CALLBACK,
+    CODE_SECONDS,
+    AuthorizationQuery,
+    ConnectorCredentialsFile,
+    ConnectorGrants,
+    ConnectorStore,
+    ExpiredProfile,
+    HeldUiProfiles,
+    IssuedCode,
+    OpenableProfile,
+    ReadServiceAccess,
+    TrustedBrowser,
+    UiAccess,
+    UiGrantAccess,
+    UiReadAccess,
+    UnreadableProfile,
+    digest,
+)
+from agent_comms.transport.mcp import (
+    PROTOCOL_VERSION,
+    SESSION_HEADER,
+    CancelledMessage,
+    InitializeResult,
+    NoProgress,
+    ProgressToken,
+    StreamedLine,
+    ToolCallMeta,
+    ToolsCallMessage,
+    ToolsCallReply,
+    ToolsCallResult,
+)
+from agent_comms.transport.progress import WireExportObserver
+from agent_comms.transport.request import ToolCall, ToolRequest
+from agent_comms.transport.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
+from agent_comms.transport.tool_request import ReadTool
+from agent_comms.transport.tools.channels import ChannelListing, CommsChannelsTool
+from agent_comms.transport.tools.reads import TranscriptPageRead
+from agent_comms.transport.tools.send import CommsSendTool
 from agent_comms.transport.tools.served import (
     CommsPinChannelTool,
     ServedCommsUserSendTool,
     invoke_tool,
 )
-from aiohttp import ClientSession, CookieJar, web
-from aiohttp.test_utils import TestClient, TestServer
-from yarl import URL
-from agent_comms_hooks import ToolRefusedError
-
-from bus_record_fixture import prepare_native_comms
-
-from connector_readiness import ConnectorReadiness
-from conftest import transcript_records
-
-from agent_comms.bus import Bus
-from agent_comms.comms import Comms, wire
-from agent_comms.transport.progress import WireExportObserver
-from agent_comms.connector import (
-    ApprovalLink, AuthorizationCodeGrant, Connector, ConnectorSendTool, ConnectorVerb, GrantUiVerb,
-    BoundedRoute, LongLivedRoute, RunningRequest, ServeVerb, RevokeVerb,
-)
-from agent_comms.transport.mcp import (
-    PROTOCOL_VERSION, SESSION_HEADER, CancelledMessage, InitializeResult, NoProgress,
-    ProgressToken, StreamedLine, ToolCallMeta, ToolsCallMessage, ToolsCallReply, ToolsCallResult,
-)
 from agent_comms.transport.tools.sidebar import (
     CommsUserSendTool,
     ServedRoot,
 )
-from agent_comms.bus_identity import BusIdentityStore
-from agent_comms.connector_caller import (
-    CALLER, GrantRefusedError, ReadOnlyConnectorCaller, ScopedUiCaller, UiCaller, UiReadCaller,
-)
-from agent_comms.connector_profile import (
-    OBSERVE_PATH, HttpsMcpEndpoint, UiConnectionProfile, UiGrantId, UiGrantSummary,
-)
-from agent_comms.connector_store import (
-    CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorCredentialsFile, ConnectorGrants,
-    ConnectorStore, ExpiredProfile, HeldUiProfiles, IssuedCode, OpenableProfile,
-    ReadServiceAccess, TrustedBrowser,
-    UiAccess, UiGrantAccess, UiReadAccess, UnreadableProfile, digest,
-)
-from agent_comms.coordination.errors import TranscriptChanged
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.storage.locked_store import DocumentChange
-from agent_comms.message_bus import WatchPass
-from agent_comms.service_passes import ServicePassStore
-from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RecordProblems, RootId
-from agent_comms.host_services.connector import ConnectorService
-from agent_comms.installer.backup import StoreBackup
-from agent_comms.launch_root import LaunchRoot
-from agent_comms.native_transcript import NativeTranscript
-from agent_comms.send_result import MessagePublished
-from agent_comms.transport.tools.reads import TranscriptPageRead
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.storage.maintenance_barrier import (
-    InstallingPhase, MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
-    ReadyPhase,
-)
-from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lock
-from agent_comms.transport.tools.channels import ChannelListing, CommsChannelsTool
-from agent_comms.transport.tools.send import CommsSendTool
-from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
-from agent_comms.thread_identity import UserThreadRole
-from agent_comms.tool_request import ReadTool
-from agent_comms.transport.request import ToolCall, ToolRequest
-from agent_comms.registry.threads import NativeThread
-import subprocess
-from agent_comms.repo import FailedGitCommand
-import site
-import socket
-import sys
-from agent_comms.channel_targets import CommandTarget, ThreadTarget
+from agent_comms_hooks import ToolRefusedError
+from bus_record_fixture import prepare_native_comms
+from conftest import transcript_records
+from connector_readiness import ConnectorReadiness
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 
@@ -136,7 +178,7 @@ def test_connector_round_trip_reads_without_a_director_thread(comms, tmp_path, r
     environment = readiness.environment({**os.environ, "HOME": str(tmp_path / "home"), "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": os.pathsep.join((str(Path(__file__).resolve().parents[1] / "src"),
                                        *site.getsitepackages()))})
-    command = "from agent_comms.connector import main; raise SystemExit(main())"
+    command = "from agent_comms.transport.connector import main; raise SystemExit(main())"
     before = comms.bus.bus.revision()
     server = subprocess.Popen(
         [sys.executable, "-c", command, "serve", "--root", comms.root, "--port", str(port)],
@@ -227,12 +269,25 @@ class ClientLogin:
         return (await issued.json())["access_token"]
 
 
+FUNNEL = {ApprovalAudience.funnel_header: "?1"}
+"""Tailscale's mark on a request that came in from the internet. A test that reads the
+link out of the owner's inbox is testing that arrival: a browser the tailnet admitted
+reads the link from the page and sends nothing (`ApprovalAudience`)."""
+
+
 async def approved_token(client: TestClient, comms: Comms) -> str:
-    """Register, confirm the real owner-message link, and redeem its PKCE-bound code."""
+    """Register, confirm the real owner-message link, and redeem its PKCE-bound code.
+
+    Arriving with tailscale's Funnel header is what makes the link travel over comms: a
+    browser the tailnet already admitted reads it from the page instead, and never sends
+    one (`ApprovalAudience`).
+    """
     login = await ClientLogin.register(client)
     parameters = FieldCodec.encode(login.query)
     assert (await client.head("/authorize", params=parameters, allow_redirects=False)).status == 405
-    waiting = await client.get("/authorize", params=parameters, allow_redirects=False)
+    waiting = await client.get(
+        "/authorize", params=parameters, allow_redirects=False, headers=FUNNEL
+    )
     assert waiting.status == 200
     owner = comms.messaging.user_identity(Checkout(comms.root))
     notice = comms.bus.inbox(owner.name).page.messages[-1]
@@ -369,7 +424,7 @@ async def test_request_log_names_the_route_and_never_its_values(client, store, r
     """Serve actual GET/POST approval secrets, with aiohttp's raw access log off."""
     login = await ClientLogin.register(client)
     assert (await client.get(
-        "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False
+        "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False, headers=FUNNEL
     )).status == 200
     owner = comms.messaging.user_identity(Checkout(comms.root))
     link = urlsplit(comms.bus.inbox(owner.name).page.messages[-1].body.splitlines()[-1])
@@ -750,7 +805,7 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
         headers = {"Authorization": f"Bearer {await approved_token(reader, wire(copied_root))}"}
         copied_bus = Bus(Bus.path_in(copied_root))
         before = copied_bus.revision()
-        barrier = MaintenanceBarrier(copied_root / "registry.json")
+        barrier = MaintenanceBarrier(RegistryFile.path_in(copied_root))
         held = barrier.begin(MaintenanceOperator.current())
         for phase in phases:
             held = barrier.advance(held, phase)
@@ -792,7 +847,8 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
 async def test_approval_previews_do_not_grant_browser_trust(client, store, comms):
     login = await ClientLogin.register(client)
     assert (await client.get(
-        "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False
+        "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False,
+        headers=FUNNEL,
     )).status == 200
     owner = comms.messaging.user_identity(Checkout(comms.root))
     link = urlsplit(comms.bus.inbox(owner.name).page.messages[-1].body.splitlines()[-1])
@@ -820,7 +876,7 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
     for number in range(ConnectorGrants.waiting_limit):
         query = replace(login.query, state=str(number))
         assert (await client.get(
-            "/authorize", params=FieldCodec.encode(query), allow_redirects=False
+            "/authorize", params=FieldCodec.encode(query), allow_redirects=False, headers=FUNNEL
         )).status == 200
     owner = comms.messaging.user_identity(Checkout(comms.root))
     before = len(comms.bus.inbox(owner.name).page.messages)
@@ -828,7 +884,7 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
     blocked = replace(login.query, state="overflow")
     for _ in range(2):
         refused = await client.get(
-            "/authorize", params=FieldCodec.encode(blocked), allow_redirects=False
+            "/authorize", params=FieldCodec.encode(blocked), allow_redirects=False, headers=FUNNEL
         )
         assert refused.status == 429 and int(refused.headers["Retry-After"]) == CODE_SECONDS
     assert len(store.read().requests) == ConnectorGrants.waiting_limit
@@ -836,18 +892,21 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
     assert len(comms.bus.inbox(owner.name).page.messages) == before
     repeated = replace(login.query, state="0")
     assert (await client.get(
-        "/authorize", params=FieldCodec.encode(repeated), allow_redirects=False
+        "/authorize", params=FieldCodec.encode(repeated), allow_redirects=False, headers=FUNNEL
     )).status == 200
-    assert len(comms.bus.inbox(owner.name).page.messages) == before
+    # A repeat re-issues the secret it minted, so the owner is told the new link; the one
+    # already waiting keeps its place and the queue does not grow.
+    assert len(comms.bus.inbox(owner.name).page.messages) == before + 1
+    assert len(store.read().requests) == ConnectorGrants.waiting_limit
     held = store.read().requests[repeated.request_id]
     store.update(lambda grants: DocumentChange.to(replace(grants, requests=grants.requests | {
         repeated.request_id: replace(held, expires_at=time.time() - 1)
     })))
     assert (await client.get(
-        "/authorize", params=FieldCodec.encode(blocked), allow_redirects=False
+        "/authorize", params=FieldCodec.encode(blocked), allow_redirects=False, headers=FUNNEL
     )).status == 200
     assert len(store.read().requests) == ConnectorGrants.waiting_limit
-    assert len(comms.bus.inbox(owner.name).page.messages) == before + 1
+    assert len(comms.bus.inbox(owner.name).page.messages) == before + 2
 
 
 async def test_owner_browser_approval_lifecycle(client, store, comms):
@@ -888,12 +947,14 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
     query = replace(query, state="untrusted-browser")
     for _ in range(2):
         waiting = await client.get(
-            "/authorize", params=FieldCodec.encode(query), allow_redirects=False
+            "/authorize", params=FieldCodec.encode(query), allow_redirects=False, headers=FUNNEL
         )
         assert waiting.status == 200
         assert "sent to the owner on comms" in await waiting.text()
     notices = comms.bus.inbox(owner.name).page.messages
-    assert len(notices) == 2  # Retry the same waiting query, not the owner's message.
+    # Each call issues the secret it minted, so each one tells the owner its own live link;
+    # a retry that kept the first record left the browser holding a secret nobody stored.
+    assert len(notices) == 3
     link = urlsplit(notices[-1].body.splitlines()[-1])
     assert (await client.get(link.path + "wrong", allow_redirects=False)).status == 400
     expired = replace(store.read().requests[query.request_id], expires_at=time.time() - 1)
@@ -907,14 +968,16 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
     store.update(lambda grants: grants.issued(query.client_id))
     assert not store.read().requests and "expired-code" not in store.read().codes
 
-    waiting = await client.get("/authorize", params=FieldCodec.encode(query))
+    waiting = await client.get("/authorize", params=FieldCodec.encode(query), headers=FUNNEL)
     assert waiting.status == 200
     held = store.read().requests[query.request_id]
     store.update(lambda grants: DocumentChange.to(replace(grants, requests={
         query.request_id: replace(held, expires_at=time.time() - 1)
     })))
     fresh = replace(query, state="fresh-wait")
-    assert (await client.get("/authorize", params=FieldCodec.encode(fresh))).status == 200
+    assert (await client.get(
+        "/authorize", params=FieldCodec.encode(fresh), headers=FUNNEL
+    )).status == 200
     assert query.request_id not in store.read().requests
     assert store.read().requests[fresh.request_id].expires_at <= time.time() + CODE_SECONDS
 
@@ -1211,9 +1274,10 @@ async def remote_answer(client: TestClient, token: str, request):
     return FieldCodec.decode(request.result_type(), reply.result.structured_content)
 
 
-async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(client, comms):
+async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(
+    client, comms, local_core
+):
     """The UI's page request answers in process and through tools/call with one record."""
-    from agent_comms.core_access import LocalCoreAccess
     from agent_comms.transport.tools.sidebar import CommsConversationPageTool
 
     comms.registry.declare(NativeThread(CALLER.name, frozenset(), Checkout(comms.root)))
@@ -1222,7 +1286,7 @@ async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(cl
     project = Checkout(comms.root)
     request = CommsConversationPageTool(conversation=ThreadTarget("worker"), project=project)
 
-    local = LocalCoreAccess(comms).call(request)
+    local = await local_core.call(request)
     assert sent.message_id in [message.message_id for message in local.messages]
     # The UI's project, not the bus root, is the worktree the read proof records.
     assert local.selection.identity.project_path == project.resolved().path
@@ -1234,12 +1298,11 @@ async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(cl
 
 @pytest.mark.parametrize("conversation", [ThreadTarget("worker"), CommandTarget.named("#comms")])
 async def test_a_ui_checks_a_conversation_for_changes_the_same_locally_and_remotely(
-    client, comms, conversation
+    client, comms, local_core, conversation
 ):
     """A revision is what the UI keeps and sends back with its next check, so it must come
     back from the connector as the same record, channel or DM, and settle once nothing
     changed. The latest-sequence bound travels the same way."""
-    from agent_comms.core_access import LocalCoreAccess
     from agent_comms.transport.tools.sidebar import (
     CommsConversationRevisionTool,
     CommsLatestSequenceTool,
@@ -1248,30 +1311,29 @@ async def test_a_ui_checks_a_conversation_for_changes_the_same_locally_and_remot
     comms.registry.declare(NativeThread(CALLER.name, frozenset({"comms"}), Checkout(comms.root)))
     comms.messaging.send_user_message(
         conversation, "check through the boundary", worktree=Checkout(comms.root))
-    local_core, token = LocalCoreAccess(comms), await approved_token(client, comms)
+    token = await approved_token(client, comms)
     first = CommsConversationRevisionTool(conversation=conversation, project=Checkout(comms.root))
 
-    local = local_core.call(first)
+    local = await local_core.call(first)
     remote = await remote_answer(client, token, first)
     assert remote == local
 
     again = replace(first, seen=remote)
     settled = await remote_answer(client, token, again)
-    assert settled == local_core.call(again)
+    assert settled == await local_core.call(again)
     assert not settled.display_changed_since(remote)
 
     latest = CommsLatestSequenceTool()
-    assert await remote_answer(client, token, latest) == local_core.call(latest)
-    assert local_core.call(latest).cursor.sequence == comms.views.latest_sequence()
+    assert await remote_answer(client, token, latest) == await local_core.call(latest)
+    assert (await local_core.call(latest)).cursor.sequence == comms.views.latest_sequence()
 
 
 async def test_an_inbox_read_after_its_place_the_same_locally_and_remotely(
-    client, comms
+    client, comms, local_core
 ):
     """An inbox read crosses the connector with its place and its wait, and
     answers what a local read answers."""
-    from agent_comms.agent_inbox import SecondsWait, TakenInputAfter
-    from agent_comms.core_access import LocalCoreAccess
+    from agent_comms.messaging.agent_inbox import SecondsWait, TakenInputAfter
     from agent_comms.transport.tools.inbox import CommsInboxTool
 
     comms.registry.declare(NativeThread(CALLER.name, frozenset(), Checkout(comms.root)))
@@ -1280,7 +1342,7 @@ async def test_an_inbox_read_after_its_place_the_same_locally_and_remotely(
     request = CommsInboxTool(
         thread="worker", after=TakenInputAfter(first.reference), wait=SecondsWait(1))
 
-    local = LocalCoreAccess(comms).call(request)
+    local = await local_core.call(request)
     remote = await remote_answer(client, await approved_token(client, comms), request)
     assert [m.body for m in remote.messages] == [m.body for m in local.messages] == ["second"]
 
@@ -1288,7 +1350,7 @@ async def test_an_inbox_read_after_its_place_the_same_locally_and_remotely(
 
 def test_every_session_is_told_how_to_take_its_own_name() -> None:
     """The fork argument's description survives its union type, so each session sees it."""
-    from agent_comms.connector_caller import ActingFork
+    from agent_comms.transport.connector_caller import ActingFork
     from agent_comms.transport.tools.send import CommsSendTool
 
     fork = FieldCodec.record_schema(CommsSendTool, ActingFork)["properties"]["fork"]
@@ -1298,7 +1360,7 @@ def test_every_session_is_told_how_to_take_its_own_name() -> None:
 
 async def test_connector_reports_the_root_its_core_serves(client, comms):
     """A remote UI keys its observation by the served root, read through the same tools/call."""
-    from agent_comms.bus_identity import BusIdentityStore
+    from agent_comms.messaging.bus_identity import BusIdentityStore
 
     minted = BusIdentityStore.minted_for(comms.root.resolve())
     headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
@@ -1321,7 +1383,7 @@ async def test_two_buses_at_one_path_do_not_answer_as_one_bus(tmp_path):
     On 2026-11-07 a session read another machine's bus through a second connector and took
     that bus's thread of its own name for itself; nothing it could ask disagreed.
     """
-    from agent_comms.bus_identity import BusIdentityStore
+    from agent_comms.messaging.bus_identity import BusIdentityStore
 
     one, other = tmp_path / "one", tmp_path / "other"
     for root in (one, other):
@@ -1342,7 +1404,7 @@ async def test_two_buses_at_one_path_do_not_answer_as_one_bus(tmp_path):
 async def test_a_connector_names_its_bus_at_the_handshake(client, comms):
     """A client that learns which bus it reached from a tool call learns it after reading
     something. The one thing that differs between two connectors is said before anything."""
-    from agent_comms.bus_identity import BusIdentityStore
+    from agent_comms.messaging.bus_identity import BusIdentityStore
 
     minted = BusIdentityStore.minted_for(comms.root.resolve())
     headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
@@ -1363,7 +1425,7 @@ async def test_a_connector_names_its_bus_at_the_handshake(client, comms):
 async def test_a_call_that_asks_for_progress_streams_it_then_its_reply(client, store, comms, tmp_path):
     """MCP progress: a tools/call carrying a progress token is answered as server-sent events,
     the export's progress notices first and its reply last."""
-    from agent_comms.exporting import EverythingScope, FullLimit, JsonlFormat
+    from agent_comms.messaging.exporting import EverythingScope, FullLimit, JsonlFormat
     from agent_comms.transport.tools.sidebar import CommsExportWireTool
 
     prepare_native_comms(comms)

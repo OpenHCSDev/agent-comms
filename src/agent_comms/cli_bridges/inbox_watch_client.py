@@ -14,8 +14,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
-import secrets
 import re
+import secrets
 import sys
 import time
 from abc import ABC, abstractmethod
@@ -26,25 +26,36 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar
 
 from aiohttp import (
-    ClientError, ClientSession, ClientWebSocketResponse, WSMsgType, WSServerHandshakeError,
+    ClientError,
+    ClientSession,
+    ClientWebSocketResponse,
+    WSMsgType,
+    WSServerHandshakeError,
 )
 from aiohttp.helpers import get_env_proxy_for_url
 from yarl import URL
 
-from agent_comms.bus import Bus
-from agent_comms.bus_publication import Delivered
-from agent_comms.harness_delivery_states import PrintLedgerId
-from agent_comms.launch_runtime import RunningSource
-from agent_comms.message_reference import MessageReference
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.watched import FileSource
-
-from .claude_protocol import ClaudeMonitorFrame
-from .claude_transcript import (
-    WATCH_DEFERRED, WATCH_REPLACED, WATCH_STOPPED, WINDOW_ENDED, PrintedLedger, PrintedNow, ReconnectsAlone,
-    ReconnectUrl, RecentClaudeWindow, RunningClaude,
+from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
+from agent_comms.cli_bridges.claude_transcript import (
+    WATCH_DEFERRED,
+    WATCH_REPLACED,
+    WATCH_STOPPED,
+    WINDOW_ENDED,
+    PrintedLedger,
+    PrintedNow,
+    RecentClaudeWindow,
+    ReconnectsAlone,
+    ReconnectUrl,
+    RunningClaude,
 )
-from .session_watch import WatchClaim
+from agent_comms.cli_bridges.harness_delivery_states import PrintLedgerId
+from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms.execution.launch_runtime import RunningSource
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.watched import FileSource
+from agent_comms.nominal.field_codec import FieldCodec
 
 
 class PrintLedger:

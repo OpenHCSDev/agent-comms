@@ -2,7 +2,7 @@
 cannot be built (a Core-internal command holding a whole Todo recurses through its history)
 stops every teammate's full turn."""
 
-from agent_comms.tool_declaration import NativeRequestTools
+from agent_comms.transport.tool_declaration import NativeRequestTools
 
 
 def test_the_native_tool_catalog_builds_every_tool_schema():
@@ -11,16 +11,17 @@ def test_the_native_tool_catalog_builds_every_tool_schema():
 
 
 def test_tool_discovery_loads_the_requested_declarations_without_changing_the_bus(comms):
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.nominal.declared_family import UnknownFamilyMember
-    from agent_comms.tool_caller import NoThreadCaller
-    from agent_comms.transport.tools.served import (
-    CommsDiscoverTool,
-    NamedToolLookup,
-    SearchToolLookup,
-)
-    from agent_comms.thread_identity import ToolName
     import pytest
+
+    from agent_comms.nominal.declared_family import UnknownFamilyMember
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.registry.thread_identity import ToolName
+    from agent_comms.transport.tool_caller import NoThreadCaller
+    from agent_comms.transport.tools.served import (
+        CommsDiscoverTool,
+        NamedToolLookup,
+        SearchToolLookup,
+    )
 
     before = comms.registry.snapshot(), comms.bus.bus.revision()
     names = (ToolName("comms_order"), ToolName("comms_send"), ToolName("comms_order"))

@@ -9,35 +9,49 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.rule_deal import (
-    Asked, AuditDue, CompactionDealMode, FullDealMode, MeantAnswer, MeantRecord, OffDealMode,
-    Owed, OwnerWordsAnswer, SessionAudit, StartedDeal, StartupDealMode, Unaudited, Unmeant,
+from agent_comms import agent_events as events
+from agent_comms.cli_bridges.hook_read_gate import ReadInput
+from agent_comms.execution.context_reading import ContextUsage
+from agent_comms.execution.fresh_private_session import create_fresh_private_session
+from agent_comms.execution.selected.tool_broker import (
+    SelectedToolRequest,
+    SelectedWriteArguments,
+)
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.nominal.field_codec import FieldCodec, MessageId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.rule_probes import Probe
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.threads import NativeThread
+from agent_comms.task_attachments.owner_notices import MeantNotice, RestartNotice
+from agent_comms.team.package import TeamPackage
+from agent_comms.team.pi_rule_gate import PiRedeal, RulesUnread
+from agent_comms.team.rule_deal import (
+    Asked,
+    AuditDue,
+    CompactionDealMode,
+    FullDealMode,
+    MeantAnswer,
+    MeantRecord,
+    OffDealMode,
+    Owed,
+    OwnerWordsAnswer,
+    SessionAudit,
+    StartedDeal,
+    StartupDealMode,
+    Unaudited,
+    Unmeant,
     Unread,
 )
-from agent_comms.rule_probes import Probe
-from agent_comms.nominal.field_codec import FieldCodec, MessageId
-
-from agent_comms import agent_events as events
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.team.package import TeamPackage
-from agent_comms.context_reading import ContextUsage
-from agent_comms.native_tool_call import CodingCall
-from agent_comms.native_tools import McpToolCall, ReadTool
-from agent_comms.pi_rule_gate import PiRedeal, RulesUnread
-from agent_comms.repo import Checkout
-from agent_comms.selected_tool_broker import SelectedToolRequest, SelectedWriteArguments
-from agent_comms.task_attachments.owner_notices import MeantNotice, RestartNotice
-from agent_comms.registry.threads import NativeThread
-from agent_comms.fresh_private_session import create_fresh_private_session
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.cli_bridges.hook_read_gate import ReadInput
+from agent_comms.transport.native_tool_call import CodingCall
+from agent_comms.transport.native_tools import McpToolCall, NativeToolDeclaration, ReadTool
 from agent_comms_hooks.skill import DeckReader
 from conftest import answer_deal, fresh_confession, probe_answers
 
 
 def call(name: str, arguments: dict[str, object]) -> CodingCall:
-    return CodingCall.decode(f"call-{name}", name, arguments)
+    return NativeToolDeclaration.decode(f"call-{name}", name, arguments)
 
 
 @pytest.fixture
@@ -134,6 +148,9 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
     )
     with pytest.raises(RulesUnread, match="probe"):
         bash.judge_under(peer_deal)  # the costly probes are owed after the reading
+    call("read", {"path": "notes.md"}).judge_under(peer_deal)  # the code a probe cites opens
+    with pytest.raises(RulesUnread):  # while writing and running stay closed
+        call("write", {"path": "notes.md", "content": "x"}).judge_under(peer_deal)
     audit = json.loads(peer_deal.audit.read_text())
     peer_deal.audit.write_text(json.dumps({**audit, "probes": probe_answers(words)}))
     bash.judge_under(peer_deal)
@@ -261,7 +278,7 @@ def test_every_refusal_opens_with_why_its_deal_was_dealt(peer_deal):
     why it was dealt instead of diagnosing the gate (rules/spine.md)."""
     import re
 
-    from agent_comms.rule_deal import RefreshDeal, StartedDeal
+    from agent_comms.team.rule_deal import RefreshDeal, StartedDeal
 
     bash = call("bash", {"command": "ls"})
     peer_deal.start()

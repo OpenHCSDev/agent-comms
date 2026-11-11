@@ -5,8 +5,11 @@ import os
 
 import pytest
 
-from agent_comms.native_evidence_read import PrivateEvidenceRead, VerifiedNativeEvidencePrefix
-from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.execution.native_evidence_read import (
+    PrivateEvidenceRead,
+    VerifiedNativeEvidencePrefix,
+)
+from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.storage.private_path import FileRevision
 from test_native_pi import _evidence
 

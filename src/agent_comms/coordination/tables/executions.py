@@ -7,35 +7,34 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from agent_comms.coordination.contracts import (
-    validate_execution_id,
-)
+from agent_comms.coordination.contracts import validate_execution_id
 from agent_comms.coordination.errors import (
     IdentityConflict,
     IntegrityViolationError,
     StaleFence,
     StaleRevision,
 )
+from agent_comms.coordination.execution_states import ExecutionState
+from agent_comms.coordination.reason_codes import ReasonCode
 from agent_comms.coordination.schema import CoordinatorRow
-from agent_comms.coordination.tables.participants import Participants
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.coordination.tables.attempts import (
     APPROVED_REPLAY_FACT_MASK,
     AttemptRecord,
     ReplayFact,
 )
-from agent_comms.execution_states import ExecutionState
+from agent_comms.coordination.tables.participants import Participants
+from agent_comms.execution.turn_failure_reads import ReplayPreparation
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     MalformedRecord,
     NullMember,
     SingleFieldValue,
     SnapshotExclude,
     SubclassUnion,
-    projected,
     ThreadLookup,
+    projected,
 )
-from agent_comms.reason_codes import ReasonCode
-from agent_comms.thread_text import AbsentText, GivenText, TextChoice
+from agent_comms.registry.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.storage.typed_table import (
     AccumulatingBits,
     Column,
@@ -58,13 +57,12 @@ from agent_comms.storage.typed_table import (
     RetainsChildren,
     TextStorage,
 )
-from agent_comms.wake_candidate_index import ProjectionUnavailableError
-
+from agent_comms.waking.errors import ProjectionUnavailableError
 
 if TYPE_CHECKING:
     from agent_comms.coordination.tables.assignments import WakeAssignment
     from agent_comms.coordination.tables.responses import ResponseObligation
-    from agent_comms.selected_source_batch import SelectedSource
+    from agent_comms.execution.selected.source_batch import SelectedSource
 
 
 class ExecutionProvenance(DeclaredFamily, affix="Origin"):
@@ -614,6 +612,7 @@ class ReplayAssessments(
     RetryPartition,
     NoDelete,
     CoordinatorRow,
+    ReplayPreparation,
 ):
     column_orders = (
         NonDecreasing(("side_effects_possible",)),

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.installer.probes.packages import PreparePackageProbe
-from agent_comms.runtime_preparation import RuntimePreparation
+from agent_comms.installer.runtime_preparation import RuntimePreparation
 
 
 class PreparationEntered(RuntimeError):

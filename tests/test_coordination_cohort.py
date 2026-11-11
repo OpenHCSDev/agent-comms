@@ -2,13 +2,6 @@
 
 from __future__ import annotations
 
-
-from agent_comms.repo import Checkout
-from bus_record_fixture import prepare_native_comms
-
-
-from bus_history import read_history
-from conftest import accept_initial, declare_test_bus, publish_initial
 import json
 import sqlite3
 import sys
@@ -19,35 +12,42 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.nominal.field_codec import AssignmentId
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.assignment_states import (
+from agent_comms.comms import Comms, wire
+from agent_comms.coordination.assignment_states import (
     DeferredAssignment,
     DeliveredAssignment,
     FullPendingAssignment,
 )
-from agent_comms.cohort_schema import AcceptanceFrontier, ClaimBatchAcknowledgements, CohortDeliveries
-from agent_comms.messages import InfoKind, Message
-from agent_comms.comms import Comms, wire
 from agent_comms.coordination.cohort import (
     pending_sealed_assignments,
     sealed_cohort_assignments,
 )
-from agent_comms.coordination.errors import IdentityConflict
-from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.cohort_schema import (
+    AcceptanceFrontier,
+    ClaimBatchAcknowledgements,
+    CohortDeliveries,
+)
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.errors import RelationViolationError
-from agent_comms.exporting import (
+from agent_comms.messaging.exporting import (
     ChannelScope,
     FullLimit,
     JsonlFormat,
 )
-from agent_comms.thread_identity import UserThreadRole
-from agent_comms.thread_status import ArchivedThreadStatus
-from agent_comms.wake_policy import BoundedTriageWake, FullWake, MessageAudience
-from agent_comms.message_page import PageBounds
+from agent_comms.messaging.message_page import PageBounds
+from agent_comms.messaging.messages import InfoKind, Message
+from agent_comms.nominal.field_codec import AssignmentId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation, UserThreadRole
+from agent_comms.registry.thread_status import ArchivedThreadStatus
 from agent_comms.registry.threads import NativeThread
+from agent_comms.waking.wake_policy import BoundedTriageWake, FullWake, MessageAudience
+from bus_history import read_history
+from bus_record_fixture import prepare_native_comms
+from conftest import accept_initial, declare_test_bus, publish_initial
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="private initial bus requires POSIX owner/directory durability"
@@ -231,12 +231,12 @@ def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Pat
 
 def test_no_wake_observer_cannot_gain_legacy_claim_after_seal(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
-    from agent_comms.audience_manifest import freeze_audience
-    from agent_comms.frozen_recipient import FrozenRecipient
-    from agent_comms.bus import PrivateRecord
-    from agent_comms.mentions import ThreadMention
-    from agent_comms.wake import OrdinaryControl
-    from agent_comms.wake_policy import NoWakeDecision, WakeDecision
+    from agent_comms.messaging.audience_manifest import freeze_audience
+    from agent_comms.messaging.bus import PrivateRecord
+    from agent_comms.messaging.frozen_recipient import FrozenRecipient
+    from agent_comms.messaging.mentions import ThreadMention
+    from agent_comms.messaging.wake import OrdinaryControl
+    from agent_comms.waking.wake_policy import NoWakeDecision, WakeDecision
 
     # A historical committed cohort retains its no-wake decision after an upgrade.
     sent = comms.bus.bus.append(lambda seq, db: PrivateRecord.from_message(

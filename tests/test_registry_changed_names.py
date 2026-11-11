@@ -5,15 +5,19 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import UnreadRegistry
-from agent_comms.repo import Checkout
-from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.registry.thread_text import (
+    ForkedParent,
+    GivenThreadText,
+)
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 
 
 def registry_with_a_fork(root: Path) -> Registration:
-    registry = Registration(root / "registry.json")
+    registry = Registration(RegistryFile.path_in(root))
     registry.register(NativeThread("alpha", frozenset(), Checkout(root), created_at=10.0))
     registry.register(NativeThread("beta", frozenset(), Checkout(root), created_at=20.0))
     registry.register(NativeThread("alpha-fork", frozenset(), Checkout(root),
@@ -61,6 +65,7 @@ def test_a_slice_holds_what_the_named_presentation_reads(tmp_path: Path) -> None
 
 def test_a_name_outside_the_slice_says_so(tmp_path: Path) -> None:
     import pytest
+
     from agent_comms.errors import OutsideRegistrySlice, UnregisteredThreadError
 
     cut = registry_with_a_fork(tmp_path).snapshot().only(("alpha",))
@@ -72,6 +77,7 @@ def test_a_name_outside_the_slice_says_so(tmp_path: Path) -> None:
 
 def test_a_name_asked_for_but_never_registered_is_unregistered(tmp_path: Path) -> None:
     import pytest
+
     from agent_comms.errors import OutsideRegistrySlice, UnregisteredThreadError
 
     cut = registry_with_a_fork(tmp_path).snapshot().only(("alpha", "nobody"))
@@ -93,7 +99,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 from agent_comms.registry.registration import Registration
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.registry.thread_text import GivenThreadText
 registry = Registration(Path(sys.argv[1]))
 registry.register(replace(registry.require(sys.argv[2]), title=GivenThreadText(sys.argv[3])))
 """
@@ -108,7 +114,7 @@ def test_a_reader_process_decodes_each_unchanged_row_once(tmp_path: Path) -> Non
     raw and is decoded through a frozen snapshot. Those decodes reach the revision the snapshot
     was frozen from, so another process's write re-decodes only the rows it changed: on
     2026-11-04 every heartbeat revision re-decoded all 2,911 rows, about 1 s per walk."""
-    path = tmp_path / "registry.json"
+    path = RegistryFile.path_in(tmp_path)
     subprocess.run([sys.executable, "-c", (
         "import sys; from pathlib import Path; sys.path.insert(0, sys.argv[2]);"
         "from test_registry_changed_names import registry_with_a_fork;"

@@ -9,7 +9,7 @@ adapter over the same Python core.
 
 Every type owns exactly one concept's semantics. Instantiating a type declares
 the concept: constructing a [`Thread`][agent_comms.threads.Thread] declares a thread;
-constructing a [`Message`][agent_comms.messages.Message] declares a message. Required
+constructing a [`Message`][agent_comms.messaging.messages.Message] declares a message. Required
 relations are proved at construction time and at every operation boundary.
 Unknown references raise — the system is fail-closed.
 

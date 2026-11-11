@@ -16,15 +16,14 @@ from typing import (
     Self,
 )
 
+from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
+from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms.cli_bridges.shared import Binding
+from agent_comms.comms import Comms
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.team.rule_deal import MeantStore, RuleDeal, SessionAudit
+from agent_comms.team.standing import UnownedWheelSpin
 from agent_comms_hooks import ClaudeTranscriptHook, HookRecord
-
-from .claude_transcript import ClaudeJsonLines
-from .session_watch import WatchClaim
-from .shared import Binding
-from ..comms import Comms
-from ..nominal.declared_family import DeclaredFamily
-from ..team.standing import UnownedWheelSpin
-from ..rule_deal import MeantStore, RuleDeal, SessionAudit
 
 
 class Tagged(HookRecord, DeclaredFamily):

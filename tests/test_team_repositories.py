@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.goals import OrderCheck
+from agent_comms.planning.goals import OrderCheck
+from agent_comms.projects.repo import Repo
 from agent_comms.registry.registry_document import RegisteredTeamProject
-from agent_comms.repo import Repo
-from agent_comms.repository_name import RepositoryName
+from agent_comms.projects.repository_name import RepositoryName
 
 
 @pytest.fixture

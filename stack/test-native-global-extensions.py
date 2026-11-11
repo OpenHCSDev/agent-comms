@@ -10,25 +10,29 @@ import hashlib
 import importlib.util
 import json
 import os
-from pathlib import Path
 import selectors
 import shutil
 import subprocess
 import sys
-import time
 import tempfile
+import time
+from pathlib import Path
+
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_storage import StorageRoots
 
 from agent_comms.comms import wire
+from agent_comms.execution.launch_runtime import RestartEnvironment
+from agent_comms.execution.native_arguments import NativeArguments
+from agent_comms.execution.native_pi import CAPABILITY, NativePiRpcLaunch
+from agent_comms.execution.pi_commands import GetState
+from agent_comms.execution.pi_events import ExtensionError
+from agent_comms.execution.pi_rpc import PiRpcChannel
+from agent_comms.installer.native_package import (
+    NativeImportsManifest,
+    VerifiedNativePackage,
+)
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.storage_rules import StorageRoots
-from agent_comms.native_package import NativeImportsManifest, VerifiedNativePackage
-from agent_comms.launch_runtime import RestartEnvironment
-from agent_comms.native_arguments import NativeArguments
-from agent_comms.native_pi import CAPABILITY, NativePiRpcLaunch
-from agent_comms.pi_commands import GetState
-from agent_comms.pi_events import ExtensionError
-from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.repo import Checkout
 
 
 def main(fixture: Path):
@@ -63,7 +67,7 @@ def main(fixture: Path):
         "PI_OFFLINE": "1", "NODE_DISABLE_COMPILE_CACHE": "1",
     }
     environment.update(RestartEnvironment(native_config=agent, agent_directory=agent).encode_native())
-    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.execution.child_process import ProcessIdentity
     from agent_comms.registry.threads import Thread
 
     comms = wire(root / "wire")

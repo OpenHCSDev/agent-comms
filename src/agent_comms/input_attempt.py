@@ -5,13 +5,25 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import Annotated, ClassVar, Self
 
-from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .nominal.field_codec import (
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.context_provenance_source import ContextProvenanceSource
+from agent_comms.execution.input_key import InputKey, InputKeyText, PublicInputKeyText
+from agent_comms.execution.input_origin import (
+    InputDelivery,
+    InputOrigin,
+    InputProvenance,
+    UnattributedInputOrigin,
+    UndeliveredInput,
+)
+from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.execution.reported_turn import ReportedTurnState
+from agent_comms.messaging.notification_evidence import ConsumptionEvidence
+from agent_comms.messaging.notification_progress import DeliveryProgress, ShownToModelProgress
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     FieldCodec,
-    boundary_decoder,
     GoalId,
     InputId,
     NullMember,
@@ -21,26 +33,13 @@ from .nominal.field_codec import (
     WireName,
     WireOmitDefault,
     WireRequired,
+    boundary_decoder,
 )
-from .input_key import InputKey, InputKeyText, PublicInputKeyText
-from .input_origin import (
-    InputDelivery,
-    InputOrigin,
-    InputProvenance,
-    UnattributedInputOrigin,
-    UndeliveredInput,
-)
-from .lifecycle_capability import LifecycleCapability, Unresolved
-from .native_input_proof import NativeContextProof
-from .notification_evidence import ConsumptionEvidence
-from .notification_progress import DeliveryProgress, ShownToModelProgress
-from .reported_turn import ReportedTurnState
-from .text_digest import TextDigest
-from .thread_identity import GenerationCounter, ThreadIncarnation
-
-if TYPE_CHECKING:
-    from .registry.registry_document import RegistrySnapshot
-    from .turn_lease import TurnLeaseFence
+from agent_comms.nominal.lifecycle_capability import LifecycleCapability, Unresolved
+from agent_comms.nominal.text_digest import TextDigest
+from agent_comms.registry.registry_names import RegistryNames
+from agent_comms.registry.thread_identity import GenerationCounter, ThreadIncarnation, TurnFence
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
 
 
 class InputAlreadyCleared(RelationViolationError):
@@ -162,11 +161,11 @@ class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, aff
 
     def context_committed(
         self,
-        lease: TurnLeaseFence,
+        lease: TurnFence,
         sent_text: str,
         context: NativeContextProof,
         *,
-        snapshot: RegistrySnapshot,
+        snapshot: RegistryNames[ThreadIdentitySource],
     ) -> InputTransition:
         raise RelationViolationError("Context acknowledgement lacks its started input")
 
@@ -196,11 +195,11 @@ class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, aff
 
     def started_for_native(
         self,
-        lease: TurnLeaseFence,
+        lease: TurnFence,
         native_id: InputId,
         sent_text: str,
         *,
-        snapshot: RegistrySnapshot,
+        snapshot: RegistryNames[ThreadIdentitySource],
     ) -> bool:
         return False
 
@@ -209,7 +208,7 @@ class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, aff
         return UndeliveredInput()
 
     def delivered_in(
-        self, lease: TurnLeaseFence, root_id: RootId, snapshot: RegistrySnapshot
+        self, lease: TurnFence, root_id: RootId, snapshot: RegistryNames[ThreadIdentitySource]
     ) -> InputDelivery:
         """The bus message this input delivered into the lease's turn."""
         return UndeliveredInput()
@@ -306,7 +305,7 @@ class HistoricalInput(UnresolvedInput):
 
 
 @dataclass(frozen=True)
-class StoredInput(InputAttempt):
+class StoredInput(InputAttempt, ContextProvenanceSource[InputProvenance]):
     """The recorded owner name and input generation, without inventing a thread identity."""
 
     exists = True
@@ -488,11 +487,11 @@ class StartedInput(KnownInputState, SentInput):
 
     def started_for_native(
         self,
-        lease: TurnLeaseFence,
+        lease: TurnFence,
         native_id: InputId,
         sent_text: str,
         *,
-        snapshot: RegistrySnapshot,
+        snapshot: RegistryNames[ThreadIdentitySource],
     ) -> bool:
         """Whether this original row's recorded lease/input evidence is this native start.
 
@@ -505,11 +504,11 @@ class StartedInput(KnownInputState, SentInput):
 
     def context_committed(
         self,
-        lease: TurnLeaseFence,
+        lease: TurnFence,
         sent_text: str,
         context: NativeContextProof,
         *,
-        snapshot: RegistrySnapshot,
+        snapshot: RegistryNames[ThreadIdentitySource],
     ) -> InputTransition:
         if not self.started_for_native(lease, context.input_id, sent_text, snapshot=snapshot):
             raise RelationViolationError(

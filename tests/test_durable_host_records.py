@@ -11,28 +11,28 @@ from agent_comms.agent_backend import (
     StaleCompaction,
 )
 from agent_comms.agent_events import Chunk, Error, Thinking, ToolStart
-from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
-from agent_comms.native_entries import NativeEntry, StoredEntry, TranscriptProjection
-from agent_comms.pi_commands import GetSessionStats
-from agent_comms.pi_counts import PiCount, UnreportedCount
-from agent_comms.pi_durable_backend import (
+from agent_comms.execution.native_entries import NativeEntry, StoredEntry, TranscriptProjection
+from agent_comms.execution.pi_commands import GetSessionStats
+from agent_comms.execution.pi_durable_backend import (
     CompactDurable,
     DurableDatabase,
-    DurablePiEvent,
     Inspect,
     PiDurableBackend,
     Settle,
 )
-from agent_comms.pi_events import PiEvent, UnknownPiEvent
-from agent_comms.pi_wire import RequestId
-from agent_comms.pi_payloads import PiContextUsage, ReportedContextUsage, ReportedText
-from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.recorded_time import UnrecordedTimeError
-from agent_comms.repo import Checkout
-from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.execution.pi_events import DurablePiEvent, PiEvent, UnknownPiEvent
+from agent_comms.execution.pi_rpc import PiRpcChannel
+from agent_comms.execution.pi_wire import RequestId
+from agent_comms.execution.provider_records import ReportedText
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.turn_item import PiRequestKey
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
+from agent_comms.pi_counts import PiCount, UnreportedCount
+from agent_comms.pi_payloads import PiContextUsage, ReportedContextUsage
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.tool_declaration import ReadAction
-from agent_comms.turn_item import PiRequestKey
+from agent_comms.storage.recorded_time import UnrecordedTimeError
+from agent_comms.transport.tool_declaration import ReadAction
 
 
 def decode(wire):

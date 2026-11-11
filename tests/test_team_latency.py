@@ -10,23 +10,23 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.audience_manifest import freeze_audience
-from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.bus import Bus, PrivateRecord
-from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.team.order import Team
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import MessageId
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messaging.audience_manifest import freeze_audience
+from agent_comms.messaging.bus import Bus, PrivateRecord
+from agent_comms.messaging.bus_tables import MessageIdentitySource
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import InfoKind, Message
+from agent_comms.messaging.wake import OrdinaryControl, resolve_wake_cohort
+from agent_comms.nominal.field_codec import MessageId
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.repo import Checkout
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.wake import OrdinaryControl, resolve_wake_cohort
+from agent_comms.team.order import Team
 
 
 def recorded_history(

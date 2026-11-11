@@ -1,11 +1,11 @@
 """Physical locking, not fake store objects: nesting must keep outsiders out."""
 
 import asyncio
-from contextvars import copy_context
 import fcntl
-from pathlib import Path
 import subprocess
 import sys
+from contextvars import copy_context
+from pathlib import Path
 
 import pytest
 
@@ -14,8 +14,8 @@ from agent_comms.storage.store_files import (
     BoundedStoreReadBudget,
     ExclusiveLock,
     SharedLock,
-    StoreLockContention,
     StoreGuard,
+    StoreLockContention,
     _async_store_lock,
     _store_lock,
     store_lock_path,

@@ -4,7 +4,7 @@ import json
 import sys
 
 from agent_comms import package_stamp
-from agent_comms.core_stamp import CoreStamp
+from agent_comms.installer.core_stamp import CoreStamp
 
 if __name__ == "__main__":
     # The stamp factory's child names the commit it builds; it is bound before any module
@@ -17,9 +17,9 @@ if __name__ == "__main__":
         case unexpected:
             raise SystemExit(f"producer_stamp takes at most one commit, not {unexpected!r}")
 
-from agent_comms.bus import Bus as Bus  # noqa: E402
-from agent_comms.messages import BusRecord  # noqa: E402
-from agent_comms.storage.typed_table import ProducedTable, ProducedRow  # noqa: E402
+from agent_comms.messaging.bus import Bus as Bus  # noqa: E402
+from agent_comms.messaging.messages import BusRecord  # noqa: E402
+from agent_comms.storage.typed_table import ProducedRow, ProducedTable  # noqa: E402
 
 
 def complete_writer_family() -> tuple[type[ProducedRow], ...]:

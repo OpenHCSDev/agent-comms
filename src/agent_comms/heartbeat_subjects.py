@@ -10,23 +10,21 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from functools import cached_property
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Mapping, Self
+from typing import Mapping, Self
 
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.comms import Comms
+from agent_comms.coordination.service_passes import ServicePasses, ServicePassStore
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import MessageId
-from agent_comms.head_review import PullRequestHead
-from agent_comms.owner_requests import OwnerRequestId
-from agent_comms.plan_phases import PlanPhase
-from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from agent_comms.planning.order_phase import OrderPhase
+from agent_comms.planning.orders import HeadVerdict, StoredHeadReview
+from agent_comms.planning.owner_requests import OwnerRequestId
+from agent_comms.planning.plan_phases import PlanPhase
+from agent_comms.projects.head_review import PullRequestHead
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.service_passes import ServicePasses, ServicePassStore
-from agent_comms.team_service import TeamService
-from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from agent_comms.todos import HeadVerdict, StoredHeadReview
-
-if TYPE_CHECKING:
-    from agent_comms.plan_phases import OrderPhase
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from agent_comms.storage.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from agent_comms.team.team_service import TeamService
 
 
 @dataclass(frozen=True)

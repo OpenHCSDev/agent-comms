@@ -1,15 +1,18 @@
 """Shared context option behavior, below the context verb."""
 from __future__ import annotations
-from abc import abstractmethod
+
 import argparse
+from abc import abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass
 from itertools import dropwhile
 from typing import ClassVar, Self
+
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.cli_verbs.context import ContextCliCommand
-from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
-from agent_comms.turn_context import ContextManifest
-from collections.abc import Iterator
+from agent_comms.execution.turn_context import ContextManifest
+
 
 class ContextOptionCliCommand(ContextCliCommand):
     @classmethod

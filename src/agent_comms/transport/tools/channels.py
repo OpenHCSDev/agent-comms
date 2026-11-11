@@ -9,12 +9,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agent_comms.channels import SavedView
 from agent_comms.display_order import ChannelSort
+from agent_comms.messaging.channels import SavedView
 from agent_comms.presentation import ChannelView
-from agent_comms.tool_caller import ToolCaller
-from agent_comms.tool_request import NativeToolRequest, ReadTool
-from agent_comms.tool_result import ToolResult
+from agent_comms.transport.tool_caller import ToolCaller
+from agent_comms.transport.tool_request import NativeToolRequest, ReadTool
+from agent_comms.transport.tool_result import ToolResult
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms

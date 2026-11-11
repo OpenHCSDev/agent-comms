@@ -3,33 +3,44 @@
 import runpy
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
-import time
 from typing import Annotated
 
 import pytest
 
-from agent_comms.comms import Comms, wire
-from agent_comms.cli_verbs.select_checkout import SelectCheckoutCliCommand
+from agent_comms.cli_verbs.cli_commands import AddCheckoutOperation
 from agent_comms.cli_verbs.goal_checkout import GoalCheckoutCliCommand
-from agent_comms.cli_commands import AddCheckoutOperation
-from agent_comms.team.standing_rules import StorageHomeMissing
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.cli_verbs.select_checkout import SelectCheckoutCliCommand
+from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, RecordProblems
-from agent_comms.thread_creation import RecordedCreationTime
-from agent_comms.repo import Checkout, DetachedStart, GitCommandError, LocalRepositorySource, Repo, RepositoryReads
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.repository_name import RepositoryName
-from agent_comms.shell_effects import (
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.order_runs import MechanicalOrderRun
+from agent_comms.planning.orders import (
+    AssignedBoundaryRead,
+    EditWorkplaces,
+    PendingProblemOrder,
+)
+from agent_comms.planning.pull_requests import PullRequestLink
+from agent_comms.projects.checkouts import (
+    Checkout,
+    DetachedStart,
+    RepositoryReads,
+)
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.repository_sources import LocalRepositorySource
+from agent_comms.projects.shell_effects import (
     CreateCheckoutStorageEffect,
     RemoveCheckoutStorageEffect,
-    StorageDenied,
     shell_storage_effects,
 )
-from agent_comms.storage_projection import StorageProjection
-from agent_comms.storage_rules import (
+from agent_comms.projects.storage_projection import StorageProjection
+from agent_comms.projects.storage_rules import (
     CheckoutAllocation,
     EditableCheckoutAllocation,
     GoalCheckoutAllocation,
@@ -37,22 +48,20 @@ from agent_comms.storage_rules import (
     StorageRule,
     UnitStorage,
 )
-from agent_comms.thread_storage import (
-    StoragePath,
-    StorageRoots,
+from agent_comms.registry.registry_document import RegisteredTeamProject
+from agent_comms.registry.thread_creation import RecordedCreationTime
+from agent_comms.registry.thread_storage import (
     NoRepositoryChoice,
     SelectedCheckout,
+    StoragePath,
+    StorageRoots,
     UnassignedThreadStorage,
 )
-from agent_comms.registry.threads import Thread, NativeThread
-from agent_comms.tool_denial import SelectedToolDenied
-from agent_comms.goals import OrderCheck
-from agent_comms.registry.registry_document import RegisteredTeamProject
-from agent_comms.order_runs import MechanicalOrderRun
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import (
-    AssignedBoundaryRead, EditWorkplaces, PendingProblemOrder, PullRequestLink,
-)
+from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.team.standing_rules import StorageHomeMissing
+from agent_comms.transport.tool_caller import ThreadCaller
+from agent_comms.transport.tool_denial import SelectedToolDenied, StorageDenied
 from source_revision_fixture import SourceRepository
 
 
@@ -735,6 +744,8 @@ def test_the_clone_refusal_names_every_step_that_creates_an_allocation(tmp_path,
                  'agent-comms-team order problem', 'agent-comms checkout add'):
         assert step in text, text
     assert text.index('request add') < text.index('order problem') < text.index('checkout add')
+    assert 'comms_repository_read' in text
+    assert '--arguments' in text and 'github:' in text
 
 
 @pytest.mark.parametrize('command,kind', [
@@ -744,9 +755,9 @@ def test_the_clone_refusal_names_every_step_that_creates_an_allocation(tmp_path,
     ('uv pip install package', 'AllocateStorageEffect'),
     ('npm ci', 'AllocateStorageEffect'),
     ('ffmpeg -i input output', 'AllocateStorageEffect'),
-    ('git -C repo worktree add --detach extra origin/main', 'ForbiddenStorageEffect'),
-    ('git worktree remove --force extra', 'ForbiddenStorageEffect'),
-    ('git worktree move extra elsewhere', 'ForbiddenStorageEffect'),
+    ('git -C repo worktree add --detach extra origin/main', 'ForbiddenRepositoryStorageEffect'),
+    ('git worktree remove --force extra', 'ForbiddenRepositoryStorageEffect'),
+    ('git worktree move extra elsewhere', 'ForbiddenRepositoryStorageEffect'),
     ('git -C ../other--P3 reset --hard', 'WriteStorageEffect'),
     ('pip install --help\nmkdir target', 'WriteStorageEffect'),
     ('mkdir -p target', 'WriteStorageEffect'),
@@ -808,7 +819,7 @@ def test_a_thread_writes_its_own_linked_worktree_without_a_goal_or_order(
 def test_the_read_path_is_a_declared_verb_not_a_clone():
     """`git clone` was refused under every path, so a reader concluded another repository could
     not be read at all; the team project already holds those checkouts and nothing named it."""
-    from agent_comms.cli_command import CliCommand
+    from agent_comms.cli_verbs.cli_command import CliCommand
 
     command = CliCommand.member_named('repositories')
     assert command.declared_name == 'repositories'

@@ -1,0 +1,80 @@
+"""The disclosed request owns exact sent values and its external disposition."""
+
+from __future__ import annotations
+
+from abc import abstractmethod
+from dataclasses import dataclass
+from typing import Literal
+
+from agent_comms.execution.turn_context import ContextSpan
+from agent_comms.execution.working_memory_disclosure import DisclosureState
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.working_memory.working_memory_labels import (
+    ClassifierVersion,
+    JevUsage,
+    QuestionVersion,
+)
+from agent_comms.working_memory.working_memory_questions import SpanQuestion
+
+
+@dataclass(frozen=True)
+class ChoiceQuestionDefinition:
+    instructions: str
+    criteria: dict[str, str]
+    type: Literal["choice"] = "choice"
+
+
+@dataclass(frozen=True)
+class DisclosureRequest:
+    span: ContextSpan
+    classifier: ClassifierVersion
+    question: QuestionVersion
+    definition: ChoiceQuestionDefinition
+    state: DisclosureState
+    grant: MessageReference
+
+    @classmethod
+    def capture(cls, span, classifier, question: type[SpanQuestion], state, grant: MessageReference):
+        return cls(span=span, classifier=classifier, question=QuestionVersion.current(question, state.owner_rules),
+                   definition=FieldCodec.decode(ChoiceQuestionDefinition, question.declaration()), state=state, grant=grant)
+
+    def payload(self):
+        return {"model": self.classifier.pin,
+                "questions": {self.question.question.declared_name: FieldCodec.encode(self.definition)},
+                "state": FieldCodec.encode(self.state)}
+
+
+@dataclass(frozen=True)
+class AnnotationOutcome(DeclaredFamily, affix="AnnotationOutcome"):
+    @abstractmethod
+    def public_description(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class SubmittedAnnotationOutcome(AnnotationOutcome):
+    def public_description(self) -> str:
+        return "Submitted; no settled classifier response is recorded. Never resend automatically."
+
+
+@dataclass(frozen=True)
+class CompletedAnnotationOutcome(AnnotationOutcome):
+    request_id: str
+    returned_model: str
+    usage: JevUsage
+
+    def public_description(self) -> str:
+        return f"Completed by {self.returned_model} · request {self.request_id} · cost ${self.usage.cost}"
+
+
+@dataclass(frozen=True)
+class FailedAnnotationOutcome(AnnotationOutcome):
+    error: str
+
+    def public_description(self) -> str:
+        return f"Classifier did not produce an authorized answer: {self.error}. Not automatically resent."
+
+
+class AnnotationBudgetExhausted(ValueError):
+    """The disclosure grant has used up its hourly request allowance."""

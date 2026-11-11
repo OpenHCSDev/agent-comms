@@ -5,32 +5,35 @@ from itertools import product
 
 import pytest
 
-from bus_record_fixture import OWNER_LOOKUP
-
-from agent_comms.coordination.tables.executions import NoPointedAttempt, NoPointedExecution
-from agent_comms.assignment_states import AssignmentState, BoundAssignment
-from agent_comms.attempt_states import AttemptState, LiveAttempt
-from agent_comms.lifecycle_capability import Complete, Failed, Successful, Terminal, Active
+from agent_comms.coordination.assignment_states import AssignmentState, BoundAssignment
+from agent_comms.coordination.attempt_states import AttemptState, LiveAttempt
 from agent_comms.coordination.errors import IntegrityViolationError
-from agent_comms.coordination.snapshot import RecoverySnapshot
-from agent_comms.coordination.tables.attempts import ReplayFact
-from agent_comms.coordination.tables.executions import ReplayAssessments
-from agent_comms.coordination.tables.executions import ExecutionProvenance, AcpOrigin
-from agent_comms.coordination.tables.publications import (
-    PublicationIntents,
-    PublicationEvidence,
-)
-from agent_comms.execution_states import (
+from agent_comms.coordination.execution_states import (
     AttemptExecution,
     DeferredExecution,
     ExecutionState,
     FailedExecution,
 )
+from agent_comms.coordination.obligation_states import PublishedResponse, ResponseState
+from agent_comms.coordination.response_acknowledgement import canonical_publication_key
+from agent_comms.coordination.snapshot import RecoverySnapshot
+from agent_comms.coordination.tables.attempts import ReplayFact
+from agent_comms.coordination.tables.executions import (
+    AcpOrigin,
+    ExecutionProvenance,
+    NoPointedAttempt,
+    NoPointedExecution,
+    ReplayAssessments,
+)
+from agent_comms.coordination.tables.publications import (
+    PublicationEvidence,
+    PublicationIntents,
+)
+from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
-from agent_comms.response_acknowledgement import canonical_publication_key
-from agent_comms.messages import InfoKind, Message
-from agent_comms.obligation_states import PublishedResponse, ResponseState
-from agent_comms.wake_policy import MessageAudience, RecipientDecision, WakePolicy
+from agent_comms.nominal.lifecycle_capability import Active, Complete, Failed, Successful, Terminal
+from agent_comms.waking.wake_policy import MessageAudience, RecipientDecision, WakePolicy
+from bus_record_fixture import OWNER_LOOKUP
 from test_coordination_store import ready, started
 
 

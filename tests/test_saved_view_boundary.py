@@ -3,14 +3,14 @@
 
 import pytest
 
-from agent_comms.channels import (
+from agent_comms.messaging.channels import (
     AllOfMatch,
     AnyOfMatch,
     ViewMatch,
     ViewPredicate,
 )
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.tool_declaration import NativeRequestTools
+from agent_comms.transport.tool_declaration import NativeRequestTools
 
 
 @pytest.mark.parametrize(

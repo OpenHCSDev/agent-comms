@@ -3,8 +3,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from .core_stamp import CoreStamp
-from .repo import Repo
+from agent_comms.installer.core_stamp import CoreStamp
+from agent_comms.projects.repo import Repo
 
 
 @dataclass(frozen=True)

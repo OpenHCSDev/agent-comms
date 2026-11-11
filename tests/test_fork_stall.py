@@ -6,17 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from transcript_record_fixture import transcript_record
-
-from agent_comms.build_identity import RecordedBuildIdentity, RepositoryCommit
 from agent_comms.cli_bridges.claude_protocol import (
     AnsweredSubagent,
     CallingSubagent,
     PromptedSubagent,
 )
 from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
-from agent_comms.team.standing import ForkStalled, SlowInstallPhase
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.installer.build_identity import RecordedBuildIdentity, RepositoryCommit
 from agent_comms.installer.interpreter_operation import (
     PhaseTiming,
     StopServicesPhase,
@@ -27,8 +23,11 @@ from agent_comms.installer.logs import InstallLogs
 from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import FreshRehearsal, RehearsedUpgrade
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.team.standing import ForkStalled, SlowInstallPhase
 from agent_comms_hooks import SubagentId
+from transcript_record_fixture import transcript_record
 
 PROMPT = {"type": "user", "uuid": str(transcript_record("prompt")), "promptId": "p",
           "timestamp": "2026-10-30T10:00:00Z", "message": {"role": "user", "content": "find it"}}

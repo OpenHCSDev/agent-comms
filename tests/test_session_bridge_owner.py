@@ -1,9 +1,5 @@
 """The real SessionStart program must leave an installable serve after hook exit."""
 
-from agent_comms.cli_bridges.session_watch import LiveWatch, WatchClaim
-
-from agent_comms_hooks.watch import WatchRecord
-from agent_comms.repo import Checkout
 import asyncio
 import json
 import os
@@ -18,20 +14,23 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import IdentityMismatchError, ProcessIdentity
-from agent_comms.cli_bridges import claude
-from agent_comms.cli_bridges.monitor import InspectSession, VerifySession
-from agent_comms.cli_bridges.shared import Binding, Serve
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.root_runtime import RootRuntime
-from agent_comms.registry.threads import ExternalThread
-from agent_comms.cli_bridges import hook_session
+from agent_comms.cli_bridges import claude, hook_session
 from agent_comms.cli_bridges.hook_requests import SkillRequest
-from agent_comms.cli_bridges.session_watch import SessionRefusedError
-from agent_comms_hooks.shell_commands import ConnectCommand
+from agent_comms.cli_bridges.monitor import InspectSession, VerifySession
+from agent_comms.cli_bridges.session_watch import LiveWatch, SessionRefusedError, WatchClaim
+from agent_comms.cli_bridges.shared import Binding, Serve
+from agent_comms.execution.child_process import (
+    IdentityMismatchError,
+    ProcessIdentity,
+)
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.root_runtime import RootRuntime
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import ExternalThread
 from agent_comms_hooks.queue_bypass import QueueBypassGuard
-from agent_comms_hooks.watch import HookAnswer, SessionHookProgram, SwappingSession
 from agent_comms_hooks.read_gate import ReadGateProgram
+from agent_comms_hooks.shell_commands import ConnectCommand
+from agent_comms_hooks.watch import HookAnswer, SessionHookProgram, SwappingSession, WatchRecord
 from conftest import installed_comms
 
 

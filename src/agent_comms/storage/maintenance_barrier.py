@@ -18,33 +18,32 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self
 
-from agent_comms_hooks import ToolRefusedError
-
-from ..child_process import ProcessIdentity
-from ..coordination.errors import DrainUnavailable
-from .private_path import FileObservation, FileRevision, PrivateFileRole
-from ..nominal.declared_family import DeclaredFamily
-from ..errors import RelationViolationError
-from ..nominal.field_codec import (
-    FieldCodec,
+from agent_comms.coordination.errors import DrainUnavailable
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.send_outcome import GrantedSend, HeldSend
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     ClaimId,
+    FieldCodec,
     MalformedRecord,
     NullMember,
     RecordMember,
     SubclassUnion,
     WireOmitDefault,
 )
-from ..launch_runtime import LaunchRuntime
-from ..lifecycle import LifecycleState
-from .locked_store import DurableFile, LockedStore, RegistryFile, WrittenFile
-from ..send_outcome import GrantedSend, HeldSend
-from .store_files import (
+from agent_comms.nominal.lifecycle import LifecycleState
+from agent_comms.storage.locked_store import DurableFile, LockedStore, RegistryFile, WrittenFile
+from agent_comms.storage.private_path import FileObservation, FileRevision, PrivateFileRole
+from agent_comms.storage.store_files import (
+    UNBOUNDED_STORE_READ,
     AtomicFile,
     RegistryLocking,
     StoreLock,
     StoreReadBudget,
-    UNBOUNDED_STORE_READ,
 )
+from agent_comms_hooks import ToolRefusedError
 
 
 class MaintenanceHeldError(RelationViolationError, ToolRefusedError, DrainUnavailable):
@@ -418,25 +417,20 @@ class MaintenanceWitness:
     @classmethod
     def observe_file(cls, path: Path) -> Self | NoMaintenanceWitness:
         try:
-            descriptor = PrivateFileRole.read(
+            source = PrivateFileRole.stream(
                 path, RelationViolationError("Maintenance witness is not private and regular"))
         except FileNotFoundError:
             return NoMaintenanceWitness()
         except OSError as error:
             raise RelationViolationError("Maintenance witness is inaccessible") from error
         try:
-            info = os.fstat(descriptor)
-            if info.st_size > 4096:
-                raise RelationViolationError("Maintenance witness is not private and regular")
-            with os.fdopen(descriptor, "rb") as stream:
-                descriptor = -1
-                value = FieldCodec.decode(cls, FieldCodec.parse(stream.read()))
+            with source:
+                if os.fstat(source.fileno()).st_size > 4096:
+                    raise RelationViolationError(
+                        "Maintenance witness is not private and regular")
+                return FieldCodec.decode(cls, FieldCodec.parse(source.read()))
         except (OSError, MalformedRecord) as error:
             raise RelationViolationError("Maintenance witness is invalid") from error
-        finally:
-            if descriptor >= 0:
-                os.close(descriptor)
-        return value
 
 
 @dataclass(frozen=True, kw_only=True)

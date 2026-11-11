@@ -1,9 +1,12 @@
 """Empty completions fail the request without declaring a dead native runtime."""
 import pytest
 
-from agent_comms.native_pi import NativeEmptyAnswer
-from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.tracked_turn import PendingTrackedTerminal, UnansweredNotifiedTrackedTerminal
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_pi import NativeEmptyAnswer
+from agent_comms.execution.tracked_turn import (
+    PendingTrackedTerminal,
+    UnansweredNotifiedTrackedTerminal,
+)
 
 
 def test_empty_final_and_notifications_keep_the_model_outcome():

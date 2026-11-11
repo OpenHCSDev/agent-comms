@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-import agent_comms.native_package as native_package
+import agent_comms.installer.native_package as native_package
 from agent_comms.storage.private_path import PrivateDirectoryRole
 from native_package_acquisition_fixture import PackageTrace
 from test_native_package import launcher as launcher
@@ -13,7 +13,7 @@ from test_native_package import load_resource_module
 
 def test_manifest_build_hashes_content_once(launcher):
     stack, package = launcher
-    namespace = load_resource_module(stack.parent / "src/agent_comms/native_package.py")
+    namespace = load_resource_module(stack.parent / "src/agent_comms/installer/native_package.py")
     trace = PackageTrace(namespace["package_tree_digest"].__code__)
     with trace.active():
         namespace["write_native_manifest"](package)
@@ -41,7 +41,7 @@ def test_materialized_directories_do_not_copy_checkout_permissions(tmp_path):
 
 def test_preparation_refuses_changed_content_before_sealing(launcher):
     stack, package = launcher
-    namespace = load_resource_module(stack.parent / "src/agent_comms/native_package.py")
+    namespace = load_resource_module(stack.parent / "src/agent_comms/installer/native_package.py")
     owner = namespace["VerifiedNativePackage"]
     assert owner.prepare(package).path == package
     (package / "dependency.js").chmod(0o600)
@@ -64,7 +64,7 @@ def test_prepared_native_fixture_is_qualified(native_runtime_package):
 
 @pytest.mark.asyncio
 async def test_private_bus_agent_construction_does_not_acquire_native_package(private_comms):
-    from agent_comms.acp import CommsAgent
+    from agent_comms.execution.acp import CommsAgent
 
     trace = PackageTrace(native_package.package_tree_digest.__code__)
     with trace.active():

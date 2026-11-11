@@ -26,6 +26,7 @@ keywords = ["agents", "coordination", "message-bus", "acp", "multi-agent"]
 dependencies = [
     "aiohttp>=3.14",
     "agent-client-protocol>=0.8",
+    "immutables",
     "metaclass-registry @ git+https://github.com/OpenHCSDev/metaclass-registry@main",
     "nominal-refactor-advisor @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor@main",
     "packaging>=24",
@@ -54,17 +55,17 @@ Issues = "https://github.com/OpenHCSDev/agent-comms/issues"
 
 [project.scripts]
 agent-comms = "agent_comms.cli:main"
-agent-comms-acp = "agent_comms.acp:main"
-agent-comms-agent = "agent_comms.worker:main"
-agent-comms-nk-foreground = "agent_comms.nk_foreground:main"
-pi-comms-native = "agent_comms.native_pi:main"
+agent-comms-acp = "agent_comms.execution.acp:main"
+agent-comms-agent = "agent_comms.execution.worker:main"
+agent-comms-nk-foreground = "agent_comms.execution.nk_foreground:main"
+pi-comms-native = "agent_comms.execution.native_pi:main"
 agent-comms-claude-bridge = "agent_comms.cli_bridges.claude:main"
 agent-comms-inbox-watch = "agent_comms.cli_bridges.inbox_watch_client:main"
 agent-comms-cloud-session = "agent_comms.cli_bridges.cloud_session:main"
 agent-comms-codex-bridge = "agent_comms.cli_bridges.codex:main"
 agent-comms-opencode-bridge = "agent_comms.cli_bridges.opencode:main"
 agent-comms-team = "agent_comms.team.cli:main"
-agent-comms-integrate = "agent_comms.integration:main"
+agent-comms-integrate = "agent_comms.projects.integration:main"
 agent-comms-team-skill = "agent_comms_hooks.watch:SkillText.main"
 agent-comms-team-reread = "agent_comms_hooks.reread:ReminderProgram.main"
 agent-comms-prime = "agent_comms.cli_bridges.hook_prime:main"
@@ -77,13 +78,13 @@ agent-comms-claude-session-started = "agent_comms.cli_bridges.hook_session:Sessi
 agent-comms-claude-session-ended = "agent_comms_hooks.session:SessionEnded.main"
 agent-comms-claude-subagent-started = "agent_comms_hooks.forks:SubagentStartProgram.main"
 agent-comms-claude-subagent-stopped = "agent_comms_hooks.forks:SubagentStopProgram.main"
-agent-comms-connector = "agent_comms.connector:main"
+agent-comms-connector = "agent_comms.transport.connector:main"
 opencode-comms = "agent_comms.cli_bridges.opencode_launch:main"
 claude-comms = "agent_comms.cli_bridges.claude_launch:main"
 
 [project.entry-points."agent_comms.writer_owned_stores"]
 bridge-delivery = "agent_comms.cli_bridges.shared"
-connector-credentials = "agent_comms.connector_store"
+connector-credentials = "agent_comms.transport.connector_store"
 
 [tool.hatch.build.hooks.custom]
 path = "hatch_build.py"
@@ -128,6 +129,9 @@ timeout_method = "thread"
 # An interpreter missing a plugin refuses to start instead of silently ignoring `timeout`.
 required_plugins = ["pytest-timeout>=2.3", "pytest-xdist>=3.6", "pytest-asyncio>=0.23"]
 markers = ["refactor_guard: permanent architecture guards selected by the required debt check"]
+# A test that builds a coroutine and drops it never ran the setup it names, and the only
+# notice is a warning printed beside the failure it caused. Fail on the warning instead.
+filterwarnings = ["error:coroutine .* was never awaited:RuntimeWarning"]
 # /tmp is RAM: keep only the last run's failing tests' directories.
 tmp_path_retention_policy = "failed"
 tmp_path_retention_count = 1
@@ -140,17 +144,20 @@ line-length = 100
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "TID252"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = [
     "agent_comms.storage.store_files.ExclusiveLock",
-    "agent_comms.importing.ImportLimits",
-    "agent_comms.transcripts.LatestPage",
-    "agent_comms.transcripts.AtFrontier",
-    "agent_comms.transcripts.LivePageSource",
-    "agent_comms.notification_evidence.FirstRecipient",
-    "agent_comms.notification_evidence.RecipientLimit",
+    "agent_comms.execution.imported_messages.ImportLimits",
+    "agent_comms.execution.transcript_sources.LatestPage",
+    "agent_comms.execution.transcript_sources.AtFrontier",
+    "agent_comms.transcript.transcripts.LivePageSource",
+    "agent_comms.messaging.notification_evidence.FirstRecipient",
+    "agent_comms.messaging.notification_evidence.RecipientLimit",
 ]
 
 [tool.mypy]

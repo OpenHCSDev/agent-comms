@@ -1,7 +1,6 @@
 """Original nullable SQL groups cannot mint a partial recorded native reference."""
 
 
-from agent_comms.repo import Checkout
 import sqlite3
 from dataclasses import replace
 from functools import partial
@@ -10,23 +9,23 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp_extension import EmptyCursorObservation, VerifiedCursorObservation
-from agent_comms.assignment_states import TriagePendingAssignment
 from agent_comms.comms import wire
+from agent_comms.coordination.assignment_states import TriagePendingAssignment
 from agent_comms.coordination.errors import IdentityConflict, StaleFence
-from agent_comms.cursor_owner import (
+from agent_comms.execution.cursor_owner import (
     CommittedCursorOwner,
     CursorOwner,
     InheritedCursor,
     RecordedCursor,
     UnstartedCursor,
 )
-from agent_comms.nominal.field_codec import FieldCodec, InputId, MessageId, RootId, ThreadLookup
-from agent_comms.historical_native_inputs import (
+from agent_comms.execution.historical_native_inputs import (
     FullHistoricalNativeInput,
     TriageHistoricalNativeInput,
 )
-from agent_comms.native_claim_epoch import RecordedNativeClaim
-from agent_comms.native_input_record import (
+from agent_comms.execution.native_claim_epoch import RecordedNativeClaim
+from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.execution.native_input_record import (
     FullNativeExecution,
     NativeInputReference,
     NumberNativeColumn,
@@ -36,18 +35,24 @@ from agent_comms.native_input_record import (
     UnrecordedNativeColumn,
     UnrecordedNativeInputReference,
 )
-from agent_comms.native_input_proof import NativeContextProof
-from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
-from agent_comms.storage.private_path import FileIdentity
-from agent_comms.proven_source_coverage import InjectedInput, NoInjectedInput, ProvenSourceCoverage, SourcePrefix
-from agent_comms.selected_triage import (
+from agent_comms.execution.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
+from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.execution.proven_source_coverage import (
+    InjectedInput,
+    NoInjectedInput,
+    ProvenSourceCoverage,
+    SourcePrefix,
+)
+from agent_comms.execution.selected.triage import (
     AbsentTriageDecisionRecord,
     DecidedTriageRecord,
     FullSelectedTriage,
     IgnoreSelectedTriage,
 )
+from agent_comms.nominal.field_codec import FieldCodec, InputId, MessageId, RootId, ThreadLookup
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.native_session_reopen import PiSessionId
+from agent_comms.storage.private_path import FileIdentity
 
 
 def cursor() -> CurrentNativeCursor:

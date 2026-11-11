@@ -3,19 +3,17 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import ClassVar
 
+from agent_comms.cli_bridges.hook_read_gate import GatedCall
+from agent_comms.cli_bridges.shared import Binding
+from agent_comms.comms import Comms
+from agent_comms.coordination.tables.board_delivery import ReaderBoardDelivery
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms_hooks import ClaudeSubagentHook
-from .hook_read_gate import GatedCall
-
-from agent_comms_hooks.skill import DeckStart
-from ..comms import Comms
-from agent_comms_hooks.skill import DeckReader
-from ..registry.registry_document import RegistrySnapshot
-from ..coordination.tables.board_delivery import ReaderBoardDelivery
-from .shared import Binding
+from agent_comms_hooks.skill import DeckReader, DeckStart
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,5 @@
 """Sidebar states answer the same questions before and after a real read."""
 
-from agent_comms.repo import Checkout
 import gc
 import hashlib
 import pickle
@@ -9,20 +8,29 @@ from dataclasses import fields, replace
 
 import pytest
 
-from agent_comms.channel_targets import IncarnationThreadTarget, ThreadTarget
 from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import MalformedRecord
-from agent_comms.display_references import (
-    ChannelDisplayReference, CurrentDisplayReferences, DisplayReference, DisplayReferences,
-    HistoricalDisplayReference, RetiredThreadReference, ThreadDisplayReference,
+from agent_comms.messaging.channel_targets import IncarnationThreadTarget, ThreadTarget
+from agent_comms.messaging.display_references import (
+    ChannelDisplayReference,
+    CurrentDisplayReferences,
+    DisplayReference,
+    DisplayReferences,
+    HistoricalDisplayReference,
+    RetiredThreadReference,
+    ThreadDisplayReference,
 )
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.historical_views import HistorySource
+from agent_comms.messaging.historical_views import HistorySource
+from agent_comms.nominal.field_codec import MalformedRecord
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import HistoricalRootPurpose, ThreadRows
-from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_status import (
+    RunningThreadStatus,
+    StoppedThreadStatus,
+)
+from agent_comms.registry.threads import NativeThread
 from agent_comms.ui_model.sidebar import ChannelRowModel, SidebarModel
 from agent_comms.ui_model.unread import ExactUnread, UnobservedUnread
-from agent_comms.registry.threads import NativeThread
 
 
 def test_sidebar_apply_and_failure_publish_their_original_answers(comms):

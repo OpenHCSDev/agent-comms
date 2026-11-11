@@ -13,30 +13,40 @@ from __future__ import annotations
 
 import inspect
 import json
-from datetime import datetime
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
-from agent_comms.class_fact import ClassFact
-from agent_comms.team.package import TeamPackage
-from agent_comms.team.rule_file import RuleFile
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.held_orders import HeldOrders
-from agent_comms.pattern_sources import PostmortemFailure
-from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.comms import Comms
-from agent_comms.cli_bridges.shared import Binding
-from agent_comms.rule_deal import (
-    AuditDue, ClearedDeal, CompactedDeal, CompactionDeal, DealDelivery, DealTrigger, DealtSources,
-    PrimedDeal, StartedDeal, SystemPromptDelivery, UnstampedCompactionDeal,
-)
-from agent_comms.slop import Slop
-from agent_comms_hooks import ClaudeSubagentHook
-from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.cli_bridges.hook_read_gate import TranscriptWords
+from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms.cli_bridges.shared import Binding
+from agent_comms.comms import Comms
+from agent_comms.nominal.class_fact import ClassFact
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.projects.slop import Slop
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.team.dealt_sources import DealtSources
+from agent_comms.team.package import TeamPackage
+from agent_comms.team.pattern_sources import PostmortemFailure
+from agent_comms.team.rule_deal import (
+    AuditDue,
+    ClearedDeal,
+    CompactedDeal,
+    CompactionDeal,
+    DealDelivery,
+    DealTrigger,
+    PrimedDeal,
+    StartedDeal,
+    SystemPromptDelivery,
+    UnstampedCompactionDeal,
+)
+from agent_comms.team.rule_file import RuleFile
+from agent_comms_hooks import ClaudeSubagentHook
+
 
 class DeckReader(DealtSources):
     """The shared sources every bound collaborator reads, on both native and CLI backends.

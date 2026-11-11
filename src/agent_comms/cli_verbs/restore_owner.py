@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from agent_comms.cli_command import TargetActionCommand
-from agent_comms.cli_command import AppliedTogether
+from dataclasses import dataclass
+from typing import Self
+
 from agent_comms.cli_support.thread_lifecycle import ThreadLifecycleCliCommand
+from agent_comms.cli_verbs.cli_command import AppliedTogether, TargetActionCommand
 from agent_comms.comms import Comms
 from agent_comms.execution.owner_lifecycle import OwnerStartResult
 from agent_comms.registry.threads import NativeOwnerCommand, OwnerLifecycleControl
-from dataclasses import dataclass
-from typing import Self
 
 
 @dataclass(frozen=True, kw_only=True)

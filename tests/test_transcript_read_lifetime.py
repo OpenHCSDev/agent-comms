@@ -1,23 +1,23 @@
 """The read index closes with its resources, before Python clears its modules."""
-from agent_comms.repo import Checkout
 import gc
 import json
 import os
-from pathlib import Path
 import sqlite3
 import subprocess
 import sys
 import weakref
+from pathlib import Path
 
 import pytest
 
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.view_unread import transcript_read_state
 from agent_comms.comms import wire
-from native_unread_fixture import native_reader
-from agent_comms.registry.registry_document import DEFAULT_ROSTER
-from agent_comms.ui_model.unread import IndexingUnread
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
 from agent_comms.registry.threads import NativeThread
+from agent_comms.registry.view_unread import transcript_read_state
+from agent_comms.ui_model.unread import IndexingUnread
+from native_unread_fixture import native_reader
 
 
 def test_collected_reader_cancels_and_joins_its_worker_then_closes_sqlite(tmp_path):

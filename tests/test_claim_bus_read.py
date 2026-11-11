@@ -5,7 +5,6 @@ Real private bus, checkpoint, registry and coordination stores under /var/tmp.
 
 from __future__ import annotations
 
-from agent_comms.repo import Checkout
 import hashlib
 import os
 import sys
@@ -13,39 +12,40 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.attempt_start import AttemptStart
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
+from agent_comms.context_segments.native_messages import TranscriptSegment
 from agent_comms.context_store import UNREAD_CONTEXT
-from conftest import accept_initial
+from agent_comms.coordination.attempt_start import AttemptStart
+from agent_comms.coordination.attempt_states import AttemptFailedAttempt
 from agent_comms.coordination.cohort import sealed_cohort_assignments
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.owner_fence import prepare_fence_token
+from agent_comms.coordination.reason_codes import NoReasonCode
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.coordination.tables.executions import WireOrigin
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
-from agent_comms.nominal.field_codec import ClaimId, TurnId
-from agent_comms.message_page import ConversationMessagePageRequest, MessagePageRequest
-from agent_comms.messages import ClaimMessage, ClaimNoticeKind
-from agent_comms.owner_fence import prepare_fence_token
-from agent_comms.read_basis import AllChannelDisplayScope, DMDisplayScope
-from agent_comms.reason_codes import NoReasonCode
-from agent_comms.selected_claim import (
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.selected.claim import (
     publish_selected_resource_claim,
     write_selected_claimed_file,
 )
-from agent_comms.selected_source_batch import SelectedSource
-from agent_comms.thread_identity import TurnIdentity
-from agent_comms.registry.threads import NativeThread
-from agent_comms.turn_context import (
+from agent_comms.execution.selected.source_batch import SelectedSource
+from agent_comms.execution.turn_context import (
     ContextManifest,
     OwnerProvenance,
     RecordedContextTurn,
     SegmentManifest,
-    TranscriptSegment,
 )
-from conftest import publish_initial
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim, WakeClaim
+from agent_comms.messaging.message_page import ConversationMessagePageRequest, MessagePageRequest
+from agent_comms.messaging.messages import ClaimMessage, ClaimNoticeKind
+from agent_comms.messaging.read_basis import AllChannelDisplayScope, DMDisplayScope
+from agent_comms.nominal.field_codec import ClaimId, TurnId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import TurnIdentity
+from agent_comms.registry.threads import NativeThread
+from conftest import accept_initial, publish_initial
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort claim_scope requires real /var/tmp"
@@ -55,22 +55,22 @@ pytestmark = pytest.mark.skipif(
 def record_context(comms: Comms, name: str, generation: int) -> None:
     owner = comms.registry.require(name)
     segment = SegmentManifest(
-        TranscriptSegment,
-        (OwnerProvenance(owner.incarnation, "input-source"),),
-        hashlib.sha256(b"context").hexdigest(),
-        7,
-        2,
+        kind=TranscriptSegment,
+        provenance=(OwnerProvenance(owner.incarnation, "input-source"),),
+        sha256=hashlib.sha256(b"context").hexdigest(),
+        utf8_bytes=7,
+        tokens=2,
     )
     comms.contexts.record_after(
         UNREAD_CONTEXT,
         ContextManifest(
-            owner.incarnation,
-            RecordedContextTurn(
+            thread=owner.incarnation,
+            turn=RecordedContextTurn(
                 TurnId(f"{generation:032x}"),
                 TurnIdentity(owner.incarnation, generation),
             ),
-            (segment,),
-            "pi.estimateTokens",
+            segments=(segment,),
+            counter="pi.estimateTokens",
         ),
     )
 
@@ -113,7 +113,7 @@ def selected_turn(private_comms, private_directory):
             "execution", expected_revision=snapshot.execution.revision
         ).value
         store.start(AttemptStart(
-            "execution", 1, lookup, person.owner_identity.generation, prepare_fence_token(),
+            execution_id="execution", attempt_ordinal=1, owner_lookup=lookup, owner_generation=person.owner_identity.generation, token=prepare_fence_token(),
             expected_execution_revision=snapshot.execution.revision,
             expected_pointer_revision=snapshot.pointer_revision,
         ))
@@ -135,7 +135,6 @@ def selected_turn(private_comms, private_directory):
 
 
 def settle_failed(store):
-    from agent_comms.attempt_states import AttemptFailedAttempt
 
     with store.session.settlement() as boundary:
         snapshot = store.get("execution")

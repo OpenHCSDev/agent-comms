@@ -3,14 +3,10 @@
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.turn_digests import OrderToolCallCountRead, TurnsSince
-
-from .standing_rules import (
-    HeldBranch,
-    HeldBranchRule,
-    HeldOrderBranchRule,
-)
+from agent_comms.execution.turn_bound import TurnsSince
+from agent_comms.execution.turn_digests import OrderToolCallCountRead
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.team.standing_rules import HeldBranch, HeldBranchRule, HeldOrderBranchRule
 
 
 @dataclass(frozen=True)

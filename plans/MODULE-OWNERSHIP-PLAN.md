@@ -249,9 +249,11 @@ modules, they are *several* owners sharing a file. Splitting them is what makes
 ### P2 — `projects/` exists: the repository and checkout owners
 
 Move the repo/checkout/worktree family out of the flat surface into `projects/`.
-`repo.py` (1,396) is the anchor; `checkout*.py`, `worktree*.py`, `integration.py`
-and the project-side storage-rule types follow only if the trace says they answer
-the same fact.
+
+**On main (2026-11-08):** `projects/` holds `repo`, `checkouts`, `git_errors`,
+`repository_sources`, `storage_projection` and `storage_rules` (claude-p-pkg's
+ProjectOwnersPhase). Still flat: `checkout_publication.py`, `integration.py` and
+`repository_name.py`; each moves only if its trace says it answers a `projects/` fact.
 
 - **Operations:** `CreateFileOperation` + `PatchTargetOperation` for module bodies;
   `EnsureImportOperation`/`RemoveImportNamesOperation` for consumer closure.

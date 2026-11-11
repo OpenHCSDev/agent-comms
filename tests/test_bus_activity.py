@@ -1,16 +1,19 @@
 """Activity and viewer clocks are read-only projections of committed bus appends."""
-from agent_comms.activity_clocks import ChannelActivity
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus import PublicRecord
-from agent_comms.mentions import ThreadMention
-from agent_comms.messages import InfoKind, Message, NoticeRole
-from agent_comms.read_basis import (
-    AllChannelDisplayScope, ChannelDisplayScope, ListedDeliveries, MemberActivityDisplayScope,
+from agent_comms.messaging.activity_clocks import ChannelActivity
+from agent_comms.messaging.bus import PublicRecord
+from agent_comms.messaging.mentions import ThreadMention
+from agent_comms.messaging.messages import InfoKind, Message, NoticeRole
+from agent_comms.messaging.read_basis import (
+    AllChannelDisplayScope,
+    ChannelDisplayScope,
+    ListedDeliveries,
+    MemberActivityDisplayScope,
 )
-from agent_comms.thread_identity import UserThreadRole
+from agent_comms.registry.thread_identity import UserThreadRole
 
 
 def append(bus, message):
@@ -66,9 +69,9 @@ def test_read_capture_defers_when_coordinator_has_no_snapshot(private_comms):
     import threading
     import time
 
+    from agent_comms.coordination.coordinator import Coordination
     from agent_comms.coordination.errors import CoordinationReadUnavailable
     from agent_comms.coordination.session import ReadNativeCoordinationSession
-    from agent_comms.coordination.coordinator import Coordination
     from agent_comms.nominal.field_codec import ThreadLookup
     from agent_comms.storage.store_files import StoreBusy
     held, release = threading.Event(), threading.Event()
@@ -103,8 +106,8 @@ def test_open_boundary_never_holds_the_registry_against_its_writers(private_comm
     once, and a write from the stale copy refuses instead of publishing over it."""
     import threading
 
-    from agent_comms.coordination.errors import StaleFence
     from agent_comms.coordination.coordinator import Coordination
+    from agent_comms.coordination.errors import StaleFence
     from agent_comms.storage.store_files import RegistryLocking
 
     registry = private_comms.bus._registry.store

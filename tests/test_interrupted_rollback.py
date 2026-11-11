@@ -1,7 +1,6 @@
 """A killed restore must be completed by the next install, before it reads the bus."""
 
 
-from agent_comms.repo import Checkout
 import os
 import signal
 import subprocess
@@ -12,20 +11,21 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import Comms, wire
-from agent_comms.active_route import active_route_path
-from agent_comms.install_choices import RehearsalMode
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.installer.active_route import active_route_path
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.installer.probes.carry import Carried, Carry
+from agent_comms.installer.install_choices import RehearsalMode
 from agent_comms.installer.launch import InstallReport
+from agent_comms.installer.probes.carry import Carried, Carry
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.upgrade import upgrade
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile
-from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.thread_text import GivenThreadText
-from bus_record_fixture import prepare_native_comms
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import InstallationFiles, LiveFilesRequest, RegistryFile
+from bus_record_fixture import prepare_native_comms
 
 
 class RegistryTitleCarry(Carry):
@@ -93,7 +93,11 @@ class CarryingRoot:
         RegistryTitleCarry(LiveFilesRequest(self.comms.root), self.spill).carry(apply=True)
 
     def digests(self) -> dict[Path, str]:
-        return {path: RegistryStore.digest(path) for path in self.registry.written}
+        return {
+            resource.live(self.comms.root): resource.owner.digest(resource.live(self.comms.root))
+            for resource in InstallationFiles(LiveFilesRequest(self.comms.root)).owned_files(
+                self.registry.written)
+        }
 
     def refused_install(self) -> None:
         """Enter the real installer; its next Git command fails on the missing checkout, so

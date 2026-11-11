@@ -1,32 +1,37 @@
 """agent-comms install: the bus it creates or practises on, and the route to it."""
 from __future__ import annotations
 
-import sys
-
-from agent_comms.repo import Checkout
 import json
 import os
 import sqlite3
+import sys
 from contextlib import closing
 from pathlib import Path
 
-from agent_comms.storage.locked_store import LiveFilesRequest
-from agent_comms.nominal.field_codec import TurnId
-from agent_comms.registry.threads import ParkedThreadWorkState, NativeThread
-
-from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
-from agent_comms.child_process import NoProcess, ProcessIdentity
-from agent_comms.bus import Bus
-from agent_comms.recorded_bus import RecordedBusIdentity
-from bus_record_fixture import prepare_native_comms
 from agent_comms.comms import wire
-from agent_comms.team.config import GivenRepos
-from agent_comms.registry.registry_document import NoTeamProject, RegisteredTeamProject
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
+from agent_comms.installer.active_route import ActiveRoute, read_active_route, route_new_bus
 from agent_comms.installer.backup import bus_files
-from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.practice import PracticeCopy
-from agent_comms.storage.locked_store import BusFile, RegistryFile, RootFile, SQLiteFile
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.recorded_bus import RecordedBusIdentity
+from agent_comms.nominal.field_codec import TurnId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_document import NoTeamProject, RegisteredTeamProject
+from agent_comms.registry.threads import NativeThread, ParkedThreadWorkState
+from agent_comms.storage.locked_store import (
+    BusFile,
+    LiveFilesRequest,
+    RegistryFile,
+    RootFile,
+    SQLiteFile,
+)
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.team.config import GivenRepos
+from bus_record_fixture import prepare_native_comms
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -82,7 +87,7 @@ def test_install_routes_a_new_bus_and_replaces_only_a_route_that_selects_none(pr
 def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(private_directory):
     root, _ = bus(private_directory)
     (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
-    barrier = MaintenanceBarrier(root / "registry.json")
+    barrier = MaintenanceBarrier(RegistryFile.path_in(root))
     barrier.begin(MaintenanceOperator.current())
     witnesses = {str(path.relative_to(root)) for path in barrier.witness_paths if path.exists()}
     assert witnesses
@@ -101,11 +106,14 @@ def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(p
     practice.include(tuple(RootFile.existing_in(root)))
     copy = practice.path
     measurement = practice.measurement
-    copied = {str(path.relative_to(copy)) for path in copy.rglob("*") if path.is_file()}
-    # The copy's own registry writer takes its own lock.
-    own_lock = {str(path.relative_to(copy))
-                for path in RegistryFile.transient_paths(RegistryFile.path_in(copy))}
-    assert copied - own_lock == declared - witnesses
+    observed = {path: path.stat() for path in copy.rglob("*") if path.is_file()}
+    # Each file owner distinguishes retained content from locks and SQLite read artifacts.
+    noncontent = set()
+    for path, owner in files.items():
+        retained = copy / path.relative_to(root)
+        noncontent.update(owner.member_paths(retained) - owner.snapshot_members(retained, observed))
+    copied = {str(path.relative_to(copy)) for path in observed.keys() - noncontent}
+    assert copied == declared - witnesses
     assert measurement.bytes > 0
     for name in databases:
         query = "SELECT name FROM sqlite_schema ORDER BY name"

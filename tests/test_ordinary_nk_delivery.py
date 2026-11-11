@@ -2,17 +2,16 @@
 publication protocol."""
 
 from __future__ import annotations
-from agent_comms.repo import Checkout
-from agent_comms.messages import NoticeRole
 
 import os
 
-
-from agent_comms.channel_targets import ThreadTarget
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.messaging.channel_targets import ThreadTarget
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.messaging.messages import NoticeRole
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import NativeThread
 from conftest import installed_comms
 from test_coordinated_runtime import tmp_path as private_root_fixture
-from agent_comms.registry.threads import NativeThread
 
 tmp_path = private_root_fixture
 

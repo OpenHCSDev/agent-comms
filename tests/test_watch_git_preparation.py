@@ -8,8 +8,8 @@ import os
 import subprocess
 import sys
 import threading
-from concurrent.futures import Future
 from collections.abc import Callable
+from concurrent.futures import Future
 from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass
 from functools import partial
@@ -18,25 +18,58 @@ from queue import Queue
 
 import pytest
 
-from agent_comms.child_process import (
-    AsyncWork, ChildRetirementFailed, GitChildPermission, GitChildren, ObservedProcess,
-    OwnedGitOpening, ReadWork, SpawnedProcess, SynchronousProcess, join_retirement,
-)
-from agent_comms.native_build_inputs import (
-    ConfiguredChildStdio, DetachedChildStdio, GitAcquisitionCancelled, GitLaunch,
-)
-from agent_comms.coordination.coordinator import Coordination
 from agent_comms.comms import Comms
-from agent_comms.message_bus import Watch
-from agent_comms.head_review import OpenPullRequestHead
-from agent_comms.service_passes import ServicePassStore
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.service_passes import ServicePassStore
+from agent_comms.execution.child_process import (
+    AsyncWork,
+    ChildRetirementFailed,
+    GitChildPermission,
+    GitChildren,
+    ObservedProcess,
+    OwnedGitOpening,
+    ReadWork,
+    SpawnedProcess,
+    SynchronousProcess,
+    join_retirement,
+)
+from agent_comms.execution.watch_passes import Watch
+from agent_comms.installer.native_build_inputs import (
+    ConfiguredChildStdio,
+    DetachedChildStdio,
+    GitAcquisitionCancelled,
+    GitLaunch,
+)
+from agent_comms.planning.nominal_census import NominalCensus
+from agent_comms.planning.orders import (
+    CitedEvidence,
+    DraftPullRequest,
+    UnmergedPullRequest,
+)
+from agent_comms.planning.phase_evidence import (
+    BusStorageAbsent,
+    CommitMerged,
+    EvidenceFound,
+    EvidenceUnread,
+    MainTree,
+    PathsAbsent,
+    PhaseEvidence,
+)
+from agent_comms.projects.change_report import (
+    BranchHeadRevision,
+    CommitRevision,
+    FileLine,
+    OrderRoots,
+)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_errors import (
+    GitCommandError,
+    UnavailableCommitError,
+)
+from agent_comms.projects.head_review import OpenPullRequestHead
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.work_branches import SourceGrowth, WorkBranchError, WorkBranches
 from git_shutdown_fixture import HeldGitHTTP, held_commit
-from agent_comms.nominal_census import NominalCensus
-from agent_comms.phase_evidence import BusStorageAbsent, CommitMerged, EvidenceFound, EvidenceUnread, MainTree, PathsAbsent, PhaseEvidence
-from agent_comms.repo import Checkout, GitCommandError, Repo, UnavailableCommitError
-from agent_comms.todos import CitedEvidence, DraftPullRequest, UnmergedPullRequest
-from agent_comms.change_report import BranchHeadRevision, CommitRevision, FileLine, OrderRoots
-from agent_comms.work_branches import SourceGrowth, WorkBranchError, WorkBranches
 from source_revision_fixture import SourceRepository
 from team_heartbeat_fixture import RetainedNominalPlanReadings
 
@@ -720,7 +753,7 @@ def test_git_opening_preserves_inherited_stdin(owned: bool) -> None:
 
 
 def test_git_bootstrap_opening_works_without_core_imports(git_preparation: GitPreparation) -> None:
-    source = Path(__file__).resolve().parents[1] / "src/agent_comms/native_build_inputs.py"
+    source = Path(__file__).resolve().parents[1] / "src/agent_comms/installer/native_build_inputs.py"
     program = (
         "import runpy,sys; module=runpy.run_path(sys.argv[1]); "
         "r=module['GitLaunch']._run(sys.argv[2], 'rev-parse', 'HEAD'); "

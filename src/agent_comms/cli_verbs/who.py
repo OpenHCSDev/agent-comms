@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import WhoResult
-from agent_comms.comms import Comms
 from dataclasses import dataclass
+
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_commands import WhoResult
+from agent_comms.comms import Comms
 
 
 @dataclass(frozen=True, kw_only=True)

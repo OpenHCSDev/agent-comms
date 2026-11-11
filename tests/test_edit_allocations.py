@@ -5,23 +5,26 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.nominal.field_codec import GoalId, OrderId
-from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.repo import Checkout
-from agent_comms.shell_effects import WriteStorageEffect
-from agent_comms.tool_denial import StorageDenied
-from agent_comms.storage_rules import CheckoutAllocation, EditableCheckoutAllocation, StorageRule
-from agent_comms.storage_projection import StorageProjection
-from agent_comms.registry.threads import ExternalThread
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.todos import (
+from agent_comms.planning.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.orders import (
     Assignment,
     IncomingWork,
-    SharedWorktreeRefusal,
     TodoConflict,
 )
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.planning.todo_refusals import SharedWorktreeRefusal
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.shell_effects import WriteStorageEffect
+from agent_comms.projects.storage_projection import StorageProjection
+from agent_comms.projects.storage_rules import (
+    CheckoutAllocation,
+    EditableCheckoutAllocation,
+    StorageRule,
+)
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.threads import ExternalThread
+from agent_comms.transport.tool_caller import ThreadCaller
+from agent_comms.transport.tool_denial import StorageDenied
 from agent_comms.transport.tools.orders import CommsTodoCreateTool
-
 
 pytest_plugins = ('test_forks',)
 

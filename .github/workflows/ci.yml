@@ -40,7 +40,7 @@ jobs:
 
       - name: Check installed clients
         run: |
-          stack/.venv/bin/python -c "import agent_comms.acp, textual, toad.app"
+          stack/.venv/bin/python -c "import agent_comms.execution.acp, textual, toad.app"
           stack/.venv/bin/agent-comms --help
           stack/.venv/bin/toad --help
 

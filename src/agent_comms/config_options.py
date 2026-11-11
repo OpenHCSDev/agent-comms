@@ -1,46 +1,40 @@
 """Configuration owns its model and thinking catalogs."""
 
-from __future__ import annotations
-
 import asyncio
 import os
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import aclosing
 from dataclasses import dataclass, field
-from functools import cached_property, partial
+from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
-from .coordination.errors import Refused
-
-from .active_route import CommsRoute, resolve_comms_route
-from .launch_root import LaunchRoot
-from .bus import Bus
-from .nominal.declared_family import DeclaredFamily
-from .launch_runtime import LaunchRuntime, ThreadLaunch
-from .owner_launch import RetainedOwnerLaunch
-from .native_arguments import NativeArguments
-from .native_pi import NativePiRpcLaunch
-from .pi_vocabulary import ServiceTier, ThinkingChoice
-from .coordination.coordinator import Coordination
-from .nominal.field_codec import FieldCodec
-from .registry.threads import ChosenServiceTier, NextTurnConfiguration, Thread
-from .thread_model import CatalogSelection, ThreadModel
-from .pi_commands import (
+from agent_comms.coordination.errors import Refused
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.launch_runtime import LaunchRuntime, ThreadLaunch
+from agent_comms.execution.native_arguments import NativeArguments
+from agent_comms.execution.native_pi import NativePiRpcLaunch
+from agent_comms.execution.pi_commands import (
     GetAvailableModels,
     GetAvailableThinkingLevels,
     SetModel,
     SetThinkingLevel,
+    SettingCommand,
 )
-from .watched import FileSource
-
-if TYPE_CHECKING:
-    from .nominal.field_codec import AcpSessionId
-    from .session_config_options import SessionConfigOptions
-    from .native_package import VerifiedNativePackage
-    from .registry.registry_document import RegistrySnapshot
+from agent_comms.execution.pi_vocabulary import ServiceTier, ThinkingChoice
+from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
+from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.watched import FileSource
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.thread_model import CatalogSelection, ThreadModel
+from agent_comms.registry.threads import ChosenServiceTier, NextTurnConfiguration, Thread
+from agent_comms.transport.owner_requests import RetainedOwnerLaunch
+from agent_comms.transport.project_request import ProjectRuntimeRequest
 
 
 class InvalidConfigChoice(ValueError):
@@ -77,6 +71,20 @@ class CatalogChoice:
         return self.value if self.value is not None else ""
 
 
+class ConfigurationChanges[Configuration](ABC):
+    """The configuration writes an option asks its executing session to make."""
+
+    @abstractmethod
+    async def configure_thread(
+        self, configuration: Configuration, thread: Thread, command: SettingCommand,
+    ) -> None: ...
+
+    @abstractmethod
+    async def store_configuration(
+        self, thread: Thread, change: NextTurnConfiguration,
+    ) -> None: ...
+
+
 class ConfigOption(DeclaredFamily, affix="ConfigOption"):
     title: ClassVar[str]
     description: ClassVar[str]
@@ -91,7 +99,7 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
 
     @abstractmethod
     async def change(
-        self, owner: SessionConfigOptions, thread: Thread, value: str
+        self, owner: ConfigurationChanges[ConfigOptions], thread: Thread, value: str
     ) -> None: ...
 
 
@@ -150,11 +158,11 @@ class CatalogConfigOption(ConfigOption):
 
     @abstractmethod
     async def apply(
-        self, owner: SessionConfigOptions, thread: Thread, value: str
+        self, owner: ConfigurationChanges[ConfigOptions], thread: Thread, value: str
     ) -> None: ...
 
     async def change(
-        self, owner: SessionConfigOptions, thread: Thread, value: str
+        self, owner: ConfigurationChanges[ConfigOptions], thread: Thread, value: str
     ) -> None:
         try:
             await self.validate(thread, value)
@@ -188,7 +196,7 @@ class ModelConfigOption(CatalogConfigOption):
         return await self.owner.models.choices(self.owner, thread.project_path)
 
     async def apply(
-        self, owner: SessionConfigOptions, thread: Thread, value: str
+        self, owner: ConfigurationChanges[ConfigOptions], thread: Thread, value: str
     ) -> None:
         provider, model = value.split("/", 1)
         await owner.configure_thread(
@@ -216,7 +224,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         return [CatalogChoice(value=level, name=level.title()) for level in levels]
 
     async def apply(
-        self, owner: SessionConfigOptions, thread: Thread, value: str
+        self, owner: ConfigurationChanges[ConfigOptions], thread: Thread, value: str
     ) -> None:
         await owner.configure_thread(
             self.owner, thread, SetThinkingLevel(level=value),
@@ -236,14 +244,13 @@ class ServiceTierConfigOption(CatalogConfigOption):
         return [CatalogChoice(name=tier.value.title(), value=tier.value) for tier in ServiceTier]
 
     async def apply(
-        self, owner: SessionConfigOptions, thread: Thread, value: str
+        self, owner: ConfigurationChanges[ConfigOptions], thread: Thread, value: str
     ) -> None:
-        await Coordination.run_worker(partial(
-            owner.comms.threads.set_thread_configuration, thread,
-            NextTurnConfiguration(
+        await owner.store_configuration(
+            thread, NextTurnConfiguration(
                 service_tier=ChosenServiceTier(FieldCodec.decode(ServiceTier, value)),
             ),
-        ))
+        )
 
 
 class ModelCatalog(DeclaredFamily, affix="ModelCatalog"):
@@ -331,7 +338,7 @@ class ConfigOptions:
         return {
             **ThreadLaunch.strip(dict(self.launch.environment)),
             **self.launch.configuration.encode(),
-            **thread.native_environment(self.route.root, snapshot),
+            **ProjectRuntimeRequest.native_environment(thread, self.route.root, snapshot),
         }
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:

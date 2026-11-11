@@ -5,14 +5,14 @@ from dataclasses import dataclass
 from typing import Annotated, ClassVar
 
 from pydantic import JsonValue
-
-from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import FieldCodec, WireName
-from agent_comms.installer.probes.carry import Carried, Carry
-from agent_comms.storage.locked_store import RootFile
-from agent_comms.storage.store_files import AtomicFile
 from toad.key_modes import KeyMode, Standard, VimNormal
 from toad.preferences import SavedSettings, ToadSettings, UiSettings
+
+from agent_comms.errors import RelationViolationError
+from agent_comms.installer.probes.carry import Carried, Carry
+from agent_comms.nominal.field_codec import FieldCodec, WireName
+from agent_comms.storage.locked_store import RootFile
+from agent_comms.storage.store_files import AtomicFile
 
 
 @dataclass(frozen=True)

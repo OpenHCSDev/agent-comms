@@ -5,10 +5,8 @@ import time
 from dataclasses import replace
 
 import pytest
-from agent_comms.transport.tools.orders import CommsTodoListTool
 from cutover.carry_todo_stories import INLINE_FIELDS, TodoStories
 
-from agent_comms.team.order import Team
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     GoalId,
@@ -16,15 +14,9 @@ from agent_comms.nominal.field_codec import (
     OrderId,
     ToolCallId,
 )
-from agent_comms.storage.locked_store import LiveFilesRequest
-from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
-from agent_comms.order_story import StoryEvent
-from agent_comms.repo import Checkout
-from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
-from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.registry.threads import NativeThread
-from agent_comms.todos import (
+from agent_comms.planning.order_story import StoryEvent
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
     AcceptedVerdict,
     Assignment,
     CheckedProblemOrder,
@@ -34,20 +26,30 @@ from agent_comms.todos import (
     OrderMessage,
     PeerAcceptedVerdict,
     ReleaseTodo,
+    ReopenTodo,
+    ReviewedOrderRun,
     RewrittenVerdict,
     SendBackStrike,
     SendBackVerdict,
     StoredOrderStory,
-    StrikeReason,
     StrikeTodo,
     SupersededVerdict,
-    WaivedVerdict,
     Todo,
     TodoCommand,
     VoidStrikeTodo,
+    WaivedVerdict,
     WordingCorrection,
 )
-from agent_comms.tool_caller import NoThreadCaller
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import LiveFilesRequest
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.storage.recorded_time import RecordedEventTime, UnrecordedEventTime
+from agent_comms.team.order import Team
+from agent_comms.transport.tool_caller import NoThreadCaller
+from agent_comms.transport.tools.orders import CommsTodoListTool
 from test_todos import order
 
 
@@ -94,6 +96,9 @@ def test_story_members_round_trip_in_one_append_only_table(recorded_problem):
     todo = store.get("P1")
     actor = recorded_problem.registry.require("colleague").incarnation
     events += (
+        ReopenTodo(todo.revision, actor, todo.held(), todo.order.checked().check,
+                   ReviewedOrderRun("A peer reviewed the original source and every remaining required outcome."),
+                   "The first source publication did not finish the remaining required work."),
         FailedCheckStrike.make(todo, 4000, "The declared acceptance command failed at its source owner."),
         PeerAcceptedVerdict(todo.revision, actor, todo.held(), ToolCallId("peer-call"),
             quote="Repair the existing record owner", peer=MessageId.mint("peer review")),

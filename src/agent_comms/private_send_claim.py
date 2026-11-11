@@ -13,53 +13,49 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from agent_comms.native_runtime_input import NativeRuntimeTable
-from .nominal.field_codec import AcpSessionId, InputId
-from .coordination.errors import IdentityConflict, RetryScheduled
-from .coordination.coordinator import Coordination
-from .diagnostics import (
-    record_acquisition_progress,
-    record_request_progress,
-)
-from .following_inputs import FollowingInputs
-from .goal_turn_permit import NoLaunchPermit
-from .storage.maintenance_barrier import MaintenanceBarrier
-from .message_bus import MessageBus
-from .native_arguments import SelectedModel
-from .native_input_owner import ParticipantOwner, RegistryOwner
-from .native_entries import NativeEvidenceScope
-from .native_input_proof import NativeContextProof
-from .native_pi import NativePiTerminalFailure, NativeTurnResult
-from .native_prompt_binding import bind_expected_prompt
-from .native_prompt_send import PromptBoundary
-from .native_session_reopen import NativeSessionIdentity
-from .native_startup import NativeStartup
-from .native_tool_call import NativeToolMode
-from .owned_send import OwnedSend
-from .publication_measurements import PublicationMeasurements
-from .registry.registry_document import RegistrySnapshot
-from .text_digest import TextDigest
-from .tracked_turn import (
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict, RetryScheduled
+from agent_comms.execution.diagnostics import record_acquisition_progress, record_request_progress
+from agent_comms.execution.following_input_contracts import FollowingPromptBoundary
+from agent_comms.execution.goal_turn_permit import NoLaunchPermit
+from agent_comms.execution.input_drain import InputDrain
+from agent_comms.execution.native_arguments import SelectedModel
+from agent_comms.execution.native_entries import NativeEvidenceScope
+from agent_comms.execution.native_execution import PackagedNativeExecution
+from agent_comms.execution.native_input_owner import ParticipantOwner, RegistryOwner
+from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.execution.native_pi import NativeTurnResult
+from agent_comms.execution.native_prompt_binding import bind_expected_prompt
+from agent_comms.execution.native_runtime_input import NativeRuntimeTable
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+from agent_comms.execution.native_startup import NativeStartup
+from agent_comms.execution.owned_send import OwnedSend
+from agent_comms.execution.private_send_stage import NativeSendStage
+from agent_comms.execution.publication_measurements import PublicationMeasurements
+from agent_comms.execution.selected.participant import SelectedParticipant
+from agent_comms.execution.selected.session import SelectedSession
+from agent_comms.execution.tracked_turn import (
     NO_FOLLOWING_INPUTS,
     NO_NATIVE_OBSERVER,
     NativeObserver,
     TrackedTurnSession,
 )
-from .turn_context import RenderedInput
-from agent_comms.turn_input_source import SelectedOriginalInput
-
-if TYPE_CHECKING:
-    from .execution.input_drain import InputDrain
-    from .coordinated_runtime import SelectedExecution
-from .private_send_stage import NativeSendStage
-from .selected_participant import SelectedParticipant
-from .selected_session import SelectedSession
+from agent_comms.execution.turn_context import RenderedInput
+from agent_comms.execution.turn_failure import NativePiTerminalFailure
+from agent_comms.execution.turn_input_source import SelectedOriginalInput
+from agent_comms.following_inputs import FollowingInputs
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId
+from agent_comms.nominal.text_digest import TextDigest
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
+from agent_comms.transport.native_tool_transport import NativeToolMode
+from agent_comms.transport.project_request import ProjectRuntimeRequest
 
 
 @dataclass(frozen=True, kw_only=True)
-class PrivateSendClaim(PromptBoundary):
+class PrivateSendClaim(FollowingPromptBoundary):
     selected: SelectedParticipant
     stage: NativeSendStage
     input_id: InputId
@@ -97,7 +93,7 @@ class PrivateSendClaim(PromptBoundary):
         return self.selected.store.session.path
 
     @property
-    def wire_root_id(self) -> str:
+    def wire_root_id(self) -> RootId:
         return self.selected.root_id
 
     @property
@@ -169,7 +165,7 @@ class PrivateSendClaim(PromptBoundary):
 
     async def execute(
         self,
-        execution: SelectedExecution,
+        execution: PackagedNativeExecution,
         *,
         model: SelectedModel,
         selected_tool_mode: NativeToolMode,
@@ -200,7 +196,8 @@ class PrivateSendClaim(PromptBoundary):
                 session=self.session,
                 model=model,
                 thinking_level=self.owner.thread.thinking_level,
-                environment=self.owner.thread.native_environment(
+                environment=ProjectRuntimeRequest.native_environment(
+                    self.owner.thread,
                     self.bus.bus.path.parent, registry,
                 ),
                 ingress=MaintenanceBarrier(self.bus._registry.store.path),
@@ -215,7 +212,7 @@ class PrivateSendClaim(PromptBoundary):
                 following=following,
             )
         except NativePiTerminalFailure as error:
-            def settle(store: Coordination, terminal: NativePiTerminalFailure = error):
+            def settle(store: Coordination, terminal: NativePiTerminalFailure[NativeContextProof] = error) -> object:
                 self.verify(store, terminal.context, source_reads)
                 return self.stage.fail_terminal(
                     store, self.participant, self.input_id, self.token_digest,
@@ -320,7 +317,7 @@ class PrivateSendClaim(PromptBoundary):
             )
 
     @contextmanager
-    def prompt_boundary(self, turn):
+    def prompt_boundary(self, turn: TrackedTurnSession) -> Iterator[None]:
         with self(turn.native.attestation.require_identity()):
             turn.grant_prompt()
             yield

@@ -10,15 +10,24 @@ import pytest
 from acp.schema import ToolCallStart
 
 import agent_comms.agent_events as events
-from agent_comms.acp import SdkSessionConnection
+from agent_comms.execution.acp import SdkSessionConnection
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.comms import wire
+from agent_comms.execution.turn_item import NativeItemId
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     ToolCallId,
 )
-from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, WriteTool
-from agent_comms.tool_declaration import (
+from agent_comms.registry.thread_identity import UnobservedTools
+from agent_comms.transport.native_tools import (
+    BashTool,
+    CodingTool,
+    EditTool,
+    NativeToolDeclaration,
+    ReadTool,
+    WriteTool,
+)
+from agent_comms.transport.tool_declaration import (
     EditAction,
     ExecuteAction,
     OtherAction,
@@ -28,7 +37,6 @@ from agent_comms.tool_declaration import (
     ToolDeclaration,
     UndeclaredTool,
 )
-from agent_comms.turn_item import NativeItemId
 from conftest import transcript_records
 from delivery_owner_fixture import canonical_agent
 
@@ -56,14 +64,16 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
             {"query": "new declaration"},
         )
         with pytest.raises(ValueError):
-            CodingTool.from_call("inspect_fixture", {"query": "new declaration"}, call_id="case")
+            CodingTool.from_call("inspect_fixture", {"query": "new declaration"}, call_id="case",
+                                offered=UnobservedTools())
         case = FieldCodec.decode(ToolCallId, "case")
         examples = (ReadTool(call_id=case, path="file"), BashTool(call_id=case, command="pwd"),
             EditTool(call_id=case, path="file", edits=(ReplacementEdit("before", "after"),)),
             WriteTool(call_id=case, path="file", content="value"))
         assert {type(tool) for tool in examples} == set(CodingTool.members_with(CodingTool))
         for tool in examples:
-            call = type(tool).from_call(tool.declared_name, tool.arguments, call_id=case)
+            call = type(tool).from_call(tool.declared_name, tool.arguments, call_id=case,
+                                        offered=UnobservedTools())
             assert type(call) is type(tool)
             event = events.ToolStart.from_call("case", tool.declared_name, call.arguments)
             assert event.kind is tool.declared_action() and event.args == tool.arguments
@@ -80,7 +90,7 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
 
 @pytest.mark.parametrize("name,label", [("grep", "Search"), ("glob", "Find")])
 async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, label):
-    from agent_comms.transcript_events import ToolStartTranscript
+    from agent_comms.transcript.transcript_events import ToolStartTranscript
 
     arguments = {"pattern": "shared preview"}
     event = events.ToolStart.from_call("pattern-case", name, arguments)
@@ -96,7 +106,7 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
         "search", f"{label} shared preview", arguments,
     )
     with pytest.raises(ValueError):
-        CodingTool.from_call(name, arguments, call_id="pattern-case")
+        CodingTool.from_call(name, arguments, call_id="pattern-case", offered=UnobservedTools())
 
 
 @pytest.mark.parametrize("name,label,kind", [
@@ -104,9 +114,8 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
     ("edit", "Edit", EditAction), ("write", "Write", EditAction),
 ])
 def test_recorded_metadata_does_not_require_an_executable_request(name, label, kind):
-    from agent_comms.native_tool_call import CodingCall
-    from agent_comms.tool_denial import SelectedToolDenied
-    from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
+    from agent_comms.transcript.transcript_events import ToolEndTranscript, ToolStartTranscript
+    from agent_comms.transport.tool_denial import SelectedToolDenied
 
     foreign = {"file_path": "external.txt"}
     start = transcript_records.event(ToolStartTranscript, position=0, tool_call_id="saved", tool_name=name, raw_input=foreign)
@@ -118,7 +127,7 @@ def test_recorded_metadata_does_not_require_an_executable_request(name, label, k
     for invalid in (17, None, [["path", "external.txt"]]):
         with pytest.raises((TypeError, ValueError)):
             FieldCodec.decode(ToolStartTranscript, {**FieldCodec.encode(start), "raw_input": invalid})
-    refused = CodingCall.decode("execution", name, foreign)
+    refused = NativeToolDeclaration.decode("execution", name, foreign)
     with pytest.raises(SelectedToolDenied):
         refused.allowed_claim()
 
@@ -126,10 +135,10 @@ def test_recorded_metadata_does_not_require_an_executable_request(name, label, k
 def test_foreign_protocol_owners_decode_canonical_preview_arguments():
     from agent_comms.cli_bridges.codex_protocol import FileChange, UpdatedFile
     from agent_comms.cli_bridges.opencode_parts import ToolPart
+    from agent_comms.cli_bridges.tool_calls import ToolCall
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.native_tools import FilePatchTool
-    from agent_comms.tool_calls import ToolCall
-    from agent_comms.transcript_events import TranscriptEvent
+    from agent_comms.transcript.transcript_events import TranscriptEvent
+    from agent_comms.transport.native_tools import FilePatchTool
 
     start, end = FileChange(path="codex.txt", diff="@@ -1 +1 @@\\n-old\\n+new\\n",
                             kind=UpdatedFile()).events(NativeItemId("codex"), ToolCallId("codex"), True, transcript_records.timestamp.at.timestamp())
@@ -150,11 +159,10 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
 
 
 def test_core_commands_share_native_identity_without_changing_external_decode():
-    from agent_comms.native_tool_call import CodingCall
-    from agent_comms.native_tools import NativeExecutableTool
-    from agent_comms.tool_declaration import NativeRequestTools
-    from agent_comms.tool_request import NativeToolRequest
+    from agent_comms.transport.native_tools import NativeExecutableTool
     from agent_comms.transport.request import ToolRequest
+    from agent_comms.transport.tool_declaration import NativeRequestTools
+    from agent_comms.transport.tool_request import NativeToolRequest
     from agent_comms.transport.tools.send import CommsSendTool
 
     schemas = NativeRequestTools.catalog()
@@ -166,7 +174,7 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
     assert ToolDeclaration.for_name("EXTERNAL_UNKNOWN").label == "EXTERNAL_UNKNOWN"
     for request in ToolRequest.members_with(NativeToolRequest):
         arguments = {"to": "destination", "body": "decode-only"}
-        call = CodingCall.decode("isolated-call", request.declared_name, arguments)
+        call = NativeToolDeclaration.decode("isolated-call", request.declared_name, arguments)
         assert isinstance(call, NativeExecutableTool) and call.declared_name == request.declared_name
         assert call.call_id == "isolated-call" and call.arguments == arguments
         assert call.allowed_claim() is None
@@ -181,16 +189,15 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
 
 def test_native_call_fields_are_not_model_arguments():
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.native_tool_call import CodingCall
-    from agent_comms.tool_denial import SelectedToolDenied
+    from agent_comms.transport.tool_denial import SelectedToolDenied
 
     arguments = {"path": "file.py", "content": "value"}
-    call = CodingCall.decode("owned-call", "write", arguments)
+    call = NativeToolDeclaration.decode("owned-call", "write", arguments)
     assert type(call) is WriteTool and call.call_id == "owned-call"
     assert call.arguments == arguments
     assert FieldCodec.encode(call) == {"tool": "write", **arguments}
     assert set(FieldCodec.record_schema(WriteTool)["properties"]) == set(arguments)
-    refused = CodingCall.decode("owned-call", "write", {**arguments, "call_id": "foreign"})
+    refused = NativeToolDeclaration.decode("owned-call", "write", {**arguments, "call_id": "foreign"})
     with pytest.raises(SelectedToolDenied):
         refused.allowed_claim()
 

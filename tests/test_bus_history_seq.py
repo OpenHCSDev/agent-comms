@@ -1,7 +1,6 @@
 """Bus history uses sequence keys; Pi session cursors remain byte positions."""
 
 
-from agent_comms.repo import Checkout
 import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
@@ -10,29 +9,34 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus, BusSnapshot, PublicRecord
-from agent_comms.bus_publication import AgentOrigin, HumanOrigin
-from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.messages import BusRow, InfoKind, Message
 from agent_comms.comms import wire
 from agent_comms.errors import HumanSendRefusedError
+from agent_comms.execution.transcript_sources import (
+    NativeTranscript,
+    NativeTranscriptCursor,
+    TranscriptCursor,
+)
+from agent_comms.messaging.bus import Bus, BusSnapshot, PublicRecord
+from agent_comms.messaging.bus_publication import AgentOrigin
+from agent_comms.messaging.bus_tables import MessageIdentitySource
+from agent_comms.messaging.historical_views import HistoryArchive
+from agent_comms.messaging.initial_origin import HumanOrigin
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.message_page import MessagePageRequest, PageBounds
+from agent_comms.messaging.messages import BusRow, InfoKind, Message
+from agent_comms.messaging.page_traversal import LiveCursor, OlderTraversal
+from agent_comms.messaging.publisher import Publisher
+from agent_comms.messaging.read_basis import ChannelDisplayScope
+from agent_comms.messaging.recorded_bus import RecordedBusIdentity
+from agent_comms.messaging.revision_views import BusSourceView, StoresView
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, MessageId
-from agent_comms.historical_views import HistoryArchive
-from agent_comms.storage.locked_store import RegistryFile
-from agent_comms.message_bus import MessageBus
-from agent_comms.message_page import MessagePageRequest, PageBounds
-from agent_comms.native_transcript import NativeTranscript
-from agent_comms.page_traversal import LiveCursor, OlderTraversal
 from agent_comms.presentation import WireRevision
-from agent_comms.publisher import Publisher
-from agent_comms.read_basis import ChannelDisplayScope
-from agent_comms.recorded_bus import RecordedBusIdentity
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
-from agent_comms.revision_views import BusSourceView, StoresView
-from agent_comms.transcripts import NativeTranscriptCursor, TranscriptCursor
+from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.private_path import FileIdentity
 from agent_comms.storage.typed_table import RowNotFoundError
-from agent_comms.registry.threads import NativeThread
 
 
 def channel_bus(root):

@@ -31,18 +31,16 @@ from typing import Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 
-from agent_comms.change_report import CitationProject, RegisteredRoots
-from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
-from agent_comms.team.standing import (
-    DeliveryAwaitingJudgement,
-    InstallDue,
-    UnownedWheelSpin,
-)
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.errors import DeferredRead
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.messaging import TeamReceipts
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.messaging.message_notification import MessageNotification
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
+from agent_comms.messaging.notification_evidence import AllOutcomes
+from agent_comms.messaging.sending import TeamReceipts
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     Argument,
     FieldCodec,
@@ -55,65 +53,71 @@ from agent_comms.nominal.field_codec import (
     SubclassUnion,
     boundary_decoder,
 )
-from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
-from agent_comms.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
-from agent_comms.held_orders import HeldOrders
-from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
-from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
-from agent_comms.plan_phases import OrderPhase, PlanPhase
-from agent_comms.notification_evidence import AllOutcomes
-from agent_comms.message_notification import MessageNotification
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry.registry_document import RegisteredTeamProject
-from agent_comms.repo import Repo, RepositoryReads
-from agent_comms.repository_name import RepositoryName
-from agent_comms.team_hud import TeamPlanDocument
-from agent_comms.slop import Slop
-from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import (
+from agent_comms.planning.delivery_evidence import DeliveryEvidence, TodoProblems, WorkingEvidence
+from agent_comms.planning.goal_actions import CreateProblemGoalAction, OrderGoalAction
+from agent_comms.planning.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
+from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.order_phase import OrderPhase
+from agent_comms.planning.order_words import (
     BluntText,
+    DirectiveText,
+    OrderText,
+    OrderWords,
+    StrikeReason,
+)
+from agent_comms.planning.orders import (
     CheckedDelivery,
     CleanHunt,
     CorrectLinkTodo,
-    DeliveryEvidence,
     DeliverySource,
-    DirectiveText,
-    ExpectedProblem,
-    LocatedProblemFinding,
-    NoSuccessor,
+    MeasuredReview,
     OperationDelivery,
     OrderedHunt,
+    OrderMessage,
     OrderProgress,
-    OrderText,
-    OrderWords,
     PendingProblemOrder,
-    ProblemFinding,
-    PullRequestLink,
     PullRequests,
     RecordPullRequest,
     SourceCompletion,
-    StrikeReason,
-    WorkingEvidence,
     StrikeTodo,
-    Successor,
     Todo,
-    TodoProblems,
-    UnlocatedProblemFinding,
     VerdictAudience,
     VoidStrikeTodo,
     WithdrawTodo,
 )
-from agent_comms.tool_caller import ForkCaller, PeerCaller, NoThreadCaller
-from agent_comms.storage.typed_table import RowNotFoundError
-
-from .standing_rules import (
-    ClearingVerb,
-    HuntDue,
-    OwedAnswer,
+from agent_comms.planning.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
+from agent_comms.planning.plan_phases import PlanPhase
+from agent_comms.planning.problem_findings import (
+    ExpectedProblem,
+    LocatedProblemFinding,
+    NoSuccessor,
+    ProblemFinding,
+    Successor,
+    UnlocatedProblemFinding,
 )
-from ..transport.tools.orders import (
+from agent_comms.planning.problem_number import ProblemNumber
+from agent_comms.planning.pull_requests import PullRequestLink
+from agent_comms.projects.change_report import (
+    CitationProject,
+    FileLine,
+    MainRevision,
+    NoSourceReference,
+    RegisteredRoots,
+)
+from agent_comms.projects.checkouts import Checkout, RepositoryReads
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.slop import Slop
+from agent_comms.registry.registry_document import RegisteredTeamProject
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
+from agent_comms.storage.recorded_time import EventTime, RecordedEventTime
+from agent_comms.storage.typed_table import RowNotFoundError
+from agent_comms.team.standing import DeliveryAwaitingJudgement, InstallDue, UnownedWheelSpin
+from agent_comms.team.standing_rules import ClearingVerb, HuntDue, OwedAnswer
+from agent_comms.team.team_hud import TeamPlanDocument
+from agent_comms.transport.tool_caller import ForkCaller, NoThreadCaller, PeerCaller
+from agent_comms.transport.tools.orders import (
     CommsChangeProblemTool,
     CommsFireTool,
     CommsOrderCheckTool,
@@ -332,6 +336,157 @@ class OrderFile:
 
     def bound_in(self, project: CitationProject) -> OrderFile:
         return replace(self, order=self.order.bound_in(project))
+
+    def source_refusals(self, context: TeamContext,
+                        traced: FileLine | NoSourceReference) -> list[str]:
+        """Scope, prose and pattern citations share the order's source revision."""
+        check = self.order.check
+        problems = []
+        for label, validate in (('order.source', lambda: self.order.require_references(context.project)),
+                                ('order.check.directory', check.require_directory)):
+            try:
+                with MalformedRecord.refusing(label):
+                    validate()
+            except MalformedRecord as error:
+                problems.append(f'{label}: {error}; fix: name an existing source location or directory')
+        references = tuple(dict.fromkeys(
+            reference for reference in (
+                *FileLine.scan('\n'.join((self.prose, *self.order.edits)), context.project),
+                *(reference for slop in self.slop for reference in (slop.at, *slop.by.cited())),
+                *traced.located(),
+            ) if reference not in self.order.created
+        ))
+        deleted = {Path(module).stem for module in self.order.deletes.modules}
+        if deleted and (unread := context.importers(deleted, check)):
+            problems.append(f'the order deletes {sorted(deleted)}, which {unread} import; '
+                            'the check must also count their `from agent_comms` imports')
+        for reference in references:
+            try:
+                with MalformedRecord.refusing(reference.to_wire()):
+                    reference.require_exists(self.order.source_roots(context.project), self.order.cited_revision)
+            except MalformedRecord as error:
+                problems.append(f'{error}; fix: cite an existing source line')
+        body = '\n'.join((self.prose, *self.order.edits, self.order.report))
+        if any((check.directory / reference.file).resolve().is_relative_to(
+                   check.directory / 'tools/') for reference in references) and not all(
+                said in body for said in ('--root tools', '--root src')):
+            problems.append('the order changes tools/: say "NRA gate with --root tools and with '
+                            '--root src, each as its own command"')
+        return problems
+
+    def assignment_refusals(self, context: TeamContext, unit: str,
+                            group: Sequence[str], listed: Mapping[str, Todo],
+                            target: OrderedProblems,
+                            traced: FileLine | NoSourceReference) -> list[str]:
+        """The document's selected problems and phase must agree. Whether the unit is free
+        for them is IncomingWork's decision, made in the assignment's own Todo transaction."""
+        problems = list(self.order.phase.order_refusals(
+            context.ready_phases,
+            self.unplanned_reason,
+        ))
+        if not group or any(not ProblemNumber.accepts(pid) for pid in group):
+            problems.append('problems: fix: supply an array of P<n> IDs, or use order problem')
+        problems.extend(target.refusals(self, group, listed))
+        for pid in group:
+            try:
+                with MalformedRecord.refusing(pid):
+                    if pid in listed:
+                        listed[pid].holder_state.require_trace(unit, traced)
+            except MalformedRecord as error:
+                problems.append(str(error))
+        return problems
+
+    def require_send(self, context: TeamContext, unit: str,
+                     group: Sequence[str], listed: Mapping[str, Todo], target: OrderedProblems,
+                     reassign: Reassignment, holders: Sequence[str], clean: bool,
+                     traced: FileLine | NoSourceReference) -> None:
+        """Collect field refusals before recording any part of this document."""
+        problems = self.problems_found(clean)
+        problems.extend(self.assignment_refusals(
+            context, unit, group, listed, target, traced))
+        problems.extend(self.source_refusals(context, traced))
+        problems.extend(self.order.check_refusals(context.comms.registry.storage_rule.checkout_base))
+        problems.extend(reassign.refusals(holders))
+        if problems:
+            sys.exit('Refused order:\n  ' + '\n  '.join(problems))
+
+    def message(self, context: TeamContext, unit: str, group: Sequence[str],
+                replacing: bool, reassign: Reassignment) -> str:
+        """Render owned fields; never parse this message back into an order."""
+        instructions = '\n'.join((self.prose, *(slop.render() for slop in self.slop),
+            f'Problems: {", ".join(group)}', *self.order.work_instructions()))
+        replacement = '\nThis replaces my earlier order on it; drop that one.' if replacing else ''
+        storage = context.comms.registry.storage_rule.order_text(
+            context.comms.registry.require(unit),
+            [str(LaunchRuntime.at_prefix(Checkout(repo.checkout).test_environment).interpreter)
+             for repo in context.repos])
+        return (instructions + replacement + reassign.note() + '\n' + storage
+                + '\nIf two lines of this order conflict, take the narrower reading, '
+                'say which one you took, and proceed; do not stop to ask.'
+                + '\nStart now and push as you go.\n'
+                + '\n'.join(line for pid in group for line in self.order.scope.instructions(pid)))
+
+    def send(
+        self, context: Team, unit: str, clean: bool,
+        reassign: Reassignment, target: OrderedProblems,
+        traced: FileLine | NoSourceReference, answers: tuple[MessageReference, ...],
+        request: RequestSelection,
+    ) -> None:
+        """Validate the complete issuance before recording, then publish its owned effects."""
+        group = target.group(self)
+        listed = {todo.id: todo for todo in context.todos()}
+        replace(self, order=target.carried(self.order, group, listed)).issue(
+            context, unit, clean, reassign, target, traced, answers, request,
+            group, listed)
+
+    def issue(
+        self, context: Team, unit: str, clean: bool,
+        reassign: Reassignment, target: OrderedProblems,
+        traced: FileLine | NoSourceReference, answers: tuple[MessageReference, ...],
+        request: RequestSelection, group: Sequence[str], listed: Mapping[str, Todo],
+    ) -> None:
+        holder = context.comms.registry.require(unit).incarnation
+        holders = sorted({assignment.owner for pid in group if pid in listed
+                          for assignment in listed[pid].current_holder.current_assignments()
+                          if assignment.owner_identity != holder})
+        replacing = target.replacing(holder, group, listed)
+        self.require_send(context, unit, group, listed, target,
+                          reassign, holders, clean, traced)
+        struck_already = replacing and listed[group[0]].struck_on_order(holder)
+        measured = MeasuredReview.read(context.comms.goals.todos)
+        review_at = measured.review_at(self.order)
+        message = self.message(context, unit, group, replacing, reassign)
+        request_id = request.for_order(context.comms.goals.todos, context.actor_identity)
+        target.record(context, self.order, unit, group, traced, request_id, review_at)
+        self.publish(context, unit, group, message, answers)
+        self.notify_replaced(context, unit, group, holders, listed, reassign)
+        print(f'{measured.summary}; review timer {review_at.clock()}')
+        print(self.order.id)
+        if replacing and not clean:
+            reassign.send_back(context, self, unit, group[0], struck_already)
+
+    def publish(
+        self, context: Team, unit: str, group: Sequence[str], message: str,
+        answers: tuple[MessageReference, ...],
+    ) -> None:
+        """Bind the one published message to every problem through its native command."""
+        sent = context.post(VerdictAudience((unit,)), message, answers)
+        for pid in group:
+            context.comms.goals.change_problem(pid, OrderMessage(
+                context.comms.goals.todos.get(pid).revision, context.actor_identity, sent,
+                at=EventTime.capture(time.time()),
+            ), context.incarnation)
+
+    def notify_replaced(
+        self, context: Team, unit: str, group: Sequence[str], holders: Sequence[str],
+        listed: Mapping[str, Todo], reassign: Reassignment,
+    ) -> None:
+        """The order that takes over the work tells each former holder why."""
+        for previous in holders:
+            context.post(VerdictAudience((previous,)),
+                         f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") '
+                         f'now belongs to {unit} because: {reassign.because()}. '
+                         'Stop that work; do not touch its files.')
 STAGES = (
     "tool call",
     "review",
@@ -696,7 +851,7 @@ class Team(TeamContext):
         """Record the decoded order, or report every failed prerequisite before any write."""
         self.comms.registry.status(unit).require_visible(f"{unit} cannot take an order.")
         document = document.resolved(finding)
-        document.order.send(self, document, unit, clean, reassign, target, traced, answers, request)
+        document.send(self, unit, clean, reassign, target, traced, answers, request)
 
     def say(self, units: str, body_file: str,
             answers: tuple[MessageReference, ...] = ()) -> None:

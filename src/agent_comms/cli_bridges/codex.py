@@ -13,23 +13,41 @@ from typing import AsyncIterator, ClassVar, Self
 
 import aiohttp
 
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.messages import Message
-from agent_comms.send_result import SendResult
-from agent_comms.cli_protocol import EarlierItems
-from agent_comms.harness_delivery_states import AcceptedOutcome, Outcome
-from .history import CodexHistory, HarnessAddress, OnlineHistory
-from .shared import SessionBinding, IncomingFrame, TranscriptBridge, Options, run_bridge
-from agent_comms.runtime_updates import (
-    EarlierPublishedPage, OfferedToolsObserved, PublishedPage, RuntimeUpdate, SessionFacts, ThreadOutput,
-)
-from agent_comms.repo import Checkout
-from agent_comms.thread_identity import UnreportedTools
-from .codex_connection import CodexConnection
-from .codex_protocol import (
-    DisplayOutput, ToolOutput, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,
+from agent_comms.cli_bridges.cli_protocol import EarlierItems
+from agent_comms.cli_bridges.codex_connection import CodexConnection
+from agent_comms.cli_bridges.codex_protocol import (
+    BusInput,
     CodexDraining,
+    DisplayOutput,
+    ItemsList,
+    ItemsPage,
+    ItemStream,
+    ResumedThread,
+    ResumeThread,
+    ToolOutput,
 )
+from agent_comms.cli_bridges.harness_delivery_states import AcceptedOutcome, Outcome
+from agent_comms.cli_bridges.history import CodexHistory, HarnessAddress, OnlineHistory
+from agent_comms.cli_bridges.runtime_updates import (
+    EarlierPublishedPage,
+    OfferedToolsObserved,
+    PublishedPage,
+    RuntimeUpdate,
+    SessionFacts,
+    ThreadOutput,
+)
+from agent_comms.cli_bridges.shared import (
+    IncomingFrame,
+    Options,
+    SessionBinding,
+    TranscriptBridge,
+    run_bridge,
+)
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.messaging.messages import Message
+from agent_comms.messaging.send_result import SendResult
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import UnreportedTools
 
 
 @dataclass

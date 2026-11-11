@@ -1,12 +1,10 @@
 """Shared fixtures: an isolated Comms wire per test."""
 
 
-from agent_comms.cli_bridges.session_watch import WatchClaim
-
-
-from agent_comms_hooks.watch import WatchRecord
-from agent_comms.repo import Checkout
+from dataclasses import dataclass
 import asyncio
+from threading import Thread
+from contextlib import asynccontextmanager
 import fcntl
 import json
 import os
@@ -17,54 +15,72 @@ import subprocess
 import sys
 import sysconfig
 import tempfile
+import tomllib
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
-from pydantic import JsonValue
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.pi_payloads import PiMessage
-from agent_comms.pi_rule_gate import PiRedeal, PiRuleGate
-from agent_comms.rule_deal import RuleDeal, SessionAudit, StartedDeal
-from agent_comms.rule_deal import ReadSpan
-from agent_comms.native_entries import SessionEntry
-from agent_comms.tool_declaration import ToolDeclaration, NoToolRecord
 from contextlib import AsyncExitStack, contextmanager
+from importlib.metadata import distribution
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue
 
 # First: importing it removes the caller's repository from the environment before any git runs.
 import fixture_git  # noqa: F401
 import goal_owner_fixture
-from agent_comms.bus import Bus, BusRecord
-from agent_comms.bus_publication import AgentOrigin
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import Comms, wire
+from agent_comms.execution.cursor_publication import CursorDelivery
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.native_entries import NativeEvidenceScope, SessionEntry
+from agent_comms.execution.pi_durable_backend import PiDurableBackend
+from agent_comms.installer.native_package import (
+    VerifiedNativePackage,
+    pinned_location,
+    pinned_native_package,
+)
+from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
+from agent_comms.installer.runtime_resolution import RuntimeResolution
+from agent_comms.messaging.bus import Bus, BusRecord
+from agent_comms.messaging.bus_publication import AgentOrigin
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.messages import (
+    ConversationRole,
+    InfoKind,
+    Message,
+    MessageKind,
+    MessageRole,
+)
+from agent_comms.messaging.publisher import InitialWrites, ParticipantPublisher
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.pi_payloads import PiMessage
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repo import Repo
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import RegisteredTeamProject
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_text import ForkedParent, GivenThreadText
+from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import (
-    MaintenanceBarrier, MaintenanceClaimHolder, MaintenanceHolder, MaintenanceOperator,
+    MaintenanceBarrier,
+    MaintenanceClaimHolder,
+    MaintenanceHolder,
+    MaintenanceOperator,
 )
-from agent_comms.message_bus import MessageBus
-from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
-from agent_comms.native_package import pinned_location, pinned_native_package
-from agent_comms.native_tool_transport import ToolListener
-from agent_comms.pi_durable_backend import PiDurableBackend
-from agent_comms.publisher import InitialWrites, ParticipantPublisher
-from agent_comms.registry.registration import Registration
-from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.storage.typed_table import TypedTable
-from agent_comms.native_entries import NativeEvidenceScope
-from agent_comms.cursor_publication import CursorDelivery
-from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.team.order import Team
-from agent_comms.tool_caller import PeerCaller
-from agent_comms.repo import Repo
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
+from agent_comms.team.pi_rule_gate import PiRedeal, PiRuleGate
+from agent_comms.team.rule_deal import ReadSpan, RuleDeal, SessionAudit, StartedDeal
+from agent_comms.transport.native_tool_transport import ToolListener
+from agent_comms.transport.core_access import LocalCoreAccess
+from agent_comms.transport.tool_caller import PeerCaller
+from agent_comms.ui_model.observation import LocalRouteObservation, ObservationProcess
+from agent_comms.transport.tool_declaration import NoToolRecord, ToolDeclaration
+from agent_comms_hooks.watch import WatchRecord
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
-from agent_comms.registry.threads import Thread, NativeThread
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.registry.registry_document import RegisteredTeamProject
 
 pytest_plugins = (goal_owner_fixture.__name__, "github_fixture", "owner_socket_fixture", "pytest_session")
 
@@ -84,7 +100,7 @@ class TranscriptRecords:
         return declaration(timestamp=self.timestamp, **facts)
 
     def message(self, payload: dict[str, JsonValue], **coordinates: JsonValue) -> dict[str, JsonValue]:
-        from agent_comms.native_entries import MessageEntry
+        from agent_comms.execution.native_entries import MessageEntry
         from agent_comms.pi_payloads import PiMessage
 
         entry = self.entry(MessageEntry, message=PiMessage.from_wire(payload), **coordinates)
@@ -92,8 +108,8 @@ class TranscriptRecords:
         return {**encoded, "message": payload}
 
     def session(self, id: str, **coordinates: JsonValue) -> SessionEntry:
-        from agent_comms.native_entries import SessionEntry
-        from agent_comms.native_session_reopen import PiSessionId
+        from agent_comms.execution.native_entries import SessionEntry
+        from agent_comms.execution.native_session_reopen import PiSessionId
 
         return self.entry(SessionEntry, id=FieldCodec.decode(PiSessionId, id), **coordinates)
 
@@ -180,8 +196,8 @@ def accept_initial(bus: MessageBus, root_id: str, seq: int, store) -> tuple:
     """
     from concurrent.futures import ThreadPoolExecutor
 
-    from agent_comms.cohort_foreground import _accept_visible_deliveries
     from agent_comms.coordination.cohort import sealed_cohort_assignments
+    from agent_comms.coordination.cohort_foreground import _accept_visible_deliveries
 
     recipients = bus.bus.delivery(seq).recipients
     if recipients:
@@ -204,14 +220,35 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 
     Child processes import this checkout's sources, the ``pythonpath`` pyproject declares:
     a relative or missing PYTHONPATH sends them to whatever tree the venv's editable
-    install names, which on 2026-10-24 was a stale checkout one TurnFailure short."""
+    install names, which on 2026-10-24 was a stale checkout one TurnFailure short.
+
+    PYTHONPATH chooses the source; the venv's entry points and console scripts are a copy
+    of whichever pyproject was last installed. A copy from another checkout launches moved
+    modules by their old path (on 2026-11-09, ten host_services tests ran an
+    agent-comms-connector importing agent_comms.connector after it moved to transport/), so
+    the session refuses to run until the venv's copy matches this checkout's declaration."""
     from xdist import is_xdist_worker
 
     os.environ["PYTHONPATH"] = os.pathsep.join(
         str(path) for path in session.config.getini("pythonpath"))
-    if session.config.option.collectonly or is_xdist_worker(session):
+    if is_xdist_worker(session):
         return
-    from agent_comms.repo import Checkout
+    root = Path(__file__).resolve().parents[1]
+    project = tomllib.loads((root / "pyproject.toml").read_text())["project"]
+    declared = {("console_scripts", name, value) for name, value in project["scripts"].items()}
+    declared |= {(group, name, value) for group, points in project["entry-points"].items()
+                 for name, value in points.items()}
+    installed = {(point.group, point.name, point.value)
+                 for point in distribution("agent-comms").entry_points}
+    if declared != installed:
+        raise pytest.UsageError(
+            f"This venv's agent-comms entry points were installed from another pyproject "
+            f"than {root / 'pyproject.toml'}: missing {sorted(declared - installed)}, "
+            f"stale {sorted(installed - declared)}. Rebuild it from this checkout: "
+            f"toad's bin/toad-test-env --agent-comms {root}, or `uv pip install -e {root}`.")
+    if session.config.option.collectonly:
+        return
+    from agent_comms.projects.checkouts import Checkout
 
     Checkout(Path(__file__).resolve().parents[1]).prepare()
 
@@ -252,7 +289,7 @@ def manager_socket(tmp_path: Path):
 def user_manager(manager_socket: Path, monkeypatch: pytest.MonkeyPatch):
     """Admit a private manager socket through the real selection boundary. Only the OS
     account record is substituted; no Core manager method is replaced."""
-    from agent_comms.child_process import SystemdUserManager
+    from agent_comms.execution.child_process import SystemdUserManager
 
     account = pwd.getpwuid(os.getuid())
     monkeypatch.setattr(pwd, "getpwuid", lambda uid: pwd.struct_passwd(
@@ -274,7 +311,7 @@ def durable_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def source_reads() -> Iterator[NativeEvidenceScope]:
-    from agent_comms.native_entries import NativeEvidenceScope
+    from agent_comms.execution.native_entries import NativeEvidenceScope
 
     with NativeEvidenceScope() as scope:
         yield scope
@@ -282,7 +319,7 @@ def source_reads() -> Iterator[NativeEvidenceScope]:
 
 @pytest.fixture
 def cursor_delivery(source_reads: NativeEvidenceScope) -> CursorDelivery:
-    from agent_comms.cursor_publication import CursorDelivery
+    from agent_comms.execution.cursor_publication import CursorDelivery
 
     return CursorDelivery(source_reads=source_reads)
 
@@ -346,8 +383,8 @@ def test_uv(monkeypatch: pytest.MonkeyPatch) -> Path:
 @pytest.fixture(scope="session")
 def native_runtime_package(pinned_native: Path) -> VerifiedNativePackage:
     """The running interpreter's artifact, qualified by the real installer before tests."""
-    from agent_comms.native_package import VerifiedNativePackage
-    from agent_comms.deal_prompt import DealPrompt
+    from agent_comms.installer.deal_prompt import DealPrompt
+    from agent_comms.installer.native_package import VerifiedNativePackage
 
     package = VerifiedNativePackage.qualify(pinned_native)
     DealPrompt.prepare()
@@ -355,9 +392,22 @@ def native_runtime_package(pinned_native: Path) -> VerifiedNativePackage:
 
 
 @pytest.fixture(autouse=True)
+def _test_worker_hosts_stop_with_the_test(request: pytest.FixtureRequest) -> Iterator[None]:
+    """Every worker host a test started on its private bus stops when the test ends."""
+    if "tmp_path" not in request.fixturenames:
+        yield
+        return
+    from worker_hosts import TestWorkerHosts
+
+    hosts = TestWorkerHosts(request.getfixturevalue("tmp_path"))
+    yield
+    hosts.stop()
+
+
+@pytest.fixture(autouse=True)
 def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """A developer's live managed process is not a test wire or native child."""
-    from agent_comms.launch_root import LaunchRoot
+    from agent_comms.execution.launch_root import LaunchRoot
 
     with LaunchRoot.unstarted().selected():
         for name in _MANAGED_RUNTIME_ENVIRONMENT:
@@ -381,7 +431,7 @@ def without_mutation_guards(db: sqlite3.Connection, table: type[TypedTable]) -> 
 @pytest.fixture
 def scratch_root(durable_home: Path) -> Path:
     """The test's own agent-scratch, derived from the storage rule under the test's HOME."""
-    from agent_comms.storage_rules import StorageRule
+    from agent_comms.projects.storage_rules import StorageRule
 
     root = StorageRule().scratch_base / "pytest" / "check-root"
     root.mkdir(parents=True)
@@ -409,8 +459,8 @@ def private_comms(private_directory: Path) -> Iterator[Comms]:
 
     root = private_directory / "wire"
     comms = prepare_native_comms(wire(root))
+    from agent_comms.execution.launch_root import LaunchRoot
     from agent_comms.installer.logs import InstallLogs
-    from agent_comms.launch_root import LaunchRoot
 
     try:
         with LaunchRoot.from_path(root).selected():
@@ -427,8 +477,8 @@ def root(tmp_path: Path) -> Path:
 @pytest.fixture
 def configured_repository(durable_home: Path, github_cli) -> Callable[[Comms, *tuple[Repo, ...]], Team]:
     """Declare the temporary colleague on its bus and use its real plan-bearing checkout."""
+    from agent_comms.projects.repo import Repo
     from agent_comms.team.order import Team
-    from agent_comms.repo import Repo
 
     repository = Repo.of(Path(__file__).resolve().parents[1])
 
@@ -458,7 +508,7 @@ def installed_runtime(
     """A temporary installation record, executable and pointer, never the real home."""
     from agent_comms.installer.probes.packages import CommitRecord, GitRecord, PackageRecord
     from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
-    from agent_comms.repo import Repo
+    from agent_comms.projects.repo import Repo
 
     repository = Repo.of(Path(__file__).resolve().parents[1])
     packages = {}
@@ -481,7 +531,7 @@ def record_installed_runtime(runtime: Path, resolution: RuntimeResolution) -> La
     A later record re-points the pointer, as a reinstall does, so fixtures that each install
     a build can share one HOME.
     """
-    from agent_comms.launch_runtime import LaunchRuntime
+    from agent_comms.execution.launch_runtime import LaunchRuntime
 
     (runtime / 'bin').mkdir(parents=True)
     (runtime / 'bin/python').symlink_to(sys.executable)
@@ -522,9 +572,9 @@ def ledger_one_failure_short(root: Path) -> Path:
     install must carry before any opening accepts it."""
     from contextlib import closing
 
-    from agent_comms.goal_attempts import GoalAttemptStore
-    from agent_comms.goal_failure_observation import FailedTurnEvidence
-    from agent_comms.turn_failure import TurnFailure
+    from agent_comms.execution.turn_failure import TurnFailure
+    from agent_comms.planning.goal_ledger import FailedTurnEvidence
+    from agent_comms.planning.goal_attempts import GoalAttemptStore
     from agent_comms.storage.typed_table import sql_literal
 
     directory = root / GoalAttemptStore.root_directory
@@ -543,7 +593,7 @@ def ledger_one_failure_short(root: Path) -> Path:
 def installed_comms(root: Path) -> Comms:
     """A root as the installer leaves it: its bus exists before any reader opens it. A test
     bus of a few megabytes declares no storage floor; tests of the floor declare their own."""
-    from agent_comms.storage_rules import StorageRule
+    from agent_comms.projects.storage_rules import StorageRule
 
     Bus.install(Bus.path_in(root))
     StorageRule(floor_gib=0).prepare_isolated(root)
@@ -564,7 +614,7 @@ def bus(tmp_path: Path) -> Bus:
 @pytest.fixture
 def thread_registration(tmp_path_factory: pytest.TempPathFactory) -> Registration:
     from agent_comms.registry.registration import Registration
-    return Registration(tmp_path_factory.mktemp('thread-registration') / 'registry.json')
+    return Registration(RegistryFile.path_in(tmp_path_factory.mktemp('thread-registration')))
 
 
 @pytest.fixture
@@ -607,7 +657,7 @@ def probe_answers(owner_words: tuple[str, ...] = ()) -> list[dict[str, str]]:
          "at": "src/agent_comms/team/package.py:15", "derive": "declaration",
          "by": "src/agent_comms/team/package.py:15"},
         {"probe": "flinch", "answer": "No: a fixture session resists nothing; the gate it runs is"
-                                      " src/agent_comms/rule_deal.py:1"},
+                                      " src/agent_comms/team/rule_deal.py:1"},
     ]
     if owner_words:
         answers.append({"probe": "prior", "words": owner_words[0],
@@ -653,3 +703,55 @@ def team_session(tmp_path, monkeypatch, team_bus):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     WatchClaim("s").enrol(WatchRecord("claude-code", str(team_bus.root), (), tmp_path / "state"))
     return team_bus
+
+
+@dataclass(frozen=True)
+class UiCoreReads:
+    """A UI's own Core calls, issued the way a UI issues them: from its thread, never from
+    the delivery loop, which `ObserverSameLoop` refuses because it would await its own answer.
+
+    Nineteen tests built `LocalCoreAccess(comms)` by hand, so the day a local read needed the
+    child serving this root, each of them was its own edit and its own chance to forget the
+    rule. One owner holds both here.
+    """
+
+    access: LocalCoreAccess
+
+    async def call[R](self, request):
+        return await asyncio.to_thread(self.access.call, request)
+
+
+@asynccontextmanager
+async def ui_core_reads(comms: Comms) -> AsyncIterator[UiCoreReads]:
+    """For a test that builds its own bus; the fixture below is the shared-bus case."""
+    async with ObservationProcess.awaited(comms.route) as reads:
+        yield UiCoreReads(LocalCoreAccess(comms, reads))
+
+
+def ui_core_read[R](comms: Comms, request):
+    """One Core call as a UI makes it, for a synchronous test that owns its own bus.
+
+    The child answers on the delivery loop while this read waits on a worker thread, which
+    is the arrangement `ObserverSameLoop` exists to require.
+
+    One child per read. Holding one open for a whole test needs the delivery loop on a
+    background thread, and two things stop that today: `ObservationProcess.awaited` takes
+    the loop and spawns the child together, although `start_receiving` documents that only
+    attachment belongs on the loop; and a closed process can stop the loop it was attached
+    to, so the next `run_coroutine_threadsafe` waits on a loop whose thread has already
+    exited. Splitting construction from attachment and retiring the loop with its children
+    both still hang at the second child (test_thread_names.py:111). The cost is one process
+    per read and it is named in the PR rather than traded for an intermittent hang.
+    """
+
+    async def once():
+        async with ui_core_reads(comms) as core:
+            return await core.call(request)
+
+    return asyncio.run(once())
+
+
+@pytest.fixture
+async def local_core(comms: Comms) -> AsyncIterator[UiCoreReads]:
+    async with ui_core_reads(comms) as reads:
+        yield reads

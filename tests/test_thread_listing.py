@@ -5,22 +5,25 @@ import sqlite3
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import partial
+from multiprocessing.synchronize import Event
 from pathlib import Path
 from typing import ClassVar
 
 import pytest
-from multiprocessing.synchronize import Event
 
-from agent_comms.storage import store_files
-from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.cli_verbs.threads import ThreadsCliCommand
 from agent_comms.comms import Comms
+from agent_comms.messaging.bus_route_counts import BusRouteCounts
 from agent_comms.presentation import CountedInbox
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.repo import Checkout
-from agent_comms.storage.store_files import LendingConnection
+from agent_comms.registry.thread_identity import (
+    AgentThreadRole,
+    UserThreadRole,
+)
 from agent_comms.registry.threads import NativeThread
-from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
+from agent_comms.storage import store_files
+from agent_comms.storage.store_files import LendingConnection
 
 
 def rename_during_count(root: Path, start: Event, done: Event) -> None:

@@ -65,7 +65,17 @@ uv export --project . --python "$PREFIX/bin/python" --no-managed-python \
     --upgrade --output-file "$installation/requirements.txt" >/dev/null
 # uv resolved the complete graph, including source overrides. pip installs that answer;
 # resolving again treats a branch URL and its selected commit as competing dependencies.
-.venv/bin/python -m pip install --upgrade --no-deps --prefer-binary -r "$installation/requirements.txt"
+# A resolved source revision must replace an installed wheel even when its version
+# is unchanged. Keep Termux's native index packages out of that forced reinstall.
+index_requirements="$installation/index-requirements.txt"
+source_requirements="$installation/source-requirements.txt"
+awk -v sources="$source_requirements" '
+    BEGIN { print "" > sources }
+    $2 == "@" { print > sources; next }
+    { print }
+' "$installation/requirements.txt" > "$index_requirements"
+.venv/bin/python -m pip install --upgrade --no-deps --prefer-binary -r "$index_requirements"
+.venv/bin/python -m pip install --force-reinstall --no-deps --prefer-binary -r "$source_requirements"
 .venv/bin/python -m pip check
 .venv/bin/python -c 'import toad.cli; print("Toad imports successfully.")'
 

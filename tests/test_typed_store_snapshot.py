@@ -5,16 +5,15 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from agent_comms.owner_release import OwnerReleaseStore
-from conftest import maintenance_held
-
 from agent_comms.errors import RelationViolationError
-from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.execution.input_key import BusInputKey
+from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.input_disposition import InputDispositionRow, InputDispositions
-from agent_comms.input_key import BusInputKey
+from agent_comms.registry.owner_release import OwnerReleaseStore
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.storage.maintenance_barrier import MaintenanceNotHeldError
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.storage.typed_table import HeldBusFile
+from conftest import maintenance_held
 
 
 @pytest.mark.parametrize("make_store", (
@@ -132,7 +131,13 @@ def test_in_memory_schema_checks_remember_nothing():
     """An in-memory database has no file identity, so its checks compare again and keep no
     record: one remembered entry per read was an unbounded set on the reader path."""
     import sqlite3
-    from agent_comms.storage.typed_table import FiledSchema, SchemaRevision, TableSchema, UnfiledSchema
+
+    from agent_comms.storage.typed_table import (
+        FiledSchema,
+        SchemaRevision,
+        TableSchema,
+        UnfiledSchema,
+    )
 
     connection = sqlite3.connect(":memory:")
     before = len(FiledSchema.verified_schemas)

@@ -1,0 +1,249 @@
+"""Historical native input evidence, not an injected-message cursor.
+
+A SQL row recorded only after a live Pi result can be corroborated against the
+private session journal and the durable prelaunch native-request binding.
+Missing or mismatched equality cannot grant source proof. This historical read
+grants no response, recovery, model replay, edit, or current-owner authority.
+"""
+
+from __future__ import annotations
+
+from abc import abstractmethod
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Annotated
+
+from agent_comms.coordination.cohort_schema import CohortTable
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.session import ReadNativeCoordinationSession
+from agent_comms.execution.native_entries import NativeEvidenceScope
+from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.execution.native_input_record import (
+    FullNativeExecution,
+    NativeInputExecution,
+    NativeInputRecord,
+    NativeInputReference,
+    TriageNativeExecution,
+)
+from agent_comms.execution.native_prompt_binding import (
+    expected_prompt_bindings,
+    expected_prompt_matches_journal,
+)
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.execution.selected.triage import SelectedTriage
+from agent_comms.execution.transcript_sources import NativeTranscript
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    AssignmentId,
+    InputId,
+    MessageId,
+    RootId,
+    ThreadLookup,
+    WireName,
+)
+from agent_comms.registry.privacy_reads import NativeAnswerRead
+from agent_comms.registry.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.storage.typed_table import TypedRow
+
+
+@dataclass(frozen=True, kw_only=True)
+class HistoricalNativeInput(NativeInputRecord, DeclaredFamily, affix="HistoricalNativeInput"):
+    wire_root_id: RootId
+    source_seq: int
+    source_message_id: MessageId
+    assignment_id: Annotated[AssignmentId, WireName("claim_id")]
+    execution: NativeInputExecution
+    input_id: InputId
+    owner_lookup: ThreadLookup
+    owner_generation: int
+    context: NativeContextProof
+    native_reference: NativeInputReference
+    # Prelaunch binding facts: None means no binding was durably written
+    # before launch (crash ordering), so equality cannot be established.
+    expected_prompt_digest: str | None = None
+    expected_prompt_equality_established: bool = False
+
+    @abstractmethod
+    def proves_triage_source(self, evidence) -> bool: ...
+
+    @property
+    def reference(self) -> NativeInputReference:
+        return self.native_reference
+
+
+@dataclass(frozen=True, kw_only=True)
+class TriageHistoricalNativeInput(HistoricalNativeInput):
+    execution: TriageNativeExecution
+    decision: type[SelectedTriage]
+
+    def proves_triage_source(self, evidence) -> bool:
+        return self.expected_prompt_equality_established and self.decision.proves_source(evidence)
+
+
+@dataclass(frozen=True, kw_only=True)
+class FailedTriageHistoricalNativeInput(HistoricalNativeInput):
+    """Canonical failed claim plus live-recorded context; no decision fabricated."""
+
+    execution: TriageNativeExecution
+
+    def proves_triage_source(self, evidence) -> bool:
+        return self.expected_prompt_equality_established
+
+
+@dataclass(frozen=True, kw_only=True)
+class FullHistoricalNativeInput(HistoricalNativeInput):
+    execution: FullNativeExecution
+
+    def proves_triage_source(self, evidence) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class HistoricalNativeAnswers(NativeAnswerRead[MessageReference]):
+    """Join retained input proofs to their own bounded transcript output."""
+
+    root: Path
+    owner: ThreadIncarnation
+    privacy: RegistryPrivacy
+
+    def answered_inputs(self, references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
+        with Coordination(str(CoordinationStore.path_in(self.root)),
+                          session_type=ReadNativeCoordinationSession) as store, NativeEvidenceScope() as reads:
+            sources: dict[MessageReference, tuple[HistoricalNativeInput, ...]] = {}
+            for reference in references:
+                proofs = read_historical_native_inputs(
+                    store, wire_root_id=self.privacy.namespace,
+                    recipient_lookup=self.owner.require_recorded().lookup,
+                    source_seq=reference.seq, source_reads=reads)
+                if any(proof.source_message_id != reference.message_id for proof in proofs):
+                    raise IdentityConflict("Native answer source differs from its named message")
+                sources[reference] = tuple(proof for proof in proofs
+                                           if proof.execution.proves_full_source(proof))
+            contexts = dict.fromkeys(proof.context for proofs in sources.values() for proof in proofs)
+            completed = frozenset(context for context in contexts
+                                  if NativeTranscript(context.session_file).completed_input(context))
+        return frozenset(reference for reference, proofs in sources.items()
+                         if any(proof.context in completed for proof in proofs))
+
+
+@dataclass(frozen=True)
+class _HistoricalSource(TypedRow):
+    input_id: InputId
+    assignment_id: AssignmentId
+    wire_seq: int
+    message_id: MessageId
+
+
+def read_historical_native_inputs(
+    store: Coordination,
+    *,
+    wire_root_id: RootId,
+    recipient_lookup: ThreadLookup,
+    source_seq: int,
+    source_reads: NativeEvidenceScope,
+) -> tuple[HistoricalNativeInput, ...]:
+    """Return at most triage and FULL proof for one sealed selected source.
+
+    Caller-supplied identity must come from a trusted bus/owner snapshot, never
+    from model arguments. This read does not look up a live owner or even assert
+    that the original bus remains valid now. It cannot authorize work. In
+    particular, do NOT derive max-seq or a cursor from these rows alone: gaps
+    and PASSIVE/no-wake deliveries have different semantics. A separate
+    current-owner cursor additionally verifies the canonical bus prefix and
+    requires a just-settled input in the owner's current input generation.
+    """
+    with source_reads.borrow():
+        if source_seq <= 0:
+            raise ValueError("historical input requires a positive source sequence")
+        if store.session._connection.in_transaction:
+            raise IdentityConflict("historical native input view requires a committed snapshot")
+        with store.session.read():
+            db = store.session._connection
+            CohortTable.require_installed(db)
+            NativeRuntimeTable.require_installed(db)
+            sources = _HistoricalSource.read(
+                db.execute(
+                    "SELECT n.input_id,c.assignment_id,c.wire_seq,c.message_id FROM native_runtime_input n "
+                    f"JOIN ({NativeRuntimeInput.source_membership_sql()}) member ON member.input_id=n.input_id "
+                    "JOIN wake_claims c ON c.assignment_id=member.assignment_id "
+                    "JOIN claim_batch_members m ON m.claim_id=c.assignment_id "
+                    "AND m.recipient_lookup=c.recipient_lookup "
+                    "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
+                    "AND r.wire_seq=m.wire_seq AND r.message_id=c.message_id AND r.sealed=1 "
+                    "JOIN cohort_delivery_receipts d ON d.wire_root_id=r.wire_root_id "
+                    "AND d.wire_seq=r.wire_seq AND d.claim_id=c.assignment_id "
+                    "AND d.recipient_lookup=n.owner_lookup "
+                    "WHERE r.wire_root_id=? AND c.recipient_lookup=? AND c.wire_seq=? "
+                    "AND n.owner_lookup=c.recipient_lookup AND n.session_entry_id IS NOT NULL",
+                    (wire_root_id, recipient_lookup, source_seq),
+                )
+            )
+            rows = []
+            for source in sources:
+                row = NativeRuntimeInput.one(db, input_id=source.input_id)
+                if not row:
+                    raise IdentityConflict(
+                        "historical native input disappeared inside its snapshot"
+                    )
+                # A retried FULL attempt saw the input, but its execution moved
+                # on; only the execution's current attempt can prove the source.
+                if not row.execution.retried_in(db, row.input_id):
+                    rows.append((source, row))
+        if len(rows) > 2 or len({type(row.execution) for _source, row in rows}) != len(rows):
+            raise IdentityConflict("historical source has ambiguous native input evidence")
+        source_reads.observe_inputs(tuple(row.require_context_proof() for _source, row in rows))
+        with expected_prompt_bindings(store, (row.input_id for _source, row in rows)) as bindings:
+            rows.sort(key=lambda item: type(item[1].execution).declared_position())
+        evidence: list[HistoricalNativeInput] = []
+        for source, row in rows:
+            original_session = row.require_session_identity()
+            session_file = original_session.path
+            recorded = row.require_context_proof()
+            try:
+                # Journal alone cannot promote an unrecorded or uncertain input.
+                # The immutable SQL row is already present from the live event;
+                # this check only corroborates its message-bearing context facts.
+                corroborated = source_reads.for_source(session_file).corroborates_context(
+                    recorded, input_id=row.input_id,
+                    files=NativeSessionFiles.for_identity(original_session, root=store.session.path.parent,
+                                             owner=row.owner_identity),
+                )
+            except (OSError, ValueError) as error:
+                raise IdentityConflict("historical native context evidence is unavailable") from error
+            if not corroborated:
+                raise IdentityConflict("historical native context differs from live-recorded proof")
+            original_session.require_context(recorded)
+            binding = bindings.get(row.input_id)
+            if binding is not None:
+                # A binding must name exactly this reserved input; anything else is
+                # corruption, not a failed equality join.
+                if binding.identity != row.identity:
+                    raise IdentityConflict("prelaunch binding does not match this live proof")
+                if binding.wire_root_id != wire_root_id:
+                    raise IdentityConflict("Prelaunch binding names another canonical wire root")
+            equality = binding is not None and expected_prompt_matches_journal(
+                session_file, binding, evidence=source_reads.for_source(session_file)
+            )
+            evidence.append(
+                row.execution.historical_proof(
+                    row,
+                    lifecycle=store.assignments.get(source.assignment_id).lifecycle,
+                    wire_root_id=wire_root_id,
+                    source_seq=source.wire_seq,
+                    source_message_id=source.message_id,
+                    assignment_id=source.assignment_id,
+                    input_id=row.input_id,
+                    owner_lookup=row.owner_lookup,
+                    owner_generation=row.owner_generation,
+                    context=recorded,
+                    native_reference=row.reference,
+                    expected_prompt_digest=binding.expected_prompt_digest if binding is not None else None,
+                    expected_prompt_equality_established=equality,
+                )
+            )
+        return tuple(evidence)

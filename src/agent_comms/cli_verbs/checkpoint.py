@@ -1,18 +1,21 @@
 from __future__ import annotations
 
-from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import CleanCheckpoint
-from agent_comms.cli_commands import FailedCheckpoint
-from agent_comms.cli_commands import NameArgument
-from agent_comms.cli_commands import PushUnknownCheckpoint
-from agent_comms.cli_commands import PushedCheckpoint
-from agent_comms.cli_commands import RefusedCheckpoint
-from agent_comms.cli_result import CliResult
-from agent_comms.comms import Comms
-from agent_comms.repo import GitCommandError
-from agent_comms.repo import Repo
 from dataclasses import dataclass
 from pathlib import Path
+
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_commands import (
+    CleanCheckpoint,
+    FailedCheckpoint,
+    NameArgument,
+    PushedCheckpoint,
+    PushUnknownCheckpoint,
+    RefusedCheckpoint,
+)
+from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.comms import Comms
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
 
 
 def declared_submodules(worktree: Path) -> frozenset[str]:

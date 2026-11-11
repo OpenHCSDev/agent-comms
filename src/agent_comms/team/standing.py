@@ -4,28 +4,23 @@ from __future__ import annotations
 
 import logging
 import time
-from pathlib import Path
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING, ClassVar, Self
+from pathlib import Path
+from typing import ClassVar, Self
 
-from agent_comms.build_identity import InstalledBuild, RecordedBuildIdentity, RepositoryCommit
-from agent_comms.bus import BusReader
 from agent_comms import team
-from agent_comms.team.questions import UnansweredTeammateAsks
-from agent_comms.team_service import TeamService
-from agent_comms.channel_targets import ThreadTarget
-from agent_comms.task_attachments.owner_notices import OrderNotice, TeamNotice
-from agent_comms.comms import Comms
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.cli_bridges.claude_protocol import OwedProgress
 from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
+from agent_comms.cli_bridges.session_watch import DeafWatch
 from agent_comms.cli_bridges.shared import Serve
-from agent_comms.goal_actions import ReissuedOrderGoalAction
-from agent_comms.nominal.field_codec import FieldCodec, GoalId, Id128
-from agent_comms.head_review import PullRequestHead
+from agent_comms.comms import Comms
+from agent_comms.coordination.service_passes import ServicePassStore, TeamPass
+from agent_comms.execution.turn_bound import TurnsSince
+from agent_comms.execution.turn_digests import TurnDigestRead
+from agent_comms.execution.watch_passes import WatchPass
 from agent_comms.heartbeat_subjects import (
     HeadSubject,
     HeartbeatSubject,
@@ -33,40 +28,49 @@ from agent_comms.heartbeat_subjects import (
     PhaseSubject,
     RequestSubject,
 )
-from agent_comms.held_orders import HeldOrders
+from agent_comms.installer.build_identity import (
+    InstalledBuild,
+    RecordedBuildIdentity,
+    RepositoryCommit,
+)
+from agent_comms.installer.interpreter_operation import InstallPhase, LauncherPhase
 from agent_comms.installer.launch import InstallRun
 from agent_comms.installer.logs import InstallLogs, InstallRunning, InstallUnit
 from agent_comms.installer.request import InstallRequest
-from agent_comms.installer.interpreter_operation import InstallPhase, LauncherPhase
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import RehearsedUpgrade
-from agent_comms.message_bus import WatchPass
-from agent_comms.messages import Message
-from agent_comms.owner_requests import OwnerRequestId
-from agent_comms.plan_reading import PlanReading
-from agent_comms.plan_phases import PlanPhase
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
-from agent_comms.repo import Repo
-from agent_comms.repository_name import RepositoryName
-from agent_comms.service_passes import ServicePassStore, TeamPass
-from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from agent_comms.registry.threads import Thread
-from agent_comms.todos import (
+from agent_comms.messaging.bus import BusReader
+from agent_comms.messaging.channel_targets import ThreadTarget
+from agent_comms.messaging.messages import Message
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, Id128
+from agent_comms.planning.goal_actions import ReissuedOrderGoalAction
+from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.orders import (
     Assignment,
     OwnerRequest,
-    PullRequests,
     ProgressRead,
-    UnmergedListedPullRequest,
+    PullRequests,
     RestoreHolderTodo,
     Todo,
+    UnmergedListedPullRequest,
 )
-from agent_comms.turn_digests import TurnDigestRead, TurnsSince
-from agent_comms.ui_model.teammate_state import AwaitingTeam, TeammateState
-from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
-from agent_comms_hooks import SubagentId
-
-from .standing_rules import (
+from agent_comms.planning.owner_requests import OwnerRequestId
+from agent_comms.planning.plan_phases import PlanPhase
+from agent_comms.planning.plan_reading import PlanReading
+from agent_comms.planning.work_dispatch import ReusedWorkDispatch, WorkDispatch
+from agent_comms.projects.head_review import PullRequestHead
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from agent_comms.registry.threads import Thread
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.task_attachments.owner_notices import OrderNotice, TeamNotice
+from agent_comms.team.questions import UnansweredTeammateAsks
+from agent_comms.team.standing_rules import (
+    ClearingVerb,
     CoreActsStandingRule,
     DatedStandingRule,
     FamilyScan,
@@ -78,11 +82,10 @@ from .standing_rules import (
     StandingRule,
     UndatedStandingRule,
 )
-from ..cli_bridges.session_watch import DeafWatch
+from agent_comms.team.team_service import TeamService
+from agent_comms.ui_model.teammate_state import AwaitingTeam, TeammateState
+from agent_comms_hooks import SubagentId
 
-
-if TYPE_CHECKING:
-    from agent_comms.team.order import TeamVerb
 
 
 @dataclass(frozen=True)
@@ -459,7 +462,7 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         return False
 
-    def blocks(self, reached: frozenset[str], action: TeamVerb,
+    def blocks(self, reached: frozenset[str], action: ClearingVerb,
                answered: tuple[OwedAnswer, ...]) -> bool:
         """Work sent to the holder waits on this judgement; an answer to the holder's own ask
         never does, or the gate would refuse the conversation the answer gate demands."""

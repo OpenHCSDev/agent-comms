@@ -7,8 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
-from ..nominal.field_codec import AbsolutePathText, DeclaredWireType, FieldCodec, NullMember, SubclassUnion
-from ..repo import Repo, RepositorySelection
+from agent_comms.nominal.field_codec import (
+    AbsolutePathText,
+    DeclaredWireType,
+    FieldCodec,
+    NullMember,
+    SubclassUnion,
+)
+from agent_comms.projects.repo import Repo, RepositorySelection
 
 
 class RepoChoice(RepositorySelection, SubclassUnion, affix="Repos"):

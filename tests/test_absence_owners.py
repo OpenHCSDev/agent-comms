@@ -6,21 +6,36 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import InputStartListener, NoInputStartListener
-from agent_comms.turn_inbox import SendNow, TurnInbox
-from agent_comms.backend import EventFinishSignal, FinishSignal, NoFinishSignal
-from agent_comms.change_report import FileLine, NoSourceReference
 from agent_comms.errors import TodoError
-from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, InputId
+from agent_comms.execution.finish_signal import EventFinishSignal
+from agent_comms.execution.finish_signal import FinishSignal
+from agent_comms.execution.finish_signal import NoFinishSignal
 from agent_comms.execution.input_drain import DrainedSession
-from agent_comms.native_child import NoInputForwarder
-from agent_comms.native_session_reopen import NoSessionRetention
-from agent_comms.native_startup import MeasuredSessionLoad, SessionLoad, UnmeasuredSessionLoad
-from agent_comms.pi_commands import GetState
-from agent_comms.pi_wire import AnonymousRequest, RequestId
-from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
-from agent_comms.turn_input_source import SelectedOriginalInput
-from agent_comms.turn_item import PiRequestKey
-from agent_comms.turn_stats import RequestedStats, StatsRequest
+from agent_comms.execution.native_child import NoInputForwarder
+from agent_comms.execution.native_session_reopen import NoSessionRetention
+from agent_comms.execution.native_startup import (
+    MeasuredSessionLoad,
+    SessionLoad,
+    UnmeasuredSessionLoad,
+)
+from agent_comms.execution.pi_commands import GetState
+from agent_comms.execution.pi_wire import AnonymousRequest, RequestId
+from agent_comms.execution.turn_goal_permission import (
+    InactiveGoalPermission,
+    TurnGoalPermission,
+)
+from agent_comms.execution.turn_inbox import (
+    SendNow,
+    TurnInbox,
+)
+from agent_comms.execution.turn_input_source import SelectedOriginalInput
+from agent_comms.execution.turn_item import PiRequestKey
+from agent_comms.execution.turn_stats import (
+    RequestedStats,
+    StatsRequest,
+)
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, InputId
+from agent_comms.projects.change_report import FileLine, NoSourceReference
 
 
 def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
@@ -53,7 +68,7 @@ def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
 def test_absent_holder_and_attempt_preserve_refusals_without_runtime_probes():
     from agent_comms.coordination.errors import RecoveryBlocked, StaleFence
     from agent_comms.coordination.tables.attempts import NoPreviousAttempt
-    from agent_comms.todos import NoTodoHolder
+    from agent_comms.planning.orders import NoTodoHolder
 
     holder = NoTodoHolder()
     assert holder.current_assignments() == ()

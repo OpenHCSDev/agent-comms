@@ -13,12 +13,17 @@ from typing import ClassVar
 
 from pydantic import JsonValue
 
-from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.probes.carry import Carried, Carry
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.planning.orders import (
+    CheckedProblemOrder,
+    CorrectCheckTodo,
+    Todo,
+    TodoStore,
+)
+from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
-from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.todos import CheckedProblemOrder, CorrectCheckTodo, Todo, TodoStore
 from agent_comms.storage.typed_table import TypedRow
 
 RETIRED = "check_corrections"

@@ -6,10 +6,30 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import ClassVar
 
-from agent_comms_hooks.watch import HookAnswer, SessionHookProgram, SkillText
 from pydantic import JsonValue
 
-from agent_comms_hooks import Bash, ClaudeHook, ClaudeHookProgram, ClaudeToolHook, HookOutput, ToolRefusedError
+from agent_comms.cli_bridges.hook_deferral import StopHook
+from agent_comms.cli_bridges.hook_forks import SessionSubagents, SubagentHook, SubagentStopHook
+from agent_comms.cli_bridges.hook_read_gate import GatedCall
+from agent_comms.cli_bridges.hook_reread import ReminderCall
+from agent_comms.cli_bridges.monitor import (
+    MonitorPeer,
+    SessionReady,
+    SessionRefused,
+    SessionReply,
+    SessionRequest,
+)
+from agent_comms.cli_bridges.shared import Binding, MonitorService
+from agent_comms.cli_verbs.merge_review import ReviewedMerge
+from agent_comms.comms import Comms
+from agent_comms_hooks import (
+    Bash,
+    ClaudeHook,
+    ClaudeHookProgram,
+    ClaudeToolHook,
+    HookOutput,
+    ToolRefusedError,
+)
 from agent_comms_hooks.bounded_waits import BoundedWaits
 from agent_comms_hooks.deferral import DeferralGuard
 from agent_comms_hooks.forks import SubagentStartProgram, SubagentStopProgram
@@ -17,17 +37,8 @@ from agent_comms_hooks.queue_bypass import QueueBypassGuard
 from agent_comms_hooks.read_gate import ReadGateProgram
 from agent_comms_hooks.reread import ReminderProgram
 from agent_comms_hooks.session import SessionEnded
-
-from ..comms import Comms
-from .hook_deferral import StopHook
-from .hook_forks import SessionSubagents, SubagentHook, SubagentStopHook
-from .hook_read_gate import GatedCall
-from .hook_reread import ReminderCall
 from agent_comms_hooks.skill import DeckStart, Prime
-from ..cli_verbs.merge_review import ReviewedMerge
-from .shared import Binding
-from .shared import MonitorService
-from .monitor import MonitorPeer, SessionReady, SessionRefused, SessionReply, SessionRequest
+from agent_comms_hooks.watch import HookAnswer, SessionHookProgram, SkillText
 
 
 @dataclass

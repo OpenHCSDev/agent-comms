@@ -6,10 +6,11 @@ from importlib import import_module
 from pathlib import Path
 
 import agent_comms.team as package
-from agent_comms.active_route import ActiveRoute, resolve_comms_route
-from agent_comms.cli_failures import CLI_FAILURES
-from agent_comms.launch_root import LaunchRoot, started
+from agent_comms.cli_support.cli_failures import CLI_FAILURES
+from agent_comms.execution.launch_root import LaunchRoot, started
+from agent_comms.installer.active_route import ActiveRoute, resolve_comms_route
 from agent_comms.team.order import Team
+
 
 def tool_name(module: str) -> str:
     """The tool a module of this package is: its name, with dashes."""

@@ -6,16 +6,23 @@ of handshake each against ts-gaming; a dropped one surfaced as a crashed worker.
 import http.client
 import json
 import threading
+import urllib.error
 
 import pytest
-from agent_comms.transport.tools.orders import CommsEmergencyReleaseTool
 from yarl import URL
 
-from agent_comms.connector_profile import BearerSecret, HttpsMcpEndpoint, UiCredential, UiGrantId
+from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.nominal.field_codec import RootId
-from agent_comms.remote_core import RemoteCoreAccess
+from agent_comms.transport.connector_profile import (
+    BearerSecret,
+    HttpsMcpEndpoint,
+    UiCredential,
+    UiGrantId,
+)
+from agent_comms.transport.remote_core import RemoteCoreAccess
 from agent_comms.transport.request import ConnectionDropped
 from agent_comms.transport.tools.channels import CommsChannelsTool
+from agent_comms.transport.tools.orders import CommsEmergencyReleaseTool
 
 REPLY = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {
     "content": [{"type": "text", "text": "{}"}], "isError": False, "structuredContent": {"read": True}}}).encode()
@@ -60,6 +67,36 @@ def test_a_read_survives_one_dropped_connection():
 
     assert access_over(connection).post(CommsChannelsTool()) == {"read": True}
     assert connection.sent == 2
+
+
+def test_a_read_defers_when_its_fresh_connection_is_unavailable():
+    connection = DroppingConnection(drops=2)
+    with pytest.raises(CoordinationReadUnavailable) as failed:
+        access_over(connection).post(CommsChannelsTool())
+    assert isinstance(failed.value, CoordinationReadUnavailable)
+    assert isinstance(failed.value.__cause__, ConnectionDropped)
+    assert connection.sent == 2
+
+
+@pytest.mark.parametrize('call,deferred', [
+    (CommsChannelsTool(), True), (CommsEmergencyReleaseTool(), False),
+])
+def test_a_gateway_failure_defers_only_reads(call, deferred):
+    class GatewayReply(Reply):
+        status, reason = 502, 'Bad Gateway'
+
+    class GatewayConnection(DroppingConnection):
+        def getresponse(self):
+            return GatewayReply()
+
+    connection = GatewayConnection(drops=0)
+    with pytest.raises(CoordinationReadUnavailable if deferred else urllib.error.HTTPError) as failed:
+        access_over(connection).post(call)
+    assert connection.sent == 1
+    if deferred:
+        assert isinstance(failed.value.__cause__, urllib.error.HTTPError)
+    else:
+        assert not isinstance(failed.value, CoordinationReadUnavailable)
 
 
 def test_a_call_that_changes_the_bus_is_never_sent_twice():

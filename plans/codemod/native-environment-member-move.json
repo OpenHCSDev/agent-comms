@@ -1,0 +1,8 @@
+{"stages": [
+ {"recipes": [{"recipe_id": "project-request-module", "operations": [
+  {"operation": "relocate_symbols_to_new_module", "file_path": "src/agent_comms/runtime_requests.py",
+   "symbol_qualnames": ["ProjectRuntimeRequest"], "destination_path": "src/agent_comms/transport/project_request.py"}]}]},
+ {"recipes": [{"recipe_id": "native-environment-onto-project-request", "operations": [
+  {"operation": "move_method_to_class", "file_path": "src/agent_comms/registry/threads.py", "target_qualname": "Thread.native_environment",
+   "destination": {"file_path": "src/agent_comms/transport/project_request.py", "target_qualname": "ProjectRuntimeRequest"},
+   "receiver_parameter": "thread"}]}]}]}

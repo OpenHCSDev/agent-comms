@@ -1,0 +1,1013 @@
+"""Pi's open event vocabulary, decoded by the RPC channel before execution."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator, Callable, Iterable
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Annotated, ClassVar
+
+from agent_comms import agent_events as events
+from agent_comms.execution.acp_failure import UnrecordedFailureSource
+from agent_comms.execution.controller import ChoiceRequest, PermissionOptionId
+from agent_comms.execution.native_failure_reads import (
+    NativeOperationFailureRead,
+    NativeResponseFailureRead,
+)
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_input_proof import (
+    NativeContextRecord,
+    NativeInputCommit,
+    NativeInputLocation,
+)
+from agent_comms.execution.native_output import NativeOutputLocation, NativeRecordLocation
+from agent_comms.execution.native_pi import NativePiOperationFailed
+from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.execution.native_turn_context import ContextObserved, NativeContextManifestData
+from agent_comms.execution.pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
+from agent_comms.execution.pi_vocabulary import CompactionReason, UnknownCompactionReason
+from agent_comms.execution.pi_wire import (
+    AnonymousRequest,
+    Opaque,
+    OpenPayload,
+    PiOmitted,
+    PiRequestId,
+    PiUsage,
+    UnknownPayload,
+)
+from agent_comms.execution.provider_records import ReportedText
+from agent_comms.execution.request_progress import RequestProgress
+from agent_comms.execution.turn_phase import (
+    AcceptsPrompt,
+    CompactionPhase,
+    ModelWaitPhase,
+    ProviderRetryPhase,
+    SummarizationRetryPhase,
+    ToolRunningPhase,
+    TurnPhase,
+)
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    DeclaredWireType,
+    FieldCodec,
+    FieldPlan,
+    InputId,
+    MalformedRecord,
+    ToolCallId,
+    TurnId,
+    WireName,
+    WireNullDefault,
+    WireOmitDefault,
+    boundary_decoder,
+)
+from agent_comms.pi_payloads import (
+    AbsentMessage,
+    CompactionData,
+    MissingData,
+    MissingToolResult,
+    NoDelta,
+    PiDelta,
+    PiMessage,
+    PiResponseData,
+    PiToolResult,
+    ProviderRetryOutcome,
+    ReportedCompaction,
+    ReportedFlag,
+    UnreportedUsage,
+)
+from agent_comms.transport.tool_declaration import ToolDeclaration
+
+if TYPE_CHECKING:
+    from agent_comms.execution.backend import TurnSession
+    from agent_comms.execution.native_attestation import NativeAttestation
+
+
+@dataclass(frozen=True)
+class PiEvent(OpenPayload, affix=""):
+    """One declaration-owned record received by the Pi RPC channel."""
+
+    ends: ClassVar[tuple[type[TurnPhase], ...]] = ()
+
+    def on(self, current: TurnPhase) -> TurnPhase:
+        return self.leave(current) if self.matches_end(current) else current
+
+    def matches_end(self, current: TurnPhase) -> bool:
+        return isinstance(current, self.ends)
+
+    def leave(self, current: TurnPhase) -> TurnPhase:
+        return ModelWaitPhase()
+
+    def __init_subclass__(
+        cls, *, ends: type[TurnPhase] | None = None, **kwargs,
+    ) -> None:
+        super().__init_subclass__(**kwargs)
+        if ends is not None:
+            cls.ends = (*cls.ends, ends)
+
+    @staticmethod
+    def unowned_event(event):
+        """Idle native queries may interleave unsolicited Pi notifications."""
+
+    async def deliver_to(self, channel) -> None:
+        await channel.deliver_event(self)
+
+    @classmethod
+    def known_kinds(cls):
+        return (cls.wire_kind(),)
+
+    @classmethod
+    def wire_kind(cls) -> str:
+        """The Pi ``type`` this member converts."""
+        return cls.declared_name
+
+    def convert(self):
+        return ()
+
+    async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        """Apply shared progress and phase behavior around this event's meaning."""
+        async for event in session.consume_native_event(self):
+            yield event
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        await self.act(session)
+        for event in self.convert():
+            yield event
+
+    async def act(self, session: TurnSession) -> None:
+        pass
+
+    @property
+    def invalidates_stop(self) -> bool:
+        return False
+
+    def observe_abort(self, session: TurnSession) -> None:
+        pass
+
+    def observe_request(self, observer: Callable[[RequestProgress], None]) -> bool:
+        """A transport measurement is independent of turn-phase publication."""
+        return False
+
+    def responds_to(self, request: PiCommand) -> bool:
+        return False
+
+    def responses_to(self, request: PiCommand) -> tuple[Response, ...]:
+        """Unsolicited events supply no reply to a correlated request."""
+        return ()
+
+    def correlate_or_deliver(self, channel, on_event: Callable[[PiEvent], None]) -> None:
+        on_event(self)
+
+
+class PhaseStartEvent(PiEvent, declared_name=None):
+    """An event that opens a turn phase; the phase it opens is declared by its class."""
+
+    starts: ClassVar[type[TurnPhase]]
+
+    def on(self, current: TurnPhase) -> TurnPhase:
+        return self.enter(current)
+
+    def enter(self, current: TurnPhase) -> TurnPhase:
+        return self.starts()
+
+
+class NativePiEvent(PiEvent, declared_name=None):
+    pass
+
+
+@dataclass(frozen=True)
+class NativeOutputCommitted(NativePiEvent, NativeOutputLocation):
+    def convert(self) -> Iterable[events.AgentEvent]:
+        yield events.NativeOutputCommitted(self)
+
+
+class DurablePiEvent(PiEvent, declared_name=None):
+    @staticmethod
+    def unowned_event(event):
+        raise RuntimeError('Pi event arrived with no open turn')
+
+    @classmethod
+    def wire_member(cls, wire):
+        members = tuple(member for member in cls.members_with(cls)
+                        if wire.get("type") in member.known_kinds())
+        if len(members) > 1:
+            raise ValueError("Ambiguous durable event declaration")
+        return members[0] if members else UnknownPiEvent
+
+
+class IgnoredDurableEvent(Opaque, DurablePiEvent):
+    ignored_kinds = ('run_start', 'run_end', 'inbox_update', 'submission', 'deferred_poll', 'usage_changed', 'snapshot', 'agent_changed')
+
+    @classmethod
+    def known_kinds(cls):
+        return cls.ignored_kinds
+
+
+@dataclass(frozen=True)
+class UnknownPiEvent(UnknownPayload, NativePiEvent, DurablePiEvent):
+    """Ignore unrecognized events; they do not prove permission to start input."""
+
+    @classmethod
+    def known_kinds(cls):
+        return ()
+
+
+@dataclass(frozen=True)
+class TurnStart(Opaque, NativePiEvent, DurablePiEvent):
+    """Pi starts one model round. Core follows the run, not its rounds."""
+
+
+@dataclass(frozen=True)
+class TurnEnd(NativePiEvent, DurablePiEvent):
+    """Pi ends one model round after its original tool results are persisted."""
+
+    round_committed: Annotated[NativeRecordLocation | PiOmitted, WireName("roundCommitted")] = PiOmitted()
+
+    def convert(self) -> Iterable[events.AgentEvent]:
+        for location in self.round_committed.present():
+            yield events.NativeRoundCommitted(location)
+
+
+@dataclass(frozen=True)
+class QueueUpdate(Opaque, NativePiEvent):
+    """Pi's own steering queue changed. Core keeps the queue the user sees."""
+
+
+@dataclass(frozen=True)
+class EntryAppended(Opaque, NativePiEvent, DurablePiEvent):
+    """Pi wrote a session entry. History is read from the session file."""
+
+
+@dataclass(frozen=True)
+class SessionInfoChanged(Opaque, NativePiEvent):
+    """The session name changed. Core reads it from get_state."""
+
+
+@dataclass(frozen=True)
+class ThinkingLevelChanged(Opaque, NativePiEvent):
+    """The thinking level changed. Core reads it from get_state."""
+
+
+@dataclass(frozen=True)
+class BashExecutionUpdate(Opaque, NativePiEvent):
+    """Output of a user ``!`` bash command; Core never sends one."""
+
+
+@dataclass(frozen=True)
+class ExtensionError(Opaque, NativePiEvent):
+    """An extension hook failed inside Pi; the failure stays in Pi's own handling."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentEnd(AcceptsPrompt, NativePiEvent):
+    will_retry: Annotated[ReportedFlag | PiOmitted, WireName("willRetry")] = PiOmitted()
+
+    @property
+    def invalidates_stop(self) -> bool:
+        return self.will_retry.value_or(False)
+
+
+@dataclass(frozen=True, kw_only=True)
+class NativeOperationError(NativePiEvent, NativeOperationFailureRead):
+    """The native run refused an operation after the prompt was acknowledged."""
+
+    error: str
+
+    async def act(self, session: TurnSession) -> None:
+        raise NativePiOperationFailed(self)
+
+
+class AgentSettled(NativePiEvent):
+    def settles(self, session: TurnSession) -> bool:
+        # A prior retained turn may finish while the new state query is
+        # pending. It cannot settle a turn whose input start is unconfirmed.
+        return not session.awaiting_native_attestation
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        if not self.settles(session):
+            session.skip = True
+            return
+        for event in await session.agent_settled(self):
+            yield event
+
+
+class AgentStart(AcceptsPrompt, NativePiEvent):
+
+    @property
+    def invalidates_stop(self) -> bool:
+        return True
+
+
+@dataclass(frozen=True, kw_only=True)
+class ModelRequestProgress(NativePiEvent):
+    progress: RequestProgress
+
+    def observe_request(self, observer: Callable[[RequestProgress], None]) -> bool:
+        observer(self.progress)
+        return True
+
+
+@dataclass(frozen=True, kw_only=True)
+class RetryEnd(PiEvent, declared_name=None):
+    attempt: int
+
+    def __post_init__(self) -> None:
+        if self.attempt < 0:
+            raise ValueError("Retry count must be nonnegative")
+
+
+@dataclass(frozen=True, kw_only=True)
+class AutoRetryEnd(RetryEnd, NativePiEvent, ends=ProviderRetryPhase):
+    outcome: Annotated[ProviderRetryOutcome, WireName("success")]
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        session.watchdog.progress()
+        updates = session.provider_retry_ended(self)
+        for event in updates:
+            yield event
+
+    def exhausted(self, session: TurnSession) -> tuple[events.AgentEvent, ...]:
+        return (session.output.error(session.output.declared_failure.text,
+                                     source=session.output.native_failure_source),)
+
+    def to_wire(self):
+        return {
+            "type": self.wire_kind(),
+            "attempt": self.attempt,
+            **self.outcome.retry_wire(),
+        }
+
+
+class NativeRetryEnd(AutoRetryEnd):
+    """The retry outcome owns whether native recovery completes the request."""
+
+    def exhausted(self, session: TurnSession) -> tuple[events.AgentEvent, ...]:
+        return ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class RetryAttemptEvent(NativePiEvent, declared_name=None):
+    """Original Pi retry data and shared observation behavior.
+
+    This intermediate declaration factors the same fields and algorithm from
+    three external events. It neither authorizes replay nor stores an attempt
+    separate from the event that Pi emitted.
+    """
+
+    attempt: int | PiOmitted = PiOmitted()
+    max_attempts: Annotated[int | PiOmitted, WireName("maxAttempts")] = PiOmitted()
+
+    def prepare_retry(self, session: TurnSession) -> None:
+        pass
+
+    async def act(self, session: TurnSession) -> None:
+        self.prepare_retry(session)
+        session.watchdog.progress()
+
+
+class AutoRetryStart(PhaseStartEvent, RetryAttemptEvent, DurablePiEvent):
+    starts = ProviderRetryPhase
+
+    def prepare_retry(self, session: TurnSession) -> None:
+        session.output.final_assistant_stop = False
+
+
+class NativeRetryStart(AutoRetryStart):
+    """The native turn recovery re-requests a refused empty response.
+
+    stack/native/native-turn-recovery.mjs owns whether a provider refusal is retryable
+    and how many times (RecoveryBudget); this wire kind carries that decision
+    before the refused assistant message, so Core reports only the recovery's
+    final outcome and never counts a refusal itself.
+    """
+
+
+class ReasonedCompaction(NativePiEvent, DurablePiEvent):
+    """A compaction record owns decoding its external reason."""
+
+    def __post_init__(self):
+        if not isinstance(self.reason, type):
+            object.__setattr__(self, "reason", CompactionReason.from_external(self.reason))
+
+    @abstractmethod
+    def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]: ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class CompactionEnd(ReasonedCompaction, ends=CompactionPhase):
+    aborted: ReportedFlag | PiOmitted = PiOmitted()
+    reason: type[CompactionReason] = UnknownCompactionReason
+    result: ReportedCompaction | PiOmitted = PiOmitted()
+    will_retry: Annotated[ReportedFlag | PiOmitted, WireName("willRetry")] = PiOmitted()
+    error_message: Annotated[ReportedText | PiOmitted, WireName("errorMessage")] = PiOmitted()
+
+    @property
+    def completed(self) -> tuple[CompactionData, ...]:
+        """The compaction Pi reported finishing: a result, and an explicit aborted=false."""
+        return () if self.aborted.value_or(True) else self.result.present()
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        session.watchdog.progress()
+        completed = self.completed
+        for result in completed:
+            for event in result.charge():
+                yield event
+            session.native.forget_context()
+            session.watchdog.compacted(session.prompt_state.started)
+        session.usage.invalidate()
+        yield session.context_info()
+        will_retry = self.will_retry.value_or(False)
+        yield next((events.CompactionEnd(reason=self.reason,
+                                         will_retry=will_retry) for result in completed),
+                   events.CompactionAbort(reason=self.reason, will_retry=will_retry))
+        for message in self.error_message.present():
+            yield session.output.error(message, source=UnrecordedFailureSource())
+        if self.will_retry.value_or(False):
+            session.request_retried()
+            session.output.final_assistant_stop = False
+
+
+@dataclass(frozen=True, kw_only=True)
+class CompactionStart(PhaseStartEvent, ReasonedCompaction):
+    starts = CompactionPhase
+
+    def enter(self, current: TurnPhase) -> TurnPhase:
+        return current.compacting()
+
+    reason: type[CompactionReason] = UnknownCompactionReason
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        session.watchdog.progress()
+        session.usage.invalidate()
+        yield session.context_info()
+        yield events.CompactionStart(reason=self.reason)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextCommitted(NativePiEvent, NativeInputCommit):
+    request_generation: Annotated[int | PiOmitted, WireName("requestGeneration")] = (
+        PiOmitted()
+    )
+    llm_context_digest: Annotated[str | PiOmitted, WireName("llmContextDigest")] = (
+        PiOmitted()
+    )
+    committed_at_ms: Annotated[int | PiOmitted, WireName("committedAtMs")] = PiOmitted()
+
+    @boundary_decoder
+    def record_for(
+        self,
+        input_id: InputId,
+        session_id: PiSessionId,
+    ) -> NativeContextRecord:
+        """Normalize the optional native acknowledgement into its required record.
+
+        This event is not durable proof. The acquired evidence reader must corroborate
+        the complete located record independently.
+        """
+        emitted = FieldCodec.encode(self)
+        try:
+            record = FieldCodec.decode(
+                NativeContextRecord,
+                {
+                    key: emitted[key]
+                    for _, key in FieldCodec.record_fields(NativeContextRecord)
+                    if key in emitted
+                },
+            )
+        except MalformedRecord as error:
+            raise NativePiUnavailable(
+                "Native Pi input/context acknowledgement is malformed"
+            ) from error
+        if record.input_commit != NativeInputCommit(input_id, session_id, record.session_entry_id):
+            raise NativePiUnavailable("Native Pi context names another original input")
+        return record
+
+
+@dataclass(frozen=True, kw_only=True)
+class TurnContextObserved(NativePiEvent):
+    context: NativeContextManifestData
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        for segment in self.context.segments:
+            segment.remember_received(session.native)
+        yield ContextObserved(self.context)
+
+
+class ExtensionUiChoice(ABC):
+    """The controller's decision, constrained to the requesting Pi dialog."""
+
+    @abstractmethod
+    def response(self, request: DialogUiRequest) -> ExtensionUiResponse: ...
+
+
+@dataclass(frozen=True)
+class CancelledUiChoice(ExtensionUiChoice):
+    def response(self, request: DialogUiRequest) -> ExtensionUiResponse:
+        return ExtensionUiResponse(id=request.id, cancelled=True)
+
+
+@dataclass(frozen=True)
+class ConfirmedUiChoice(ExtensionUiChoice):
+    confirmed: bool
+
+    def response(self, request: DialogUiRequest) -> ExtensionUiResponse:
+        return request.confirm(self.confirmed)
+
+
+@dataclass(frozen=True)
+class ValueUiChoice(ExtensionUiChoice):
+    value: str
+
+    def response(self, request: DialogUiRequest) -> ExtensionUiResponse:
+        return request.select(self.value)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ExtensionUiRequest(NativePiEvent):
+    """Pi owns the outer type; concrete declarations own its method vocabulary."""
+
+    method: str | None = None
+    id: PiRequestId = AnonymousRequest()
+
+    @classmethod
+    def wire_kind(cls) -> str:
+        return ExtensionUiRequest.declared_name
+
+    @classmethod
+    def wire_case(cls, wire):
+        method = wire.get("method")
+        return next(
+            (
+                case
+                for case in cls.members_with(cls)
+                if case.method is not None and case.method == method
+            ),
+            cls,
+        )
+
+    def to_wire(self):
+        data = super().to_wire()
+        data.update(type="extension_ui_request", method=self.method)
+        return data
+
+    def require_id(self) -> str:
+        identity = self.id.value_or("")
+        if not 0 < len(identity) <= 128:
+            raise ValueError("Pi extension UI request lacked a bounded ID.")
+        return identity
+
+    async def act(self, session: TurnSession) -> None:
+        # Unknown methods never reach a controller or acquire reply authority.
+        self.require_id()
+        session.skip = True
+
+
+@dataclass(frozen=True, kw_only=True)
+class SetStatusUiRequest(ExtensionUiRequest):
+    method: ClassVar[str] = "setStatus"
+    status_key: Annotated[str | PiOmitted, WireName("statusKey")] = PiOmitted()
+    status_text: Annotated[ReportedText | PiOmitted, WireName("statusText")] = PiOmitted()
+
+    async def apply(self, session):
+        if self.status_key == "pi-mcp/live-v1":
+            acknowledgement = session.extension_ui.observe(self.status_text.value_or(None), session)
+            if acknowledgement is not None:
+                yield events.McpLiveStatus(acknowledgement=acknowledgement)
+        session.skip = True
+
+
+@dataclass(frozen=True, kw_only=True)
+class DialogUiRequest(ExtensionUiRequest, ChoiceRequest[ExtensionUiChoice]):
+    title: str | None = None
+
+    def confirm(self, value: bool) -> ExtensionUiResponse:
+        return CancelledUiChoice().response(self)
+
+    def select(self, value: str) -> ExtensionUiResponse:
+        return CancelledUiChoice().response(self)
+
+    def permission(self, turn_id: TurnId):
+        return None
+
+    def choice(self, option_id: PermissionOptionId) -> ExtensionUiChoice:
+        return CancelledUiChoice()
+
+    def cancelled(self) -> ExtensionUiChoice:
+        return CancelledUiChoice()
+
+    async def act(self, session: TurnSession) -> None:
+        await session.extension_ui.answer(self, session)
+        session.skip = True
+
+
+class PermissionUiRequest(DialogUiRequest):
+    deny: ClassVar[PermissionOptionId] = PermissionOptionId("deny")
+
+    @abstractmethod
+    def permission_body(self) -> str: ...
+
+    @abstractmethod
+    def permission_options(self): ...
+
+    def permission(self, turn_id: TurnId):
+        from acp.schema import ContentToolCallContent, TextContentBlock, ToolCallUpdate
+
+        if self.title is None or not 0 < len(self.title) <= 160:
+            return None
+        body, options = self.permission_body(), self.permission_options()
+        return (
+            ToolCallUpdate(
+                tool_call_id=f"pi-ui-{turn_id}-{self.id}",
+                kind="other",
+                title=self.title,
+                content=[
+                    ContentToolCallContent(
+                        type="content",
+                        content=TextContentBlock(type="text", text=body),
+                    )
+                ],
+            ),
+            options,
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConfirmUiRequest(PermissionUiRequest):
+    method: ClassVar[str] = "confirm"
+    allow: ClassVar[PermissionOptionId] = PermissionOptionId("allow-once")
+    message: str | None = None
+
+    def confirm(self, value: bool) -> ExtensionUiResponse:
+        return ExtensionUiResponse(id=self.id, confirmed=value)
+
+    def permission_body(self) -> str:
+        if self.message is None or len(self.message) > 8192:
+            raise ValueError("Pi confirmation message is unavailable")
+        return self.message
+
+    def permission_options(self):
+        from acp.schema import PermissionOption
+
+        return [
+            PermissionOption(option_id=self.allow, name="Allow once", kind="allow_once"),
+            PermissionOption(option_id=self.deny, name="Deny", kind="reject_once"),
+        ]
+
+    def choice(self, option_id: PermissionOptionId) -> ExtensionUiChoice:
+        return ConfirmedUiChoice(option_id == self.allow)
+
+
+@dataclass(frozen=True, kw_only=True)
+class SelectUiRequest(PermissionUiRequest):
+    method: ClassVar[str] = "select"
+    options: tuple[str, ...] | None = None
+
+    def select(self, value: str) -> ExtensionUiResponse:
+        if self.options and value in self.options:
+            return ExtensionUiResponse(id=self.id, value=value)
+        return CancelledUiChoice().response(self)
+
+    def permission_body(self) -> str:
+        return "Select one Pi extension option for this turn only."
+
+    def choices(self) -> dict[str, str]:
+        if self.options is None or not 1 <= len(self.options) <= 8:
+            raise ValueError("Pi selection options are unavailable")
+        if any(not item or len(item) > 100 for item in self.options):
+            raise ValueError("Pi selection option is invalid")
+        return {f"choice-{index}": value for index, value in enumerate(self.options)}
+
+    def permission_options(self):
+        from acp.schema import PermissionOption
+
+        return [
+            PermissionOption(option_id=key, name=f"Choose {value}", kind="allow_once")
+            for key, value in self.choices().items()
+        ] + [PermissionOption(option_id=self.deny, name="Cancel", kind="reject_once")]
+
+    def choice(self, option_id: PermissionOptionId) -> ExtensionUiChoice:
+        value = self.choices().get(option_id)
+        return CancelledUiChoice() if value is None else ValueUiChoice(value)
+
+
+@dataclass(frozen=True, kw_only=True)
+class InputUiRequest(DialogUiRequest):
+    method: ClassVar[str] = "input"
+    placeholder: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class EditorUiRequest(DialogUiRequest):
+    method: ClassVar[str] = "editor"
+    default_value: Annotated[str | PiOmitted, WireName("defaultValue")] = PiOmitted()
+
+
+@dataclass(frozen=True, kw_only=True)
+class InputCommitted(NativePiEvent, NativeInputLocation):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class MessageEnd(AcceptsPrompt, NativePiEvent, DurablePiEvent):
+    message: PiMessage = field(
+        default_factory=AbsentMessage
+    )
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        for event in await self.message.apply_end(session):
+            yield event
+
+
+@dataclass(frozen=True, kw_only=True)
+class MessageStart(AcceptsPrompt, NativePiEvent, DurablePiEvent):
+    message: PiMessage = field(
+        default_factory=AbsentMessage
+    )
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        for update in await self.message.apply_start(session, self):
+            yield update
+
+    @property
+    def invalidates_stop(self) -> bool:
+        return self.message.invalidates_start
+
+    def observe_abort(self, session: TurnSession) -> None:
+        self.message.observe_start_abort(session, self)
+
+
+@dataclass(frozen=True, kw_only=True)
+class MessageUpdate(AcceptsPrompt, NativePiEvent, DurablePiEvent):
+    assistant_message_event: Annotated[
+        NoDelta | PiDelta, WireName("assistantMessageEvent")
+    ] = NoDelta()
+    message: PiMessage = field(
+        default_factory=AbsentMessage
+    )
+    usage: Annotated[PiUsage, WireOmitDefault(), WireNullDefault()] = UnreportedUsage()
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        if self.message.update_context and not session.native.attestation.uncertain:
+            tokens = self.message.measured_tokens.otherwise(self.usage.total_tokens)
+            for event in tokens.provisional(session):
+                yield event
+
+        for event in await self.assistant_message_event.emit(session):
+            yield event
+
+    def convert(self):
+        return self.assistant_message_event.events()
+
+
+@dataclass(frozen=True)
+class ResponseOutcome(DeclaredFamily, DeclaredWireType, affix="ResponseOutcome"):
+    """Decode Pi's success flag once into the outcome that owns its behavior."""
+
+    wire_type = bool
+    success_value: ClassVar[bool]
+    payload_field: ClassVar[FieldPlan]
+
+    @classmethod
+    def selection_key(cls) -> bool:
+        return cls.success_value
+
+    @classmethod
+    def from_wire(cls, value: object) -> ResponseOutcome:
+        return cls.member_selected(FieldCodec.decode(bool, value))()
+
+    def to_wire(self) -> bool:
+        return self.success_value
+
+    @classmethod
+    def excluded_fields(cls) -> set[str]:
+        keys = {member.payload_field.key
+                for member in ResponseOutcome.members_with(ResponseOutcome)}
+        return keys - {cls.payload_field.key}
+
+    @classmethod
+    def validate_payload(cls, error: ReportedText | PiOmitted) -> None:
+        pass
+
+    def conflicts_attestation(self, data: PiResponseData, attestation: NativeAttestation) -> bool:
+        return False
+
+    def proves_idle(self, response: Response) -> bool:
+        return False
+
+    def require_success(self, response: Response) -> None:
+        """Success need not carry data: native acknowledgement commands omit it."""
+
+    def require_data(self, response: Response) -> PiResponseData:
+        self.require_success(response)
+        return response.data.require_payload()
+
+    @abstractmethod
+    def apply_command(
+        self, command: PiCommand, response: Response, session: TurnSession,
+    ) -> Iterable[events.AgentEvent]: ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class Response(NativePiEvent, DurablePiEvent, NativeResponseFailureRead):
+    command: type[PiCommand] = UnknownCommand
+    data: PiResponseData = field(default_factory=MissingData)
+    error: ReportedText | PiOmitted = PiOmitted()
+    id: PiRequestId = AnonymousRequest()
+    success: ResponseOutcome
+
+    @classmethod
+    def decode_fields(cls, value, decoded):
+        command = FieldCodec.field_plan(cls, "command")
+        owner = (PiCommand.response_owner(value[command.key])
+                 if command.key in value else cls.command)
+        outcome = FieldCodec.field_plan(cls, "success").read(value)
+        error = FieldCodec.field_plan(cls, "error").read(value)
+        owner.validate_response(value, cls, outcome, error)
+        return super().decode_fields(value, dict(
+            decoded, command=owner, success=outcome, error=error,
+            data=owner.decode_response_data(value.get("data")),
+        ))
+
+    async def deliver_to(self, channel) -> None:
+        channel.correlate(self)
+
+    def correlate_or_deliver(self, channel, on_event: Callable[[PiEvent], None]) -> None:
+        channel.correlate(self)
+
+    def responds_to(self, request: PiCommand) -> bool:
+        return self.id == request.id and self.command is request.response_type()
+
+    def responses_to(self, request: PiCommand) -> tuple[Response, ...]:
+        return (self,) if self.responds_to(request) else ()
+
+    def require_data(self) -> PiResponseData:
+        """Expose this response's payload only after its outcome accepts it."""
+        return self.success.require_data(self)
+
+    def rejection_details(self) -> dict:
+        """Private diagnostic projection, excluding response data and prompt content."""
+        return {
+            "command": self.command.declared_name,
+            "id": FieldCodec.encode(self.id),
+            "success": FieldCodec.encode(self.success),
+            "error": FieldCodec.encode(self.error),
+        }
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        owner = session.native.reader.correlate(self)
+        if owner.invalidates_identity(self, session):
+            for event in await session.invalidate_identity():
+                yield event
+            return
+        for event in owner.on_response(self, session):
+            yield event
+
+
+class SucceededResponseOutcome(ResponseOutcome):
+    success_value = True
+    payload_field = FieldCodec.field_plan(Response, "data")
+
+    def proves_idle(self, response: Response) -> bool:
+        return not response.require_data().session_busy
+
+    def conflicts_attestation(self, data: PiResponseData, attestation: NativeAttestation) -> bool:
+        return data.conflicts_attestation(attestation)
+
+    def apply_command(
+        self, command: PiCommand, response: Response, session: TurnSession,
+    ) -> Iterable[events.AgentEvent]:
+        return command.accepted(response, session)
+
+
+class FailedResponseOutcome(ResponseOutcome):
+    success_value = False
+    payload_field = FieldCodec.field_plan(Response, "error")
+
+    def require_success(self, response: Response) -> None:
+        raise NativePiUnavailable(response.error.require())
+
+    @classmethod
+    def validate_payload(cls, error: ReportedText | PiOmitted) -> None:
+        error.require()
+
+    def apply_command(
+        self, command: PiCommand, response: Response, session: TurnSession,
+    ) -> Iterable[events.AgentEvent]:
+        return command.rejected(response, session)
+
+
+class SteeringInterruptCompleted(NativePiEvent):
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        session.explicit_interrupt = False
+        session.output.interrupted()
+        yield events.SteeringInterrupted()
+
+
+class SteeringInterruptStarted(NativePiEvent):
+    async def act(self, session: TurnSession) -> None:
+        session.explicit_interrupt = True
+
+
+class SummarizationRetryAttemptStart(PhaseStartEvent, RetryAttemptEvent):
+    starts = SummarizationRetryPhase
+
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class SummarizationRetryFinished(NativePiEvent, ends=SummarizationRetryPhase):
+    result: ReportedCompaction | PiOmitted = PiOmitted()
+    success: ReportedFlag | PiOmitted = PiOmitted()
+
+    async def act(self, session: TurnSession) -> None:
+        session.watchdog.progress()
+
+
+class SummarizationRetryScheduled(PhaseStartEvent, RetryAttemptEvent):
+    starts = SummarizationRetryPhase
+
+    pass
+
+
+class PiToolCallEvent:
+    """Pi's tool events name their call; an omitted or empty name reads as "tool"."""
+
+    tool_call_id: ReportedText | PiOmitted
+    tool_name: ReportedText | PiOmitted
+
+    @property
+    def tool_label(self) -> str:
+        return self.tool_name.text_or("tool")
+
+    @property
+    def tool_id(self) -> ToolCallId:
+        return FieldCodec.decode(ToolCallId, self.tool_call_id.text_or(self.tool_label))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ToolExecutionEnd(
+    AcceptsPrompt,
+    PiToolCallEvent,
+    NativePiEvent,
+    DurablePiEvent,
+    ends=ToolRunningPhase,
+):
+    def leave(self, current: TurnPhase) -> TurnPhase:
+        return current.tool_ended(self.tool_id)
+
+    is_error: Annotated[ReportedFlag | PiOmitted, WireName("isError")] = PiOmitted()
+    result: PiToolResult = field(default_factory=MissingToolResult)
+    tool_call_id: Annotated[ReportedText | PiOmitted, WireName("toolCallId")] = PiOmitted()
+    tool_name: Annotated[ReportedText | PiOmitted, WireName("toolName")] = PiOmitted()
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        name = self.tool_label
+        is_ok = not self.is_error.value_or(False)
+        tool_id = self.tool_id
+        session.watchdog.progress()
+        yield events.ToolEnd(
+            id=tool_id,
+            name=name,
+            ok=is_ok,
+            output=self.result.text(),
+            diff=ToolDeclaration.for_name(name).result_diff(self.result, is_ok),
+            sent_message=self.result.sent_message(is_ok),
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class ToolExecutionStart(
+    AcceptsPrompt,
+    PiToolCallEvent,
+    NativePiEvent,
+    DurablePiEvent,
+    PhaseStartEvent,
+):
+    starts = ToolRunningPhase
+
+    def enter(self, current: TurnPhase) -> TurnPhase:
+        return current.tool_started(self.tool_id, self.tool_label)
+
+    args: object = field(default_factory=dict)
+    tool_call_id: Annotated[ReportedText | PiOmitted, WireName("toolCallId")] = PiOmitted()
+    tool_name: Annotated[ReportedText | PiOmitted, WireName("toolName")] = PiOmitted()
+
+    def convert(self):
+        return (events.ToolStart.from_call(self.tool_id, self.tool_label, self.args),)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ToolExecutionUpdate(AcceptsPrompt, PiToolCallEvent, NativePiEvent, DurablePiEvent):
+
+    partial_result: Annotated[PiToolResult, WireName("partialResult")] = field(
+        default_factory=MissingToolResult
+    )
+    tool_call_id: Annotated[ReportedText | PiOmitted, WireName("toolCallId")] = PiOmitted()
+    tool_name: Annotated[ReportedText | PiOmitted, WireName("toolName")] = PiOmitted()
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+
+        yield events.ToolProgress(
+            id=self.tool_id,
+            name=self.tool_label,
+            output=self.partial_result.text(),
+        )

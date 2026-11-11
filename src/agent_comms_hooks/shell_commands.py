@@ -10,7 +10,7 @@ from itertools import islice
 from pathlib import Path
 from typing import ClassVar, Never, Self
 
-from . import HookRefused
+from agent_comms_hooks import HookRefused
 
 
 class ShellText(io.StringIO):

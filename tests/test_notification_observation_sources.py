@@ -6,17 +6,20 @@ from multiprocessing import Pipe
 from multiprocessing.connection import Connection
 from pathlib import Path
 
-from agent_comms.bus_publication import Delivered
 from agent_comms.comms import Comms
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.message_reference import MessageReference
-from agent_comms.notification_progress import AnsweredResponse, UnansweredResponse
-from agent_comms.notification_evidence import RecipientLimit
-from agent_comms.notification_reads import LiveNotificationRead
+from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.notification_evidence import RecipientLimit
+from agent_comms.messaging.notification_progress import AnsweredResponse, UnansweredResponse
+from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.storage.private_path import FileObservation, FileRevision
 from agent_comms.ui_model.observation import (
-    NotificationsObserved, ObserveNotifications, ObservationService,
-    ReadNotifications, RevisionObserved,
+    NotificationsObserved,
+    ObservationService,
+    ObserveNotifications,
+    ReadNotifications,
+    RevisionObserved,
 )
 from test_coordinated_runtime import tmp_path  # noqa: F401
 from test_following_context_notifications import following_input, following_session

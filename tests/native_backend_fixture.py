@@ -1,6 +1,5 @@
 """Acquired original native fixture: a saved Pi session, its owner and a loopback provider."""
 
-from agent_comms.repo import Checkout
 import asyncio
 import json
 import os
@@ -10,24 +9,33 @@ from pathlib import Path
 from unittest.mock import patch
 
 import agent_comms.agent_events as events
-import agent_comms.backend as backend
+import agent_comms.execution.backend as backend
+from agent_comms.execution.acp import SdkSessionConnection
 from agent_comms.agent_backend import NoInputStartListener
-from agent_comms.turn_inbox import InputContent, InputRequest, SteerInputPolicy, TurnInbox
-from agent_comms.child_process import BoundedRun, join_retirement
-from agent_comms.acp import SdkSessionConnection
 from agent_comms.comms import wire
-from agent_comms.controller import NO_CONTROLLER, NoController
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.execution.child_process import (
+    BoundedRun,
+    join_retirement,
+)
+from agent_comms.execution.controller import NO_CONTROLLER, NoController
+from agent_comms.execution.cursor_publication import CursorDelivery
+from agent_comms.execution.fresh_private_session import create_fresh_private_session
+from agent_comms.execution.native_arguments import GivenArguments, GivenBinary, NativeArguments
+from agent_comms.execution.native_child import PiSessionChild
+from agent_comms.execution.selected.actions import NoSelectedTools
+from agent_comms.execution.turn_inbox import (
+    InputContent,
+    InputRequest,
+    SteerInputPolicy,
+    TurnInbox,
+)
+from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
-from agent_comms.fresh_private_session import create_fresh_private_session
-from agent_comms.native_arguments import GivenArguments, GivenBinary, NativeArguments
-from agent_comms.native_child import PiSessionChild
-from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.pi_native_backend import PersistentPiSession
-from agent_comms.selected_actions import NoSelectedTools
-from agent_comms.storage_rules import StorageRule
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.execution.persistent_pi_session import PersistentPiSession
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
 from compaction_loopback import LoopbackProvider
 from delivery_owner_fixture import canonical_agent
@@ -193,7 +201,7 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
     root, project, config = (tmp_path / name for name in ("wire", "project", "config"))
     root.mkdir(mode=0o700)
     project.mkdir(mode=0o700)
-    from agent_comms.repo import Repo
+    from agent_comms.projects.repo import Repo
     Repo.git(project, 'init', '--quiet')
     config.mkdir(mode=0o700)
     session = create_fresh_private_session(tmp_path / "sessions", worktree=project).path

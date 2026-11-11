@@ -3,8 +3,8 @@
 from pathlib import Path
 
 from agent_comms.cli_bridges.history import HarnessHistory, History
-from agent_comms.harness_install import HarnessSession
 from agent_comms.cli_bridges.shared import BridgeDeliveryStore, CliBridge
+from agent_comms.installer.harness_install import HarnessSession
 
 
 def test_bridges_list_their_own_state_directories(monkeypatch, tmp_path: Path) -> None:

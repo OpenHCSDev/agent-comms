@@ -1,18 +1,20 @@
 """Data-only shell boundary controls: no commands, subprocesses or filesystem writes."""
 from __future__ import annotations
 
-from pathlib import Path
 import io
 import shlex
 import unittest
+from pathlib import Path
 
-from agent_comms.shell_effects import (
-    ForbiddenStorageEffect, ShellInvocation, StorageDenied, WriteStorageEffect,
+from agent_comms.projects.shell_effects import (
+    ForbiddenStorageEffect,
+    ShellInvocation,
+    WriteStorageEffect,
     shell_storage_effects,
 )
+from agent_comms.transport.tool_denial import StorageDenied
 from agent_comms_hooks.bounded_waits import WaitCommand
 from agent_comms_hooks.shell_commands import HereDocument, ShellCommand, ShellText
-
 
 CWD = Path('/shell-decoder-control')
 

@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-from agent_comms.cli_support.constraint_pin import OriginalConstraintPin
-from agent_comms.cli_commands import ConstraintPinnedResult
-from agent_comms.cli_commands import _message_reference
-from agent_comms.cli_result import CliResult
-from agent_comms.comms import Comms
-from agent_comms.nominal.field_codec import Argument
-from agent_comms.nominal.field_codec import Normalize
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
 from dataclasses import dataclass
 from typing import Annotated
+
+from agent_comms.cli_support.constraint_pin import OriginalConstraintPin
+from agent_comms.cli_verbs.cli_commands import ConstraintPinnedResult, _message_reference
+from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.comms import Comms
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
+from agent_comms.nominal.field_codec import Argument, Normalize
 
 
 @dataclass(frozen=True, kw_only=True)

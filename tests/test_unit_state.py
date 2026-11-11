@@ -3,38 +3,48 @@
 import asyncio
 import json
 import os
-from contextlib import nullcontext
 import time
+from contextlib import nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
 
-from agent_comms.activity import ActivityState
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.launch_runtime import LaunchRoot
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.transcript_sources import ExternalTranscript
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
+from agent_comms.installer.runtime_resolution import CorePackage
+from agent_comms.nominal.field_codec import OrderId, ToolCallId
+from agent_comms.planning.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.order_runs import ApplicationOrderRun
+from agent_comms.planning.orders import (
+    DeliverTodo,
+    OperationDelivery,
+    ProgressRead,
+    UnreadProgress,
+)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.work_branches import WorkBranchError
+from agent_comms.registry.activity import ActivityState
+from agent_comms.registry.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_text import ForkedParent
+from agent_comms.registry.threads import ExternalThread, ForkThread
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.task_attachments.team_pings import TeammatePing, TeamUpdate
 from agent_comms.team.standing_rules import (
     ReviewTimerUp,
     TeamInputs,
 )
-from agent_comms.team_heartbeat import TeamObservation
-from agent_comms.team_hud import TeamFrame
-from team_heartbeat_fixture import LIVE_PLAN_READINGS, ObservedHeartbeat, capture_frame, current_hud, observe_team
-from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.nominal.field_codec import OrderId, ToolCallId
-from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.installer.runtime_resolution import CorePackage
-from agent_comms.launch_runtime import LaunchRoot
-from agent_comms.order_runs import ApplicationOrderRun
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Checkout, GitCommandError, Repo
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.registry.threads import ExternalThread, ForkThread
-from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.thread_text import ForkedParent
-from agent_comms.task_attachments.team_pings import TeamUpdate, TeammatePing
-from agent_comms.todos import DeliverTodo, OperationDelivery, ProgressRead, UnreadProgress
-from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.team.team_heartbeat import TeamObservation
+from agent_comms.team.team_hud import TeamFrame
+from agent_comms.transcript.transcript_events import ToolStartTranscript
 from agent_comms.ui_model.teammate_state import (
     AwaitingApplicationRun,
     AwaitingTeam,
@@ -50,8 +60,14 @@ from agent_comms.ui_model.teammate_state import (
     TeammateState,
     Unreadable,
 )
-from agent_comms.work_branches import WorkBranchError
 from source_revision_fixture import SourceRepository
+from team_heartbeat_fixture import (
+    LIVE_PLAN_READINGS,
+    ObservedHeartbeat,
+    capture_frame,
+    current_hud,
+    observe_team,
+)
 from test_holder_standing_rules import blocked_holder, publish, state_cards
 
 pytest_plugins = ("test_holder_standing_rules", "test_proof_build")
@@ -133,7 +149,9 @@ def unread_checkout(comms, tmp_path):
 
 
 @pytest.mark.parametrize("member", TeammateState.worst_first(), ids=lambda member: member.__name__)
-def test_teammate_state_family_uses_real_records(held_bus, tmp_path, request, member):
+async def test_teammate_state_family_uses_real_records(
+    held_bus, tmp_path, request, goal_turn_owners, member
+):
     comms = held_bus
     teammate = "worker"
     with LaunchRoot.from_path(comms.root).selected():
@@ -142,7 +160,7 @@ def test_teammate_state_family_uses_real_records(held_bus, tmp_path, request, me
         elif member is Idle:
             teammate = "outsider"
         elif member is Blocked:
-            blocked_holder(comms)
+            await blocked_holder(comms, goal_turn_owners)
         elif member is Detached:
             comms.registry.register(comms.registry.require(teammate), StoppedThreadStatus())
         elif member is AwaitingTeam:

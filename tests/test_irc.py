@@ -1,28 +1,33 @@
 """IRC model: channels, DMs, presence, history views."""
 from pathlib import Path
 
-from agent_comms.repo import Checkout
-from agent_comms.channel_targets import CommandTarget, DeclaredTag
 import pytest
 
+from agent_comms.comms import wire
+from agent_comms.errors import UnknownChannelError, UnregisteredThreadError
+from agent_comms.messaging.channel_targets import CommandTarget, DeclaredTag
+from agent_comms.messaging.channels import AllChannel, BuiltinChannelView
+from agent_comms.messaging.messages import InfoKind, Message
+from agent_comms.messaging.read_basis import NamedViewer
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_store import UncachedRegistry
-from agent_comms.channels import AllChannel, BuiltinChannelView
-from agent_comms.comms import wire
-from conftest import installed_comms
-from agent_comms.errors import UnknownChannelError, UnregisteredThreadError
-from agent_comms.messages import Message, InfoKind
-from agent_comms.read_basis import NamedViewer
-from bus_history import read_history
-from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.registry.thread_text import (
+    ForkedParent,
+    GivenThreadText,
+)
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
+from bus_history import read_history
+from conftest import installed_comms
 
 
 @pytest.fixture
 def chat(comms):
     """ci/docs join the declared tags; PR111 is owned by this actual process."""
     import os
-    from agent_comms.child_process import ProcessIdentity
+
+    from agent_comms.execution.child_process import ProcessIdentity
     from conftest import declare_test_bus
 
     return declare_test_bus(comms, channels=("ci", "docs"), threads=(
@@ -118,7 +123,7 @@ class TestPresence:
         """P1270: being seen is presence, not a declaration change. The heartbeat moves only
         presence.json, so registry.json (5.7 MB on the live bus) is not rewritten for it, and
         a reader that opened the registry earlier still sees the new time."""
-        path = tmp_path / "registry.json"
+        path = RegistryFile.path_in(tmp_path)
         registry = Registration(path)
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         reader = Registration(path)
@@ -136,7 +141,7 @@ class TestPresence:
         """#4190 send-back (f-ci): a reader captures the registry, a rename commits, then the
         reader lays presence over what it captured. Rows are never dropped, so the old
         revision's thread still has one, and the renamed thread reads under its new name."""
-        path = tmp_path / "registry.json"
+        path = RegistryFile.path_in(tmp_path)
         registry = Registration(path)
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         reader = Registration(path).store
@@ -151,9 +156,9 @@ class TestPresence:
         capture decodable, and declaring the old name again writes a new time over its row."""
         import time
 
-        from agent_comms.presence import PresenceStore
+        from agent_comms.registry.presence import PresenceStore
 
-        path = tmp_path / "registry.json"
+        path = RegistryFile.path_in(tmp_path)
         registry = Registration(path)
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         reader = Registration(path).store
@@ -161,7 +166,7 @@ class TestPresence:
         registry.remove("a")
         reader.cache.entry = UncachedRegistry()
         stale = reader._decode_revision(captured).document.seen_at("a")
-        assert PresenceStore.at(tmp_path).read().seen["a"] == stale
+        assert PresenceStore(tmp_path).read().seen["a"] == stale
         time.sleep(0.01)
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         assert Registration(path).last_seen("a") > stale
@@ -188,7 +193,7 @@ class TestPresence:
 
 class TestCurrentThreadEnvironment:
     def test_current_thread_decodes_its_launch_record(self, monkeypatch, tmp_path):
-        from agent_comms.launch_runtime import ThreadLaunch
+        from agent_comms.execution.launch_runtime import ThreadLaunch
         from agent_comms.registry.threads import current_thread
 
         monkeypatch.setenv(ThreadLaunch.variable("name"), "me")

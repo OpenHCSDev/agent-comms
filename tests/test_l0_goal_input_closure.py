@@ -1,35 +1,34 @@
 """Current goal/input boundaries through durable stores and the real owner socket."""
 
-from agent_comms.repo import Checkout
 import os
 import sqlite3
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.turn_failure import FailedTurnResolution
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_key import BusInputKey
+from agent_comms.execution.turn_failure import BackendFailed, FailedTurnResolution
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, TurnId
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     GoalPrecondition,
     OwnerInvocable,
     RetryGoalAction,
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goal_attempts import GoalWorkDecision
-from agent_comms.goal_generation import ReadyGeneration
-from agent_comms.goal_history import GoalHistoryEntry
-from agent_comms.goal_states import BlockedGoal, GoalState, UnrecordedBlockGoal
+from agent_comms.planning.goal_generation import ReadyGeneration
+from agent_comms.planning.goal_history import GoalHistoryEntry
+from agent_comms.planning.goal_ledger import GoalWorkDecision
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_states import BlockedGoal, GoalState, UnrecordedBlockGoal
 from agent_comms.planning.goal_waits import GoalWait, GoalWaits
-from agent_comms.goals import Goal
-from agent_comms.input_disposition import InputDispositions
-from agent_comms.input_key import BusInputKey
+from agent_comms.planning.goals import Goal
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.turn_failure import BackendFailed
 from stored_inputs import stored_inputs
-from agent_comms.goal_scope import OneGoal
 
 
 def register(comms, name):

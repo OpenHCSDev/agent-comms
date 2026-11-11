@@ -5,13 +5,12 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent_comms.cli_bridges.shared import Binding
+from agent_comms.comms import Comms
+from agent_comms.execution.turn_phase import ModelWaitPhase, TurnPhase
+from agent_comms.registry.threads import Thread
+from agent_comms.transport.tool_caller import ForkCaller, ForkRecordOwed
 from agent_comms_hooks import ClaudeSubagentHook, ClaudeTranscriptHook, SubagentId, ToolRefusedError
-
-from .shared import Binding
-from ..comms import Comms
-from ..registry.threads import Thread
-from ..tool_caller import ForkCaller, ForkRecordOwed
-from ..turn_phase import ModelWaitPhase, TurnPhase
 
 
 @dataclass(frozen=True)

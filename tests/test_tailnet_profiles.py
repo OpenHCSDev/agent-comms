@@ -10,13 +10,26 @@ from dataclasses import replace
 import pytest
 from yarl import URL
 
-from agent_comms.connector_profile import (
-    BearerSecret, HttpsMcpEndpoint, UiConnectionProfile, UiCredential, UiGrantId,
-)
 from agent_comms.nominal.field_codec import FieldCodec, RootId
-from agent_comms.tailnet_buses import PeerHoldsBus, TailnetPeer
-from agent_comms.tailnet_profiles import (
-    HoldingPeerProfile, OfferedPeerProfile, PeerAnsweredNothing, PeerRefusedProfile, TailnetProfiles,
+from agent_comms.transport.connector_profile import (
+    BearerSecret,
+    HttpsMcpEndpoint,
+    UiConnectionProfile,
+    UiCredential,
+    UiGrantId,
+)
+from agent_comms.transport.connector_store import (
+    HeldUiProfiles,
+    MisdirectedProfile,
+    OpenableProfile,
+)
+from agent_comms.transport.tailnet_buses import PeerHoldsBus, TailnetPeer
+from agent_comms.transport.tailnet_profiles import (
+    HoldingPeerProfile,
+    OfferedPeerProfile,
+    PeerAnsweredNothing,
+    PeerRefusedProfile,
+    TailnetProfiles,
 )
 
 GAMING = PeerHoldsBus(TailnetPeer("ts-gaming", "100.119.57.99", True), 43)
@@ -39,8 +52,7 @@ def test_the_ask_runs_the_peers_own_connector_over_ssh():
 
 
 def test_a_profile_comes_back_held_under_the_peer(tmp_path, monkeypatch):
-    monkeypatch.setattr("agent_comms.connector_store.HeldUiProfiles.directory",
-                        classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(HeldUiProfiles, "directory", classmethod(lambda cls: tmp_path))
     offered = TailnetProfiles.asked(GAMING, 0, profile_text() + "\n")
     assert isinstance(offered, OfferedPeerProfile)
     assert not list(tmp_path.iterdir()), "Core returns a profile, not a path on its own host"
@@ -86,8 +98,7 @@ def test_a_held_profile_pointing_anywhere_but_mcp_is_not_openable(tmp_path, monk
     """
     import time
 
-    from agent_comms.connector_profile import MCP_PATH
-    from agent_comms.connector_store import HeldUiProfiles, MisdirectedProfile, OpenableProfile
+    from agent_comms.transport.connector_profile import MCP_PATH
 
     monkeypatch.setattr(HeldUiProfiles, "directory", classmethod(lambda cls: tmp_path))
     live = time.time() + 3600
@@ -108,8 +119,7 @@ def test_a_held_profile_pointing_anywhere_but_mcp_is_not_openable(tmp_path, monk
 def test_asking_again_replaces_what_was_held_and_revokes_it(tmp_path, monkeypatch):
     """Every pick minted another grant, and the old one stayed live with a row beside the
     new one that looked exactly the same."""
-    monkeypatch.setattr("agent_comms.connector_store.HeldUiProfiles.directory",
-                        classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(HeldUiProfiles, "directory", classmethod(lambda cls: tmp_path))
     asked: list[tuple[str, ...]] = []
     monkeypatch.setattr(TailnetProfiles, "run",
                         classmethod(lambda cls, command: asked.append(tuple(command)) or (0, profile_text())))

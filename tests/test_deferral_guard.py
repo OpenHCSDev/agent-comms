@@ -5,28 +5,30 @@ import json
 import os
 import sys
 import time
-from uuid import uuid4
 from collections.abc import Iterator
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from pydantic import JsonValue
 
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.hook_deferral import FutureOrder, Later, NextTick, TranscriptRecord
 from agent_comms.cli_bridges.hook_requests import HookReply, StopRequest
 from agent_comms.cli_bridges.session_watch import WatchClaim
-from agent_comms_hooks.watch import WatchRecord
 from agent_comms.comms import Comms
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.repo import Checkout
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread
-from agent_comms.transcript_events import AssistantTranscript
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.transcript.transcript_events import AssistantTranscript
 from agent_comms_hooks import deferral
+from agent_comms_hooks.watch import WatchRecord
 from hook_session_fixture import resident_hook, resident_session
-
 
 RECORDED = "2026-11-04T00:00:00.000Z"
 """Claude writes every transcript record with its original time; the decoder refuses one without."""

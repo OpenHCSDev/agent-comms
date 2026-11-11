@@ -14,20 +14,22 @@ current owner fence, but never creates an absent row or manufactures owner loss.
 
 from __future__ import annotations
 
-
 import time
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import Annotated, Type
 
-from agent_comms.cohort_schema import ClaimBatchAcknowledgements, CohortTable
+from agent_comms.coordination.cohort_schema import ClaimBatchAcknowledgements, CohortTable
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (
     IdentityConflict,
-    PublicationActivationBlocked,
     PublicationUncertain,
     StaleFence,
 )
+from agent_comms.coordination.obligation_states import PublishedResponse, PublishingResponse
+from agent_comms.coordination.owner_fence import OwnerFence
+from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.results import AlreadyApplied, Applied
 from agent_comms.coordination.snapshot import RecoverySnapshot
 from agent_comms.coordination.tables.assignments import WakeAssignment
@@ -35,38 +37,32 @@ from agent_comms.coordination.tables.publications import (
     PublicationEvidence,
     PublicationIntents,
 )
+from agent_comms.coordination.tables.response_schema import ResponseTable
 from agent_comms.coordination.tables.responses import ResponseObligation
-from agent_comms.response_acknowledgement import canonical_publication_key
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.message_bus import MessageBus
-from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
-from agent_comms.native_input_owner import RegistryOwner
-from agent_comms.obligation_states import PublishedResponse, PublishingResponse
-from agent_comms.owner_fence import OwnerFence
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
-from agent_comms.private_registry_guard import RegistryPrivacy
-from agent_comms.private_send_rules import RunningTurnRegistryCheck
-from agent_comms.publisher import ResponseWrites
+from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.private_send_rules import RunningTurnRegistryCheck
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.messages import (
+    ConversationRole,
+    InfoKind,
+    Message,
+    MessageKind,
+    MessageRole,
+)
+from agent_comms.messaging.publisher import ResponseWrites
+from agent_comms.messaging.response_conversation import ResponseConversation
+from agent_comms.nominal.field_codec import MessageId, RootId, ThreadLookup
+from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.typed_table import (
     Column,
     ForeignKey,
-    ImmutableRows,
     SqlValue,
     TypedRow,
     WithoutRowid,
 )
-
-from ..nominal.field_codec import MessageId, RootId, ThreadLookup
-from ..input_disposition import InputDispositions
-from ..storage.locked_store import RegistryFile
-from ..response_conversation import ResponseConversation
-
-
-class ResponseTable(ImmutableRows, PrivateCoordinatorTable):
-    """An immutable response definition with its write checks and append evidence."""
-
-    schema_error = PublicationActivationBlocked
 
 @dataclass(frozen=True)
 class PublicationAppendDispatches(ResponseTable, WithoutRowid):
@@ -287,7 +283,7 @@ class LiveResponseOwner(RegistryOwner):
         # The last canonical snapshot contains every original assignment.
         # Complete required dependency settlement before the acquired worker
         # can close or report cancellation; no input/goal is reconstructed.
-        from ..comms import wire
+        from agent_comms.comms import wire
 
         goals = wire(bus.bus.path.parent).goals
         for assignment in published.assignments:
@@ -550,7 +546,7 @@ def _settle_fenced_response(
                     raise PublicationUncertain("no keyed bus acknowledgement; no resend authorized")
                 # This call created the durable dispatch barrier, and owns the
                 # only authorized first append while its final fence is locked.
-                from ..response_conversation import ResponseConversation
+                from agent_comms.messaging.response_conversation import ResponseConversation
 
                 conversation = ResponseConversation.capture(bus, snapshot, obligation, boundary.privacy, registry_snapshot)
                 matched = bus.publisher._publish_keyed_response_unlocked(

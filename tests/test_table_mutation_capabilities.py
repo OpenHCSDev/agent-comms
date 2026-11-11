@@ -6,24 +6,21 @@ from typing import Annotated, ClassVar
 
 import pytest
 
-from bus_record_fixture import OWNER_LOOKUP
-from conftest import maintenance_held
-
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import SchemaVersionError
-from agent_comms.storage.locked_store import SQLiteFile
-from agent_comms.coordination.schema import CoordinatorTable
-from agent_comms.coordination.tables.executions import ExecutionRecord
-from agent_comms.coordination.tables.participants import OwnerGenerations, Participants
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.execution_states import (
+from agent_comms.coordination.execution_states import (
     ActiveExecution,
     CompletedExecution,
     DeferredExecution,
     ExecutionState,
     PendingExecution,
 )
-from agent_comms.lifecycle import LifecycleState
+from agent_comms.coordination.schema import CoordinatorTable
+from agent_comms.coordination.tables.executions import ExecutionRecord
+from agent_comms.coordination.tables.participants import OwnerGenerations, Participants
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.lifecycle import LifecycleState
+from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.storage.typed_table import (
     AccumulatingBits,
     Column,
@@ -31,7 +28,6 @@ from agent_comms.storage.typed_table import (
     FinalizedColumn,
     FinalizedLifecycle,
     FirstValueState,
-    HeldBusFile,
     FrozenColumn,
     Generated,
     GuardedAfterWrites,
@@ -39,6 +35,7 @@ from agent_comms.storage.typed_table import (
     GuardedInserts,
     GuardedRelatedInserts,
     GuardedUpdateMembership,
+    HeldBusFile,
     ImmutableRows,
     IncrementingColumn,
     InitialOneWayColumn,
@@ -57,6 +54,8 @@ from agent_comms.storage.typed_table import (
     ValidatedInserts,
     WriteOnceColumns,
 )
+from bus_record_fixture import OWNER_LOOKUP
+from conftest import maintenance_held
 
 
 @dataclass(frozen=True)

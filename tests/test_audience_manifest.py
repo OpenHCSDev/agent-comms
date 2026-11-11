@@ -4,11 +4,18 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.audience_manifest import MAX_RECIPIENTS, MAX_WIRE_ENVELOPE_BYTES, freeze_audience
-from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.mentions import ThreadMention
-from agent_comms.messages import AlertKind, InfoKind, Message
-from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
+from agent_comms.messaging.audience_manifest import (
+    MAX_RECIPIENTS,
+    MAX_WIRE_ENVELOPE_BYTES,
+    freeze_audience,
+)
+from agent_comms.messaging.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.mentions import ThreadMention
+from agent_comms.messaging.messages import AlertKind, InfoKind, Message
+from agent_comms.registry.thread_identity import (
+    AgentThreadRole,
+    UserThreadRole,
+)
 from bus_record_fixture import RECIPIENT_LOOKUP, SENDER_LOOKUP, UNRELATED_LOOKUP
 
 

@@ -2,62 +2,104 @@
 
 from __future__ import annotations
 
-from .tool_result import ToolResult
-
 import logging
 import time
 from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
-from agent_comms.nominal.field_codec import PresenceExclude
-from agent_comms.repo import Checkout
-
-from .activity import ActivityCapture, ObservedActivity
-from .activity_clocks import ChannelActivity
-from .catalog_store import ChannelCatalog
-from .cli_result import CliResult
-from .context_segments.retained import RetainedSegment
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec, WireForm
-from .input_disposition import InputDispositions
-from .registry.registration import Registration
-from .registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot, RosterVisibility
-from .retained_task_facts import RetainedTaskFacts
-from .shared_ledger import LedgerDocument
-from .registry.threads import ConversationPreparation, Thread, current_thread
-from .thread_identity import ThreadIncarnation
-from .sent_message import AssignedSourceIdentity
-from .view_unread import transcript_read_state
-
-if TYPE_CHECKING:
-    from .registry_provenance import DeletedThread
-from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresentation
-
-from .agent_activity import AgentActivity
-from .channel_management import ChannelManagement
-from .channel_targets import ChannelTarget, CommandTarget, ThreadTarget
-from .channels import ChannelMemberIndex
-from .collaboration_ledger import CollaborationLedger
-from .errors import UnknownChannelError
-from .exporting import WireExportBoundary, WireExportFormat, WireExportLimit, WireExportProvenance, WireExportScope, WireTranscriptExporter
-from .transport.progress import WireExportObserver
-from .goal_management import Goals
-from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory, HistorySource
-from .message_bus import MessageBus
-from .message_page import NEWEST_PAGE, MessagePage, PageBounds
-from .message_reference import MessageReference
-from .messages import Message
-from .messaging import Messaging
-from agent_comms.message_notification import NotificationWindow
-from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
-from .page_traversal import LiveCursor
-from .message_notification import MessageNotification
-from .presentation import BusPresentation, ChannelView, CoordinationSnapshot, CountedRead, InboxRead, NoRevision, ReadState, ThreadRecord, ThreadView, WireRevision
-from .read_basis import AnonymousViewer, DisplayViewer, DMDisplayBasis, NamedViewer
-from .transcripts import TranscriptCursor, Transcripts
+from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.context_segments.retained import RetainedSegment
+from agent_comms.errors import UnknownChannelError
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.messaging.activity_clocks import ChannelActivity
+from agent_comms.messaging.channel_management import ChannelManagement
+from agent_comms.messaging.channel_targets import (
+    ChannelTarget,
+    CommandTarget,
+    ThreadTarget,
+)
+from agent_comms.messaging.channels import ChannelMemberIndex
+from agent_comms.messaging.exporting import (
+    WireExportBoundary,
+    WireExportFormat,
+    WireExportLimit,
+    WireExportProvenance,
+    WireExportScope,
+    WireTranscriptExporter,
+)
+from agent_comms.messaging.historical_views import (
+    ChannelDisplayHistory,
+    ChannelHistory,
+    DMDisplayHistory,
+    DMHistory,
+    HistorySource,
+)
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.message_notification import (
+    MessageNotification,
+    NotificationWindow,
+)
+from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
+from agent_comms.messaging.notification_evidence import (
+    FirstRecipient,
+    OutcomeViewer,
+    RecipientCursor,
+    RecipientLimit,
+)
+from agent_comms.messaging.page_traversal import LiveCursor
+from agent_comms.messaging.read_basis import (
+    AnonymousViewer,
+    DisplayViewer,
+    DMDisplayBasis,
+    NamedViewer,
+)
+from agent_comms.messaging.recorded_bus import RecordedBusIdentity
+from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
+from agent_comms.messaging.sending import Messaging
+from agent_comms.messaging.sent_message import AssignedSourceIdentity
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, PresenceExclude, WireForm
+from agent_comms.planning.goal_management import Goals
+from agent_comms.presentation import (
+    BusPresentation,
+    ChannelView,
+    CoordinationSnapshot,
+    CountedRead,
+    InboxRead,
+    NoRevision,
+    ReadState,
+    ThreadRecord,
+    ThreadView,
+    WireRevision,
+)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import ActivityCapture, ObservedActivity
+from agent_comms.registry.agent_activity import AgentActivity
+from agent_comms.registry.catalog_store import ChannelCatalog
+from agent_comms.registry.collaboration_ledger import CollaborationLedger
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_names import DeletedThread
+from agent_comms.registry.relationships import RelationshipSource
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
+from agent_comms.registry.shared_ledger import LedgerDocument
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_presentation import (
+    NoThreadPresentation,
+    ThreadPresentation,
+)
+from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
+from agent_comms.registry.view_unread import transcript_read_state
+from agent_comms.storage.private_path import FileRevision
+from agent_comms.execution.transcript_sources import TranscriptCursor
+from agent_comms.transcript.transcripts import Transcripts
+from agent_comms.transport.progress import WireExportObserver
+from agent_comms.transport.tool_result import ToolResult
 
 _LOG = logging.getLogger(__name__)
 
@@ -159,7 +201,7 @@ class ThreadPresentations:
         return self.read(name).require(name)
 
 
-class HistoryViews:
+class HistoryViews(RelationshipSource):
     def __init__(
         self,
         root: Path,
@@ -339,7 +381,7 @@ class HistoryViews:
                     snapshot.visible_threads(visibility), snapshot=snapshot,
                 ),
                 self.last_sent_timestamps(clocks.sent.items(), registry=snapshot),
-                ChannelActivity.for_views(channels, clocks.channels),
+                channels.history_activity(clocks.channels),
                 visibility,
             )
 
@@ -353,8 +395,7 @@ class HistoryViews:
             rows = ((alias, clocks.sent[alias]) for thread in registered
                     for alias in snapshot.names_for(thread.name) if alias in clocks.sent)
             sent = self.last_sent_timestamps(rows, registry=snapshot)
-            history = ChannelActivity.for_views(
-                {channel.name: channel}, clocks.channels)[channel.name]
+            history = channel.history_activity(clocks.channels)
             return ChannelView.capture(
                 channel, registered, snapshot, catalog.pinned_threads(channel.name),
                 self.agents.all_activity(registered, snapshot=snapshot), sent, history, visibility,
@@ -457,8 +498,17 @@ class HistoryViews:
         return self.bus.bus.revision()
 
     def revision(self) -> WireRevision:
-        """A cheap observer token; activity expiry is checked without rescanning idle logs."""
-        return WireRevision.capture(self, expiry_tick=int(time.time()))
+        """Stat sources only; strict content reads belong to the requesting view."""
+        expiry_tick = int(time.time())
+        captured = {
+            name: tuple(revision for path in group
+                        for revision in FileRevision.capture(path).revisions())
+            for name, group in WireRevision.source_paths(self).items()
+        }
+        return WireRevision(
+            **captured, bus_identity=RecordedBusIdentity.capture(self.bus.bus.path),
+            bus_seq=self.bus.bus.revision(), expiry_tick=expiry_tick,
+        )
 
     def who(self) -> tuple[ThreadView, ...]:
         """Who is here: live presences, with no unread scan that grows with history."""

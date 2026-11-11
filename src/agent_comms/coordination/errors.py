@@ -8,7 +8,7 @@ from typing import ClassVar, Never, Self
 
 from pydantic import JsonValue
 
-from ..nominal.field_codec import DeclaredError, FieldCodec, ReportedError
+from agent_comms.nominal.field_codec import DeclaredError, FieldCodec, ReportedError
 
 
 class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome
@@ -102,7 +102,12 @@ class ReportedDeferredRead(ReportedError, DeferredRead):  # noqa: N818 - reporte
 
 
 class CoordinationReadUnavailable(CoordinationError, DeferredRead):
-    """No committed SQLite snapshot was acquired; no absence is established."""
+    """No source snapshot was acquired; no absence is established.
+
+    SQLite contention and an unavailable remote source retain their own error
+    identities, but both leave the reader's committed value in place until the
+    source announces that it can be read again.
+    """
 
     busy_message: ClassVar[str] = "The database read is busy"
     sqlite_errorcode: int

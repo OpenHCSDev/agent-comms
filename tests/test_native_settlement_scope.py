@@ -5,13 +5,13 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.attempt_states import SucceededAttempt
-from agent_comms.bus import Bus
-from agent_comms.child_process import NoProcess
-from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.coordination.attempt_states import SucceededAttempt
 from agent_comms.coordination.coordinator import StandaloneCoordination
-from agent_comms.envelope_claim_transitions import ExistingFileClaim
-from agent_comms.selected_claim import publish_selected_resource_claim
+from agent_comms.execution.child_process import NoProcess
+from agent_comms.execution.selected.claim import publish_selected_resource_claim
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim
+from agent_comms.registry.thread_status import StoppedThreadStatus
 from test_claim_bus_read import selected_turn, settle_failed
 
 
@@ -38,7 +38,7 @@ def test_standalone_session_never_guesses_native_resources_from_bus_file(tmp_pat
 
 
 def test_wire_success_cannot_silently_complete_original_response(tmp_path):
-    from test_coordination_store import ready, started, final_evidence
+    from test_coordination_store import final_evidence, ready, started
 
     with ready(tmp_path / "coordination.sqlite3") as store:
         _, fence = started(store)

@@ -1,6 +1,7 @@
 """Every command failure crosses a worker's pipe whole, whatever its constructor takes."""
 
 import importlib
+import io
 import pickle
 import pkgutil
 import subprocess
@@ -9,7 +10,8 @@ import pytest
 
 import agent_comms
 from agent_comms.coordination.errors import CommandFailure
-from agent_comms.repo import FailedGitCommand
+from agent_comms.projects.git_errors import FailedGitCommand
+from agent_comms.transport.request import RemoteReadUnavailable
 
 
 def members(family: type) -> set[type]:
@@ -41,3 +43,14 @@ def test_a_raised_git_failure_keeps_its_git_message() -> None:
     copy = pickle.loads(pickle.dumps(FailedGitCommand("/repo", run)))
     assert str(copy) == "Git in /repo: fatal: bad object"
     assert (copy.returncode, copy.stderr) == (128, "fatal: bad object\n")
+
+
+def test_unavailable_read_keeps_its_roles_and_cause_in_both_unpicklers() -> None:
+    failure = RemoteReadUnavailable("offline")
+    failure.__cause__ = ConnectionError("source closed")
+    encoded = pickle.dumps(failure)
+    for copy in (pickle.loads(encoded), pickle._Unpickler(io.BytesIO(encoded)).load()):
+        assert type(copy) is RemoteReadUnavailable
+        assert isinstance(copy, ConnectionError)
+        assert str(copy) == "offline"
+        assert str(copy.__cause__) == "source closed"

@@ -1,27 +1,27 @@
 """An unfinished observation cannot keep a real sidebar from being answered."""
 
-from agent_comms.repo import Checkout
-from pathlib import Path
 from dataclasses import replace
 from itertools import count
 from multiprocessing import Pipe
+from pathlib import Path
 
 import pytest
 
+from agent_comms.messaging.revision_views import StatusView
 from agent_comms.presentation import WireRevision
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.storage.private_path import FileRevision
-from agent_comms.revision_views import StatusView
 from agent_comms.ui_model.observation import (
-    TeamHudReading,
     NotificationReading,
-    ObserveTeamHud,
-    ObserveNotifications,
     ObservationPending,
     ObservationService,
+    ObserveNotifications,
     ObserveSidebar,
+    ObserveTeamHud,
     ObserveThreads,
     ReadingObservation,
     SidebarReading,
+    TeamHudReading,
     ThreadReading,
 )
 

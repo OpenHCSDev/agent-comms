@@ -1,9 +1,7 @@
 """The shared owner reconstructs prefixes, not the CLI decoders or the database."""
 import pytest
 
-from agent_comms.nominal.field_codec import ToolCallId
-from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from agent_comms.runtime_updates import (
+from agent_comms.cli_bridges.runtime_updates import (
     ActiveItem,
     AllTurnsEnded,
     AppendDraftItem,
@@ -17,11 +15,19 @@ from agent_comms.runtime_updates import (
     ToolDraft,
     TurnEnded,
 )
-from agent_comms.tool_calls import ToolCall
-from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript
-from agent_comms.transcript_sources import NoDraft
-from agent_comms.turn_item import NativeItemId, NativeTurnId
-from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
+from agent_comms.cli_bridges.tool_calls import ToolCall
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
+from agent_comms.execution.turn_phase import (
+    ModelWaitPhase,
+    ToolRunningPhase,
+)
+from agent_comms.nominal.field_codec import ToolCallId
+from agent_comms.storage.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from agent_comms.transcript.transcript_drafts import NoDraft
+from agent_comms.transcript.transcript_events import AssistantTranscript, ThinkingTranscript
 from test_codex_items import _output
 
 
@@ -258,9 +264,9 @@ def test_completed_only_sources_do_not_retain_draft_state(tmp_path):
     output.publish_batch(
         [
             FinishedItem(
-                t_turn_id,
-                NativeItemId("a"),
-                (AssistantTranscript("complete", timestamp=1.0, position=NativeItemId("a")),),
+                turn_id=t_turn_id,
+                item_id=NativeItemId("a"),
+                events=(AssistantTranscript("complete", timestamp=1.0, position=NativeItemId("a")),),
             )
         ]
     )

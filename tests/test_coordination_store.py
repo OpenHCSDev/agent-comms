@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.nominal.field_codec import SnapshotExclude
-
 import hashlib
 import multiprocessing
 import sqlite3
@@ -15,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.assignment_states import (
+from agent_comms.coordination.assignment_states import (
     AssignmentState,
     DeferredAssignment,
     EngagedAssignment,
@@ -25,8 +23,8 @@ from agent_comms.assignment_states import (
     PassiveAssignment,
     TriagePendingAssignment,
 )
-from agent_comms.attempt_start import INITIAL_LEASE_DURATION_MS, AttemptStart
-from agent_comms.attempt_states import (
+from agent_comms.coordination.attempt_start import INITIAL_LEASE_DURATION_MS, AttemptStart
+from agent_comms.coordination.attempt_states import (
     AttemptFailedAttempt,
     LiveAttempt,
     ModelRunningAttempt,
@@ -35,6 +33,7 @@ from agent_comms.attempt_states import (
     SettlingAttempt,
     SucceededAttempt,
 )
+from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.coordination.errors import (
     IdentityConflict,
     IntegrityViolationError,
@@ -43,6 +42,17 @@ from agent_comms.coordination.errors import (
     StaleFence,
     StaleRevision,
 )
+from agent_comms.coordination.execution_states import (
+    ActiveExecution,
+    CompletedExecution,
+    DeferredExecution,
+    FailedExecution,
+    PendingExecution,
+)
+from agent_comms.coordination.owner_fence import OwnerFence, prepare_fence_token
+from agent_comms.coordination.reason_codes import GivenReasonCode, NoDetail
+from agent_comms.coordination.recovery_states import FailedRecovery
+from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.results import AlreadyApplied, Applied
 from agent_comms.coordination.schema import CoordinatorTable
 from agent_comms.coordination.snapshot import RecoverySnapshot
@@ -60,24 +70,12 @@ from agent_comms.coordination.tables.executions import (
 from agent_comms.coordination.tables.publications import (
     PublicationIntents,
 )
-from agent_comms.coordination.coordinator import StandaloneCoordination
-from agent_comms.execution_states import (
-    ActiveExecution,
-    CompletedExecution,
-    DeferredExecution,
-    FailedExecution,
-    PendingExecution,
-)
-from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId
-from agent_comms.messages import InfoKind, Message
-from agent_comms.owner_fence import OwnerFence, prepare_fence_token
-from agent_comms.reason_codes import GivenReasonCode, NoDetail
-from agent_comms.recovery_states import FailedRecovery
-from agent_comms.response_acknowledgement import canonical_publication_key
-from agent_comms.selected_source_batch import SelectedSource
-from agent_comms.turn_failure import ProviderRetryExhausted
+from agent_comms.execution.selected.source_batch import SelectedSource
+from agent_comms.execution.turn_failure import ProviderRetryExhausted
+from agent_comms.messaging.messages import InfoKind, Message
+from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, SnapshotExclude
 from agent_comms.storage.typed_table import SQLiteForeignKeys
-from agent_comms.wake_policy import (
+from agent_comms.waking.wake_policy import (
     BoundedTriageWake,
     FullWake,
     MessageAudience,
@@ -97,11 +95,11 @@ def store(path: Path) -> StandaloneCoordination:
 
 
 def wire_source(db: StandaloneCoordination, assignment_id: AssignmentId, original: Message, mode: WakePolicy) -> SelectedSource:
-    from agent_comms.audience_manifest import freeze_audience
-    from agent_comms.frozen_recipient import FrozenRecipient
-    from agent_comms.bus import PrivateRecord
-    from agent_comms.selected_source_batch import SelectedSource
-    from agent_comms.wake_policy import WakeDecision
+    from agent_comms.execution.selected.source_batch import SelectedSource
+    from agent_comms.messaging.audience_manifest import freeze_audience
+    from agent_comms.messaging.bus import PrivateRecord
+    from agent_comms.messaging.frozen_recipient import FrozenRecipient
+    from agent_comms.waking.wake_policy import WakeDecision
 
     audience = freeze_audience(original, (FrozenRecipient(SENDER_LOOKUP, "Owner"),),
                                "0" * 64, sender_lookup=OWNER_LOOKUP,
@@ -149,11 +147,11 @@ def started(db: StandaloneCoordination) -> tuple[str, OwnerFence]:
     token = prepare_fence_token()
     result = db.start(
         AttemptStart(
-            "exec",
-            1,
-            SENDER_LOOKUP,
-            1,
-            token,
+            execution_id="exec",
+            attempt_ordinal=1,
+            owner_lookup=SENDER_LOOKUP,
+            owner_generation=1,
+            token=token,
             expected_execution_revision=2,
             expected_pointer_revision=0,
         )
@@ -163,7 +161,7 @@ def started(db: StandaloneCoordination) -> tuple[str, OwnerFence]:
 
 
 def final_evidence(db: StandaloneCoordination, fence: OwnerFence, pointer_revision: int = 1) -> OwnerFence:
-    from agent_comms.owner_fence import OwnerFence
+    from agent_comms.coordination.owner_fence import OwnerFence
 
     assert isinstance(fence, OwnerFence)
     result = db.advance(
@@ -202,11 +200,11 @@ def _concurrent_start(
             gate.wait(timeout=5)
             result = db.start(
                 AttemptStart(
-                    "exec",
-                    1,
-                    SENDER_LOOKUP,
-                    1,
-                    token,
+                    execution_id="exec",
+                    attempt_ordinal=1,
+                    owner_lookup=SENDER_LOOKUP,
+                    owner_generation=1,
+                    token=token,
                     expected_execution_revision=2,
                     expected_pointer_revision=0,
                 )
@@ -384,11 +382,11 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
         assert not db.session._connection.in_transaction
         first = db.start(
             AttemptStart(
-                "exec",
-                1,
-                SENDER_LOOKUP,
-                1,
-                token,
+                execution_id="exec",
+                attempt_ordinal=1,
+                owner_lookup=SENDER_LOOKUP,
+                owner_generation=1,
+                token=token,
                 expected_execution_revision=2,
                 expected_pointer_revision=0,
             )
@@ -406,11 +404,11 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
         assert token not in db_path.read_bytes().decode("latin1")
         duplicate = db.start(
             AttemptStart(
-                "exec",
-                1,
-                SENDER_LOOKUP,
-                1,
-                token,
+                execution_id="exec",
+                attempt_ordinal=1,
+                owner_lookup=SENDER_LOOKUP,
+                owner_generation=1,
+                token=token,
                 expected_execution_revision=2,
                 expected_pointer_revision=0,
             )
@@ -421,11 +419,11 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
         )
         duplicate = db.start(
             AttemptStart(
-                "exec",
-                1,
-                SENDER_LOOKUP,
-                1,
-                token,
+                execution_id="exec",
+                attempt_ordinal=1,
+                owner_lookup=SENDER_LOOKUP,
+                owner_generation=1,
+                token=token,
                 expected_execution_revision=2,
                 expected_pointer_revision=0,
             )
@@ -435,11 +433,11 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
         with pytest.raises(IdentityConflict):
             db.start(
                 AttemptStart(
-                    "exec",
-                    2,
-                    SENDER_LOOKUP,
-                    1,
-                    token,
+                    execution_id="exec",
+                    attempt_ordinal=2,
+                    owner_lookup=SENDER_LOOKUP,
+                    owner_generation=1,
+                    token=token,
                     expected_execution_revision=2,
                     expected_pointer_revision=0,
                 )
@@ -449,11 +447,11 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
     with store(db_path) as reopened:
         duplicate = reopened.start(
             AttemptStart(
-                "exec",
-                1,
-                SENDER_LOOKUP,
-                1,
-                token,
+                execution_id="exec",
+                attempt_ordinal=1,
+                owner_lookup=SENDER_LOOKUP,
+                owner_generation=1,
+                token=token,
                 expected_execution_revision=2,
                 expected_pointer_revision=0,
             )
@@ -470,11 +468,11 @@ def test_token_digest_is_global_and_only_digest_persists(db_path: Path) -> None:
         with pytest.raises(IdentityConflict):
             db.start(
                 AttemptStart(
-                    "other-exec",
-                    1,
-                    RECIPIENT_LOOKUP,
-                    1,
-                    token,
+                    execution_id="other-exec",
+                    attempt_ordinal=1,
+                    owner_lookup=RECIPIENT_LOOKUP,
+                    owner_generation=1,
+                    token=token,
                     expected_execution_revision=2,
                     expected_pointer_revision=0,
                 )
@@ -562,11 +560,11 @@ def test_retry_partition_and_generation_fence(db_path: Path) -> None:
         with pytest.raises(StaleFence):
             db.start(
                 AttemptStart(
-                    "exec",
-                    2,
-                    SENDER_LOOKUP,
-                    1,
-                    prepare_fence_token(),
+                    execution_id="exec",
+                    attempt_ordinal=2,
+                    owner_lookup=SENDER_LOOKUP,
+                    owner_generation=1,
+                    token=prepare_fence_token(),
                     expected_execution_revision=4,
                     expected_pointer_revision=2,
                 )
@@ -574,11 +572,11 @@ def test_retry_partition_and_generation_fence(db_path: Path) -> None:
         db.participants.advance_generation(SENDER_LOOKUP, expected_generation=1)
         second = db.start(
             AttemptStart(
-                "exec",
-                2,
-                SENDER_LOOKUP,
-                2,
-                prepare_fence_token(),
+                execution_id="exec",
+                attempt_ordinal=2,
+                owner_lookup=SENDER_LOOKUP,
+                owner_generation=2,
+                token=prepare_fence_token(),
                 expected_execution_revision=4,
                 expected_pointer_revision=2,
             )
@@ -590,11 +588,11 @@ def test_retry_partition_and_generation_fence(db_path: Path) -> None:
         assert isinstance(
             db.start(
                 AttemptStart(
-                    "exec",
-                    1,
-                    SENDER_LOOKUP,
-                    1,
-                    token,
+                    execution_id="exec",
+                    attempt_ordinal=1,
+                    owner_lookup=SENDER_LOOKUP,
+                    owner_generation=1,
+                    token=token,
                     expected_execution_revision=2,
                     expected_pointer_revision=0,
                 )
@@ -690,11 +688,11 @@ def test_provider_proof_carries_until_later_attempt_records_output(
         db.participants.advance_generation(SENDER_LOOKUP, expected_generation=1)
         second = db.start(
             AttemptStart(
-                "exec",
-                2,
-                SENDER_LOOKUP,
-                2,
-                prepare_fence_token(),
+                execution_id="exec",
+                attempt_ordinal=2,
+                owner_lookup=SENDER_LOOKUP,
+                owner_generation=2,
+                token=prepare_fence_token(),
                 expected_execution_revision=4,
                 expected_pointer_revision=2,
             )
@@ -804,11 +802,11 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
         with pytest.raises(sqlite3.IntegrityError):
             db.start(
                 AttemptStart(
-                    "exec",
-                    2,
-                    SENDER_LOOKUP,
-                    2,
-                    prepared,
+                    execution_id="exec",
+                    attempt_ordinal=2,
+                    owner_lookup=SENDER_LOOKUP,
+                    owner_generation=2,
+                    token=prepared,
                     expected_execution_revision=4,
                     expected_pointer_revision=2,
                 )
@@ -819,11 +817,11 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
         db.session._connection.execute("DROP TRIGGER fail_retry_obligation")
         second = db.start(
             AttemptStart(
-                "exec",
-                2,
-                SENDER_LOOKUP,
-                2,
-                prepared,
+                execution_id="exec",
+                attempt_ordinal=2,
+                owner_lookup=SENDER_LOOKUP,
+                owner_generation=2,
+                token=prepared,
                 expected_execution_revision=4,
                 expected_pointer_revision=2,
             )
@@ -873,11 +871,11 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
         with pytest.raises(IdentityConflict):
             db.start(
                 AttemptStart(
-                    "exec",
-                    1,
-                    SENDER_LOOKUP,
-                    1,
-                    prepare_fence_token(),
+                    execution_id="exec",
+                    attempt_ordinal=1,
+                    owner_lookup=SENDER_LOOKUP,
+                    owner_generation=1,
+                    token=prepare_fence_token(),
                     expected_execution_revision=3,
                     expected_pointer_revision=0,
                 )
@@ -940,11 +938,11 @@ def test_frozen_v2_pre_attempt_deferred_execution_cannot_resume(db_path: Path) -
         with pytest.raises(RecoveryBlocked):
             db.start(
                 AttemptStart(
-                    "exec",
-                    1,
-                    SENDER_LOOKUP,
-                    1,
-                    prepare_fence_token(),
+                    execution_id="exec",
+                    attempt_ordinal=1,
+                    owner_lookup=SENDER_LOOKUP,
+                    owner_generation=1,
+                    token=prepare_fence_token(),
                     expected_execution_revision=3,
                     expected_pointer_revision=0,
                 )
@@ -969,11 +967,11 @@ def test_crash_reopen_pending_starts_once_after_owner_returns(db_path: Path) -> 
         token = prepare_fence_token()
         applied = returned.start(
             AttemptStart(
-                "exec",
-                1,
-                SENDER_LOOKUP,
-                2,
-                token,
+                execution_id="exec",
+                attempt_ordinal=1,
+                owner_lookup=SENDER_LOOKUP,
+                owner_generation=2,
+                token=token,
                 expected_execution_revision=2,
                 expected_pointer_revision=0,
             )
@@ -984,11 +982,11 @@ def test_crash_reopen_pending_starts_once_after_owner_returns(db_path: Path) -> 
     with store(db_path) as reopened:
         replay = reopened.start(
             AttemptStart(
-                "exec",
-                1,
-                SENDER_LOOKUP,
-                2,
-                token,
+                execution_id="exec",
+                attempt_ordinal=1,
+                owner_lookup=SENDER_LOOKUP,
+                owner_generation=2,
+                token=token,
                 expected_execution_revision=2,
                 expected_pointer_revision=0,
             )
@@ -998,11 +996,11 @@ def test_crash_reopen_pending_starts_once_after_owner_returns(db_path: Path) -> 
         with pytest.raises(StaleRevision):
             reopened.start(
                 AttemptStart(
-                    "exec",
-                    1,
-                    SENDER_LOOKUP,
-                    2,
-                    prepare_fence_token(),
+                    execution_id="exec",
+                    attempt_ordinal=1,
+                    owner_lookup=SENDER_LOOKUP,
+                    owner_generation=2,
+                    token=prepare_fence_token(),
                     expected_execution_revision=2,
                     expected_pointer_revision=0,
                 )

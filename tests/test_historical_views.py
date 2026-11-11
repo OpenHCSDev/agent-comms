@@ -1,47 +1,62 @@
 """Actual saved buses and transcripts, with colliding live/source sequences."""
 
 
-from agent_comms.historical_views import AllHistoricalSenders, NamedHistoricalSender
-from agent_comms.transcripts import RecordedPageSource
-from agent_comms.repo import Checkout
 import json
 import os
-from dataclasses import replace
+from dataclasses import fields, replace
 from pathlib import Path
 
 import pytest
 
-from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile
-from agent_comms.registry.registration import Registration
-from agent_comms.bus import Bus, PublicRecord
-from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import HistoricalSourceChanged, ReloadRequired
-from agent_comms.nominal.field_codec import InputId
-from agent_comms.turn_item import FreshNativeId
-from agent_comms.historical_views import HistoricalMessage, HistoryArchive, HistorySource
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.transcript_routes import DisplayText
+from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.installer.backup import bus_files
-from agent_comms.message_page import MessagePageRequest, PageBounds
-from agent_comms.messages import Message
-from agent_comms.page_traversal import HistoryCursor
-from agent_comms.historical_views import HistoricalSelection
-from agent_comms.read_basis import AllChannelDisplayScope, ChannelConversation, ChannelSelection, ConversationCursor, DMSelection, NamedViewer, ReadCursor
-from agent_comms.read_ledger import ReadLedger
-from agent_comms.routing import MessageRoute, TurnRouting
-from agent_comms.transcript_routes import DisplayText
-from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.messaging.bus import Bus, PublicRecord
+from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.messaging.historical_views import (
+    AllHistoricalSenders,
+    HistoricalMessage,
+    HistoricalSelection,
+    HistoryArchive,
+    HistorySource,
+    NamedHistoricalSender,
+)
+from agent_comms.messaging.message_page import (
+    MessagePageRequest,
+    PageBounds,
+)
+from agent_comms.messaging.messages import Message
+from agent_comms.messaging.page_traversal import HistoryCursor
+from agent_comms.messaging.read_basis import (
+    AllChannelDisplayScope,
+    ChannelConversation,
+    ChannelSelection,
+    ConversationCursor,
+    DMSelection,
+    NamedViewer,
+    ReadCursor,
+)
+from agent_comms.messaging.read_ledger import ReadLedger
+from agent_comms.messaging.routing import MessageRoute, TurnRouting
+from agent_comms.nominal.field_codec import FieldCodec, InputId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_provenance import RegistryProvenance
+from agent_comms.registry.threads import NativeThread, ThreadProvenance
+from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile
 from agent_comms.storage.store_files import StoreOwner
-from agent_comms.registry.threads import NativeThread
-
-
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.transcripts import RecordedTranscriptReadIdentity, TranscriptReadIdentity
+from agent_comms.transcript.transcripts import (
+    RecordedPageSource,
+    RecordedTranscriptReadIdentity,
+    TranscriptReadIdentity,
+)
 from agent_comms.transport.tools.reads import TranscriptPageRead
-from test_transcript_pages import shared_page
-from dataclasses import fields
-from agent_comms.registry_provenance import RegistryProvenance
-from agent_comms.registry.threads import ThreadProvenance
 from test_locked_store import process
+from test_transcript_pages import shared_page
+
 
 @pytest.mark.parametrize('exists', [False, True])
 def test_catalogue_creation_or_change_during_read_is_rejected(tmp_path, exists):
@@ -259,7 +274,7 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     live.registry.remove("alice")
     live.registry.register(replacement)
     source = live.views.attach_history(old.root)
-    original_registry = (old.root / "registry.json").read_bytes()
+    original_registry = (RegistryFile.path_in(old.root)).read_bytes()
     original_native = native.read_bytes()
 
     read = live.transcripts.capture_page_read("alice", page_source=RecordedPageSource(source.key))
@@ -284,7 +299,7 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     live_identity = live.transcripts.capture_page_read("alice").identity
     live_identity.publish_turn(lambda root, thread: delivered.append((root, thread)))
     assert delivered == [(str(live.root), live.registry.require("alice"))]
-    assert (old.root / "registry.json").read_bytes() == original_registry
+    assert (RegistryFile.path_in(old.root)).read_bytes() == original_registry
     assert native.read_bytes() == original_native
 
 

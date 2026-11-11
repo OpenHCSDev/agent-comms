@@ -1,8 +1,8 @@
 """Entrypoints import their APIs, not the package root's former catalog."""
 import json
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -17,7 +17,7 @@ importlib.import_module({entrypoint!r})
 from agent_comms.registry.threads import Thread
 from agent_comms.agent_backend import AgentBackend, NewThreadBackend
 print(json.dumps({{
-    'catalog_loaded': 'agent_comms.tools' in sys.modules,
+    'catalog_loaded': 'agent_comms.transport.tools.served' in sys.modules,
     'sealed': AgentBackend._sealed,
     'default': NewThreadBackend.selected().declared_name,
 }}))
@@ -40,8 +40,8 @@ sys.path.insert(0, {str(source)!r})
 from dataclasses import dataclass
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 goal_id = GoalId.mint()
-from agent_comms.tool_declaration import ToolDeclaration
-assert 'agent_comms.tools' not in sys.modules
+from agent_comms.transport.tool_declaration import ToolDeclaration
+assert 'agent_comms.transport.tools.served' not in sys.modules
 @dataclass(frozen=True)
 class SavedTool:
     tool: ToolDeclaration | None

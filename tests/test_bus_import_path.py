@@ -13,7 +13,7 @@ import sys
 import pytest
 
 
-@pytest.mark.parametrize("module", ["agent_comms.comms", "agent_comms.todos"])
+@pytest.mark.parametrize("module", ["agent_comms.comms", "agent_comms.planning.orders"])
 def test_bus_client_never_imports_the_advisor(module: str) -> None:
     loaded = subprocess.run(
         [sys.executable, "-c",

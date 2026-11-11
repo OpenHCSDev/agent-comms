@@ -1,71 +1,91 @@
-import sys
-
-from agent_comms.core_access import LocalCoreAccess
-from agent_comms.repo import Checkout
-from agent_comms.comms import Comms
-from agent_comms.registry.registration import Registration
-from agent_comms.thread_text import GivenThreadText, NoThreadText, ThreadText
 import asyncio
+import hashlib
 import json
 import os
 import sqlite3
 import stat
-from dataclasses import replace
+import subprocess
+import sys
 from collections.abc import Callable, Iterable
-from typing import BinaryIO, IO, Self
+from dataclasses import replace
+from pathlib import Path
 from types import TracebackType
-from agent_comms.transport.tools.sidebar import CommsImportedSourceTool
+from typing import IO, BinaryIO, Self
+
+import pytest
 from pydantic import JsonValue
-from agent_comms.harness_install import (
+from transcript_record_fixture import transcript_record
+
+from agent_comms.cli import CliInvocation
+from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
+from agent_comms.cli_bridges.codex import CodexAppServer
+from agent_comms.cli_bridges.codex_connection import CodexConnection
+from agent_comms.cli_bridges.codex_protocol import (
+    BusInput,
+    InitializeResponse,
+    ItemsList,
+    RequestParams,
+)
+from agent_comms.cli_bridges.codex_records import (
+    ROLLOUT_RECORD,
+    CodexRolloutProvenance,
+    ForeignItem,
+    ForeignRecord,
+    ResponseItemRecord,
+)
+from agent_comms.cli_bridges.history import (
+    DefaultAddress,
+    OfflineHistory,
+    OnlineHistory,
+)
+from agent_comms.cli_bridges.opencode import OpenCodeConnection, OpenCodeServer
+from agent_comms.cli_bridges.opencode_parts import SavedMessage
+from agent_comms.cli_bridges.opencode_protocol import Session
+from agent_comms.cli_bridges.runtime_updates import FinishedItem, TurnEnded
+from agent_comms.comms import Comms
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import NO_PROCESS
+from agent_comms.execution.imported_messages import (
+    ImportedMessage,
+    ImportedReply,
+    ImportedRequest,
+    ImportLimits,
+)
+from agent_comms.execution.imported_session_metadata import ImportedSessionMetadata
+from agent_comms.execution.native_entries import ImportedMetadataEntry, NativeEntry
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.turn_context import FileProvenance
+from agent_comms.importing import ImportBuffer, ImportSnapshot, ThreadImported
+from agent_comms.installer.harness_install import (
     ClaudeCodeHarness,
     CodexHarness,
     Harness,
     OpenCodeHarness,
     PiHarness,
 )
-from agent_comms.thread_text import ExpectedSession
-from agent_comms.thread_creation import RecordedCreationTime
-from agent_comms.transcript_events import (
-    ImportedMessage,
-    ImportedReply,
-    ImportedRequest,
-    TextTranscript,
-)
-from pathlib import Path
-
-import pytest
-from transcript_record_fixture import transcript_record
-
-from agent_comms.session_file import RegistrySessionLocation
-
-from agent_comms.importing import (
-    ImportBuffer,
-    ImportLimits,
-    ImportSnapshot,
-    ImportedSessionMetadata,
-    ThreadImported,
-)
-from agent_comms.cli import CliInvocation
-from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
-from agent_comms.cli_bridges.codex import CodexAppServer
-from agent_comms.cli_bridges.codex_connection import CodexConnection
-from agent_comms.cli_bridges.codex_protocol import BusInput, InitializeResponse, RequestParams, ItemsList
-from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD, ForeignItem, ForeignRecord, ResponseItemRecord
-from agent_comms.cli_bridges.history import DefaultAddress, OfflineHistory, OnlineHistory
-from agent_comms.thread_text import AnySession, NamedSession
-from agent_comms.cli_bridges.opencode import OpenCodeServer, OpenCodeConnection
-from agent_comms.cli_bridges.opencode_parts import SavedMessage
-from agent_comms.cli_bridges.opencode_protocol import Session
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
-from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
-from agent_comms.registry.threads import ThreadProvenance, ExternalThread, NativeThread
-from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.runtime_updates import FinishedItem, TurnEnded
-from agent_comms.ui_model.message_category import AgentCategory, ThinkingCategory, UserCategory
-from agent_comms.turn_context import CodexRolloutProvenance
-from agent_comms.child_process import NO_PROCESS
-from agent_comms.errors import RelationViolationError
-from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.thread_creation import RecordedCreationTime
+from agent_comms.registry.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_text import (
+    AnySession,
+    ExpectedSession,
+    GivenThreadText,
+    NamedSession,
+    NoThreadText,
+    ThreadText,
+)
+from agent_comms.registry.threads import ExternalThread, NativeThread, ThreadProvenance
+from agent_comms.transcript.transcript_events import TextTranscript
+from conftest import ui_core_read
+from agent_comms.transport.tools.sidebar import CommsImportedSourceTool
+from agent_comms.ui_model.message_category import (
+    AgentCategory,
+    ThinkingCategory,
+    UserCategory,
+)
 
 
 def lines(path: Path, records: Iterable[dict[str, JsonValue]], tail: str = "") -> Path:
@@ -301,11 +321,10 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
     entry = NativeEntry.from_wire(saved[1])
     assert isinstance(entry, ImportedMetadataEntry)
     assert entry.to_wire() == saved[1]
-    core = LocalCoreAccess(comms)
-    assert core.call(CommsImportedSourceTool(
+    assert ui_core_read(comms, CommsImportedSourceTool(
         owner=original_owner, source=refs[1])).text == "Historical developer λ.\n"
     with pytest.raises(ValueError):
-        core.call(CommsImportedSourceTool(owner=original_owner, source=replace(refs[1], instruction=999)))
+        ui_core_read(comms, CommsImportedSourceTool(owner=original_owner, source=replace(refs[1], instruction=999)))
     with pytest.raises(ValueError):
         ImportedSessionMetadata.sources_for_owner(
             comms.registry, replace(original_owner, created_at=RecordedCreationTime(original_owner.created_at + 1)))
@@ -351,6 +370,26 @@ def test_codex_instructions_come_from_the_selected_history_and_the_request_from_
     assert snapshot.latest_request == "Prior question"
     assert tuple(ref.public_text(None) for ref in snapshot.historical_instructions) == (
         "Selected historical wording",)
+
+
+def test_imported_historical_source_decodes_cold_and_rejects_other_provenance(tmp_path: Path) -> None:
+    text = "Historical source from the original saved record"
+    path = codex_lines(tmp_path / "historical-source.jsonl", [codex_message("system", text)])
+    raw = path.read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    source = CodexRolloutProvenance(str(path), 0, len(raw), digest, 0)
+    metadata = ImportedSessionMetadata(CodexHarness, "original", 0, 0, 0, (), (source,))
+    wire = FieldCodec.encode(metadata)
+    completed = subprocess.run(
+        (sys.executable, str(Path(__file__).with_name("historical_source_probe.py")),
+         json.dumps(wire), text),
+        capture_output=True, text=True, timeout=30,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert isinstance(wire, dict)
+    wire["historical_instructions"] = [FieldCodec.encode(FileProvenance(str(path), digest))]
+    with pytest.raises(ValueError):
+        FieldCodec.decode(ImportedSessionMetadata, wire)
 
 
 def test_codex_items_codex_does_not_declare_are_foreign() -> None:
@@ -745,7 +784,7 @@ class FakeOpenCode(OpenCodeConnection):
         return self.saved
 
     async def status(self) -> TurnEnded:
-        from agent_comms.runtime_updates import TurnEnded
+        from agent_comms.cli_bridges.runtime_updates import TurnEnded
 
         return TurnEnded()
 

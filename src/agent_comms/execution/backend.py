@@ -1,0 +1,821 @@
+"""Pi native turns: the private turn implementation behind ``PiNativeBackend``.
+
+Core reaches this module only through ``PiNativeBackend.run_turn``. It runs the
+selected native Pi process through its verified RPC launch contract. Pi's
+JSON-lines events carry text deltas, tool arguments and tool results for
+thinking indicators and tool-call cards.
+
+Events are frozen nominal values declared in :mod:`agent_events`.
+
+Native terminal failures yield ``done`` with ``ok=False``. Unexpected producer
+faults retain their original exception for the existing owner-turn failure
+publisher after child retirement. Provider failures reported as an assistant
+message also fail the turn, carrying ``errorMessage`` and typed diagnostics.
+"""
+
+from __future__ import annotations
+
+from agent_comms.execution.stats_callbacks import WatchdogSessionRead
+
+import asyncio
+import json
+from abc import ABC, abstractmethod
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Iterable,
+    Iterator,
+    Sequence,
+)
+from contextlib import AsyncExitStack, aclosing, contextmanager
+from dataclasses import dataclass, field
+from functools import partial
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
+
+from metaclass_registry.mro_dispatch import MroDispatch, handles
+
+from agent_comms import agent_events as events
+from agent_comms.agent_backend import NO_INPUT_START_LISTENER, InputStartListener
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution import pi_commands as commands
+from agent_comms.execution import pi_events as pi
+from agent_comms.execution.acp_failure import ProviderRetryResult, UnrecordedFailureSource
+from agent_comms.execution.cursor_publication import CursorDelivery
+from agent_comms.execution.extension_ui import ExtensionUiSession
+from agent_comms.execution.finish_signal import NO_FINISH_SIGNAL, FinishSignal
+from agent_comms.execution.image_input import ImageInput
+from agent_comms.execution.native_attestation import AttestationError
+from agent_comms.execution.native_child import NativeChildState, PiSessionChild
+from agent_comms.execution.native_entries import NativeEvidenceScope
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_input_proof import NativeContextProof, NativeInputCommit
+from agent_comms.execution.native_pi import NativePiRpcLaunch, read_tracked_input_commitment
+from agent_comms.execution.native_session_callbacks import (
+    NativeSessionCallbacks,
+    PromptSessionCallbacks,
+)
+from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
+from agent_comms.execution.native_startup import NATIVE_STARTUP_POLICY, NativeStartup
+from agent_comms.execution.participant_identity import ParticipantIdentity
+from agent_comms.execution.pi_rpc import PiRpcChannel
+from agent_comms.execution.pi_wire import RequestId
+from agent_comms.execution.private_sidecar import native_request_digest
+from agent_comms.execution.prompt_state import PromptState, QueuedOperation, UnwrittenPrompt
+from agent_comms.execution.request_progress import (
+    NO_REQUEST_OBSERVER,
+    RequestObserver,
+    RequestProgress,
+)
+from agent_comms.execution.send_outcome import NO_SEND_BOUNDARY, SendBoundary
+from agent_comms.execution.session_retention import NativeSessionRetention
+from agent_comms.execution.turn_context import InputContributionCoordinates
+from agent_comms.execution.turn_failure import (
+    BackendDidNotExit,
+    FollowupUnrecognized,
+    IdentityUncertain,
+    InputIdUnavailable,
+    InputMissing,
+    NativeChildSignaled,
+    NativeLaunchInvalid,
+    NativePreflightExit,
+    TurnFailure,
+)
+from agent_comms.execution.turn_failure_reads import TerminalSessionRead
+from agent_comms.execution.turn_inbox import TurnInbox, TurnInboxItem
+from agent_comms.execution.turn_inputs import InputForwarding
+from agent_comms.execution.turn_item import PiRequestKey
+from agent_comms.execution.turn_output import TurnOutput
+from agent_comms.execution.turn_phase import NativePhaseChanged, SettlingStatsPhase, TurnPhase
+from agent_comms.execution.turn_stats import StatsRequest
+from agent_comms.execution.turn_usage import UsageAccount
+from agent_comms.execution.turn_watchdog import (
+    DEFAULT_MODEL_WAIT,
+    ProgressWatchdog,
+    TurnWait,
+    TurnWaitExpired,
+)
+from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.nominal.field_codec import InputId, MalformedRecord
+from agent_comms.pi_payloads import AssistantMessage, UserMessage
+from agent_comms.transport.native_tool_transport import (
+    NativeToolMode,
+    ToolTransport,
+    UnboundToolTransport,
+)
+from agent_comms.transport.tool_denial import SelectedToolDenied
+
+# Pi 0.85.1 owns provider-idle detection and defaults it to 300 seconds. This
+# transport backstop must remain strictly longer so Pi can emit its authoritative
+# timeout, auto-retry, and transport evidence before agent-comms intervenes.
+_PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS = 300.0
+assert DEFAULT_MODEL_WAIT.budget > _PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS
+
+
+RPC_ABORT_GRACE_SECONDS = 2.0
+
+
+CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS = NATIVE_STARTUP_POLICY.readiness_seconds
+
+
+PROMPT_START_TIMEOUT_SECONDS = 180.0
+
+
+_IDENTITY_FAILURE_TEXT = "Pi session identity changed during this turn."
+
+
+async def terminate_task_process[Result](task: asyncio.Task[Result]) -> None:
+    """Terminate the backend subprocess owned by an agent turn task."""
+    session = TurnSession.active.get(task)
+    if session is not None:
+        await session.native_session.close()
+        TurnSession.active.pop(task, None)
+
+
+async def stream_agent_events(
+    agent_bin: str,
+    agent_args: Sequence[str],
+    task: str,
+    cwd: str,
+    env_extra: dict[str, str] | None = None,
+    session_file: str | None = None,
+    steering_queue: TurnInbox | None = None,
+    finish_event: asyncio.Event | None = None,
+    images: Sequence[ImageInput] = (),
+    model_wait: TurnWait = DEFAULT_MODEL_WAIT,
+    rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
+    send_boundary: SendBoundary = NO_SEND_BOUNDARY,
+    *,
+    cursor_delivery: CursorDelivery,
+    input_start: InputStartListener,
+    persistent_session: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity],
+    package: VerifiedNativePackage,
+    root: Path,
+    owner: ParticipantIdentity,
+    session_directory: Path,
+    ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
+    context_contributions: tuple[InputContributionCoordinates, ...] = (),
+    request_observer: RequestObserver = NO_REQUEST_OBSERVER,
+    tool_mode: NativeToolMode,
+) -> AsyncIterator[events.AgentEvent]:
+    """Run the backend; native completion ends with a ``done`` event.
+
+    The no-progress watchdog applies only while waiting for the model. A running
+    tool has no deadline in this intentionally incomplete first slice: preventing
+    false model-stall kills does not solve a hung tool, which requires a separate
+    durable tool-liveness policy. Durable retry decisions belong to the
+    coordinator, never this transport adapter.
+    """
+    async with persistent_session.lock:
+        try:
+            launch = await Coordination.run_worker(partial(
+                persistent_session.child_state.managed_launch,
+                agent_bin,
+                tuple(agent_args),
+                package=package,
+                root=root,
+                owner=owner,
+                directory=session_directory,
+                worktree=Path(cwd),
+                environment=env_extra,
+                session_file=session_file,
+            ))
+        except NativePiUnavailable as error:
+            yield events.Error(text=str(error), reason_code=NativeLaunchInvalid.declared_name)
+            yield events.Done(ok=False, failure=NativeLaunchInvalid(str(error)), text=str(error))
+            return
+        async with (
+            launch.session.files(root).accept_input(),
+            aclosing(
+                TurnSession(
+                    launch,
+                    partial(
+                        commands.Prompt,
+                        id=RequestId(PiRequestKey.fresh()),
+                        input_id=InputId.mint(),
+                        message=task,
+                        images=tuple(images),
+                        context_contributions=context_contributions,
+                    ),
+                    tool_mode=tool_mode,
+                    steering_queue=steering_queue,
+                    finish_signal=FinishSignal.from_event(finish_event),
+                    model_wait=model_wait,
+                    rpc_abort_grace=rpc_abort_grace,
+                    send_boundary=send_boundary,
+                    input_start=input_start,
+                    cursor_delivery=cursor_delivery,
+                    native_session=persistent_session,
+                    ui_request=ui_request,
+                    request_observer=request_observer,
+                    startup=NativeStartup.for_launch(launch),
+                ).run()
+            ) as stream,
+        ):
+            async for event in stream:
+                yield event
+
+
+class NativeSession(MroDispatch, WatchdogSessionRead[ProgressWatchdog, StatsRequest]):
+    """Shared child acquisition, attestation, observation and retirement."""
+
+    active: ClassVar[dict[asyncio.Task[Any], NativeSession]] = {}
+
+    @property
+    @abstractmethod
+    def prompt_type(self) -> type[QueuedOperation]:
+        """Each concrete native operation declares whether it sends input."""
+
+    def __init__(
+        self,
+        launch: NativePiRpcLaunch,
+        steering_queue: TurnInbox | None = None,
+        finish_signal: FinishSignal = NO_FINISH_SIGNAL,
+        model_wait: TurnWait = DEFAULT_MODEL_WAIT,
+        rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
+        send_boundary: SendBoundary = NO_SEND_BOUNDARY,
+        input_start: InputStartListener = NO_INPUT_START_LISTENER,
+        ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
+        request_observer: RequestObserver = NO_REQUEST_OBSERVER,
+        *, startup: NativeStartup, native_session: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity],
+    ):
+        self.launch = launch
+        self.tool_socket: ToolTransport
+        self.finish_signal = finish_signal
+        self.request_observer = request_observer
+        self.watchdog = ProgressWatchdog(
+            model_wait, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS,
+            NATIVE_STARTUP_POLICY,
+        )
+        self.rpc_abort_grace = rpc_abort_grace
+        self.send_boundary = send_boundary
+        self.input_start = input_start
+        self.native_session = native_session
+        self.extension_ui = ExtensionUiSession(ui_request)
+        self.startup = startup
+        self.inputs = InputForwarding(steering_queue if steering_queue is not None else TurnInbox())
+        self.prompt_state: PromptState = self.prompt_type()
+        self.stats = StatsRequest()
+        self.usage = UsageAccount()
+        self.output = TurnOutput()
+        self.rejected_signal = asyncio.Event()
+        self.rejected_commands: list[events.InputRefused] = []
+        self.explicit_interrupt = False
+        self.started_during_abort: list[events.FollowingInputStarted] = []
+        self.finished = self.skip = False
+
+    def refuse(self, item: TurnInboxItem) -> None:
+        """Refuse one unwritten operation through its most specific nominal handler."""
+        next(self.handlers_for(item))(item)
+
+    @handles(TurnInboxItem)
+    def refuse_queued_input(self, item: TurnInboxItem) -> None:
+        for input_id in item.carried_inputs:
+            self.rejected_commands.append(events.FollowingInputRefused(id=input_id))
+            self.rejected_signal.set()
+
+    @handles(UnwrittenPrompt)
+    def refuse_original_prompt(self, item: UnwrittenPrompt) -> None:
+        self.output.record_failure(InputMissing("Original input was cleared before send."))
+        self.finish_request()
+        self.rejected_signal.set()
+
+    def accept_tool_round(self, message: AssistantMessage) -> None:
+        self.tool_socket.announce(message)
+
+    def accept_final_message(self, message: AssistantMessage) -> None:
+        """A turn that only streams its output takes no answer from the final message."""
+
+    def accept_unfinished_message(self, failure: TurnFailure) -> None:
+        """A streaming turn reports an unfinished message through its output, not a failure."""
+
+    async def assistant_started(self) -> None:
+        self.output.start_message()
+
+    async def assistant_ended(self) -> None:
+        """A streaming turn keeps no per-message draft."""
+
+    async def text_received(self, text: str) -> None:
+        self.output.append(text)
+
+    async def agent_settled(self, event: pi.AgentSettled) -> tuple[events.AgentEvent, ...]:
+        """Settling asks Pi for the turn's statistics before the turn reports itself finished."""
+        await self.native.stop_forwarding()
+        self.prompt_state = self.prompt_state.settle(event)
+        self.watchdog.progress()
+        self.watchdog.phase = SettlingStatsPhase()
+        await self.stats.request(self)
+        return ()
+
+    def native_phase_changes(self, previous: TurnPhase) -> Iterator[NativePhaseChanged]:
+        """Publish the actual observer phase without storing another phase copy."""
+        if self.watchdog.phase != previous:
+            yield NativePhaseChanged(self.watchdog.phase, self.native.proc.identity)
+
+    @property
+    def started_input(self):
+        return self.prompt_state.started and self.inputs.permits_interaction
+
+    @property
+    def awaiting_native_attestation(self):
+        return not self.native.attestation.observed
+
+    async def consume_native_event(self, event):
+        """Observe one decoded event through the shared native lifecycle owner."""
+        event.observe_request(self.record_request_progress)
+        previous = self.watchdog.phase
+        self.watchdog.dispatch_sync(event, self)
+        for update in await self.apply_native_event(event):
+            yield update
+        self.watchdog.transition(event)
+        async for update in self.stats.settle(self):
+            yield update
+        for update in self.native_phase_changes(previous):
+            yield update
+
+    def record_request_progress(self, progress: RequestProgress) -> None:
+        """Record the original sample without borrowing global publication locks.
+
+        The acquired native process supplies its identity; the configured
+        observer binds the original public turn lease. No phase owns a copy of
+        the transport clock or request lifecycle.
+        """
+        self.request_observer(progress, self.native.proc.identity)
+
+    async def apply_native_event(self, event) -> tuple[events.AgentEvent, ...]:
+        if await self.dispatch(event) is None:
+            return ()
+        return tuple([update async for update in event.apply(self)])
+
+    @property
+    def accepts_output(self):
+        return self.native.attestation.trustworthy
+
+    def committable_message(self, text):
+        return self.started_input and self.accepts_output and self.output.matches_message(text)
+
+    def ensure_input_forwarding(self):
+        self.native.forward_input(partial(self.inputs.forward, self))
+
+    def observe_input_during_abort(self, event):
+        if self.accepts_output:
+            self.started_during_abort.extend(
+                events.FollowingInputStarted(id=identity)
+                for identity in self.inputs.mark_started(self, event)
+            )
+
+    def permits_live_status(self) -> bool:
+        """Only tracked, live input may publish an informational package acknowledgement."""
+        return self.stats.permits_live_status(self)
+
+    async def abort_stalled_rpc(self) -> None:
+        await self.finish_input()
+        abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
+        try:
+            remaining = max(0.0, abort_deadline - self.loop.time())
+            abort = commands.Abort(id=RequestId(PiRequestKey("agent-comms-watchdog")))
+            self.native.send(abort)
+            await asyncio.wait_for(self.native.drain(), timeout=remaining)
+            while remaining := max(0.0, abort_deadline - self.loop.time()):
+                response = await asyncio.wait_for(
+                    self.native.reader.readline(), timeout=remaining
+                )
+                if not response:
+                    break
+                try:
+                    abort_payload = PiRpcChannel.decode_record(response)
+                except (json.JSONDecodeError, UnicodeDecodeError, MalformedRecord):
+                    continue
+                abort_payload.observe_abort(self)
+                if abort_payload.responds_to(abort):
+                    break
+        except (TimeoutError, BrokenPipeError):
+            pass
+        await self.native.shutdown()
+
+    def context_info(self) -> events.ContextInfo:
+        return events.ContextInfo(
+            context_used=self.usage.used,
+            context_size=self.usage.size,
+        )
+
+    async def open_transport(self, resources: AsyncExitStack) -> UnboundToolTransport:
+        return await ToolTransport.open(self, resources)
+
+    @contextmanager
+    def native_acquisition(self):
+        """The original acquisition failures preserve their source disposition."""
+        try:
+            yield
+        except NativePiUnavailable as error:
+            self.prompt_state.raise_native_failure(error, self.launch.session.attestation())
+
+    async def acquire_native(self, resources: AsyncExitStack, *, reuse: bool) -> PiSessionChild:
+        """Acquire leaf transport once in the original turn's resource lifetime."""
+        with self.native_acquisition():
+            async with AsyncExitStack() as transport:
+                with self.startup.measurements.operation("open_transport"):
+                    unbound = await self.open_transport(transport)
+                native = await self.open_native(reuse=reuse)
+                with self.startup.measurements.operation("native_process_binding"):
+                    self.tool_socket = await unbound.bind_process(native.proc.pid)
+                native.transport = transport.pop_all()
+        self.owner = asyncio.current_task()
+        if self.owner is not None:
+            self.active[self.owner] = self
+            resources.callback(self.active.pop, self.owner, None)
+        return native
+
+    async def open_native(self, *, reuse: bool) -> PiSessionChild:
+        """Let the session manage child ownership for new or continued input."""
+        with self.startup.measurements.operation("native_open"):
+            native = await self.native_session.open(
+                self.launch, reuse=reuse, startup=self.startup, watchdog=self.watchdog,
+            )
+        self.startup.native_process = native.proc.identity
+        return native
+
+    async def run(self) -> AsyncGenerator[events.AgentEvent]:
+        self.loop = asyncio.get_running_loop()
+        self.owner = asyncio.current_task()
+        async with AsyncExitStack() as resources:
+            try:
+                self.native = await self.acquire_native(
+                    resources, reuse=True
+                )
+                async with self.native.failures():
+                    self.output.sensitive |= self.native.sensitive_diagnostics
+                    try:
+                        self.native.send(self.native.attestation.request)
+                        await self.native.drain()
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass
+                    await self.initialize_rpc()
+                    while True:
+                        self.skip = False
+                        async for event in self.receive_record():
+                            yield event
+                        if self.finished:
+                            break
+                        if self.skip:
+                            continue
+                        if self.awaiting_native_attestation:
+                            try:
+                                self.native.attestation = self.native.attestation.accept(self.payload)
+                            except AttestationError as error:
+                                await error.refuse(self)
+                                break
+                            if self.native.attestation.observed:
+                                self.inputs.queue.begin(self.prompt_type())
+                                self.ensure_input_forwarding()
+                        async for event in self.payload.consume(self):
+                            yield event
+                        if self.finished:
+                            break
+                        if self.skip:
+                            continue
+                    self.finished = False
+                    await self.retain_or_close()
+                    await self.finish_diagnostics()
+                    for event in self.finish_result():
+                        yield event
+            finally:
+                if not self.native_session.child_state.retained:
+                    await self.native_session.close()
+
+    async def receive_record(self) -> AsyncIterator[events.AgentEvent]:
+        while self.rejected_commands:
+            yield self.rejected_commands.pop(0)
+        self.rejected_signal.clear()
+        try:
+            self.line = await self.watchdog.read(self)
+        except TurnWaitExpired as expired:
+            async for event in expired.wait.expire(self):
+                yield event
+            return
+        if not self.line:
+            if self.awaiting_native_attestation:
+                self.output.diagnostic = {
+                    "elapsed_ms": round(
+                        (self.loop.time() - self.watchdog.launch_started_at) * 1000
+                    ),
+                    "spawn_ms": self.watchdog.spawn_ms,
+                }
+                self.output.diagnostic.update(self.watchdog.session_load.diagnostic)
+                self.output.record_failure(
+                    NativePreflightExit(
+                        "Pi native input-ID capability preflight ended before attestation."
+                    )
+                )
+            self.finish_request()
+            return
+        self.line = self.line.strip()
+        if not self.line:
+            self.skip = True
+            return
+        try:
+            self.payload = PiRpcChannel.decode_record(self.line)
+        except json.JSONDecodeError:
+            self.skip = True
+            return
+        except MalformedRecord as error:
+            if self.awaiting_native_attestation:
+                self.output.record_failure(
+                    InputIdUnavailable(
+                        f"Invalid Pi capability preflight response: {error}"
+                    )
+                )
+                await self.native.shutdown()
+                self.finish_request()
+                return
+            raise
+
+    def grant_prompt(self) -> None:
+        """The permitted write starts sending input and starts its timer."""
+        self.prompt_state = self.prompt_state.dispatch()
+        self.watchdog.await_input()
+
+    async def invalidate_identity(self) -> tuple[events.AgentEvent, ...]:
+        self.native.attestation = self.native.attestation.invalidate()
+        self.usage.invalidate()
+        self.output.discard_text()
+        updates = (self.context_info(),)
+        self.output.record_failure(IdentityUncertain(_IDENTITY_FAILURE_TEXT))
+        await self.abort_stalled_rpc()
+        self.finish_request()
+        return updates
+
+    def request_retried(self) -> None:
+        """Pi compacted after an overflow and re-sends the same request."""
+        self.output.request_retried()
+
+    def finish_request(self) -> None:
+        """The native session alone closes its running request."""
+        self.finished = True
+
+    def record_retry(self, result: ProviderRetryResult) -> None:
+        """The provider retry outcome decides whether this turn's failure may run again."""
+        self.output.retry_result = result
+
+    async def initialize_rpc(self) -> None:
+        self.active_session_file = self.launch.session.session_file
+        self.watchdog.reading()
+
+    async def finish_input(self) -> None:
+        """Retire snapshot work before the input transport it borrows."""
+        await self.stats.close()
+        await self.native.finish_input()
+
+    async def retain_or_close(self) -> None:
+        self.tool_socket.assert_complete()
+        await self.finish_input()
+        retention = self.native.attestation.identity
+        if self.prompt_state.permits_retention(self):
+            self.native.sensitive_diagnostics = self.output.sensitive
+            retention.retain(self.native, self.native_session)
+        if not self.native_session.child_state.retained:
+            outcome = await self.native.shutdown(graceful=True)
+            outcome.report_shutdown(partial(
+                self.output.record_failure,
+                BackendDidNotExit("agent backend did not exit"),
+            ))
+            outcome.report_stopped(partial(
+                self.output.record_failure,
+                NativeChildSignaled(f"Pi RPC child {outcome.summary}"),
+            ), NativeChildSignaled.stop_exits)
+
+    async def finish_diagnostics(self) -> None:
+        self.error_text = (
+            "" if self.native.proc.alive() else await self.native.proc.stderr_tail()
+        )
+        self.output.startup_error(self.error_text)
+
+    def finish_result(self) -> Iterable[events.AgentEvent]:
+        yield from self.output.done(self, self.error_text)
+
+
+T = TypeVar("T")
+
+
+class NativeCommitObservation(ABC, Generic[T]):
+    """Observed native input records, without permission to start or replay input."""
+
+    @abstractmethod
+    def require(self) -> T: ...
+
+    def capture(self, event: T) -> NativeCommitObservation[T]:
+        raise NativePiUnavailable("Native Pi repeated the input commitment")
+
+
+class PendingNativeCommit(NativeCommitObservation[T]):
+    def require(self) -> T:
+        raise NativePiUnavailable("Native Pi did not commit a tracked model context")
+
+    def capture(self, event: T) -> NativeCommitObservation[T]:
+        return ObservedNativeCommit(event)
+
+
+@dataclass(frozen=True)
+class ObservedNativeCommit(NativeCommitObservation[T]):
+    event: T
+
+    def require(self) -> T:
+        return self.event
+
+
+@dataclass
+class TrackedInputContext:
+    """One actually sent command owns its emitted join, bounded by this run's scope."""
+
+    command: commands.Prompt
+    input_commit: NativeCommitObservation[pi.InputCommitted] = field(
+        default_factory=PendingNativeCommit
+    )
+    context_commit: NativeCommitObservation[pi.ContextCommitted] = field(
+        default_factory=PendingNativeCommit
+    )
+
+    async def committed_input(self, turn: TurnSession, event: pi.InputCommitted) -> None:
+        self.input_commit = self.input_commit.capture(event)
+        async with turn.cursor_delivery.reading() as source_reads:
+            await Coordination.run_worker(
+                lambda: source_reads.for_source(
+                    turn.launch.session.files(turn.launch.root).session
+                ).observe(event)
+            )
+        await self.command.input_committed(turn, event)
+
+    def proof(
+        self,
+        files: NativeSessionFiles,
+        session_id: PiSessionId,
+        source_reads: NativeEvidenceScope,
+    ) -> NativeContextProof:
+        evidence = source_reads.for_source(files.session)
+        proof = evidence.verify_context(
+            files,
+            self.input_commit.require(),
+            self.context_commit.require().record_for(self.command.input_id, session_id),
+        )
+        committed = read_tracked_input_commitment(
+            proof.session_file,
+            self.command.input_id,
+            evidence=evidence,
+        )
+        if not committed.matches(
+            native_request_digest(
+                self.command.message,
+                streaming_behavior=self.command.streaming_behavior,
+                images=self.command.images,
+            )
+        ):
+            raise NativePiUnavailable("Native context differs from its actual scoped input request")
+        return proof
+
+    async def committed_context(self, turn: TurnSession, event: pi.ContextCommitted) -> None:
+        self.context_commit = ObservedNativeCommit(event)
+        async with turn.cursor_delivery.reading() as source_reads:
+            proof = await Coordination.run_worker(
+                partial(
+                    self.proof,
+                    turn.launch.session.files(turn.launch.root),
+                    turn.native.attestation.require_identity().session_id,
+                    source_reads,
+                )
+            )
+            await self.command.context_committed(turn, proof, source_reads)
+
+
+class TurnSession(NativeSession, PromptSessionCallbacks):
+    """A native input adds its declared tools and constructs its connected command."""
+
+    prompt_type = UnwrittenPrompt
+
+    def provider_retry_ended(self, event: pi.AutoRetryEnd) -> tuple[events.AgentEvent, ...]:
+        updates = event.outcome.apply(event, self)
+        self.record_retry(event.outcome.result(event.attempt, self.output.redact))
+        return updates
+
+    def __init__(
+        self,
+        launch,
+        make_command: Callable[..., commands.Prompt],
+        *,
+        tool_mode: NativeToolMode,
+        cursor_delivery: CursorDelivery,
+        **options,
+    ):
+        super().__init__(launch, **options)
+        self.tool_mode = tool_mode
+        self.make_command = make_command
+        self.cursor_delivery = cursor_delivery
+        self.contexts: dict[InputId, TrackedInputContext] = {}
+
+    async def open_transport(self, resources: AsyncExitStack) -> UnboundToolTransport:
+        resources.callback(self.contexts.clear)
+        unbound = await self.tool_mode.open_transport(self, resources)
+        self.command = self.make_command(owner_tools=unbound.listener.connection)
+        del self.make_command
+        self.contexts[self.command.input_id] = TrackedInputContext(self.command)
+        self.output.sensitive = bool(self.command.images)
+        return unbound
+
+    def following_started(self, command: commands.FollowingPrompt) -> None:
+        if command.input_id in self.contexts:
+            raise NativePiUnavailable(
+                "A tracked following input reused an in-scope native identity"
+            )
+        self.contexts[command.input_id] = TrackedInputContext(command)
+
+    async def original_committed(self, event: NativeInputCommit) -> None:
+        """An ordinary original already started through its matched MessageStart."""
+
+    async def original_context_committed(
+        self,
+        context: NativeContextProof,
+        source_reads: NativeEvidenceScope,
+    ) -> None:
+        await self.input_start.original_context_committed(self.command.message, context)
+
+    @handles(pi.InputCommitted)
+    async def committed_input(self, event: pi.InputCommitted) -> None:
+        if context := self.contexts.get(event.input_id):
+            await context.committed_input(self, event)
+
+    @handles(pi.ContextCommitted)
+    async def committed_context(self, event: pi.ContextCommitted) -> None:
+        if context := self.contexts.get(event.input_id):
+            await context.committed_context(self, event)
+
+    async def context_proof(self) -> NativeContextProof:
+        if not self.started_input or not self.accepts_output:
+            raise SelectedToolDenied("Native tool has no started input")
+        async with self.cursor_delivery.reading() as source_reads:
+            return await Coordination.run_worker(
+                partial(
+                    self.contexts[self.command.input_id].proof,
+                    self.launch.session.files(self.launch.root),
+                    self.native.attestation.require_identity().session_id,
+                    source_reads,
+                )
+            )
+
+    @handles(pi.ToolExecutionStart)
+    async def tool_started(self, event):
+        await self.context_proof()
+        self.tool_socket.tool_started(event)
+
+    @handles(pi.ToolExecutionEnd)
+    async def tool_finished(self, event):
+        self.tool_socket.tool_finished(event, self.command.input_id)
+
+    def reject_prompt(self, response):
+        error = self.output.error(response.error.text_or("Prompt was rejected"),
+                                  source=UnrecordedFailureSource())
+        yield error
+        self.finish_request()
+
+    def matches_original_input(self, message):
+        return self.inputs.permits_interaction and message.matches_input(
+            self.command.message, self.command.input_id
+        )
+
+    async def accept_user_message(
+        self, message: UserMessage, event: pi.MessageStart
+    ) -> tuple[events.AgentEvent, ...]:
+        """Own the original/follow-up input effect across all decoded user messages."""
+        if self.prompt_state.awaiting_start and self.matches_original_input(message):
+            if not self.input_start.original(self.command.input_id, self.command.message):
+                self.inputs.uncertain = True
+                self.output.record_failure(
+                    InputMissing("Pi input start did not match the durable attempt.")
+                )
+                await self.abort_stalled_rpc()
+                self.finish_request()
+                return ()
+            self.prompt_state = self.prompt_state.start(event)
+            self.ensure_input_forwarding()
+            return self.input_start.started_events
+        if self.started_input:
+            started = self.inputs.mark_started(self, event)
+            if started:
+                return tuple(events.FollowingInputStarted(id=input_id) for input_id in started)
+            self.inputs.uncertain = True
+            self.output.final_assistant_stop = False
+            self.output.record_failure(
+                FollowupUnrecognized(
+                    "Pi RPC saw an unrecognized follow-up user message start."
+                )
+            )
+        else:
+            self.inputs.uncertain = True
+            self.output.final_assistant_stop = False
+            self.output.record_failure(
+                InputMissing("Pi RPC run ended without this prompt's user message start.")
+            )
+        await self.abort_stalled_rpc()
+        self.finish_request()
+        return ()

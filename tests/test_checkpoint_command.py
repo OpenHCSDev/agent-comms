@@ -1,15 +1,20 @@
 """The checkpoint command commits and pushes a thread's uncommitted work as a named state."""
 
-from agent_comms.repo import Checkout
 import subprocess
 from pathlib import Path
 
 import pytest
 
 from agent_comms.cli_verbs.checkpoint import CheckpointCliCommand
-from agent_comms.cli_commands import CleanCheckpoint, PushUnknownCheckpoint, PushedCheckpoint, RefusedCheckpoint
-from bus_record_fixture import context_comms
+from agent_comms.cli_verbs.cli_commands import (
+    CleanCheckpoint,
+    PushedCheckpoint,
+    PushUnknownCheckpoint,
+    RefusedCheckpoint,
+)
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from bus_record_fixture import context_comms
 from fixture_git import ENVIRONMENT
 
 

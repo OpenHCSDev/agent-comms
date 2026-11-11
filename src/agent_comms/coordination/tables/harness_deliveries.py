@@ -12,24 +12,36 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, Self
 
+from agent_comms.cli_bridges.harness_delivery_states import (
+    MonitorEvidence,
+    Outcome,
+    UnconfirmedOutcome,
+    UnrecordedMonitor,
+)
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.participants import Participants
+from agent_comms.execution.input_origin import HarnessAttemptOrigin
+from agent_comms.installer.harness_install import HarnessSession
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import MessageId, ThreadLookup, TranscriptRecordId
-from agent_comms.harness_delivery_states import (
-    MonitorEvidence, Outcome, UnconfirmedOutcome, UnrecordedMonitor,
-)
-from agent_comms.harness_install import HarnessSession
-from agent_comms.input_origin import HarnessAttemptOrigin
-from agent_comms.message_reference import MessageReference
 from agent_comms.storage.typed_table import (
-    LOCAL_TABLE_SOURCE, AttachedPracticeRebuild, Column, ForeignKey, FrozenColumn,
-    ImmutableRows, Index, NoDelete, RetainsChildren, TableSchema, TableSource,
+    LOCAL_TABLE_SOURCE,
+    AttachedPracticeRebuild,
+    Column,
+    ForeignKey,
+    FrozenColumn,
+    ImmutableRows,
+    Index,
+    NoDelete,
+    RetainsChildren,
+    TableSchema,
+    TableSource,
 )
 
 if TYPE_CHECKING:
-    from agent_comms.assignment_store import AssignmentStore
+    from agent_comms.coordination.assignment_store import AssignmentStore
 
 
 @dataclass(frozen=True, slots=True)

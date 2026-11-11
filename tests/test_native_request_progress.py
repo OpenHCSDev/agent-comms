@@ -4,10 +4,13 @@ import json
 import subprocess
 from pathlib import Path
 
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.request_progress import (
-    IteratorStreamId, IteratorTiming, RequestProgress, UnreportedIteratorTiming,
+from agent_comms.execution.request_progress import (
+    IteratorStreamId,
+    IteratorTiming,
+    RequestProgress,
+    UnreportedIteratorTiming,
 )
+from agent_comms.nominal.field_codec import FieldCodec
 
 
 def test_native_iterator_custody_is_preserved_in_request_records(pinned_native, tmp_path):

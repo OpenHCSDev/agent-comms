@@ -1,9 +1,9 @@
 """Shared relation behavior extends without endpoint-comparison consumer edits."""
 from pathlib import Path
 
-from agent_comms.repo import Checkout
 from agent_comms.peer_relevance import GoalContactRelevance
-from agent_comms.relationships import MutualThreadRelation, RelationRecord
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.relationships import MutualThreadRelation, RelationRecord
 from agent_comms.registry.threads import NativeThread
 
 

@@ -1,16 +1,16 @@
 """Ordinary committed appends drive the actual recipient watch, with no writer hints."""
 
-from agent_comms.repo import Checkout
 import asyncio
 from contextlib import AsyncExitStack, aclosing
 
 import pytest
 
-from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.comms import wire
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
-from bus_record_fixture import append_reply
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
+from bus_record_fixture import append_reply
 
 
 @pytest.mark.asyncio

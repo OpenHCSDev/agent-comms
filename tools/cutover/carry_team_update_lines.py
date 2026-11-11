@@ -12,15 +12,21 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
-from agent_comms.bus import Bus
-from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdateNotice, TeamUpdate, Ping
+from cutover.carry_team_observations import TeamObservations
+
+from agent_comms.installer.probes.carry import Carried, Carry
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.installer.probes.carry import Carried, Carry
+from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.locked_store import RootFile
-from agent_comms.messages import Message
-from agent_comms.thread_identity import ThreadIncarnation
-from cutover.carry_team_observations import TeamObservations
+from agent_comms.task_attachments.team_pings import (
+    Ping,
+    TeamDecisions,
+    TeamUpdate,
+    TeamUpdateNotice,
+)
 
 # The wire names of the deleted HUD ping classes; no class declares them any more.
 RETIRED = ("load", "unit_row", "phase_row", "finished_phases_row", "forks_row")

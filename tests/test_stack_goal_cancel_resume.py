@@ -1,8 +1,4 @@
 """Real native Pi and owner socket: cancelled goals need an explicit fresh grant."""
-from agent_comms.coordination.errors import Refused
-from agent_comms.controller import SessionUpdateSink
-from agent_comms.input_key import AcpInputKey
-
 import asyncio
 import json
 import os
@@ -10,16 +6,25 @@ import os
 import pytest
 from acp.schema import SessionNotification
 
-from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId
-from agent_comms.goal_attempts import GoalAttemptStore
-from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration, ReservedGeneration
-from agent_comms.goals import Goal
-from agent_comms.goal_states import ActiveGoal, PausedGoal
+from agent_comms.coordination.errors import Refused
+from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.input_key import AcpInputKey
 from agent_comms.input_attempt import StartedInput
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId
+from agent_comms.planning.goal_attempts import GoalAttemptStore
+from agent_comms.planning.goal_generation import (
+    BlockedGeneration,
+    ReadyGeneration,
+    ReservedGeneration,
+)
+from agent_comms.planning.goal_states import (
+    ActiveGoal,
+    PausedGoal,
+)
+from agent_comms.planning.goals import Goal
 from compaction_loopback import LoopbackProvider
 from native_backend_fixture import native_backend_fixture
 from stored_inputs import stored_inputs
-
 
 UNCERTAIN_SENTINEL_KEY = AcpInputKey(InputId.mint())
 

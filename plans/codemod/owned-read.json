@@ -1,0 +1,19 @@
+{"stages": [
+ {"recipes": [{"recipe_id": "owned-moves-to-owned-read", "operations": [{
+   "operation": "serve_class_members",
+   "classes": [{
+     "target": {"file_path": "src/agent_comms/bus_read.py", "target_qualname": "OwnerScopedRead"},
+     "served_header": "class OwnedRead[Result: ToolResult = ToolResult](OwnerScopedRead[Result], ABC)",
+     "member_names": ["owned"]}]}]}]},
+ {"recipes": [{"recipe_id": "owner-answered-reads-are-owned", "operations": [
+   {"operation": "replace_class_base", "file_path": "src/agent_comms/bus_read.py", "target_qualname": "OwnerLiveRead",
+    "base_name": "OwnerScopedRead[Result]", "replacement_base_name": "OwnedRead[Result]"},
+   {"operation": "ensure_import", "file_path": "src/agent_comms/transport/tools/orders.py",
+    "import_source": "from ...bus_read import OwnedRead"},
+   {"operation": "replace_class_base", "file_path": "src/agent_comms/transport/tools/orders.py", "target_qualname": "ServedInputDeliveryRead",
+    "base_name": "OwnerScopedRead", "replacement_base_name": "OwnedRead"}]}]},
+ {"recipes": [{"recipe_id": "owner-side-reads-leave-bus-read", "operations": [{
+   "operation": "relocate_symbols_to_module", "file_path": "src/agent_comms/bus_read.py",
+   "symbol_qualnames": ["OwnedRead", "OwnerLiveRead", "ServedOwnerReadRuntimeRequest"],
+   "destination_path": "src/agent_comms/runtime_requests.py"}]}]}
+]}

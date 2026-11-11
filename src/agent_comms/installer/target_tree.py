@@ -10,9 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
-from agent_comms.installer.carry import STEPS
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.repo import DetachedStart, Repo, ScratchCheckout
+from agent_comms.projects.checkouts import DetachedStart, ScratchCheckout
+from agent_comms.projects.repo import Repo
+
+STEPS = Path("tools/cutover")
 
 
 @dataclass(frozen=True)

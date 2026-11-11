@@ -24,16 +24,16 @@ from dataclasses import (
 from pathlib import Path
 from typing import ClassVar
 
-from . import (
+from agent_comms_hooks import (
     ClaudeHook,
     ClaudeHookProgram,
     HookRecord,
     LaunchedPrompt,
     SessionFailure,
 )
-from .board import SessionWire
-from .process_claim import ProcessSingleton
-from .shell_commands import ConnectCommand
+from agent_comms_hooks.board import SessionWire
+from agent_comms_hooks.process_claim import ProcessSingleton
+from agent_comms_hooks.shell_commands import ConnectCommand
 
 
 class SessionCommandError(RuntimeError, SessionFailure):

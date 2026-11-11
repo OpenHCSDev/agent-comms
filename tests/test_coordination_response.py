@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.repo import Checkout
 import os
 from contextlib import closing
 from dataclasses import dataclass, replace
@@ -10,41 +9,55 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.attempt_start import AttemptStart
-from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
-from conftest import accept_initial, publish_initial, responder
+from agent_comms.coordination.assignment_states import CompletedAssignment
+from agent_comms.coordination.attempt_start import AttemptStart
+from agent_comms.coordination.attempt_states import (
+    ModelRunningAttempt,
+    PromptAcceptedAttempt,
+    SettlingAttempt,
+)
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
     IdentityConflict,
     StaleFence,
     StaleRevision,
 )
+from agent_comms.coordination.execution_states import CompletedExecution
+from agent_comms.coordination.obligation_states import (
+    PendingResponse,
+    PublishedResponse,
+    PublishingResponse,
+)
+from agent_comms.coordination.owner_fence import OwnerFence, prepare_fence_token
 from agent_comms.coordination.response import (
     LiveResponseOwner,
     PublicationAppendDispatches,
     prepare_fenced_response,
     publish_fenced_response,
 )
-from agent_comms.coordination.tables.executions import ExecutionRecord, NoPointedExecution, WireOrigin
+from agent_comms.coordination.results import AlreadyApplied
+from agent_comms.coordination.tables.executions import (
+    ExecutionRecord,
+    NoPointedExecution,
+    WireOrigin,
+)
 from agent_comms.coordination.tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination.tables.responses import ResponseObligation
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.selected.source_batch import SelectedSource
+from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.publisher import ParticipantPublisher
 from agent_comms.nominal.field_codec import AssignmentId, InputId, RootId, ThreadLookup, TurnId
-from agent_comms.lifecycle_capability import Active, Complete
-from agent_comms.message_bus import MessageBus
-from agent_comms.assignment_states import CompletedAssignment
-from agent_comms.coordination.results import AlreadyApplied
-from agent_comms.execution_states import CompletedExecution
-from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
-from agent_comms.owner_fence import OwnerFence, prepare_fence_token
-from agent_comms.publisher import ParticipantPublisher
+from agent_comms.nominal.lifecycle_capability import Active, Complete
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
-from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.typed_table import TypedTable
 from bus_record_fixture import prepare_native_comms
+from conftest import accept_initial, publish_initial, responder
 
 # Private bus publication requires POSIX owner/mode ancestry; Windows stat
 # emulation cannot attest this boundary or exercise its durability contract.
@@ -108,11 +121,11 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     token = prepare_fence_token()
     first = store.start(
         AttemptStart(
-            "exec",
-            1,
-            recipient.recipient_lookup,
-            1,
-            token,
+            execution_id="exec",
+            attempt_ordinal=1,
+            owner_lookup=recipient.recipient_lookup,
+            owner_generation=1,
+            token=token,
             expected_execution_revision=2,
             expected_pointer_revision=0,
         )
@@ -259,7 +272,7 @@ def test_response_requires_exact_same_root_coordinator(tmp_path: Path) -> None:
             prepare_fenced_response(
                 wrong_database, case.bus, case.fence, "not allowed", exact_target=case.reply_target, owner_witness=case.witness
             )
-        alien_registry = Registration(tmp_path / "foreign" / "registry.json")
+        alien_registry = Registration(RegistryFile.path_in(tmp_path / "foreign"))
         alien_bus = responder(case.comms.root, alien_registry)
         with pytest.raises(IdentityConflict):
             prepare_fenced_response(
@@ -335,15 +348,15 @@ def test_response_requires_current_exact_live_turn(tmp_path, change):
 def test_response_answers_the_messages_its_turn_took_in(tmp_path: Path) -> None:
     from uuid import uuid4
 
+    from agent_comms.execution.input_origin import WireInputOrigin
     from agent_comms.input_disposition import InputDispositions
-    from agent_comms.input_origin import WireInputOrigin
 
     case = _ready(tmp_path, direct=True)
     try:
         follow_up = case.comms.messaging.send("sender", "owner", "Part 2, mid-turn").message
         lease = case.witness.thread.require_turn_lease()
         inputs = InputDispositions(case.comms.root)
-        key = inputs.bus_key(follow_up, case.witness.thread)
+        key = follow_up.bus_key(case.witness.thread)
         text = "Part 2, mid-turn"
         assert inputs.record(
             key, seq=follow_up.seq, owner="owner", claim_scope=lease.claimed_generation,

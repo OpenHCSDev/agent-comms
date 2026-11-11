@@ -27,20 +27,29 @@ from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from functools import partial
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING, BinaryIO, ClassVar, Final, TextIO
+from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, Final, TextIO
 
+from agent_comms.coordination.errors import (
+    ContendedRead,
+    CoordinationReadUnavailable,
+    StaleRevision,
+)
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import LockHolder, Platform
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import PathText, ScratchName
+from agent_comms.storage.private_path import (
+    FileIdentity,
+    FileObservation,
+    FileRevision,
+    OwnedDirectoryRole,
+    PrivateFileRole,
+)
 from agent_comms_hooks.process_claim import (
     ExclusiveFlock,
     FlockMode,
     SharedFlock,
 )
-
-from ..child_process import LockHolder, Platform
-from ..coordination.errors import ContendedRead, CoordinationReadUnavailable, StaleRevision
-from ..nominal.declared_family import DeclaredFamily
-from ..errors import RelationViolationError
-from ..nominal.field_codec import PathText, ScratchName
-from .private_path import FileIdentity, FileObservation, FileRevision, OwnedDirectoryRole, PrivateFileRole
 
 if TYPE_CHECKING:
     from sqlite3 import _IsolationLevel
@@ -786,17 +795,24 @@ class AtomicFile:
 
     @contextmanager
     def _staging(self) -> Iterator[tuple[BinaryIO, Path]]:
-        descriptor, temporary = self._stage()
+        output, temporary = self._stage()
         try:
-            with os.fdopen(descriptor, "wb") as output:
+            with output:
                 Platform.current().make_private_descriptor(output.fileno(), self.mode)
                 yield output, temporary
         finally:
             self._discard(temporary)
 
-    def _stage(self) -> tuple[int, Path]:
+    def _stage(self) -> tuple[BinaryIO, Path]:
+        """Both stagings hand back a stream that owns its descriptor, so no override
+        leaves an int for _staging to remember."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        return StoreOwner.stage_file(self.path)
+        descriptor, temporary = StoreOwner.stage_file(self.path)
+        try:
+            return os.fdopen(descriptor, "wb"), temporary
+        except BaseException:
+            os.close(descriptor)
+            raise
 
     def _discard(self, staged: Path) -> None:
         staged.unlink(missing_ok=True)
@@ -871,12 +887,12 @@ class DirectoryAtomicFile(AtomicFile):
 
     directory: int
 
-    def _stage(self) -> tuple[int, Path]:
+    def _stage(self) -> tuple[BinaryIO, Path]:
         temporary = self.path.with_name(StoreOwner.staging_name.format(
             name=self.path.name, token=ScratchName.mint()) + StoreOwner.staging_suffix)
-        descriptor = PrivateFileRole.create(temporary.name, ValueError(
-            "Staged publication is not a private regular file"), dir_fd=self.directory)
-        return descriptor, temporary
+        return PrivateFileRole.created_stream(temporary.name, ValueError(
+            "Staged publication is not a private regular file"),
+            dir_fd=self.directory), temporary
 
     def _discard(self, staged: Path) -> None:
         try:

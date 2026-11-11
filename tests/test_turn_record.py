@@ -1,18 +1,19 @@
 """Real registry/turn files and the public Comms phase entrypoint."""
 
-from agent_comms.repo import Checkout
 import json
 import os
-
-import pytest
 from shutil import copytree
 
-from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import TurnId
-from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.child_process import ProcessIdentity
+import pytest
+
 from agent_comms.comms import wire
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.nominal.field_codec import TurnId
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import RegistryFile
 
 
 def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
@@ -25,20 +26,20 @@ def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
     original = comms.agents.begin_turn(
         'worker', TurnId('0d8da7dc169a0c12f0a6f121b819ca38')
     ).turn_lease.record
-    raw = json.loads((source / 'registry.json').read_text())
+    raw = comms.registry.store.stored()
     reference = raw['threads']['worker']['turn_record']
     assert reference == {}
     copytree(source, copied)
 
-    moved = RegistryStore(copied / 'registry.json')
+    moved = RegistryStore(RegistryFile.path_in(copied))
     entry = moved.read_entry('worker').entry.thread
     assert entry.turn_record.read().id == '0d8da7dc169a0c12f0a6f121b819ca38'
     assert entry.turn_record.path == copied / 'turns' / original.path.name
     assert moved.read().threads['worker'].turn_record.path == entry.turn_record.path
-    assert moved.read().threads['worker'].turn_record.registry_path == copied / 'registry.json'
+    assert moved.read().threads['worker'].turn_record.registry_path == RegistryFile.path_in(copied)
 
-    forged = json.loads((copied / 'registry.json').read_text())
+    forged = RegistryStore(RegistryFile.path_in(copied)).stored()
     forged['threads']['worker']['turn_record']['lookup'] = 'wrong-identity'
-    (copied / 'registry.json').write_text(json.dumps(forged))
+    RegistryStore(RegistryFile.path_in(copied)).rewrite_stored(lambda _: forged)
     with pytest.raises(RelationViolationError):
-        RegistryStore(copied / 'registry.json').read_entry('worker')
+        RegistryStore(RegistryFile.path_in(copied)).read_entry('worker')

@@ -9,15 +9,24 @@ from typing import ClassVar
 
 from pydantic import JsonValue
 
-from agent_comms.connector_store import (
-    AccessLabel, AuthorizationRequest, ConnectorAccess, ConnectorCredentialsFile, ConnectorGrants,
-    ExistingDirectorAccess, ExpiringGrant, IssuedCode, RegisteredClient, ThreadGrant, TrustedBrowser,
-)
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.probes.carry import Carried, Carry
-from agent_comms.storage.locked_store import RootFile
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.storage.locked_store import RootFile
 from agent_comms.storage.store_files import AtomicFile
+from agent_comms.transport.connector_store import (
+    AccessLabel,
+    AuthorizationRequest,
+    ConnectorAccess,
+    ConnectorCredentialsFile,
+    ConnectorGrants,
+    ExistingDirectorAccess,
+    ExpiringGrant,
+    IssuedCode,
+    RegisteredClient,
+    ThreadGrant,
+    TrustedBrowser,
+)
 
 
 @dataclass(frozen=True)

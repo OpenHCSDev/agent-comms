@@ -1,29 +1,27 @@
 """Inbox pages drain oldest first without changing uncertain inputs."""
-from pathlib import Path
-
-from agent_comms.repo import Checkout
 import asyncio
 import json
 import os
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
-from agent_comms.input_key import AcpInputKey, BusInputKey
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.nominal.field_codec import FieldCodec, InputId, TurnId
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.planning.goal_waits import RecordedGoalWait
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_key import AcpInputKey, BusInputKey
+from agent_comms.execution.reported_turn import ReportedTurn
 from agent_comms.input_attempt import BoundUnknownInput
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.message_page import PageBounds
-from agent_comms.reported_turn import ReportedTurn
-from agent_comms.text_digest import TextDigest
+from agent_comms.messaging.message_page import PageBounds
+from agent_comms.nominal.field_codec import FieldCodec, InputId, TurnId
+from agent_comms.nominal.text_digest import TextDigest
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.goal_waits import RecordedGoalWait
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
 from stored_inputs import insert_inputs, stored_inputs
-
 
 OWNER_INPUT_KEY = AcpInputKey(InputId.mint())
 

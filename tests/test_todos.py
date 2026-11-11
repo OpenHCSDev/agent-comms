@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-
-from agent_comms.repo import Checkout
-from agent_comms.bus import Bus
-
 import argparse
 import asyncio
 import json
@@ -23,38 +19,27 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import NoProcess, ProcessIdentity
-from agent_comms.team.order import Team, PullRequestVerb, SayVerb
-from agent_comms.task_attachments.team_pings import RulePing
-from agent_comms.team.standing_rules import (
-    OwedAnswer,
-    StandingRule,
-)
-from agent_comms.ui_model.teammate_state import AwaitingTeam
-from agent_comms.team.standing import RetainedHolderWheelSpin, UnownedOrderWatch, UnownedWheelSpin
-from agent_comms.team_heartbeat import TeamHeartbeat
 from agent_comms.comms import wire
-from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.held_orders import HeldOrders
-from agent_comms.goals import OrderCheck
-from agent_comms.installer.practice import PracticeCopy
-from agent_comms.storage.locked_store import RootFile
-from agent_comms.installer.runtime_resolution import CorePackage, TextualPackage, ToadPackage
-from agent_comms.owner_requests import NewestOpenRequest
-from agent_comms.plan_phases import PlanPhase
-from agent_comms.launch_root import LaunchRoot
-from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry.registration import Registration
-from agent_comms.repository_name import RepositoryName
-from agent_comms.storage_rules import StorageRule
-from agent_comms.registry.threads import ExternalThread, Thread, NativeThread
-from agent_comms.thread_identity import CoreWatcherIncarnation
-from agent_comms.transcript_events import AssistantTranscript
-from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.errors import TodoError
-from agent_comms.todos import (
+from agent_comms.execution.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
+from agent_comms.installer.practice import PracticeCopy
+from agent_comms.installer.runtime_resolution import CorePackage, TextualPackage, ToadPackage
+from agent_comms.messaging.bus import Bus
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
+from agent_comms.planning.goal_actions import ClearGoalAction, SetGoalAction
+from agent_comms.planning.goals import (
+    GoalChangedError,
+    NoGoal,
+    OrderCheck,
+    ProblemGoalOrder,
+)
+from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.order_phase import UnplannedPhase
+from agent_comms.planning.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
     Assignment,
     ChangeTodoState,
     ClaimOrder,
@@ -63,7 +48,7 @@ from agent_comms.todos import (
     DeliverTodo,
     DoneTodoState,
     DraftListedPullRequest,
-    ExpectedProblem,
+    FoldedProblemOrder,
     MergedListedPullRequest,
     MergedProgress,
     NotWorkMaintainer,
@@ -72,36 +57,54 @@ from agent_comms.todos import (
     OrderMessage,
     PendingProblemOrder,
     ProgressRead,
-    PullRequestCommit,
-    PullRequestLink,
-    PullRequestSource,
     PullRequests,
+    PullRequestSource,
     RecordPullRequest,
     ReleaseTodo,
     StoredOrderStory,
-    StrikeReason,
     Todo,
     TodoCommand,
     TodoConflict,
     TodoState,
     TodoStore,
     UnmergedListedPullRequest,
+    UnorderedProblemOrder,
     WithdrawTodo,
 )
-from agent_comms.work_branches import WorkBranches
-from source_revision_fixture import SourceRepository
-from agent_comms.plan_phases import RetainedStorePhase, UnplannedPhase
-from agent_comms.todos import FoldedProblemOrder, UnorderedProblemOrder
-from agent_comms.team.standing import ReassignedWheelSpin
-from agent_comms.goals import GoalChangedError, NoGoal
+from agent_comms.planning.owner_requests import NewestOpenRequest
+from agent_comms.planning.plan_phases import PlanPhase, RetainedStorePhase
+from agent_comms.planning.problem_findings import ExpectedProblem
+from agent_comms.planning.pull_requests import PullRequestCommit, PullRequestLink
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.projects.work_branches import WorkBranches
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.thread_identity import CoreWatcherIncarnation
+from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
+from agent_comms.storage.locked_store import RegistryFile, RootFile
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.task_attachments.team_pings import RulePing
+from agent_comms.team.order import PullRequestVerb, SayVerb, Team
+from agent_comms.team.standing import (
+    ReassignedWheelSpin,
+    RetainedHolderWheelSpin,
+    UnownedOrderWatch,
+    UnownedWheelSpin,
+)
+from agent_comms.team.standing_rules import OwedAnswer, StandingRule
+from agent_comms.team.team_heartbeat import TeamHeartbeat
+from agent_comms.transcript.transcript_events import AssistantTranscript
+from agent_comms.ui_model.teammate_state import AwaitingTeam
 from conftest import team_as
+from source_revision_fixture import SourceRepository
 
 pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work", "test_proof_build", "github_fixture")
 
 
 def thread(name: str, root: Path, created: float) -> Thread:
     """A registered thread: work is assigned only to a holder the registry knows."""
-    registration = Registration(Path(root) / "registry.json")
+    registration = Registration(RegistryFile.path_in(Path(root)))
     registration.register(NativeThread(name, frozenset(), Checkout(root), created_at=created))
     return registration.require(name)
 
@@ -147,10 +150,59 @@ def test_phase_checks_keep_folded_declarations_and_exact_creator_birth(
             declaration = FoldedProblemOrder(original=declaration, into='elsewhere', why='duplicate')
         with store.writing() as db:
             Todo.update(db, where='id=?', parameters=(todo.id,), order=declaration)
+    originals = tuple(store.get(f"P{index}") for index in range(1, len(declarations) + 1))
+    expected = tuple(row.order.instructions(row) for row in originals if row.pending)
+    assert tuple(text for row in originals for text in row.goal_instructions()) == expected
+    assert ProblemGoalOrder().instructions(originals) == "\n\n".join(expected)
     assert store.phases_checked(frozenset()) == {}
     assert store.phases_checked(frozenset({colleague.incarnation})) == {
         RetainedStorePhase: 20, UnplannedPhase: 30,
     }
+
+
+@pytest.mark.parametrize('retire_goal', (
+    ClearGoalAction(), SetGoalAction(text='A different task after the handoff'),
+))
+@pytest.mark.parametrize('merged', (False, True))
+def test_retired_goal_does_not_keep_assignment_consent(comms, source_repository, retire_goal, merged):
+    for name in ('holder', 'replacement'):
+        comms.registry.declare(ExternalThread(name, frozenset(), Checkout(comms.root)))
+    holder = comms.registry.require('holder')
+    replacement = comms.registry.require('replacement')
+    original_goal = comms.goals.update_goal('holder', SetGoalAction(text='Original work'))
+    new_goal = comms.goals.update_goal('replacement', SetGoalAction(text='Take over the work'))
+    store = comms.goals.todos
+    request = store.add_request(holder.incarnation, 'Repair the held assignment').id
+    handoff_request = store.add_request(replacement.incarnation, 'Take over the held work').id
+    checked = order(source_repository)
+    checked = checked.merged(source_repository.main_commit) if merged else checked
+    todo = store.create(
+        'P1', source_repository.github, 'Fix the held assignment',
+        creator=holder, owner=holder, assigner=holder.incarnation,
+        generation=original_goal.id, review_at=RecordedEventTime(1000),
+        order=checked, request=request,
+    )
+
+    def take_over():
+        return store.assign(
+            (ExpectedProblem(todo.id, todo.revision),), owner=replacement,
+            assigner=replacement.incarnation, generation=new_goal.id, request=handoff_request,
+            review_at=RecordedEventTime(1000), order=checked,
+        )[0]
+
+    with pytest.raises(TodoError, match='cannot release or replace'):
+        take_over()
+    with pytest.raises(NotWorkMaintainer):
+        store.assign(
+            (ExpectedProblem(todo.id, todo.revision),), owner=holder,
+            assigner=replacement.incarnation, generation=original_goal.id, request=handoff_request,
+            review_at=RecordedEventTime(1000), order=checked,
+        )
+    comms.goals.update_goal('holder', retire_goal)
+    assigned = take_over()
+    assert assigned.held().owner_identity == replacement.incarnation
+    assert assigned.held().generation == new_goal.id
+    assert assigned.order == checked
 
 
 def _assign_process(root: str, checkout: str, name: str, created: float, gate) -> tuple[str, str]:
@@ -436,7 +488,7 @@ def pr_team(tmp_path, monkeypatch, proof_build_checkouts, durable_home, github_c
     # The volume is the tmp_path HOME; the machine's floor belongs to the live bus's rule.
     rule = StorageRule(checkout_base=source.checkout.parent, floor_gib=0)
     (tmp_path / "storage.json").write_text(json.dumps(FieldCodec.encode(rule)))
-    Registration(tmp_path / "registry.json").register(colleague)
+    Registration(RegistryFile.path_in(tmp_path)).register(colleague)
     # The source carries the copied plans; a second checkout of its repository would
     # be compared against the source's installed commit, which it never holds.
     # Verbs act as the teammate running them; no colleague stands in for an actor-less context.

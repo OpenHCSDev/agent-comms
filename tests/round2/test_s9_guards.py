@@ -6,22 +6,21 @@ from pathlib import Path
 import pytest
 
 pytestmark = pytest.mark.refactor_guard
+from agent_comms.execution import fresh_private_session, manual_compaction_bridge, native_session_reopen, pi_helper
+
 ROOT = Path(__file__).resolve().parents[2] / "src/agent_comms"
 
 
 def files():
+    """The compaction modules wherever their package puts them, plus the named helpers found
+    through their imports, so a move never shrinks what the guard reads."""
     return sorted(
-        set(ROOT.glob("owner_compaction_*.py"))
-        | set(ROOT.glob("compaction_*.py"))
-        | set(ROOT.glob("native_compaction_*.py"))
+        set(ROOT.rglob("owner_compaction_*.py"))
+        | set(ROOT.rglob("compaction_*.py"))
+        | set(ROOT.rglob("native_compaction_*.py"))
         | {
-            ROOT / name
-            for name in (
-                "manual_compaction_bridge.py",
-                "native_session_reopen.py",
-                "pi_helper.py",
-                "fresh_private_session.py",
-            )
+            Path(module.__file__)
+            for module in (manual_compaction_bridge, native_session_reopen, pi_helper, fresh_private_session)
         }
     )
 

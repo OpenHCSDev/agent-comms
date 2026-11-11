@@ -12,27 +12,35 @@ from typing import Annotated, ClassVar, Literal, Type
 
 import pytest
 
+from agent_comms.messaging.messages import InfoKind, MessageKind
 from agent_comms.nominal.field_codec import (
-    AttemptId, BoundedText, FieldCodec, GitCommitText, GoalId, Id128Text, MalformedRecord, NoAttemptId, NullMember,
+    AttemptId,
+    BoundedText,
+    FieldCodec,
+    GitCommitText,
+    GoalId,
+    Id128Text,
+    MalformedRecord,
+    NoAttemptId,
+    NullMember,
 )
 from agent_comms.storage.store_files import DEFAULT_STORE_CONTENTION
-from agent_comms.messages import InfoKind, MessageKind
 from agent_comms.storage.typed_table import (
+    FULL_SCHEMA_REBUILD,
     Column,
     DurableTables,
     ExactStorage,
-    FULL_SCHEMA_REBUILD,
     ForeignKey,
     Generated,
     Index,
     IntegerStorage,
     JsonStorage,
+    RowNotFoundError,
+    SQLiteSchemaObject,
     SqlStorage,
     SqlValue,
-    SQLiteSchemaObject,
     TypedRow,
     TypedTable,
-    RowNotFoundError,
     WriterOwnedFile,
 )
 
@@ -306,13 +314,13 @@ def test_schema_carry_preserves_foreign_children_and_rolls_back_orphans(tmp_path
 
 
 def test_writer_derives_missing_nullable_fields_but_refuses_unclaimed_data():
-    from agent_comms.goal_history import (
-        BaselineRevision,
-        CommittedEntry,
-        GoalHistoryEntry,
-        GoalHistoryError,
-    )
-    from agent_comms.goals import NoGoal
+    from agent_comms.planning.goal_history import (
+    BaselineRevision,
+    CommittedEntry,
+    GoalHistoryEntry,
+    GoalHistoryError,
+)
+    from agent_comms.planning.goals import NoGoal
     from agent_comms.storage.typed_table import WriterOwnedFile
 
     entry = GoalHistoryEntry(1, BaselineRevision, 1.0, NoGoal(), NoGoal(),
@@ -405,7 +413,7 @@ def test_durable_writer_drops_a_declared_dropped_field_and_keeps_rows():
 
 
 def test_atomic_creation_preserves_declared_indexes_triggers_and_strict_creation():
-    from agent_comms.native_input_proof import NativeContextJournal
+    from agent_comms.execution.native_input_proof import NativeContextJournal
 
     with sqlite3.connect(':memory:') as db:
         NativeContextJournal.create(db, if_not_exists=True)

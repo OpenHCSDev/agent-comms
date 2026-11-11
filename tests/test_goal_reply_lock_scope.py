@@ -1,6 +1,5 @@
 """Reply reads leave the registry free, and publication keeps its observed state."""
 
-from agent_comms.repo import Checkout
 import fcntl
 import os
 from contextlib import contextmanager
@@ -9,33 +8,35 @@ from functools import partial
 
 import pytest
 
-from agent_comms.bus import Bus
-from agent_comms.input_key import BusInputKey
-from agent_comms.bus_publication import Delivered
-from agent_comms.bus_tables import ReceivedSource
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination.errors import StaleFence
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_key import BusInputKey
+from agent_comms.execution.reported_turn import NoReportedTurn
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.messaging.bus_tables import ReceivedSource
+from agent_comms.messaging.messages import ConversationRole, NoticeRole
 from agent_comms.nominal.field_codec import GoalWaitId, TurnId
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     EditGoalAction,
-    GoalPublicationContext,
     GoalPrecondition,
+    GoalPublicationContext,
     RuntimeInvocable,
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.planning.goal_waits import GoalWaitReview, NoGoalWait, RecordedGoalWait
-from agent_comms.input_disposition import InputDispositions
-from agent_comms.messages import ConversationRole, NoticeRole
-from agent_comms.storage.store_files import store_lock_path
-from agent_comms.thread_text import GivenThreadText
-from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.transport.request import ToolRequest
-from agent_comms.reported_turn import NoReportedTurn
-from goal_owner_fixture import canonical_goal_wire
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_wait_recovery import GoalWaitReview
+from agent_comms.planning.goal_waits import NoGoalWait, RecordedGoalWait
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
-from agent_comms.goal_scope import OneGoal
+from agent_comms.storage.store_files import store_lock_path
+from agent_comms.transport.request import ToolRequest
+from agent_comms.transport.tool_caller import ThreadCaller
+from goal_owner_fixture import canonical_goal_wire
 
 
 class RegistryProbeBus(Bus, declared_name=None):

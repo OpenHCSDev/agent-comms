@@ -8,12 +8,22 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.cli_bridges import claude_launch
-from agent_comms.deal_prompt import DealPrompt
-from agent_comms.native_package import OWNER_INSTRUCTIONS
+from agent_comms.installer.deal_prompt import DealPrompt
+from agent_comms.installer.native_package import OWNER_INSTRUCTIONS
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.rule_deal import (
-    AuditDue, DealtRead, DealtRuleGate, OpenedReads, PromptReads, SessionRuleDeal,
-    StartedDeal, SystemPromptDelivery, Unaudited, Unread,
+from agent_comms.team.prompt_reads import (
+    DealtRead,
+    PromptReads,
+)
+from agent_comms.team.rule_deal import (
+    AuditDue,
+    DealtRuleGate,
+    OpenedReads,
+    SessionRuleDeal,
+    StartedDeal,
+    SystemPromptDelivery,
+    Unaudited,
+    Unread,
 )
 from agent_comms_hooks import LaunchedPrompt
 from agent_comms_hooks.skill import DeckReader, DeckStart

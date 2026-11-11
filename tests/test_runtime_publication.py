@@ -3,8 +3,7 @@
 import subprocess
 import sys
 
-
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.publication import RuntimePublication
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 

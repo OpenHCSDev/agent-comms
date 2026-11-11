@@ -9,15 +9,15 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.root_runtime import ForeignRuntimeError, RootRuntime, RootRuntimeStore
+from agent_comms.messaging.bus import Bus
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
     NoMaintenanceTarget,
 )
-from agent_comms.root_runtime import ForeignRuntimeError, RootRuntime, RootRuntimeStore
-from agent_comms.bus import Bus
 
 
 def test_root_runtime_attachment_family(tmp_path):

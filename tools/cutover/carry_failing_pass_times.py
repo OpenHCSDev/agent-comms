@@ -11,10 +11,10 @@ from typing import ClassVar
 
 from pydantic import JsonValue
 
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.coordination.service_passes import FailingPass, ServicePasses, ServicePassStore
 from agent_comms.installer.probes.carry import Carried, Carry
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.storage.locked_store import RootFile
-from agent_comms.service_passes import FailingPass, ServicePasses, ServicePassStore
 from agent_comms.storage.store_files import AtomicFile
 
 

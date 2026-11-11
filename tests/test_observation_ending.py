@@ -10,7 +10,11 @@ import multiprocessing
 import pytest
 
 from agent_comms.ui_model.observation import (
-    ObservationEnded, ObservationProcess, ObserverDied, ObserverRetired, StopObserving,
+    ObservationEnded,
+    ObservationProcess,
+    ObserverDied,
+    ObserverRetired,
+    StopObserving,
 )
 
 

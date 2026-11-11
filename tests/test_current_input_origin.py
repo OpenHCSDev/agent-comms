@@ -1,35 +1,61 @@
 """Original authored ingress and neutral historical evidence share one input store."""
-from pathlib import Path
-from agent_comms.controller import NO_CONTROLLER
-from agent_comms.nominal.field_codec import AcpSessionId
-from agent_comms.repo import Checkout
-from agent_comms.controller import CancelledOutcome, Controller, PermissionOutcome, SessionUpdateSink
-
-from agent_comms.channel_targets import CommandTarget
-
-from agent_comms.lifecycle_capability import Unresolved
-from agent_comms.messages import Message, NoticeRole
 from contextlib import ExitStack
-
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from acp.schema import TextContentBlock
 
 from agent_comms.acp_extension import QueuePromptRequest, decode_request, encode_request
 from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import FieldCodec, InputId, MessageId, TurnId, GoalId
-from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
-from agent_comms.goals import AbsentGoalCheckpoint, Goal, GoalRevision, NoGoal, PresentGoalCheckpoint
+from agent_comms.execution.controller import (
+    NO_CONTROLLER,
+    CancelledOutcome,
+    Controller,
+    PermissionOutcome,
+    SessionUpdateSink,
+)
+from agent_comms.execution.input_key import AcpInputKey
+from agent_comms.execution.input_origin import (
+    HumanInputOrigin,
+    UnattributedInputOrigin,
+    WireInputOrigin,
+)
+from agent_comms.execution.queued_input import QueuedInput
 from agent_comms.input_attempt import ReservedInput
-from agent_comms.input_key import AcpInputKey
-from agent_comms.input_origin import HumanInputOrigin, UnattributedInputOrigin, WireInputOrigin
-from agent_comms.message_reference import MessageReference
-from agent_comms.queued_input import QueuedInput
-from agent_comms.retained_task_facts import CurrentHumanInputTaskFact, HumanInputTaskFact, InputTaskFact
-from test_acp_queue_contract import _owner
-from stored_inputs import stored_inputs
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message, NoticeRole
+from agent_comms.messaging.retained_task_facts import (
+    CurrentHumanInputTaskFact,
+    HumanInputTaskFact,
+    InputTaskFact,
+)
+from agent_comms.nominal.field_codec import (
+    AcpSessionId,
+    FieldCodec,
+    GoalId,
+    InputId,
+    MessageId,
+    TurnId,
+)
+from agent_comms.nominal.lifecycle_capability import Unresolved
+from agent_comms.planning.goal_states import (
+    ActiveGoal,
+    CompletedGoal,
+    PausedGoal,
+)
+from agent_comms.planning.goals import (
+    AbsentGoalCheckpoint,
+    Goal,
+    GoalRevision,
+    NoGoal,
+    PresentGoalCheckpoint,
+)
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from stored_inputs import stored_inputs
+from test_acp_queue_contract import _owner
 
 
 class Client(Controller, SessionUpdateSink):
@@ -61,8 +87,12 @@ def capture(comms):
 
 async def test_queue_observation_owns_capture_and_rejects_malformed_available_scope(live_owner):
     from agent_comms.acp_extension import (
-        AvailableQueueProjection, PendingQueueProjection, QueueChangedUpdate,
-        LiveQueueScope, NoQueueScope, UnavailableQueueProjection,
+        AvailableQueueProjection,
+        LiveQueueScope,
+        NoQueueScope,
+        PendingQueueProjection,
+        QueueChangedUpdate,
+        UnavailableQueueProjection,
     )
     comms, agent = live_owner
     scope = await agent.inputs.queue_binding(AcpSessionId('beta'))
@@ -104,7 +134,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     row = stored_inputs(inputs.root).lookup(key)
     assert row.origin == origin and row.source_text == command.user_text
     assert len(stored_inputs(inputs.root).rows) == 1 and comms.bus.bus.revision() == before
-    from agent_comms.turn_context import UserFollowupSegment
+    from agent_comms.execution.turn_context import UserFollowupSegment
     queued = agent.inputs.state('beta').require_inbox().get_nowait()
     assert queued.input_id == command.input_id
     assert queued.content.text == 'User follow-up:\n' + command.user_text
@@ -266,9 +296,13 @@ async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope
 
 
 async def test_direct_human_input_pin_shares_original_source_lineage_without_replay(live_owner):
-    from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop, UserTaskSupersession
-    from agent_comms.retained_task_facts import RetainedTaskFacts
-    from agent_comms.turn_context import WireProvenance
+    from agent_comms.execution.turn_context import WireProvenance
+    from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
+    from agent_comms.messaging.task_sources import (
+        CorrectionTaskChange,
+        UserTaskDrop,
+        UserTaskSupersession,
+    )
 
     comms, agent = live_owner
     origin = capture(comms)

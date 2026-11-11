@@ -5,26 +5,23 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import TYPE_CHECKING
 
 from acp.schema import (
     AgentMessageChunk,
     AgentThoughtChunk,
     ContentToolCallContent,
+    SessionInfoUpdate,
     TextContentBlock,
     ToolCallProgress,
     ToolCallStart,
     ToolKind,
     UsageUpdate,
-    SessionInfoUpdate,
 )
-from metaclass_registry.mro_dispatch import (
-    MroDispatch,
-    handles,
-)
+from metaclass_registry.mro_dispatch import MroDispatch, handles
 
-from . import agent_events as events
-from .acp_extension import (
+from agent_comms import agent_events as events
+from agent_comms.acp_extension import (
+    AgentCommsUpdate,
     CompactionChangedUpdate,
     GoalChangedUpdate,
     McpClientAcknowledgementUpdate,
@@ -35,11 +32,18 @@ from .acp_extension import (
     TextRouteUpdate,
     encode_updates,
 )
-from .context_reading import ContextUsage, UnsizedContext
-from .controller import SessionUpdateSink
-from .coordination.coordinator import Coordination
-from .nominal.field_codec import AcpSessionId, TurnId
-from .tool_declaration import (
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.context_reading import ContextUsage, UnsizedContext
+from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.native_output import NativeRecordLocation
+from agent_comms.execution.tool_results import tool_result_content
+from agent_comms.execution.turn_effects import TurnEffects
+from agent_comms.messaging.routing import MessageRoute, NoMessageRoute
+from agent_comms.nominal.field_codec import AcpSessionId, TurnId
+from agent_comms.planning.goal_events import GoalChanged
+from agent_comms.transcript.transcript_updates import TranscriptUpdate
+from agent_comms.transcript.transcripts import NativeCommittedPrefix
+from agent_comms.transport.tool_declaration import (
     EditAction,
     ExecuteAction,
     OtherAction,
@@ -47,15 +51,6 @@ from .tool_declaration import (
     SearchAction,
     ToolAction,
 )
-from .tool_results import tool_result_content
-from .transcript_updates import TranscriptUpdate
-from .routing import MessageRoute, NoMessageRoute
-from .turn_effects import TurnEffects
-
-if TYPE_CHECKING:
-    from .acp_extension import AgentCommsUpdate
-    from .native_output import NativeRecordLocation
-    from .transcripts import NativeCommittedPrefix
 
 
 class AcpToolAction(MroDispatch):
@@ -144,8 +139,8 @@ class AcpEventConsumer(MroDispatch):
             ),
         )
 
-    @handles(events.GoalChanged)
-    async def goal_changed(self, event: events.GoalChanged) -> None:
+    @handles(GoalChanged)
+    async def goal_changed(self, event: GoalChanged) -> None:
         await self.client.publish_update(
             session_id=self.session_id,
             update=SessionInfoUpdate(

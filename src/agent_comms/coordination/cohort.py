@@ -12,10 +12,8 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.assignment_states import AssignmentState, PendingNotification
-from agent_comms.bus_publication import Delivered
-from agent_comms.private_registry_guard import RegistryPrivacy
-from agent_comms.cohort_schema import (
+from agent_comms.coordination.assignment_states import AssignmentState, PendingNotification
+from agent_comms.coordination.cohort_schema import (
     AwarenessClaimGenerations,
     ClaimBatchAcknowledgements,
     ClaimBatchMembers,
@@ -25,6 +23,7 @@ from agent_comms.cohort_schema import (
     SelectedClaim,
 )
 from agent_comms.coordination.contracts import POLICY_VERSION, RESOLVER_VERSION
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (
     IdentityConflict,
     IntegrityViolationError,
@@ -33,9 +32,9 @@ from agent_comms.coordination.results import AlreadyApplied, Applied
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordination.tables.participants import OwnerGenerations, Participants
-from agent_comms.coordination.coordinator import Coordination
-
-from ..nominal.field_codec import AssignmentId, MessageId, WireName, RootId, ThreadLookup
+from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.nominal.field_codec import AssignmentId, MessageId, RootId, ThreadLookup, WireName
+from agent_comms.registry.private_registry_guard import RegistryPrivacy
 
 _LOG = logging.getLogger(__name__)
 

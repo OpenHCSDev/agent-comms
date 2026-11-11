@@ -7,8 +7,8 @@ from collections.abc import Iterable
 from functools import cache
 from typing import ClassVar
 
-from ..nominal.declared_family import DeclaredFamily
-from ..storage.typed_table import sql_literal
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.storage.typed_table import sql_literal
 
 
 class CoordinatorVocabulary(DeclaredFamily, declared_name=None):

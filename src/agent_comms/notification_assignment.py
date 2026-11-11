@@ -5,47 +5,53 @@ from __future__ import annotations
 import sqlite3
 from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from functools import cached_property
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, NoReturn
 
-from .frozen_recipient import FrozenRecipient
-from .bus import Bus
-from .coordination.database import CoordinationStore, StoreFile
-from .coordination.tables.assignments import WakeAssignment
-from .coordination.tables.executions import CurrentExecutions
-from .coordination.tables.harness_deliveries import HarnessDelivery
-from .coordination.tables.publications import PublicationEvidence
-from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec, ThreadLookup, boundary_decoder
-from .input_disposition import InputDispositions
-from .message_reference import MessageReference
-from agent_comms.notification_progress import AssignmentResponse, UnansweredResponse
-from .notification_evidence import ConsumptionEvidence
-from .notification_progress import (
+from agent_comms.coordination.database import CoordinationStore, StoreFile
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.executions import CurrentExecutions
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
+from agent_comms.coordination.tables.publications import PublicationEvidence
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.messaging.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.notification_evidence import (
+    ConsumptionEvidence,
+    FirstRecipient,
+    OutcomeViewer,
+    RecipientCursor,
+    RecipientLimit,
+)
+from agent_comms.messaging.notification_progress import (
     AssignmentProgress,
+    AssignmentResponse,
     QueuedProgress,
     SentProgress,
     ShownToModelProgress,
+    UnansweredResponse,
 )
-from .private_registry_guard import RegistryPrivacy
-from .registry.registry_store import RegistryStore
-from .storage.typed_table import BooleanStorage, TypedRow
-from .wake_policy import RecipientDecision
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, boundary_decoder
+from agent_comms.registry.notification_selection_read import NotificationSelectionRead
+from agent_comms.registry.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.storage.typed_table import BooleanStorage, TypedRow
+from agent_comms.waking.wake_policy import RecipientDecision
 
-from dataclasses import field
-from functools import cached_property
-from .thread_identity import ThreadIncarnation
-from agent_comms.notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
-from .bus_publication import Delivered
 if TYPE_CHECKING:
 
-    from .agent_activity import RecipientActivity
-    from .coordination.database import InvalidStore, MissingStore
-    from .message_notification import MessageNotification
-    from .private_registry_guard import RegistryPrivacy
-    from .notification_progress import DeliveryProgress
+    from agent_comms.coordination.database import InvalidStore, MissingStore
+    from agent_comms.messaging.message_notification import MessageNotification
+    from agent_comms.messaging.notification_progress import DeliveryProgress
+    from agent_comms.registry.private_registry_guard import RegistryPrivacy
+    from agent_comms.registry.recipient_activity import RecipientActivity
 
 
 @dataclass(frozen=True)
@@ -79,7 +85,7 @@ class RecipientSelection:
 
 
 @dataclass(frozen=True)
-class NotificationSelection:
+class NotificationSelection(NotificationSelectionRead["NotificationAssignmentRead"]):
     """The exact per-original recipient cuts used by every expensive evidence reader."""
 
     window_limit: ClassVar[int] = 120
@@ -429,7 +435,7 @@ class NotificationAssignment(NotificationSource):
         """
         registry = RegistryStore.at(root).snapshot()
         keys = {
-            InputDispositions.bus_key(page.source.message, thread): key
+            page.source.message.bus_key(thread): key
             for page in read.selection.pages
             for key, recipient in page.entries
             for thread in registry.recipient(recipient, page.source).input_owners()

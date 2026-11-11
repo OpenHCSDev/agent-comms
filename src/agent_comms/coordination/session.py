@@ -10,25 +10,26 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.bus import StoredBusReader
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
     IntegrityViolationError,
 )
-from agent_comms.publication_measurements import PublicationMeasurements
+from agent_comms.execution.publication_measurements import PublicationMeasurements
+from agent_comms.messaging.bus import StoredBusReader
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.store_files import (
-    DEFAULT_STORE_CONTENTION, StoreContention,
+    DEFAULT_STORE_CONTENTION,
+    StoreContention,
 )
 
 if TYPE_CHECKING:
-    from ..attempt_states import TerminalAttempt
-    from .snapshot import RecoverySnapshot
-    from ..message_bus import MessageBus
-    from ..registry.registry_store import RegistryCut
-    from ..registry.registry_document import RegistrySnapshot
-    from ..private_registry_guard import RegistryPrivacy
+    from agent_comms.coordination.attempt_states import TerminalAttempt
+    from agent_comms.coordination.snapshot import RecoverySnapshot
+    from agent_comms.messaging.message_bus import MessageBus
+    from agent_comms.registry.private_registry_guard import RegistryPrivacy
+    from agent_comms.registry.registry_document import RegistrySnapshot
+    from agent_comms.registry.registry_store import RegistryCut
 
 
 def system_clock() -> int:
@@ -179,8 +180,9 @@ class NativeCoordinationSession(CoordinationSession):
     @cached_property
     def bus(self) -> MessageBus:
         """Create native bus owners only when this session first needs a boundary."""
-        import agent_comms.message_bus as message_bus, agent_comms.publisher as publisher, \
-            agent_comms.registry.registration as registration
+        import agent_comms.messaging.message_bus as message_bus
+        import agent_comms.messaging.publisher as publisher
+        import agent_comms.registry.registration as registration
 
         return message_bus.MessageBus(
             self.path.parent,

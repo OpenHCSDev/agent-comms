@@ -6,8 +6,8 @@ import json
 import logging
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, replace
 from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Self
@@ -22,7 +22,7 @@ from pydantic import (
 )
 
 from agent_comms.agent_events import TranscriptModelUsage
-from agent_comms.cli_protocol import (
+from agent_comms.cli_bridges.cli_protocol import (
     Declared,
     OpenWire,
     TaggedWire,
@@ -30,17 +30,10 @@ from agent_comms.cli_protocol import (
     TimestampedWire,
     WireHeader,
 )
-from agent_comms.nominal.field_codec import (
-    MalformedRecord,
-    ToolCallId,
-    TranscriptRecordId,
-)
-from agent_comms.message_reference import MessageReference
-from agent_comms.pi_counts import PiCount, PiCountWire
-from agent_comms.recorded_time import EventTime
-from agent_comms.runtime_updates import (
+from agent_comms.cli_bridges.runtime_updates import (
     ActiveItem,
-    AllTurnsCancelled, AllTurnsEnded,
+    AllTurnsCancelled,
+    AllTurnsEnded,
     FinishedItem,
     HiddenItem,
     HistoryNotice,
@@ -56,26 +49,8 @@ from agent_comms.runtime_updates import (
     TurnEnded,
     TurnStarted,
 )
-from agent_comms.thread_identity import OfferedTools, ToolName, UnobservedTools
-from agent_comms.thread_model import ThreadModel
-from agent_comms.thread_text import ThreadText
-from agent_comms.tool_calls import CliToolArguments, ToolCall
-from agent_comms.tool_declaration import one_line
-from agent_comms.transcript_events import (
-    AssistantTranscript,
-    NarrationTranscript,
-    ThinkingTranscript,
-    NoticeTranscript,
-    TranscriptEvent,
-    UserTranscript,
-)
-from agent_comms.turn_item import NativeItemId, NativeTurnId, NamedSourceTurn, NoSourceTurn, SourceTurn
-from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
-
-from ..session_receipts import SessionReceipts
-from ..tool_declaration import ContextRows
-from ..wire_models import WireModel
-from .shared import (
+from agent_comms.cli_bridges.session_receipts import SessionReceipts
+from agent_comms.cli_bridges.shared import (
     MONITOR_FRAME,
     ConfirmedDelivery,
     ForeignMonitorFrame,
@@ -89,9 +64,39 @@ from .shared import (
     TranscriptConfirmsDelivery,
     WireReference,
 )
+from agent_comms.cli_bridges.tool_calls import CliToolArguments, ToolCall
+from agent_comms.cli_bridges.wire_models import WireModel
+from agent_comms.execution.turn_item import (
+    NamedSourceTurn,
+    NativeItemId,
+    NativeTurnId,
+    NoSourceTurn,
+    SourceTurn,
+)
+from agent_comms.execution.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.nominal.field_codec import (
+    MalformedRecord,
+    ToolCallId,
+    TranscriptRecordId,
+)
+from agent_comms.pi_counts import PiCount, PiCountWire
+from agent_comms.registry.thread_identity import OfferedTools, ToolName, UnobservedTools
+from agent_comms.registry.thread_model import ThreadModel
+from agent_comms.registry.thread_text import ThreadText
+from agent_comms.storage.recorded_time import EventTime
+from agent_comms.transcript.transcript_events import (
+    AssistantTranscript,
+    NarrationTranscript,
+    NoticeTranscript,
+    ThinkingTranscript,
+    TranscriptEvent,
+    UserTranscript,
+)
+from agent_comms.transport.tool_declaration import ContextRows, one_line
 
 if TYPE_CHECKING:
-    from .shared import MonitorAttachment
+    from agent_comms.cli_bridges.shared import MonitorAttachment
 
 
 class ClaudeMonitorFrame(MonitorIncomingFrame):
@@ -443,7 +448,7 @@ class KnownTurn(ClaudeTurn):
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...],
                  phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
-        return (FinishedItem(self.id, NativeItemId(item), events),)
+        return (FinishedItem(turn_id=self.id, item_id=NativeItemId(item), events=events),)
 
     def active(self, tool_id: str, phase: ClaudeReaderPhase,
                turn_phase: TurnPhase) -> tuple[RuntimeUpdate, ...]:

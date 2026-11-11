@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.channels import AnyChannel
-from agent_comms.cli_command import CliCommand
-from agent_comms.comms import Comms
-from agent_comms.nominal.field_codec import Argument
-from agent_comms.history_result import DmHistoryPageResult, HistoryPageResult
-from agent_comms.message_page import PageBounds
-from agent_comms.page_traversal import NewestCursor
-from agent_comms.page_traversal import PageCursor
-from agent_comms.read_basis import AnonymousViewer
-from agent_comms.read_basis import DisplayViewer
+import json
 from dataclasses import dataclass
 from typing import Annotated
-import json
+
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.comms import Comms
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.channels import AnyChannel
+from agent_comms.messaging.history_result import DmHistoryPageResult, HistoryPageResult
+from agent_comms.messaging.message_page import PageBounds
+from agent_comms.messaging.page_traversal import NewestCursor, PageCursor
+from agent_comms.messaging.read_basis import AnonymousViewer, DisplayViewer
+from agent_comms.nominal.field_codec import Argument
 
 
 @dataclass(frozen=True, kw_only=True)

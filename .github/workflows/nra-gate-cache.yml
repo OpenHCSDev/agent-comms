@@ -55,7 +55,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/paired-sources"
+          PYTHONPATH=src python -m agent_comms.projects.integration --resolve-ci-inputs "$RUNNER_TEMP/paired-sources"
           --runner-root "$RUNNER_TEMP" --repository "${{ github.repository }}" --tested-commit "${{ github.sha }}" --event-name "${{ github.event_name }}" --event-path "$GITHUB_EVENT_PATH"
 
       - name: Build the one common checker environment
@@ -78,7 +78,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          PYTHONPATH=src python -m agent_comms.integration --revalidate-ci-inputs "$RUNNER_TEMP/paired-sources"
+          PYTHONPATH=src python -m agent_comms.projects.integration --revalidate-ci-inputs "$RUNNER_TEMP/paired-sources"
           --runner-root "$RUNNER_TEMP" --repository "${{ github.repository }}" --tested-commit "${{ github.sha }}" --event-name "${{ github.event_name }}" --event-path "$GITHUB_EVENT_PATH"
 
       - uses: actions/cache/save@v4

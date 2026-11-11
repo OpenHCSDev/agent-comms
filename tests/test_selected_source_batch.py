@@ -1,22 +1,20 @@
 """Canonical original-bus batch capture and one-use native reservation."""
 
 
-from agent_comms.repo import Checkout
-from bus_record_fixture import prepare_native_comms
-from conftest import publish_initial
-
 import os
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from conftest import accept_initial
 from agent_comms.coordination.cohort import pending_sealed_assignments
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.selected_participant import SelectedParticipant
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.selected.participant import SelectedParticipant
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
+from bus_record_fixture import prepare_native_comms
+from conftest import accept_initial, publish_initial
 
 
 @pytest.mark.asyncio

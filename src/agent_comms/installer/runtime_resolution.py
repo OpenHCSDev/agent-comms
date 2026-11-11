@@ -16,10 +16,9 @@ from functools import cached_property
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit
 from zipfile import ZipFile
 
-from agent_comms.installer.building_runtime import BuildingRuntime
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 from packaging.markers import Marker, default_environment
 from packaging.requirements import Requirement
@@ -28,8 +27,8 @@ from packaging.utils import canonicalize_name, parse_wheel_filename
 from packaging.version import Version
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import FieldCodec, GitCommitText, boundary_decoder
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.installer.building_runtime import BuildingRuntime
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import RuntimeProbe
 from agent_comms.installer.probes.interpreter import (
@@ -45,10 +44,11 @@ from agent_comms.installer.probes.packages import (
     PreparePackageProbe,
 )
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.repo import Repo
-from agent_comms.repository_name import RepositoryName
-from agent_comms.work_branches import WorkBranches
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, GitCommitText, boundary_decoder
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.work_branches import WorkBranches
 
 if TYPE_CHECKING:
     from agent_comms.installer.runtime_stack import RuntimeStack
@@ -717,6 +717,9 @@ class LockSource(BaseModel):
     def tracked(self, name: str) -> tuple[str, ...]:
         return ()
 
+    def tracked_requirement(self, name: str) -> tuple[str, ...]:
+        return ()
+
     def project_source(self) -> UvSourceOptions:
         raise ValueError("Local/virtual sources have no external retention projection")
 
@@ -767,6 +770,21 @@ class GitSource(LockSource):
         branches = self.location.selector.branches()
         self.require_branches(name, branches)
         return (name,) if branches else ()
+
+    def tracked_requirement(self, name: str) -> tuple[str, ...]:
+        """This package named by the branch it follows, for an installer outside the lock.
+
+        The locked revision answers "what did this branch point at when we solved"; a test
+        environment asking for the branch wants today's answer, and reading the revision
+        out of the lock gives it a dead one.
+        """
+        branches = self.location.selector.branches()
+        self.require_branches(name, branches)
+        if not branches:
+            return ()
+        fields = self.location.package.fields()
+        suffix = f"#{urlencode(fields)}" if fields else ""
+        return (f"{name} @ git+{self.location.repository}@{branches[0]}{suffix}",)
 
     @staticmethod
     def require_branches(name: str, branches: tuple[str, ...]) -> None:
@@ -865,6 +883,24 @@ class ResolvedLock(BaseModel):
         """``uv lock`` arguments moving every branch-tracking package to its branch head while
         the release and revision pins stay: what the installer and every CI sync run first."""
         return tuple(argument for name in self.tracked() for argument in ("--upgrade-package", name))
+
+    def tracked_requirements(self, excluded: frozenset[str] = frozenset()) -> tuple[str, ...]:
+        """The same packages as requirements naming their branch, for installers outside this lock.
+
+        Toad's test environment installs the exported closure with ``--frozen`` and then has
+        to ask for these separately: the freeze is correct for everything pinned and wrong
+        for everything tracking a branch, which is the one set this lock can already name.
+
+        ``excluded`` names the distributions the caller installs itself, by the same
+        canonical name :meth:`external` uses. Filtered here, where the entries still carry
+        their declared names, so no caller reads a package name back out of the rendered
+        requirement text.
+        """
+        return tuple(dict.fromkeys(
+            requirement
+            for entry in self.package
+            if canonicalize_name(entry.name) not in excluded
+            for requirement in entry.source.tracked_requirement(entry.name)))
 
     def external(self, excluded: frozenset[str]) -> dict[str, VersionedPackage]:
         """Current-interpreter external evidence; local/virtual entries select themselves out."""

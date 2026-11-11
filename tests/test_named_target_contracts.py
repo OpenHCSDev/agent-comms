@@ -1,12 +1,16 @@
 """Named destinations share counting, change attribution and human read contracts."""
 
-from agent_comms.repo import Checkout
 import pytest
 
-from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
 from agent_comms.errors import HumanSendRefusedError, UnregisteredThreadError
-from agent_comms.historical_views import UnobservedConversation, DMDisplayHistory
-from agent_comms.read_basis import NamedViewer
+from agent_comms.messaging.channel_targets import (
+    CommandTarget,
+    IncarnationThreadTarget,
+    NamedTarget,
+)
+from agent_comms.messaging.historical_views import DMDisplayHistory, UnobservedConversation
+from agent_comms.messaging.read_basis import NamedViewer
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from bus_record_fixture import context_comms
 

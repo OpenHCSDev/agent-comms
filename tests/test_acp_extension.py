@@ -1,11 +1,8 @@
 """Declared extension decoding is strict and shares its owner with consumers."""
 
-from agent_comms.transcript_sources import NoDraft
-from agent_comms.repo import Checkout
 import pytest
 
 from agent_comms.acp_extension import (
-    TextNoticeUpdate,
     AgentCommsUpdate,
     AvailableQueueProjection,
     CompactionChangedUpdate,
@@ -15,11 +12,9 @@ from agent_comms.acp_extension import (
     CursorAdvancedUpdate,
     CursorEnvelope,
     GoalChangedUpdate,
+    IdentifiedInputStarted,
     InputDeliveryChangedUpdate,
     InputFailedUpdate,
-    IdentifiedInputStarted,
-    UnidentifiedInputStarted,
-    LiveCursorScope,
     LiveQueueScope,
     McpClientAcknowledgementUpdate,
     NoQueueScope,
@@ -28,29 +23,52 @@ from agent_comms.acp_extension import (
     QueueItem,
     RequestFailedUpdate,
     SelectedWriteAcceptedUpdate,
+    TextNoticeUpdate,
     TextRouteUpdate,
     TranscriptChangedUpdate,
     TranscriptDraftUpdate,
     TranscriptSnapshotUpdate,
     TurnChangedUpdate,
     UnavailableCursorObservation,
+    UnidentifiedInputStarted,
     decode_updates,
     encode_updates,
 )
-from agent_comms.acp_failure import ACPFailure, BackendDeliveryFailure
 from agent_comms.agent_events import CompactionStart
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.context_reading import UnmeasuredContext
-from agent_comms.nominal.field_codec import AcpSessionId, AssignmentId, ClaimId, InputId, MessageId, RootId, TurnId
-from agent_comms.goal_presentation import IdleGoalExecution
-from agent_comms.goals import NoGoal
-from agent_comms.pi_wire import McpLiveAcknowledgement
-from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
+from agent_comms.execution.acp_failure import ACPFailure, BackendDeliveryFailure
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.context_reading import UnmeasuredContext
+from agent_comms.execution.pi_wire import McpLiveAcknowledgement
+from agent_comms.execution.transcript_sources import NativeTranscriptCursor
+from agent_comms.execution.turn_context import (
+    ContextManifest,
+    NextContextTurn,
+)
+from agent_comms.execution.turn_lease import (
+    ActiveTurn,
+    FinishedTurn,
+    TurnState,
+)
+from agent_comms.nominal.field_codec import (
+    AcpSessionId,
+    AssignmentId,
+    ClaimId,
+    InputId,
+    MessageId,
+    RootId,
+    TurnId,
+)
+from agent_comms.planning.goal_presentation import IdleGoalExecution
+from agent_comms.planning.goals import NoGoal
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import (
+    ClaimedIdentity,
+    RecordedThreadIncarnation,
+)
 from agent_comms.registry.threads import NativeThread
-from agent_comms.transcripts import NativeTranscriptCursor
 from agent_comms.storage.private_path import MissingFile
-from agent_comms.turn_context import ContextManifest, NextContextTurn
-from agent_comms.turn_lease import ActiveTurn, FinishedTurn, TurnState
+from agent_comms.transcript.transcript_drafts import NoDraft
+from agent_comms.transport.attachment_scope import LiveCursorScope
 
 
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
@@ -63,13 +81,13 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         session_id=AcpSessionId("pilot"), claimed_identity=owner, owner=ProcessIdentity(123, 1),
     )
     from agent_comms.acp_extension import NativeOutputCommittedUpdate, NativeRoundCommittedUpdate
-    from agent_comms.native_output import AssistantOutput, NativeRecordLocation
-    from agent_comms.native_session_reopen import PiSessionId
-    from agent_comms.turn_item import NativeItemId
-    from agent_comms.sent_message import AssignedSourceIdentity
-    from agent_comms.transcripts import NativeCommittedPrefix
-    from agent_comms.native_transcript import PresentSessionCut
+    from agent_comms.execution.native_output import AssistantOutput, NativeRecordLocation
+    from agent_comms.execution.native_session_reopen import PiSessionId
+    from agent_comms.execution.native_record_file import PresentSessionCut
+    from agent_comms.execution.turn_item import NativeItemId
+    from agent_comms.messaging.sent_message import AssignedSourceIdentity
     from agent_comms.storage.private_path import FileRevision
+    from agent_comms.transcript.transcripts import NativeCommittedPrefix
     sample_path = tmp_path / "session.jsonl"
     sample_path.write_text("{}\n")
     committed = NativeCommittedPrefix(
@@ -80,7 +98,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     )
     samples = (
         ContextAnnotatedUpdate(
-            ContextManifest(owner.incarnation, NextContextTurn(), (), "source-codec-control"),
+            ContextManifest(thread=owner.incarnation, turn=NextContextTurn(), segments=(), counter="source-codec-control"),
             (),
         ),
         RequestFailedUpdate(ACPFailure.from_detail(-32603, "The usage limit has been reached")),

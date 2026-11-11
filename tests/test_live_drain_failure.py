@@ -12,16 +12,17 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.acp import CommsAgent
-
-from agent_comms.activity import (
-    NativeInputDrainDiagnostic, StoppedDrainDiagnostic, UnavailableDrainDiagnostic,
-)
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.drain_failures import drain_failures
-from agent_comms.native_package import VerifiedNativePackage
+from agent_comms.execution.drain_failures import drain_failures
+from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
+from agent_comms.registry.activity import (
+    NativeInputDrainDiagnostic,
+    StoppedDrainDiagnostic,
+    UnavailableDrainDiagnostic,
+)
 from agent_comms.team.standing import InboxUnavailable, UnitDeaf
 from native_backend_fixture import wait_for as until
 from test_acp_private_nk_delivery import _private_comms, _session

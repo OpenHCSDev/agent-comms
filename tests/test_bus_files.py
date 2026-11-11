@@ -1,7 +1,6 @@
 """The real bus publishes only files declared by their existing state owners."""
 
 
-from agent_comms.repo import Checkout
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -11,19 +10,26 @@ import pytest
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.session import NativeCapture
-from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim
-from agent_comms.nominal.field_codec import ClaimId, GoalId, InputId, TurnId
+from agent_comms.execution.native_input_proof import NativeContextJournal, NativeInputProof
+from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.installer.backup import bus_files
-from agent_comms.storage.locked_store import DeclaredFile, DurableFile, LiveFilesRequest, RootFile, RuntimeFile, SQLiteFile
-from agent_comms.native_input_proof import NativeContextJournal
-from agent_comms.native_input_proof import NativeInputProof
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repository_name import RepositoryName
+from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim, NativeClaim
+from agent_comms.nominal.field_codec import ClaimId, GoalId, InputId, TurnId
+from agent_comms.planning.orders import TodoStore
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.registry.threads import NativeThread
-from agent_comms.todos import TodoStore
-from agent_comms.native_session_reopen import PiSessionId
+from agent_comms.storage.locked_store import (
+    DeclaredFile,
+    DurableFile,
+    LiveFilesRequest,
+    RootFile,
+    RuntimeFile,
+    SQLiteFile,
+)
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.storage.typed_table import ReconciledFile
-from agent_comms.turn_item import FreshNativeId
 from bus_record_fixture import prepare_native_comms
 from test_todos import order
 

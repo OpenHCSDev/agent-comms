@@ -1,10 +1,19 @@
 """Original authored retained context, independent of its export producer."""
 from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
-from ..exporting import AuthoredSourceScope, FullLimit, WireExportBoundary, WireExportProvenance, WireTranscriptExporter
-from ..retained_task_facts import RetainedTaskFacts
-from ..turn_context import ContextSegment, OwnerProvenance, WireProvenance
+
+from agent_comms.execution.turn_context import ContextSegment, OwnerProvenance, WireProvenance
+from agent_comms.messaging.exporting import (
+    AuthoredSourceScope,
+    FullLimit,
+    WireExportBoundary,
+    WireExportProvenance,
+    WireTranscriptExporter,
+)
+from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
+
 
 @dataclass(frozen=True, kw_only=True)
 class RetainedSegment(ContextSegment):
@@ -40,7 +49,7 @@ class RetainedSegment(ContextSegment):
 
     def export(self, destination: Path | str, *, overwrite: bool = False) -> WireExportProvenance:
         """Publish this immutable read's selection through the original writer."""
-        from ..retained_context import RetainedFormat
+        from agent_comms.context_segments.retained_context import RetainedFormat
 
         selected = sorted((source for fact in self.retained.facts
                            for source in fact.wire_sources()

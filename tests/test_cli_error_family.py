@@ -1,7 +1,6 @@
 """Core's error declaration controls encoding and read-watch recovery."""
 from __future__ import annotations
 
-from agent_comms.repo import Checkout
 import asyncio
 import json
 import sys
@@ -10,14 +9,15 @@ from contextlib import closing
 import pytest
 from pydantic import ValidationError
 
-from agent_comms.cli import _fail, CliInvocation
+from agent_comms.cli import CliInvocation, _fail
+from agent_comms.cli_bridges.cli_protocol import WATCH_LINE, FailedCoreError, UnavailableCoreError
 from agent_comms.cli_bridges.shared import Binding, GivenBinding, StoredBinding
-from agent_comms.cli_protocol import WATCH_LINE, FailedCoreError, UnavailableCoreError
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.nominal.field_codec import RecordProblems
-from agent_comms.storage.locked_store import SQLiteFile
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import SQLiteFile
 
 
 @pytest.mark.parametrize('error,expected', [

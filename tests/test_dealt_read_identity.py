@@ -8,12 +8,22 @@ import json
 import sys
 from pathlib import Path
 
-from agent_comms.context_reading import ContextUsage
-from agent_comms.rule_deal import (
-    AuditDue, DealRecord, DealtRead, DealtSource, Open, OpenedReads, ReadSpan, StartedDeal, Unread,
-)
+from agent_comms.execution.context_reading import ContextUsage
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.pi_rule_gate import PiRedeal
+from agent_comms.team.pi_rule_gate import PiRedeal
+from agent_comms.team.prompt_reads import (
+    DealtRead,
+    DealtSource,
+)
+from agent_comms.team.rule_deal import (
+    AuditDue,
+    DealRecord,
+    Open,
+    OpenedReads,
+    ReadSpan,
+    StartedDeal,
+    Unread,
+)
 from agent_comms_hooks.skill import DeckReader
 from conftest import answer_deal, fresh_confession
 
@@ -74,8 +84,8 @@ def test_a_refresh_passed_while_reading_the_deal_is_answered_by_it(team_bus):
 def test_his_question_quotes_the_written_audit_statement_and_asks():
     """He quotes what the session wrote and asks; he never narrates what it did."""
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.rule_deal import MeantRecord, SessionAudit
-    from agent_comms.rule_probes import Probe
+    from agent_comms.projects.rule_probes import Probe
+    from agent_comms.team.rule_deal import MeantRecord, SessionAudit
 
     flinch = FieldCodec.decode(Probe, {"probe": "flinch", "answer": "Yes: I ended turns on a wait.\nSecond line"})
     prior = FieldCodec.decode(Probe, {"probe": "prior", "prior": "I take his plan as the work.",

@@ -22,7 +22,7 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from agent_comms.class_fact import ClassFact, Declarations
+from agent_comms.nominal.class_fact import ClassFact, Declarations
 
 
 def declared_words(stem: str) -> str:
@@ -87,6 +87,8 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
                 key_attribute="declared_name",
                 skip_if_no_key=True,
                 discovery_package=discovery_package,
+                # A family's package is its whole tree: members in a subpackage are members.
+                discovery_recursive=True,
             )
         elif root is not None:
             config = root.__registry_config__
@@ -286,8 +288,8 @@ class DeclaredFamily(FamilyMember, ABC, metaclass=FamilyMeta):
     @staticmethod
     @cache
     def discover_package(package: ModuleType) -> None:
-        """Import each module of the package once, so its members register themselves."""
-        for module in pkgutil.iter_modules(package.__path__, package.__name__ + "."):
+        """Import each module of the package's tree once, so its members register themselves."""
+        for module in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
             if not module.ispkg:
                 import_module_preserving_root_logging(module.name)
 
@@ -334,22 +336,6 @@ class ModuleMembers(FamilyMember):
         if actual != expected:
             raise TypeError(f"{cls.__qualname__} declares {cls.declared_name!r}; "
                             f"its module stem must be {expected!r}, not {actual!r}")
-
-    @classmethod
-    def _named_member(cls, name: object) -> type[DeclaredFamily]:
-        from .field_codec import FieldCodec, MalformedRecord
-
-        try:
-            selected = FieldCodec.decode(str, name)
-        except MalformedRecord as error:
-            raise UnknownFamilyMember(f"A declared module name must be text: {name!r}") from error
-        package = cls.family_root.__registry_config__.discovery_package
-        package_module: ModuleType = import_module_preserving_root_logging(package)
-        stem = cls.module_stem(selected)
-        if stem not in {info.name for info in pkgutil.iter_modules(package_module.__path__)}:
-            raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}")
-        import_module_preserving_root_logging(f"{package}.{stem}")
-        return dict.__getitem__(cls.family_root.__registry__, selected)
 
 
 class RegisteredFamily(DeclaredFamily):

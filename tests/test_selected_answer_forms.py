@@ -7,11 +7,6 @@ and the answer was never delivered.
 
 from __future__ import annotations
 
-
-from agent_comms.repo import Checkout
-from bus_record_fixture import prepare_native_comms
-
-from conftest import publish_initial
 import os
 import sys
 from contextlib import contextmanager
@@ -20,15 +15,20 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from conftest import accept_initial
 from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.messages import InfoKind
-from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.selected_source_batch import SelectedSource, SelectedSourceBatch
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.selected.source_batch import (
+    SelectedSource,
+    SelectedSourceBatch,
+)
+from agent_comms.messaging.messages import InfoKind
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from bus_record_fixture import prepare_native_comms
+from conftest import accept_initial, publish_initial
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort claim_scope requires real /var/tmp"

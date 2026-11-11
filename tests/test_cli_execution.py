@@ -7,15 +7,15 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 from contextlib import redirect_stdout
+from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.cli import CliInvocation
 from agent_comms.cli_bridges.shared import Send
-from agent_comms.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.messaging.bus import Bus
 
 
 @pytest.fixture

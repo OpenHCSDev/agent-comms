@@ -1,11 +1,11 @@
 """A holder claims through the real tool boundary on a copied bus."""
-from agent_comms.bus_tables import AuthoredAnswers
 import json
+import os
 import shlex
 import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import chdir
+from contextlib import chdir, contextmanager
 from dataclasses import replace
 
 import pytest
@@ -14,14 +14,13 @@ from agent_comms.coordination.errors import (
     CoordinationBeginUnavailable,
     CoordinationReadUnavailable,
 )
-
-from agent_comms.change_report import FileLine
-from agent_comms.team.order import OrderFile, TeamContext, main
-from agent_comms.team.standing import DeliveryAwaitingJudgement, Scrutinize
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.errors import (
-    TodoError,
     HumanSendRefusedError,
+    TodoError,
 )
+from agent_comms.messaging.bus_tables import AuthoredAnswers
+from agent_comms.messaging.messages import HandoffKind, Message, QuestionKind
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     GoalId,
@@ -29,46 +28,57 @@ from agent_comms.nominal.field_codec import (
     RecordProblems,
     ToolCallId,
 )
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goals import OrderCheck, ProblemGoalOrder
-from agent_comms.messages import HandoffKind, Message, QuestionKind
-from agent_comms.order_runs import ApplicationOrderRun
-from agent_comms.storage.locked_store import SQLiteFile
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.slop import (
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.goals import (
+    OrderCheck,
+    ProblemGoalOrder,
+)
+from agent_comms.planning.order_runs import ApplicationOrderRun
+from agent_comms.planning.order_words import (
+    DeliveryReport,
+    StrikeReason,
+)
+from agent_comms.planning.orders import (
+    CheckedProblemOrder,
+    ClaimedProblemOrder,
+    ClaimOrder,
+    ClaimPublicationUnavailable,
+    CorrectCheckTodo,
+    DeliveredProblemOrder,
+    DoneTodoState,
+    FailedCheckStrike,
+    OrderClaim,
+    OrderMessage,
+    PendingProblemOrder,
+    ReleaseTodo,
+    ResumeClaimOrder,
+    SelectedClaimReviewer,
+    SendBackVerdict,
+    StrikeTodo,
+    Todo,
+    TodoConflict,
+    TriageScope,
+)
+from agent_comms.planning.problem_findings import ExpectedProblem
+from agent_comms.planning.pull_requests import PullRequestLink
+from agent_comms.projects.change_report import FileLine
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.slop import (
     DeclarationDerivation,
     DeleteCopyDerivation,
     Derivation,
     ExistingLine,
     Slop,
 )
+from agent_comms.registry.thread_status import PausedBridgeThreadStatus
+from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import SQLiteFile
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.storage.store_files import StoreBusy, StoreWait
+from agent_comms.team.order import OrderFile, TeamContext, main
+from agent_comms.team.standing import DeliveryAwaitingJudgement, Scrutinize
 from agent_comms.team.standing_rules import OwedAnswer
-from agent_comms.todos import (
-    CheckedProblemOrder,
-    ClaimOrder,
-    ClaimPublicationUnavailable,
-    ClaimedProblemOrder,
-    CorrectCheckTodo,
-    DeliveredProblemOrder,
-    DeliveryReport,
-    DoneTodoState,
-    ExpectedProblem,
-    FailedCheckStrike,
-    OrderClaim,
-    OrderMessage,
-    PendingProblemOrder,
-    PullRequestLink,
-    ReleaseTodo,
-    ResumeClaimOrder,
-    SelectedClaimReviewer,
-    SendBackVerdict,
-    StrikeReason,
-    StrikeTodo,
-    Todo,
-    TodoConflict,
-    TriageScope,
-)
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.orders import (
     CommsOrderDeliverTool,
     CommsVerdictTool,
@@ -133,7 +143,7 @@ def test_delivery_report_refuses_a_flat_status_memo():
 
 def test_a_delivery_records_the_repository_its_pull_request_lives_in(held_team):
     """An order in one repo can be delivered by a pull request in another (Core order, Textual PR)."""
-    from agent_comms.repository_name import RepositoryName
+    from agent_comms.projects.repository_name import RepositoryName
 
     ctx = held_team
     comms = ctx.comms
@@ -214,7 +224,7 @@ def test_claim_refuses_retired_or_reborn_current_parent(held_team, parent_state)
         ctx, "Killed the historical-author routing slop at todos.py; the assignment owns the target."),
         problem=original.id,
     )
-    with pytest.raises(HumanSendRefusedError):
+    with pytest.raises(TodoError, match=f"@{parent} will not answer this review"):
         ThreadCaller(original.holder).invoke(request, comms)
     assert comms.goals.todos.get(original.id) == original
     assert comms.bus.bus.revision() == before
@@ -270,6 +280,66 @@ def test_self_assigned_claim_selects_a_reviewer_and_retains_its_choice(held_team
         ThreadCaller(todo.holder).invoke(different, comms)
     assert comms.goals.todos.get(todo.id) == claimed
     assert comms.bus.bus.revision() == after
+
+
+def test_a_claim_follows_its_pull_request_to_a_new_head(held_team):
+    """A push after delivery moves the claim, so the verdict reads the head that ships."""
+    ctx = held_team
+    comms = ctx.comms
+    todo = self_assigned_order(ctx)
+    reviewer = SelectedClaimReviewer(comms.registry.require(ctx.actor_name).incarnation)
+    request = replace(delivery(
+        ctx, "Killed the frozen-claim slop at orders.py; the verdict reads the shipping head."),
+        problem=todo.id, reviewer=reviewer)
+    ThreadCaller(todo.holder).invoke(request, comms)
+    repo = ctx.repos[0]
+    repo.git(repo.checkout, "commit", "--allow-empty", "-q", "-m", "Pushed again")
+    moved = replace(request, head=repo.git(repo.checkout, "rev-parse", "HEAD").strip())
+    ThreadCaller(todo.holder).invoke(moved, comms)
+    claim = comms.goals.todos.get(todo.id).order.claim
+    assert claim.head == moved.head
+    assert comms.bus.bus.lookup_message(claim.message.message_id).message.target == ctx.actor_name
+    elsewhere = replace(moved, head=request.head,
+                        pull_request=PullRequestLink(moved.pull_request.repo, 2))
+    with pytest.raises(TodoError, match="new head of its own pull request"):
+        ThreadCaller(todo.holder).invoke(elsewhere, comms)
+    assert comms.goals.todos.get(todo.id).order.claim == claim
+
+
+def away_reviewer(ctx: TeamContext) -> NativeThread:
+    return NativeThread("away-reviewer", frozenset(),
+                        Checkout(ctx.root.parent / "away-reviewer"), created_at=16.0)
+
+
+def away_reviewer_delivery(ctx: TeamContext, teammate: NativeThread):
+    """A self-assigned claim naming a reviewer whose bridge paused."""
+    todo = self_assigned_order(ctx)
+    ctx.comms.registry.register(teammate, PausedBridgeThreadStatus())
+    reviewer = SelectedClaimReviewer(ctx.comms.registry.require("away-reviewer").incarnation)
+    return todo, replace(delivery(
+        ctx, "Killed the unjudged-claim slop at orders.py; a reviewer that reads gets it."),
+        problem=todo.id, reviewer=reviewer)
+
+
+def test_a_claim_to_a_reviewer_that_will_never_read_it_is_refused(held_team):
+    """On 2026-11-10 mate-a's P1444 claim sat for a stopped claude-a: nothing read it."""
+    comms = held_team.comms
+    todo, request = away_reviewer_delivery(held_team, away_reviewer(held_team))
+    before = comms.bus.bus.revision()
+    with pytest.raises(TodoError, match="@away-reviewer will not answer this review"):
+        ThreadCaller(todo.holder).invoke(request, comms)
+    assert comms.goals.todos.get(todo.id) == todo
+    assert comms.bus.bus.revision() == before
+
+
+def test_a_claim_to_a_paused_reviewer_whose_process_lives_is_recorded(held_team):
+    comms = held_team.comms
+    todo, request = away_reviewer_delivery(held_team, replace(
+        away_reviewer(held_team), process_identity=ProcessIdentity.capture(os.getpid())))
+    ThreadCaller(todo.holder).invoke(request, comms)
+    claim = comms.goals.todos.get(todo.id).order.claim
+    assert claim.reviewer == request.reviewer
+    assert comms.bus.bus.lookup_message(claim.message.message_id).message.target == "away-reviewer"
 
 
 @pytest.mark.parametrize("change", ("retired", "reborn", "renamed"))
@@ -372,6 +442,14 @@ def test_a_busy_begin_answers_every_storage_error_handler() -> None:
         raise caught.value
 
 
+@contextmanager
+def held_bus_writer(ctx: TeamContext):
+    """Hold the real writer; the blocked publication need not spend an outage budget."""
+    with SQLiteFile.writers_drained(ctx.comms.bus.bus.path), pytest.MonkeyPatch.context() as patch:
+        patch.setattr(StoreWait, "timeout", StoreBusy.timeout)
+        yield
+
+
 def unsent_claim(ctx):
     """A real claim whose Todo commits while another writer holds the bus."""
     comms = ctx.comms
@@ -379,8 +457,8 @@ def unsent_claim(ctx):
     request = delivery(
         ctx, "Killed the stupid duplicated count decision; read its actual diff before accepting it.")
     before = comms.bus.bus.revision()
-    # The bus writer's own busy wait expires; nothing in the publisher or claim is patched.
-    with SQLiteFile.writers_drained(comms.bus.bus.path):
+    # SQLite refuses the real locked writer; publication and claim logic stay unpatched.
+    with held_bus_writer(ctx):
         with pytest.raises(ClaimPublicationUnavailable) as unsent:
             ThreadCaller("worker").invoke(request, comms)
     claimed = comms.goals.todos.get("P1")
@@ -465,7 +543,7 @@ def test_a_published_claim_retried_on_a_held_bus_is_unavailable_never_unsent(hel
     ThreadCaller("worker").invoke(request, comms)
     claimed = comms.goals.todos.get("P1")
     published = comms.bus.bus.revision()
-    with SQLiteFile.writers_drained(comms.bus.bus.path):
+    with held_bus_writer(ctx):
         with pytest.raises(ClaimPublicationUnavailable) as unavailable:
             ThreadCaller("worker").invoke(request, comms)
     assert isinstance(unavailable.value.__cause__, sqlite3.Error)
@@ -693,15 +771,17 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     assert store.get("P2") == claims[1]
 
 
-def test_claimed_order_to_another_teammate_is_refused_and_writes_nothing(held_team, cited_source):
+def test_claimant_can_hand_off_unfinished_work_without_losing_its_claim(held_team, cited_source):
     ctx = held_team
     ctx.comms.registry.register(thread("other", ctx.root, 3.0))
     claimed = claimed_by_worker(ctx)
-    with pytest.raises(TodoError, match="Only an undelivered order can change owner"):
-        main(["send", "other", corrected_order_file(ctx, cited_source), "--clean", "--reassign",
-              "the claimant reported the delivery, so moving it would discard that claim",
-              "--as", "worker"], ctx)
-    assert ctx.comms.goals.todos.get("P1") == claimed
+    main(["send", "other", corrected_order_file(ctx, cited_source), "--clean", "--reassign",
+          "the claimant transfers the unfinished work while preserving its recorded claim",
+          "--as", "worker"], ctx)
+    following = ctx.comms.goals.todos.get("P1")
+    assert following.held().owner_identity == ctx.comms.registry.require("other").incarnation
+    assert isinstance(following.order, PendingProblemOrder)
+    assert claimed.order in following.history.events(following.id, CheckedProblemOrder)
 
 
 def test_claimed_order_takes_a_check_correction_through_the_real_verb(held_team):

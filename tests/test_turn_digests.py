@@ -1,38 +1,53 @@
 import sys
+
+from agent_comms.cli_bridges.claude_transcript import RunningClaude
+from agent_comms.context_segments.native_messages import TranscriptSegment
+
 """One query contract over the original native and external record owners."""
 
-from agent_comms.repo import Checkout
 import asyncio
 import hashlib
-from contextlib import aclosing, redirect_stdout, suppress
-from datetime import datetime, timedelta
 import io
 import json
 import os
+from contextlib import aclosing, redirect_stdout, suppress
+from datetime import datetime, timedelta
 
 import pytest
-from agent_comms_hooks import ToolRefusedError
 from transcript_record_fixture import transcript_record
 
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli import CliInvocation
 from agent_comms.cli_bridges.claude import ClaudeBridge
+from agent_comms.cli_bridges.runtime_updates import FinishedItem
 from agent_comms.cli_bridges.shared import Binding, Options, Serve, StoredBinding, Watch
 from agent_comms.comms import wire
 from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.context_store import ContextEntry
-from agent_comms.external_transcript import NoEarlierPage
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.turn_bound import (
+    LastTurns,
+    TurnBound,
+    TurnsBefore,
+    TurnsOlderThan,
+    TurnsSince,
+)
+from agent_comms.execution.turn_context import (
+    JournalProvenance,
+    SegmentManifest,
+    UserInputSegment,
+    WireProvenance,
+)
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.watched import FileSource
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.runtime_updates import FinishedItem
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.transcript_events import AssistantTranscript, TurnDigest
-from agent_comms.turn_context import JournalProvenance, SegmentManifest, TranscriptSegment, UserInputSegment, WireProvenance
-from agent_comms.turn_digests import LastTurns, TurnBound, TurnsOlderThan, TurnsBefore, TurnsSince
-from agent_comms.bus import Bus
-from agent_comms.turn_item import NativeItemId, NativeTurnId
-from agent_comms.native_session_reopen import PiSessionId
-from agent_comms.watched import FileSource
+from agent_comms.transcript.external_transcript_rows import NoEarlierPage
+from agent_comms.transcript.transcript_events import AssistantTranscript, TurnDigest
+from agent_comms_hooks import ToolRefusedError
 
 
 def endpoint(comms, name, window, *, detail='activity'):
@@ -165,13 +180,13 @@ def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_
     # Historical frames own their original references; new frames leave those
     # references with the per-message body. Both reconstruct the same history.
     frame_sources = (() if original_in_body else (WireProvenance(asked.reference),))
-    wake = SegmentManifest(SelectedWakeSegment,
-                           (*frame_sources, WireProvenance(sent_outcome.reference)), digest, 1, 1)
+    wake = SegmentManifest(kind=SelectedWakeSegment,
+                           provenance=(*frame_sources, WireProvenance(sent_outcome.reference)), sha256=digest, utf8_bytes=1, tokens=1)
     originals = (UserInputSegment(
         provenance=(WireProvenance(asked.reference),), content=asked.body,
     ).manifest(0),) if original_in_body else ()
-    entry = SegmentManifest(TranscriptSegment, (JournalProvenance(str(source), ('u1',)),),
-                            digest, len(frame), 1, contributors=(wake, *originals))
+    entry = SegmentManifest(kind=TranscriptSegment, provenance=(JournalProvenance(str(source), ('u1',)),),
+                            sha256=digest, utf8_bytes=len(frame), tokens=1, contributors=(wake, *originals))
     with comms.contexts.writing() as db:
         ContextEntry(
             PiSessionId("source"), str(source), NativeItemId("u1"), entry
@@ -254,10 +269,10 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     recorded = comms.transcripts.external('claude').turns(LastTurns(300))
     comms.registry.declare(ExternalThread('paged', frozenset(), Checkout(tmp_path)))
     items = [
-        FinishedItem(turn.turn_id, NativeItemId(turn.turn_id), turn.events)
+        FinishedItem(turn_id=turn.turn_id, item_id=NativeItemId(turn.turn_id), events=turn.events)
         for turn in reversed(recorded)
     ]
-    items.insert(empty_index, FinishedItem(undated_edge_turn_id, NativeItemId('undated-edge'), ()))
+    items.insert(empty_index, FinishedItem(turn_id=undated_edge_turn_id, item_id=NativeItemId('undated-edge'), events=()))
     comms.transcripts.external('paged').publish_page(items, NoEarlierPage())
     pages = list(paged_answers(comms, 'paged'))
     seen = [turn['turn_id'] for page in pages for turn in page['turns']]
@@ -297,8 +312,8 @@ def test_missing_native_session_is_empty_and_nonpositive_count_is_rejected(tmp_p
 def test_undated_and_equal_time_transcripts_page_without_timestamp_assumptions(tmp_path, events):
     comms = wire(tmp_path)
     comms.registry.declare(ExternalThread('undated', frozenset(), Checkout(tmp_path)))
-    items = tuple(FinishedItem(NativeTurnId(f'undated-{index}'), NativeItemId(f'item-{index}'),
-        events) for index in range(251))
+    items = tuple(FinishedItem(turn_id=NativeTurnId(f'undated-{index}'), item_id=NativeItemId(f'item-{index}'),
+        events=events) for index in range(251))
     comms.transcripts.external('undated').publish_page(items, NoEarlierPage())
     pages = list(paged_answers(comms, 'undated'))
     seen = [turn['turn_id'] for page in pages for turn in page['turns']]
@@ -324,7 +339,6 @@ def test_turn_windows_distinguish_first_and_last_event_time():
 def test_a_restarted_session_reads_the_transcript_claude_is_writing(tmp_path, monkeypatch):
     """A restart in another working directory leaves the session's transcript in two project
     directories; the running session is the newer one, and no match at all still refuses."""
-    from agent_comms.cli_bridges.claude_transcript import RunningClaude
 
     monkeypatch.setenv('HOME', str(tmp_path))
     projects = tmp_path / '.claude/projects'

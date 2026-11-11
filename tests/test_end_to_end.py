@@ -7,13 +7,13 @@ import sys
 
 import pytest
 
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.child_process import BoundedRun
 from agent_comms.cli import main
 from agent_comms.comms import wire
-from agent_comms.repo import Checkout
-from agent_comms.owner_connection import socket_path
-from agent_comms.read_basis import NamedViewer
+from agent_comms.execution.child_process import BoundedRun
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.read_basis import NamedViewer
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.transport.owner_connection import socket_path
 from native_backend_fixture import native_backend_fixture
 
 # Each test boots native Pi and chains CLI children; `fork` alone boots Pi twice (its

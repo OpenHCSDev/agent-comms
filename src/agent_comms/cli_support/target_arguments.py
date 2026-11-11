@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from agent_comms.channel_targets import NoChannel
-from agent_comms.channel_targets import SurroundingChannel
-from agent_comms.cli_command import CliCommand
-from agent_comms.repo import Checkout
-from agent_comms.nominal.field_codec import Argument
-from agent_comms.nominal.field_codec import Normalize
+import dataclasses
 from dataclasses import dataclass
 from typing import Annotated
-import dataclasses
+
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.messaging.channel_targets import NoChannel, SurroundingChannel
+from agent_comms.nominal.field_codec import Argument, Normalize
+from agent_comms.projects.checkouts import Checkout
 
 
 @dataclass(frozen=True, kw_only=True)

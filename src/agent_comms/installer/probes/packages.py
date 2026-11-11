@@ -6,20 +6,20 @@ import hashlib
 from dataclasses import dataclass
 from importlib.metadata import Distribution, distributions
 from pathlib import Path, PurePosixPath
+from typing import ClassVar, Self
 from urllib.parse import unquote, urlsplit
 from zipfile import ZipExtFile, ZipFile
-from typing import ClassVar, Self
 
 from packaging.utils import canonicalize_name
 from pydantic import BaseModel, Field, JsonValue, RootModel
 from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 
-from agent_comms.build_artifact import BuildArtifact
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.installer.build_artifact import BuildArtifact
+from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
+from agent_comms.installer.runtime_preparation import RuntimePreparation
 from agent_comms.nominal.field_codec import Sha256Text, WireValue
 from agent_comms.storage.private_path import FileRevision
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
-from agent_comms.runtime_preparation import RuntimePreparation
 
 
 @dataclass(frozen=True)

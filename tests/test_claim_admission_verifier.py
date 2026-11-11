@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-
-from agent_comms.repo import Checkout
-from bus_record_fixture import prepare_native_comms
-
-from conftest import publish_initial
 import os
 import sys
 from dataclasses import replace
@@ -15,27 +10,33 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-import agent_comms.selected_claim as selected_claim
-from agent_comms.assignment_states import FullPendingAssignment
-from agent_comms.attempt_start import AttemptStart
-from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.nominal.field_codec import ClaimId, TurnId
-from agent_comms.selected_claim import (
+import agent_comms.execution.selected.claim as selected_claim
+from agent_comms.comms import wire
+from agent_comms.coordination.assignment_states import FullPendingAssignment
+from agent_comms.coordination.attempt_start import AttemptStart
+from agent_comms.coordination.attempt_states import (
+    ModelRunningAttempt,
+    PromptAcceptedAttempt,
+    SettlingAttempt,
+)
+from agent_comms.coordination.cohort import sealed_cohort_assignments
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.owner_fence import prepare_fence_token
+from agent_comms.coordination.tables.executions import WireOrigin
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.selected.claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
     write_selected_claimed_file,
 )
-from agent_comms.comms import wire
-from conftest import accept_initial
-from agent_comms.coordination.cohort import sealed_cohort_assignments
-from agent_comms.coordination.errors import IdentityConflict
-from agent_comms.coordination.tables.executions import WireOrigin
-from agent_comms.coordination.coordinator import Coordination
-from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
-from agent_comms.owner_fence import prepare_fence_token
-from agent_comms.selected_source_batch import SelectedSource
+from agent_comms.execution.selected.source_batch import SelectedSource
+from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim, WakeClaim
+from agent_comms.nominal.field_codec import ClaimId, TurnId
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from bus_record_fixture import prepare_native_comms
+from conftest import accept_initial, publish_initial
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort claim_scope requires real /var/tmp"
@@ -94,11 +95,11 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 execution_id, expected_revision=snapshot.execution.revision
             ).value
             started = store.start(AttemptStart(
-                execution_id,
-                1,
-                alice_lookup,
-                person.owner_identity.generation,
-                prepare_fence_token(),
+                execution_id=execution_id,
+                attempt_ordinal=1,
+                owner_lookup=alice_lookup,
+                owner_generation=person.owner_identity.generation,
+                token=prepare_fence_token(),
                 expected_execution_revision=snapshot.execution.revision,
                 expected_pointer_revision=snapshot.pointer_revision,
             ))

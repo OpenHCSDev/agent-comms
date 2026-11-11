@@ -7,8 +7,13 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .context_reading import ContextReading, ContextUsage, UnmeasuredContext, UnsizedContextUsage
-from .nominal.field_codec import (
+from agent_comms.execution.context_reading import (
+    ContextReading,
+    ContextUsage,
+    UnmeasuredContext,
+    UnsizedContextUsage,
+)
+from agent_comms.nominal.field_codec import (
     AcceptsNull,
     ExternalField,
     ExternalJsonShape,
@@ -20,9 +25,9 @@ from .nominal.field_codec import (
 )
 
 if TYPE_CHECKING:
-    from .agent_events import AgentEvent
-    from .backend import TurnSession
-    from .turn_usage import UsageAccount
+    from agent_comms.execution.agent_event import AgentEvent
+    from agent_comms.execution.backend import TurnSession
+    from agent_comms.execution.turn_usage import UsageAccount
 
 
 class PiCountWire(AcceptsNull):

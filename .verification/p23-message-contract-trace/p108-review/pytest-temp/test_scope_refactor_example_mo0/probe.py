@@ -1,0 +1,2 @@
+from nominal_refactor_advisor import declaration_dependencies, lexical_scopes
+assert declaration_dependencies.FunctionBindingProjection is lexical_scopes.FunctionBindingProjection

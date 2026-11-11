@@ -13,14 +13,15 @@ from pathlib import Path
 import pytest
 
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
+from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import (
     DeadHolderReleasedPhase,
     DrainingPhase,
     InstallingPhase,
     MaintenanceBarrier,
     MaintenanceClaimHolder,
-    MaintenanceHolder,
     MaintenanceHeldError,
+    MaintenanceHolder,
     MaintenanceOperator,
     MaintenancePhase,
     MaintenanceState,
@@ -37,7 +38,7 @@ from agent_comms.storage.store_files import (
 
 
 def _hold(root: Path, phase: type[MaintenancePhase], ready) -> None:
-    barrier = MaintenanceBarrier(root / "registry.json")
+    barrier = MaintenanceBarrier(RegistryFile.path_in(root))
     held = barrier.begin(MaintenanceOperator.current())
     for successor in (PausedPhase, InstallingPhase):
         if held.phase is phase:
@@ -77,10 +78,10 @@ def test_operator_uses_process_identity_codec() -> None:
 
 
 @pytest.mark.parametrize("phase", [DrainingPhase, PausedPhase, InstallingPhase])
-@pytest.mark.parametrize("file,mode", [("wire", SharedLock()), ("registry.json", ExclusiveLock())])
+@pytest.mark.parametrize("file,mode", [("wire", SharedLock()), (RegistryFile.filename, ExclusiveLock())])
 def test_dead_holder_refuses_detecting_input_then_opens(tmp_path, phase, file, mode):
     root = tmp_path / "bus"
-    barrier = MaintenanceBarrier(root / "registry.json")
+    barrier = MaintenanceBarrier(RegistryFile.path_in(root))
     with real_holder(root, phase) as (child, held):
         child.kill()
         child.join(5)
@@ -104,7 +105,7 @@ def test_dead_holder_refuses_detecting_input_then_opens(tmp_path, phase, file, m
 
 async def test_async_recovery_borrows_registry_without_blocking_event_loop(tmp_path: Path):
     root = tmp_path / "bus"
-    barrier = MaintenanceBarrier(root / "registry.json")
+    barrier = MaintenanceBarrier(RegistryFile.path_in(root))
     with real_holder(root) as (child, _held):
         child.kill()
         child.join(5)
@@ -113,7 +114,7 @@ async def test_async_recovery_borrows_registry_without_blocking_event_loop(tmp_p
             async with barrier.ingress_async():
                 pytest.fail("The detecting input must be refused")
 
-        async with _async_store_lock(root / 'registry.json', ExclusiveLock(), StoreGuard.contention):
+        async with _async_store_lock(RegistryFile.path_in(root), ExclusiveLock(), StoreGuard.contention):
             attempt = asyncio.create_task(incoming())
             await asyncio.sleep(0.025)
             assert not attempt.done()
@@ -126,7 +127,7 @@ async def test_async_recovery_borrows_registry_without_blocking_event_loop(tmp_p
 async def test_concurrent_request_claims_do_not_change_each_others_permissions(tmp_path):
     from agent_comms.coordination.coordinator import Coordination
 
-    barrier = MaintenanceBarrier(tmp_path / "registry.json")
+    barrier = MaintenanceBarrier(RegistryFile.path_in(tmp_path))
     held = barrier.begin(MaintenanceOperator.current())
     selected, refused = asyncio.Event(), asyncio.Event()
     environment = dict(os.environ)

@@ -1,6 +1,5 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
 
-from agent_comms.repo import Checkout
 import asyncio
 import os
 import sqlite3
@@ -11,14 +10,15 @@ from pathlib import Path
 import pytest
 
 import agent_comms.agent_events as events
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.owned_turn import OwnedTurn
-from agent_comms.owner_launch import RetainedOwnerLaunch
-from agent_comms.storage.private_path import FileRevision
+from agent_comms.execution.turn_input_source import NoTurnAcceptance
+from agent_comms.messaging.messages import AlertKind, InfoKind, Message, NoticeRole
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.turn_input_source import NoTurnAcceptance
+from agent_comms.storage.private_path import FileRevision
+from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from bus_history import read_history
 from conftest import publish_initial
 from delivery_owner_fixture import qualified_owner_launch, start_headless_owner
@@ -62,7 +62,7 @@ async def test_observation_waits_for_the_held_coordinator_snapshot(tmp_path):
 
 @pytest.mark.asyncio
 async def test_empty_delivery_recovery_does_not_wait_for_wire_writer(tmp_path):
-    from agent_comms.queued_input import DeliveredInput
+    from agent_comms.execution.queued_input import DeliveredInput
 
     comms, agent, root_id = _covered_session(tmp_path)
     entered, release = threading.Event(), threading.Event()
@@ -138,7 +138,7 @@ async def test_original_turn_keeps_cleanup_lease_after_owner_fence(
     from functools import partial
 
     from agent_comms.coordination.errors import StaleFence
-    from agent_comms.turn_phase import CancellingPhase
+    from agent_comms.execution.turn_phase import CancellingPhase
 
     comms, agent, _root_id, session_id = _session(tmp_path)
     execution = OwnedTurn(

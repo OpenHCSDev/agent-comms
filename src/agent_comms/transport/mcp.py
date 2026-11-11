@@ -16,22 +16,34 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Annotated, ClassVar, Literal, Self
 
-from agent_comms_hooks import ToolRefusedError
 from aiohttp import web
 from pydantic import JsonValue
 
-from ..cli_protocol import CoreError
-from ..connector_caller import ConnectorCaller, ConnectorTool
-from ..coordination.errors import CommandFailure, Refused
-from ..errors import RelationViolationError
-from .progress import CancellableWireExport, WireExportCancelled, WireExportObserver, WireExportProgress
-from ..nominal.declared_family import DeclaredFamily
-from ..nominal.field_codec import (
-    FieldCodec, NullMember, RecordMember, SingleFieldValue, SubclassUnion, WireExclude, WireName,
-    WireOmitDefault, boundary_decoder, projected,
+from agent_comms.cli_bridges.cli_protocol import CoreError
+from agent_comms.coordination.errors import CommandFailure, Refused
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    NullMember,
+    RecordMember,
+    SingleFieldValue,
+    SubclassUnion,
+    WireExclude,
+    WireName,
+    WireOmitDefault,
+    boundary_decoder,
+    projected,
 )
-from .request import ToolCall, ToolRequest
-from ..tool_request import ServedRequest
+from agent_comms.transport.connector_caller import ConnectorCaller, ConnectorTool
+from agent_comms.transport.progress import (
+    CancellableWireExport,
+    WireExportCancelled,
+    WireExportObserver,
+    WireExportProgress,
+)
+from agent_comms.transport.request import ToolCall, ToolRequest
+from agent_comms.transport.tool_request import ServedRequest
+from agent_comms_hooks import ToolRefusedError
 
 JsonRpcId = int | str
 PROTOCOL_VERSION = "2025-06-18"
@@ -570,7 +582,8 @@ class ToolsCallReply(McpReply, StreamedEvent):
     def structured(self) -> dict[str, JsonValue]:
         """The tool's declared reply, or its declared failure raised."""
         if self.result.is_error:
-            raise RelationViolationError(" ".join(content.text for content in self.result.content))
+            error, = self.result.content
+            CoreError.decoded(error.text).raise_error()
         return self.result.structured_content
 
     def delivered(self, observer: WireExportObserver, replies: list[ToolsCallReply]) -> None:

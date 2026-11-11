@@ -5,99 +5,36 @@ from __future__ import annotations
 
 import asyncio
 import json
-from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING
 
-
-from .cli_result import CliResult
-from .tool_result import ToolResult
-from .nominal.field_codec import FieldCodec, WireName
-from .harness_install import Harness
-from .thread_text import NoThreadText, ThreadText
-from .transcript_events import ImportedInput, ImportedMessage, NoRetainedRequest
-from .turn_context import CodexRolloutProvenance
-from .turn_item import NativeItemId
-
-if TYPE_CHECKING:
-    from .cli_bridges.history import History
-    from .runtime_updates import SessionFacts
-    from .transcript_events import TranscriptEvent
-
-
-@dataclass(frozen=True, slots=True)
-class ImportLimits:
-    messages: int = 200
-    characters: int = 120_000
-    per_message: int = 12_000
-
-    def __post_init__(self) -> None:
-        if min(self.messages, self.characters, self.per_message) <= 0:
-            raise ValueError("Import budgets must be positive.")
-
-
-@dataclass(frozen=True, slots=True)
-class ImportedSessionMetadata:
-    """Original saved import observation; references grant reading, never execution."""
-
-    harness: Annotated[type[Harness], WireName("format")]
-    source_id: str
-    messages_seen: int
-    messages_imported: int
-    truncated_messages: int
-    notices: tuple[str, ...]
-    historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
-
-    @classmethod
-    def sources_for_owner(cls, registry, owner):
-        """Original metadata membership borrows registry and selected-file ownership."""
-        current = registry.require(owner.name)
-        if current.incarnation != owner.incarnation:
-            raise ValueError("Imported context thread incarnation changed")
-        if current.session_file != owner.session_file:
-            raise ValueError("Imported context selected session changed")
-        return current.runtime.imported_sources()
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ImportedConversation(ABC):
-    """A session imported as a stopped thread: where it ran and the Pi session it becomes."""
-
-    harness: type[Harness]
-    source_id: str
-    project: str
-    messages_seen: int
-    title: ThreadText = NoThreadText()
-    truncated_messages: int = 0
-    notices: tuple[str, ...] = ()
-    historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
-
-    @property
-    @abstractmethod
-    def imported_messages(self) -> int: ...
-
-    @abstractmethod
-    def session_bytes(self, project: Path) -> bytes:
-        """The thread's Pi session file, for a thread working in ``project``."""
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class KeptPiSession(ImportedConversation):
-    """A native Pi session is already what a thread runs: its file is the session, unchanged."""
-
-    source: Path
-
-    @property
-    def imported_messages(self) -> int:
-        return self.messages_seen
-
-    def session_bytes(self, project: Path) -> bytes:
-        return self.source.read_bytes()
+from agent_comms.cli_bridges.runtime_updates import SessionFacts
+from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.execution.import_history_source import ImportHistorySource
+from agent_comms.execution.imported_conversation import ImportedConversation
+from agent_comms.execution.imported_messages import (
+    ImportedInput,
+    ImportedMessage,
+    ImportLimits,
+    NoRetainedRequest,
+)
+from agent_comms.execution.imported_session_metadata import ImportedSessionMetadata
+from agent_comms.execution.native_entries import (
+    ImportedSessionWriter,
+    NativeEntry,
+    SessionEntry,
+)
+from agent_comms.execution.turn_context import HistoricalInstructionProvenance
+from agent_comms.execution.turn_item import NativeItemId
+from agent_comms.installer.harness_install import Harness
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.registry.thread_text import NoThreadText, ThreadText
+from agent_comms.transcript.transcript_events import TranscriptEvent
+from agent_comms.transport.tool_result import ToolResult
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -107,7 +44,7 @@ class ImportSnapshot(ImportedConversation):
     latest_request: str = ""
 
     @classmethod
-    def read(cls, history: History, limits: ImportLimits) -> ImportSnapshot:
+    def read(cls, history: ImportHistorySource, limits: ImportLimits) -> ImportSnapshot:
         async def collect() -> ImportBuffer:
             buffer = ImportBuffer(limits)
             async for update in history.history():
@@ -125,8 +62,6 @@ class ImportSnapshot(ImportedConversation):
 
     def pi_session(self, project: Path) -> str:
         """A valid Pi v3 tree, using text-only portable historical context."""
-        from .native_entries import ImportedSessionWriter, NativeEntry, SessionEntry
-
         timestamp = datetime.now(UTC)
         iso = timestamp.isoformat()
         records: list[object] = [SessionEntry.fresh(project, timestamp).to_wire()]
@@ -134,8 +69,8 @@ class ImportSnapshot(ImportedConversation):
         records.append({"type": "custom", "id": parent, "parentId": None, "timestamp": iso,
             "customType": "agent-comms-import",
             "data": FieldCodec.encode(ImportedSessionMetadata(
-                self.harness, self.source_id, self.messages_seen, len(self.messages),
-                self.truncated_messages, self.notices, self.historical_instructions)),
+                harness=self.harness, source_id=self.source_id, messages_seen=self.messages_seen, messages_imported=len(self.messages),
+                truncated_messages=self.truncated_messages, notices=self.notices, historical_instructions=self.historical_instructions)),
         })
         context = (
             f"Conversation imported from {self.harness.declared_name} session {self.source_id}.\n"
@@ -179,7 +114,7 @@ class ImportBuffer:
     source_id: str = ""
     project: str = ""
     title: ThreadText = NoThreadText()
-    instructions: set[CodexRolloutProvenance] = field(default_factory=set)
+    instructions: set[HistoricalInstructionProvenance] = field(default_factory=set)
 
     def add(self, events: Iterable[TranscriptEvent]) -> None:
         for event in events:
@@ -187,7 +122,8 @@ class ImportBuffer:
 
     def append(self, message: ImportedMessage) -> None:
         self.seen += 1
-        message.remember(self)
+        for request in message.retained_request().present():
+            self.latest_request = request.body[: self.limits.per_message]
         message = message.bounded(self.limits)
         self.truncated += int(message.truncated)
         self.messages.append(message)
@@ -219,7 +155,7 @@ class ImportBuffer:
             truncated_messages=self.truncated, notices=tuple(sorted(self.notices)),
             latest_request=self.latest_request,
             historical_instructions=tuple(
-                sorted(self.instructions, key=lambda value: (value.offset, value.instruction))),
+                sorted(self.instructions, key=lambda value: value.instruction_position())),
         )
 
 
@@ -233,14 +169,14 @@ class ThreadImported(CliResult, ToolResult):
     omitted_messages: int
     truncated_messages: int
     notices: tuple[str, ...]
-    historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
+    historical_instructions: tuple[HistoricalInstructionProvenance, ...] = ()
 
     @classmethod
     def of(cls, thread: str, session_file: Path, snapshot: ImportedConversation) -> ThreadImported:
         return cls(
-            thread, str(session_file), snapshot.harness, snapshot.source_id,
-            snapshot.imported_messages, snapshot.messages_seen - snapshot.imported_messages,
-            snapshot.truncated_messages, snapshot.notices, snapshot.historical_instructions,
+            thread=thread, session_file=str(session_file), harness=snapshot.harness, source_id=snapshot.source_id,
+            imported_messages=snapshot.imported_messages, omitted_messages=snapshot.messages_seen - snapshot.imported_messages,
+            truncated_messages=snapshot.truncated_messages, notices=snapshot.notices, historical_instructions=snapshot.historical_instructions,
         )
 
     def to_wire(self) -> dict[str, object]:

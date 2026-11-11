@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import SystemdUserManager
-from agent_comms.systemd_unit import AgentsSlice
+from agent_comms.execution.child_process import SystemdUserManager
+from agent_comms.execution.systemd_unit import AgentsSlice
 
 
 @pytest.mark.parametrize(("cores", "quota"), [(12, 1000), (8, 600)])

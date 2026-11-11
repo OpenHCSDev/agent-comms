@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from agent_comms.channel_targets import SurroundingChannel
-
 from abc import abstractmethod
-from agent_comms.catalog_document import CatalogAccess
-from agent_comms.cli_command import CliCommand
-from agent_comms.comms import Comms
-from agent_comms.registry.threads import ThreadCommandAvailability, Thread
-from agent_comms.thread_status import ThreadStatus
 from dataclasses import dataclass
 from typing import Self
+
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.comms import Comms
+from agent_comms.messaging.channel_targets import SurroundingChannel
+from agent_comms.registry.catalog_document import CatalogAccess
+from agent_comms.registry.thread_status import ThreadStatus
+from agent_comms.registry.threads import Thread, ThreadCommandAvailability
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -1,0 +1,2433 @@
+{
+  "applied": false,
+  "is_clean": true,
+  "sequence": {
+    "stages": [
+      {
+        "recipes": [
+          {
+            "recipe_id": "p23-remaining-provider-imports",
+            "operations": [
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+                "rationale": "",
+                "import_source": "from agent_comms.display_sources import SentClocks"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+                "rationale": "",
+                "import_source": "from agent_comms.display_sources import ActivitySource"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+                "rationale": "",
+                "import_source": "from agent_comms.display_sources import ChannelOrderSource"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+                "rationale": "",
+                "import_source": "from agent_comms.display_sources import ChannelSortView, SortedChannel, StoredThreadOrder"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+                "rationale": "",
+                "import_source": "from agent_comms.display_sources import ChannelSortView"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py",
+                "rationale": "",
+                "import_source": "from agent_comms.messaging.published_bus import BusResources"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+                "rationale": "",
+                "import_source": "from agent_comms.relationships import RelationshipSource"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+                "rationale": "",
+                "import_source": "from agent_comms.goal_work import GoalFailureOwner"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+                "rationale": "",
+                "import_source": "from agent_comms.goal_work import GoalAssignment, GoalAssignments"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+                "rationale": "",
+                "import_source": "from agent_comms.planning.goal_attempt_phase import GoalAttemptTransition"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+                "rationale": "",
+                "import_source": "from agent_comms.planning.goal_failure_observation import GenerationFailureSource"
+              }
+            ],
+            "architecture_guards": [],
+            "reason": "P23 admitted actual-provider membership from the retained 18-provider source map. Replace structural contracts by state-free nominal ABCs, preserving original fields and provider bodies. Delete RelationshipBusSource in favor of existing BusResources; leave the original catalog contract and its provider pair unchanged behind the retained native extraction refusal. Delete the overpromising GoalAssignmentOrder: Todo owns zero-or-one instructions selected through its original Pending capability, and the goal joins those in original todo order. FoldedProblemOrder stays unchanged. These exact authored patches establish source changes, not metaclass/import/behavior equivalence. The original guarded/local imports and cold initialization obligations are recorded separately; no apply or execution proof is claimed.",
+            "authority_claims": []
+          }
+        ],
+        "architecture_guards": []
+      },
+      {
+        "recipes": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "operations": [
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "\"\"\"The source operations display choices consume, independent of their services.\"\"\"\n\nfrom collections.abc import Iterable, Mapping\nfrom contextlib import AbstractContextManager\nfrom typing import Protocol, Self\n\n\nclass SentClocks(Protocol):\n    @property\n    def sent(self) -> Mapping[str, float]: ...\n\n\nclass ActivitySource(Protocol):\n    def opened_activity(self) -> AbstractContextManager[SentClocks]: ...\n\n\nclass SentHistorySource[Registry](Protocol):\n    @property\n    def bus(self) -> ActivitySource: ...\n\n    def last_sent_timestamps(\n        self, rows: Iterable[tuple[str, float]], *, registry: Registry,\n    ) -> dict[str, float]: ...\n\n\nclass StoredThreadOrder[Order](Protocol):\n    @property\n    def order(self) -> Order: ...\n\n\nclass ChannelOrderSource[ThreadOrder, ChannelOrder](Protocol):\n    def set_channel_sort(self, name: str, order: ThreadOrder) -> StoredThreadOrder[ThreadOrder]: ...\n\n    def set_channel_order(self, order: ChannelOrder) -> ChannelOrder: ...\n\n\nclass SortedChannel[View, Order](Protocol):\n    @property\n    def name(self) -> str: ...\n\n    @property\n    def created_at(self) -> float: ...\n\n    def sort_key(self, order: Order, view: View) -> tuple[int, int, float, float, str]: ...\n\n\nclass ChannelSortView[Order](Protocol):\n    @property\n    def channel(self) -> SortedChannel[Self, Order]: ...\n\n    @property\n    def last_activity(self) -> float: ...\n\n    @property\n    def last_user_input(self) -> float: ...\n",
+                    "new_source": "\"\"\"The source operations display choices consume, independent of their services.\"\"\"\n\nfrom abc import ABC, abstractmethod\nfrom collections.abc import Iterable, Mapping\nfrom contextlib import AbstractContextManager\nfrom typing import Self\n\n\nclass SentClocks(ABC):\n    __slots__ = ()\n    sent: Mapping[str, float]\n\n\nclass ActivitySource(ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def opened_activity(self) -> AbstractContextManager[SentClocks]: ...\n\n\nclass SentHistorySource[Registry](ABC):\n    __slots__ = ()\n    bus: ActivitySource\n\n    @abstractmethod\n    def last_sent_timestamps(\n        self, rows: Iterable[tuple[str, float]], *, registry: Registry,\n    ) -> dict[str, float]: ...\n\n\nclass StoredThreadOrder[Order](ABC):\n    __slots__ = ()\n    order: Order\n\n\nclass ChannelOrderSource[ThreadOrder, ChannelOrder](ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def set_channel_sort(self, name: str, order: ThreadOrder) -> StoredThreadOrder[ThreadOrder]: ...\n\n    @abstractmethod\n    def set_channel_order(self, order: ChannelOrder) -> ChannelOrder: ...\n\n\nclass SortedChannel[View, Order](ABC):\n    __slots__ = ()\n    name: str\n    created_at: float\n\n    @abstractmethod\n    def sort_key(self, order: Order, view: View) -> tuple[int, int, float, float, str]: ...\n\n\nclass ChannelSortView[Order](ABC):\n    __slots__ = ()\n    channel: SortedChannel[Self, Order]\n    last_activity: float\n    last_user_input: float\n"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/display_sources.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "\"\"\"The assignment read surface consumed by a goal, without a dependency on its stores.\"\"\"\n\nfrom abc import ABC, abstractmethod\nfrom typing import Protocol, Self\n\nfrom agent_comms.execution.child_process import ProcessState\nfrom agent_comms.nominal.field_codec import GoalId\nfrom agent_comms.projects.checkouts import Checkout\nfrom agent_comms.registry.thread_identity import ObservedTurn\nfrom agent_comms.registry.thread_identity import ThreadIncarnation\n\n\nclass GoalObservation(Protocol):\n    @property\n    def captured(self) -> object: ...\n\n    def accepts_observation(self, goal_id: GoalId, minimum_revision: int) -> bool: ...\n\n\nclass GoalOwner(Protocol):\n    @property\n    def name(self) -> str: ...\n\n    @property\n    def incarnation(self) -> ThreadIncarnation: ...\n\n    @property\n    def goal(self) -> GoalObservation: ...\n\n    def require_goal_assignment(self, actor: ThreadIncarnation) -> None: ...\n\n\nclass GoalFailureOwner(GoalOwner, Protocol):\n    @property\n    def worktree(self) -> Checkout: ...\n\n    @property\n    def process_identity(self) -> ProcessState: ...\n\n    def observed_turn(self, claim_scope: int) -> ObservedTurn: ...\n\n\nclass GoalAssignmentOrder[Assignment](Protocol):\n    def instructions(self, assignment: Assignment) -> str: ...\n\n\nclass GoalAssignment(Protocol):\n    @property\n    def order(self) -> GoalAssignmentOrder[Self]: ...\n\n    @property\n    def pending(self) -> bool: ...\n\n    def progress_line(self) -> str: ...\n\n\nclass GoalAssignments(Protocol):\n    def for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]: ...\n\n    def closed_for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]: ...\n\n    def holds_pending(self, owner: ThreadIncarnation) -> bool: ...\n\n\nclass GoalWorkSource(ABC):\n    @property\n    @abstractmethod\n    def todos(self) -> GoalAssignments: ...\n",
+                    "new_source": "\"\"\"The assignment read surface consumed by a goal, without a dependency on its stores.\"\"\"\n\nfrom abc import ABC, abstractmethod\n\nfrom agent_comms.execution.child_process import ProcessState\nfrom agent_comms.nominal.field_codec import GoalId\nfrom agent_comms.projects.checkouts import Checkout\nfrom agent_comms.registry.thread_identity import ObservedTurn, ThreadIncarnation\n\n\nclass GoalObservation(ABC):\n    __slots__ = ()\n\n    @property\n    @abstractmethod\n    def captured(self) -> object: ...\n\n    @abstractmethod\n    def accepts_observation(self, goal_id: GoalId, minimum_revision: int) -> bool: ...\n\n\nclass GoalOwner(ABC):\n    __slots__ = ()\n    name: str\n    goal: GoalObservation\n\n    @property\n    @abstractmethod\n    def incarnation(self) -> ThreadIncarnation: ...\n\n    @abstractmethod\n    def require_goal_assignment(self, actor: ThreadIncarnation) -> None: ...\n\n\nclass GoalFailureOwner(GoalOwner):\n    __slots__ = ()\n    worktree: Checkout\n    process_identity: ProcessState\n\n    @abstractmethod\n    def observed_turn(self, claim_scope: int) -> ObservedTurn: ...\n\n\nclass GoalAssignment(ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def goal_instructions(self) -> tuple[str, ...]: ...\n\n    @abstractmethod\n    def progress_line(self) -> str: ...\n\n\nclass GoalAssignments(ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]: ...\n\n    @abstractmethod\n    def closed_for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]: ...\n\n    @abstractmethod\n    def holds_pending(self, owner: ThreadIncarnation) -> bool: ...\n\n\nclass GoalWorkSource(ABC):\n    @property\n    @abstractmethod\n    def todos(self) -> GoalAssignments: ...\n"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_work.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "from typing import ClassVar, Protocol",
+                    "new_source": "from typing import ClassVar"
+                  },
+                  {
+                    "old_source": "class GoalAttemptTransition(Protocol):\n    def advance(\n        self, conn: Connection, phase: GoalAttemptPhase, *,\n        progress_witness: str | None = ..., resolution: AttemptResolution = ...,\n    ) -> None: ...",
+                    "new_source": "class GoalAttemptTransition(ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def advance(\n        self, conn: Connection, phase: GoalAttemptPhase, *,\n        progress_witness: str | None = ..., resolution: AttemptResolution = ...,\n    ) -> None: ..."
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempt_phase.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "from typing import Protocol\n",
+                    "new_source": ""
+                  },
+                  {
+                    "old_source": "class GenerationFailureSource[Failure](Protocol):\n    def failure_evidence(self, conn: Connection) -> GoalFailureEvidence[Failure]: ...",
+                    "new_source": "class GenerationFailureSource[Failure](ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def failure_evidence(self, conn: Connection) -> GoalFailureEvidence[Failure]: ..."
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_failure_observation.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "class ActivityClocks:",
+                    "new_source": "class ActivityClocks(SentClocks):"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "class BusResources:",
+                    "new_source": "class BusResources(ActivitySource):"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "class ChannelManagement:",
+                    "new_source": "class ChannelManagement(ChannelOrderSource[type[ThreadSort], type[ChannelSort]]):"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "from agent_comms.display_order import CreatedThreadSort, ThreadSort",
+                    "new_source": "from agent_comms.display_order import ChannelSort, CreatedThreadSort, ThreadSort"
+                  },
+                  {
+                    "old_source": "class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, affix=\"Channel\"):",
+                    "new_source": "class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, StoredThreadOrder[type[ThreadSort]], SortedChannel[ChannelSortView[type[ChannelSort]], type[ChannelSort]], affix=\"Channel\"):"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "class ChannelView(ToolResult):",
+                    "new_source": "class ChannelView(ToolResult, ChannelSortView[type[ChannelSort]]):"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "from agent_comms.bus import BusReader\n",
+                    "new_source": ""
+                  },
+                  {
+                    "old_source": "from agent_comms.display_sources import ActivitySource, SentHistorySource",
+                    "new_source": "from agent_comms.display_sources import SentHistorySource"
+                  },
+                  {
+                    "old_source": "class RelationshipBusSource(ActivitySource, Protocol):\n    @property\n    def bus(self) -> BusReader: ...\n\n\n",
+                    "new_source": ""
+                  },
+                  {
+                    "old_source": "class RelationshipSource(SentHistorySource[RegistrySnapshot], Protocol):\n    @property\n    def root(self) -> Path: ...\n\n    @property\n    def registry(self) -> Registration: ...\n\n    @property\n    def bus(self) -> RelationshipBusSource: ...\n\n    @property\n    def channels(self) -> RelationshipCatalogSource: ...\n\n    def revision(self) -> presentation.WireRevision: ...\n\n    def thread_views(\n        self, visibility: RosterVisibility,\n    ) -> tuple[presentation.ThreadView, ...]: ...",
+                    "new_source": "class RelationshipSource(SentHistorySource[RegistrySnapshot]):\n    __slots__ = ()\n    root: Path\n    registry: Registration\n    bus: BusResources\n    channels: RelationshipCatalogSource\n\n    @abstractmethod\n    def revision(self) -> presentation.WireRevision: ...\n\n    @abstractmethod\n    def thread_views(\n        self, visibility: RosterVisibility,\n    ) -> tuple[presentation.ThreadView, ...]: ..."
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "class HistoryViews:",
+                    "new_source": "class HistoryViews(RelationshipSource):"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "CatalogSelection, DeclaredFamily, TaskOwner,",
+                    "new_source": "CatalogSelection, DeclaredFamily, TaskOwner, GoalFailureOwner,"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "from typing import TYPE_CHECKING, Annotated, ClassVar, Literal",
+                    "new_source": "from typing import Annotated, ClassVar, Literal"
+                  },
+                  {
+                    "old_source": "from agent_comms.goal_work import GoalAssignment, GoalOwner, GoalWorkSource",
+                    "new_source": "from agent_comms.goal_work import GoalAssignment, GoalObservation, GoalOwner, GoalWorkSource"
+                  },
+                  {
+                    "old_source": "RegistrationInheritance[\"GoalDeclaration\"],\n",
+                    "new_source": "RegistrationInheritance[\"GoalDeclaration\"], GoalObservation,\n"
+                  },
+                  {
+                    "old_source": "return \"\\n\\n\".join(todo.order.instructions(todo) for todo in todos if todo.pending)",
+                    "new_source": "return \"\\n\\n\".join(text for todo in todos for text in todo.goal_instructions())"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goals.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "class Todo(TodoStoreRows, TypedTable):",
+                    "new_source": "class Todo(TodoStoreRows, TypedTable, GoalAssignment):"
+                  },
+                  {
+                    "old_source": "class TodoStore(OwnerRequestStore, TodoHistory):",
+                    "new_source": "class TodoStore(OwnerRequestStore, TodoHistory, GoalAssignments):"
+                  },
+                  {
+                    "old_source": "    def progress_line(self) -> str:\n",
+                    "new_source": "    def goal_instructions(self) -> tuple[str, ...]:\n        \"\"\"The original pending order contributes one instruction, every other order none.\"\"\"\n        return tuple(item.order.instructions(item)\n                     for item in self.order.items_with(Pending, self))\n\n    def progress_line(self) -> str:\n"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "class Generation(GoalLedgerTable, TypedTable, GoalGenerationRead):",
+                    "new_source": "class Generation(GoalLedgerTable, TypedTable, GoalGenerationRead, GenerationFailureSource[\"FailedTurnEvidence\"]):"
+                  },
+                  {
+                    "old_source": "class AttemptRecord(GoalLedgerTable, TypedTable):",
+                    "new_source": "class AttemptRecord(GoalLedgerTable, TypedTable, GoalAttemptTransition):"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+                "rationale": ""
+              }
+            ],
+            "architecture_guards": [],
+            "reason": "P23 admitted actual-provider membership from the retained 18-provider source map. Replace structural contracts by state-free nominal ABCs, preserving original fields and provider bodies. Delete RelationshipBusSource in favor of existing BusResources; leave the original catalog contract and its provider pair unchanged behind the retained native extraction refusal. Delete the overpromising GoalAssignmentOrder: Todo owns zero-or-one instructions selected through its original Pending capability, and the goal joins those in original todo order. FoldedProblemOrder stays unchanged. These exact authored patches establish source changes, not metaclass/import/behavior equivalence. The original guarded/local imports and cold initialization obligations are recorded separately; no apply or execution proof is claimed.",
+            "authority_claims": []
+          }
+        ],
+        "architecture_guards": []
+      }
+    ]
+  },
+  "stage_count": 2,
+  "stages": [
+    {
+      "simulation": {
+        "rewrites": [
+          {
+            "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-imports",
+                "plan_item_declaration": "EnsureImportOperation",
+                "plan_item_index": 0,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+                "line": 9,
+                "end_line": 8,
+                "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+              }
+            ],
+            "qualname": "agent_comms.activity_clocks",
+            "line": 1,
+            "end_line": 64,
+            "target_id": "c2ee6b7e49",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-imports",
+                "plan_item_declaration": "EnsureImportOperation",
+                "plan_item_index": 2,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+                "line": 12,
+                "end_line": 11,
+                "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+              }
+            ],
+            "qualname": "agent_comms.channel_management",
+            "line": 1,
+            "end_line": 306,
+            "target_id": "cd89e68b33",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-imports",
+                "plan_item_declaration": "EnsureImportOperation",
+                "plan_item_index": 9,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+                "line": 21,
+                "end_line": 21,
+                "source_hash": "673c4824bc7bf64c2d83b08428b0b412"
+              },
+              {
+                "recipe_id": "p23-remaining-provider-imports",
+                "plan_item_declaration": "EnsureImportOperation",
+                "plan_item_index": 10,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+                "line": 21,
+                "end_line": 21,
+                "source_hash": "673c4824bc7bf64c2d83b08428b0b412"
+              },
+              {
+                "recipe_id": "p23-remaining-provider-imports",
+                "plan_item_declaration": "EnsureImportOperation",
+                "plan_item_index": 9,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+                "line": 24,
+                "end_line": 24,
+                "source_hash": "59b6951c75f303e178b1a4f85e1b9652"
+              },
+              {
+                "recipe_id": "p23-remaining-provider-imports",
+                "plan_item_declaration": "EnsureImportOperation",
+                "plan_item_index": 10,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+                "line": 24,
+                "end_line": 24,
+                "source_hash": "59b6951c75f303e178b1a4f85e1b9652"
+              }
+            ],
+            "qualname": "agent_comms.goal_ledger",
+            "line": 1,
+            "end_line": 583,
+            "target_id": "6d33bcbea8",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-imports",
+                "plan_item_declaration": "EnsureImportOperation",
+                "plan_item_index": 6,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+                "line": 86,
+                "end_line": 85,
+                "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+              }
+            ],
+            "qualname": "agent_comms.history_views",
+            "line": 1,
+            "end_line": 544,
+            "target_id": "8131adedc7",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-imports",
+                "plan_item_declaration": "EnsureImportOperation",
+                "plan_item_index": 3,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+                "line": 12,
+                "end_line": 11,
+                "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+              }
+            ],
+            "qualname": "agent_comms.messaging.channels",
+            "line": 1,
+            "end_line": 430,
+            "target_id": "c29186a1ab",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-imports",
+                "plan_item_declaration": "EnsureImportOperation",
+                "plan_item_index": 1,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+                "line": 14,
+                "end_line": 13,
+                "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+              }
+            ],
+            "qualname": "agent_comms.messaging.published_bus",
+            "line": 1,
+            "end_line": 52,
+            "target_id": "c498c9e463",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-imports",
+                "plan_item_declaration": "EnsureImportOperation",
+                "plan_item_index": 8,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+                "line": 54,
+                "end_line": 53,
+                "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+              }
+            ],
+            "qualname": "agent_comms.planning.orders",
+            "line": 1,
+            "end_line": 6444,
+            "target_id": "65cf5be014",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-imports",
+                "plan_item_declaration": "EnsureImportOperation",
+                "plan_item_index": 4,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+                "line": 32,
+                "end_line": 31,
+                "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+              }
+            ],
+            "qualname": "agent_comms.presentation",
+            "line": 1,
+            "end_line": 678,
+            "target_id": "2ce628b0c3",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-imports",
+                "plan_item_declaration": "EnsureImportOperation",
+                "plan_item_index": 7,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+                "line": 28,
+                "end_line": 27,
+                "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+              }
+            ],
+            "qualname": "agent_comms.registry.threads",
+            "line": 1,
+            "end_line": 967,
+            "target_id": "d3b0d74ccd",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-imports",
+                "plan_item_declaration": "EnsureImportOperation",
+                "plan_item_index": 5,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py",
+                "line": 27,
+                "end_line": 26,
+                "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+              }
+            ],
+            "qualname": "agent_comms.relationships",
+            "line": 1,
+            "end_line": 959,
+            "target_id": "9f36e3c527",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py",
+            "operation": "replace_target"
+          }
+        ],
+        "parse_validation": {
+          "backend": "ast_span",
+          "validated_file_paths": [
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py"
+          ],
+          "parse_valid": true
+        },
+        "base_revisions": [
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+            "source_hash": "336802ab34221e9a09f851ecba8b7f42"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus.py",
+            "source_hash": "068b6a8d05fb7f0ad1c566a425ef5193"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus_activity_index.py",
+            "source_hash": "11a114cfd03de39af55428d437f36c77"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/catalog_document.py",
+            "source_hash": "794d249f78980d8e8a3cd2fc3416175f"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/catalog_store.py",
+            "source_hash": "46da9df16bfc6d921122ce4942c7e4b2"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+            "source_hash": "83107c8d062852462d7a1df57f2b695f"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/class_fact.py",
+            "source_hash": "888c663cb6739f49d123240f260ef165"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/context_owner.py",
+            "source_hash": "a5123f3b942022e747b468f139851f38"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/display_order.py",
+            "source_hash": "8566321859860bb024504fe64c45bb0d"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/display_sources.py",
+            "source_hash": "1dac1ef9ea1d658e469b027a84766c01"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/execution/turn_context.py",
+            "source_hash": "20e6b3f2b7f65b67065c2c13704e8bfc"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+            "source_hash": "4bd8b15845b7a0333026a66d70599601"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_mutation.py",
+            "source_hash": "3ee2894d4baa60dce93c0cd1f7c9b859"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_work.py",
+            "source_hash": "5a97b6e1929ba769add28607a79bf39d"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+            "source_hash": "b6d5b65985d4fa043798f11d404b2bd3"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_attempt.py",
+            "source_hash": "c0b26ca2601ce3e5bc27022e8e190424"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_origin.py",
+            "source_hash": "2f6eddb94891d8998bd3826b98bb1dab"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/lifecycle_capability.py",
+            "source_hash": "4ea9999f8a14745b7a1a07114e87182a"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+            "source_hash": "f532623a8002fc58b9eda1cccda45e04"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/message_bus.py",
+            "source_hash": "ddb8638c91537842970fe223a4e80bc8"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/messages.py",
+            "source_hash": "5075ac64b90bfa6024b3da34d10ac219"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+            "source_hash": "3f88dd5b19a38aa16a23b3765a9dd5be"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/nominal/declared_family.py",
+            "source_hash": "d70c1165441e07d0fdb560e6d25a62a4"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/order_story.py",
+            "source_hash": "3b148ac96c290591fc91a8832b04c298"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempt_phase.py",
+            "source_hash": "d2c2ee64559f138dbe4cb1af9424e751"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempts.py",
+            "source_hash": "731a020a60a46631297dd16897e2e7ee"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_failure_observation.py",
+            "source_hash": "8c720d990bee032547d32f3b2d7406ef"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_generation.py",
+            "source_hash": "d8c7127b319b087af959af413847e047"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_management.py",
+            "source_hash": "81fc3d373ac81cc6e3499c7768428c11"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_records.py",
+            "source_hash": "33fce76e477a8eb4ede637960c21f9f0"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_states.py",
+            "source_hash": "3b98321d1aa5907f0938a4f3d27b7b77"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goals.py",
+            "source_hash": "1324e38390d31e47e763e3a0ed63a85c"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+            "source_hash": "1d08b07d5f0dc29e78465c259ba3cf30"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+            "source_hash": "f33accb247db6affeafade41d84b7740"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registration.py",
+            "source_hash": "9bdb49e2f807c931d6cb5d01a97edcdd"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_document.py",
+            "source_hash": "29417245c7874432d62e52e909192179"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_creation.py",
+            "source_hash": "b7b68d1e16e442dd5123332cbe6dc6f7"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_identity.py",
+            "source_hash": "3d0aff76f0bebb1bc7d247da360b16b3"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_management.py",
+            "source_hash": "518681c89a31a705fc02e9c8aea85691"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+            "source_hash": "afa768bab7a6f49ef1ef8c2c1f2a887f"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry_provenance.py",
+            "source_hash": "91335bea8f2676b37426828bddb865a1"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py",
+            "source_hash": "6a6567c8142e7d8700a271340c2cc7ed"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/retained_task_facts.py",
+            "source_hash": "34bface507f27dd68d14b3ee12a5ac51"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/storage/typed_table.py",
+            "source_hash": "ea51bbba05d70ec1d96df787b122a71d"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/task_owner.py",
+            "source_hash": "c286c37210b1063697e9786b11b6d7fe"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/task_sources.py",
+            "source_hash": "c85a3969133eaa66fa3ad8b8d9a6903d"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/thread_identity_source.py",
+            "source_hash": "857773b1f7f68cbff6db70b7fce63d67"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/tool_result.py",
+            "source_hash": "80acd8313f20f9053aa79d42e571b115"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/tests/test_goal_runtime_annotations.py",
+            "source_hash": "3f2e289b566f3ee281692b51318e8a82"
+          }
+        ],
+        "deleted_file_paths": [],
+        "applied_rewrite_count": 10,
+        "changed_file_paths": [
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py"
+        ]
+      },
+      "architecture_guard_report": {
+        "rules": [],
+        "violations": [],
+        "is_clean": true,
+        "violation_count": 0
+      },
+      "preflight_report": {
+        "reports": [],
+        "is_clean": true,
+        "preflight_failed": false,
+        "report_count": 0
+      },
+      "document": {
+        "recipes": [
+          {
+            "recipe_id": "p23-remaining-provider-imports",
+            "operations": [
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+                "rationale": "",
+                "import_source": "from agent_comms.display_sources import SentClocks"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+                "rationale": "",
+                "import_source": "from agent_comms.display_sources import ActivitySource"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+                "rationale": "",
+                "import_source": "from agent_comms.display_sources import ChannelOrderSource"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+                "rationale": "",
+                "import_source": "from agent_comms.display_sources import ChannelSortView, SortedChannel, StoredThreadOrder"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+                "rationale": "",
+                "import_source": "from agent_comms.display_sources import ChannelSortView"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py",
+                "rationale": "",
+                "import_source": "from agent_comms.messaging.published_bus import BusResources"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+                "rationale": "",
+                "import_source": "from agent_comms.relationships import RelationshipSource"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+                "rationale": "",
+                "import_source": "from agent_comms.goal_work import GoalFailureOwner"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+                "rationale": "",
+                "import_source": "from agent_comms.goal_work import GoalAssignment, GoalAssignments"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+                "rationale": "",
+                "import_source": "from agent_comms.planning.goal_attempt_phase import GoalAttemptTransition"
+              },
+              {
+                "operation": "ensure_import",
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+                "rationale": "",
+                "import_source": "from agent_comms.planning.goal_failure_observation import GenerationFailureSource"
+              }
+            ],
+            "architecture_guards": [],
+            "reason": "P23 admitted actual-provider membership from the retained 18-provider source map. Replace structural contracts by state-free nominal ABCs, preserving original fields and provider bodies. Delete RelationshipBusSource in favor of existing BusResources; leave the original catalog contract and its provider pair unchanged behind the retained native extraction refusal. Delete the overpromising GoalAssignmentOrder: Todo owns zero-or-one instructions selected through its original Pending capability, and the goal joins those in original todo order. FoldedProblemOrder stays unchanged. These exact authored patches establish source changes, not metaclass/import/behavior equivalence. The original guarded/local imports and cold initialization obligations are recorded separately; no apply or execution proof is claimed.",
+            "authority_claims": []
+          }
+        ],
+        "architecture_guards": []
+      },
+      "is_clean": true
+    },
+    {
+      "simulation": {
+        "rewrites": [
+          {
+            "rationale": "Patch exact source text inside 'agent_comms.activity_clocks'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+                "plan_item_declaration": "PatchTargetOperation",
+                "plan_item_index": 4,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+                "line": 62,
+                "end_line": 62,
+                "source_hash": "a280052a1be0711033e3dff7d6b64ab9"
+              }
+            ],
+            "qualname": "ActivityClocks",
+            "line": 62,
+            "end_line": 64,
+            "target_id": "2cf8d0eccb",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Patch exact source text inside 'agent_comms.channel_management'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+                "plan_item_declaration": "PatchTargetOperation",
+                "plan_item_index": 6,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+                "line": 158,
+                "end_line": 158,
+                "source_hash": "887801f12d73ca8c3f51880461813a32"
+              }
+            ],
+            "qualname": "ChannelManagement",
+            "line": 158,
+            "end_line": 307,
+            "target_id": "754aa094a9",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Patch exact source text inside 'agent_comms.display_sources'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+                "plan_item_declaration": "PatchTargetOperation",
+                "plan_item_index": 0,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/display_sources.py",
+                "line": 3,
+                "end_line": 55,
+                "source_hash": "30901fa9773435b0cfeab7950a581044"
+              }
+            ],
+            "qualname": "agent_comms.display_sources",
+            "line": 1,
+            "end_line": 55,
+            "target_id": "a6435ae740",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/display_sources.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Patch exact source text inside 'agent_comms.goal_ledger'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+                "plan_item_declaration": "PatchTargetOperation",
+                "plan_item_index": 14,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+                "line": 140,
+                "end_line": 298,
+                "source_hash": "15765f98983a7d0904d3694c1da268fa"
+              }
+            ],
+            "qualname": "agent_comms.goal_ledger",
+            "line": 1,
+            "end_line": 583,
+            "target_id": "6d33bcbea8",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Patch exact source text inside 'agent_comms.goal_work'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+                "plan_item_declaration": "PatchTargetOperation",
+                "plan_item_index": 1,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_work.py",
+                "line": 4,
+                "end_line": 61,
+                "source_hash": "238db898f1d5e908df6af09c7bd50b6f"
+              }
+            ],
+            "qualname": "agent_comms.goal_work",
+            "line": 1,
+            "end_line": 68,
+            "target_id": "d3062ab57e",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_work.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Patch exact source text inside 'agent_comms.history_views'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+                "plan_item_declaration": "PatchTargetOperation",
+                "plan_item_index": 10,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+                "line": 196,
+                "end_line": 196,
+                "source_hash": "c564d02bfb63c4d61be7a5656961dc01"
+              }
+            ],
+            "qualname": "HistoryViews",
+            "line": 196,
+            "end_line": 545,
+            "target_id": "6304b3a835",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Patch exact source text inside 'agent_comms.messaging.channels'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+                "plan_item_declaration": "PatchTargetOperation",
+                "plan_item_index": 7,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+                "line": 15,
+                "end_line": 59,
+                "source_hash": "b3b9c9a9e3f122854adad153e39c457c"
+              }
+            ],
+            "qualname": "agent_comms.messaging.channels",
+            "line": 1,
+            "end_line": 431,
+            "target_id": "658f9e24cb",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Patch exact source text inside 'agent_comms.messaging.published_bus'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+                "plan_item_declaration": "PatchTargetOperation",
+                "plan_item_index": 5,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+                "line": 20,
+                "end_line": 20,
+                "source_hash": "dd364b3e0db849a1b858e44be8a416a2"
+              }
+            ],
+            "qualname": "BusResources",
+            "line": 20,
+            "end_line": 29,
+            "target_id": "7e6d7ac924",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Patch exact source text inside 'agent_comms.planning.goal_attempt_phase'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+                "plan_item_declaration": "PatchTargetOperation",
+                "plan_item_index": 2,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempt_phase.py",
+                "line": 6,
+                "end_line": 15,
+                "source_hash": "2bdbe858ee46d5852424209a6d2e9c30"
+              }
+            ],
+            "qualname": "agent_comms.planning.goal_attempt_phase",
+            "line": 1,
+            "end_line": 81,
+            "target_id": "0b9033e18f",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempt_phase.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Patch exact source text inside 'agent_comms.planning.goal_failure_observation'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+                "plan_item_declaration": "PatchTargetOperation",
+                "plan_item_index": 3,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_failure_observation.py",
+                "line": 7,
+                "end_line": 23,
+                "source_hash": "da2ef2199a3b2085abf170aa76aefe20"
+              }
+            ],
+            "qualname": "agent_comms.planning.goal_failure_observation",
+            "line": 1,
+            "end_line": 24,
+            "target_id": "3f984838db",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_failure_observation.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Patch exact source text inside 'agent_comms.planning.goals'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+                "plan_item_declaration": "PatchTargetOperation",
+                "plan_item_index": 12,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goals.py",
+                "line": 11,
+                "end_line": 582,
+                "source_hash": "c36e581d4a0fd0edf0d6faab735aadc7"
+              }
+            ],
+            "qualname": "agent_comms.planning.goals",
+            "line": 1,
+            "end_line": 919,
+            "target_id": "ff470891b2",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goals.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Patch exact source text inside 'agent_comms.planning.orders'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+                "plan_item_declaration": "PatchTargetOperation",
+                "plan_item_index": 13,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+                "line": 5020,
+                "end_line": 5794,
+                "source_hash": "9ee7a35a3b534af1b4d2803683c7d2d9"
+              }
+            ],
+            "qualname": "agent_comms.planning.orders",
+            "line": 1,
+            "end_line": 6445,
+            "target_id": "e145c6fdcf",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Patch exact source text inside 'agent_comms.presentation'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+                "plan_item_declaration": "PatchTargetOperation",
+                "plan_item_index": 8,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+                "line": 255,
+                "end_line": 255,
+                "source_hash": "91ce891556a7ee6f82806767534e6136"
+              }
+            ],
+            "qualname": "ChannelView",
+            "line": 255,
+            "end_line": 299,
+            "target_id": "7b2ff42315",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Patch exact source text inside 'agent_comms.registry.threads'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+                "plan_item_declaration": "PatchTargetOperation",
+                "plan_item_index": 11,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+                "line": 328,
+                "end_line": 328,
+                "source_hash": "fd4a85f151768020e1751345274716db"
+              }
+            ],
+            "qualname": "Thread",
+            "line": 328,
+            "end_line": 803,
+            "target_id": "9631fcc9f9",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+            "operation": "replace_target"
+          },
+          {
+            "rationale": "Patch exact source text inside 'agent_comms.relationships'.",
+            "contributors": [
+              {
+                "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+                "plan_item_declaration": "PatchTargetOperation",
+                "plan_item_index": 9,
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py",
+                "line": 19,
+                "end_line": 746,
+                "source_hash": "484ed79325e27ab6359b194af77bcc2e"
+              }
+            ],
+            "qualname": "agent_comms.relationships",
+            "line": 1,
+            "end_line": 960,
+            "target_id": "bab011b1ef",
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py",
+            "operation": "replace_target"
+          }
+        ],
+        "parse_validation": {
+          "backend": "ast_span",
+          "validated_file_paths": [
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/display_sources.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_work.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempt_phase.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_failure_observation.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goals.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+            "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py"
+          ],
+          "parse_valid": true
+        },
+        "base_revisions": [
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+            "source_hash": "597f0fa888816c9146c7ce3058b13fa5"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus.py",
+            "source_hash": "068b6a8d05fb7f0ad1c566a425ef5193"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus_activity_index.py",
+            "source_hash": "11a114cfd03de39af55428d437f36c77"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/catalog_document.py",
+            "source_hash": "794d249f78980d8e8a3cd2fc3416175f"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/catalog_store.py",
+            "source_hash": "46da9df16bfc6d921122ce4942c7e4b2"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+            "source_hash": "50ed701aee508d6729a2aeb7c1584db9"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/class_fact.py",
+            "source_hash": "888c663cb6739f49d123240f260ef165"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/context_owner.py",
+            "source_hash": "a5123f3b942022e747b468f139851f38"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/display_order.py",
+            "source_hash": "8566321859860bb024504fe64c45bb0d"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/display_sources.py",
+            "source_hash": "1dac1ef9ea1d658e469b027a84766c01"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/execution/turn_context.py",
+            "source_hash": "20e6b3f2b7f65b67065c2c13704e8bfc"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+            "source_hash": "f2c8d592e1e4df2044da4dfe34cd027c"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_mutation.py",
+            "source_hash": "3ee2894d4baa60dce93c0cd1f7c9b859"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_work.py",
+            "source_hash": "5a97b6e1929ba769add28607a79bf39d"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+            "source_hash": "26d264675d3936a3a701e6d6c4a76e0f"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_attempt.py",
+            "source_hash": "c0b26ca2601ce3e5bc27022e8e190424"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_origin.py",
+            "source_hash": "2f6eddb94891d8998bd3826b98bb1dab"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/lifecycle_capability.py",
+            "source_hash": "4ea9999f8a14745b7a1a07114e87182a"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+            "source_hash": "c330444b8626adc44ba881050952ed89"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/message_bus.py",
+            "source_hash": "ddb8638c91537842970fe223a4e80bc8"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/messages.py",
+            "source_hash": "5075ac64b90bfa6024b3da34d10ac219"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+            "source_hash": "392886dc2fc26058afa4eddea8ab7009"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/nominal/declared_family.py",
+            "source_hash": "d70c1165441e07d0fdb560e6d25a62a4"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/order_story.py",
+            "source_hash": "3b148ac96c290591fc91a8832b04c298"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempt_phase.py",
+            "source_hash": "d2c2ee64559f138dbe4cb1af9424e751"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempts.py",
+            "source_hash": "731a020a60a46631297dd16897e2e7ee"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_failure_observation.py",
+            "source_hash": "8c720d990bee032547d32f3b2d7406ef"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_generation.py",
+            "source_hash": "d8c7127b319b087af959af413847e047"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_management.py",
+            "source_hash": "81fc3d373ac81cc6e3499c7768428c11"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_records.py",
+            "source_hash": "33fce76e477a8eb4ede637960c21f9f0"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_states.py",
+            "source_hash": "3b98321d1aa5907f0938a4f3d27b7b77"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goals.py",
+            "source_hash": "1324e38390d31e47e763e3a0ed63a85c"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+            "source_hash": "cb159c53b3598deb70966b088d24dbef"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+            "source_hash": "b62ae182a4de2e68d9f7d3ba998d9601"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registration.py",
+            "source_hash": "9bdb49e2f807c931d6cb5d01a97edcdd"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_document.py",
+            "source_hash": "29417245c7874432d62e52e909192179"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_creation.py",
+            "source_hash": "b7b68d1e16e442dd5123332cbe6dc6f7"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_identity.py",
+            "source_hash": "3d0aff76f0bebb1bc7d247da360b16b3"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_management.py",
+            "source_hash": "518681c89a31a705fc02e9c8aea85691"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+            "source_hash": "6d86fa6e245ab7aaa11c5e5f2279f710"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry_provenance.py",
+            "source_hash": "91335bea8f2676b37426828bddb865a1"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py",
+            "source_hash": "94aa59da02de2e3201c9428d4ec8c373"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/retained_task_facts.py",
+            "source_hash": "34bface507f27dd68d14b3ee12a5ac51"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/storage/typed_table.py",
+            "source_hash": "ea51bbba05d70ec1d96df787b122a71d"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/task_owner.py",
+            "source_hash": "c286c37210b1063697e9786b11b6d7fe"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/task_sources.py",
+            "source_hash": "c85a3969133eaa66fa3ad8b8d9a6903d"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/thread_identity_source.py",
+            "source_hash": "857773b1f7f68cbff6db70b7fce63d67"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/tool_result.py",
+            "source_hash": "80acd8313f20f9053aa79d42e571b115"
+          },
+          {
+            "file_path": "/home/ts/wt/comms-friction--P17/tests/test_goal_runtime_annotations.py",
+            "source_hash": "3f2e289b566f3ee281692b51318e8a82"
+          }
+        ],
+        "deleted_file_paths": [],
+        "applied_rewrite_count": 15,
+        "changed_file_paths": [
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/display_sources.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_work.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempt_phase.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_failure_observation.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goals.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+          "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py"
+        ]
+      },
+      "architecture_guard_report": {
+        "rules": [],
+        "violations": [],
+        "is_clean": true,
+        "violation_count": 0
+      },
+      "preflight_report": {
+        "reports": [],
+        "is_clean": true,
+        "preflight_failed": false,
+        "report_count": 0
+      },
+      "document": {
+        "recipes": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "operations": [
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "\"\"\"The source operations display choices consume, independent of their services.\"\"\"\n\nfrom collections.abc import Iterable, Mapping\nfrom contextlib import AbstractContextManager\nfrom typing import Protocol, Self\n\n\nclass SentClocks(Protocol):\n    @property\n    def sent(self) -> Mapping[str, float]: ...\n\n\nclass ActivitySource(Protocol):\n    def opened_activity(self) -> AbstractContextManager[SentClocks]: ...\n\n\nclass SentHistorySource[Registry](Protocol):\n    @property\n    def bus(self) -> ActivitySource: ...\n\n    def last_sent_timestamps(\n        self, rows: Iterable[tuple[str, float]], *, registry: Registry,\n    ) -> dict[str, float]: ...\n\n\nclass StoredThreadOrder[Order](Protocol):\n    @property\n    def order(self) -> Order: ...\n\n\nclass ChannelOrderSource[ThreadOrder, ChannelOrder](Protocol):\n    def set_channel_sort(self, name: str, order: ThreadOrder) -> StoredThreadOrder[ThreadOrder]: ...\n\n    def set_channel_order(self, order: ChannelOrder) -> ChannelOrder: ...\n\n\nclass SortedChannel[View, Order](Protocol):\n    @property\n    def name(self) -> str: ...\n\n    @property\n    def created_at(self) -> float: ...\n\n    def sort_key(self, order: Order, view: View) -> tuple[int, int, float, float, str]: ...\n\n\nclass ChannelSortView[Order](Protocol):\n    @property\n    def channel(self) -> SortedChannel[Self, Order]: ...\n\n    @property\n    def last_activity(self) -> float: ...\n\n    @property\n    def last_user_input(self) -> float: ...\n",
+                    "new_source": "\"\"\"The source operations display choices consume, independent of their services.\"\"\"\n\nfrom abc import ABC, abstractmethod\nfrom collections.abc import Iterable, Mapping\nfrom contextlib import AbstractContextManager\nfrom typing import Self\n\n\nclass SentClocks(ABC):\n    __slots__ = ()\n    sent: Mapping[str, float]\n\n\nclass ActivitySource(ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def opened_activity(self) -> AbstractContextManager[SentClocks]: ...\n\n\nclass SentHistorySource[Registry](ABC):\n    __slots__ = ()\n    bus: ActivitySource\n\n    @abstractmethod\n    def last_sent_timestamps(\n        self, rows: Iterable[tuple[str, float]], *, registry: Registry,\n    ) -> dict[str, float]: ...\n\n\nclass StoredThreadOrder[Order](ABC):\n    __slots__ = ()\n    order: Order\n\n\nclass ChannelOrderSource[ThreadOrder, ChannelOrder](ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def set_channel_sort(self, name: str, order: ThreadOrder) -> StoredThreadOrder[ThreadOrder]: ...\n\n    @abstractmethod\n    def set_channel_order(self, order: ChannelOrder) -> ChannelOrder: ...\n\n\nclass SortedChannel[View, Order](ABC):\n    __slots__ = ()\n    name: str\n    created_at: float\n\n    @abstractmethod\n    def sort_key(self, order: Order, view: View) -> tuple[int, int, float, float, str]: ...\n\n\nclass ChannelSortView[Order](ABC):\n    __slots__ = ()\n    channel: SortedChannel[Self, Order]\n    last_activity: float\n    last_user_input: float\n"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/display_sources.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "\"\"\"The assignment read surface consumed by a goal, without a dependency on its stores.\"\"\"\n\nfrom abc import ABC, abstractmethod\nfrom typing import Protocol, Self\n\nfrom agent_comms.execution.child_process import ProcessState\nfrom agent_comms.nominal.field_codec import GoalId\nfrom agent_comms.projects.checkouts import Checkout\nfrom agent_comms.registry.thread_identity import ObservedTurn\nfrom agent_comms.registry.thread_identity import ThreadIncarnation\n\n\nclass GoalObservation(Protocol):\n    @property\n    def captured(self) -> object: ...\n\n    def accepts_observation(self, goal_id: GoalId, minimum_revision: int) -> bool: ...\n\n\nclass GoalOwner(Protocol):\n    @property\n    def name(self) -> str: ...\n\n    @property\n    def incarnation(self) -> ThreadIncarnation: ...\n\n    @property\n    def goal(self) -> GoalObservation: ...\n\n    def require_goal_assignment(self, actor: ThreadIncarnation) -> None: ...\n\n\nclass GoalFailureOwner(GoalOwner, Protocol):\n    @property\n    def worktree(self) -> Checkout: ...\n\n    @property\n    def process_identity(self) -> ProcessState: ...\n\n    def observed_turn(self, claim_scope: int) -> ObservedTurn: ...\n\n\nclass GoalAssignmentOrder[Assignment](Protocol):\n    def instructions(self, assignment: Assignment) -> str: ...\n\n\nclass GoalAssignment(Protocol):\n    @property\n    def order(self) -> GoalAssignmentOrder[Self]: ...\n\n    @property\n    def pending(self) -> bool: ...\n\n    def progress_line(self) -> str: ...\n\n\nclass GoalAssignments(Protocol):\n    def for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]: ...\n\n    def closed_for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]: ...\n\n    def holds_pending(self, owner: ThreadIncarnation) -> bool: ...\n\n\nclass GoalWorkSource(ABC):\n    @property\n    @abstractmethod\n    def todos(self) -> GoalAssignments: ...\n",
+                    "new_source": "\"\"\"The assignment read surface consumed by a goal, without a dependency on its stores.\"\"\"\n\nfrom abc import ABC, abstractmethod\n\nfrom agent_comms.execution.child_process import ProcessState\nfrom agent_comms.nominal.field_codec import GoalId\nfrom agent_comms.projects.checkouts import Checkout\nfrom agent_comms.registry.thread_identity import ObservedTurn, ThreadIncarnation\n\n\nclass GoalObservation(ABC):\n    __slots__ = ()\n\n    @property\n    @abstractmethod\n    def captured(self) -> object: ...\n\n    @abstractmethod\n    def accepts_observation(self, goal_id: GoalId, minimum_revision: int) -> bool: ...\n\n\nclass GoalOwner(ABC):\n    __slots__ = ()\n    name: str\n    goal: GoalObservation\n\n    @property\n    @abstractmethod\n    def incarnation(self) -> ThreadIncarnation: ...\n\n    @abstractmethod\n    def require_goal_assignment(self, actor: ThreadIncarnation) -> None: ...\n\n\nclass GoalFailureOwner(GoalOwner):\n    __slots__ = ()\n    worktree: Checkout\n    process_identity: ProcessState\n\n    @abstractmethod\n    def observed_turn(self, claim_scope: int) -> ObservedTurn: ...\n\n\nclass GoalAssignment(ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def goal_instructions(self) -> tuple[str, ...]: ...\n\n    @abstractmethod\n    def progress_line(self) -> str: ...\n\n\nclass GoalAssignments(ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]: ...\n\n    @abstractmethod\n    def closed_for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]: ...\n\n    @abstractmethod\n    def holds_pending(self, owner: ThreadIncarnation) -> bool: ...\n\n\nclass GoalWorkSource(ABC):\n    @property\n    @abstractmethod\n    def todos(self) -> GoalAssignments: ...\n"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_work.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "from typing import ClassVar, Protocol",
+                    "new_source": "from typing import ClassVar"
+                  },
+                  {
+                    "old_source": "class GoalAttemptTransition(Protocol):\n    def advance(\n        self, conn: Connection, phase: GoalAttemptPhase, *,\n        progress_witness: str | None = ..., resolution: AttemptResolution = ...,\n    ) -> None: ...",
+                    "new_source": "class GoalAttemptTransition(ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def advance(\n        self, conn: Connection, phase: GoalAttemptPhase, *,\n        progress_witness: str | None = ..., resolution: AttemptResolution = ...,\n    ) -> None: ..."
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempt_phase.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "from typing import Protocol\n",
+                    "new_source": ""
+                  },
+                  {
+                    "old_source": "class GenerationFailureSource[Failure](Protocol):\n    def failure_evidence(self, conn: Connection) -> GoalFailureEvidence[Failure]: ...",
+                    "new_source": "class GenerationFailureSource[Failure](ABC):\n    __slots__ = ()\n\n    @abstractmethod\n    def failure_evidence(self, conn: Connection) -> GoalFailureEvidence[Failure]: ..."
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_failure_observation.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "class ActivityClocks:",
+                    "new_source": "class ActivityClocks(SentClocks):"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "class BusResources:",
+                    "new_source": "class BusResources(ActivitySource):"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "class ChannelManagement:",
+                    "new_source": "class ChannelManagement(ChannelOrderSource[type[ThreadSort], type[ChannelSort]]):"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "from agent_comms.display_order import CreatedThreadSort, ThreadSort",
+                    "new_source": "from agent_comms.display_order import ChannelSort, CreatedThreadSort, ThreadSort"
+                  },
+                  {
+                    "old_source": "class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, affix=\"Channel\"):",
+                    "new_source": "class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, StoredThreadOrder[type[ThreadSort]], SortedChannel[ChannelSortView[type[ChannelSort]], type[ChannelSort]], affix=\"Channel\"):"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "class ChannelView(ToolResult):",
+                    "new_source": "class ChannelView(ToolResult, ChannelSortView[type[ChannelSort]]):"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "from agent_comms.bus import BusReader\n",
+                    "new_source": ""
+                  },
+                  {
+                    "old_source": "from agent_comms.display_sources import ActivitySource, SentHistorySource",
+                    "new_source": "from agent_comms.display_sources import SentHistorySource"
+                  },
+                  {
+                    "old_source": "class RelationshipBusSource(ActivitySource, Protocol):\n    @property\n    def bus(self) -> BusReader: ...\n\n\n",
+                    "new_source": ""
+                  },
+                  {
+                    "old_source": "class RelationshipSource(SentHistorySource[RegistrySnapshot], Protocol):\n    @property\n    def root(self) -> Path: ...\n\n    @property\n    def registry(self) -> Registration: ...\n\n    @property\n    def bus(self) -> RelationshipBusSource: ...\n\n    @property\n    def channels(self) -> RelationshipCatalogSource: ...\n\n    def revision(self) -> presentation.WireRevision: ...\n\n    def thread_views(\n        self, visibility: RosterVisibility,\n    ) -> tuple[presentation.ThreadView, ...]: ...",
+                    "new_source": "class RelationshipSource(SentHistorySource[RegistrySnapshot]):\n    __slots__ = ()\n    root: Path\n    registry: Registration\n    bus: BusResources\n    channels: RelationshipCatalogSource\n\n    @abstractmethod\n    def revision(self) -> presentation.WireRevision: ...\n\n    @abstractmethod\n    def thread_views(\n        self, visibility: RosterVisibility,\n    ) -> tuple[presentation.ThreadView, ...]: ..."
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "class HistoryViews:",
+                    "new_source": "class HistoryViews(RelationshipSource):"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "CatalogSelection, DeclaredFamily, TaskOwner,",
+                    "new_source": "CatalogSelection, DeclaredFamily, TaskOwner, GoalFailureOwner,"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "from typing import TYPE_CHECKING, Annotated, ClassVar, Literal",
+                    "new_source": "from typing import Annotated, ClassVar, Literal"
+                  },
+                  {
+                    "old_source": "from agent_comms.goal_work import GoalAssignment, GoalOwner, GoalWorkSource",
+                    "new_source": "from agent_comms.goal_work import GoalAssignment, GoalObservation, GoalOwner, GoalWorkSource"
+                  },
+                  {
+                    "old_source": "RegistrationInheritance[\"GoalDeclaration\"],\n",
+                    "new_source": "RegistrationInheritance[\"GoalDeclaration\"], GoalObservation,\n"
+                  },
+                  {
+                    "old_source": "return \"\\n\\n\".join(todo.order.instructions(todo) for todo in todos if todo.pending)",
+                    "new_source": "return \"\\n\\n\".join(text for todo in todos for text in todo.goal_instructions())"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goals.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "class Todo(TodoStoreRows, TypedTable):",
+                    "new_source": "class Todo(TodoStoreRows, TypedTable, GoalAssignment):"
+                  },
+                  {
+                    "old_source": "class TodoStore(OwnerRequestStore, TodoHistory):",
+                    "new_source": "class TodoStore(OwnerRequestStore, TodoHistory, GoalAssignments):"
+                  },
+                  {
+                    "old_source": "    def progress_line(self) -> str:\n",
+                    "new_source": "    def goal_instructions(self) -> tuple[str, ...]:\n        \"\"\"The original pending order contributes one instruction, every other order none.\"\"\"\n        return tuple(item.order.instructions(item)\n                     for item in self.order.items_with(Pending, self))\n\n    def progress_line(self) -> str:\n"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+                "rationale": ""
+              },
+              {
+                "operation": "patch_target",
+                "replacements": [
+                  {
+                    "old_source": "class Generation(GoalLedgerTable, TypedTable, GoalGenerationRead):",
+                    "new_source": "class Generation(GoalLedgerTable, TypedTable, GoalGenerationRead, GenerationFailureSource[\"FailedTurnEvidence\"]):"
+                  },
+                  {
+                    "old_source": "class AttemptRecord(GoalLedgerTable, TypedTable):",
+                    "new_source": "class AttemptRecord(GoalLedgerTable, TypedTable, GoalAttemptTransition):"
+                  }
+                ],
+                "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+                "rationale": ""
+              }
+            ],
+            "architecture_guards": [],
+            "reason": "P23 admitted actual-provider membership from the retained 18-provider source map. Replace structural contracts by state-free nominal ABCs, preserving original fields and provider bodies. Delete RelationshipBusSource in favor of existing BusResources; leave the original catalog contract and its provider pair unchanged behind the retained native extraction refusal. Delete the overpromising GoalAssignmentOrder: Todo owns zero-or-one instructions selected through its original Pending capability, and the goal joins those in original todo order. FoldedProblemOrder stays unchanged. These exact authored patches establish source changes, not metaclass/import/behavior equivalence. The original guarded/local imports and cold initialization obligations are recorded separately; no apply or execution proof is claimed.",
+            "authority_claims": []
+          }
+        ],
+        "architecture_guards": []
+      },
+      "is_clean": true
+    }
+  ],
+  "simulation": {
+    "rewrites": [
+      {
+        "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-imports",
+            "plan_item_declaration": "EnsureImportOperation",
+            "plan_item_index": 0,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+            "line": 9,
+            "end_line": 8,
+            "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+          }
+        ],
+        "qualname": "agent_comms.activity_clocks",
+        "line": 1,
+        "end_line": 64,
+        "target_id": "c2ee6b7e49",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-imports",
+            "plan_item_declaration": "EnsureImportOperation",
+            "plan_item_index": 2,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+            "line": 12,
+            "end_line": 11,
+            "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+          }
+        ],
+        "qualname": "agent_comms.channel_management",
+        "line": 1,
+        "end_line": 306,
+        "target_id": "cd89e68b33",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-imports",
+            "plan_item_declaration": "EnsureImportOperation",
+            "plan_item_index": 9,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+            "line": 21,
+            "end_line": 21,
+            "source_hash": "673c4824bc7bf64c2d83b08428b0b412"
+          },
+          {
+            "recipe_id": "p23-remaining-provider-imports",
+            "plan_item_declaration": "EnsureImportOperation",
+            "plan_item_index": 10,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+            "line": 21,
+            "end_line": 21,
+            "source_hash": "673c4824bc7bf64c2d83b08428b0b412"
+          },
+          {
+            "recipe_id": "p23-remaining-provider-imports",
+            "plan_item_declaration": "EnsureImportOperation",
+            "plan_item_index": 9,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+            "line": 24,
+            "end_line": 24,
+            "source_hash": "59b6951c75f303e178b1a4f85e1b9652"
+          },
+          {
+            "recipe_id": "p23-remaining-provider-imports",
+            "plan_item_declaration": "EnsureImportOperation",
+            "plan_item_index": 10,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+            "line": 24,
+            "end_line": 24,
+            "source_hash": "59b6951c75f303e178b1a4f85e1b9652"
+          }
+        ],
+        "qualname": "agent_comms.goal_ledger",
+        "line": 1,
+        "end_line": 583,
+        "target_id": "6d33bcbea8",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-imports",
+            "plan_item_declaration": "EnsureImportOperation",
+            "plan_item_index": 6,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+            "line": 86,
+            "end_line": 85,
+            "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+          }
+        ],
+        "qualname": "agent_comms.history_views",
+        "line": 1,
+        "end_line": 544,
+        "target_id": "8131adedc7",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-imports",
+            "plan_item_declaration": "EnsureImportOperation",
+            "plan_item_index": 3,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+            "line": 12,
+            "end_line": 11,
+            "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+          }
+        ],
+        "qualname": "agent_comms.messaging.channels",
+        "line": 1,
+        "end_line": 430,
+        "target_id": "c29186a1ab",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-imports",
+            "plan_item_declaration": "EnsureImportOperation",
+            "plan_item_index": 1,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+            "line": 14,
+            "end_line": 13,
+            "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+          }
+        ],
+        "qualname": "agent_comms.messaging.published_bus",
+        "line": 1,
+        "end_line": 52,
+        "target_id": "c498c9e463",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-imports",
+            "plan_item_declaration": "EnsureImportOperation",
+            "plan_item_index": 8,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+            "line": 54,
+            "end_line": 53,
+            "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+          }
+        ],
+        "qualname": "agent_comms.planning.orders",
+        "line": 1,
+        "end_line": 6444,
+        "target_id": "65cf5be014",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-imports",
+            "plan_item_declaration": "EnsureImportOperation",
+            "plan_item_index": 4,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+            "line": 32,
+            "end_line": 31,
+            "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+          }
+        ],
+        "qualname": "agent_comms.presentation",
+        "line": 1,
+        "end_line": 678,
+        "target_id": "2ce628b0c3",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-imports",
+            "plan_item_declaration": "EnsureImportOperation",
+            "plan_item_index": 7,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+            "line": 28,
+            "end_line": 27,
+            "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+          }
+        ],
+        "qualname": "agent_comms.registry.threads",
+        "line": 1,
+        "end_line": 967,
+        "target_id": "d3b0d74ccd",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Ensure import source exists in '/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-imports",
+            "plan_item_declaration": "EnsureImportOperation",
+            "plan_item_index": 5,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py",
+            "line": 27,
+            "end_line": 26,
+            "source_hash": "64550d6ffe2c0a01a14aba1eade0200c"
+          }
+        ],
+        "qualname": "agent_comms.relationships",
+        "line": 1,
+        "end_line": 959,
+        "target_id": "9f36e3c527",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Patch exact source text inside 'agent_comms.activity_clocks'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "plan_item_declaration": "PatchTargetOperation",
+            "plan_item_index": 4,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+            "line": 62,
+            "end_line": 62,
+            "source_hash": "a280052a1be0711033e3dff7d6b64ab9"
+          }
+        ],
+        "qualname": "ActivityClocks",
+        "line": 62,
+        "end_line": 64,
+        "target_id": "2cf8d0eccb",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Patch exact source text inside 'agent_comms.channel_management'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "plan_item_declaration": "PatchTargetOperation",
+            "plan_item_index": 6,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+            "line": 158,
+            "end_line": 158,
+            "source_hash": "887801f12d73ca8c3f51880461813a32"
+          }
+        ],
+        "qualname": "ChannelManagement",
+        "line": 158,
+        "end_line": 307,
+        "target_id": "754aa094a9",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Patch exact source text inside 'agent_comms.display_sources'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "plan_item_declaration": "PatchTargetOperation",
+            "plan_item_index": 0,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/display_sources.py",
+            "line": 3,
+            "end_line": 55,
+            "source_hash": "30901fa9773435b0cfeab7950a581044"
+          }
+        ],
+        "qualname": "agent_comms.display_sources",
+        "line": 1,
+        "end_line": 55,
+        "target_id": "a6435ae740",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/display_sources.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Patch exact source text inside 'agent_comms.goal_ledger'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "plan_item_declaration": "PatchTargetOperation",
+            "plan_item_index": 14,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+            "line": 140,
+            "end_line": 298,
+            "source_hash": "15765f98983a7d0904d3694c1da268fa"
+          }
+        ],
+        "qualname": "agent_comms.goal_ledger",
+        "line": 1,
+        "end_line": 583,
+        "target_id": "6d33bcbea8",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Patch exact source text inside 'agent_comms.goal_work'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "plan_item_declaration": "PatchTargetOperation",
+            "plan_item_index": 1,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_work.py",
+            "line": 4,
+            "end_line": 61,
+            "source_hash": "238db898f1d5e908df6af09c7bd50b6f"
+          }
+        ],
+        "qualname": "agent_comms.goal_work",
+        "line": 1,
+        "end_line": 68,
+        "target_id": "d3062ab57e",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_work.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Patch exact source text inside 'agent_comms.history_views'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "plan_item_declaration": "PatchTargetOperation",
+            "plan_item_index": 10,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+            "line": 196,
+            "end_line": 196,
+            "source_hash": "c564d02bfb63c4d61be7a5656961dc01"
+          }
+        ],
+        "qualname": "HistoryViews",
+        "line": 196,
+        "end_line": 545,
+        "target_id": "6304b3a835",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Patch exact source text inside 'agent_comms.messaging.channels'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "plan_item_declaration": "PatchTargetOperation",
+            "plan_item_index": 7,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+            "line": 15,
+            "end_line": 59,
+            "source_hash": "b3b9c9a9e3f122854adad153e39c457c"
+          }
+        ],
+        "qualname": "agent_comms.messaging.channels",
+        "line": 1,
+        "end_line": 431,
+        "target_id": "658f9e24cb",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Patch exact source text inside 'agent_comms.messaging.published_bus'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "plan_item_declaration": "PatchTargetOperation",
+            "plan_item_index": 5,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+            "line": 20,
+            "end_line": 20,
+            "source_hash": "dd364b3e0db849a1b858e44be8a416a2"
+          }
+        ],
+        "qualname": "BusResources",
+        "line": 20,
+        "end_line": 29,
+        "target_id": "7e6d7ac924",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Patch exact source text inside 'agent_comms.planning.goal_attempt_phase'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "plan_item_declaration": "PatchTargetOperation",
+            "plan_item_index": 2,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempt_phase.py",
+            "line": 6,
+            "end_line": 15,
+            "source_hash": "2bdbe858ee46d5852424209a6d2e9c30"
+          }
+        ],
+        "qualname": "agent_comms.planning.goal_attempt_phase",
+        "line": 1,
+        "end_line": 81,
+        "target_id": "0b9033e18f",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempt_phase.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Patch exact source text inside 'agent_comms.planning.goal_failure_observation'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "plan_item_declaration": "PatchTargetOperation",
+            "plan_item_index": 3,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_failure_observation.py",
+            "line": 7,
+            "end_line": 23,
+            "source_hash": "da2ef2199a3b2085abf170aa76aefe20"
+          }
+        ],
+        "qualname": "agent_comms.planning.goal_failure_observation",
+        "line": 1,
+        "end_line": 24,
+        "target_id": "3f984838db",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_failure_observation.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Patch exact source text inside 'agent_comms.planning.goals'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "plan_item_declaration": "PatchTargetOperation",
+            "plan_item_index": 12,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goals.py",
+            "line": 11,
+            "end_line": 582,
+            "source_hash": "c36e581d4a0fd0edf0d6faab735aadc7"
+          }
+        ],
+        "qualname": "agent_comms.planning.goals",
+        "line": 1,
+        "end_line": 919,
+        "target_id": "ff470891b2",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goals.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Patch exact source text inside 'agent_comms.planning.orders'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "plan_item_declaration": "PatchTargetOperation",
+            "plan_item_index": 13,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+            "line": 5020,
+            "end_line": 5794,
+            "source_hash": "9ee7a35a3b534af1b4d2803683c7d2d9"
+          }
+        ],
+        "qualname": "agent_comms.planning.orders",
+        "line": 1,
+        "end_line": 6445,
+        "target_id": "e145c6fdcf",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Patch exact source text inside 'agent_comms.presentation'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "plan_item_declaration": "PatchTargetOperation",
+            "plan_item_index": 8,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+            "line": 255,
+            "end_line": 255,
+            "source_hash": "91ce891556a7ee6f82806767534e6136"
+          }
+        ],
+        "qualname": "ChannelView",
+        "line": 255,
+        "end_line": 299,
+        "target_id": "7b2ff42315",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Patch exact source text inside 'agent_comms.registry.threads'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "plan_item_declaration": "PatchTargetOperation",
+            "plan_item_index": 11,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+            "line": 328,
+            "end_line": 328,
+            "source_hash": "fd4a85f151768020e1751345274716db"
+          }
+        ],
+        "qualname": "Thread",
+        "line": 328,
+        "end_line": 803,
+        "target_id": "9631fcc9f9",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+        "operation": "replace_target"
+      },
+      {
+        "rationale": "Patch exact source text inside 'agent_comms.relationships'.",
+        "contributors": [
+          {
+            "recipe_id": "p23-remaining-provider-membership-and-owner-api",
+            "plan_item_declaration": "PatchTargetOperation",
+            "plan_item_index": 9,
+            "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py",
+            "line": 19,
+            "end_line": 746,
+            "source_hash": "484ed79325e27ab6359b194af77bcc2e"
+          }
+        ],
+        "qualname": "agent_comms.relationships",
+        "line": 1,
+        "end_line": 960,
+        "target_id": "bab011b1ef",
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py",
+        "operation": "replace_target"
+      }
+    ],
+    "parse_validation": {
+      "backend": "ast_span",
+      "validated_file_paths": [
+        "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+        "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+        "/home/ts/wt/comms-friction--P17/src/agent_comms/display_sources.py",
+        "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+        "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_work.py",
+        "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+        "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+        "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+        "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempt_phase.py",
+        "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_failure_observation.py",
+        "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goals.py",
+        "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+        "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+        "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+        "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py"
+      ],
+      "parse_valid": true
+    },
+    "base_revisions": [
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+        "source_hash": "336802ab34221e9a09f851ecba8b7f42"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus.py",
+        "source_hash": "068b6a8d05fb7f0ad1c566a425ef5193"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/bus_activity_index.py",
+        "source_hash": "11a114cfd03de39af55428d437f36c77"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/catalog_document.py",
+        "source_hash": "794d249f78980d8e8a3cd2fc3416175f"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/catalog_store.py",
+        "source_hash": "46da9df16bfc6d921122ce4942c7e4b2"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+        "source_hash": "83107c8d062852462d7a1df57f2b695f"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/class_fact.py",
+        "source_hash": "888c663cb6739f49d123240f260ef165"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/context_owner.py",
+        "source_hash": "a5123f3b942022e747b468f139851f38"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/display_order.py",
+        "source_hash": "8566321859860bb024504fe64c45bb0d"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/display_sources.py",
+        "source_hash": "1dac1ef9ea1d658e469b027a84766c01"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/execution/turn_context.py",
+        "source_hash": "20e6b3f2b7f65b67065c2c13704e8bfc"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+        "source_hash": "4bd8b15845b7a0333026a66d70599601"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_mutation.py",
+        "source_hash": "3ee2894d4baa60dce93c0cd1f7c9b859"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_work.py",
+        "source_hash": "5a97b6e1929ba769add28607a79bf39d"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+        "source_hash": "b6d5b65985d4fa043798f11d404b2bd3"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_attempt.py",
+        "source_hash": "c0b26ca2601ce3e5bc27022e8e190424"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/input_origin.py",
+        "source_hash": "2f6eddb94891d8998bd3826b98bb1dab"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/lifecycle_capability.py",
+        "source_hash": "4ea9999f8a14745b7a1a07114e87182a"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+        "source_hash": "f532623a8002fc58b9eda1cccda45e04"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/message_bus.py",
+        "source_hash": "ddb8638c91537842970fe223a4e80bc8"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/messages.py",
+        "source_hash": "5075ac64b90bfa6024b3da34d10ac219"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+        "source_hash": "3f88dd5b19a38aa16a23b3765a9dd5be"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/nominal/declared_family.py",
+        "source_hash": "d70c1165441e07d0fdb560e6d25a62a4"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/order_story.py",
+        "source_hash": "3b148ac96c290591fc91a8832b04c298"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempt_phase.py",
+        "source_hash": "d2c2ee64559f138dbe4cb1af9424e751"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempts.py",
+        "source_hash": "731a020a60a46631297dd16897e2e7ee"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_failure_observation.py",
+        "source_hash": "8c720d990bee032547d32f3b2d7406ef"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_generation.py",
+        "source_hash": "d8c7127b319b087af959af413847e047"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_management.py",
+        "source_hash": "81fc3d373ac81cc6e3499c7768428c11"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_records.py",
+        "source_hash": "33fce76e477a8eb4ede637960c21f9f0"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_states.py",
+        "source_hash": "3b98321d1aa5907f0938a4f3d27b7b77"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goals.py",
+        "source_hash": "1324e38390d31e47e763e3a0ed63a85c"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+        "source_hash": "1d08b07d5f0dc29e78465c259ba3cf30"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+        "source_hash": "f33accb247db6affeafade41d84b7740"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registration.py",
+        "source_hash": "9bdb49e2f807c931d6cb5d01a97edcdd"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/registry_document.py",
+        "source_hash": "29417245c7874432d62e52e909192179"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_creation.py",
+        "source_hash": "b7b68d1e16e442dd5123332cbe6dc6f7"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_identity.py",
+        "source_hash": "3d0aff76f0bebb1bc7d247da360b16b3"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/thread_management.py",
+        "source_hash": "518681c89a31a705fc02e9c8aea85691"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+        "source_hash": "afa768bab7a6f49ef1ef8c2c1f2a887f"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry_provenance.py",
+        "source_hash": "91335bea8f2676b37426828bddb865a1"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py",
+        "source_hash": "6a6567c8142e7d8700a271340c2cc7ed"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/retained_task_facts.py",
+        "source_hash": "34bface507f27dd68d14b3ee12a5ac51"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/storage/typed_table.py",
+        "source_hash": "ea51bbba05d70ec1d96df787b122a71d"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/task_owner.py",
+        "source_hash": "c286c37210b1063697e9786b11b6d7fe"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/task_sources.py",
+        "source_hash": "c85a3969133eaa66fa3ad8b8d9a6903d"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/thread_identity_source.py",
+        "source_hash": "857773b1f7f68cbff6db70b7fce63d67"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/tool_result.py",
+        "source_hash": "80acd8313f20f9053aa79d42e571b115"
+      },
+      {
+        "file_path": "/home/ts/wt/comms-friction--P17/tests/test_goal_runtime_annotations.py",
+        "source_hash": "3f2e289b566f3ee281692b51318e8a82"
+      }
+    ],
+    "deleted_file_paths": [],
+    "applied_rewrite_count": 25,
+    "changed_file_paths": [
+      "/home/ts/wt/comms-friction--P17/src/agent_comms/activity_clocks.py",
+      "/home/ts/wt/comms-friction--P17/src/agent_comms/channel_management.py",
+      "/home/ts/wt/comms-friction--P17/src/agent_comms/display_sources.py",
+      "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_ledger.py",
+      "/home/ts/wt/comms-friction--P17/src/agent_comms/goal_work.py",
+      "/home/ts/wt/comms-friction--P17/src/agent_comms/history_views.py",
+      "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/channels.py",
+      "/home/ts/wt/comms-friction--P17/src/agent_comms/messaging/published_bus.py",
+      "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_attempt_phase.py",
+      "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goal_failure_observation.py",
+      "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/goals.py",
+      "/home/ts/wt/comms-friction--P17/src/agent_comms/planning/orders.py",
+      "/home/ts/wt/comms-friction--P17/src/agent_comms/presentation.py",
+      "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/threads.py",
+      "/home/ts/wt/comms-friction--P17/src/agent_comms/relationships.py"
+    ]
+  },
+  "architecture_guard_report": {
+    "rules": [],
+    "violations": [],
+    "is_clean": true,
+    "violation_count": 0
+  },
+  "preflight_report": {
+    "reports": [],
+    "is_clean": true,
+    "preflight_failed": false,
+    "report_count": 0
+  }
+}

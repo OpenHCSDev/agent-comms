@@ -4,12 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.shell_effects import (
+from agent_comms.projects.shell_effects import (
     ForbiddenStorageEffect,
     WriteStorageEffect,
     shell_storage_effects,
 )
-from agent_comms.tool_denial import StorageDenied
+from agent_comms.transport.tool_denial import StorageDenied
 
 
 @pytest.mark.parametrize("command", [

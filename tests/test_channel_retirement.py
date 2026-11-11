@@ -1,29 +1,28 @@
 """Saved audience retirement retains addressed history, never routing authority."""
 
-from agent_comms.repo import Checkout
-from agent_comms.channel_targets import CommandTarget
-
 import json
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus import Bus, PublicRecord
-from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.channels import AnyOfMatch, ViewPredicate, ActivityView, ParticipantsView
 from agent_comms.comms import wire
+from agent_comms.messaging.bus import Bus, PublicRecord
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.channels import ActivityView, AnyOfMatch, ParticipantsView, ViewPredicate
+from agent_comms.messaging.message_page import PageBounds
+from agent_comms.messaging.messages import InfoKind, Membership, Message
+from agent_comms.messaging.page_traversal import LiveCursor
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.message_page import PageBounds
-from agent_comms.messages import InfoKind, Membership, Message
-from agent_comms.page_traversal import LiveCursor
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.catalog_store import ChannelCatalog
+from agent_comms.registry.threads import NativeThread
 from bus_history import read_history
 from test_private_human_ingress import _root
-from agent_comms.registry.threads import NativeThread
 
 
 def saved_catalog(root):
-    from agent_comms.catalog_document import CatalogDocument, ChannelPreferences
     from agent_comms.display_order import LastActivityThreadSort, LastUserInputChannelSort
+    from agent_comms.registry.catalog_document import CatalogDocument, ChannelPreferences
 
     document = CatalogDocument(
         tags=frozenset({"api", "ui"}),

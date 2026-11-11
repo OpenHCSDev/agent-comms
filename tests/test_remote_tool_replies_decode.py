@@ -3,12 +3,12 @@ calls must declare a concrete one. CommsUserSendTool once inherited the abstract
 PublishingToolRequest: Core posted the owner's message, the remote Toad could not decode the
 reply, and its composer stayed held as if the send had failed."""
 
-from agent_comms.channels import Channel
-from agent_comms.cli_commands import ThreadArchivedResult
-from agent_comms.send_result import MessagePublished
-from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.tool_request import HumanToolRequest, PublishingToolRequest
-from agent_comms.tool_result import ToolResult
+from agent_comms.cli_verbs.cli_commands import ThreadArchivedResult
+from agent_comms.messaging.channels import Channel
+from agent_comms.messaging.send_result import MessagePublished
+from agent_comms.transport.tool_declaration import ToolDeclaration
+from agent_comms.transport.tool_request import HumanToolRequest, PublishingToolRequest
+from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools.orders import (
     CommsBoardTool,
     TeamBoard,
@@ -21,8 +21,8 @@ from agent_comms.transport.tools.served import (
 )
 from agent_comms.transport.tools.sidebar import (
     ChannelOrderSet,
-    CommsSortChannelTool,
     CommsSortChannelsTool,
+    CommsSortChannelTool,
     CommsUserSendTool,
 )
 

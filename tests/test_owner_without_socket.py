@@ -7,9 +7,9 @@ import os
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.owner_connection import OwnerConnection
-from agent_comms.storage_rules import StorageRule
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.transport.owner_connection import OwnerConnection
 
 
 def test_a_live_process_without_a_runtime_socket_is_an_unreachable_owner(tmp_path):

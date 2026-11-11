@@ -3,35 +3,51 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from contextlib import asynccontextmanager
-from dataclasses import dataclass
 import os
 import sqlite3
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
-
-from agent_comms.repo import Checkout
 from typing import AsyncIterator, ClassVar, Self
 from urllib.parse import quote
 
 import aiohttp
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
-from agent_comms.messages import Message
-from agent_comms.send_result import SendResult
-from agent_comms.cli_arguments import CliArguments
-from agent_comms.harness_delivery_states import Outcome, PersistedOutcome
 
-from .history import HarnessAddress, OnlineHistory, OpenCodeHistory
-from .shared import (
-    SessionBinding, CliBridge, GivenBinding, GivenThread, IncomingFrame, Options, SuppliedSession,
-    TranscriptBridge, Watch, run_bridge,
+from agent_comms.cli_bridges.cli_arguments import CliArguments
+from agent_comms.cli_bridges.harness_delivery_states import Outcome, PersistedOutcome
+from agent_comms.cli_bridges.history import HarnessAddress, OnlineHistory, OpenCodeHistory
+from agent_comms.cli_bridges.opencode_parts import SavedMessage, UserMessage
+from agent_comms.cli_bridges.opencode_protocol import (
+    MESSAGES,
+    SESSION_STATUSES,
+    Connected,
+    IdleStatus,
+    OpenCodeEvent,
+    OpenCodeStream,
+    Prompt,
+    SavedInput,
+    Session,
+    TextInput,
+    Toast,
 )
-from agent_comms.runtime_updates import RuntimeUpdate
-from .opencode_protocol import (
-    Connected, OpenCodeEvent, OpenCodeStream, Prompt, SavedInput, Session, TextInput, Toast,
-    SESSION_STATUSES, MESSAGES, IdleStatus,
+from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate
+from agent_comms.cli_bridges.shared import (
+    CliBridge,
+    GivenBinding,
+    GivenThread,
+    IncomingFrame,
+    Options,
+    SessionBinding,
+    SuppliedSession,
+    TranscriptBridge,
+    Watch,
+    run_bridge,
 )
-from .opencode_parts import SavedMessage, UserMessage
+from agent_comms.comms import wire
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.messaging.messages import Message
+from agent_comms.messaging.send_result import SendResult
+from agent_comms.projects.checkouts import Checkout
 
 
 async def event_payloads(response: aiohttp.ClientResponse) -> AsyncIterator[str]:

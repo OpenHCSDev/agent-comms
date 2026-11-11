@@ -5,10 +5,9 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from bus_record_fixture import RECIPIENT_LOOKUP, ROOT_ID
 
-from agent_comms.bus import ClaimRecord
-from agent_comms.envelope_claim_transitions import (
+from agent_comms.messaging.bus import ClaimRecord
+from agent_comms.messaging.envelope_claim_transitions import (
     ClaimConflict,
     ClaimProjection,
     ClaimRelease,
@@ -21,8 +20,17 @@ from agent_comms.envelope_claim_transitions import (
     WakeClaim,
     WakeClaims,
 )
-from agent_comms.nominal.field_codec import AssignmentId, ClaimId, FieldCodec, InputId, MalformedRecord, MessageId, TurnId
-from agent_comms.messages import ClaimMessage, ClaimNoticeKind, Message
+from agent_comms.messaging.messages import ClaimMessage, ClaimNoticeKind, Message
+from agent_comms.nominal.field_codec import (
+    AssignmentId,
+    ClaimId,
+    FieldCodec,
+    InputId,
+    MalformedRecord,
+    MessageId,
+    TurnId,
+)
+from bus_record_fixture import RECIPIENT_LOOKUP, ROOT_ID
 
 G1 = ClaimId("a" * 32)
 G2 = ClaimId("b" * 32)
@@ -42,8 +50,8 @@ def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence
     from test_todos import thread
 
     _, resource, _ = resources(tmp_path)
-    from agent_comms.child_process import ProcessIdentity
-    from agent_comms.thread_status import RunningThreadStatus
+    from agent_comms.execution.child_process import ProcessIdentity
+    from agent_comms.registry.thread_status import RunningThreadStatus
 
     comms.registry.declare(replace(thread("owner", comms.root, 2.0),
                                    process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())

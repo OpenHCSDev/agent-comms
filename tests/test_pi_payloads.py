@@ -6,16 +6,34 @@ from dataclasses import dataclass
 import pytest
 
 from agent_comms.agent_events import ProviderUsage
+from agent_comms.execution.pi_commands import GetState, PiCommand, Prompt
+from agent_comms.execution.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
+from agent_comms.execution.pi_rpc import PiRpcChannel
+from agent_comms.execution.pi_wire import PiPayload
+from agent_comms.execution.provider_records import (
+    TextContent,
+    ToolCallContent,
+)
+from agent_comms.execution.tool_results import NoToolDiff
+from agent_comms.execution.turn_usage import UsageAccount
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord
-from agent_comms.tool_results import NoToolDiff
-from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
-from agent_comms.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
-from agent_comms.pi_wire import PiPayload
-from agent_comms.pi_payloads import AssistantMessage, MissingData, MissingToolResult, ProvidedToolResult, ReportedModel, StateData, TextContent, ToolCallContent, UnknownData, UnreportedModel, UnreportedUsage
-from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.turn_usage import UsageAccount
-from agent_comms.thread_model import DeclaredModel, UndeclaredModel
+from agent_comms.pi_payloads import (
+    AssistantMessage,
+    MissingData,
+    MissingToolResult,
+    ProvidedToolResult,
+    ReportedModel,
+    StateData,
+    UnknownData,
+    UnreportedModel,
+    UnreportedUsage,
+)
+from agent_comms.registry.thread_model import (
+    DeclaredModel,
+    UndeclaredModel,
+)
+from agent_comms.transport.native_tools import NativeToolDeclaration
 
 
 def decode(record):
@@ -183,8 +201,8 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
 
 
 def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repetition():
-    from agent_comms.native_failures import NativePiUnavailable
-    from agent_comms.backend import ObservedNativeCommit, PendingNativeCommit
+    from agent_comms.execution.backend import ObservedNativeCommit, PendingNativeCommit
+    from agent_comms.execution.native_failures import NativePiUnavailable
 
     event = decode({"type": "input_committed", "inputId": "a" * 32, "sessionId": "session", "sessionEntryId": "entry", "sessionEntryStart": 128})
     pending = PendingNativeCommit()
@@ -243,7 +261,7 @@ def test_image_forwarding_reuses_image_owner_and_preserves_native_shape():
     ],
 )
 def test_final_content_owns_native_text_claim(content, expected):
-    from agent_comms.native_failures import NativePiUnavailable
+    from agent_comms.execution.native_failures import NativePiUnavailable
 
     event = decode({"type": "message_end", "message": {
         "role": "assistant", "stopReason": "stop", "content": content,
@@ -269,7 +287,7 @@ def test_final_content_owns_native_text_claim(content, expected):
     ],
 )
 def test_saved_failed_turn_uses_the_live_turn_end_decision(stop, content, error, failed):
-    from agent_comms.native_entries import NativeEntry
+    from agent_comms.execution.native_entries import NativeEntry
 
     message = dict(role="assistant", content=content, stopReason=stop,
                    api="api", provider="provider", model="model")
@@ -287,7 +305,7 @@ def test_saved_failed_turn_uses_the_live_turn_end_decision(stop, content, error,
 
 
 def test_answer_given_before_a_later_input_stands_when_that_input_ends_without_text():
-    from agent_comms.tracked_turn import AnsweredTrackedTerminal, PendingTrackedTerminal
+    from agent_comms.execution.tracked_turn import AnsweredTrackedTerminal, PendingTrackedTerminal
 
     answered = PendingTrackedTerminal().append("first answer").later_input(["first ", "answer"])
 
@@ -300,7 +318,7 @@ def test_answer_given_before_a_later_input_stands_when_that_input_ends_without_t
 
 
 def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
-    from agent_comms.turn_item import ProviderResponseId
+    from agent_comms.execution.turn_item import ProviderResponseId
 
     response_id = ProviderResponseId("resp-a")
     for usage in (None, {"totalTokens": 0}, {"totalTokens": 7}):
@@ -323,8 +341,8 @@ def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
 
 
 def test_raw_tool_arguments_reach_the_declared_call_refusal():
-    from agent_comms.native_tool_call import CodingCall, RefusedCodingCall
-    from agent_comms.tool_denial import SelectedToolDenied
+    from agent_comms.transport.native_tool_call import RefusedCodingCall
+    from agent_comms.transport.tool_denial import SelectedToolDenied
 
     event = decode({"type": "message_end", "message": {
         "role": "assistant", "content": [
@@ -332,7 +350,7 @@ def test_raw_tool_arguments_reach_the_declared_call_refusal():
     }})
     raw, = event.message.tool_calls
     assert raw.arguments == []
-    call = CodingCall.decode(raw.id, raw.name, raw.arguments)
+    call = NativeToolDeclaration.decode(raw.id, raw.name, raw.arguments)
     assert isinstance(call, RefusedCodingCall)
     with pytest.raises(SelectedToolDenied):
         call.allowed_claim()
@@ -351,8 +369,8 @@ def test_raw_tool_arguments_reach_the_declared_call_refusal():
 )
 def test_auto_retry_end_decodes_pi_boolean_success_into_its_outcome(line, member):
     """Pi's own auto_retry_end record (agent-session.js) selects the outcome by its boolean."""
-    from agent_comms.pi_events import AutoRetryEnd
-    from agent_comms.pi_rpc import PiRpcChannel
+    from agent_comms.execution.pi_events import AutoRetryEnd
+    from agent_comms.execution.pi_rpc import PiRpcChannel
 
     event = PiRpcChannel.decode_record(line, strict=True)
 

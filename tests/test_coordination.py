@@ -1,7 +1,5 @@
 """Slice-1 store_files, direct-SQL authority and crash/reopen shape tests."""
 
-from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, SnapshotExclude
-
 import os
 import sqlite3
 import subprocess
@@ -12,21 +10,11 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
-from agent_comms.native_build_inputs import ConfiguredChildStdio
-from agent_comms.child_process import SpawnedProcess
-from bus_record_fixture import (
-    OWNER_LOOKUP, RECIPIENT_LOOKUP, RENAMED_OWNER_LOOKUP, UNRELATED_LOOKUP,
-)
-from conftest import maintenance_held
-
-from agent_comms.coordination.tables.executions import NoPointedAttempt, NoPointedExecution, PointedAttempt, PointedExecution
-from agent_comms.reason_codes import NoReasonCode
-from agent_comms.assignment_states import (
-    CompletedAssignment,
-    EngagedAssignment,
-)
-from agent_comms.attempt_states import (
+from agent_comms.coordination.assignment_states import CompletedAssignment, EngagedAssignment
+from agent_comms.coordination.attempt_states import (
     AttemptFailedAttempt,
+    AttemptState,
+    LiveAttempt,
     ModelRunningAttempt,
     PromptAcceptedAttempt,
     PromptStartingAttempt,
@@ -34,8 +22,22 @@ from agent_comms.attempt_states import (
     SucceededAttempt,
 )
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.storage.store_files import StoreBusy
 from agent_comms.coordination.errors import IntegrityViolationError, SchemaVersionError
+from agent_comms.coordination.execution_states import (
+    ActiveExecution,
+    CompletedExecution,
+    DeferredExecution,
+    ExecutionState,
+    FailedExecution,
+    PendingExecution,
+)
+from agent_comms.coordination.obligation_states import (
+    PendingResponse,
+    ResponseState,
+    SilentResponse,
+)
+from agent_comms.coordination.reason_codes import NoReasonCode
+from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.schema import CoordinatorTable
 from agent_comms.coordination.snapshot import RecoverySnapshot
 from agent_comms.coordination.tables.assignments import (
@@ -44,37 +46,36 @@ from agent_comms.coordination.tables.assignments import (
     WakeAssignment,
 )
 from agent_comms.coordination.tables.attempts import AttemptRecord, ReplayFact
-from agent_comms.coordination.tables.executions import NoReplayAssessment, ReplayAssessments
 from agent_comms.coordination.tables.executions import (
+    AcpOrigin,
     CurrentExecutions,
     ExecutionProvenance,
-    WireOrigin,
-    AcpOrigin,
     ExecutionRecord,
+    NoPointedAttempt,
+    NoPointedExecution,
+    NoReplayAssessment,
+    PointedAttempt,
+    PointedExecution,
+    ReplayAssessments,
+    WireOrigin,
 )
 from agent_comms.coordination.tables.participants import OwnerGenerations, Participants
-from agent_comms.coordination.tables.publications import (
-    PublicationIntents,
-)
+from agent_comms.coordination.tables.publications import PublicationIntents
 from agent_comms.coordination.tables.responses import ResponseObligation
-from agent_comms.response_acknowledgement import canonical_publication_key
-from agent_comms.execution_states import (
-    ActiveExecution,
-    CompletedExecution,
-    DeferredExecution,
-    ExecutionState,
-    FailedExecution,
-    PendingExecution,
-)
-from agent_comms.attempt_states import AttemptState, LiveAttempt
+from agent_comms.execution.child_process import Platform, SpawnedProcess
+from agent_comms.installer.native_build_inputs import ConfiguredChildStdio
+from agent_comms.messaging.messages import InfoKind, Message
+from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, SnapshotExclude
+from agent_comms.storage.store_files import StoreBusy
 from agent_comms.storage.typed_table import HeldBusFile, JsonStorage
-from agent_comms.messages import InfoKind, Message
-from agent_comms.obligation_states import (
-    PendingResponse,
-    ResponseState,
-    SilentResponse,
+from agent_comms.waking.wake_policy import FullWake
+from bus_record_fixture import (
+    OWNER_LOOKUP,
+    RECIPIENT_LOOKUP,
+    RENAMED_OWNER_LOOKUP,
+    UNRELATED_LOOKUP,
 )
-from agent_comms.wake_policy import FullWake
+from conftest import maintenance_held
 
 
 def execution(*, status=PendingExecution, ordinal=None, origin=AcpOrigin):
@@ -510,18 +511,20 @@ print("ready")
 
 def test_first_create_never_closes_a_published_target_fd(tmp_path, monkeypatch):
     path = tmp_path / "atomic-create.sqlite3"
-    before_link = threading.Event()
+    before_publish = threading.Event()
     publish = threading.Event()
-    original_link = os.link
+    platform_type = type(Platform.current())
+    original_publish = platform_type.publish_new_file
     errors = []
 
-    def paused_link(source, destination, *, follow_symlinks=True):
+    def paused_publish(platform, source, destination, *, src_dir_fd=None, dst_dir_fd=None):
         if destination == path:
-            before_link.set()
+            before_publish.set()
             assert publish.wait(15)
-        return original_link(source, destination, follow_symlinks=follow_symlinks)
+        return original_publish(platform, source, destination,
+                                src_dir_fd=src_dir_fd, dst_dir_fd=dst_dir_fd)
 
-    monkeypatch.setattr(os, "link", paused_link)
+    monkeypatch.setattr(platform_type, "publish_new_file", paused_publish)
 
     def creator():
         try:
@@ -533,7 +536,7 @@ def test_first_create_never_closes_a_published_target_fd(tmp_path, monkeypatch):
     thread = threading.Thread(target=creator)
     thread.start()
     try:
-        assert before_link.wait(15)
+        assert before_publish.wait(15)
         assert not path.exists()
         with pytest.raises(sqlite3.OperationalError):
             sqlite3.connect(f"file:{path}?mode=rw", uri=True).execute("BEGIN IMMEDIATE")

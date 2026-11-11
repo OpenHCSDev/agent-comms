@@ -16,39 +16,45 @@ from subprocess import TimeoutExpired
 from typing import ClassVar, Self
 
 from agent_comms.comms import Comms
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.heartbeat_subjects import HeartbeatSubject, TeammateSubject
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.ui_model.hud_groups import (
-    ExpandedHudGroup, HudGroup, IdleGroup, InProgressGroup, ParkedGroup,
-    ReadyToTestGroup, UrgentGroup,
-)
 from agent_comms.nominal.field_codec import (
     DisclosedRecord,
     MalformedRecord,
     ToolCallId,
 )
-from agent_comms.goal_presentation import GoalSnapshot
-from agent_comms.heartbeat_subjects import HeartbeatSubject, TeammateSubject
-from agent_comms.messages import Message
-from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.repo import GitCommandError
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.thread_status import ThreadStatus
-from agent_comms.registry.threads import Thread
-from agent_comms.todos import (
+from agent_comms.planning.goal_presentation import GoalSnapshot
+from agent_comms.planning.orders import (
     MergedProgress,
     NoCommitProgress,
     OrderProgress,
     ProgressSource,
     Todo,
 )
-from agent_comms.transcript_events import OrderCall, TurnDigest
-from agent_comms.work_branches import WorkBranchError
-
-from ..team.standing_rules import (
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.work_branches import WorkBranchError
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_status import ThreadStatus
+from agent_comms.registry.threads import Thread
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.team.standing_rules import (
     FamilyScan,
     HeartbeatFrame,
+    ObservedTeammate,
+    TeammateEvidence,
     UndatedStandingRule,
+)
+from agent_comms.transcript.transcript_events import OrderCall, TurnDigest
+from agent_comms.ui_model.hud_groups import (
+    ExpandedHudGroup,
+    HudGroup,
+    IdleGroup,
+    InProgressGroup,
+    ParkedGroup,
+    ReadyToTestGroup,
+    UrgentGroup,
 )
 
 
@@ -86,7 +92,7 @@ class UnreadableClock(TeammateClock):
 
 
 @dataclass(frozen=True)
-class TeammateObservation:
+class TeammateObservation(TeammateEvidence):
     """Original sources shared by candidate states within this one read."""
 
     comms: Comms
@@ -210,7 +216,7 @@ class NeedsTeamAttention(UrgentPresentation):
 
 
 @dataclass(frozen=True)
-class TeammateState(UndatedStandingRule, FamilyScan, declared_name=None):
+class TeammateState(UndatedStandingRule, FamilyScan, ObservedTeammate, declared_name=None):
     unit: ThreadIncarnation
     orders: tuple[str, ...]
     presence: ThreadStatus
@@ -365,14 +371,28 @@ class Unreadable(NeedsTeamAttention, TeammateState):
 
 
 @dataclass(frozen=True)
-class Detached(TeammateState):
-    """A holder whose presence takes no delivery: an order sent now is not read now, so its
-    card waits below the board and raises no line until it runs again. The registered status
-    owns that fact; the inbox's read marker is the owner's and says nothing about the unit."""
+class Detached(NeedsTeamAttention, TeammateState):
+    """A stopped holder: a name still on open orders that no longer takes delivery.
 
-    hud_group = ParkedGroup
-    question = "it's stopped. can its orders wait for it?"
-    action = "leave it parked, or reassign an order that cannot wait"
+    This card can only ever be a holder. observations() keeps a unit that is not
+    receiving exactly when it is in `held` (eligible = set(held), then receiving
+    executors), so a stopped unit with nothing assigned is not observed at all. It
+    nonetheless described itself as parked, sat below the working groups in ParkedGroup,
+    raised no line, and offered "leave it parked" as the first half of its action.
+
+    "Held" and "its holder still answers" were one card's two facts joined by whoever
+    read it, and every reader took the cheap half: a name beside an order reads as taken,
+    so nobody checks whether that name still takes delivery. On 2026-11-10 one stopped
+    session held four orders while five teammates sat idle with none, and the board
+    raised no line for any of it.
+
+    A name does not hold an order; a unit that reads its inbox does. So this asks for a
+    hand and its action names the next move instead of offering to do nothing.
+    """
+
+    hud_group = UrgentGroup
+    question = "it's stopped and still holds orders. who takes them?"
+    action = "take its orders, or release them with order fire; a stopped name owns nothing"
 
     @classmethod
     def derive(cls, source: TeammateObservation) -> Iterator[Self]:
@@ -380,7 +400,8 @@ class Detached(TeammateState):
             yield cls(source.thread.incarnation, source.orders, source.presence, source)
 
     def detail(self) -> str:
-        return f"{self.presence.declared_name}, takes no delivery; {super().detail()}"
+        return (f"{self.presence.declared_name}, takes no delivery, still holds "
+                f"{len(self.orders)}: {', '.join(self.orders)}; {super().detail()}")
 
 
 @dataclass(frozen=True)

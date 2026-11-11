@@ -1,0 +1,743 @@
+"""Source-bound historical display values. These carry no delivery authority."""
+
+from __future__ import annotations
+
+import shutil
+import tempfile
+from abc import ABC, abstractmethod
+from collections import deque
+from collections.abc import Callable, Collection, Iterator, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass, replace
+from functools import cache, partial
+from pathlib import Path
+from typing import TYPE_CHECKING, Self
+
+from agent_comms.coordination.errors import DMScopeChanged, HistoricalSourceChanged
+from agent_comms.errors import UnregisteredThreadError
+from agent_comms.execution.child_process import Platform
+from agent_comms.execution.transcript_routes import TranscriptRoutes
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.channel_targets import NamedTarget, ThreadTarget
+from agent_comms.messaging.channels import Channel
+from agent_comms.messaging.display_references import (
+    HistoryReferenceSource,
+    MessageHistory,
+    ReferenceContext,
+)
+from agent_comms.messaging.message_notification import MessageNotification, NotificationWindow
+from agent_comms.messaging.message_page import (
+    NEWEST_PAGE,
+    ConversationMessagePageRequest,
+    MessagePage,
+    MessagePageRequest,
+    PageBounds,
+)
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import CarriesEnvelope, Message
+from agent_comms.messaging.notification_evidence import (
+    FirstRecipient,
+    OutcomeViewer,
+    RecipientCursor,
+    RecipientLimit,
+)
+from agent_comms.messaging.page_traversal import HistoryCursor, HistorySourceKey, OlderTraversal
+from agent_comms.messaging.read_basis import (
+    AnonymousViewer,
+    ChannelDisplayIdentity,
+    ChannelDisplayScope,
+    DisplayBasis,
+    DisplayIdentity,
+    DisplayViewer,
+    DMDisplayBasis,
+    DMDisplayIdentity,
+    DMDisplayScope,
+    MessageDisplayScope,
+    NamedViewer,
+    NoDisplaySelection,
+    SelectedDisplay,
+    SourceDisplayIdentity,
+)
+from agent_comms.messaging.read_ledger import ReadLedger
+from agent_comms.messaging.recorded_bus import RecordedBusIdentity
+from agent_comms.messaging.revision_views import BusSourceView
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    NullMember,
+    RecordMember,
+    ScratchName,
+    SingleFieldValue,
+    SubclassUnion,
+    TaggedRecordMember,
+)
+from agent_comms.presentation import WireRevision
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.catalog_store import ChannelCatalog
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_provenance import RegistryProvenance
+from agent_comms.registry.registry_tables import RegistryRowRevision
+from agent_comms.registry.thread_identity import UnrecordedThreadIncarnation
+from agent_comms.registry.threads import Thread, ThreadProvenance
+from agent_comms.storage.locked_store import DocumentChange, RegistryFile, RootFile
+from agent_comms.storage.maintenance_barrier import CarriedDocument
+from agent_comms.storage.private_path import (
+    FileObservation,
+    FileRevision,
+    ObservedPath,
+    PrivateDirectoryRole,
+)
+from agent_comms.storage.store_files import SingleFileStore, SourceTier, StoreOwner
+from agent_comms.transport.tool_result import ToolResult
+
+if TYPE_CHECKING:
+    from agent_comms.history_views import HistoryViews
+    from agent_comms.presentation import BusPresentation
+    from agent_comms.registry.catalog_document import CatalogDocument
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalSelection(TaggedRecordMember, SelectedDisplay):
+    displayed: HistoricalDisplay
+
+    @property
+    def identity(self) -> SourceDisplayIdentity:
+        return SourceDisplayIdentity(
+            viewer=self.displayed.displayed.viewer_identity,
+            history_revision=self.history_revision,
+            bus_identity=self.displayed.displayed.bus_identity,
+        )
+
+    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
+        self.displayed.acknowledge(views.bus.history, views.registry)
+
+    def select_evidence(self, selected: frozenset[int]) -> Self:
+        return replace(self, displayed=self.displayed.select(selected))
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalDisplay:
+    source: HistorySource
+    displayed: DisplayBasis
+
+    def select(self, sequences: Collection[int]) -> HistoricalDisplay:
+        return HistoricalDisplay(self.source, self.displayed.select(sequences))
+
+    def acknowledge(self, archive: HistoryArchive, registry: Registration) -> None:
+        """Acknowledge exactly painted historical membership in its own ledger."""
+        viewer = registry.require(self.displayed.viewer)
+        viewer.role.require_user(DMScopeChanged("Historical viewer changed; refresh history"))
+        if viewer.incarnation != self.displayed.viewer_identity:
+            raise DMScopeChanged("Historical viewer changed; refresh history")
+        if self.source not in archive.sources():
+            raise HistoricalSourceChanged("Historical source detached; refresh history")
+        self.source.acknowledge(self.displayed)
+
+
+class HistoryView(ABC):
+    """A requested view binds its predicate once to each original registry."""
+
+    @property
+    def viewer(self) -> DisplayViewer:
+        return AnonymousViewer()
+
+    def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
+        """Bind the query to the bus owner's snapshot and read that exact source."""
+        with presentation.bus.snapshot() as (basis, source):
+            request = self.page_request(self.capture(basis.registry), bounds)
+            return request.read_opened(source)
+
+    def page(self, presentation: BusPresentation, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
+        return presentation.bus.history.integrated_page(self, presentation, bounds)
+
+    @abstractmethod
+    def capture(self, snapshot: RegistryProvenance) -> MessageDisplayScope:
+        """Retain the source's aliases/membership without borrowing live identity."""
+
+    def page_request(self, scope, bounds: PageBounds) -> MessagePageRequest:
+        return MessagePageRequest(scope, bounds)
+
+
+class ConversationObservation(SubclassUnion, affix=""):
+    """What a UI last saw of one conversation. It goes to Core with the next revision read
+    and comes back as the new revision, locally or through the connector."""
+
+    @abstractmethod
+    def matches_stores(self, stores: WireRevision) -> bool: ...
+
+    @abstractmethod
+    def capture(self, stores: WireRevision,
+                read: Callable[[], ConversationRevision]) -> ConversationRevision: ...
+
+    @abstractmethod
+    def display_changed_before(self, later: ConversationRevision) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class UnobservedConversation(NullMember, ConversationObservation):
+    """A first observation has no selection and therefore always reads."""
+
+    def matches_stores(self, stores: WireRevision) -> bool:
+        return False
+
+    def capture(self, stores: WireRevision,
+                read: Callable[[], ConversationRevision]) -> ConversationRevision:
+        return read()
+
+    def display_changed_before(self, later: ConversationRevision) -> bool:
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationRevision(RecordMember, ConversationObservation, ToolResult):
+    """Core's captured selection and original store observation for one view, and the reply
+    a UI's revision request returns."""
+
+    stores: WireRevision
+    selection: DisplayIdentity
+
+    def matches_stores(self, stores: WireRevision) -> bool:
+        return self.stores == stores
+
+    def capture(self, stores: WireRevision,
+                read: Callable[[], ConversationRevision]) -> ConversationRevision:
+        return (type(self)(stores, self.selection) if stores.selection_reusable_from(self.stores)
+                else read())
+
+    def display_changed_since(self, earlier: ConversationObservation) -> bool:
+        return earlier.display_changed_before(self)
+
+    def display_changed_before(self, later: ConversationRevision) -> bool:
+        return (self.selection != later.selection
+                or later.stores.changed_since(BusSourceView(), self.stores))
+
+
+class ConversationHistoryView(HistoryView):
+    """Historical views that present conversation content, not owner state."""
+
+    @classmethod
+    def revision(cls, views: HistoryViews, target: NamedTarget,
+                 earlier: ConversationObservation,
+                 *, worktree: Checkout) -> ConversationRevision:
+        return earlier.capture(
+            views.revision(), partial(cls._read_revision, views, target, worktree))
+
+    @classmethod
+    def _read_revision(cls, views: HistoryViews, target: NamedTarget,
+                       worktree: Checkout) -> ConversationRevision:
+        viewer = views.messaging.user_identity(worktree)
+        document, catalog, stores = views.registry.store.read_pair_observed(
+            views.channels.catalog, views.revision)
+        snapshot = RegistrySnapshot.capture(document)
+        return ConversationRevision(
+            stores, cls._selection(
+                views, snapshot, catalog,
+                snapshot.require(viewer.name), target, worktree,
+                FileRevision.capture(views.bus.history.path),
+            ),
+        )
+
+    @classmethod
+    @abstractmethod
+    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
+                   viewer: Thread, target: NamedTarget, worktree: Checkout,
+                   history_revision: FileObservation) -> DisplayIdentity: ...
+
+    def page_request(self, scope, bounds: PageBounds) -> MessagePageRequest:
+        return ConversationMessagePageRequest(scope, bounds)
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelHistory(HistoryView):
+    scope: ChannelDisplayScope
+
+    def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
+        return self.scope
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
+    channel: Channel
+    viewer: DisplayViewer = AnonymousViewer()
+
+    @classmethod
+    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
+                   viewer: Thread, target: NamedTarget, worktree: Checkout,
+                   history_revision: FileObservation) -> ChannelDisplayIdentity:
+        with views.bus.opened_activity() as activity:
+            channel = catalog.require_channel(target.selected_name(snapshot), activity)
+        return ChannelDisplayIdentity(
+            viewer=viewer.incarnation,
+            bus_identity=RecordedBusIdentity.capture(views.bus.bus.path),
+            scope=channel.display_scope(snapshot), history_revision=history_revision,
+        )
+
+    def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
+        return presentation.channel_page(self.channel.name, viewer=self.viewer, bounds=bounds)
+
+    def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
+        return self.channel.display_scope(snapshot)
+
+
+@dataclass(frozen=True, slots=True)
+class DMHistory(HistoryView):
+    first: str
+    second: ThreadTarget
+
+    def capture(self, snapshot: RegistryProvenance) -> DMDisplayScope:
+        return DMDisplayScope.capture(
+            self.first, self.second.selected_name(snapshot), snapshot)
+
+
+@dataclass(frozen=True, slots=True)
+class DMDisplayHistory(ConversationHistoryView, DMHistory):
+    worktree: Checkout
+
+    @classmethod
+    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
+                   viewer: Thread, target: NamedTarget, worktree: Checkout,
+                   history_revision: FileObservation) -> DMDisplayIdentity:
+        name = target.selected_name(snapshot)
+        try:
+            peer = snapshot.participant(name).incarnation
+        except UnregisteredThreadError:
+            peer = UnrecordedThreadIncarnation(name)
+        root = views.root.stat()
+        return DMDisplayIdentity(
+            root_identity=(root.st_dev, root.st_ino),
+            bus_identity=RecordedBusIdentity.capture(views.bus.bus.path),
+            project_path=worktree.resolved().path, requested_peer=target.name,
+            viewer=viewer.incarnation, peer=peer,
+            scope=DMDisplayScope.capture(viewer.name, name, snapshot), history_revision=history_revision,
+        )
+
+    @property
+    def viewer(self) -> NamedViewer:
+        return NamedViewer(self.first)
+
+    def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
+        bus = presentation.bus
+        snapshot = presentation.registry.snapshot()
+        peer = self.second.selected_name(snapshot)
+        missing = peer not in snapshot.threads
+        if missing and bus.history.threads(NamedHistoricalSender(peer)):
+            return MessagePage((), False, False, NoDisplaySelection())
+        return DMDisplayBasis.fetch_page(
+            bus,
+            presentation.registry,
+            bus.bus.path.parent,
+            snapshot.require(self.first),
+            self.second,
+            worktree=self.worktree, bounds=bounds,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class HistorySource(MessageHistory, HistoryReferenceSource):
+    """An immutable bus/registry snapshot attached by the destination MessageBus."""
+
+    root: str
+    original_root: str
+    bus_identity: RecordedBusIdentity
+    snapshot_bus_identity: RecordedBusIdentity
+    snapshot_bus_revision: int
+    snapshot_registry_revision: RegistryRowRevision
+    provenance: RegistryProvenance
+
+    def references_from(self, context: ReferenceContext) -> ReferenceContext:
+        return context.for_history(self)
+
+    def selection(self, displayed: DisplayBasis) -> HistoricalSelection:
+        return HistoricalSelection(HistoricalDisplay(self, displayed))
+
+    def __post_init__(self) -> None:
+        # Archived transcripts stay with the original root; the snapshot copies no sessions.
+        object.__setattr__(self, "provenance", self.provenance.bound_to(Path(self.original_root)))
+
+    @property
+    def key(self) -> HistorySourceKey:
+        return HistorySourceKey(self.root)
+
+    @property
+    def snapshot_identity(self) -> tuple[HistorySourceKey, int, RegistryRowRevision]:
+        """One root is captured again at later revisions, and those captures record other names."""
+        return self.key, self.snapshot_bus_revision, self.snapshot_registry_revision
+
+    @classmethod
+    def capture_original(cls, root: Path) -> HistorySource:
+        """The original namespace and file revision come from the same retained document."""
+        captured = Registration(RegistryFile.path_in(root)).store.read_revision()
+        identity = RecordedBusIdentity.capture(Bus.path_in(root))
+        return cls(
+            str(root), str(root), identity, identity, Bus(Bus.path_in(root)).revision(),
+            captured.source.revision, RegistryProvenance.capture(captured.document),
+        )
+
+    @staticmethod
+    def matching_original(sources: tuple[HistorySource, ...], root: Path) -> Iterator[HistorySource]:
+        """Every archive of this original, in the catalog's declared order."""
+        return (source for source in sources if source.original_root == str(root))
+
+    def retain(self, destination: Path) -> HistorySource:
+        """Copy this original into an unpublished directory without changing its inputs."""
+        root = Path(self.original_root)
+        self.require_original(root)
+        catalog_path = ChannelCatalog.path_in(root)
+        catalog_revision = FileRevision.capture(catalog_path)
+        archived = Bus(Bus.path_in(destination))
+        Bus(Bus.path_in(root)).backup(archived.path)
+        registry = Registration(RegistryFile.path_in(root)).store.retain(destination)
+        if catalog_path.exists():
+            target = destination / catalog_path.name
+            shutil.copy2(catalog_path, target)
+            Platform.current().sync_file(target)
+        TranscriptRoutes(root).retain(destination)
+        self.require_original(root)
+        if FileRevision.capture(catalog_path) != catalog_revision:
+            raise ValueError("Historical catalog changed during snapshot; retry")
+        if archived.revision() != self.snapshot_bus_revision:
+            raise ValueError("Historical bus changed during snapshot; retry")
+        if not self.provenance.threads:
+            raise ValueError("Historical source has no identity declarations")
+        Platform.current().sync_directory(destination)
+        return HistorySource(
+            str(destination.resolve()), self.original_root, self.bus_identity,
+            RecordedBusIdentity.capture(archived.path), self.snapshot_bus_revision,
+            registry.source.revision, self.provenance,
+        )
+
+    def validate(self) -> None:
+        root = Path(self.root)
+        error = ValueError("Historical snapshot changed; restore it before browsing")
+        if not self.snapshot_bus_identity.matches(ObservedPath.at(Bus.path_in(root))):
+            raise error
+        if Bus(Bus.path_in(root)).revision() != self.snapshot_bus_revision:
+            raise error
+        if not Registration(RegistryFile.path_in(root)).store.has_revision(self.snapshot_registry_revision):
+            raise error
+
+    def acknowledge(self, displayed: DisplayBasis) -> None:
+        """Validate this archived source before updating its own read ledger."""
+        self.validate()
+        ReadLedger.at(self.root).mark_displayed(displayed.viewer, displayed)
+
+    def require_original(self, root: Path) -> None:
+        """Check an original typed acquisition before destination publication."""
+        root = root.resolve()
+        if self.root != str(root) or self.original_root != str(root):
+            raise ValueError("Recorded provenance belongs to another original source")
+        self.validate()
+        if not self.bus_identity.matches(ObservedPath.at(Bus.path_in(root))):
+            raise ValueError("Recorded provenance lost original bus ownership")
+
+    @classmethod
+    def require(cls, sources: tuple[HistorySource, ...], key: HistorySourceKey) -> HistorySource:
+        for source in sources:
+            if source.key == key:
+                source.validate()
+                return source
+        raise HistoricalSourceChanged("Historical source detached; refresh history")
+
+    def notification_references(
+        self,
+        sources: tuple[HistorySource, ...],
+        references: Sequence[MessageReference],
+        viewer: OutcomeViewer,
+        *,
+        after: RecipientCursor = FirstRecipient(),
+        limit: RecipientLimit = RecipientLimit(),
+    ) -> NotificationWindow:
+        """Read this namespace within its archive's current catalogue read, as this viewer
+        may see it."""
+
+        if self.require(sources, self.key) != self:
+            raise HistoricalSourceChanged("Historical source changed; refresh history")
+        root = Path(self.root)
+        result = MessageNotification.read_references(
+            Bus(Bus.path_in(root)),
+            references,
+            partial(
+                MessageNotification.recorded_delivery_window,
+                root,
+                self.provenance,
+                viewer=viewer,
+                after=after,
+                limit=limit,
+            ),
+        )
+        self.validate()
+        return result
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HistoricalMessage(CarriesEnvelope, Message):
+    source: HistorySource
+    source_order: int
+    sender_created_at: float | None
+    target_created_at: float | None
+
+    @classmethod
+    def project(
+        cls, message: Message, source: HistorySource, order: int, snapshot: RegistryProvenance
+    ) -> HistoricalMessage:
+        message = message.history_snapshot
+
+        def creation(name: str) -> float | None:
+            declaration = snapshot.threads.get(snapshot.canonical_name(name))
+            # A registration created after the message cannot identify its sender
+            # or recipient. The saved registry can still be inspected separately.
+            return (
+                declaration.created_at
+                if declaration is not None and declaration.created_at <= message.timestamp
+                else None
+            )
+
+        return cls.from_message(
+            message,
+            role=message.role.as_historical(),
+            source=source,
+            source_order=order,
+            sender_created_at=creation(message.sender),
+            target_created_at=creation(message.target),
+        )
+
+    @property
+    def history_source(self) -> HistorySource:
+        return self.source
+
+    @property
+    def view_cursor(self) -> HistoryCursor:
+        return HistoryCursor(source=self.source.key, sequence=self.seq)
+
+    @property
+    def view_key(self) -> tuple[str, int]:
+        return self.source.key, self.seq
+
+    @property
+    def view_order(self) -> tuple[int, int, int]:
+        return 0, self.source_order, self.seq
+
+    @property
+    def display_metadata(self) -> dict:
+        return {
+            "history": {
+                "source": self.source.original_root,
+                "bus_identity": FieldCodec.encode(self.source.bus_identity),
+                "sender_created_at": self.sender_created_at,
+                "target_created_at": self.target_created_at,
+            },
+        }
+
+
+class HistoricalSenders(SubclassUnion, affix="HistoricalSender"):
+    """Whose preserved threads a history lists: every sender (null) or one name."""
+
+    @abstractmethod
+    def includes(self, thread: ThreadProvenance, provenance: RegistryProvenance) -> bool: ...
+
+
+@dataclass(frozen=True)
+class AllHistoricalSenders(NullMember, HistoricalSenders):
+    def includes(self, thread: ThreadProvenance, provenance: RegistryProvenance) -> bool:
+        return True
+
+
+@dataclass(frozen=True)
+class NamedHistoricalSender(SingleFieldValue, HistoricalSenders):
+    name: str
+
+    def includes(self, thread: ThreadProvenance, provenance: RegistryProvenance) -> bool:
+        return thread.incarnation.matches_recorded_name(self.name, provenance)
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalThread:
+    source: HistorySource
+    thread: ThreadProvenance
+
+
+class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]], SourceTier):
+    """Ordered immutable source snapshots; never a delivery/launch authority."""
+
+    filename = "history_sources.json"
+
+    record_type = tuple[HistorySource, ...]
+
+    def empty(self) -> tuple[HistorySource, ...]:
+        return ()
+
+    @classmethod
+    def files_in(cls, root: Path) -> frozenset[Path]:
+        """Archived roots are found by where attach puts them, never by decoding the
+        catalogue: a copy of a root in an older shape must copy before any carry reads it."""
+        declared = super().files_in(root)
+        for archived in cls.archived_roots(root):
+            declared |= RootFile.paths_in(archived)
+        return declared
+
+    @staticmethod
+    def archive_directory(root: Path) -> Path:
+        return root / "history"
+
+    @classmethod
+    def archived_roots(cls, directory: Path) -> tuple[Path, ...]:
+        archives = cls.archive_directory(directory)
+        if not archives.is_dir():
+            return ()
+        return tuple(sorted(path for path in archives.iterdir()
+                            if path.is_dir() and not StoreOwner.is_staging(path)))
+
+    def sources(self) -> tuple[HistorySource, ...]:
+        with self.read_sources() as sources:
+            return sources
+
+    @contextmanager
+    def read_sources(self) -> Iterator[tuple[HistorySource, ...]]:
+        """Decode one read's catalogue; reject changes without decoding it again."""
+        captured = self._capture_unlocked()
+        sources = self.read_copied(captured)
+        self._require_revision(captured.revision)
+        yield sources
+        self._require_revision(captured.revision)
+
+    def _require_revision(self, revision: FileObservation) -> None:
+        if FileRevision.capture(self.path) != revision:
+            raise HistoricalSourceChanged("Historical catalogue changed; refresh history")
+
+    def attach(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
+        """Prepare a source without archive exclusion, then publish it exactly once."""
+        source_root = source_root.resolve()
+        if source_root == self.path.parent.resolve():
+            raise ValueError("The live bus cannot be its own history source")
+        for existing in HistorySource.matching_original(self.sources(), source_root):
+            return existing
+        parent = self.archive_directory(self.path.parent)
+        PrivateDirectoryRole.make_parents(parent)
+        stage = Path(tempfile.mkdtemp(
+            prefix=StoreOwner.staging_name.format(name="source", token=""),
+            suffix=StoreOwner.staging_suffix, dir=parent))
+        try:
+            original = HistorySource.capture_original(source_root) if source_read is None else source_read
+            original.require_original(source_root)
+            catalog_revision = FileRevision.capture(ChannelCatalog.path_in(source_root))
+            prepared = original.retain(stage)
+            target = parent / f"source-{ScratchName.mint()}"
+
+            def publish(sources: tuple[HistorySource, ...]) -> DocumentChange[tuple[HistorySource, ...], HistorySource]:
+                for existing in HistorySource.matching_original(sources, source_root):
+                    return DocumentChange(sources, existing)
+                original.require_original(source_root)
+                if FileRevision.capture(ChannelCatalog.path_in(source_root)) != catalog_revision:
+                    raise ValueError("Historical catalog changed before publication; retry")
+                PrivateDirectoryRole.make_parents(parent)
+                stage.rename(target)
+                Platform.current().sync_directory(parent)
+                Platform.current().sync_directory(self.path.parent)
+                source = replace(prepared, root=str(target.resolve()))
+                return DocumentChange((*sources, source), source)
+
+            return self.update(publish)
+        finally:
+            # A promoted directory may already be published; only the private stage is ours to discard.
+            if stage.exists():
+                shutil.rmtree(stage)
+
+    def page(self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
+        traversal = bounds.traversal
+        sources = self.sources()
+        start = next(
+            (i for i, source in enumerate(sources) if source.key == traversal.source),
+            -1 if traversal.historical else len(sources) - 1,
+        )
+        if traversal.historical and start < 0:
+            raise HistoricalSourceChanged("Historical source detached; reload history")
+        for index in traversal.source_indexes(start, len(sources)):
+            source = sources[index]
+            source.validate()
+            snapshot = source.provenance
+            current = replace(bounds, traversal=traversal.for_source(index == start))
+            request = view.page_request(view.capture(snapshot), current)
+            current_snapshot = presentation.registry.snapshot()
+            document = presentation.bus.reads.read()
+            opened = Bus(Bus.path_in(Path(source.root)))
+            raw = request.read_opened(opened)
+            projected = replace(raw, messages=tuple(
+                HistoricalMessage.project(message, source, index, snapshot)
+                for message in raw.messages))
+            page = replace(projected, selection=view.viewer.historical_selection(
+                projected, presentation, source, opened, document, current_snapshot))
+            if page.messages:
+                return replace(
+                    page,
+                    has_older=page.has_older or index > 0,
+                    has_newer=page.has_newer or index < len(sources) - 1,
+                )
+        return MessagePage((), False, False, NoDisplaySelection())
+
+    def integrated_page(
+        self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
+    ) -> MessagePage:
+        # One traversal asks once whether live messages follow its archives.
+        live_follows = cache(lambda: bool(view.live_page(presentation, PageBounds(limit=1)).messages))
+        first = self._source_page(view, presentation, bounds, live_follows)
+        pages = deque((first,))
+        # Each part extends the traversal's edge, so the remaining budget and continuation
+        # follow from the newest part; the pages are combined once, at the end.
+        following = bounds.after(first)
+        while following is not None:
+            part = self._source_page(view, presentation, following, live_follows)
+            if part.selection.history_revision != first.selection.history_revision:
+                raise HistoricalSourceChanged("Historical sources changed; reload history")
+            if not following.fits(len(part.messages)):
+                break
+            bounds.traversal.append(pages, part)
+            following = following.after(part)
+        return MessagePage.combine(tuple(pages)) if len(pages) > 1 else first
+
+    def _source_page(
+        self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds,
+        live_follows: Callable[[], bool],
+    ) -> MessagePage:
+        historical = bounds.traversal.historical
+        if not self.sources() and not historical:
+            return view.live_page(presentation, bounds)
+        history_revision = FileRevision.capture(self.path)
+        def historical_page() -> MessagePage:
+            history = self.page(
+                view, presentation, bounds if historical else replace(bounds, traversal=OlderTraversal())
+            )
+            if history.messages:
+                return replace(
+                    history,
+                    selection=replace(history.selection, history_revision=history_revision),
+                    has_newer=history.has_newer or live_follows(),
+                )
+            selected = history if historical else page
+            result = replace(selected, selection=replace(selected.selection, history_revision=history_revision))
+            if historical:
+                return bounds.traversal.after_exhausted_history(
+                    lambda traversal: view.live_page(presentation, replace(bounds, traversal=traversal)),
+                    result,
+                )
+            return result
+
+        if historical:
+            return historical_page()
+        page = view.live_page(presentation, bounds)
+        return bounds.traversal.source_page(
+            replace(
+                page,
+                has_older=page.has_older or bool(self.sources()),
+                selection=replace(page.selection, history_revision=history_revision),
+            ),
+            historical_page,
+        )
+
+    def threads(self, senders: HistoricalSenders) -> tuple[HistoricalThread, ...]:
+        result: list[HistoricalThread] = []
+        for source in self.sources():
+            source.validate()
+            result.extend(HistoricalThread(source, thread)
+                          for thread in source.provenance.threads.values()
+                          if senders.includes(thread, source.provenance))
+        return tuple(result)

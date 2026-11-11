@@ -2,23 +2,31 @@
 
 import pytest
 
-from agent_comms.assignment_states import AssignmentState, EngagedAssignment, FullPendingAssignment
-from agent_comms.attempt_states import SucceededAttempt
+from agent_comms.coordination.assignment_states import (
+    AssignmentState,
+    EngagedAssignment,
+    FullPendingAssignment,
+)
+from agent_comms.coordination.attempt_states import SucceededAttempt
 from agent_comms.coordination.errors import IntegrityViolationError
+from agent_comms.coordination.execution_states import (
+    ActiveExecution,
+    PendingExecution,
+)
+from agent_comms.coordination.obligation_states import (
+    PublishedResponse,
+    ResponseState,
+    SilentResponse,
+)
+from agent_comms.coordination.reason_codes import NoReasonCode
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import (
     ExecutionRecord,
     WireOrigin,
 )
-from agent_comms.execution_states import (
-    ActiveExecution,
-    PendingExecution,
-)
 from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId
-from agent_comms.lifecycle_capability import Failed
-from agent_comms.obligation_states import PublishedResponse, ResponseState, SilentResponse
-from agent_comms.reason_codes import NoReasonCode
-from agent_comms.wake_policy import FullWake, MessageAudience
+from agent_comms.nominal.lifecycle_capability import Failed
+from agent_comms.waking.wake_policy import FullWake, MessageAudience
 from bus_record_fixture import OWNER_LOOKUP
 
 
@@ -43,7 +51,7 @@ def test_state_data_cannot_be_attached_to_wrong_variant():
 
 def test_execution_extension_is_stored_and_transitioned(tmp_path):
     from agent_comms.coordination.coordinator import Coordination
-    from agent_comms.execution_states import UnstartedExecution
+    from agent_comms.coordination.execution_states import UnstartedExecution
 
     class PausedExecution(UnstartedExecution):
         @classmethod
@@ -73,9 +81,9 @@ def test_execution_extension_is_stored_and_transitioned(tmp_path):
 
 def test_new_response_state_roundtrips_real_store(tmp_path):
     from agent_comms.coordination.coordinator import Coordination
+    from agent_comms.coordination.execution_states import QueuedExecution
     from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink
     from agent_comms.coordination.tables.responses import ResponseObligation
-    from agent_comms.execution_states import QueuedExecution
 
     class ReviewedResponse(ResponseState):
         @classmethod
@@ -119,7 +127,7 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
 
 
 def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
-    from agent_comms.assignment_states import FailedAssignment
+    from agent_comms.coordination.assignment_states import FailedAssignment
     from agent_comms.coordination.coordinator import Coordination
 
     class AwaitingAssignment(FullPendingAssignment):

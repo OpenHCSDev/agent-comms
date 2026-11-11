@@ -3,13 +3,14 @@
 import subprocess
 import sys
 import threading
+import os
 from pathlib import Path
 
 import pytest
 
 import pytest_session as sessions
-from agent_comms.storage_rules import StorageRule
-from agent_comms.test_lease import HostTestLease, NewTestRun
+from agent_comms.execution.test_lease import HostTestLease, InheritedTestRun, NewTestRun
+from agent_comms.projects.storage_rules import StorageRule
 
 pytest_plugins = ("pytester",)
 
@@ -28,6 +29,10 @@ def test_controller_prepares_once_and_confirmation_does_not_reacquire(
     with sessions.TestSession.from_worker_hint("", NewTestRun(), lease) as owner:
         owner.prepare()
         owner.confirm(controller_session)
+        assert owner.start.descriptors()
+        with lease.held(InheritedTestRun(os.dup(owner.start.descriptors()[0]))):
+            with lease.observed() as shared:
+                assert shared.held
         with lease.observed() as claim:
             assert claim.held
     with lease.observed() as claim:
@@ -38,7 +43,7 @@ def test_forged_worker_hint_defers_but_never_bypasses_admission(
     tmp_path: Path, controller_session: pytest.Session,
 ):
     lease = HostTestLease.in_home(tmp_path)
-    hold = ("from pathlib import Path; import sys; from agent_comms.test_lease import"
+    hold = ("from pathlib import Path; import sys; from agent_comms.execution.test_lease import"
             " HostTestLease\nwith HostTestLease(Path(sys.argv[1])).held():\n"
             "    print('held', flush=True); sys.stdin.read(1)")
     with subprocess.Popen((sys.executable, "-c", hold, str(lease.path)), stdin=subprocess.PIPE,

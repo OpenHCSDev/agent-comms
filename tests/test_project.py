@@ -1,6 +1,4 @@
 """Project changes preserve thread/session identity and synchronize executing owners."""
-from agent_comms.controller import SessionUpdateSink
-
 import asyncio
 import json
 import os
@@ -9,14 +7,14 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
-from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from acp import RequestError
 
-from delivery_owner_fixture import canonical_agent
-from agent_comms.comms import wire
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
-from agent_comms.repo import Checkout
+from agent_comms.comms import wire
+from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
+from agent_comms.projects.checkouts import Checkout
+from delivery_owner_fixture import canonical_agent
 
 
 async def test_project_update_is_published_and_old_saved_cwd_can_resume(

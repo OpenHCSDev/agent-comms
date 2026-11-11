@@ -1,28 +1,9 @@
 
-from agent_comms.repo import Checkout, LaunchCheckout
 import os
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus import Bus
-from agent_comms.channel_management import (
-    ArchiveThreadsTagDisposition,
-    DeleteExclusiveInactiveThreadsTagDisposition,
-    DeleteThreadsTagDisposition,
-)
-from agent_comms.channel_targets import CommandTarget, CommsTag, DeclaredTag
-from agent_comms.channels import (
-    AllOfMatch,
-    AnyOfMatch,
-    BuiltinChannelView,
-    ChannelMemberIndex,
-    ParticipantsView,
-    RetiredTagChannel,
-    TagChannel,
-    ViewPredicate,
-)
-from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.display_order import (
     ChannelSort,
@@ -32,16 +13,48 @@ from agent_comms.display_order import (
     ThreadSort,
 )
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
+from agent_comms.execution.pi_vocabulary import HighThinkingLevel
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.channel_management import (
+    ArchiveThreadsTagDisposition,
+    DeleteExclusiveInactiveThreadsTagDisposition,
+    DeleteThreadsTagDisposition,
+)
+from agent_comms.messaging.channel_targets import CommandTarget, CommsTag, DeclaredTag
+from agent_comms.messaging.channels import (
+    AllOfMatch,
+    AnyOfMatch,
+    BuiltinChannelView,
+    ChannelMemberIndex,
+    ParticipantsView,
+    RetiredTagChannel,
+    TagChannel,
+    ViewPredicate,
+)
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.pi_vocabulary import HighThinkingLevel
-from agent_comms.registry.registry_document import RosterVisibility
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.thread_management import ForkSpec, GivenTags
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.projects.checkouts import (
+    Checkout,
+    LaunchCheckout,
+)
+from agent_comms.registry.roster_visibility import RosterVisibility
+from agent_comms.registry.thread_management import (
+    ForkSpec,
+    GivenTags,
+)
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_status import (
+    ArchivedThreadStatus,
+    RunningThreadStatus,
+    StoppedThreadStatus,
+)
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
-from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
 from conftest import installed_comms
 
@@ -64,8 +77,8 @@ def setup_wire(path):
 
 
 def test_current_membership_cannot_create_an_unfrozen_delivery(tmp_path):
-    from agent_comms.bus import PublicRecord
-    from agent_comms.messages import InfoKind, Message
+    from agent_comms.messaging.bus import PublicRecord
+    from agent_comms.messaging.messages import InfoKind, Message
 
     comms = setup_wire(tmp_path)
     before_join = comms.messaging.send("a", "#api", "before other joined").message
@@ -221,10 +234,10 @@ def test_tag_removal_preserves_current_records(tmp_path):
 
 @pytest.mark.asyncio
 async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catalog(tmp_path):
-    from agent_comms.channel_management import TagDisposition
-    from agent_comms.cli_command import CliCommand
+    from agent_comms.cli_verbs.cli_command import CliCommand
+    from agent_comms.messaging.channel_management import TagDisposition
     from agent_comms.nominal.field_codec import FieldCodec, compile_decoder
-    from agent_comms.tool_declaration import NativeRequestTools
+    from agent_comms.transport.tool_declaration import NativeRequestTools
     from agent_comms.transport.tools.served import CommsTagsTool
 
     comms = setup_wire(tmp_path)
@@ -233,10 +246,9 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
     action = next(action for action in catalog if action.declaration.declared_name == 'delete-tag')
     disposition = DeleteExclusiveInactiveThreadsTagDisposition()
     editor_value = compile_decoder(TagDisposition).encode_editor(disposition)
-    from agent_comms.launch_root import LaunchRoot
-
     from agent_comms.config_options import ConfigOptions
-    from agent_comms.owner_launch import RetainedOwnerLaunch
+    from agent_comms.execution.launch_root import LaunchRoot
+    from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 
     with LaunchRoot.from_path(comms.root).selected():
         prepared = await action.prepared(ConfigOptions(RetainedOwnerLaunch.configured(), comms.route))
@@ -364,8 +376,8 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path, s
     import json
 
     from agent_comms.cli_bridges.history import OfflineHistory
-    from agent_comms.thread_text import AnySession
-    from agent_comms.harness_install import OpenCodeHarness
+    from agent_comms.installer.harness_install import OpenCodeHarness
+    from agent_comms.registry.thread_text import AnySession
 
     comms = setup_wire(tmp_path)
     predicate = ViewPredicate(AnyOfMatch, frozenset({"api"}))

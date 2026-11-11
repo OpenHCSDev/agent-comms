@@ -4,8 +4,12 @@ The recorded reply is ts-gaming's own `tailscale serve status --json` on 2026-11
 funnelled origin on 443 and one tailnet-only port, both in front of the same connector.
 """
 
-from agent_comms.served_endpoints import (
-    FunnelServed, NothingTailnetOnly, OfferedByTailnet, ServedEndpoints, ServedTarget,
+from agent_comms.transport.served_endpoints import (
+    FunnelServed,
+    NothingTailnetOnly,
+    OfferedByTailnet,
+    ServedEndpoints,
+    ServedTarget,
     TailnetServed,
 )
 
@@ -92,8 +96,8 @@ def test_a_port_nothing_serves_refuses_without_naming_endpoints():
 
 
 def test_both_probes_run_a_command_one_way():
-    from agent_comms.probed_command import ProbedCommand
-    from agent_comms.tailnet_buses import TailnetBuses
+    from agent_comms.transport.probed_command import ProbedCommand
+    from agent_comms.transport.tailnet_buses import TailnetBuses
     assert issubclass(ServedEndpoints, ProbedCommand) and issubclass(TailnetBuses, ProbedCommand)
     # A classmethod binds per access, so the comparison is of the one function behind it.
     assert ServedEndpoints.run.__func__ is ProbedCommand.run.__func__

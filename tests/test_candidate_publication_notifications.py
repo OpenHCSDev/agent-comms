@@ -2,9 +2,7 @@
 
 from contextvars import Context
 
-
 from agent_comms.storage.store_files import StoreLock
-
 
 
 def test_release_scope_closes_after_context_switch_and_stale_context_starts_fresh():

@@ -50,7 +50,7 @@ PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}" \
     "$python" "$repo_root/tools/render_native_proof_schema.py" \
     "$native_root/native-proof-schema.mjs"
 # Build verification renders the unit prompt, never a unit's first turn.
-identity=$("$python" -I "$repo_root/src/agent_comms/native_build_inputs.py" \
+identity=$("$python" -I "$repo_root/src/agent_comms/installer/native_build_inputs.py" \
     "$repo_root" "$(node --version)" "$(npm --version)" "${PI_MCP_DEPENDENCY_PACKAGE:-}")
 read -r build_id preparation_stamp <<< "$identity"
 store_root=$(native store)
@@ -180,7 +180,7 @@ native share_resources \
     "$stage/node_modules/@earendil-works/pi-coding-agent" "$store_root"
 if [[ "$update_pins" == true ]]; then
     native write_manifest "$native_package"
-    identity=$("$python" -I "$repo_root/src/agent_comms/native_build_inputs.py" \
+    identity=$("$python" -I "$repo_root/src/agent_comms/installer/native_build_inputs.py" \
         "$repo_root" "$(node --version)" "$(npm --version)" "${PI_MCP_DEPENDENCY_PACKAGE:-}")
     read -r build_id preparation_stamp <<< "$identity"
     target="$store_root/.pi-native-$build_id"

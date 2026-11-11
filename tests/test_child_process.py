@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.native_build_inputs import DetachedChildStdio
-from agent_comms.child_process import (
+from agent_comms.execution.child_process import (
+    STOP_GRACE_SECONDS,
     AttachedChild,
     BoundedRun,
     ChildOutcome,
@@ -30,13 +30,13 @@ from agent_comms.child_process import (
     Platform,
     ProcessIdentity,
     ResidentManager,
-    STOP_GRACE_SECONDS,
     SpawnedProcess,
     SynchronousProcess,
     TimedOutOutcome,
 )
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.launch_runtime import LaunchRuntime
 from process_tree_fixture import TREE, identities, ready
 
 
@@ -218,7 +218,7 @@ def test_grandchild_import_path_holds_one_copy_of_the_checkout(tmp_path: Path) -
     # The child relaunches through the same owner: two generations of real launches.
     report = (
         "import os,sys; from pathlib import Path; "
-        "from agent_comms.child_process import SpawnedProcess; "
+        "from agent_comms.execution.child_process import SpawnedProcess; "
         "r = SpawnedProcess.run((sys.executable, '-c', "
         "'import os; print(os.environ[\"PYTHONPATH\"])'), "
         "timeout=30, cwd=Path.cwd(), env=dict(os.environ)); "
@@ -364,7 +364,7 @@ def test_new_outcome_is_derived_and_field_encoded() -> None:
 
 @pytest.mark.asyncio
 async def test_exec_failure_is_reported_by_real_exec_boundary(tmp_path: Path) -> None:
-    from agent_comms.child_process import FailedToStartOutcome
+    from agent_comms.execution.child_process import FailedToStartOutcome
 
     result = await BoundedRun.run((str(tmp_path / "missing-executable"),), timeout=2)
     assert isinstance(result.outcome, FailedToStartOutcome)
@@ -374,7 +374,7 @@ async def test_exec_failure_is_reported_by_real_exec_boundary(tmp_path: Path) ->
 async def test_parent_lifeline_loss_releases_real_sqlite_reader(tmp_path: Path) -> None:
     import sqlite3
 
-    from agent_comms.child_process import ParentLifeline
+    from agent_comms.execution.child_process import ParentLifeline
 
     if sys.platform == "win32":
         pytest.skip("Recovery gateway uses POSIX peer sockets and inherited descriptors")
@@ -390,7 +390,7 @@ async def test_parent_lifeline_loss_releases_real_sqlite_reader(tmp_path: Path) 
                 """
 import sqlite3,sys,time
 from pathlib import Path
-from agent_comms.child_process import ParentLifeline
+from agent_comms.execution.child_process import ParentLifeline
 ParentLifeline.guard()
 db=sqlite3.connect(sys.argv[1],isolation_level=None)
 db.execute('BEGIN'); db.execute('SELECT * FROM state').fetchall()
@@ -423,7 +423,7 @@ time.sleep(60)
 
 LAUNCHER = """import json,sys,time
 from pathlib import Path
-from agent_comms.child_process import OutlivesLauncherLifetime, SpawnedProcess
+from agent_comms.execution.child_process import OutlivesLauncherLifetime, SpawnedProcess
 from agent_comms.nominal.field_codec import FieldCodec
 sleeper = (sys.executable, '-c', 'import time; time.sleep(60)')
 children = (SpawnedProcess.launch(sleeper),
@@ -460,7 +460,7 @@ async def test_killed_launcher_takes_its_child_and_leaves_its_resident(tmp_path:
 
 UNIT_LAUNCHER = """import json,subprocess,sys
 from pathlib import Path
-from agent_comms.child_process import OutlivesLauncherLifetime, Platform, SpawnedProcess
+from agent_comms.execution.child_process import OutlivesLauncherLifetime, Platform, SpawnedProcess
 from agent_comms.nominal.field_codec import FieldCodec
 sleeper = (sys.executable, '-c', 'import time; time.sleep(60)')
 # A new session and a reparent to init leave the process tree, never the unit's cgroup.
@@ -585,7 +585,7 @@ async def test_discard_stderr_drains_past_transport_capacity_to_real_eof():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("exit_delay", (.1, STOP_GRACE_SECONDS + .1))
 async def test_parent_process_reaps_but_observation_cannot_claim_exit_code(exit_delay: float) -> None:
-    from agent_comms.child_process import DetachedExitOutcome
+    from agent_comms.execution.child_process import DetachedExitOutcome
 
     child = SpawnedProcess.launch((sys.executable, "-c",
                                   "import sys,time; time.sleep(float(sys.argv[1])); sys.exit(7)",

@@ -1,20 +1,24 @@
 """Process exclusion and declaration-selected CI admission, not mocked flock."""
 
 import os
-from pathlib import Path
 import pwd
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
-from agent_comms import test_lease as leases
-
+from agent_comms.execution.test_lease import (
+    GithubActionsTestLease,
+    HostTestLease,
+    InheritedTestRun,
+    TestLease,
+)
 
 _HOLD = """
 from pathlib import Path
 import sys
-from agent_comms.test_lease import HostTestLease
+from agent_comms.execution.test_lease import HostTestLease
 with HostTestLease(Path(sys.argv[1])).held():
     print('held', flush=True)
     sys.stdin.read(1)
@@ -23,14 +27,14 @@ with HostTestLease(Path(sys.argv[1])).held():
 _ADOPT = """
 from pathlib import Path
 import sys
-from agent_comms.test_lease import HostTestLease, InheritedTestRun
+from agent_comms.execution.test_lease import HostTestLease, InheritedTestRun
 with HostTestLease(Path(sys.argv[1])).held(InheritedTestRun(int(sys.argv[2]))):
     print('adopted')
 """
 
 
 def test_second_process_waits_for_the_holder_then_runs(tmp_path: Path) -> None:
-    lease = leases.HostTestLease.in_home(tmp_path)
+    lease = HostTestLease.in_home(tmp_path)
     command = (sys.executable, "-c", _HOLD, str(lease.path))
     with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                           text=True) as holder:
@@ -46,7 +50,7 @@ def test_second_process_waits_for_the_holder_then_runs(tmp_path: Path) -> None:
 
 
 def test_child_adopts_the_same_claim_and_parent_keeps_it(tmp_path: Path) -> None:
-    lease = leases.HostTestLease.in_home(tmp_path)
+    lease = HostTestLease.in_home(tmp_path)
     with lease.held() as start:
         adopted = subprocess.run(
             (sys.executable, "-c", _ADOPT, str(lease.path),
@@ -58,34 +62,34 @@ def test_child_adopts_the_same_claim_and_parent_keeps_it(tmp_path: Path) -> None
 
 
 def test_foreign_descriptor_cannot_exempt_a_controller(tmp_path: Path) -> None:
-    lease = leases.HostTestLease.in_home(tmp_path)
+    lease = HostTestLease.in_home(tmp_path)
     lease.path.parent.mkdir(parents=True)
     lease.path.touch()
     with (tmp_path / "foreign").open("w") as foreign:
         with pytest.raises(ValueError, match="is not the claim"):
-            with lease.held(leases.InheritedTestRun(foreign.fileno())):
+            with lease.held(InheritedTestRun(foreign.fileno())):
                 pass
 
 
 def test_only_declared_ci_runner_avoids_the_host_claim(tmp_path: Path) -> None:
-    ci = leases.TestLease.for_runner_programs(
-        (Path(leases.GithubActionsTestLease.runner_program),), tmp_path,
+    ci = TestLease.for_runner_programs(
+        (Path(GithubActionsTestLease.runner_program),), tmp_path,
     )
     with ci.held(), ci.held():
         pass
-    local = leases.TestLease.for_runner_programs((Path(sys.executable),), tmp_path)
-    assert local.path == leases.HostTestLease.in_home(tmp_path).path
+    local = TestLease.for_runner_programs((Path(sys.executable),), tmp_path)
+    assert local.path == HostTestLease.in_home(tmp_path).path
 
 
 def test_environment_does_not_choose_ci_or_move_the_host_lock(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    original = leases.TestLease.current().path
+    original = TestLease.current().path
     monkeypatch.setenv("CI", "true")
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("HOME", str(tmp_path))
-    current = leases.TestLease.current()
+    current = TestLease.current()
     assert current.path == original
-    assert current.path == leases.HostTestLease.in_home(
+    assert current.path == HostTestLease.in_home(
         Path(pwd.getpwuid(os.getuid()).pw_dir),
     ).path

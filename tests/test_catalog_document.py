@@ -4,9 +4,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.comms import wire
-from agent_comms.messages import Message, InfoKind
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.messages import InfoKind, Message
 
 
 def test_independent_writers_merge_under_wire_then_document_lock(tmp_path):

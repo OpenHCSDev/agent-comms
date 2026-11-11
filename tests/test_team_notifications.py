@@ -5,62 +5,79 @@ import json
 import os
 import pickle
 import time
-from contextlib import contextmanager, nullcontext
 from collections.abc import Iterator
-from dataclasses import dataclass, replace
+from contextlib import contextmanager, nullcontext
+from dataclasses import dataclass, field, replace
 from multiprocessing import Pipe
 
 import pytest
 
-
-from agent_comms.bus_read import UiRead
-from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.cli_bridges.codex_connection import CodexConnection
+from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.cli_verbs.fork import ForkCliCommand
-from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
+from agent_comms.comms import Comms
+from agent_comms.coordination.errors import DeferredRead
+from agent_comms.coordination.service_passes import ServicePassStore
+from agent_comms.errors import (
+    HumanSendRefusedError,
+    RelationViolationError,
+    UnregisteredThreadError,
+)
+from agent_comms.execution.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.messaging.bus_publication import AgentOrigin
+from agent_comms.messaging.bus_read import UiRead
+from agent_comms.messaging.channel_targets import TeammatesTag, ThreadTarget
+from agent_comms.messaging.initial_origin import HumanOrigin
+from agent_comms.messaging.message_page import MessagePageRequest
+from agent_comms.messaging.messages import ConversationRole, InfoKind, Message
+from agent_comms.messaging.read_basis import DMDisplayScope
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.planning.orders import ProgressRead
+from agent_comms.planning.todo_refusals import TeammateOccupied
+from agent_comms.presentation import NoRevision
+from agent_comms.projects.checkouts import Checkout, UnpushedHead
+from agent_comms.projects.work_branches import WorkBranchError
+from agent_comms.registry.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
+from agent_comms.registry.thread_management import GivenTags
+from agent_comms.registry.threads import ForkThread, NativeThread, Thread
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.task_attachments.team_pings import (
+    PublishedFacts,
+    RulePing,
+    TeamDecisions,
+    TeamUpdate,
+    TeamUpdateNotice,
+    TeamUpdateStore,
+)
 from agent_comms.team.standing_rules import (
     ReviewTimerUp,
     ServicePassFailing,
     StandingRule,
     UndatedStandingRule,
 )
-from agent_comms.thread_management import GivenTags
-from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
-from agent_comms.comms import Comms
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.transport.tools.served import invoke_tool
-from team_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
-from agent_comms.team_hud import TeamFrame, TeamHud, TeamPlan, CodexUsage, UnreadableUsage
-from agent_comms.team_hud_records import Teammate, PhasesDoneByPlanGroup
+from agent_comms.team.team_heartbeat import TeamHeartbeat, TeamObservation
+from agent_comms.team.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, UnreadableUsage
+from agent_comms.team.team_hud_records import Teammate
 from agent_comms.team.vibe_check import OverloadDegradation
-from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdateNotice, TeamUpdate, TeamUpdateStore, PublishedFacts, RulePing
-from agent_comms.errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
-from agent_comms.launch_root import LaunchRoot
-from agent_comms.message_page import MessagePageRequest
-from agent_comms.read_basis import DMDisplayScope
-from agent_comms.service_passes import ServicePassStore
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import ProgressRead, TeammateOccupied
-from agent_comms.ui_model import observation
-from agent_comms.ui_model.observation import TeamHudObserved, ObservationService, ObserveTeamHud
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.transcript.transcript_events import IncomingTranscript
+from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.reads import TeammateRead
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.work_branches import WorkBranchError
-from agent_comms.ui_model.observation import ReadOperation, ReadRefused
-from agent_comms.cli_bridges.codex_connection import CodexConnection
-from agent_comms.ui_model.teammate_state import (
-    Spinning, TeammateState, UrgentGroup,
-)
-from agent_comms.cli_bridges.session_watch import WatchClaim
-from agent_comms_hooks.watch import WatchRecord
-from agent_comms.wake_policy import PassiveWake
-from agent_comms.bus_publication import AgentOrigin, HumanOrigin
-from agent_comms.channel_targets import TeammatesTag, ThreadTarget
-from agent_comms.messages import ConversationRole, InfoKind, Message
-from agent_comms.transcript_events import IncomingTranscript
+from agent_comms.transport.tools.served import invoke_tool
+from agent_comms.ui_model import observation
+from agent_comms.ui_model.hud_groups import PhasesDoneByPlanGroup
 from agent_comms.ui_model.message_category import HeartbeatCategory, InboundCategory, all_categories
-from agent_comms.repo import Checkout, UnpushedHead
-from agent_comms.registry.threads import Thread, ForkThread, NativeThread
+from agent_comms.ui_model.observation import (
+    ObservationService,
+    ObserveTeamHud,
+    ReadOperation,
+    ReadRefused,
+    TeamHudObserved,
+)
+from agent_comms.ui_model.teammate_state import Spinning, TeammateState, UrgentGroup
+from agent_comms.waking.wake_policy import PassiveWake
+from agent_comms_hooks.watch import WatchRecord
+from team_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
 from test_holder_standing_rules import state_cards
 from test_unit_state import recorded_turn
 
@@ -89,7 +106,7 @@ def test_heartbeat_delivery_preserves_membership_board_history_and_direct_messag
     notification_bus: Comms, delivery: str, publications: int,
 ) -> None:
     from agent_comms.cli_verbs.heartbeat_delivery import HeartbeatDeliveryCliCommand
-    from agent_comms.heartbeat_delivery import HeartbeatDelivery
+    from agent_comms.registry.heartbeat_delivery import HeartbeatDelivery
 
     comms = notification_bus
     original = comms.registry.require("colleague")
@@ -573,11 +590,15 @@ def test_failure_packet_follows_the_team_rename_alias(notification_bus):
 
 def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_bus):
     """Ready and done-but-held phases colleague; finished phases are one count per plan."""
-    from agent_comms.team_hud_records import TeamPhase
-    from agent_comms.plan_phases import (
-        BusInterfacePhase, DesignReconciledPhase, OneOrderOwnerPhase, RecordPlanePhase,
-        RetainedStorePhase, ReviewQueuePhase,
+    from agent_comms.planning.plan_phases import (
+        BusInterfacePhase,
+        DesignReconciledPhase,
+        OneOrderOwnerPhase,
+        RecordPlanePhase,
+        RetainedStorePhase,
+        ReviewQueuePhase,
     )
+    from agent_comms.team.team_hud_records import TeamPhase
 
     comms = notification_bus
     colleague = comms.registry.require("colleague").incarnation
@@ -611,7 +632,7 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
 
 def test_frame_keeps_original_ping_order_and_folded_idle_records(tmp_path):
     from agent_comms.nominal.field_codec import OrderId
-    from agent_comms.thread_identity import RecordedThreadIncarnation
+    from agent_comms.registry.thread_identity import RecordedThreadIncarnation
     from agent_comms.ui_model.hud_groups import IdleGroup
     from agent_comms.ui_model.teammate_state import Idle, NoPendingClock, PendingClock, Stuck
 
@@ -888,9 +909,65 @@ def test_a_frame_this_reader_cannot_decode_reaches_the_page_not_the_observer(not
     assert pickle.loads(pickle.dumps(recovered)).huds == TeamFrame.read_all(comms.root)
 
 
+@dataclass
+class PreparedInterest:
+    readings: list = field(default_factory=list)
+
+    def prepared(self, reading, service) -> None:
+        self.readings.append(reading)
+
+
+@dataclass
+class PreparingService:
+    """The parts of ObservationService a board preparation touches, recording what it sends."""
+
+    comms: object
+    revision: object
+    sent: list = field(default_factory=list)
+    interest: PreparedInterest = field(default_factory=PreparedInterest)
+
+    def send(self, result) -> None:
+        self.sent.append(result)
+
+
+@pytest.mark.parametrize("failure, outcome", [
+    (DeferredRead("the board's stores are mid-write"), "again"),
+    (ValueError("a heartbeat frame this build cannot decode"), "unreadable"),
+    (RuntimeError("a defect in the board read"), "raised"),
+])
+def test_preparing_the_board_answers_each_read_outcome_through_its_owner(
+        notification_bus, failure, outcome):
+    """prepare() caught every Exception and called it unreadable history: a deferred read was
+    shown as broken instead of retried, and a real defect was rendered as a saved-data error.
+    It now reads through UnreadableHistory.outcome, the owner read() already uses."""
+    comms = notification_bus
+    reading = ObserveTeamHud().observation()
+    service = PreparingService(comms, comms.views.revision())
+    reading.prepared_revision = service.revision
+
+    def failing_board(_comms):
+        raise failure
+
+    reading.read_board = failing_board
+    if outcome == "raised":
+        with pytest.raises(RuntimeError, match="a defect in the board read"):
+            asyncio.run(reading.prepare(service))
+        return
+    asyncio.run(reading.prepare(service))
+    assert service.interest.readings == []
+    if outcome == "again":
+        assert service.sent == []
+        assert isinstance(reading.prepared_revision, NoRevision)
+    else:
+        unreadable, = service.sent
+        assert isinstance(unreadable, observation.TeamHudUnreadable)
+        assert "cannot decode" in str(unreadable.error)
+
+
 def test_codex_usage_decodes_window_and_keeps_refusal_visible():
     import json
     from datetime import datetime
+
     from agent_comms.cli_bridges.codex_protocol import RateLimitsResponse
     from agent_comms.nominal.field_codec import FieldCodec
 
@@ -912,8 +989,8 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
 
 def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_evidence(notification_bus):
     comms = notification_bus
-    from agent_comms.head_review import PullRequestHead
-    from agent_comms.repository_name import RepositoryName
+    from agent_comms.projects.head_review import PullRequestHead
+    from agent_comms.projects.repository_name import RepositoryName
     from agent_comms.team.standing_rules import OrderlessUnreviewedHead
 
     rules = tuple(OrderlessUnreviewedHead(
@@ -935,7 +1012,7 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
     assert len(message.task.handled) == 12
     assert {entry.text for entry in message.task.board(comms)} == {rule.line() for rule in rules}
     assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12
-    from agent_comms.text_digest import TextDigest
+    from agent_comms.nominal.text_digest import TextDigest
 
     swapped = (*packet.handled[:-1], replace(packet.handled[-1], observation=TextDigest.of("other observation")))
     replacement = replace(packet, handled=swapped, waiting=swapped)
@@ -1189,7 +1266,7 @@ def test_a_board_packet_files_under_heartbeats_while_the_owners_own_words_stay_i
 def test_an_archived_lead_keeps_its_board_and_the_pass_completes(notification_bus):
     """2026-11-02: from 14:49 every heartbeat pass died on 'Initial direct target must be visible'
     sending the archived colleague its packet, so no teammate had a board."""
-    from agent_comms.thread_status import ArchivedThreadStatus
+    from agent_comms.registry.thread_status import ArchivedThreadStatus
 
     comms = notification_bus
     comms.registry.register(comms.registry.require("colleague"), ArchivedThreadStatus())

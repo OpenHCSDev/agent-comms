@@ -1,31 +1,53 @@
 """Shared maintenance, exact holder consent and genuine caller binding are different contracts."""
 
+import time
 from contextlib import nullcontext
 from dataclasses import replace
-import time
 
 import pytest
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, OwnerInvocable, PausedGoalAction, ReissuedOrderGoalAction, SetGoalAction
-from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, ModelPause, PausedGoal
-from agent_comms.goals import Goal, GoalConsentRequired, NoGoal
 from agent_comms.nominal.field_codec import GoalId, OrderId
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation
-from agent_comms.thread_status import (
-    NoBridgeThreadStatus, PausedBridgeThreadStatus, StoppedThreadStatus, StoppingThreadStatus,
+from agent_comms.planning.goal_actions import (
+    CreateProblemGoalAction,
+    OrderGoalAction,
+    OwnerInvocable,
+    PausedGoalAction,
+    ReissuedOrderGoalAction,
+    SetGoalAction,
 )
-from agent_comms.registry.threads import ParkedThreadWorkState
-from agent_comms.todos import (
+from agent_comms.planning.goal_states import (
+    ActiveGoal,
+    BlockedGoal,
+    CompletedGoal,
+    ModelPause,
+    PausedGoal,
+)
+from agent_comms.planning.goals import (
+    Goal,
+    GoalConsentRequired,
+    NoGoal,
+)
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
     AssignTodo,
-    HolderConsentRequired,
     ReleaseTodo,
-    StrikeReason,
     TodoConflict,
 )
-from agent_comms.tool_caller import ForkCaller, PeerCaller, ThreadCaller
-
+from agent_comms.planning.todo_refusals import HolderConsentRequired
+from agent_comms.registry.thread_identity import (
+    CoreWatcherIncarnation,
+    RecordedThreadIncarnation,
+)
+from agent_comms.registry.thread_status import (
+    NoBridgeThreadStatus,
+    PausedBridgeThreadStatus,
+    StoppedThreadStatus,
+    StoppingThreadStatus,
+)
+from agent_comms.registry.threads import ParkedThreadWorkState
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.transport.tool_caller import ForkCaller, PeerCaller, ThreadCaller
 from agent_comms.transport.tools.orders import (
     CommsChangeProblemTool,
     CommsOrderTool,

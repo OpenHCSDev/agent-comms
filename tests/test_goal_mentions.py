@@ -2,19 +2,13 @@
 
 from __future__ import annotations
 
-
-from agent_comms.repo import Checkout
-import json
 from dataclasses import asdict
 from pathlib import Path
 
 import pytest
 
-from agent_comms.relationships import CollaboratingRelationshipGroup, RelationshipEdit
 from agent_comms.comms import Comms, wire
-from agent_comms.transport.tools.served import invoke_tool
-from conftest import installed_comms
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
     CompletedGoalAction,
     EditGoalAction,
@@ -23,13 +17,23 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.goals import (
-    AliasMentionBinding, LimitExceededMentionBinding, MalformedMentionBinding, NonExecutableMentionBinding, ResolvedMentionBinding, SelfMentionBinding, UnknownMentionBinding,
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goals import (
+    AliasMentionBinding,
+    LimitExceededMentionBinding,
+    MalformedMentionBinding,
+    NonExecutableMentionBinding,
+    ResolvedMentionBinding,
+    SelfMentionBinding,
+    UnknownMentionBinding,
 )
-from agent_comms.thread_identity import UserThreadRole
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.relationships import CollaboratingRelationshipGroup, RelationshipEdit
+from agent_comms.registry.thread_identity import UserThreadRole
 from agent_comms.registry.threads import NativeThread
-from agent_comms.goal_scope import OneGoal
+from agent_comms.transport.tool_caller import ThreadCaller
+from agent_comms.transport.tools.served import invoke_tool
+from conftest import installed_comms
 
 
 def _wire(tmp_path: Path) -> Comms:
@@ -241,18 +245,3 @@ def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: P
     assert _rows(comms, "peer")[0] == {}
     assert _rows(comms, "owner")[0] == {}
     assert not comms.relationships.store.path.exists()
-
-
-def test_old_writer_text_change_drops_derived_links_without_erasing_goal(tmp_path: Path) -> None:
-    comms = _wire(tmp_path)
-    goal = comms.goals.update_goal("owner", SetGoalAction(text="@peer"))
-    assert goal is not None
-    path = comms.registry.store.path
-    raw = json.loads(path.read_text())
-    raw["threads"]["owner"]["goal"]["text"] = "No mention"
-    raw["threads"]["owner"]["goal"]["revision"] += 1
-    path.write_text(json.dumps(raw))
-    reopened = wire(comms.root)
-    assert reopened.registry.require("owner").goal.text == "No mention"
-    assert _rows(reopened, "owner")[0] == {}
-    assert reopened.relationships.goal_contacts("owner")[0] == ()

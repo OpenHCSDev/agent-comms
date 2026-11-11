@@ -4,13 +4,16 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.storage.locked_store import InstallationFiles, LiveFilesRequest
-from agent_comms.storage.locked_store import LockedFile, RootFile
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.storage.store_files import AtomicFile, store_lock_path
 from agent_comms.registry.threads import ThreadCatalogFile
+from agent_comms.storage.locked_store import (
+    InstallationFiles,
+    LiveFilesRequest,
+    LockedFile,
+    RootFile,
+)
+from agent_comms.storage.store_files import store_lock_path
 
 
 def _catalog(root):
@@ -36,7 +39,8 @@ def test_session_locks_are_undeclared_and_never_locked(tmp_path):
     pytest.param(RegistryStore, True, id="multi-file-registry"),
 ])
 def test_copy_uses_the_declared_read_guard(
-    tmp_path: Path, store_type: type[ReadLedger] | type[RegistryStore], copy_takes_lock: bool,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    store_type: type[ReadLedger] | type[RegistryStore], copy_takes_lock: bool,
 ):
     """Atomic documents copy without read locks; the registry copies under its shared guard."""
     root, copy = tmp_path / "root", tmp_path / "copy"
@@ -47,19 +51,22 @@ def test_copy_uses_the_declared_read_guard(
         path.write_text("{}")
     store = store_type.at(root)
     document = store.empty()
-    # Publish a declared document without first creating its writer lock: an
-    # existing lock would hide whether copy_group actually takes a read guard.
-    AtomicFile(store.path).write_text(FieldCodec.compact(
-        FieldCodec.encode_document(document, store.record_type)))
-    original = store.path.read_bytes()
-    assert not store_lock_path(store.path).exists()
+    store.replace(document)
+    guarded_reads = []
+    guarded_read = store_type.guarded_read
+
+    def reading(selected):
+        guarded_reads.append(selected.path)
+        return guarded_read(selected)
+
+    monkeypatch.setattr(store_type, "guarded_read", reading)
     for resource in InstallationFiles(LiveFilesRequest(root)).owned_files((*plain, store.path)):
         target = copy / resource.path
         target.parent.mkdir(parents=True, exist_ok=True)
         resource.owner.copy_group(resource.live(root), target)
     assert not any(directory.glob(".*.lock"))
-    assert store_lock_path(store.path).exists() == copy_takes_lock
-    assert store.path.read_bytes() == original
+    assert (store.path in guarded_reads) == copy_takes_lock
+    assert store.read() == document
     assert store_type.at(copy).read() == document
     assert sorted(path.name for path in (copy / directory.relative_to(root)).iterdir()) == [
         path.name for path in plain]

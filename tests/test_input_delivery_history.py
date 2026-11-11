@@ -1,7 +1,5 @@
 """Current owner queues scope notices without altering durable input evidence."""
 
-from agent_comms.bus_read import OwnerScopedRead
-from agent_comms.repo import Checkout
 import asyncio
 from dataclasses import replace
 from pathlib import Path
@@ -10,38 +8,56 @@ import pytest
 from acp.schema import TextContentBlock
 
 from agent_comms.acp_extension import (
-    GoalSnapshotReply, QueuePromptRequest, TurnChangedUpdate, UpdateMetadata, encode_request,
+    GoalSnapshotReply,
+    QueuePromptRequest,
+    TurnChangedUpdate,
+    UpdateMetadata,
+    encode_request,
 )
-from agent_comms.child_process import NoProcess, ProcessIdentity
-from agent_comms.bus_read import BusRead, OwnerScopedRead
-from agent_comms.errors import RelationViolationError
-from agent_comms.input_key import AcpInputKey, BusInputKey
 from agent_comms.comms import Comms, wire
-from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, TurnId
+from agent_comms.coordination.errors import ReloadRequired, StaleFence
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import (
+    NoProcess,
+    ProcessIdentity,
+)
+from agent_comms.execution.input_key import AcpInputKey, BusInputKey
+from agent_comms.execution.reported_turn import ReportedTurn
 from agent_comms.input_attempt import (
     OwnerQueueInputDeliveryScope,
     UnobservedInputDeliveryScope,
     UnresolvedInputReference,
 )
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goals import NoGoal
+from agent_comms.messaging.bus_read import (
+    BusRead,
+    OwnerScopedRead,
+)
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, TurnId
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.goals import NoGoal
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_status import (
+    ConnectedThreadStatus,
+    StoppedThreadStatus,
+    ThreadStatus,
+)
+from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
+from agent_comms.transport.owner_connection import OwnerIdentityChangedError
+from agent_comms.transport.tool_caller import ToolCaller
 from agent_comms.transport.tools.orders import (
     ServedInputDeliveryRead,
     ServedOwnerGoalRead,
 )
 from agent_comms.transport.tools.reads import InputDeliveryRead, OwnerGoalRead
-from agent_comms.reported_turn import ReportedTurn
-from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
-from agent_comms.thread_status import ConnectedThreadStatus, StoppedThreadStatus, ThreadStatus
-from agent_comms.owner_connection import OwnerIdentityChangedError
-from agent_comms.coordination.errors import ReloadRequired, StaleFence
-from agent_comms.tool_caller import ToolCaller
-from agent_comms.ui_model.observation import ReadOwnerOperation, ReadAnswered, ReadRefused
+from agent_comms.ui_model.observation import ReadAnswered, ReadOwnerOperation, ReadRefused
 from bus_record_fixture import prepare_native_comms
-from delivery_owner_fixture import canonical_delivery_owner, qualified_owner_launch, start_headless_owner  # noqa: F401
+from delivery_owner_fixture import (  # noqa: F401
+    canonical_delivery_owner,
+    qualified_owner_launch,
+    start_headless_owner,
+)
 from stored_inputs import stored_inputs
-
 
 UI_KEY = AcpInputKey(InputId.mint())
 

@@ -1,42 +1,45 @@
 """Original sealed messaging survives silent context rows through every projection."""
 import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 
-from agent_comms.nominal.field_codec import FieldCodec, InputId, TurnId
-from agent_comms.image_input import ImageInput
-from agent_comms.native_tool_call import OwnerToolConnection
-from agent_comms.pi_commands import Prompt
-from agent_comms.thread_identity import TurnIdentity
-from agent_comms.turn_context import (
+from agent_comms.context_segments.awareness import AwarenessSegment
+from agent_comms.context_segments.native_messages import TranscriptSegment
+from agent_comms.context_store import ContextRequest, ContextSegmentVersion
+from agent_comms.execution.image_input import ImageInput
+from agent_comms.execution.pi_commands import Prompt
+from agent_comms.execution.turn_context import (
     ContextManifest,
     OwnerProvenance,
     RecordedContextTurn,
     SegmentManifest,
-    TranscriptSegment,
     TurnContext,
     UserInputSegment,
 )
+from agent_comms.nominal.field_codec import FieldCodec, InputId, TurnId
+from agent_comms.registry.thread_identity import TurnIdentity
+from agent_comms.transport.native_tool_transport import OwnerToolConnection
 from bus_record_fixture import context_comms
 from conftest import publish_initial
 
 
 def manifest(owner, generation=1):
     source=OwnerProvenance(owner.incarnation, 'original-input-source')
-    segment=SegmentManifest(TranscriptSegment,(source,),hashlib.sha256(b'PRIVATE INPUT').hexdigest(),13,4)
+    segment=SegmentManifest(kind=TranscriptSegment,provenance=(source,),sha256=hashlib.sha256(b'PRIVATE INPUT').hexdigest(),utf8_bytes=13,tokens=4)
     return ContextManifest(
-        owner.incarnation,
-        RecordedContextTurn(
+        thread=owner.incarnation,
+        turn=RecordedContextTurn(
             TurnId('ab87f599dc0a50a56b7c65de71c39426'),
             TurnIdentity(owner.incarnation, generation),
         ),
-        (segment,),
-        'pi.estimateTokens',
+        segments=(segment,),
+        counter='pi.estimateTokens',
     )
 
 
 def corrupt_context_kind(comms, name, kind):
     """Damage only one owner's stored payload, not its schema or message bus."""
-    from agent_comms.context_store import ContextRequest, ContextSegmentVersion
 
     selected = comms.contexts.page(name, comms.registry).resources[-1]
     with comms.contexts.writing() as db:
@@ -51,10 +54,7 @@ def corrupt_context_kind(comms, name, kind):
 
 
 def test_awareness_inspection_reads_the_committed_source_beside_a_held_writer(tmp_path):
-    from concurrent.futures import ThreadPoolExecutor
-    from threading import Event
 
-    from agent_comms.context_segments.awareness import AwarenessSegment
 
     comms = context_comms(tmp_path)
     publish_initial(comms, 'sender', '#team', '@Alice original question')
@@ -79,7 +79,7 @@ def test_awareness_inspection_reads_the_committed_source_beside_a_held_writer(tm
         finally:
             release.set()
         writer.result(timeout=2)
-    inspection = TurnContext.for_inspection(comms, owner)
+    inspection = comms.context_for(owner)
     assert original[0] in inspection.segments
     assert comms.bus.bus.revision() == before
 

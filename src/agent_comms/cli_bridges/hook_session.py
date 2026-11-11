@@ -7,13 +7,11 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-
+from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms.cli_bridges.shared import Serve
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms_hooks import ClaudeTranscriptHook
-from agent_comms_hooks.watch import SkillText
-from agent_comms_hooks.watch import SessionEndpoint
-from .session_watch import WatchClaim
-from .shared import Serve
-from ..child_process import ProcessIdentity
+from agent_comms_hooks.watch import SessionEndpoint, SkillText
 
 
 @dataclass(frozen=True)

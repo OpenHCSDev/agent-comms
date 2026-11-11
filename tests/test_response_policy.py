@@ -1,17 +1,19 @@
-from agent_comms.repo import Checkout
+from agent_comms.execution.input_key import BusInputKey
+from agent_comms.execution.input_key import OwnedBusInputKey
+from agent_comms.messaging.messages import ConversationRole, InfoKind, Message
+from agent_comms.messaging.response_policy import ResponseEligibility, ResponsePolicy
+from agent_comms.messaging.routing import ScheduledTurn
 from agent_comms.nominal.field_codec import GoalId
-from agent_comms.messages import ConversationRole, Message, InfoKind
-from agent_comms.response_policy import ResponseEligibility, ResponsePolicy
-from agent_comms.routing import ScheduledTurn
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.goal_scope import OneGoal
 
 
 def test_golden_policy_names():
     assert ResponsePolicy.names() == ("direct", "collective", "mentioned", "informational")
 
 
-def test_new_policy_drives_eligibility_guidance_and_batching(tmp_path):
+def test_new_policy_drives_eligibility_guidance_and_batching(tmp_path, thread_registration):
     class ReviewPolicy(ResponsePolicy):
         starts_turn = True
         separate_turn = True
@@ -41,6 +43,8 @@ def test_new_policy_drives_eligibility_guidance_and_batching(tmp_path):
         turn = ScheduledTurn.incoming(message)
         assert "review; only reviewers respond" in turn.prompt
         assert ScheduledTurn.take_batch([turn, turn]) == ([turn], [turn])
+        owner = NativeThread("reviewer", frozenset(), Checkout(tmp_path))
+        assert message.bus_key(owner) == OwnedBusInputKey(message.seq, float(owner.created_at))
 
     finally:
         ReviewPolicy.withdraw()
@@ -48,7 +52,6 @@ def test_new_policy_drives_eligibility_guidance_and_batching(tmp_path):
 
 def test_autonomous_turns_keep_message_batches_and_delivery_keys_separate(tmp_path, thread_registration):
     goal_id = GoalId.mint()
-    from agent_comms.input_disposition import InputDispositions
 
     goal = ScheduledTurn("Continue the goal", goal_id=OneGoal(goal_id))
     resume = ScheduledTurn.resuming_in_project(Checkout(tmp_path))
@@ -62,8 +65,8 @@ def test_autonomous_turns_keep_message_batches_and_delivery_keys_separate(tmp_pa
     assert ScheduledTurn.take_batch([direct, direct]) == ([direct], [direct])
 
     owner = NativeThread("owner", frozenset(), Checkout(tmp_path))
-    dispositions = InputDispositions(tmp_path)
     assert goal.origin.messages() == ()
-    assert goal.origin.bus_keys(dispositions, owner) == ()
+    assert goal.origin.bus_keys(owner) == ()
     assert first.origin.messages() == (first.origin,)
-    assert first.origin.bus_keys(dispositions, owner) == (dispositions.bus_key(first.origin, owner),)
+    assert first.origin.bus_keys(owner) == (OwnedBusInputKey(first.origin.seq, float(owner.created_at)),)
+    assert direct.origin.bus_keys(owner) == (BusInputKey(direct.origin.seq),)

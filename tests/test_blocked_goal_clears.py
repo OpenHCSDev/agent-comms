@@ -4,12 +4,18 @@ import asyncio
 
 import pytest
 
+from agent_comms.execution.queued_input import InitialInput
+from agent_comms.execution.turn_failure import (
+    BackendFailed,
+    FailedTurnResolution,
+)
 from agent_comms.nominal.field_codec import InputId
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration
-from agent_comms.queued_input import InitialInput
-from agent_comms.repo import Checkout
-from agent_comms.turn_failure import BackendFailed, FailedTurnResolution
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.goal_generation import (
+    BlockedGeneration,
+    ReadyGeneration,
+)
+from agent_comms.projects.checkouts import Checkout
 from delivery_owner_fixture import reply_turn_finished
 from native_backend_fixture import native_backend_fixture
 

@@ -1,9 +1,8 @@
 """Launch selection has one grammar, then typed consumers and native validation."""
 
 import pytest
-from agent_comms.pi_vocabulary import HighThinkingLevel, NoThinkingOverride, OffThinkingLevel
 
-from agent_comms.native_arguments import (
+from agent_comms.execution.native_arguments import (
     InheritedArguments,
     NamedOption,
     NativeArguments,
@@ -13,7 +12,16 @@ from agent_comms.native_arguments import (
     SelectedModel,
     ValueArgument,
 )
-from agent_comms.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
+from agent_comms.execution.pi_vocabulary import (
+    HighThinkingLevel,
+    NoThinkingOverride,
+    OffThinkingLevel,
+)
+from agent_comms.registry.thread_model import (
+    DeclaredModel,
+    ThreadModel,
+    UndeclaredModel,
+)
 
 
 @pytest.mark.parametrize("selection", [None, "", "model", "/model", "provider/"])

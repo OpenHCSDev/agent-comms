@@ -5,6 +5,5 @@ from pathlib import Path
 
 from agent_comms.installer.building_runtime import BuildingRuntime
 
-
 if __name__ == "__main__":
     BuildingRuntime.claim(Path(sys.argv[1]))

@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.coordination.session import CoordinationSession, system_clock
-from agent_comms.coordination.coordinator import Coordination
 from agent_comms.storage.store_files import StoreBusy, StoreContention
 from bus_record_fixture import OWNER_LOOKUP, RECIPIENT_LOOKUP, SENDER_LOOKUP
 

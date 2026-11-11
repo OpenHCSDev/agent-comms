@@ -4,8 +4,8 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.messages import InfoKind, Message
 
 
 @pytest.mark.parametrize("body", ["hello", "a\nb", "λ🙂", "e\u0301", "x" * 4096])

@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from pathlib import Path
 import tomllib
+from pathlib import Path
 
 import pytest
 
-FACADE = ("agent_comms.comms", "agent_comms.todos", "agent_comms.cli_commands")
+FACADE = ("agent_comms.comms", "agent_comms.planning.orders", "agent_comms.cli_verbs.cli_commands")
 
 
 @pytest.mark.parametrize("hook", sorted({

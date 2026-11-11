@@ -1,5 +1,4 @@
 
-from agent_comms.nominal.field_codec import ReportExclude, StatusExclude, WireExclude
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -9,6 +8,18 @@ import pytest
 from pydantic import BaseModel, JsonValue
 from typing_extensions import TypeForm
 
+from agent_comms.execution.turn_item import NativeItemId
+from agent_comms.messaging.messages import (
+    ConversationRole,
+    InfoKind,
+    JoinedMembership,
+    LeftMembership,
+    MembershipConversationRole,
+    MembershipNoticeRole,
+    Message,
+    MessageRole,
+    NoticeRole,
+)
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     DeclaredWireType,
@@ -26,8 +37,10 @@ from agent_comms.nominal.field_codec import (
     PathText,
     RecordedTimestamp,
     RecordMember,
+    ReportExclude,
     RootId,
     SnapshotExclude,
+    StatusExclude,
     SubclassUnion,
     TextRepresentation,
     ThreadLookup,
@@ -36,29 +49,19 @@ from agent_comms.nominal.field_codec import (
     TurnId,
     UnsupportedFieldType,
     ValueDecoder,
-    compile_decoder,
     WireAbsentNone,
     WireContext,
+    WireExclude,
     WireInline,
     WireName,
     WireNonNull,
     WireTransient,
     WireValue,
+    compile_decoder,
     projected,
 )
-from agent_comms.messages import (
-    ConversationRole,
-    InfoKind,
-    JoinedMembership,
-    LeftMembership,
-    MembershipConversationRole,
-    MembershipNoticeRole,
-    Message,
-    MessageRole,
-    NoticeRole,
-)
-from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeItemId
+from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.transcript.transcript_events import ToolStartTranscript
 from conftest import transcript_records
 
 
@@ -843,8 +846,8 @@ def test_member_cannot_write_a_second_family_discriminator() -> None:
 
 
 def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments() -> None:
-    from agent_comms.tool_declaration import ToolDeclaration
-    from agent_comms.transcript_events import ToolStartTranscript
+    from agent_comms.transcript.transcript_events import ToolStartTranscript
+    from agent_comms.transport.tool_declaration import ToolDeclaration
 
     arguments: dict[str, JsonValue] = {"to": "receiver", "body": "hello"}
     event = transcript_records.event(
@@ -1021,7 +1024,7 @@ def test_record_reports_missing_unknown_and_malformed_siblings_together() -> Non
 
 
 def test_declaration_bug_passes_through_a_data_boundary_as_type_error() -> None:
-    from agent_comms.bus_source_page import SourcePage
+    from agent_comms.messaging.bus_source_page import SourcePage
 
     @dataclass(frozen=True, kw_only=True)
     class TwoRepresentations(SourcePage):
@@ -1032,15 +1035,15 @@ def test_declaration_bug_passes_through_a_data_boundary_as_type_error() -> None:
 
 
 def test_identity_and_digest_text_is_one_rule_at_every_reader(tmp_path: Path) -> None:
-    from agent_comms.bus_source_page import AddressedPage
-    from agent_comms.private_registry_guard import PrivateRegistryGuard
-    from agent_comms.text_digest import TextDigest
+    from agent_comms.messaging.bus_source_page import AddressedPage
+    from agent_comms.nominal.text_digest import TextDigest
+    from agent_comms.registry.private_registry_guard import PrivateRegistryGuard
 
     minted = ThreadLookup.mint()
     root_id = RootId.mint()
     # The field decodes at its boundary; the guard receives the namespace's declared kind.
     assert AddressedPage.capture(lookup=minted).lookup == minted
-    assert PrivateRegistryGuard(tmp_path / "registry.json", root_id).root_id.hex() == root_id
+    assert PrivateRegistryGuard(RegistryFile.path_in(tmp_path), root_id).root_id.hex() == root_id
     for invalid in (minted.upper(), minted[:31], int(minted, 16)):
         with pytest.raises(MalformedRecord):
             AddressedPage.capture(lookup=invalid)
@@ -1316,3 +1319,20 @@ def test_a_compiled_decoder_lookup_is_compiled_once():
         pass
 
     assert ValueDecoder._registered(Looked) is ValueDecoder._registered(Looked)
+
+
+def test_an_unknown_field_hint_walks_each_record_type_once() -> None:
+    """Every level holds the next one twice: 2**24 paths to ``leaf``, one type per level. A
+    per-path cycle guard re-walked each shared type down every branch, and on 2026-11-10
+    printing one such decode failure held Toad's UI thread until it was killed."""
+    from dataclasses import make_dataclass
+
+    from agent_comms.nominal.field_codec import RecordProblems
+
+    level = make_dataclass("Level24", [("leaf", int)], frozen=True)
+    for depth in range(23, -1, -1):
+        level = make_dataclass(f"Level{depth}", [("a", level), ("b", level)], frozen=True)
+    with pytest.raises(RecordProblems) as raised:
+        FieldCodec.decode(level, {"leaf": 1})
+    hint = raised.value.problems["leaf"]
+    assert hint.startswith("leaf belongs under a.") and hint.endswith(".leaf")

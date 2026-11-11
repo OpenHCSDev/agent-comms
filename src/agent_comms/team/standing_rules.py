@@ -3,114 +3,55 @@ from __future__ import annotations
 import argparse
 import math
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections import Counter
-from collections.abc import (
-    Iterable,
-    Iterator,
-    Mapping,
-    Sequence,
-)
-from dataclasses import (
-    dataclass,
-    field,
-    fields,
-)
-from functools import (
-    cache,
-    cached_property,
-)
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field, fields
+from functools import cache, cached_property
 from itertools import combinations
 from pathlib import Path
 from subprocess import TimeoutExpired
-from typing import (
-    ClassVar,
-    Self,
-    TYPE_CHECKING,
-    cast,
-)
+from typing import ClassVar, Self, cast
 
-from ..bus import BusReader
-from ..channel_targets import ThreadTarget
-from ..child_process import (
-    ProcessIdentity,
-    ResidentMemory,
+from agent_comms.cli_verbs.declared_verb import DeclaredVerb
+from agent_comms.comms import Comms
+from agent_comms.coordination.service_passes import (
+    FailingPass,
+    ServicePasses,
+    ServicePassStore,
 )
-from ..comms import Comms
-from ..declared_verb import DeclaredVerb
-from ..errors import (
-    RejectedEnforcementError,
-    RelationViolationError,
-)
-from ..goal_management import Goals
-from ..head_review import (
-    HeadReviewOrder,
-    PullRequestHead,
-)
-from ..heartbeat_subjects import (
+from agent_comms.errors import RejectedEnforcementError, RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity, ResidentMemory
+from agent_comms.execution.root_runtime import RootRuntimeStore
+from agent_comms.execution.turn_bound import LastTurns, RecentTurnsSince
+from agent_comms.execution.turn_digests import OrderEditCountRead, TurnDigestRead
+from agent_comms.heartbeat_subjects import (
     AnswerSubject,
     HeadSubject,
     HeartbeatSubject,
     TeammateSubject,
 )
-from ..held_orders import HeldOrders
-from ..message_reference import MessageReference
-from ..messages import Message
-from ..nominal.declared_family import (
-    DeclaredFamily,
-    RegisteredFamily,
-)
-from ..nominal.field_codec import (
-    DefaultExternalName,
+from agent_comms.messaging.bus import BusReader
+from agent_comms.messaging.channel_targets import ThreadTarget
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
+from agent_comms.nominal.declared_family import DeclaredFamily, RegisteredFamily
+from agent_comms.nominal.field_codec import (
     DefaultedName,
+    DefaultExternalName,
     FieldCodec,
     OrderId,
 )
-from ..owner_requests import (
-    OwnerRequestId,
-    RequestDirective,
-)
-from ..plan_phases import PlanPhase
-from ..plan_reading import (
-    PlanReading,
-    PlanReadings,
-)
-from ..recorded_time import (
-    EventTime,
-    RecordedEventTime,
-)
-from ..registry.registry_document import (
-    RegisteredTeamProject,
-    RegistrySnapshot,
-)
-from ..registry.threads import Thread
-from ..repo import (
-    GitCommandError,
-    Repo,
-)
-from ..repository_name import RepositoryName
-from ..root_runtime import RootRuntimeStore
-from ..service_passes import (
-    FailingPass,
-    ServicePassStore,
-    ServicePasses,
-)
-from ..storage_rules import (
-    MemoryUse,
-    StorageRule,
-    UnitStorage,
-)
-from ..task_attachments.owner_notices import OrderNotice
-from ..team_service import TeamService
-from ..text_digest import TextDigest
-from ..thread_identity import ThreadIncarnation
-from ..todos import (
+from agent_comms.nominal.text_digest import TextDigest
+from agent_comms.planning.goal_management import Goals
+from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.orders import (
     ClosedHeadReading,
     EditWorkplaces,
     HeadReviewRecord,
     HeadVerdict,
-    MergeBlock,
     OrderClaim,
+    OrderProgress,
     OwnerRequest,
     PresentCheckout,
     ProgressRead,
@@ -122,25 +63,52 @@ from ..todos import (
     TodoConflict,
     TodoStore,
 )
-from ..transcript_events import TurnDigest
-from ..turn_digests import (
-    LastTurns,
-    OrderEditCountRead,
-    RecentTurnsSince,
-    TurnDigestRead,
-)
-from ..work_branches import (
+from agent_comms.planning.owner_requests import OwnerRequestId, RequestDirective
+from agent_comms.planning.plan_phases import PlanPhase
+from agent_comms.planning.plan_reading import PlanReading, PlanReadings
+from agent_comms.planning.pull_requests import MergeBlock
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.head_review import HeadReviewOrder, PullRequestHead
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.storage_rules import MemoryUse, StorageRule, UnitStorage
+from agent_comms.projects.work_branches import (
     BranchDifference,
     SourceGrowth,
     UnparsedSource,
     WorkBranchError,
 )
+from agent_comms.registry.registry_document import (
+    RegisteredTeamProject,
+    RegistrySnapshot,
+)
+from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.threads import Thread
+from agent_comms.storage.recorded_time import EventTime, RecordedEventTime
+from agent_comms.task_attachments.owner_notices import OrderNotice
+from agent_comms.team.team_service import TeamService
+from agent_comms.transcript.transcript_events import TurnDigest
 
-if TYPE_CHECKING:
-    from ..ui_model.teammate_state import (
-        TeammateObservation,
-        TeammateState,
-    )
+
+class TeammateEvidence(ABC):
+    """The original holder facts consumed by standing-rule scans."""
+
+    thread: Thread
+    todos: tuple[Todo, ...]
+    frame: HeartbeatFrame
+
+    @abstractmethod
+    def merges(self) -> dict[str, OrderProgress]: ...
+
+
+class ObservedTeammate(ABC):
+    """A classified holder supplies its original evidence and readable identities."""
+
+    unit: ThreadIncarnation
+    source: TeammateEvidence
+
+    @abstractmethod
+    def readable_units(self) -> tuple[ThreadIncarnation, ...]: ...
 
 
 @dataclass(frozen=True)
@@ -254,7 +222,7 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
     @classmethod
     @abstractmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]: ...
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]: ...
 
     @abstractmethod
     def line(self) -> str: ...
@@ -409,7 +377,7 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
 
     @classmethod
     def broken(cls, comms: Comms, after: float = 0.0, *,
-               observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[StandingRule, ...]:
+               observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[StandingRule, ...]:
         """Read each owner once against the supplied frame and its one progress reader."""
         return tuple(rule for owner in cls.scan_owners()
                      for rule in owner.scan_observed(comms, observed, frame)
@@ -426,7 +394,7 @@ class RetiredStandingRule(DefaultExternalName, StandingRule):
 
     @classmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return ()
 
     def line(self) -> str:
@@ -456,7 +424,7 @@ class IndependentStandingRule(StandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return cls.violations(comms)
 
 
@@ -475,7 +443,7 @@ class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         # Storage reads the filesystem, not the git source an unreadable card failed on:
         # a unit whose declared home is gone is that card and a missing home.
         held = frame.holders
@@ -519,7 +487,7 @@ class LostTools(UndatedStandingRule):
 
     @classmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         found = []
         for unit in observed:
             thread = unit.source.thread
@@ -572,7 +540,7 @@ class HeldBranch(HolderBranch):
 
     worktree: Path
     repository: PresentCheckout = field(compare=False, repr=False)
-    source: TeammateObservation = field(compare=False, repr=False)
+    source: TeammateEvidence = field(compare=False, repr=False)
     queued: bool = field(compare=False)
 
     @property
@@ -648,7 +616,7 @@ class HeldBranchRule(HolderProblemLine, UndatedStandingRule, FamilyScan, declare
 
     @classmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         storage = comms.registry.storage_rule
         captured = frame.pulls.captured_branch_paths
         branches = []
@@ -866,7 +834,7 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         now = time.time()
         return tuple(rule for rule in frame.answers if isinstance(rule, cls) and rule.due(now))
 
@@ -1030,7 +998,7 @@ class HeartbeatFrame(TeamInputs):
                    }.values()),
             closed,
             reviews,
-            EditWorkplaces.capture(comms, snapshot, inputs.live, inputs.pulls),
+            EditWorkplaces.capture(comms.goals, snapshot, inputs.holders, inputs.pulls),
             TodoStore.timers_up_in(inputs.todos, time.time(), inputs.pulls.progress(inputs.todos, comms.registry)),
         )
 
@@ -1048,12 +1016,12 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
 
     @classmethod
     def found(cls, why: str, comms: Comms,
-              observed: Sequence[TeammateState], frame: HeartbeatFrame) -> Self:
+              observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> Self:
         return cls(why=why)
 
     @classmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         why = cls.reason(comms, frame)
         return (cls.found(why, comms, observed, frame),) if why else ()
 
@@ -1069,7 +1037,7 @@ class HeldOrderDue(HeldOrderLine, DatedStandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         """Conditions read the frame's own progress facts, never a second forge read."""
         return tuple(cls(problem=todo.id, holder=todo.held().owner_identity,
                          order=todo.order.checked().id, since=due)
@@ -1140,7 +1108,7 @@ class ReviewTimerUp(HeldOrderDue, FamilyScan):
 
     @classmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[ReviewTimerUp, ...]:
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[ReviewTimerUp, ...]:
         rules: list[ReviewTimerUp] = []
         for todo, due in cls.conditions(comms, frame):
             for request in frame.pulls.open_for(todo)[:1]:
@@ -1191,7 +1159,7 @@ class DeliveredHeadReview(HeldOrderLine, DatedStandingRule):
 
     @classmethod
     def scan_observed(
-        cls, comms: Comms, observed: Sequence[TeammateState], frame: HeartbeatFrame,
+        cls, comms: Comms, observed: Sequence[ObservedTeammate], frame: HeartbeatFrame,
     ) -> tuple[Self, ...]:
         now = time.time()
         return tuple(
@@ -1224,7 +1192,7 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
 
     @classmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return cls.scan_reviews(comms.goals, frame.pulls)
 
     @classmethod
@@ -1285,7 +1253,7 @@ class StuckMerge(HeadLine, DatedStandingRule):
 
     @classmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return cls.scan_pulls(comms.goals, frame.pulls)
 
     @classmethod
@@ -1330,7 +1298,7 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
 
     @classmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         ordered = comms.goals.todos.board()
         return cls.scan_pulls(comms.goals, frame.pulls, frame.todos, ordered)
 
@@ -1397,7 +1365,7 @@ class OrderlessPullRequest(IdlePullRequest):
 
     @classmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return cls.scan_orderless(comms.goals, frame.pulls)
 
     @classmethod
@@ -1430,7 +1398,7 @@ class ChurningPullRequest(IdlePullRequest):
 
     @classmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         goals, pulls, now = comms.goals, frame.pulls, time.time()
         found = (
             cls(request=PullRequestHead(repo, row.number, row.head),
@@ -1470,7 +1438,7 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule, FamilyScan):
 
     @classmethod
     def found(cls, why: str, comms: Comms,
-              observed: Sequence[TeammateState], frame: HeartbeatFrame) -> HuntDue:
+              observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> HuntDue:
         since = cls.hunted(comms) + cls.seconds
         readable = {unit for state in observed for unit in state.readable_units()}
         todos = tuple(todo for todo in frame.todos
@@ -1604,7 +1572,7 @@ class BoardDisagrees(UndatedStandingRule):
 
     @classmethod
     def scan_observed(cls, comms: Comms,
-                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         progress = frame.pulls.progress(frame.todos, comms.registry)
         return tuple(
             cls(problem=todo.id, order=todo.order.checked().id, merge=merged.sha)

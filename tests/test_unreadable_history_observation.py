@@ -5,8 +5,6 @@ manifest whose declaration name is intentionally unavailable in this reader.
 """
 
 
-from agent_comms.repo import Checkout
-from agent_comms.context_store import UNREAD_CONTEXT
 import asyncio
 import pickle
 from dataclasses import dataclass
@@ -14,6 +12,7 @@ from dataclasses import dataclass
 import pytest
 
 from agent_comms.context_segments.response import SelectedResponseSegment
+from agent_comms.context_store import UNREAD_CONTEXT, ContextRequest
 from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
     DeferredRead,
@@ -21,22 +20,25 @@ from agent_comms.coordination.errors import (
     StaleRevision,
     TranscriptChanged,
 )
-from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.errors import (
     RelationViolationError,
     StoredHistoryUnreadable,
 )
-from agent_comms.owner_connection import OwnerIdentityChangedError, OwnerReplyLostError
-from agent_comms.context_store import ContextRequest
+from agent_comms.execution.turn_context import RecordedContextManifest
+from agent_comms.messaging.notification_reads import LiveNotificationRead
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.presentation import WireRevision
-from agent_comms.notification_reads import LiveNotificationRead
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.owner_connection import OwnerIdentityChangedError, OwnerReplyLostError
 from agent_comms.ui_model.observation import (
-    LocalRouteObservation, ObservationProcess,
+    LocalRouteObservation,
+    ObservationProcess,
     ObserveSidebar,
     ObserveThreads,
     OwnerRead,
-    ReadNotifications,
     ReadBusy,
+    ReadNotifications,
     ReadRefused,
     ReadRequest,
     SidebarObserved,
@@ -48,11 +50,9 @@ from agent_comms.ui_model.observation import (
     UnreadableHistory,
 )
 from agent_comms.ui_model.status import OpenThreadStatus
-from agent_comms.turn_context import RecordedContextManifest
 from agent_comms_hooks import ToolRefusedError
 from observed_queue import ObservedQueue
 from test_turn_context_wire import corrupt_context_kind, manifest
-from agent_comms.registry.threads import NativeThread
 
 
 @dataclass(frozen=True)

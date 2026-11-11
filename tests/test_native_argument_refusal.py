@@ -1,6 +1,5 @@
 """Real native tool errors complete their call; they do not fail the input."""
 
-from agent_comms.pi_payloads import ReportedFlag, ReportedText
 import asyncio
 import json
 import os
@@ -8,11 +7,21 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_comms.native_tool_call import ArgumentRefusal, CodingCall
-from agent_comms.tool_denial import SelectedToolDenied
-from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
-from agent_comms.channel_coding_tools import CodingToolSocket
-from agent_comms.pi_payloads import AssistantMessage, ReportedParts, ToolCallContent
+from agent_comms.execution.channel_coding_tools import CodingToolSocket
+from agent_comms.execution.pi_events import ToolExecutionEnd, ToolExecutionStart
+from agent_comms.execution.provider_records import (
+    ReportedText,
+    ToolCallContent,
+)
+from agent_comms.pi_payloads import (
+    AssistantMessage,
+    ReportedFlag,
+    ReportedParts,
+)
+from agent_comms.transport.native_tool_call import ArgumentRefusal
+from agent_comms.transport.native_tools import NativeToolDeclaration
+from agent_comms.transport.tool_denial import SelectedToolDenied
+from coding_owner_fixture import OwnerDouble
 
 
 @pytest.mark.parametrize("name, arguments, encoded", [
@@ -20,7 +29,7 @@ from agent_comms.pi_payloads import AssistantMessage, ReportedParts, ToolCallCon
     ("read", {"path": "x", "offset": None, "limit": None}, {"path": "x"}),
 ])
 def test_pi_optional_nulls_are_omitted_by_the_existing_codec(name, arguments, encoded):
-    call = CodingCall.decode("optional-null", name, arguments)
+    call = NativeToolDeclaration.decode("optional-null", name, arguments)
     assert call.allowed_claim() is None
     assert call.arguments == encoded
 
@@ -28,7 +37,7 @@ def test_pi_optional_nulls_are_omitted_by_the_existing_codec(name, arguments, en
 @pytest.mark.parametrize("request_first", [False, True])
 async def test_refused_arguments_complete_without_an_owner_callback(
         tmp_path, request_first, tool_listener, undealt_gate):
-    class Owner:
+    class Owner(OwnerDouble):
         async def allow(self, round_number, call):
             raise AssertionError("invalid arguments must never acquire authority")
 

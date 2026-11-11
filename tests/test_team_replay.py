@@ -17,6 +17,48 @@ from typing import ClassVar
 
 import pytest
 
+from agent_comms.cli_bridges.codex_connection import CodexConnection
+from agent_comms.comms import Comms
+from agent_comms.execution.launch_runtime import LaunchRoot
+from agent_comms.execution.transcript_sources import ExternalTranscript
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
+from agent_comms.nominal.field_codec import ToolCallId
+from agent_comms.planning.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.goals import (
+    CountCheckResult,
+    OrderCheck,
+)
+from agent_comms.planning.order_runs import ApplicationOrderRun, MechanicalOrderRun
+from agent_comms.planning.orders import (
+    ClaimOrder,
+    DraftListedPullRequest,
+    OperationDelivery,
+    OrderClaim,
+    OrderMessage,
+    PendingProblemOrder,
+    ProgressRead,
+    Todo,
+    UnmergedListedPullRequest,
+)
+from agent_comms.planning.pull_requests import PullRequestLink
+from agent_comms.projects.checkouts import (
+    Checkout,
+    RepositoryReads,
+    UnpushedHead,
+)
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.work_branches import SourceGrowth, WorkBranchError
+from agent_comms.registry.thread_identity import (
+    ReportedTools,
+    ToolName,
+)
+from agent_comms.registry.thread_text import ForkedParent
+from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.team.spinning import SpinningTeammate, StaleUncommittedEdits
 from agent_comms.team.standing_rules import (
@@ -30,42 +72,14 @@ from agent_comms.team.standing_rules import (
     TeamInputs,
     UnparsedBranch,
 )
-from agent_comms.team_heartbeat import TeamObservation
-from team_heartbeat_fixture import LIVE_PLAN_READINGS, current_hud, observe_team
-from agent_comms.cli_bridges.codex_connection import CodexConnection
-from agent_comms.comms import Comms
-from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.nominal.field_codec import ToolCallId
-from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.launch_runtime import LaunchRoot
-from agent_comms.goals import CountCheckResult, OrderCheck
-from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Checkout, Repo, RepositoryReads, UnpushedHead
-from agent_comms.repository_name import RepositoryName
-from agent_comms.thread_identity import ReportedTools, ToolName
-from agent_comms.thread_text import ForkedParent
-from agent_comms.registry.threads import Thread, NativeThread
-from agent_comms.todos import (
-    ClaimOrder,
-    DraftListedPullRequest,
-    OperationDelivery,
-    OrderClaim,
-    OrderMessage,
-    PendingProblemOrder,
-    ProgressRead,
-    PullRequestLink,
-    Todo,
-    UnmergedListedPullRequest,
-)
-from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.team.team_heartbeat import TeamObservation
+from agent_comms.transcript.transcript_events import ToolStartTranscript
 from agent_comms.ui_model.teammate_state import Unreadable
-from agent_comms.work_branches import SourceGrowth, WorkBranchError
 from conftest import declare_test_bus
 from fixture_git import IDENTITY
 from github_fixture import GitHubFixture
 from source_revision_fixture import SourceRepository
+from team_heartbeat_fixture import LIVE_PLAN_READINGS, current_hud, observe_team
 from test_watch_git_preparation import GitPreparation
 
 pytest_plugins = ("github_fixture",)

@@ -9,20 +9,20 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.native_entries import NativeEntry, NativeEvidenceScope
-from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.native_input_proof import NativeContextJournal, NativeInputLocation
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.execution.native_entries import NativeEntry, NativeEvidenceScope
+from agent_comms.execution.native_evidence_read import PrivateEvidenceRead
+from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.execution.native_input_proof import NativeContextJournal, NativeInputLocation
+from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.execution.transcript_sources import NativeTranscript
+from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.nominal.field_codec import InputId
-from agent_comms.native_session_reopen import PiSessionId
-from agent_comms.turn_item import FreshNativeId
-from agent_comms.native_evidence_read import PrivateEvidenceRead
-from agent_comms.native_transcript import NativeTranscript
 from agent_comms.storage.store_files import (
     ExclusiveLock,
-    StoreLockContention,
     StoreGuard,
+    StoreLockContention,
     _store_lock,
 )
 from bus_record_fixture import OWNER_LOOKUP
@@ -148,6 +148,7 @@ def test_physical_lock_budget_closes_refused_descriptor(tmp_path):
 
 def test_consumer_work_cannot_spend_physical_lock_resource(tmp_path):
     import time
+
     from agent_comms.storage.store_files import StoreLockContention, _store_lock
     resource = StoreLockContention(.025)
     with _store_lock(tmp_path / 'first', ExclusiveLock(), resource):

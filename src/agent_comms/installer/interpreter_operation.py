@@ -22,11 +22,11 @@ from typing import ClassVar, cast
 
 from typing_extensions import TypeForm
 
-from agent_comms.child_process import Platform
-from agent_comms.native_build_inputs import GitLaunch
-from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.execution.child_process import Platform
+from agent_comms.execution.launch_root import started
+from agent_comms.installer.native_build_inputs import GitLaunch
 from agent_comms.installer.runtime_wire import CrossesRuntimes
-from agent_comms.launch_root import started
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, JsonValue
 from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
 from agent_comms.storage.store_files import BorrowedStoreLock

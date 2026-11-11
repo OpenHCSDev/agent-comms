@@ -4,8 +4,6 @@ import subprocess
 import sys
 
 
-
-
 def test_importing_order_with_empty_home_reads_no_config_and_opens_no_store(tmp_path):
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(('AGENT_COMMS_', 'PI_COMMS_', 'PI_NATIVE_'))}

@@ -6,18 +6,27 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.execution.native_entries import (
+    MessageEntry,
+    NativeEntry,
+    TranscriptProjection,
+    UnknownEntry,
+)
+from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.execution.native_session_reopen import PiSessionId
+from agent_comms.execution.transcript_sources import NativeTranscript
+from agent_comms.execution.turn_item import (
+    FreshNativeId,
+    NativeItemId,
+)
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,
     ToolCallId,
 )
-from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProjection, UnknownEntry
-from agent_comms.native_transcript import NativeTranscript
-from agent_comms.native_input_proof import NativeContextProof
-from agent_comms.native_session_reopen import PiSessionId
 from agent_comms.pi_payloads import UserMessage
-from agent_comms.transcript_events import (
+from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
     ThinkingTranscript,
@@ -26,7 +35,6 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.turn_item import FreshNativeId, NativeItemId
 from conftest import transcript_records
 
 STAMPED = 1790812800.0  # "2026-10-01T00:00:00.000Z", the time every fixture row records

@@ -1,0 +1,1472 @@
+"""What proves a plan phase done: facts on its repository's fetched ``origin/main``, and for
+the merge gate the repository's own GitHub rules.
+
+Task acceptance never proves a phase. Each phase declares the evidence its plan's
+"Done means" names, and ``PlanPhase.done`` reads only that evidence. Evidence that reads
+only main is retained by the heartbeat with that commit; a pass with unmoved main
+reuses those answers. Forge evidence declares its independent per-pass lifetime.
+"""
+
+from __future__ import annotations
+
+import ast
+import copy
+import re
+from abc import ABC, abstractmethod
+from collections import Counter
+from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import dataclass, field, replace
+from functools import cached_property
+from pathlib import Path, PurePosixPath
+from typing import TYPE_CHECKING, ClassVar, cast, get_args, get_origin
+
+from metaclass_registry.mro_dispatch import MroDispatch, handles
+
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.projects.checkouts import Checkout, CheckoutHistory
+from agent_comms.projects.repo import Repo
+
+if TYPE_CHECKING:
+    from agent_comms.planning.plan_reading import PlanReading
+
+
+@dataclass(frozen=True)
+class MainModule:
+    """One transient Python module of main; retained evidence never owns its syntax."""
+
+    file_path: str
+    source: str
+    module: ast.Module
+
+
+class Census(ABC):
+    """The installed NominalRefactorAdvisor's census, as evidence counts with it. Its
+    implementation owns the advisor, so declaring evidence never loads the advisor; only a
+    tree read for a plan carries one."""
+
+    @abstractmethod
+    def god_function(self, module: MainModule,
+                     function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool: ...
+
+    @abstractmethod
+    def absence_probes(self, node: ast.AST) -> int: ...
+
+    @abstractmethod
+    def audit_package(self) -> Path: ...
+
+
+@dataclass(frozen=True)
+class MainTree:
+    """One commit of a repository's fetched ``origin/main``, counted with ``census``; evidence
+    never reads a worktree."""
+
+    repo: Repo
+    commit: str
+    census: Census = field(compare=False, repr=False)
+    history: CheckoutHistory = field(compare=False, repr=False, kw_only=True)
+    branch: ClassVar[str] = "main"
+    source: ClassVar[str] = ".py"
+    bindings: dict[tuple[tuple[str, ...], str], ModuleBindings] = field(
+        default_factory=dict, compare=False, repr=False, kw_only=True,
+    )
+    facts: dict[str, SourceFacts] = field(
+        default_factory=dict, compare=False, repr=False, kw_only=True,
+    )
+
+    def __post_init__(self) -> None:
+        self.history.include(self.commit)
+
+    @classmethod
+    def of(cls, repo: Repo, census: Census) -> MainTree:
+        return cls.from_history(repo, census, Checkout(repo.checkout).read())
+
+    @classmethod
+    def from_history(cls, repo: Repo, census: Census, history: CheckoutHistory) -> MainTree:
+        return cls(repo, history.resolve(f"{repo.remote}/{cls.branch}"), census, history=history)
+
+    def has(self, path: str) -> bool:
+        return not self.missing((path,))[0]
+
+    @cached_property
+    def objects(self) -> dict[str, str]:
+        """This tree's membership, including directories, without requiring blob contents."""
+        return Repo.tree_objects(self.repo.checkout, self.commit, (), "-r", "-t")
+
+    @cached_property
+    def files(self) -> dict[str, str]:
+        """This tree's blobs, listed once per commit: every module read filters this listing."""
+        return Repo.tree_objects(self.repo.checkout, self.commit, (), "-r")
+
+    def missing(self, paths: tuple[str, ...]) -> tuple[bool, ...]:
+        """Tree membership does not require a present path's promised contents."""
+        return tuple(path not in self.objects for path in paths)
+
+    def grep(self, *options: str, pattern: str, paths: tuple[str, ...]) -> list[str]:
+        """``git grep -E`` rows of this tree's Python modules, like ``module`` and ``modules``;
+        the Markdown beside them quotes code it does not hold.
+
+        A submodule is another repository's tree, regardless of local recurse settings.
+        Git pathspecs such as ``:!file`` exclude.
+        """
+        return [row for row in self.text_grep(*options, pattern=pattern, paths=paths)
+                if row.split(":", 2)[1].endswith(self.source)]
+
+    def text_grep(self, *options: str, pattern: str, paths: tuple[str, ...]) -> tuple[str, ...]:
+        """Declared text evidence, including documents, from this exact repository tree."""
+        return Repo.grep(
+            self.repo.checkout,
+            "--no-recurse-submodules",
+            *options,
+            "-E",
+            "-e",
+            pattern,
+            self.commit,
+            "--",
+            *paths,
+        )
+
+    def count(self, pattern: str, paths: tuple[str, ...]) -> int:
+        """Matching lines under ``paths``."""
+        return sum(
+            int(row.rsplit(":", 1)[1]) for row in self.grep("-c", pattern=pattern, paths=paths)
+        )
+
+    def matching_lines(self, pattern: str, paths: tuple[str, ...]) -> frozenset[tuple[str, int]]:
+        """Each ``(path, line)`` under ``paths`` whose line matches."""
+        return frozenset(
+            (path, int(line))
+            for _, path, line, _ in (
+                row.split(":", 3) for row in self.grep("-n", pattern=pattern, paths=paths)
+            )
+        )
+
+    def module(self, path: str) -> MainModule:
+        module, = self.modules((path,))
+        return module
+
+    def present_modules(self, paths: tuple[str, ...]) -> Iterator[MainModule]:
+        """The parsed modules of the ``paths`` main holds. Plans finish by deleting files, so
+        a declared path main no longer holds has no module, and nothing it held is left."""
+        missing = self.missing(paths)
+        for path, absent in zip(paths, missing, strict=True):
+            if not absent:
+                yield self.module(path)
+
+    def selected(self, paths: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
+        """The exact Python blobs under the declared paths, in Git's tree order."""
+        roots = tuple(path.rstrip("/") for path in paths)
+        return tuple((blob, name) for name, blob in self.files.items()
+                     if name.endswith(self.source)
+                     and any(name == root or name.startswith(f"{root}/") for root in roots))
+
+    def modules(self, paths: tuple[str, ...]) -> Iterator[MainModule]:
+        """Parse only the requested modules and release each tree after its consumer advances."""
+        blobs = self.selected(paths)
+        contents = Repo.blobs(self.repo.checkout, *(blob for blob, _ in blobs))
+        for (_, name), content in zip(blobs, contents, strict=True):
+            source = content.decode()
+            yield MainModule(name, source, ast.parse(source, filename=name))
+
+    def module_bindings(self, paths: tuple[str, ...],
+                        roots: tuple[str, ...]) -> Iterator[ModuleBindings]:
+        """Per-blob declaration facts under their import roots, parsed only as requested."""
+        blobs = self.selected(paths)
+        fresh = tuple((blob, name) for blob, name in blobs
+                      if (roots, name) not in self.bindings
+                      or not self.bindings[roots, name].retained(self))
+        contents = dict(zip((name for _, name in fresh),
+                            Repo.blobs(self.repo.checkout, *(blob for blob, _ in fresh)),
+                            strict=True))
+        for blob, name in blobs:
+            if name in contents:
+                tree = self.parse(name, blob, contents[name])
+                key = (roots, name)
+                if key not in self.bindings or not self.bindings[key].retained(self):
+                    self.bind(roots, name, blob, tree)
+            yield self.bindings[roots, name]
+
+    shared_roots: ClassVar[tuple[str, ...]] = ("src",)
+    """The import roots nearly every evidence reads: one parse records their bindings too."""
+
+    def parse(self, name: str, blob: str, content: bytes) -> ast.Module:
+        """One parse per blob for every ``src``-wide reader: a blob under the shared roots
+        records its source facts and its shared bindings from the same tree, each only
+        while not already current."""
+        tree = ast.parse(content.decode(), filename=name)
+        if any(PurePosixPath(name).is_relative_to(root) for root in self.shared_roots):
+            if name not in self.facts or not self.facts[name].retained(self):
+                self.facts[name] = SourceFacts.of(name, blob, tree)
+            shared = (self.shared_roots, name)
+            if shared not in self.bindings or not self.bindings[shared].retained(self):
+                self.bind(self.shared_roots, name, blob, tree)
+        return tree
+
+    def bind(self, roots: tuple[str, ...], name: str, blob: str, tree: ast.Module) -> None:
+        module, package = DeclaredScopes.dotted(name, roots)
+        bindings = ModuleBindings(name, module, package, blob=blob)
+        bindings.visit(tree)
+        self.bindings[roots, name] = bindings
+
+    def source_facts(self, paths: tuple[str, ...]) -> Iterator[SourceFacts]:
+        """Each Python blob's whole-module facts under ``paths``, from one parse per blob that
+        every evidence shares: a later tree parses only the blobs it changed."""
+        blobs = self.selected(paths)
+        fresh = tuple((blob, name) for blob, name in blobs
+                      if name not in self.facts or not self.facts[name].retained(self))
+        contents = Repo.blobs(self.repo.checkout, *(blob for blob, _ in fresh))
+        for (blob, name), content in zip(fresh, contents, strict=True):
+            tree = self.parse(name, blob, content)
+            if name not in self.facts or not self.facts[name].retained(self):
+                self.facts[name] = SourceFacts.of(name, blob, tree)
+        for _, name in blobs:
+            yield self.facts[name]
+
+    def following(self, current: MainTree) -> MainTree:
+        """Carry only facts whose source blob the next tree still holds; the same commit holds
+        every blob, so its facts carry without listing the tree again."""
+        if current == self:
+            return replace(current, bindings=dict(self.bindings), facts=dict(self.facts))
+        return replace(current, bindings={
+            key: bindings for key, bindings in self.bindings.items()
+            if bindings.retained(current)
+        }, facts={name: facts for name, facts in self.facts.items() if facts.retained(current)})
+
+    def contains(self, sha: str) -> bool:
+        return self.history.contains(sha, self.commit)
+
+
+class UnreadableEvidenceError(Exception):
+    """The evidence's source could not be read this pass; the phase is unknown, not failed."""
+
+
+class EvidenceRead(ABC):
+    """What one reading learned of one evidence."""
+
+    @abstractmethod
+    def held(self) -> bool: ...
+
+    @abstractmethod
+    def describe(self, evidence: PhaseEvidence) -> str: ...
+
+    def retained(self, evidence: PhaseEvidence, previous: MainTree, current: MainTree) -> bool:
+        return evidence.retained(previous, current)
+
+
+@dataclass(frozen=True)
+class EvidenceFound(EvidenceRead):
+    holds: bool
+
+    def held(self) -> bool:
+        return self.holds
+
+    def describe(self, evidence: PhaseEvidence) -> str:
+        return evidence.describe()
+
+
+@dataclass(frozen=True)
+class EvidenceUnread(EvidenceRead):
+    """The source could not be read: not done, and the description says why."""
+
+    reason: str
+
+    def held(self) -> bool:
+        return False
+
+    def describe(self, evidence: PhaseEvidence) -> str:
+        return f"unknown ({self.reason}): {evidence.describe()}"
+
+    def retained(self, evidence: PhaseEvidence, previous: MainTree, current: MainTree) -> bool:
+        """A source recovering from failure does not require a new main commit."""
+        return False
+
+
+class PhaseEvidence(ABC):
+    def prepare(self, reading: PlanReading) -> None:
+        """Most evidence needs only the selected local tree."""
+
+    def recorded(self, reading: PlanReading) -> None:
+        reading.read(self)
+
+    def retained(self, previous: MainTree, current: MainTree) -> bool:
+        """Main-derived answers remain true of the same immutable tree."""
+        return previous == current
+
+    @abstractmethod
+    def holds(self, reading: PlanReading) -> bool: ...
+
+    @abstractmethod
+    def describe(self) -> str: ...
+
+    def sites(self, reading: PlanReading) -> tuple[str, ...]:
+        """Each ``PATH:LINE`` that keeps this evidence from holding; evidence naming no line
+        has none, and its description says what is missing."""
+        return ()
+
+
+class MainEvidence(PhaseEvidence):
+    """Read the selected immutable main; PlanReading owns the answer's lifetime."""
+
+    def holds(self, reading: PlanReading) -> bool:
+        return self.read(reading.main)
+
+    @abstractmethod
+    def read(self, main: MainTree) -> bool: ...
+
+    def sites(self, reading: PlanReading) -> tuple[str, ...]:
+        return self.located(reading.main)
+
+    def located(self, main: MainTree) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class CommitMerged(MainEvidence):
+    sha: str
+
+    def prepare(self, reading: PlanReading) -> None:
+        Repo.require_commits(reading.main.repo.checkout, reading.main.repo.remote,
+                             self.sha, reading.main.commit)
+        reading.main.history.include(self.sha, reading.main.commit)
+
+    def read(self, main: MainTree) -> bool:
+        return main.contains(self.sha)
+
+    def describe(self) -> str:
+        return f"{self.sha} on main"
+
+
+@dataclass(frozen=True)
+class PathsAbsent(MainEvidence):
+    paths: tuple[str, ...]
+
+    def read(self, main: MainTree) -> bool:
+        return not any(main.has(path) for path in self.paths)
+
+    def describe(self) -> str:
+        return "absent from main: " + ", ".join(self.paths)
+
+
+@dataclass(frozen=True)
+class PatternEvidence(MainEvidence):
+    """A ``git grep -E`` count on main, judged by the member."""
+
+    pattern: str
+    paths: tuple[str, ...] = ("src",)
+
+    def read(self, main: MainTree) -> bool:
+        return self.satisfied(main.count(self.pattern, self.searched(main)))
+
+    def searched(self, main: MainTree) -> tuple[str, ...]:
+        """``paths`` without the phase declarations, which spell every pattern they ban."""
+        from agent_comms.planning.plan_phases import PlanPhase
+
+        declaration = main.repo.module_file(PlanPhase.__module__)
+        return (*self.paths, f":!{declaration.as_posix()}")
+
+    @abstractmethod
+    def satisfied(self, count: int) -> bool: ...
+
+
+@dataclass(frozen=True)
+class PatternAbsent(PatternEvidence):
+    def located(self, main: MainTree) -> tuple[str, ...]:
+        return tuple(f"{path}:{line}" for path, line in
+                     sorted(main.matching_lines(self.pattern, self.searched(main))))
+
+    def satisfied(self, count: int) -> bool:
+        return count == 0
+
+    def describe(self) -> str:
+        return f"no {self.pattern!r} in {' '.join(self.paths)} on main"
+
+
+@dataclass(frozen=True)
+class PatternPresent(PatternEvidence):
+    def satisfied(self, count: int) -> bool:
+        return count > 0
+
+    def describe(self) -> str:
+        return f"{self.pattern!r} in {' '.join(self.paths)} on main"
+
+
+@dataclass(frozen=True)
+class AuditPatternPresent(PatternPresent):
+    """A pattern in the audit package of the installed NominalRefactorAdvisor: code this
+    repository runs from that repository, which main's lock pins by commit."""
+
+    def read(self, main: MainTree) -> bool:
+        package = main.census.audit_package()
+        found = re.compile(self.pattern, re.MULTILINE)
+        return self.satisfied(sum(len(found.findall(module.read_text(encoding="utf-8")))
+                                  for module in package.rglob("*.py")))
+
+    def describe(self) -> str:
+        return f"{self.pattern!r} in the installed NominalRefactorAdvisor audit package"
+
+
+@dataclass(frozen=True)
+class DocumentPatternPresent(PatternPresent):
+    """A recorded document fact, rather than executable Python source."""
+
+    def read(self, main: MainTree) -> bool:
+        return bool(main.text_grep("-l", pattern=self.pattern, paths=self.searched(main)))
+
+
+class BusStorageAbsent(MainEvidence, ast.NodeVisitor):
+    """Read executable bus references, not text describing their deletion."""
+
+    symbols = re.compile(r"WireLog|wire_log|_wire_lock_path|has_private_wire_fields")
+    filenames = re.compile(r"bus[.]jsonl|bus_meta[.]json")
+    lock_name: ClassVar[str] = "wire"
+    path_methods: ClassVar[tuple[str, ...]] = (Path.with_name.__name__, Path.joinpath.__name__)
+    found = False
+
+    def read(self, main: MainTree) -> bool:
+        return not any(facts.bus_storage for facts in main.source_facts(("src",)))
+
+    def describe(self) -> str:
+        return "no known physical bus symbols, file literals or lock paths in Python source on main"
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.found |= bool(self.symbols.fullmatch(node.name))
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self.found |= bool(self.symbols.fullmatch(node.name))
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        self.found |= bool(self.symbols.fullmatch((node.module or "").rpartition(".")[2]))
+        self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        self.found |= bool(self.symbols.fullmatch(node.id))
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        self.found |= bool(self.symbols.fullmatch(node.attr))
+        self.generic_visit(node)
+
+    def visit_alias(self, node: ast.alias) -> None:
+        self.found |= bool(self.symbols.fullmatch(node.name.rpartition(".")[2]))
+
+    def visit_Constant(self, node: ast.Constant) -> None:
+        if isinstance(node.value, str):
+            self.found |= bool(self.filenames.fullmatch(node.value))
+
+    @staticmethod
+    def prose(node: ast.Expr) -> bool:
+        """A docstring or inert prose cannot open a physical bus."""
+        return isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)
+
+    def visit_Expr(self, node: ast.Expr) -> None:
+        if not self.prose(node):
+            self.generic_visit(node)
+
+    def visit_BinOp(self, node: ast.BinOp) -> None:
+        match node:
+            case ast.BinOp(op=ast.Div(), right=ast.Constant(value=value)):
+                self.found |= value == self.lock_name
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        match node:
+            case ast.Call(func=ast.Attribute(attr=method), args=[*_, ast.Constant(value=value)]):
+                self.found |= method in self.path_methods and value == self.lock_name
+        self.generic_visit(node)
+
+
+@dataclass(frozen=True)
+class AllEvidence(PhaseEvidence):
+    parts: tuple[PhaseEvidence, ...]
+
+    def prepare(self, reading: PlanReading) -> None:
+        for part in self.parts:
+            reading.prepare(part)
+
+    def recorded(self, reading: PlanReading) -> None:
+        for part in self.parts:
+            part.recorded(reading)
+        super().recorded(reading)
+
+    def retained(self, previous: MainTree, current: MainTree) -> bool:
+        # Derive from this pass's parts, including a source that recovered from failure.
+        return False
+
+    def holds(self, reading: PlanReading) -> bool:
+        return all(reading.holds(part) for part in self.parts)
+
+    def sites(self, reading: PlanReading) -> tuple[str, ...]:
+        return tuple(site for part in self.parts if not reading.holds(part)
+                     for site in part.sites(reading))
+
+    def describe(self) -> str:
+        return "; ".join(part.describe() for part in self.parts)
+
+
+@dataclass(frozen=True)
+class ParityEvidence(AllEvidence):
+    """Native owners supply the facts; the historical comparison matrix cannot overrule them."""
+
+
+class ErasedBody(ast.NodeTransformer):
+    """A function's shape with identifiers, literals and attribute names erased, as the
+    duplicate scan compared them."""
+
+    def visit_Name(self, node: ast.Name) -> ast.AST:
+        return ast.copy_location(ast.Name("_", node.ctx), node)
+
+    def visit_arg(self, node: ast.arg) -> ast.AST:
+        return ast.copy_location(ast.arg("_"), node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
+        self.generic_visit(node)
+        return ast.copy_location(ast.Attribute(node.value, "_", node.ctx), node)
+
+    def visit_Constant(self, node: ast.Constant) -> ast.AST:
+        return ast.copy_location(ast.Constant(None), node)
+
+    @classmethod
+    def of(cls, function: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+        erased = cls().visit(copy.deepcopy(function))
+        return ast.dump(erased.args) + ast.dump(ast.Module(erased.body, []))
+
+
+class NamedFunctions(ast.NodeVisitor):
+    """The functions and coroutines, nested ones included, named one of ``names``."""
+
+    def __init__(self, names: tuple[str, ...]) -> None:
+        self.names = names
+        self.found: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self.collect(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self.collect(node)
+
+    def collect(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        if node.name in self.names:
+            self.found.append(node)
+        self.generic_visit(node)
+
+    @classmethod
+    def of(
+        cls, names: tuple[str, ...], tree: ast.AST
+    ) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+        functions = cls(names)
+        functions.visit(tree)
+        return functions.found
+
+
+class Classes:
+    """Every class statement in the given trees, nested ones included."""
+
+    @staticmethod
+    def of(trees: Iterable[ast.AST]) -> Iterator[ast.ClassDef]:
+        return (node for tree in trees for node in ast.walk(tree) if isinstance(node, ast.ClassDef))
+
+
+@dataclass(frozen=True)
+class NoExactCopies(MainEvidence):
+    """No two functions named one of ``names`` across ``paths`` share one erased body."""
+
+    names: tuple[str, ...]
+    paths: tuple[str, ...]
+
+    def read(self, main: MainTree) -> bool:
+        shapes = [
+            ErasedBody.of(function)
+            for module in main.present_modules(self.paths)
+            for function in NamedFunctions.of(self.names, module.module)
+        ]
+        return len(shapes) == len(set(shapes))
+
+    def describe(self) -> str:
+        return f"no exact copies of {'/'.join(self.names)} in {' '.join(self.paths)} on main"
+
+
+@dataclass(frozen=True)
+class NoGodFunction(MainEvidence):
+    """The census finds no god function named ``name`` in ``path``."""
+
+    path: str
+    name: str
+
+    def read(self, main: MainTree) -> bool:
+        return not any(
+            main.census.god_function(module, function)
+            for module in main.present_modules((self.path,))
+            for function in NamedFunctions.of((self.name,), module.module)
+        )
+
+    def describe(self) -> str:
+        return f"no god function {self.name} in {self.path} on main"
+
+
+@dataclass(frozen=True)
+class NoAbsenceProbes(MainEvidence):
+    """The census's foreign absence probe (IDEN-3) counts zero in ``paths``; a plain optional
+    value with no behaviour stays ``None``."""
+
+    paths: tuple[str, ...]
+
+    def read(self, main: MainTree) -> bool:
+        """Every node is offered to the probe, whose own pattern decides what it counts."""
+        return not any(
+            main.census.absence_probes(node)
+            for module in main.present_modules(self.paths)
+            for node in ast.walk(module.module)
+        )
+
+    def describe(self) -> str:
+        return f"no foreign absence probes in {' '.join(self.paths)} on main"
+
+
+@dataclass(frozen=True)
+class ClassFlagsAbsent(MainEvidence):
+    """No line matching ``pattern`` in ``paths`` is a statement of a class body. A function's
+    local or a dataclass field default of the same name is not a declared flag."""
+
+    pattern: str
+    paths: tuple[str, ...] = ("src",)
+    owners: tuple[QualifiedName, ...] = ()
+
+    def read(self, main: MainTree) -> bool:
+        matched = main.matching_lines(self.pattern, self.paths)
+        if self.owners:
+            scopes = DeclaredScopes.of(main, self.paths)
+            statements = (
+                (declared.path, line)
+                for owner in self.owners
+                for declared in scopes.declared(owner)
+                for line in declared.body_lines
+            )
+        else:
+            statements = (
+                (path, statement.lineno)
+                for path in {path for path, _ in matched}
+                for declared in Classes.of((main.module(path).module,))
+                for statement in declared.body
+            )
+        return not any(statement in matched for statement in statements)
+
+    def describe(self) -> str:
+        owners = f" of {', '.join(str(owner) for owner in self.owners)}" if self.owners else ""
+        return f"no class body line {self.pattern!r}{owners} in {' '.join(self.paths)} on main"
+
+
+class NamedClasses(ast.NodeVisitor):
+    """The classes a base list or an ``isinstance`` target names, each by its last dotted part.
+    A subscripted or computed base names none."""
+
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    def visit_Name(self, node: ast.Name) -> None:
+        self.names.add(node.id)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        self.names.add(node.attr)
+
+    def visit_Subscript(self, node: ast.Subscript) -> None:
+        """``Generic[T]`` names no class of ``src``."""
+
+    def visit_Call(self, node: ast.Call) -> None:
+        """A base computed by a call names no class."""
+
+    @classmethod
+    def of(cls, nodes: Iterable[ast.expr]) -> set[str]:
+        named = cls()
+        for node in nodes:
+            named.visit(node)
+        return named.names
+
+
+class ScopeBindings(ast.NodeVisitor):
+    """Names bound by one lexical scope, without borrowing a nested scope's locals."""
+
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, (ast.Store, ast.Del)):
+            self.names.add(node.id)
+
+    def visit_arg(self, node: ast.arg) -> None:
+        self.names.add(node.arg)
+
+    def visit_alias(self, node: ast.alias) -> None:
+        self.names.add(node.asname or node.name.split(".")[0])
+
+    def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        self.names.add(node.name)
+        for value in (*node.decorator_list, *node.args.defaults,
+                      *(default for default in node.args.kw_defaults if default is not None)):
+            self.visit(value)
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.names.add(node.name)
+        for value in (*node.decorator_list, *node.bases, *node.keywords):
+            self.visit(value)
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        """A lambda's locals do not bind names in its enclosing scope."""
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+        if node.name is not None:
+            self.names.add(node.name)
+        self.generic_visit(node)
+
+    def visit_MatchAs(self, node: ast.MatchAs) -> None:
+        if node.name is not None:
+            self.names.add(node.name)
+        self.generic_visit(node)
+
+    def visit_MatchStar(self, node: ast.MatchStar) -> None:
+        if node.name is not None:
+            self.names.add(node.name)
+
+    def visit_MatchMapping(self, node: ast.MatchMapping) -> None:
+        if node.rest is not None:
+            self.names.add(node.rest)
+        self.generic_visit(node)
+
+    def visit_Global(self, node: ast.Global) -> None:
+        self.names.update(node.names)
+
+    def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
+        self.names.update(node.names)
+
+    @classmethod
+    def of(cls, nodes: Iterable[ast.AST]) -> set[str]:
+        bindings = cls()
+        for node in nodes:
+            bindings.visit(node)
+        return bindings.names
+
+
+class ClassChecks(ast.NodeVisitor):
+    """The classes the visited modules declare and the classes their ``isinstance`` calls
+    name."""
+
+    def __init__(self) -> None:
+        self.declared: set[str] = set()
+        self.classes: list[tuple[str, frozenset[str]]] = []
+        self.path = ""
+        self.checked: list[tuple[str, int, frozenset[str]]] = []
+        self._scopes: list[set[str]] = []
+        self._methods: set[ast.FunctionDef | ast.AsyncFunctionDef] = set()
+        self._comparison_guards: set[ast.Call] = set()
+
+    def visit_Module(self, node: ast.Module) -> None:
+        self._scopes.append(ScopeBindings.of(node.body))
+        try:
+            self.generic_visit(node)
+        finally:
+            self._scopes.pop()
+            self._methods.clear()
+            self._comparison_guards.clear()
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.declared.add(node.name)
+        self.classes.append((node.name, frozenset(NamedClasses.of(node.bases))))
+        self._methods.update(member for member in node.body
+                             if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)))
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._scopes.append(ScopeBindings.of((node.args, *node.body)))
+        arguments = (*node.args.posonlyargs, *node.args.args)
+        if (node in self._methods and not node.decorator_list
+            and node.name in ("__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__")
+            and len(arguments) == 2 and node.args.vararg is None and node.args.kwarg is None
+            and not node.args.kwonlyargs
+            and not any({"isinstance", "NotImplemented", "*"} & scope for scope in self._scopes)):
+            for statement in node.body:
+                match statement:
+                    case ast.If(
+                        test=ast.UnaryOp(op=ast.Not(), operand=ast.Call(
+                            func=ast.Name(id="isinstance"),
+                            args=[ast.Name(id=foreign), _], keywords=[],
+                        ) as check),
+                        body=[ast.Return(value=ast.Name(id="NotImplemented"))], orelse=[],
+                    ) if foreign == arguments[1].arg:
+                        self._comparison_guards.add(check)
+        self.generic_visit(node)
+        self._scopes.pop()
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        # Async special methods do not return Python's comparison result.
+        self._scopes.append(ScopeBindings.of((node.args, *node.body)))
+        self.generic_visit(node)
+        self._scopes.pop()
+
+    def visit_Call(self, node: ast.Call) -> None:
+        match node:
+            case ast.Call(func=ast.Name(id=isinstance.__name__), args=[_, target]) \
+                    if node not in self._comparison_guards:
+                self.checked.append((self.path, node.lineno, frozenset(NamedClasses.of((target,)))))
+        self.generic_visit(node)
+
+
+class BusStorageProbe(BusStorageAbsent):
+    """One node's bus-storage check, for a walk another visitor drives: it never walks the
+    children itself, and a docstring's text stays inert as the full scan leaves it."""
+
+    def __init__(self) -> None:
+        self.inert: set[ast.AST] = set()
+
+    def visit(self, node: ast.AST) -> None:
+        if node not in self.inert:
+            super().visit(node)
+
+    def generic_visit(self, node: ast.AST) -> None:
+        """The driving walk reaches the children."""
+
+    def visit_Expr(self, node: ast.Expr) -> None:
+        if self.prose(node):
+            self.inert.add(node.value)
+
+
+class SourceScan(ClassChecks):
+    """The isinstance and class scan with each node it reaches also probed for bus storage:
+    one walk of a module for every fact SourceFacts keeps."""
+
+    def __init__(self, path: str) -> None:
+        super().__init__()
+        self.path = path
+        self.bus = BusStorageProbe()
+
+    def visit(self, node: ast.AST) -> None:
+        self.bus.visit(node)
+        super().visit(node)
+
+
+@dataclass(frozen=True)
+class SourceFacts:
+    """One blob's whole-module facts that ``src``-wide evidence reads, from one parse: no tree
+    keeps syntax, and the facts carry to later trees while the path holds this blob."""
+
+    path: str
+    blob: str
+    bus_storage: bool
+    declared: frozenset[str]
+    checked: tuple[tuple[int, frozenset[str]], ...]
+    classes: tuple[tuple[str, frozenset[str]], ...]
+
+    @classmethod
+    def of(cls, path: str, blob: str, tree: ast.Module) -> SourceFacts:
+        checks = SourceScan(path)
+        checks.visit(tree)
+        return cls(path, blob, checks.bus.found, frozenset(checks.declared),
+                   tuple((line, named) for _, line, named in checks.checked),
+                   tuple(checks.classes))
+
+    def retained(self, main: MainTree) -> bool:
+        """These facts remain valid exactly while this path holds their original blob."""
+        return main.files.get(self.path) == self.blob
+
+    def owned(self, declared: frozenset[str]) -> tuple[int, ...]:
+        """The line of each ``isinstance`` here that names one of the ``declared`` classes."""
+        return tuple(line for line, named in self.checked if named & declared)
+
+
+@dataclass(frozen=True)
+class OwnClassChecksAbsent(MainEvidence):
+    """No ``isinstance`` in ``src`` names a class that ``src`` declares; checks against AST,
+    typing and SDK types stay."""
+
+    def read(self, main: MainTree) -> bool:
+        return not self.located(main)
+
+    def located(self, main: MainTree) -> tuple[str, ...]:
+        """The path and line of each check naming a class ``src`` declares."""
+        facts = tuple(main.source_facts(("src",)))
+        declared = frozenset().union(*(module.declared for module in facts))
+        return tuple(f"{module.path}:{line}" for module in facts
+                     for line in module.owned(declared))
+
+    def describe(self) -> str:
+        return "no isinstance against a class declared in src on main"
+
+
+@dataclass(frozen=True)
+class ParentsShared(MainEvidence):
+    """Every named class, and every class declared in ``paths``, is a direct base of at least
+    two classes in ``src``: a capability or mixin left with one member is folded back."""
+
+    names: tuple[str, ...] = ()
+    paths: tuple[str, ...] = ()
+
+    def read(self, main: MainTree) -> bool:
+        declared = {*self.names, *(name for module in main.source_facts(self.paths)
+                                   for name, _ in module.classes)}
+        members = Counter(base for module in main.source_facts(("src",))
+                          for _, bases in module.classes for base in bases & declared)
+        return all(members[name] >= 2 for name in declared)
+
+    def describe(self) -> str:
+        named = [*self.names, *self.paths]
+        return "two members each for " + " ".join(named) + " on main"
+
+
+@dataclass(frozen=True)
+class QualifiedName:
+    """A module or class as Python imports it, one part per dotted segment."""
+
+    parts: tuple[str, ...]
+
+    @classmethod
+    def of(cls, dotted: str) -> QualifiedName:
+        """An import statement's module text, split once where the AST hands it over."""
+        return cls(tuple(part for part in dotted.split(".") if part))
+
+    @classmethod
+    def of_class(cls, declared: type) -> QualifiedName:
+        """A live class's name, as its module and qualified name declare it."""
+        return cls.of(declared.__module__).joined(cls.of(declared.__qualname__))
+
+    def child(self, name: str) -> QualifiedName:
+        return QualifiedName((*self.parts, name))
+
+    def joined(self, other: QualifiedName) -> QualifiedName:
+        return QualifiedName((*self.parts, *other.parts))
+
+    @property
+    def parent(self) -> QualifiedName:
+        return QualifiedName(self.parts[:-1])
+
+    @property
+    def name(self) -> str:
+        return self.parts[-1]
+
+    def ancestors(self) -> tuple[QualifiedName, ...]:
+        """This name and each enclosing one, nearest first, down to the empty root."""
+        return tuple(QualifiedName(self.parts[:end]) for end in range(len(self.parts), -1, -1))
+
+    def __str__(self) -> str:
+        return ".".join(self.parts)
+
+
+@dataclass(frozen=True)
+class Declaration:
+    """One declaring statement on main and the module path that holds it, so two declarations
+    spelled alike stay two."""
+
+    path: str
+
+    def under(self, paths: tuple[str, ...]) -> bool:
+        return any(PurePosixPath(self.path).is_relative_to(path) for path in paths)
+
+
+@dataclass(frozen=True)
+class MemberAnswer:
+    """The exact location-free AST comparison answer, not the statement that supplied it."""
+
+    line: int
+    shape: str
+
+
+class RosterValue(MroDispatch):
+    """Compact expression facts shared by base-name and roster evidence."""
+
+    def members(self, bindings: ModuleBindings, scopes: DeclaredScopes, before: int) -> int:
+        return 0
+
+    def references(self, bindings: ModuleBindings, scopes: DeclaredScopes, before: int) -> int:
+        return 0
+
+    def names(self) -> tuple[QualifiedName, ...]:
+        return ()
+
+    def attribute(self, member: str) -> RosterValue:
+        return RosterValue()
+
+    def called(self) -> RosterValue:
+        return RosterValue()
+
+    def spread(self) -> RosterValue:
+        return RosterValue()
+
+    @classmethod
+    def of(cls, value: ast.expr) -> RosterValue:
+        """Decode foreign syntax once through its declared nominal handler."""
+        return cast(RosterValue, cls.handler_for(type(value))(value))
+
+    @handles(ast.expr)
+    @staticmethod
+    def read_other(value: ast.expr) -> RosterValue:
+        return RosterValue()
+
+    @handles(ast.Name)
+    @staticmethod
+    def read_name(value: ast.Name) -> RosterValue:
+        return LocalRoster(QualifiedName((value.id,)))
+
+    @handles(ast.Attribute)
+    @staticmethod
+    def read_attribute(value: ast.Attribute) -> RosterValue:
+        return RosterValue.of(value.value).attribute(value.attr)
+
+    @handles(ast.Call)
+    @staticmethod
+    def read_call(value: ast.Call) -> RosterValue:
+        if len(value.args) == 1:
+            return RosterValue.of(value.args[0]).called()
+        return RosterValue()
+
+    @handles(ast.Tuple, ast.List, ast.Set)
+    @staticmethod
+    def read_sequence(value: ast.Tuple | ast.List | ast.Set) -> RosterValue:
+        return LiteralRoster(tuple(RosterValue.of(element) for element in value.elts))
+
+    @handles(ast.Starred)
+    @staticmethod
+    def read_spread(value: ast.Starred) -> RosterValue:
+        return RosterValue.of(value.value).spread()
+
+
+@dataclass(frozen=True)
+class ReferencedRoster(RosterValue):
+    name: QualifiedName
+
+    def names(self) -> tuple[QualifiedName, ...]:
+        return (self.name,)
+
+    def references(self, bindings: ModuleBindings, scopes: DeclaredScopes, before: int) -> int:
+        return sum(1 for _ in scopes.resolve(bindings.prefix, self.name))
+
+    def attribute(self, member: str) -> RosterValue:
+        return ReferencedRoster(self.name.child(member))
+
+
+class LocalRoster(ReferencedRoster):
+    """A bare local name can be spread; an attribute reference cannot."""
+
+    def spread(self) -> RosterValue:
+        return SpreadRoster(self.name.name)
+
+
+@dataclass(frozen=True)
+class SpreadRoster(RosterValue):
+    local: str
+
+    def references(self, bindings: ModuleBindings, scopes: DeclaredScopes, before: int) -> int:
+        return sum(value.members(bindings, scopes, before)
+                   for value in bindings.literal(self.local, before))
+
+
+@dataclass(frozen=True)
+class MemberRoster(RosterValue):
+    elements: tuple[RosterValue, ...]
+
+    def members(self, bindings: ModuleBindings, scopes: DeclaredScopes, before: int) -> int:
+        return sum(element.references(bindings, scopes, before) for element in self.elements)
+
+
+class LiteralRoster(MemberRoster):
+    """Only a literal collection, not an already-called one, is a call's admitted argument."""
+
+    def called(self) -> RosterValue:
+        return MemberRoster(self.elements)
+
+
+@dataclass(frozen=True)
+class BodyAssignment:
+    line: int
+    targets: tuple[str, ...]
+    value: RosterValue
+
+    @classmethod
+    def of(cls, statement: ast.stmt) -> Iterator[BodyAssignment]:
+        match statement:
+            case ast.Assign(targets=targets, value=value):
+                yield cls(statement.lineno, tuple(ast.unparse(target) for target in targets),
+                          RosterValue.of(value))
+            case ast.AnnAssign(target=target, value=ast.expr() as value):
+                yield cls(statement.lineno, (ast.unparse(target),), RosterValue.of(value))
+
+
+@dataclass(frozen=True)
+class DeclaredClass(Declaration):
+    name: str
+    bases: tuple[QualifiedName, ...]
+    body_lines: tuple[int, ...]
+    answers: Mapping[str, MemberAnswer] = field(compare=False, hash=False)
+    assignments: tuple[BodyAssignment, ...] = field(compare=False, hash=False)
+
+    @classmethod
+    def of(cls, path: str, node: ast.ClassDef) -> DeclaredClass:
+        return cls(path, node.name,
+                   tuple(name for base in node.bases for name in RosterValue.of(base).names()),
+                   tuple(statement.lineno for statement in node.body),
+                   ClassAnswers.of(node, frozenset()),
+                   tuple(bound for statement in node.body
+                         for bound in BodyAssignment.of(statement)))
+
+
+@dataclass(frozen=True)
+class DeclaredFunction(Declaration):
+    """A function's declaration location, never its deferred executable body."""
+
+    line: int
+
+
+class ClassDeclarations(ast.NodeVisitor, MroDispatch):
+    """Each class and function a body declares, nested classes and methods under their outer
+    class's name. A function body runs later, so nothing in it is declared at import."""
+
+    def __init__(self, classes: dict[QualifiedName, DeclaredClass],
+                 functions: dict[QualifiedName, DeclaredFunction],
+                 path: str, prefix: QualifiedName) -> None:
+        self.classes = classes
+        self.functions = functions
+        self.path = path
+        self.prefix = prefix
+
+    def visit(self, node: ast.AST) -> None:
+        self.handler_for(type(node))(self, node)
+
+    @handles(ast.AST)
+    def visit_node(self, node: ast.AST) -> None:
+        super().visit(node)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        qualified = self.prefix.child(node.name)
+        self.classes[qualified] = DeclaredClass.of(self.path, node)
+        ClassDeclarations(self.classes, self.functions, self.path, qualified).generic_visit(node)
+
+    @handles(ast.FunctionDef, ast.AsyncFunctionDef)
+    def declare_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        """Both function forms defer their executable body until called."""
+        self.functions[self.prefix.child(node.name)] = DeclaredFunction(self.path, node.lineno)
+
+
+class ModuleBindings(ClassDeclarations):
+    """What one module's top level binds, under ``if`` and ``try`` too: its classes, its
+    imports and the values it assigns names."""
+
+    def __init__(self, path: str, module: QualifiedName, package: QualifiedName,
+                 *, blob: str) -> None:
+        super().__init__({}, {}, path, module)
+        self.blob = blob
+        self.anchors = (QualifiedName(()), *package.ancestors())
+        self.bound: dict[str, QualifiedName] = {}
+        self.assigned: dict[str, list[BodyAssignment]] = {}
+        self.assignments: list[BodyAssignment] = []
+
+    def retained(self, main: MainTree) -> bool:
+        """These facts remain valid exactly while this path holds their original blob."""
+        return main.files.get(self.path) == self.blob
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.bound[node.name] = self.prefix.child(node.name)
+        super().visit_ClassDef(node)
+
+    def visit_Import(self, node: ast.Import) -> None:
+        """``import a.b`` binds ``a``; ``import a.b as c`` binds ``c`` to ``a.b``."""
+        for alias in node.names:
+            imported = QualifiedName.of(alias.name)
+            self.bound[alias.asname or imported.parts[0]] = (
+                imported if alias.asname else QualifiedName(imported.parts[:1])
+            )
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """A relative import climbs from this module's package, one level per dot."""
+        origin = self.anchors[node.level].joined(QualifiedName.of(node.module or ""))
+        for alias in node.names:
+            self.bound[alias.asname or alias.name] = origin.child(alias.name)
+
+    @handles(ast.Assign, ast.AnnAssign)
+    def record_assignments(self, node: ast.Assign | ast.AnnAssign) -> None:
+        for assignment in BodyAssignment.of(node):
+            self.assignments.append(assignment)
+            for target in assignment.targets:
+                self.assigned.setdefault(target, []).append(assignment)
+
+    def reach(self, local: str) -> Iterator[QualifiedName]:
+        """What this module's top level binds ``local`` to, if it binds it."""
+        if local in self.bound:
+            yield self.bound[local]
+
+    def literal(self, local: str, before: int) -> Iterator[RosterValue]:
+        """The last value this module's top level assigns ``local`` before line ``before``."""
+        yield from [assignment.value for assignment in self.assigned.get(local, [])
+                    if assignment.line < before][-1:]
+
+
+class DeclaredScopes:
+    """The modules under ``paths`` on main, each resolving a name only through what its own top
+    level binds. A class is found by its qualified name, the way Python imports it, never by
+    its bare spelling in some other module; a name its module never binds reaches nothing."""
+
+    @classmethod
+    def of(cls, main: MainTree, paths: tuple[str, ...]) -> DeclaredScopes:
+        """Resolve this tree from its compact blob facts; no global tree or scope lifetime."""
+        return cls(main, paths)
+
+    def __init__(self, main: MainTree, paths: tuple[str, ...]) -> None:
+        self.classes: dict[QualifiedName, DeclaredClass] = {}
+        self.functions: dict[QualifiedName, DeclaredFunction] = {}
+        self.modules: dict[QualifiedName, ModuleBindings] = {}
+        self.module_of: dict[str, QualifiedName] = {}
+        for bindings in main.module_bindings(paths, paths):
+            self.modules[bindings.prefix] = bindings
+            self.classes.update(bindings.classes)
+            self.functions.update(bindings.functions)
+            self.module_of[bindings.path] = bindings.prefix
+
+    @staticmethod
+    def dotted(path: str, roots: tuple[str, ...]) -> tuple[QualifiedName, QualifiedName]:
+        """The module's import name below the root that holds it, and its package; a package's
+        ``__init__`` is the package itself."""
+        root = next(root for root in roots if PurePosixPath(path).is_relative_to(root))
+        relative = PurePosixPath(path).relative_to(root)
+        package = QualifiedName(relative.parent.parts)
+        return package.joined(QualifiedName.of(relative.stem.removeprefix("__init__"))), package
+
+    def qualify(self, module: QualifiedName, expression: QualifiedName) -> Iterator[QualifiedName]:
+        """Resolve the decoded local name through this module's actual top-level bindings."""
+        local, *members = expression.parts
+        yield from (owner.joined(QualifiedName(tuple(members)))
+                    for owner in self.modules[module].reach(local))
+
+    def declared(
+        self, qualified: QualifiedName, seen: frozenset[QualifiedName] = frozenset()
+    ) -> Iterator[DeclaredClass]:
+        """The class a qualified name reaches, following a module's re-export of an import."""
+        if qualified in self.classes:
+            yield self.classes[qualified]
+        elif qualified.parent in self.modules:
+            for target in self.modules[qualified.parent].reach(qualified.name):
+                if target not in seen:
+                    yield from self.declared(target, seen | {qualified})
+
+    def resolve(self, module: QualifiedName, expression: QualifiedName) -> Iterator[DeclaredClass]:
+        for qualified in self.qualify(module, expression):
+            yield from self.declared(qualified)
+
+    def parents(self, declared: DeclaredClass) -> Iterator[DeclaredClass]:
+        """Each direct base declared under the roots, read through its module's bindings."""
+        for base in declared.bases:
+            for parent in self.resolve(self.module_of[declared.path], base):
+                if parent != declared:
+                    yield parent
+
+    def lineage(self, declared: DeclaredClass) -> frozenset[DeclaredClass]:
+        """The class and every class its bases reach under the roots."""
+        found = {declared}
+        pending = [declared]
+        while pending:
+            for parent in self.parents(pending.pop()):
+                if parent not in found:
+                    found.add(parent)
+                    pending.append(parent)
+        return frozenset(found)
+
+
+@dataclass(frozen=True)
+class DeclarationEvidence(MainEvidence, DeclaredFamily, affix="Declared"):
+    """Whether ``paths`` on main declare a member's kind of declaration called ``name``, read
+    from the walk of their import roots; each member's declared name is the kind it reads. The
+    name is a string because it is the declared target of a declaration the phase's work may
+    not have written yet."""
+
+    name: str
+    paths: tuple[str, ...] = ("src",)
+
+    def read(self, main: MainTree) -> bool:
+        roots = tuple(dict.fromkeys(PurePosixPath(path).parts[0] for path in self.paths))
+        return any(
+            qualified.name == self.name and declared.under(self.paths)
+            for bindings in main.module_bindings(self.candidates(main), roots)
+            for qualified, declared in self.declarations(bindings).items()
+        )
+
+    def candidates(self, main: MainTree) -> tuple[str, ...]:
+        """The modules under ``paths`` whose text holds ``name`` as a word: a module that
+        declares it must spell it, so one ``git grep`` at main's commit spares parsing the
+        rest (589 test modules, to find one test function)."""
+        return tuple(row.split(":", 1)[1] for row in main.grep(
+            "-l", "-w", pattern=re.escape(self.name), paths=self.paths))
+
+    @abstractmethod
+    def declarations(self, scopes: ClassDeclarations) -> Mapping[QualifiedName, Declaration]: ...
+
+    def describe(self) -> str:
+        return f"{self.declared_name} {self.name} declared in {' '.join(self.paths)} on main"
+
+
+@dataclass(frozen=True)
+class ClassDeclared(DeclarationEvidence):
+    """A class ``name`` declared under ``paths``."""
+
+    def declarations(self, scopes: ClassDeclarations) -> Mapping[QualifiedName, Declaration]:
+        return scopes.classes
+
+
+@dataclass(frozen=True)
+class FunctionDeclared(DeclarationEvidence):
+    """A function or method ``name`` declared under ``paths``."""
+
+    def declarations(self, scopes: ClassDeclarations) -> Mapping[QualifiedName, Declaration]:
+        return scopes.functions
+
+
+class DecoratorNames(NamedClasses):
+    """The classes a decorator list names; ``@dataclass(frozen=True)`` names the class it calls."""
+
+    def visit_Call(self, node: ast.Call) -> None:
+        self.visit(node.func)
+
+
+class ClassAnswers(ast.NodeVisitor):
+    """Each member a class body declares by name, with its declaration. A field counts only on
+    a dataclass, and a name ``type`` reads per class never counts."""
+
+    def __init__(self, declared: ast.ClassDef, per_class: frozenset[str]) -> None:
+        self.fields = dataclass.__name__ in DecoratorNames.of(declared.decorator_list)
+        self.per_class = per_class
+        self.found: dict[str, MemberAnswer] = {}
+
+    @classmethod
+    def of(cls, declared: ast.ClassDef, per_class: frozenset[str]) -> dict[str, MemberAnswer]:
+        answers = cls(declared, per_class)
+        for member in declared.body:
+            answers.visit(member)
+        return answers.found
+
+    def record(self, name: str, member: ast.stmt) -> None:
+        if name not in self.per_class:
+            self.found[name] = MemberAnswer(member.lineno, ast.dump(member))
+
+    def generic_visit(self, node: ast.AST) -> None:
+        """Only the body's own statements declare members."""
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self.record(node.name, node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self.record(node.name, node)
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        match node.targets:
+            case [ast.Name(id=name)]:
+                self.record(name, node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        """A field is inherited only between dataclasses, and only one with a default restates."""
+        match node:
+            case ast.AnnAssign(target=ast.Name(id=name), value=ast.expr()) if self.fields:
+                self.record(name, node)
+
+
+@dataclass(frozen=True)
+class RestatedMembersAbsent(MainEvidence):
+    """No class in ``paths`` restates a member its direct base in ``paths`` declares: a method
+    or class attribute equal to the base's, or a field equal to the base's when both are
+    dataclasses, so the field is already inherited."""
+
+    paths: tuple[str, ...] = ("src",)
+    per_class: ClassVar[frozenset[str]] = frozenset({"__slots__"})
+    """Names ``type`` reads from each class's own namespace, never through its bases."""
+
+    def read(self, main: MainTree) -> bool:
+        return not any(self.restatements(main))
+
+    def located(self, main: MainTree) -> tuple[str, ...]:
+        return tuple(self.restatements(main))
+
+    def restatements(self, main: MainTree) -> Iterator[str]:
+        """Each restated member, as ``PATH:LINE Class.member``."""
+        scopes = DeclaredScopes.of(main, self.paths)
+        for declared in scopes.classes.values():
+            for parent in scopes.parents(declared):
+                inherited = parent.answers
+                for name, member in declared.answers.items():
+                    if (name not in self.per_class and name in inherited
+                            and inherited[name].shape == member.shape):
+                        restated = QualifiedName((declared.name, name))
+                        yield f"{declared.path}:{member.line} {restated}"
+
+    def describe(self) -> str:
+        return f"no member restating its base's in {' '.join(self.paths)} on main"
+
+
+@dataclass(frozen=True)
+class ClassRostersAbsent(MainEvidence):
+    """No module or class body in ``paths`` binds a literal collection naming two or more
+    classes ``paths`` declares, builtins beside them or not, ``*NAME`` read through the
+    module's own bindings: a family's members derive from its registry and their order from
+    its declarations. A class attribute a ``families`` member declares as a tuple of its own
+    classes, as ``PlanPhase.after``, is a dependency between members, not a roster."""
+
+    paths: tuple[str, ...] = ("src",)
+    families: tuple[type, ...] = ()
+
+    def read(self, main: MainTree) -> bool:
+        return not any(self.rosters(main))
+
+    def located(self, main: MainTree) -> tuple[str, ...]:
+        return tuple(self.rosters(main))
+
+    def relations(self, scopes: DeclaredScopes) -> dict[DeclaredClass, frozenset[str]]:
+        """Each family's declaration under the roots, found by its qualified name, with the class
+        attributes it declares as a tuple of its own classes."""
+        return {
+            declared: frozenset(
+                name
+                for name, hint in FieldCodec._types(family).items()
+                if get_origin(hint) is ClassVar
+                and get_args(hint) == (tuple[type[family], ...],)  # type: ignore[valid-type]
+            )
+            for family in self.families
+            for declared in scopes.declared(QualifiedName.of_class(family))
+        }
+
+    @staticmethod
+    def related(
+        scopes: DeclaredScopes,
+        relations: dict[DeclaredClass, frozenset[str]],
+        declared: DeclaredClass,
+    ) -> frozenset[str]:
+        """The relations of every family the class descends from; any other class's ``after``
+        is a roster like any other."""
+        lineage = scopes.lineage(declared)
+        return frozenset[str]().union(
+            *(names for family, names in relations.items() if family in lineage)
+        )
+
+    def rosters(self, main: MainTree) -> Iterator[str]:
+        """Each roster, as ``PATH:LINE NAME``."""
+        scopes = DeclaredScopes.of(main, self.paths)
+        relations = self.relations(scopes)
+        for bindings in scopes.modules.values():
+            bodies = (
+                (QualifiedName(()), frozenset[str](), tuple(bindings.assignments)),
+                *(
+                    (
+                        QualifiedName((declared.name,)),
+                        self.related(scopes, relations, declared),
+                        declared.assignments,
+                    )
+                    for declared in scopes.classes.values()
+                    if declared.path == bindings.path
+                ),
+            )
+            found = sorted(
+                (statement.line, str(owner.child(target)))
+                for owner, related, body in bodies
+                for statement in body
+                if len(statement.targets) == 1
+                for target in statement.targets
+                if target not in related
+                and statement.value.members(bindings, scopes, statement.line) >= 2
+            )
+            yield from (f"{bindings.path}:{line} {target}" for line, target in found)
+
+    def describe(self) -> str:
+        return f"no literal roster of declared classes in {' '.join(self.paths)} on main"

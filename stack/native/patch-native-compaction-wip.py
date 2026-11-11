@@ -15,7 +15,7 @@ import re
 import sys
 from pathlib import Path
 
-from agent_comms.native_build_inputs import NativeRepositoryInputs
+from agent_comms.installer.native_build_inputs import NativeRepositoryInputs
 
 REPO = Path(__file__).resolve().parents[2]
 INSTRUCTION = REPO / NativeRepositoryInputs.of(REPO).compaction_instruction

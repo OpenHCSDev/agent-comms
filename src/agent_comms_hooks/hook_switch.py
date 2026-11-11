@@ -13,11 +13,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-from agent_comms.declared_verb import DeclaredVerb
-from agent_comms.harness_install import merge_json
+from agent_comms.cli_verbs.declared_verb import DeclaredVerb
+from agent_comms.installer.harness_install import merge_json
 from agent_comms.nominal.field_codec import Argument
-
-from .shell_commands import EmergencyHookStop
+from agent_comms_hooks.shell_commands import EmergencyHookStop
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
+from asyncio import Future
+from collections import deque
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, TypeVar
+from typing import Annotated, ClassVar, Generic, Literal, TypeVar
 
 from pydantic import (
     Field,
@@ -18,23 +20,13 @@ from pydantic import (
     field_validator,
 )
 
-from agent_comms.cli_protocol import Declared, TaggedWire, TextWire
-from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
-from agent_comms.external_transcript import EarlierPage, NoEarlierPage
-from agent_comms.nominal.field_codec import (
-    FieldCodec,
-    MessageId,
-    ToolCallId,
-    boundary_decoder,
-)
-from agent_comms.native_tools import FilePatchTool
-from agent_comms.recorded_time import EventTime, UnrecordedEventTime
-from agent_comms.runtime_updates import (
-    HiddenItem,
+from agent_comms.cli_bridges.cli_protocol import Declared, TaggedWire, TextWire
+from agent_comms.cli_bridges.runtime_updates import (
     AppendDraftItem,
     CompletedItem,
     DraftAccumulator,
     FinishedTurn,
+    HiddenItem,
     PageItem,
     ParagraphDraft,
     PresentableDraft,
@@ -46,10 +38,28 @@ from agent_comms.runtime_updates import (
     TurnEnded,
     TurnStarted,
 )
-from agent_comms.tool_calls import DecodedToolCall, ToolCall
-from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.tool_results import NoToolDiff, ToolDiff
-from agent_comms.transcript_events import (
+from agent_comms.cli_bridges.shared import BridgeInputObserved
+from agent_comms.cli_bridges.tool_calls import DecodedToolCall, ToolCall
+from agent_comms.cli_bridges.usage_reading import RateLimits
+from agent_comms.cli_bridges.wire_models import DeclaredWireFamily, WireModel
+from agent_comms.execution.tool_results import NoToolDiff, ToolDiff
+from agent_comms.execution.turn_item import NamedSourceTurn, NativeItemId, NativeTurnId
+from agent_comms.execution.turn_phase import (
+    CompactionPhase,
+    ModelWaitPhase,
+    ToolRunningPhase,
+    TurnPhase,
+)
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    MessageId,
+    ToolCallId,
+    boundary_decoder,
+)
+from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
+from agent_comms.transcript.external_transcript_rows import EarlierPage, NoEarlierPage
+from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
     ThinkingTranscript,
@@ -57,12 +67,8 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.turn_item import NativeItemId, NativeTurnId, NamedSourceTurn
-from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
-
-from ..wire_models import DeclaredWireFamily, WireModel
-from .shared import BridgeInputObserved
-from ..usage_reading import RateLimits
+from agent_comms.transport.native_tools import FilePatchTool
+from agent_comms.transport.tool_declaration import ToolDeclaration
 
 
 class UserInput(TaggedWire, ABC, affix=""):
@@ -312,20 +318,27 @@ class RpcError(WireModel):
         return refused(f'Codex: {self.message}')
 
 
-if TYPE_CHECKING:
-    from .codex_connection import CodexConnection
+
+
+class RpcReplyTarget(ABC):
+    """Match replies and retain notifications on their existing connection."""
+
+    pending: deque[RpcNotification]
+
+    @abstractmethod
+    def answer(self, request_id: int) -> Future[JsonValue]: ...
 
 
 class RpcReply(WireModel, ABC):
     @abstractmethod
-    def route(self, connection: CodexConnection) -> None: ...
+    def route(self, connection: RpcReplyTarget) -> None: ...
 
 
 class RpcSuccess(RpcReply):
     id: int
     result: JsonValue
 
-    def route(self, connection: CodexConnection) -> None:
+    def route(self, connection: RpcReplyTarget) -> None:
         connection.answer(self.id).set_result(self.result)
 
 
@@ -336,14 +349,14 @@ class RpcFailure(RpcReply):
 class RpcRequestFailure(RpcFailure):
     id: int
 
-    def route(self, connection: CodexConnection) -> None:
+    def route(self, connection: RpcReplyTarget) -> None:
         connection.answer(self.id).set_exception(self.error.refusal())
 
 
 class RpcConnectionFailure(RpcFailure):
     id: None
 
-    def route(self, connection: CodexConnection) -> None:
+    def route(self, connection: RpcReplyTarget) -> None:
         raise ConnectionError('Codex reported a failure outside any request')
 
 
@@ -351,7 +364,7 @@ class RpcNotification(RpcReply):
     method: str
     params: JsonValue
 
-    def route(self, connection: CodexConnection) -> None:
+    def route(self, connection: RpcReplyTarget) -> None:
         connection.pending.append(self)
 
 

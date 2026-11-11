@@ -8,13 +8,11 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 from acp.schema import PromptResponse
 
-from ..input_key import InputKey
-
-from ..acp_extension import (
+from agent_comms.acp_extension import (
     InputDeliveryChangedUpdate,
     LiveQueueScope,
     NoQueueScope,
@@ -23,63 +21,82 @@ from ..acp_extension import (
     QueueScope,
     encode_updates,
 )
-from ..activity import FailedWakeDiagnostic, StoppedDrainDiagnostic
-from ..agent_backend import AgentBackend
-from ..turn_inbox import ClearQueue, InputContent, SendNow, TurnInbox, TurnInboxItem
-from ..bus import Bus
-from ..child_process import join_retirement
-from ..cohort_schema import AcceptanceFrontier
-from ..comms import Comms
-from ..config_options import ConfigOptions
-from ..controller import SessionUpdateSink
-from ..coordination.cohort import next_sealed_assignment
-from ..coordination.database import CoordinationStore
-from ..coordination.coordinator import Coordination
-from ..cursor_owner import CursorOwner
-from ..drain_failures import (
+from agent_comms.comms import Comms
+from agent_comms.config_options import ConfigOptions
+from agent_comms.coordination.cohort import next_sealed_assignment
+from agent_comms.coordination.cohort_schema import AcceptanceFrontier
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.execution.child_process import join_retirement
+from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.cursor_owner import CursorOwner
+from agent_comms.execution.drain_failures import (
     DEFERRED_DRAIN_ERRORS,
     UNAVAILABLE_DRAIN_ERRORS,
     drain_failures,
     record_drain_failure,
 )
-from ..errors import RelationViolationError, UnregisteredThreadError
-from ..nominal.field_codec import AcpSessionId, InputId, RootId, ThreadLookup
-from ..image_input import ImageInput
-from ..input_attempt import (
+from agent_comms.execution.following_input_contracts import FollowingInputRetirement
+from agent_comms.execution.image_input import ImageInput
+from agent_comms.execution.input_effects import InputEffects
+from agent_comms.execution.input_event_source import InputEventSource, InputEventState
+from agent_comms.execution.input_key import InputKey
+from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.proven_source_coverage import SourcePrefix
+from agent_comms.execution.queue_publication import QueuePublication
+from agent_comms.execution.queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
+from agent_comms.execution.reservation_rules import (
+    ReservationRule,
+    ReservationViolationError,
+    RuleCheck,
+)
+from agent_comms.execution.session_lifecycle import SessionLifecycle
+from agent_comms.execution.session_owner_reads import OwnedSessionLifetime, SessionTaskOwner
+from agent_comms.execution.session_tasks import (
+    BackgroundTask,
+    RunningBackgroundTask,
+    RunningTurnTask,
+    TurnTask,
+    WatchingObservationTask,
+)
+from agent_comms.execution.turn_context import TurnContext, UserFollowupSegment
+from agent_comms.execution.turn_inbox import (
+    ClearQueuedInputs,
+    InputContent,
+    SendNow,
+    TurnInbox,
+    TurnInboxItem,
+)
+from agent_comms.execution.turn_input_source import (
+    AcceptedFollowingInput,
+    NoTurnAcceptance,
+    OriginalTurnInput,
+)
+from agent_comms.execution.turn_outcome import TurnOutcome
+from agent_comms.execution.turn_terminal import OwnerStop
+from agent_comms.input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     InputDeliveryScope,
     OwnerQueueInputDeliveryScope,
 )
-from ..input_disposition import InputDispositions, InputDocument
-from ..input_effects import InputEffects
-from ..lifecycle_capability import Executing
-from ..storage.maintenance_barrier import MaintenanceIngress
-from ..storage.locked_store import GoalWakeFile
-from ..native_input_owner import RegistryOwner
-from ..proven_source_coverage import SourcePrefix
-from ..queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
-from ..registry.registry_document import RegistryDocument, RegistryEntry
-from ..registry.registry_store import RegistryEntryRevision
-from ..routing import ScheduledTurn
-from ..runtime_server import RuntimeServer
-from ..owner_launch import OwnerRetiredReply, StopOwnerRuntimeRequest
-from .session_lifecycle import SessionLifecycle
-from ..thread_identity import ClaimedIdentity, OwnerIdentity
-from ..registry.threads import NativeThread, Thread
-from ..turn_context import TurnContext, UserFollowupSegment
-from ..turn_input_source import AcceptedFollowingInput, OriginalTurnInput
-from ..turn_terminal import OwnerStop
-from ..watched import ChangeSignal, FileLifetimeSource, FileSource
-
-from ..nominal.declared_family import DeclaredFamily
-from ..storage.maintenance_barrier import MaintenanceStatus
-from ..reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
-from ..turn_outcome import TurnOutcome
-from ..turn_input_source import NoTurnAcceptance
-if TYPE_CHECKING:
-    from ..goals import GoalDeclaration
-    from agent_comms.following_inputs import OwnerFollowingInputs
-
+from agent_comms.input_disposition import InputDispositions, InputDocument
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.routing import ScheduledTurn
+from agent_comms.messaging.watched import ChangeSignal, FileLifetimeSource, FileSource
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId, ThreadLookup
+from agent_comms.nominal.lifecycle_capability import Executing
+from agent_comms.planning.goals import GoalDeclaration
+from agent_comms.registry.activity import FailedWakeDiagnostic, StoppedDrainDiagnostic
+from agent_comms.registry.registry_document import RegistryDocument, RegistryEntry
+from agent_comms.registry.registry_store import RegistryEntryRevision
+from agent_comms.registry.thread_identity import ClaimedIdentity, OwnerIdentity
+from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.storage.locked_store import GoalWakeFile
+from agent_comms.storage.maintenance_barrier import MaintenanceIngress, MaintenanceStatus
+from agent_comms.transport.owner_requests import OwnerRetiredReply, StopOwnerRuntimeRequest
+from agent_comms.transport.runtime_server import RuntimeServer
 
 AGENT_PREFIX = "!agent "
 
@@ -642,80 +659,8 @@ class StartedDrainTurn(AwaitingDrainTurn):
         await Coordination.run_worker(partial(inputs.finish_original_inputs, self.source.keys))
 
 
-class BackgroundTask:
-    """An idle producer; running members own cancellation and joined retirement."""
-
-    @property
-    def busy(self) -> bool:
-        return False
-
-    def owns(self, task: asyncio.Task[object]) -> bool:
-        return False
-
-    def producers(self) -> tuple[asyncio.Task[object], ...]:
-        return ()
-
-    def cancel(self) -> None:
-        pass
-
-    async def stop(self) -> None:
-        self.cancel()
-        await join_retirement(asyncio.gather(*self.producers(), return_exceptions=True))
-
-    def wake(self) -> None:
-        pass
-
-
-@dataclass(frozen=True)
-class RunningBackgroundTask(BackgroundTask):
-    task: asyncio.Task[object]
-
-    @property
-    def busy(self) -> bool:
-        return not self.task.done() and not self.task.cancelling()
-
-    def owns(self, task: asyncio.Task[object]) -> bool:
-        return self.task is task
-
-    def producers(self) -> tuple[asyncio.Task[object], ...]:
-        return (self.task,)
-
-    def cancel(self) -> None:
-        self.task.cancel()
-
-
-@dataclass(frozen=True)
-class WatchingObservationTask(RunningBackgroundTask):
-    watcher: ChangeSignal
-
-    def wake(self) -> None:
-        self.watcher.wake()
-
-
-class TurnTask(BackgroundTask):
-    async def prepare_cancel(self, transition: Callable[[], Awaitable[None]]) -> None:
-        pass
-
-    async def abort(self, backend: AgentBackend) -> None:
-        pass
-
-
-@dataclass(frozen=True)
-class RunningTurnTask(RunningBackgroundTask, TurnTask):
-
-    @property
-    def busy(self) -> bool:
-        return True
-
-    async def prepare_cancel(self, transition: Callable[[], Awaitable[None]]) -> None:
-        await transition()
-
-    async def abort(self, backend: AgentBackend) -> None:
-        await backend.abort(self.task)
-
-
 @dataclass(eq=False)
-class DrainedSession:
+class DrainedSession(SessionTaskOwner, InputEventState):
     """One drained session's state, from its first use until the session ends."""
 
     identifier: AcpSessionId = field(kw_only=True)
@@ -865,7 +810,7 @@ class DrainedSession:
 
 
 @dataclass(eq=False)
-class OwnerSession(DrainedSession):
+class OwnerSession(DrainedSession, OwnedSessionLifetime):
     """Local execution retains its original configuration, never copies its fields."""
 
     configuration: ConfigOptions = field(kw_only=True)
@@ -918,7 +863,7 @@ class OwnerSession(DrainedSession):
         return (*super().producers(), self.auth_observer)
 
 
-class InputDrain(InputObservation):
+class InputDrain(InputObservation, QueuePublication, InputEventSource):
     async def begin_observation(
         self, state: DrainedSession, entry: RegistryEntry,
     ) -> RegistryEntry:
@@ -1021,7 +966,7 @@ class InputDrain(InputObservation):
                 ))
             state.queued = retained
             if cleared:
-                state.to_turn(ClearQueue(tuple(item.input_id for item in cleared)))
+                state.to_turn(ClearQueuedInputs(tuple(item.input_id for item in cleared)))
             state.restored = {}
         await self.emit_queue_state(session_id)
 
@@ -1089,7 +1034,7 @@ class InputDrain(InputObservation):
         keys.update(
             key
             for turn in self.state(session_id).pending_turns
-            for key in turn.origin.bus_keys(self.dispositions, owner)
+            for key in turn.origin.bus_keys(owner)
         )
         return OwnerQueueInputDeliveryScope(frozenset(keys))
 
@@ -1192,7 +1137,7 @@ class InputDrain(InputObservation):
         await self.root_observer.stop()
         await self.close_sessions(tuple(self.drained.values()))
 
-    async def close_sessions(self, states: tuple[DrainedSession, ...]) -> None:
+    async def close_sessions(self, states: tuple[SessionTaskOwner, ...]) -> None:
         tasks = tuple(task for state in states for task in state.producers())
         for state in states:
             state.retire_producers()
@@ -1225,7 +1170,7 @@ class InputDrain(InputObservation):
         """Commit selected input retirement before turn cleanup finishes."""
         return self.dispositions.settle_unbound(keys)
 
-    async def finish_turn_inputs(self, following: OwnerFollowingInputs) -> None:
+    async def finish_turn_inputs(self, following: FollowingInputRetirement) -> None:
         """Retire the ending turn's existing input owner; retain UNKNOWN only as notices."""
         session_id, inbox = following.session_id, following.inbox
         state = self.state(session_id)
@@ -1239,7 +1184,7 @@ class InputDrain(InputObservation):
             await turn.finish_original(self)
         finally:
             try:
-                await following.pass_on_unread(self.effects.turns)
+                await following.pass_on_unread()
             finally:
                 # Retire only after the old lease ended and live, unwritten
                 # acceptances had their handoff. UNKNOWN rows never grant it.

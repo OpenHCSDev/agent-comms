@@ -7,12 +7,13 @@ from functools import partial
 
 import pytest
 
-from agent_comms.controller import NO_CONTROLLER
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.native_arguments import GivenBinary
-from agent_comms.notification_reads import LiveNotificationRead
+from agent_comms.execution.controller import NO_CONTROLLER
+from agent_comms.execution.native_arguments import GivenBinary
+from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.ui_model.observation import (
-    LocalRouteObservation, ObservationProcess,
+    LocalRouteObservation,
+    ObservationProcess,
     ObserverDied,
     ReadNotifications,
     StopObserving,

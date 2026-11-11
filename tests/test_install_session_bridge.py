@@ -2,10 +2,6 @@
 
 
 
-from agent_comms_hooks.watch import NoSessionBridge
-from agent_comms.cli_bridges.session_watch import LapsedWatch, LiveWatch, WatchClaim
-from agent_comms_hooks.watch import WatchRecord
-from agent_comms.repo import Checkout
 import json
 import os
 import signal
@@ -14,39 +10,52 @@ import sqlite3
 import subprocess
 import sys
 import time
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from functools import partial
 from html import escape
-from contextlib import closing
 from pathlib import Path
 
 import pytest
 
-from agent_comms.native_build_inputs import DetachedChildStdio
-from agent_comms.child_process import ProcessIdentity, SpawnedProcess
-from agent_comms.activity import ActivityStore
-from agent_comms.transcript_events import AssistantTranscript
-from agent_comms.turn_digests import LastTurns
-from agent_comms.comms import wire
-from agent_comms.fd_readiness import ready
-from agent_comms.cli_bridges.monitor import (
-    ClaimedReplacement, InspectSession, PauseSession, SessionInformation,
-)
-from agent_comms.cli_bridges import claude
+from agent_comms.cli_bridges import claude, hook_session
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
-from agent_comms.cli_bridges.shared import (
-    MONITOR_FRAME, Binding, MonitorBridgeStopped, MonitorBridgeSwapping, MonitorProbe, Serve, SessionBridge, SessionBridgeResumes,
-    ReleasedSessionBridge, UnacknowledgedPause, UnobservedBridge,
+from agent_comms.cli_bridges.fd_readiness import ready
+from agent_comms.cli_bridges.monitor import (
+    ClaimedReplacement,
+    InspectSession,
+    PauseSession,
+    SessionInformation,
 )
-from conftest import installed_comms
-from transcript_record_fixture import transcript_record
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.cli_bridges.session_watch import LapsedWatch, LiveWatch, WatchClaim
+from agent_comms.cli_bridges.shared import (
+    MONITOR_FRAME,
+    Binding,
+    MonitorBridgeStopped,
+    MonitorBridgeSwapping,
+    MonitorProbe,
+    ReleasedSessionBridge,
+    Serve,
+    SessionBridge,
+    SessionBridgeResumes,
+    UnacknowledgedPause,
+    UnobservedBridge,
+)
+from agent_comms.comms import wire
+from agent_comms.execution.child_process import ProcessIdentity, SpawnedProcess
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.root_runtime import RootRuntime
+from agent_comms.execution.turn_bound import LastTurns
+from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.root_runtime import RootRuntime
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import ActivityStore
 from agent_comms.registry.threads import ExternalThread
-from agent_comms.cli_bridges import hook_session
+from agent_comms.transcript.transcript_events import AssistantTranscript
+from agent_comms_hooks.watch import NoSessionBridge, WatchRecord
+from conftest import installed_comms
 from source_programs import SourcePrograms
+from transcript_record_fixture import transcript_record
 
 SERVE_FROM_SOURCE = (sys.executable, '-c', 'from agent_comms.cli_bridges.claude import main; main()')
 
@@ -216,7 +225,7 @@ def send_as_peer(built, tmp_path, env, body, *, declare=False):
     """The bus belongs to the built runtime, so the sender attaches as that runtime."""
     code = (
         'import sys; from pathlib import Path; from agent_comms.comms import wire; '
-        'from agent_comms.repo import Checkout; from agent_comms.registry.threads import NativeThread; '
+        'from agent_comms.projects.checkouts import Checkout; from agent_comms.registry.threads import NativeThread; '
         'comms = wire(Path(sys.argv[1])); '
         + ('comms.registry.declare(NativeThread("peer", frozenset(), Checkout(Path(sys.argv[3])))); ' if declare else '')
         + 'comms.messaging.send("peer", "bridge-copy", sys.argv[2])'

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from agent_comms.catalog_document import CatalogAccess
-from agent_comms.registry.registry_document import ResolvedChannel
-from agent_comms.cli_support.named import NamedCliCommand
-from agent_comms.comms import Comms
-from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.repo import Checkout
 from dataclasses import dataclass
 from typing import Self
+
+from agent_comms.cli_support.named import NamedCliCommand
+from agent_comms.comms import Comms
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.catalog_document import CatalogAccess
+from agent_comms.registry.registry_document import RegistrySnapshot, ResolvedChannel
 
 
 @dataclass(frozen=True, kw_only=True)

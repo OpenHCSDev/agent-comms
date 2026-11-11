@@ -1,26 +1,25 @@
 """Real install-style stop on a copied private bus with a controlled provider."""
 
 
-from agent_comms.repo import Checkout
 import asyncio
-from contextlib import closing
 import shutil
+from contextlib import closing
 from pathlib import Path
 
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.comms import wire
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goal_states import ActiveGoal
-from agent_comms.goal_attempts import AttemptRecord
-from agent_comms.goal_attempt_phase import FailedAttempt, SucceededAttempt
-from agent_comms.goal_generation import ReadyGeneration
-from agent_comms.goal_failure_observation import FailedTurnEvidence
-from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.native_arguments import GivenArguments
+from agent_comms.execution.native_arguments import GivenArguments
+from agent_comms.installer.native_package import VerifiedNativePackage
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.goal_attempt_phase import FailedAttempt, SucceededAttempt
+from agent_comms.planning.goal_generation import ReadyGeneration
+from agent_comms.planning.goal_ledger import AttemptRecord, FailedTurnEvidence
+from agent_comms.planning.goal_states import ActiveGoal
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import NoObservedTurn
+from agent_comms.registry.threads import NativeThread
 from native_backend_fixture import native_backend_fixture, wait_for
 from source_programs import SourcePrograms
-from agent_comms.thread_identity import NoObservedTurn
-from agent_comms.registry.threads import NativeThread
 
 
 async def stopped_goal_journey(

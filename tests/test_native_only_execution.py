@@ -1,7 +1,6 @@
 """Retained native execution, refusal, and canonical headless/runtime behavior."""
 
 
-from agent_comms.repo import Checkout
 import asyncio
 import os
 import sys
@@ -12,11 +11,13 @@ from acp.schema import TextContentBlock
 
 import agent_comms.agent_events as events
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
 from pi_session_turn import one_turn_events
+
 
 @pytest.mark.parametrize("arguments,code", [(('--help',), 0), (('tools',), 2), ((), 2)])
 def test_headless_discovery_cannot_admit_an_unnamed_owner(tmp_path, arguments, code):
@@ -26,7 +27,7 @@ def test_headless_discovery_cannot_admit_an_unnamed_owner(tmp_path, arguments, c
     environment = LaunchRoot.environment(os.environ)
     environment.pop('AGENT_COMMS_THREAD', None)
     result = subprocess.run(
-        (sys.executable, '-c', 'from agent_comms.worker import main; raise SystemExit(main())', *LaunchRoot.from_path(root).arguments(), *arguments),
+        (sys.executable, '-c', 'from agent_comms.execution.worker import main; raise SystemExit(main())', *LaunchRoot.from_path(root).arguments(), *arguments),
         env=environment, capture_output=True, timeout=30,
     )
     assert result.returncode == code, result.stderr.decode()
@@ -46,7 +47,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(
     # The real private boundary disallows volatile or symlinked roots.
     import tempfile
 
-    from agent_comms.acp import CommsClient
+    from agent_comms.execution.acp import CommsClient
     from agent_comms.comms import wire
 
     with tempfile.TemporaryDirectory(prefix="l0b-headless-", dir="/var/tmp") as owned:

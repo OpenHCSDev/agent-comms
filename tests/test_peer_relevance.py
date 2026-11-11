@@ -1,18 +1,17 @@
 """How much one thread matters to another, and what its peers see of that."""
 
-from agent_comms.repo import Checkout
-from conftest import publish_initial
 import json
 from dataclasses import replace
 
-from agent_comms.child_process import NoProcess
-
 import pytest
 
-from conftest import installed_comms
 from agent_comms.context_segments.partner_activity import PartnerActivitySegment
-from agent_comms.goal_actions import CompletedGoalAction, GoalPrecondition, SetGoalAction
-from agent_comms.goal_states import ActiveGoal, CompletedGoal
+from agent_comms.execution.child_process import NoProcess
+from agent_comms.execution.turn_context import (
+    CoordinationSegment,
+    NextContextTurn,
+    TurnContext,
+)
 from agent_comms.peer_relevance import (
     AlwaysListed,
     ChannelmateRelevance,
@@ -23,11 +22,21 @@ from agent_comms.peer_relevance import (
     StrangerRelevance,
     Visible,
 )
-from agent_comms.relationships import RelationshipEdit
-from agent_comms.thread_text import ForkedParent
+from agent_comms.planning.goal_actions import (
+    CompletedGoalAction,
+    GoalPrecondition,
+    SetGoalAction,
+)
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_states import (
+    ActiveGoal,
+    CompletedGoal,
+)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.relationships import RelationshipEdit
+from agent_comms.registry.thread_text import ForkedParent
 from agent_comms.registry.threads import NativeThread
-from agent_comms.turn_context import CoordinationSegment, NextContextTurn, TurnContext
-from agent_comms.goal_scope import OneGoal
+from conftest import installed_comms, publish_initial
 
 
 def _wire(tmp_path, *threads):
@@ -42,7 +51,7 @@ def _wire(tmp_path, *threads):
 def _peers(comms, name):
     owner = comms.registry.require(name)
     context = TurnContext.for_owner(
-        owner, NextContextTurn(), "", comms.views.thread_views(),
+        owner, NextContextTurn(), "", tuple(view.thread for view in comms.views.thread_views()),
         comms.relationships.context_relations(name), comms.goals,
     )
     return next(s for s in context.segments if isinstance(s, CoordinationSegment)).peers
@@ -112,12 +121,12 @@ def test_peer_list_keeps_every_related_peer_whatever_its_name_or_the_thread_coun
 def _coordination_text(comms, name):
     owner = comms.registry.require(name)
     return CoordinationSegment.capture(
-        owner, comms.views.thread_views(), comms.relationships.context_relations(name), comms.goals
+        owner, tuple(view.thread for view in comms.views.thread_views()), comms.relationships.context_relations(name), comms.goals
     ).text()
 
 
 def _partner_activity(comms, name):
-    context = TurnContext.for_inspection(comms, comms.registry.require(name))
+    context = comms.context_for(comms.registry.require(name))
     return tuple(s for s in context.segments if isinstance(s, PartnerActivitySegment))
 
 
@@ -182,7 +191,7 @@ def test_context_shows_each_relation_with_its_author_time_note_and_history(tmp_p
     comms = _wire(tmp_path, ("owner", ()), ("partner", ()), ("mentioned", ()), ("nobody", ()))
 
     def records(name):
-        context = TurnContext.for_inspection(comms, comms.registry.require(name))
+        context = comms.context_for(comms.registry.require(name))
         segments = [s for s in context.segments if isinstance(s, RelationshipsSegment)]
         return segments[0].records if segments else ()
 
@@ -203,7 +212,7 @@ def test_context_shows_each_relation_with_its_author_time_note_and_history(tmp_p
         "mentioned", GoalContactRelevance, "owner", None)
     assert records("partner")[0].peer == "owner" and records("partner")[0].author == "partner"
     assert records("nobody") == ()
-    context = TurnContext.for_inspection(comms, comms.registry.require("owner"))
+    context = comms.context_for(comms.registry.require("owner"))
     shown = json.loads(next(
         s for s in context.segments if isinstance(s, RelationshipsSegment)
     ).text().splitlines()[-1])
@@ -232,6 +241,6 @@ def test_recent_direct_work_stays_addressable_without_bare_peer_inventory(tmp_pa
 def test_parent_binding_remains_without_bare_parent_inventory(tmp_path):
     comms = _wire(tmp_path, ("parent", ()), ("unrelated", ()))
     comms.registry.declare(NativeThread('child', frozenset(), Checkout(tmp_path), parent=ForkedParent('parent')))
-    context = TurnContext.for_inspection(comms, comms.registry.require("child"))
+    context = comms.context_for(comms.registry.require("child"))
     segment = next(s for s in context.segments if isinstance(s, CoordinationSegment))
     assert (segment.parent, segment.peers) == ("parent", ())

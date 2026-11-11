@@ -1,7 +1,7 @@
 # Behaviour catalog
 
-Generated from `agent_comms.behaviour_patterns` by
-`python -m agent_comms.behaviour_patterns > docs/agents/behaviour-catalog.md`; do not edit by hand.
+Generated from `agent_comms.team.behaviour_patterns` by
+`python -m agent_comms.team.behaviour_patterns > docs/agents/behaviour-catalog.md`; do not edit by hand.
 
 Each behaviour failure pattern is declared once in Core with its signature (what it looks like in state, readable without trusting a report) and the existing checks that enforce it. Patterns in code, rather than in behaviour, are NominalRefactorAdvisor's catalog (`nominal_refactor_advisor/audit/patterns/README.md`).
 
@@ -67,7 +67,7 @@ An open order's progress reads no commit while a pull request linked to it has m
 
 Checked by:
 
-- standing rule `board_disagrees` (`agent_comms.standing_rules.BoardDisagrees`)
+- standing rule `board_disagrees` (`agent_comms.team.standing_rules.BoardDisagrees`)
 
 Learned from: P170 (c9c0c04db); Failure 7: October 9 postmortem: 350 commit subjects in five days claimed facts were "derived", "canonical" or "authoritative" while the same constant remained hand-written in three places; commit titles supplied no frame-time proof.
 
@@ -77,7 +77,7 @@ A teammate order, strike, roast or directive whose words outside cited spans mat
 
 Checked by:
 
-- check in `agent_comms.todos.PlainText`
+- check in `agent_comms.planning.order_words.PlainText`
 
 Learned from: [comms-team rule](../../src/agent_comms/skills/comms-team/SKILL.md) "Hate jargon."; Failure 8: October 9 postmortem: repeated permission exchanges and reports replaced delivery; one checkout reached 8.7 GB, ratchets ran dozens of times and over 200,000 evidence lines were committed in one night.
 
@@ -87,7 +87,7 @@ A send-back strike on an order already struck since it was sent.
 
 Checked by:
 
-- check in `agent_comms.todos.Todo.struck_on_order`
+- check in `agent_comms.planning.orders.Todo.struck_on_order`
 
 Learned from: P184 (7af14a520)
 
@@ -97,7 +97,7 @@ A strike recorded in error is deleted, or voided while not live, instead of a vo
 
 Checked by:
 
-- check in `agent_comms.todos.TodoCommand.apply`
+- check in `agent_comms.planning.orders.TodoCommand.apply`
 
 Learned from: P47 (15d435152)
 
@@ -108,8 +108,8 @@ An order whose check line does not read `repo :: command -> integer`, prints no 
 Checked by:
 
 - check in `agent_comms.team.order.CheckRequest.parse`
-- check in `agent_comms.child_process.NoIntegerPrinted.unproven`
-- check in `agent_comms.child_process.CountPrinted.unproven`
+- check in `agent_comms.execution.child_process.NoIntegerPrinted.unproven`
+- check in `agent_comms.execution.child_process.CountPrinted.unproven`
 
 Learned from: P114 (d889df612); Failure 4: October 9 postmortem: 451 measurement-related commits and 716 evidence files yielded only three comparable files; headline 11.7 ms median timings measured terminal writes, not total frames.; Failure 7: October 9 postmortem: 350 commit subjects in five days claimed facts were "derived", "canonical" or "authoritative" while the same constant remained hand-written in three places; commit titles supplied no frame-time proof.
 
@@ -119,7 +119,7 @@ A strike recorded on a problem other than the one given as its argument, such as
 
 Checked by:
 
-- check in `agent_comms.todos.TodoStore.apply`
+- check in `agent_comms.planning.orders.TodoStore.apply`
 
 Learned from: P194 (b26843727); [comms-team rule](../../src/agent_comms/skills/comms-team/SKILL.md) "Strikes measure misses and trigger scrutiny; they never release work."
 

@@ -1,30 +1,34 @@
 """A fresh carry generation says nothing about the old goal's execution."""
 
-from agent_comms.repo import Checkout
-from contextlib import closing
-from dataclasses import replace
 import os
 import sqlite3
+from contextlib import closing
+from dataclasses import replace
 
 import pytest
 
-from agent_comms.nominal.field_codec import InputId
-from agent_comms.input_key import AcpInputKey
-from agent_comms.nominal.field_codec import GoalId
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.goal_actions import (
-    ActiveGoalAction, GoalPrecondition, ModelInvocable, OwnerInvocable,
-    RetryGoalAction, RuntimeInvocable,
-)
-from agent_comms.goal_attempts import GoalAttemptStore, MissingGoalGenerationError
-from agent_comms.goal_generation import ReadyGeneration
-from agent_comms.goal_states import BlockedGoal
-from agent_comms.goals import Goal
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_key import AcpInputKey
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.nominal.field_codec import GoalId, InputId
+from agent_comms.planning.goal_actions import (
+    ActiveGoalAction,
+    GoalPrecondition,
+    ModelInvocable,
+    OwnerInvocable,
+    RetryGoalAction,
+    RuntimeInvocable,
+)
+from agent_comms.planning.goal_attempts import GoalAttemptStore
+from agent_comms.planning.goal_generation import ReadyGeneration
+from agent_comms.planning.goal_ledger import MissingGoalGenerationError
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_states import BlockedGoal
+from agent_comms.planning.goals import Goal
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.goal_scope import OneGoal
-
+from agent_comms.storage.locked_store import RegistryFile
 
 UNKNOWN_ORIGINAL_KEY = AcpInputKey(InputId.mint())
 
@@ -42,14 +46,14 @@ def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_pat
                   claim_scope=comms.registry.snapshot().claim_generation(thread.name),
                   target=thread.name, text='This uncertain original must not replay')
     original_inputs = inputs.path.read_bytes()
-    original_registry = (comms.root / 'registry.json').read_bytes()
+    original_registry = comms.registry.store.rows.mark()
     with pytest.raises(MissingGoalGenerationError):
         store.require_generation(goal.id)
 
     # The one-time tool calls this existing writer after backup and absence
     # checks. This is a new unreserved generation, not evidence of no past run.
     store.create_goal(goal.id)
-    assert (comms.root / 'registry.json').read_bytes() == original_registry
+    assert comms.registry.store.rows.mark() == original_registry
     reopened = GoalAttemptStore.at(comms.root / 'goal-private')
     assert reopened.require_generation(goal.id).lifecycle == ReadyGeneration()
     expect = GoalPrecondition(goal_id=OneGoal(goal.id), expected_checkpoint=goal.captured,

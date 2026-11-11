@@ -1,40 +1,38 @@
 """Real turn acquisition and terminal handling share the execution owner."""
 
-from agent_comms.repo import Checkout
-from agent_comms.native_arguments import GivenBinary
-from agent_comms.native_package import VerifiedNativePackage
 import os
 import signal
 import sqlite3
 import subprocess
 import sys
-from collections.abc import AsyncIterator, Callable
-from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager, closing
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager, closing
 from dataclasses import fields
-from functools import partial
 
 import pytest
 
 from agent_comms import agent_events as events
-from agent_comms.acp import CommsAgent
-from agent_comms.acp_failure import NativeTurnError
-from agent_comms.child_process import ChildOutcome, ProcessIdentity
 from agent_comms.comms import Comms, wire
-from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, GoalId
-from agent_comms.goal_actions import (
+from agent_comms.execution.acp_failure import NativeTurnError
+from agent_comms.execution.child_process import ChildOutcome, ProcessIdentity
+from agent_comms.execution.owned_turn import OwnedTurn
+from agent_comms.execution.turn_failure import NativeChildSignaled
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
+from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
     GoalAction,
     PausedGoalAction,
     RetryGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_failure_observation import FailedTurnEvidence
-from agent_comms.goal_history import RecordedGoalHistory
-from agent_comms.goal_presentation import (
+from agent_comms.planning.goal_execution import GoalExecution
+from agent_comms.planning.goal_history import RecordedGoalHistory
+from agent_comms.planning.goal_ledger import FailedTurnEvidence
+from agent_comms.planning.goal_presentation import (
     AttemptFailedExecution,
     AttemptUnresolvedExecution,
     CompletedExecution,
-    GoalExecution,
+    GoalExecutionControls,
     GoalSnapshot,
     IdleGoalExecution,
     PausedExecution,
@@ -43,15 +41,14 @@ from agent_comms.goal_presentation import (
     RunningExecution,
     StandbyExecution,
 )
-from agent_comms.goal_scope import OneGoal
-from agent_comms.goal_states import ActiveGoal, ModelPause
-from agent_comms.storage.maintenance_barrier import MaintenanceOperator
-from agent_comms.execution.owned_turn import OwnedTurn
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_states import ActiveGoal, ModelPause
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.tool_caller import ToolCaller
+from agent_comms.storage.maintenance_barrier import MaintenanceOperator
+from agent_comms.transport.tool_caller import ToolCaller
 from agent_comms.transport.tools.goals import CommsGoalHistoryTool
-from agent_comms.turn_failure import NativeChildSignaled
-from agent_comms.turn_input_source import NoTurnAcceptance
+from goal_owner_fixture import GoalTurnOwners
 
 
 @pytest.fixture
@@ -91,7 +88,7 @@ def test_execution_identity_survives_wire_and_change_detection(execution_bus, ex
     (RetryableBlockExecution(GoalId.mint(), "source fixture"), (RetryGoalAction,)),
 ))
 async def test_execution_owns_toggle_dispatch_and_unavailability(
-    execution: GoalExecution, expected_actions: tuple[type[GoalAction], ...],
+    execution: GoalExecutionControls, expected_actions: tuple[type[GoalAction], ...],
 ) -> None:
     actions: list[type[GoalAction]] = []
     unavailable: list[None] = []
@@ -105,43 +102,11 @@ async def test_execution_owns_toggle_dispatch_and_unavailability(
     assert len(unavailable) == int(not expected_actions)
 
 
-SESSION = AcpSessionId("goal-execution-session")
-
-
-async def bound_owner(comms: Comms, native: VerifiedNativePackage) -> CommsAgent:
-    """One real owner bound to the worker on this bus. Its caller decides whether it shuts
-    down: a shut-down owner stops its thread, so a holder read after its failed turn must
-    still be bound."""
-    agent = CommsAgent(comms, GivenBinary(str(native.cli)), auto_wake=False)
-    await agent.sessions.bind_owned(comms.registry.require("worker"), SESSION)
-    return agent
-
-
 @pytest.fixture
 async def turn_on(
-    execution_bus: Comms, native_runtime_package: VerifiedNativePackage,
-) -> AsyncIterator[Callable[..., AbstractAsyncContextManager[OwnedTurn]]]:
-    """One real owner serves this test's turns and shuts down once at its end."""
-    agent = await bound_owner(execution_bus, native_runtime_package)
-    try:
-        yield partial(acquired_turn, agent, SESSION)
-    finally:
-        await agent.shutdown()
-
-
-@asynccontextmanager
-async def acquired_turn(
-    agent: CommsAgent, session: AcpSessionId, comms: Comms, *, original_owner_input: bool = False,
-) -> AsyncIterator[OwnedTurn]:
-    owner = comms.registry.require("worker")
-    turn = OwnedTurn(
-        agent.turns, session, owner.name, "Continue original work",
-        original_owner_input=original_owner_input, original_goal_id=owner.goal.require().id,
-        acceptance=NoTurnAcceptance(),
-    )
-    async with AsyncExitStack() as resources, AsyncExitStack() as permits:
-        assert await turn.acquire(resources, permits)
-        yield turn
+    execution_bus: Comms, goal_turn_owners: GoalTurnOwners,
+) -> Callable[..., AbstractAsyncContextManager[OwnedTurn]]:
+    return await goal_turn_owners.for_bus(execution_bus)
 
 
 def failure_count(comms):

@@ -7,7 +7,7 @@ publication only its compaction handler, so a viewer (Toad) saw nothing until hi
 import asyncio
 from contextlib import AsyncExitStack
 
-from agent_comms.repo import Checkout
+from agent_comms.projects.checkouts import Checkout
 from delivery_owner_fixture import canonical_agent, reply_turn_finished
 from native_backend_fixture import native_backend_fixture
 

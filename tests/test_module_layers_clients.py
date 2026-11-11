@@ -1,21 +1,21 @@
 """A stack client's imports root reachability and fail on modules Core lacks."""
 
 import ast
-from collections.abc import Callable
 import os
 import shutil
 import subprocess
 import sys
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 import tomli_w
-
-from module_layers import MaterializedClients, OutgoingWire, Package, StackClient
 from agent_comms_project import AgentCommsProject, ClientTypeErrors
-from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
-from agent_comms.todos import DraftListedPullRequest
+from module_layers import MaterializedClients, OutgoingWire, Package, StackClient
+
+from agent_comms.planning.orders import DraftListedPullRequest
+from agent_comms.projects.head_review import BaseSide, HeadSide, IntegrationInput, Side
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
 

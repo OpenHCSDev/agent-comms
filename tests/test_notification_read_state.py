@@ -1,5 +1,3 @@
-from agent_comms.transcripts import RecordedPageSource
-from agent_comms.page_traversal import HistorySourceKey
 import pickle
 import sys
 from dataclasses import replace
@@ -7,44 +5,67 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.message_notification import NotificationPass
-
-from agent_comms.bus_read import BusRead, UiRead
+from agent_comms.acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate
 from agent_comms.comms import Comms
 from agent_comms.coordination.errors import ReloadRequired
-from agent_comms.nominal.field_codec import FieldCodec, MessageId
+from agent_comms.execution.transcript_sources import (
+    EarlierThan,
+    NativeTranscriptCursor,
+)
 from agent_comms.history_views import HistoryViews
-from agent_comms.message_reference import MessageReference
+from agent_comms.messaging.bus_read import BusRead, OwnerScopedRead, UiRead
+from agent_comms.messaging.message_notification import NotificationPass
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.notification_reads import (
+    LiveNotificationRead,
+    NotificationRead,
+    RecordedNotificationRead,
+)
+from agent_comms.messaging.page_traversal import HistorySourceKey
+from agent_comms.messaging.revision_views import (
+    ActivityView,
+    NotificationEvidenceView,
+    NotificationsView,
+    RegistrationsView,
+    SidebarView,
+    StatusView,
+    StoresView,
+)
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, OrderId
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
-from agent_comms.notification_reads import (
-    LiveNotificationRead, NotificationRead, RecordedNotificationRead,
-)
-from agent_comms.transport.tools.reads import TeammateRead, InputDeliveryRead, OwnerGoalRead, TranscriptPageRead
-from agent_comms.storage.private_path import FileRevision, MissingFile
-from agent_comms.registry_provenance import DeletedThread
-from agent_comms.repo import Checkout
 from agent_comms.presentation import NoRevision, WireRevision
-from agent_comms.revision_views import (
-    ActivityView, NotificationEvidenceView, NotificationsView, RegistrationsView,
-    SidebarView, StatusView, StoresView,
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_names import DeletedThread
+from agent_comms.registry.thread_identity import (
+    AgentThreadRole,
+    RecordedThreadIncarnation,
+    UserThreadRole,
 )
-from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.registry.threads import NativeThread
-from agent_comms.tool_declaration import NativeRequestTools
+from agent_comms.storage.private_path import FileRevision, MissingFile
+from agent_comms.team.team_hud_records import TeammateDetail
+from agent_comms.transcript.transcripts import RecordedPageSource
 from agent_comms.transport.request import ToolRequest
-from agent_comms.acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate
-from agent_comms.bus_read import OwnerScopedRead
-from agent_comms.team_hud_records import TeammateDetail
-from agent_comms.nominal.field_codec import OrderId
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.transcripts import EarlierThan, NativeTranscriptCursor
+from agent_comms.transport.tool_declaration import NativeRequestTools
+from agent_comms.transport.tools.reads import (
+    InputDeliveryRead,
+    OwnerGoalRead,
+    TeammateRead,
+    TranscriptPageRead,
+)
 from agent_comms.transport.tools.served import CommsMessageOutcomesTool
 from agent_comms.ui_model.observation import (
-    NotificationBatch, NotificationsObserved, ObserveNotifications, ReadNotifications, ReadOperation,
+    NotificationBatch,
+    NotificationsObserved,
+    ObserveNotifications,
+    ReadNotifications,
+    ReadOperation,
     ReadOwnerOperation,
-    ReadTranscript, ReadTranscriptUpdate, RefreshTranscript, SubscribeTranscript,
+    ReadTranscript,
+    ReadTranscriptUpdate,
+    RefreshTranscript,
+    SubscribeTranscript,
 )
-
 
 
 def test_notification_read_states_use_the_request_revision_contract(comms):
@@ -288,9 +309,15 @@ def test_first_revision_requires_reads_even_for_unchanged_empty_stores():
 
 
 def test_notification_rank_overrides_follow_the_mro_without_changing_parent_ranks():
-    from agent_comms.notification_progress import (
-        ActiveDelivery, DeliveryRank, SelectedConsumedProgress, SendingProgress,
-        SentProgress, SettledDelivery, ShownToModelProgress, WaitingDelivery,
+    from agent_comms.messaging.notification_progress import (
+        ActiveDelivery,
+        DeliveryRank,
+        SelectedConsumedProgress,
+        SendingProgress,
+        SentProgress,
+        SettledDelivery,
+        ShownToModelProgress,
+        WaitingDelivery,
     )
 
     assert SentProgress(100).rank() == DeliveryRank.position_of(WaitingDelivery)

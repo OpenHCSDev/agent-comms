@@ -15,7 +15,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from agent_comms.native_package import SYSTEM_PROMPT
+from agent_comms.installer.native_package import SYSTEM_PROMPT
 from agent_comms_hooks import LaunchedPrompt
 
 

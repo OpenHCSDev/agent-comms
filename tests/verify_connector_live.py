@@ -5,10 +5,6 @@ The caller selects scratch; each subprocess run retires its temporary directory.
 """
 from __future__ import annotations
 
-
-from agent_comms.repo import Checkout
-from agent_comms.bus import Bus
-
 import json
 import os
 import shutil
@@ -18,10 +14,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-from connector_readiness import ConnectorReadiness
 from agent_comms.comms import wire
-from agent_comms.connector_store import ConnectorStore
+from agent_comms.messaging.bus import Bus
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.connector_store import ConnectorStore
+from connector_readiness import ConnectorReadiness
 
 
 def curl_call(port, token, body, *, arguments=None):

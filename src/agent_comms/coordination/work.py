@@ -4,10 +4,10 @@ from collections.abc import Callable
 from contextvars import Context
 from functools import partial
 
-from ..child_process import AsyncWork
-from ..storage.maintenance_barrier import MaintenanceHolder
-from ..native_build_inputs import GitLaunch
-from ..storage.store_files import StoreLock
+from agent_comms.execution.child_process import AsyncWork
+from agent_comms.installer.native_build_inputs import GitLaunch
+from agent_comms.storage.maintenance_barrier import MaintenanceHolder
+from agent_comms.storage.store_files import StoreLock
 
 
 class CoordinationWork:

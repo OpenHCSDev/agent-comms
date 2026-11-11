@@ -11,7 +11,7 @@ from uuid import uuid4
 import pytest
 from acp.schema import TextContentBlock
 
-from agent_comms.acp import CommsClient
+from agent_comms.execution.acp import CommsClient
 from agent_comms.acp_extension import (
     CompactionChangedUpdate,
     CompactionCommittedUpdate,
@@ -22,13 +22,13 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.agent_events import CompactionEnd
 from agent_comms.comms import wire
-from agent_comms.controller import SessionUpdateSink
+from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.launch_runtime import RestartEnvironment
+from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
+from agent_comms.execution.pi_vocabulary import ManualCompactionReason
+from agent_comms.execution.queued_input import InitialInput
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
-from agent_comms.launch_runtime import RestartEnvironment
-from agent_comms.native_arguments import GivenArguments, GivenBinary
-from agent_comms.pi_vocabulary import ManualCompactionReason
-from agent_comms.queued_input import InitialInput
-from agent_comms.owner_connection import socket_path
+from agent_comms.transport.owner_connection import socket_path
 from delivery_owner_fixture import canonical_agent
 
 

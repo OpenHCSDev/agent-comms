@@ -4,10 +4,10 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import Comms
-from agent_comms.repo import Checkout
-from agent_comms.repository_name import RepositoryName
-from agent_comms.task_attachments.owner_notices import OrderNotice
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.task_attachments.owner_notices import OrderNotice
 from agent_comms.team.standing_rules import BranchBehindMain
 from conftest import declare_test_bus
 
@@ -71,7 +71,7 @@ def test_branch_notice_never_addresses_a_departed_holders_replacement(
 def test_branch_notice_skips_an_archived_holder(branch_notice: tuple[Comms, BranchBehindMain]) -> None:
     """2026-11-02 15:04: this reminder to an archived holder raised 'Initial direct target must
     be visible' and failed every heartbeat pass, so no teammate had a board."""
-    from agent_comms.thread_status import ArchivedThreadStatus
+    from agent_comms.registry.thread_status import ArchivedThreadStatus
 
     comms, notice = branch_notice
     comms.registry.register(comms.registry.require("worker"), ArchivedThreadStatus())

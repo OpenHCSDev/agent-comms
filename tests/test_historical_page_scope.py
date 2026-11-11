@@ -1,18 +1,18 @@
 """Source-owned history predicates and sound sequence-indexed membership."""
 
-from agent_comms.repo import Checkout
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus import PublicRecord
-from agent_comms.channel_targets import CommandTarget
 from agent_comms.comms import wire
-from agent_comms.mentions import ThreadMention
-from agent_comms.message_page import PageBounds
-from agent_comms.messages import InfoKind, Message
-from agent_comms.page_traversal import HistoryCursor
-from agent_comms.read_basis import NamedViewer
+from agent_comms.messaging.bus import PublicRecord
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.mentions import ThreadMention
+from agent_comms.messaging.message_page import PageBounds
+from agent_comms.messaging.messages import InfoKind, Message
+from agent_comms.messaging.page_traversal import HistoryCursor
+from agent_comms.messaging.read_basis import NamedViewer
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 
 

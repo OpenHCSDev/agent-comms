@@ -1,14 +1,18 @@
 """An ending attempt cannot release a replacement just because its ID is reused."""
 
-from agent_comms.repo import Checkout
 import os
 
-
 from agent_comms.comms import wire
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.turn_lease import (
+    FinishedTurnFence,
+    NoFinishedTurn,
+    NoTurn,
+    NoTurnLease,
+)
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.registry.threads import Thread, NativeThread
-from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn, NoTurn, NoTurnLease
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import NativeThread, Thread
 
 
 def test_old_lease_cannot_clear_same_id_after_delete_rebind(tmp_path):

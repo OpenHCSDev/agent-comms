@@ -7,14 +7,14 @@ from functools import partial
 
 import pytest
 
-from agent_comms.assignment_states import DeferredAssignment, FullPendingAssignment
-from agent_comms.cohort_foreground import _accept_visible_deliveries
+from agent_comms.coordination.assignment_states import DeferredAssignment, FullPendingAssignment
 from agent_comms.coordination.cohort import pending_sealed_assignments
+from agent_comms.coordination.cohort_foreground import _accept_visible_deliveries
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.nominal.field_codec import InputId, TurnId
+from agent_comms.execution.queued_input import DeliveredInput
 from agent_comms.input_attempt import NotSentInput
+from agent_comms.nominal.field_codec import InputId, TurnId
 from agent_comms.storage.private_path import FileRevision
-from agent_comms.queued_input import DeliveredInput
 from conftest import publish_initial
 from stored_inputs import stored_inputs
 from test_acp_private_nk_delivery import _session

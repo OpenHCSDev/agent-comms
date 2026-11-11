@@ -5,14 +5,20 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.errors import RouteChangedError, UnregisteredThreadError
-from agent_comms.input_key import AcpInputKey
-from agent_comms.nominal.field_codec import InputId
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.execution.input_key import AcpInputKey
 from agent_comms.input_attempt import UnobservedInputDeliveryScope, UnresolvedInput
 from agent_comms.input_disposition import DeliveryOverview
-from agent_comms.notification_progress import SendingProgress
-from agent_comms.thread_presentation import IdleThreadPresentationStatus, OtherRouteThread, SessionDisconnected, StatusPending, ThreadPresentationStatus, WorkingThreadPresentationStatus
-from agent_comms.thread_presentation import NoThreadPresentation
+from agent_comms.messaging.notification_progress import SendingProgress
+from agent_comms.nominal.field_codec import FieldCodec, InputId
+from agent_comms.registry.thread_presentation import (
+    IdleThreadPresentationStatus,
+    NoThreadPresentation,
+    OtherRouteThread,
+    SessionDisconnected,
+    StatusPending,
+    ThreadPresentationStatus,
+    WorkingThreadPresentationStatus,
+)
 from agent_comms.ui_model.delivery import DeliveryView, ReadDeliveryView
 from agent_comms.ui_model.status import ThreadStatusModel
 

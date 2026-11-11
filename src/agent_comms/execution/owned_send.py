@@ -1,0 +1,245 @@
+"""Check an ordinary owner turn and hold its locks through native stdin.write."""
+
+from __future__ import annotations
+
+from contextlib import AbstractContextManager
+from dataclasses import dataclass
+from functools import partial
+from typing import TYPE_CHECKING
+
+from agent_comms import agent_events as events
+from agent_comms.agent_backend import InputStartListener
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.session import NativeCapture, NativeCommit
+from agent_comms.execution.channel_coding_tools import CodingToolOwner, OrdinaryContextCheck
+from agent_comms.execution.goal_turn_permit import GoalTurnPermit
+from agent_comms.execution.input_drain import InputDrain
+from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.execution.ordinary_turn_rules import (
+    MissingAcceptedInputRule,
+    MissingTurnOwnerCheck,
+)
+from agent_comms.execution.reservation_rules import (
+    ReservationRule,
+    ReservationViolationError,
+    RuleCheck,
+)
+from agent_comms.execution.send_outcome import AuthorityChangedSend, SendBoundary, SendOutcome
+from agent_comms.execution.turn_input_source import (
+    OrdinaryOwnerCheck,
+    OriginalTurnInput,
+    RunningOrdinaryOwnerCheck,
+    TurnInputSource,
+)
+from agent_comms.input_attempt import InputAlreadyCleared
+from agent_comms.messaging.envelope_claim_transitions import NativeClaim
+from agent_comms.nominal.field_codec import AcpSessionId, ClaimId, InputId, TurnId
+from agent_comms.planning.goal_attempts import GoalAttemptStore
+from agent_comms.planning.goal_waits import GoalWait
+from agent_comms.registry.threads import Thread
+from agent_comms.transport.tool_denial import SelectedToolDenied
+
+if TYPE_CHECKING:
+    from agent_comms.execution.turn_goal_permission import TurnGoalPermission
+    from agent_comms.registry.registry_document import RegistrySnapshot
+
+
+
+@dataclass(frozen=True, kw_only=True)
+class InputKeysCheck(RuleCheck):
+    source: TurnInputSource
+    text: str
+
+
+class InputKeysRule(ReservationRule):
+    check_type = InputKeysCheck
+    explanation = "The input keys do not prove this exact original channel batch."
+
+    def violated(self, check: InputKeysCheck) -> bool:
+        return not check.source.valid_keys(check.text)
+
+
+@dataclass(frozen=True, kw_only=True)
+class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
+    started_events = (events.OriginalInputStarted(),)
+
+    inputs: InputDrain
+    goal_store: GoalAttemptStore
+    session_id: AcpSessionId
+    turn: TurnId
+    claim_generation: int
+    original_source: OriginalTurnInput
+    goal_permit: GoalTurnPermit
+
+    def source(self, public_id: InputId) -> TurnInputSource:
+        try:
+            return self.inputs.state(self.session_id).following[public_id]
+        except KeyError as error:
+            raise ReservationViolationError(MissingAcceptedInputRule()) from error
+
+    def require_owner(self, snapshot: RegistrySnapshot, canonical: str) -> Thread:
+        try:
+            return snapshot.threads[canonical]
+        except KeyError:
+            MissingTurnOwnerCheck().require_valid()
+            raise
+
+    def _check_owner(
+        self,
+        current: Thread,
+        snapshot: RegistrySnapshot,
+        canonical: str,
+        source: TurnInputSource,
+        text: str,
+        *,
+        check_type: type[OrdinaryOwnerCheck] = OrdinaryOwnerCheck,
+    ) -> None:
+        check_type(
+            expected=self.thread,
+            current=current,
+            registry=snapshot,
+            canonical=canonical,
+            claim_generation=self.claim_generation,
+            turn=self.turn,
+        ).require_valid()
+        InputKeysCheck(source=source, text=text).require_valid()
+
+    def _require_context(
+        self, source: TurnInputSource, current: Thread, wait: GoalWait,
+    ) -> None:
+        OrdinaryContextCheck(
+            source=source, owner=current, goal=current.goal, wait=wait, comms=self.comms
+        ).require_valid()
+        if not source.bypasses_goal_permit:
+            self.goal_permit.check_grant(self.goal_store)
+
+    def _refusal(self, refusal: ReservationViolationError) -> SendOutcome:
+        return AuthorityChangedSend(refusal)
+
+    def send_original(self, native_id: InputId, text: str) -> AbstractContextManager[SendOutcome]:
+        return self.original_source.prepare_send(self, native_id, text)
+
+    def send_following(
+        self, public_id: InputId, native_id: InputId, text: str,
+    ) -> AbstractContextManager[SendOutcome]:
+        return self.source(public_id).prepare_send(self, native_id, text)
+
+    def send_interrupt(
+        self, public_id: InputId, native_id: InputId, text: str,
+    ) -> AbstractContextManager[SendOutcome]:
+        return self.source(public_id).prepare_send(
+            self, native_id, text, already_bound=True,
+        )
+
+    @property
+    def goal_permission(self) -> TurnGoalPermission:
+        return self.original_source.goal_permission
+
+    def verify(self, store, turn, snapshot) -> None:
+        """Recheck the running original without binding it or consuming its wait again."""
+        if not turn.started_input or not turn.accepts_output:
+            raise SelectedToolDenied("Native tool has no started original input")
+        canonical = snapshot.canonical_name(self.thread.name)
+        try:
+            current = self.require_owner(snapshot, canonical)
+            self._check_owner(
+                current, snapshot, canonical, self.original_source, turn.command.message,
+                check_type=RunningOrdinaryOwnerCheck,
+            )
+            self._require_context(
+                self.original_source, current, self.comms.goals.goal_wait(canonical),
+            )
+        except (ReservationViolationError, InputAlreadyCleared) as error:
+            raise SelectedToolDenied(str(error)) from error
+
+    def claim_resource(self, store, turn, resource, slot: ClaimId):
+        with NativeCapture(self.comms.bus) as boundary:
+            snapshot = boundary.registry
+            self.verify(store, turn, snapshot)
+            owner = snapshot.require(self.owner_name)
+            canonical = resource.normalized(self.thread.worktree.path)
+            scope = NativeClaim(owner_claimed_generation=self.claim_generation,
+                                operation_id=slot, turn_id=self.turn,
+                                input_id=turn.command.input_id)
+            with boundary.registry_cut.current():
+                return boundary.bus.publisher._publish_acquisition_unlocked(
+                    snapshot, owner, canonical, scope, activity=boundary.activity)
+
+    async def release_resources(self) -> None:
+        """The ordinary turn owns its acquisitions through native/tool retirement."""
+        if not self.claims:
+            return
+
+        def release() -> None:
+            with NativeCommit(self.comms.bus) as boundary:
+                boundary.bus.publisher.release_resources(
+                    boundary, tuple(self.claims.values()), "Released files after an ordinary turn"
+                )
+
+        await Coordination.run_worker(release)
+
+    def original(self, native_id: InputId, text: str) -> bool:
+        return self._started(self.original_source, native_id, text)
+
+    def following(self, public_id: InputId, native_id: InputId, text: str) -> bool:
+        return self._started(self.source(public_id), native_id, text)
+
+    async def original_context_committed(self, sent_text: str, context: NativeContextProof) -> None:
+        await Coordination.run_worker(
+            partial(
+                self._record_context,
+                self.original_source,
+                sent_text,
+                context,
+            )
+        )
+
+    async def following_context_committed(
+        self,
+        public_id: InputId,
+        sent_text: str,
+        context: NativeContextProof,
+    ) -> None:
+        await Coordination.run_worker(
+            partial(
+                self._record_context,
+                self.source(public_id),
+                sent_text,
+                context,
+            )
+        )
+
+    def _record_context(
+        self,
+        source: TurnInputSource,
+        sent_text: str,
+        context: NativeContextProof,
+    ) -> None:
+        with self.inputs.comms.registry.store.current_snapshot() as cut:
+            snapshot = cut.snapshot
+            source.require_context_source(self)
+            canonical = snapshot.canonical_name(self.thread.name)
+            current = self.require_owner(snapshot, canonical)
+            self._check_owner(
+                current,
+                snapshot,
+                canonical,
+                source,
+                sent_text,
+                check_type=RunningOrdinaryOwnerCheck,
+            )
+            self.inputs.dispositions.context_committed(
+                source.keys,
+                lease=self.thread.require_turn_lease(),
+                sent_text=sent_text,
+                context=context,
+                snapshot=snapshot,
+            )
+
+    def _started(self, source: TurnInputSource, native_id: InputId, sent_text: str) -> bool:
+        return source.valid_keys(sent_text) and all(
+            self.inputs.dispositions.started(
+                key, turn_id=self.turn, native_id=native_id, text=sent_text
+            )
+            for key in source.keys
+        )

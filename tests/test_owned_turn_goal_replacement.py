@@ -7,30 +7,32 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import backend
-from agent_comms.controller import NO_CONTROLLER
-from agent_comms.channel_coding_tools import OrdinaryGoalRule
-from agent_comms.acp import CommsAgent
-from agent_comms.turn_inbox import InputContent
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.acp import CommsAgent
+from agent_comms.execution.backend import TurnSession
+from agent_comms.execution.channel_coding_tools import OrdinaryGoalRule
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.controller import NO_CONTROLLER
+from agent_comms.execution.owned_send import OwnedSend
+from agent_comms.execution.owned_turn import OwnedTurn
+from agent_comms.execution.queued_input import InitialInput, QueuedInput
+from agent_comms.execution.reservation_rules import ReservationViolationError
+from agent_comms.execution.turn_inbox import InputContent
+from agent_comms.execution.turn_input_source import NoTurnAcceptance
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, OrderId
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     BlockedGoalAction,
+    ClearGoalAction,
     CreateProblemGoalAction,
     OrderGoalAction,
     OwnerInvocable,
     PausedGoalAction,
+    SetGoalAction,
 )
-from agent_comms.goal_states import ActiveGoal
-from agent_comms.owned_send import OwnedSend
-from agent_comms.execution.owned_turn import OwnedTurn
-from agent_comms.queued_input import InitialInput, QueuedInput
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Checkout
-from agent_comms.repository_name import RepositoryName
-from agent_comms.reservation_rules import ReservationViolationError
+from agent_comms.planning.goal_states import ActiveGoal
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.registry.threads import NativeThread
-from agent_comms.turn_input_source import NoTurnAcceptance
+from agent_comms.storage.recorded_time import RecordedEventTime
 from compaction_loopback import LoopbackProvider
 from conftest import answer_rules, declare_team, installed_comms
 from native_backend_fixture import native_backend_fixture, wait_for
@@ -77,7 +79,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
              input_id=InputId.mint()))
             try:
                 await wait_for(lambda: saved.provider.posts == 1)
-                sender = backend.TurnSession.active[task].send_boundary
+                sender = TurnSession.active[task].send_boundary
                 assert isinstance(sender, OwnedSend)
                 original_turn = sender.turn
                 original_process = comms.registry.require(worker).process_identity
@@ -113,6 +115,45 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                 assert 'captured goal permission no longer applies' not in messages
                 with pytest.raises(ReservationViolationError, match='acknowledgement is missing'):
                     sender.source('unknown-public-input')
+            finally:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_clearing_goal_keeps_an_accepted_native_inputs_read_tool(
+    tmp_path, native_runtime_package,
+):
+    async with native_backend_fixture(tmp_path, package=native_runtime_package) as saved:
+        await saved.author_history()
+        (saved.project / 'probe.txt').write_text('read after clearing the goal\n')
+        async with saved.open_owner(native_options=(), auto_wake=False) as (agent, session_id):
+            comms = agent._comms
+            worker = agent.sessions.require(session_id)
+            answer_rules(comms, worker)
+            comms.goals.update_goal(worker, SetGoalAction(text='Finish the old assignment'))
+            saved.provider.tool_call = ('read', {'path': 'probe.txt'})
+            saved.provider.response_gate = asyncio.Event()
+            task = asyncio.create_task(InitialInput.run(
+                agent.inputs, session_id, worker, 'Read probe.txt for the next task',
+                display_text='Read probe.txt for the next task', input_id=InputId.mint(),
+            ))
+            try:
+                await wait_for(lambda: saved.provider.posts == 1)
+                sender = TurnSession.active[task].send_boundary
+                original_turn = sender.turn
+                original_process = comms.registry.require(worker).process_identity
+                comms.goals.update_goal(worker, ClearGoalAction(), actor=OwnerInvocable)
+                saved.provider.response_gate.set()
+                async with asyncio.timeout(40):
+                    await task
+                assert comms.registry.require(worker).turn_generation == 1
+                assert comms.registry.require(worker).process_identity == original_process
+                assert sender.turn == original_turn
+                assert saved.provider.posts == 2  # original request, then successful tool reply
+                messages = saved.session.read_text()
+                assert 'read after clearing the goal' in messages
+                assert 'captured goal permission no longer applies' not in messages
             finally:
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)

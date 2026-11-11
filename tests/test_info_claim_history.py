@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.messaging.messages import ClaimMessage, InfoKind, Message
 from agent_comms.nominal.field_codec import MalformedRecord
-from agent_comms.messages import ClaimMessage, InfoKind, Message
 
 
 def historical_row():

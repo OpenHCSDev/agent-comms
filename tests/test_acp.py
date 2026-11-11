@@ -3,9 +3,6 @@
 Exercises the agent the way real clients (Toad, Zed) do: through
 Core's ACP connection over real stdio pipes, plus direct handler-level tests.
 """
-from agent_comms.repo import Checkout
-from agent_comms.controller import SessionUpdateSink
-
 import asyncio
 import json
 import os
@@ -19,30 +16,33 @@ from acp import RequestError
 from acp.schema import TextContentBlock
 
 import agent_comms.agent_events as ae
-import agent_comms.backend as backend
-from agent_comms.acp import CommsAgent
+import agent_comms.execution.backend as backend
+from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
     TranscriptSnapshotUpdate,
     decode_updates,
 )
-from agent_comms.activity import ActivityState
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.channels import AnyChannel
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.context_reading import ContextUsage, UnmeasuredContext
-from agent_comms.errors import UnregisteredThreadError
 from agent_comms.coordination.errors import Refused
+from agent_comms.errors import UnregisteredThreadError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.context_reading import ContextUsage, UnmeasuredContext
+from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.native_arguments import GivenArguments
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.channels import AnyChannel
+from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, TurnId
-from agent_comms.native_arguments import GivenArguments
 from agent_comms.pi_counts import PiCount
-from agent_comms.read_basis import NamedViewer
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import ActivityState
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
 from agent_comms.ui_model.observation import ReadTranscript, SubscribeTranscript
 from conftest import installed_comms
 from delivery_owner_fixture import canonical_agent
+
 
 def facts(metadata, kind):
     return tuple((f for f in decode_updates(metadata) if isinstance(f, kind)))
@@ -152,7 +152,7 @@ class TestHandlers:
         self, tmp_path: Path, session_project: Path, native_runtime_package,
     ):
         from agent_comms.config_options import ServiceTierConfigOption
-        from agent_comms.pi_vocabulary import ServiceTier
+        from agent_comms.execution.pi_vocabulary import ServiceTier
 
         agent = self._agent(tmp_path)
         try:
@@ -409,7 +409,7 @@ class TestWireProtocol:
             },
         ]
         proc = subprocess.Popen(
-            [sys.executable, "-m", "agent_comms.acp"],
+            [sys.executable, "-m", "agent_comms.execution.acp"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -497,8 +497,7 @@ class TestFullHistory:
 class TestActivityLayer:
     def test_emit_and_read_current(self, wired):
 
-        from agent_comms.presentation import WireRevision
-        from agent_comms.turn_phase import ToolRunningPhase
+        from agent_comms.execution.turn_phase import ToolRunningPhase
 
         wired.registry.declare(NativeThread(
             "activity-owner", frozenset(), Checkout(wired.root),
@@ -507,16 +506,16 @@ class TestActivityLayer:
             "activity-owner", TurnId('fb5e210a764598099d8e8d358c83aadc')
         )
         try:
-            before = WireRevision.capture(wired.views, expiry_tick=0)
+            before = wired.views.revision()
             wired.agents.transition_turn(owner.thread.turn_lease, ToolRunningPhase(detail="bash: echo hi"))
             activity = wired.agents.activity_of(owner.thread.name, snapshot=wired.registry.snapshot())
             assert activity.state is ActivityState.WORKING
             assert activity.detail == "bash: echo hi"
-            working = WireRevision.capture(wired.views, expiry_tick=0)
+            working = wired.views.revision()
             assert working.activity != before.activity
         finally:
             wired.agents.finish_turn(owner.thread.turn_lease)
-        assert WireRevision.capture(wired.views, expiry_tick=0).activity != working.activity
+        assert wired.views.revision().activity != working.activity
 
     def test_idle_cannot_carry_detail(self, wired):
 
@@ -531,7 +530,7 @@ class TestActivityLayer:
     def test_stale_activity_reads_idle(self, wired):
         import time as _time
 
-        from agent_comms.activity import Activity
+        from agent_comms.registry.activity import Activity
 
         wired.agents.activity.emit(
             Activity(thread="PR111", state=ActivityState.WORKING, detail="old",
@@ -540,7 +539,7 @@ class TestActivityLayer:
         assert wired.agents.activity_of("PR111", snapshot=wired.registry.snapshot()).state is ActivityState.IDLE
 
     def test_store_reads_the_latest_activity_of_exactly_the_requested_threads_after_reopen(self, tmp_path):
-        from agent_comms.activity import Activity, ActivityStore
+        from agent_comms.registry.activity import Activity, ActivityStore
 
         store = ActivityStore(tmp_path)
         store.emit(Activity(thread="a", state=ActivityState.THINKING))
@@ -560,7 +559,7 @@ class TestTargetPrefix:
         ("@fixer", ("#all", "@fixer")),
     ])
     def test_prefix_names_the_target(self, text, target):
-        from agent_comms.turn_runner import parse_target
+        from agent_comms.execution.turn_runner import parse_target
 
         assert parse_target(text) == target
 

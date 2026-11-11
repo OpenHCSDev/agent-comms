@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.owner_release import NoRelease
-from agent_comms.repo import Checkout
 import asyncio
 import os
 import shlex
@@ -18,28 +16,33 @@ from pathlib import Path
 
 import pytest
 
+import agent_comms
 import agent_comms_hooks
-from agent_comms import native_package
-from agent_comms.turn_failure import FailedTurnResolution
-from agent_comms.child_process import NoProcess, ObservedProcess, SpawnedProcess
+import fixture_git
 from agent_comms.comms import wire
 from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import (
+    NoProcess,
+    SpawnedProcess,
+)
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
+from agent_comms.execution.pi_vocabulary import ThinkingLevelField
+from agent_comms.execution.restart_scope import OwnersNamed
+from agent_comms.execution.session_file import NoSessionFile
+from agent_comms.execution.turn_failure import BackendFailed, FailedTurnResolution
+from agent_comms.installer.native_package import MANIFEST
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId, TurnId, compile_decoder
-from agent_comms.launch_root import LaunchRoot
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.owner_connection import socket_path
-from agent_comms.native_arguments import GivenArguments, GivenBinary
-from agent_comms.pi_vocabulary import ThinkingLevelField
-from agent_comms.restart_scope import OwnersNamed
-from agent_comms.session_file import NoSessionFile
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.owner_release import NoRelease
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
-from agent_comms.turn_failure import BackendFailed
+from agent_comms.transport.owner_connection import socket_path
 from delivery_owner_fixture import canonical_agent
-import fixture_git
 from native_backend_fixture import native_backend_fixture
 
 
@@ -59,69 +62,64 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
         comms.owners.start_many, ("worker",), agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()),
     ))
     owner = comms.registry.require("worker")
-    try:
-        deadline = time.monotonic() + 10
-        while not socket_path(comms.root, first.pid).exists():
-            assert owner.process_alive, "Actual worker exited before runtime attach"
-            assert time.monotonic() < deadline, "Actual worker failed to attach runtime"
-            await asyncio.sleep(0.02)
-        assert (await Coordination.run_worker(partial(comms.owners.start_many, ("worker",))))[0].pid == owner.require_process().pid
-        assert not owner.process_identity.runs_here()
-        from agent_comms.owner_cutover import PreserveOwnerRuntime
+    deadline = time.monotonic() + 10
+    while not socket_path(comms.root, first.pid).exists():
+        assert owner.process_alive, "Actual worker exited before runtime attach"
+        assert time.monotonic() < deadline, "Actual worker failed to attach runtime"
+        await asyncio.sleep(0.02)
+    assert (await Coordination.run_worker(partial(comms.owners.start_many, ("worker",))))[0].pid == owner.require_process().pid
+    assert not owner.process_identity.runs_here()
+    from agent_comms.execution.owner_cutover import PreserveOwnerRuntime
 
-        assert owner.process_alive
-        assert isinstance(comms.owners.releases.read_many(("worker",))["worker"], NoRelease)
-        restarted = await Coordination.run_worker(partial(
-            comms.owners.restart_owners, OwnersNamed(("worker",)),
-            agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()),
-        ))
-        replacement = comms.registry.require("worker")
-        assert len(restarted) == 1
-        assert replacement.process_alive and not owner.process_alive
-        assert replacement.process_identity != owner.process_identity
-        assert replacement.created_at == declared.created_at
-        assert replacement.task == declared.task
+    assert owner.process_alive
+    assert isinstance(comms.owners.releases.read_many(("worker",))["worker"], NoRelease)
+    restarted = await Coordination.run_worker(partial(
+        comms.owners.restart_owners, OwnersNamed(("worker",)),
+        agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()),
+    ))
+    replacement = comms.registry.require("worker")
+    assert len(restarted) == 1
+    assert replacement.process_alive and not owner.process_alive
+    assert replacement.process_identity != owner.process_identity
+    assert replacement.created_at == declared.created_at
+    assert replacement.task == declared.task
 
-        class KeepFixtureRuntime(PreserveOwnerRuntime):
-            """A fresh lifecycle retains its selected fixture runtime."""
+    class KeepFixtureRuntime(PreserveOwnerRuntime):
+        """A fresh lifecycle retains its selected fixture runtime."""
 
-            def require_selection(self, snapshot, owners):
-                assert [thread.name for thread in owners] == ["worker"]
+        def require_selection(self, snapshot, owners):
+            assert [thread.name for thread in owners] == ["worker"]
 
-            def after_stopped(self, lifecycle):
-                assert not replacement.process_alive
+        def after_stopped(self, lifecycle):
+            assert not replacement.process_alive
 
-        (installed,) = await Coordination.run_worker(partial(
-            wire(comms.root).owners.restart_owners,
-            OwnersNamed(("worker",)), agent_bin=GivenBinary("pi"),
-            agent_args=GivenArguments(()), cutover=KeepFixtureRuntime(),
-        ))
-        assert installed.previous_pid == replacement.require_process().pid
-        assert not replacement.process_alive
-        replacement = comms.registry.require("worker")
-        assert replacement.process_alive and replacement.require_process().pid == installed.pid
-        await Coordination.run_worker(partial(comms.owners.stop, "worker"))
-        assert not replacement.process_alive
-        assert comms.registry.status("worker").stopped
-        assert comms.registry.require("worker").created_at == declared.created_at
-    finally:
-        current = comms.registry.require("worker")
-        if current.process_alive:
-            assert current.process_identity is not None
-            ObservedProcess(current.process_identity).stop_sync()
+    (installed,) = await Coordination.run_worker(partial(
+        wire(comms.root).owners.restart_owners,
+        OwnersNamed(("worker",)), agent_bin=GivenBinary("pi"),
+        agent_args=GivenArguments(()), cutover=KeepFixtureRuntime(),
+    ))
+    assert installed.previous_pid == replacement.require_process().pid
+    assert not replacement.process_alive
+    replacement = comms.registry.require("worker")
+    assert replacement.process_alive and replacement.require_process().pid == installed.pid
+    await Coordination.run_worker(partial(comms.owners.stop, "worker"))
+    assert not replacement.process_alive
+    assert comms.registry.status("worker").stopped
+    assert comms.registry.require("worker").created_at == declared.created_at
 
 
 @pytest.mark.timeout(180)
 @pytest.mark.parametrize("owner_count", (3, 29))
 async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_count):
     from acp.schema import TextContentBlock
-    from agent_comms.acp import CommsClient
-    from agent_comms.owner_launch import RetainedOwnerLaunch
+
+    from agent_comms.execution.acp import CommsClient
     from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
-    from native_backend_fixture import NativeBackendFixture
-    from delivery_owner_fixture import FakeClient
+    from agent_comms.transport.owner_requests import RetainedOwnerLaunch
+    from agent_comms.transport.tool_caller import NoThreadCaller
     from agent_comms.transport.tools.served import CommsResourcesTool
-    from agent_comms.tool_caller import NoThreadCaller
+    from delivery_owner_fixture import FakeClient
+    from native_backend_fixture import NativeBackendFixture
 
     comms = wire(native_workers.root)
     names = tuple(f"shared-{index}" for index in range(owner_count))
@@ -252,12 +250,12 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
     checkout = tmp_path / "unprepared"
     # A clean checkout holds both source packages, and neither bytecode nor the untracked
     # node_modules install. Copying one lets the other import from whatever is installed.
-    for module in (native_package, agent_comms_hooks):
+    for module in (agent_comms, agent_comms_hooks):
         package = Path(module.__file__).parent
         shutil.copytree(package, checkout / "src" / package.name,
                         ignore=shutil.ignore_patterns("__pycache__", "node_modules"))
     (checkout / "stack").mkdir()
-    shutil.copy2(native_package.MANIFEST, checkout / "stack" / native_package.MANIFEST.name)
+    shutil.copy2(MANIFEST, checkout / "stack" / MANIFEST.name)
     # A source checkout stamps its build from its own repository's HEAD.
     for command in (("init", "-q"), ("add", "-A"), ("commit", "-q", "-m", "unprepared")):
         fixture_git.run(checkout, *command)
@@ -273,31 +271,27 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
     comms = wire(root)
     owner = comms.registry.require("failed-start")
     deadline = time.monotonic() + 5
-    try:
-        while owner.process_alive:
-            assert time.monotonic() < deadline, "Worker did not terminate on invalid launch"
-            time.sleep(.01)
-        logs = tuple((root / "diagnostics").glob("owner-*.log"))
-        assert len(logs) == 1
-        trace = logs[0].read_text()
-        assert "Owner launch: failed-start" in trace
-        assert "Traceback (most recent call last)" in trace
-        assert "PublicationActivationBlocked" in trace
-        assert logs[0].stat().st_mode & 0o777 == 0o600
-        assert not socket_path(root, pid).exists()
-        assert owner.session_file == NoSessionFile()
-    finally:
-        if owner.process_alive:
-            ObservedProcess(owner.process_identity).stop_sync()
+    while owner.process_alive:
+        assert time.monotonic() < deadline, "Worker did not terminate on invalid launch"
+        time.sleep(.01)
+    logs = tuple((root / "diagnostics").glob("owner-*.log"))
+    assert len(logs) == 1
+    trace = logs[0].read_text()
+    assert "Owner launch: failed-start" in trace
+    assert "Traceback (most recent call last)" in trace
+    assert "PublicationActivationBlocked" in trace
+    assert logs[0].stat().st_mode & 0o777 == 0o600
+    assert not socket_path(root, pid).exists()
+    assert owner.session_file == NoSessionFile()
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Exact retained launch uses Linux /proc")
 async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, monkeypatch, native_workers):
     """One provider-free installed worker batch, with original distinct settings."""
-    from agent_comms.goal_states import BlockedGoal
-    from agent_comms.goals import Goal
-    from agent_comms.owner_cutover import PreserveOwnerRuntime
-    from agent_comms.owner_launch import RetainedOwnerLaunch
+    from agent_comms.execution.owner_cutover import PreserveOwnerRuntime
+    from agent_comms.planning.goal_states import BlockedGoal
+    from agent_comms.planning.goals import Goal
+    from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 
     model = 'response-local/fixture'
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", model)
@@ -447,7 +441,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
 
 
 def test_native_configuration_retains_original_home_across_writable_fork(tmp_path, monkeypatch):
-    from agent_comms.launch_runtime import RestartEnvironment
+    from agent_comms.execution.launch_runtime import RestartEnvironment
 
     original = tmp_path / "original-home"
     canonical = original / "credentials"
@@ -473,7 +467,7 @@ def test_native_configuration_retains_original_home_across_writable_fork(tmp_pat
 
 
 def test_native_configuration_uses_original_pi_directory_when_not_explicit(tmp_path):
-    from agent_comms.launch_runtime import RestartEnvironment
+    from agent_comms.execution.launch_runtime import RestartEnvironment
 
     configuration = RestartEnvironment.inherit({
         "HOME": str(tmp_path), "PI_CODING_AGENT_DIR": "~/configured-agent",

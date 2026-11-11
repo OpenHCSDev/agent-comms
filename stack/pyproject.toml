@@ -9,6 +9,13 @@ dependencies = [
     "textual[syntax]",
 ]
 
+[project.optional-dependencies]
+# The test interpreter installs this, so it resolves our own packages here and nowhere else.
+# It used to sync the checkout's own lock, which nothing refreshed, so it kept installing a
+# NominalRefactorAdvisor old enough that its gate.py and json_reports.py disagreed with each
+# other while this stack tracked that package's main.
+dev = ["agent-comms[dev]"]
+
 [tool.uv]
 package = false
 # This stack owns source selection, including Toad's transitive requirements.

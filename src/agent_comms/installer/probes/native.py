@@ -3,13 +3,10 @@ from __future__ import annotations
 import sys
 
 import agent_comms
+from agent_comms.installer.deal_prompt import DealPrompt
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
-from agent_comms.native_package import (
-    VerifiedNativePackage,
-    pinned_native_package,
-)
+from agent_comms.installer.native_package import VerifiedNativePackage, pinned_native_package
 from agent_comms.package_stamp import STAMP
-from agent_comms.deal_prompt import DealPrompt
 
 
 class PrepareNativeProbe(TargetProbe, RuntimeProbe[None]):

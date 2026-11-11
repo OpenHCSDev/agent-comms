@@ -2,19 +2,19 @@
 from __future__ import annotations
 
 from agent_comms.comms import Comms
+from agent_comms.heartbeat_subjects import TeamHistory
+from agent_comms.planning.nominal_census import NominalPlanReadings
+from agent_comms.planning.orders import ProgressRead
+from agent_comms.planning.plan_reading import PlanReadings, RetainedPlanReadings
+from agent_comms.task_attachments.team_pings import TeamDelivery, TeamUpdate, TeamUpdateNotice
 from agent_comms.team.standing_rules import (
     HeartbeatFrame,
     TeamInputs,
 )
-from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
-from agent_comms.team_hud import CodexUsage, TeamHud
-from agent_comms.team_service import TeamService
-from agent_comms.heartbeat_subjects import TeamHistory
-from agent_comms.task_attachments.team_pings import TeamDelivery, TeamUpdateNotice, TeamUpdate
+from agent_comms.team.team_heartbeat import TeamHeartbeat, TeamObservation
+from agent_comms.team.team_hud import CodexUsage, TeamHud
+from agent_comms.team.team_service import TeamService
 from agent_comms.ui_model.teammate_state import TeammateState
-from agent_comms.nominal_census import NominalPlanReadings
-from agent_comms.plan_reading import PlanReadings, RetainedPlanReadings
-from agent_comms.todos import ProgressRead
 
 
 class RetainedNominalPlanReadings(RetainedPlanReadings, NominalPlanReadings):

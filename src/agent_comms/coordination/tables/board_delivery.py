@@ -12,14 +12,12 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import CoordinationBeginUnavailable
 from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.coordination.session import CoordinationSession
-from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
-from agent_comms.task_attachments.team_pings import TeamUpdate
-from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from agent_comms.storage.typed_table import Column
-from agent_comms.transcript_routes import WithoutRowid
-from agent_comms_hooks.board import BoardEntry, SessionBoard
-
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
+from agent_comms.storage.typed_table import Column, WithoutRowid
+from agent_comms.task_attachments.team_pings import TeamUpdate
+from agent_comms_hooks.board import BoardEntry, SessionBoard
 
 
 @dataclass(frozen=True)

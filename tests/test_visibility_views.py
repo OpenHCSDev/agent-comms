@@ -1,13 +1,16 @@
 """Viewer-only presence flags reveal archived threads without reviving owners."""
 
 
-from agent_comms.repo import Checkout
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.registry.registry_document import RosterVisibility
-from agent_comms.thread_identity import UserThreadRole
-from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.roster_visibility import RosterVisibility
+from agent_comms.registry.thread_identity import UserThreadRole
+from agent_comms.registry.thread_status import (
+    ArchivedThreadStatus,
+    StoppedThreadStatus,
+)
 from agent_comms.registry.threads import NativeThread
 
 

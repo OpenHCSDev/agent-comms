@@ -1,8 +1,8 @@
-from agent_comms.repo import Checkout
 import pytest
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.errors import UnregisteredThreadError
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from conftest import installed_comms
 

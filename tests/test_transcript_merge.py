@@ -1,10 +1,10 @@
-from conftest import transcript_records
-from agent_comms.transcript_events import (
+from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     ContextTranscript,
     ThinkingTranscript,
     UserTranscript,
 )
+from conftest import transcript_records
 
 
 def test_stream_merge_is_owned_by_event_and_preserves_declaration():

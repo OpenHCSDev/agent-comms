@@ -8,7 +8,6 @@ import importlib
 import sys
 import time
 
-
 if __name__ == "__main__":
     importlib.import_module(sys.argv[1])
     time.sleep(120)

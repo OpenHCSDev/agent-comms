@@ -4,11 +4,14 @@ from pathlib import Path
 import pytest
 
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.selected_triage import InvalidTriageDecision, RejectedTriageOutcome
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.selected.triage import (
+    InvalidTriageDecision,
+    RejectedTriageOutcome,
+)
 from test_coordinated_runtime import tmp_path  # noqa: F401
+from test_live_context_notifications import acknowledge_context, recorded_input_context
 from test_native_failure_recovery import prepared_native_triage
-from test_live_context_notifications import recorded_input_context, acknowledge_context
 
 
 def refusal() -> str:
@@ -53,7 +56,7 @@ async def test_one_claim_takes_an_original_ask_and_one_replacement(tmp_path: Pat
 
 
 async def test_the_replacement_alone_proves_the_source(tmp_path: Path):
-    from agent_comms.native_input_record import TriageNativeExecution
+    from agent_comms.execution.native_input_record import TriageNativeExecution
 
     async with prepared_native_triage(tmp_path) as claim:
         context = await recorded_input_context(claim)

@@ -7,9 +7,8 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.coordination.errors import DrainUnavailable, Refused
 from agent_comms_hooks import ToolRefusedError
 
-
 if TYPE_CHECKING:
-    from agent_comms.messages import BusRecord
+    from agent_comms.messaging.messages import BusRecord
 
 
 class RejectedEnforcementError(ValueError):
@@ -52,6 +51,16 @@ class OutsideRegistrySlice(ToolRefusedError):  # noqa: N818 - a refusal, named f
 
 class UnknownChannelError(ToolRefusedError):
     """A target is absent from the catalog and current thread tags."""
+
+
+class SourceOutsideImport(ToolRefusedError):  # noqa: N818 - a refusal, named for its case
+    """A requested source is not one the imported session recorded. A bare ValueError here
+    was no refusal the observer child knew, so one such read killed every UI read with it."""
+
+
+class MentionOutsideChannelError(ToolRefusedError):
+    """A channel post @-names a live thread the channel does not reach. On 2026-11-10 two
+    review send-backs to an untagged cloud session went to 22 other threads and never to it."""
 
 
 class ExportDestinationExists(ToolRefusedError, FileExistsError):

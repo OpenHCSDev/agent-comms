@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from agent_comms.cli_command import TargetActionCommand
-from agent_comms.cli_commands import TagRenamedResult
+from dataclasses import dataclass
+from typing import Annotated, Self
+
 from agent_comms.cli_support.exact_tag import ExactTagCliCommand
+from agent_comms.cli_verbs.cli_command import TargetActionCommand
+from agent_comms.cli_verbs.cli_commands import TagRenamedResult
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
-from dataclasses import dataclass
-from typing import Annotated
-from typing import Self
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.repo import Checkout
-from agent_comms.errors import GoalRefused, StaleAttemptError
 import multiprocessing
 import os
 import sqlite3
@@ -16,33 +14,43 @@ from queue import Empty
 
 import pytest
 
-from agent_comms.turn_failure import BackendFailed
-
-from agent_comms.attempt_recovery import RecoveryMonitorCapability
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_verbs.stop import StopCliCommand
+from agent_comms.coordination.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import RecoveryBlocked
+from agent_comms.errors import GoalRefused, StaleAttemptError, UnresolvedAttemptError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.pi_wire import PiUsage
+from agent_comms.execution.turn_failure import BackendFailed, FailedTurnResolution
 from agent_comms.nominal.field_codec import AttemptId, GoalId, MalformedRecord, RetryDecisionId
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goal_attempt_phase import ClaimedAttempt, FailedAttempt, SucceededAttempt
-from agent_comms.goal_failure_observation import FailedTurnEvidence
-from agent_comms.goal_attempts import AttemptRecord, Generation, GoalAttemptStore, GoalWorkDecision, ProviderUsageTotal, ReservationConflictError, StorageUncertainError
-from agent_comms.errors import UnresolvedAttemptError
-from agent_comms.goal_generation import (
+from agent_comms.pi_counts import PiCount, UnreportedCount
+from agent_comms.planning.attempt_resolution import OperatorStopped, RetryDecision
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.goal_attempt_phase import ClaimedAttempt, FailedAttempt, SucceededAttempt
+from agent_comms.planning.goal_attempts import (
+    GoalAttemptStore,
+    LaunchPermit,
+    ProviderUsageTotal,
+    ReservationConflictError,
+)
+from agent_comms.planning.goal_generation import (
     BlockedGeneration,
     CancelledGeneration,
     CompletedGeneration,
     ReadyGeneration,
     ReservedGeneration,
 )
-from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.pi_counts import PiCount, UnreportedCount
-from agent_comms.pi_wire import PiUsage
+from agent_comms.planning.goal_ledger import (
+    AttemptRecord,
+    FailedTurnEvidence,
+    Generation,
+    GoalWorkDecision,
+    StorageUncertainError,
+)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_creation import RecordedCreationTime
 from agent_comms.registry.threads import NativeThread
-from agent_comms.thread_creation import RecordedCreationTime
-from agent_comms.attempt_resolution import OperatorStopped, RetryDecision
-from agent_comms.turn_failure import FailedTurnResolution
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="POSIX fork and directory fsync crash instrumentation."
@@ -333,7 +341,7 @@ def test_provider_reported_responses_are_attributed_once_and_survive_reopen(stor
     second = PiUsage.from_wire(
         {"input": 40, "output": 10, "totalTokens": 50, "cost": {"total": 0.2}})
 
-    from agent_comms.turn_item import ProviderResponseId
+    from agent_comms.execution.turn_item import ProviderResponseId
 
     first_response, second_response = ProviderResponseId("resp-a"), ProviderResponseId("resp-b")
     permit.record_provider_usage(store, first_response, first)
@@ -522,7 +530,7 @@ def test_stopped_reserved_generation_refuses_its_missing_attempt(store):
     attempt_id = AttemptId.mint()
     generation = Generation(goal_id, 1, ReservedGeneration(), attempt_id)
     with pytest.raises(StorageUncertainError, match=attempt_id):
-        generation.lifecycle.stopped_permit(store, generation)
+        generation.lifecycle.stopped_permit(store, generation, LaunchPermit)
 
 
 def test_incomplete_current_schema_is_not_repaired_or_regranted(store):

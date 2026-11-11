@@ -4,19 +4,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import MergeReviewResult
+from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_commands import MergeReviewResult
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, MalformedRecord
-from agent_comms.head_review import PullRequestHead
-from agent_comms.repository_name import RepositoryName
+from agent_comms.planning.orders import StoredHeadReview
+from agent_comms.projects.head_review import PullRequestHead
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.todos import StoredHeadReview
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms_hooks import ToolRefusedError
 from agent_comms_hooks.queue_bypass import QueueBypass, QueueBypassGuard
-
-from ..cli_bridges.session_watch import WatchClaim
 
 
 class ReviewedMerge:

@@ -1,18 +1,18 @@
 """Durable-store thread location and history paging over a real store; no provider inputs."""
-from agent_comms.repo import Checkout
 import asyncio
 import subprocess
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.session_file import NoSessionFile, RegistrySessionLocation
+from agent_comms.execution.pi_durable_backend import DurableDatabase, Inspect, PiDurableBackend
+from agent_comms.execution.session_file import NoSessionFile, RegistrySessionLocation
+from agent_comms.execution.turn_bound import LastTurns
+from agent_comms.execution.turn_runner import TurnRunner
+from agent_comms.execution.unstarted_runtime import UnstartedRuntime
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.turn_digests import LastTurns
-from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend, Inspect
-from agent_comms.registry.threads import Thread, NativeThread
-from agent_comms.turn_runner import TurnRunner
-from agent_comms.unstarted_runtime import UnstartedRuntime
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import NativeThread, Thread
 
 
 @pytest.mark.parametrize('saved', [False, True])

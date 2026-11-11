@@ -9,33 +9,42 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus
-from agent_comms.change_report import FileLine
-from agent_comms.cli_commands import OrderCheckoutGrant
+import fixture_git
+from agent_comms.cli_verbs.cli_commands import OrderCheckoutGrant
 from agent_comms.comms import wire
+from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.goals import OrderCheck
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.order_runs import MechanicalOrderRun
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry.registry_document import RegisteredTeamProject
-from agent_comms.repo import Checkout, CheckoutHoldsWorkError, DetachedStart, GitCommandError, LaunchCheckout, NewBranchStart, Repo, RepositoryReads, ScratchCheckout
-from agent_comms.repository_name import RepositoryName
-from agent_comms.storage_rules import StorageRule
-from agent_comms.tool_denial import StorageDenied
-from agent_comms.thread_creation import RecordedCreationTime
-from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import (
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.order_runs import MechanicalOrderRun
+from agent_comms.planning.orders import (
     PendingProblemOrder,
     TodoConflict,
     WithdrawTodo,
 )
+from agent_comms.projects.change_report import FileLine
+from agent_comms.projects.checkouts import (
+    Checkout,
+    CheckoutHoldsWorkError,
+    DetachedStart,
+    LaunchCheckout,
+    NewBranchStart,
+    RepositoryReads,
+    ScratchCheckout,
+)
+from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.registry.registry_document import RegisteredTeamProject
+from agent_comms.registry.thread_creation import RecordedCreationTime
+from agent_comms.registry.thread_status import StoppedThreadStatus
+from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.transport.tool_denial import StorageDenied
 from cli_command import core, core_process
-import fixture_git
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
-
 
 git = fixture_git.run
 
@@ -112,13 +121,13 @@ def test_retired_checkout_remains_readable_without_qualifying_a_new_launch(tmp_p
     assert qualified.path == project
     comms = wire(tmp_path / 'wire')
     comms.registry.declare(NativeThread('retired', frozenset(), Checkout(qualified.path)))
-    before = comms.registry.store.path.read_bytes()
+    before = comms.registry.store.rows.mark()
     shutil.rmtree(project)
     reopened = wire(comms.root).registry.require('retired')
     assert reopened.worktree == Checkout(project)
     assert reopened.project_path == project
     assert FieldCodec.encode(reopened.worktree) == str(project)
-    assert comms.registry.store.path.read_bytes() == before
+    assert comms.registry.store.rows.mark() == before
     with pytest.raises(FileNotFoundError):
         FieldCodec.decode(LaunchCheckout, str(project))
 

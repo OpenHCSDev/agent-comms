@@ -1,0 +1,275 @@
+"""Default-OFF ACP owner preplan for one private selected existing-file write.
+
+An ACP operator supplies bytes *before* dispatch. The owner process persists
+one intent; the selected runner applies it only after a verified native result.
+An accepted or uncertain intent is never automatically retried. This is not
+an interceptor for Pi/shell/edit writes or a filesystem security boundary.
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import os
+from contextlib import ExitStack, suppress
+from dataclasses import (
+    dataclass,
+    fields,
+)
+from pathlib import Path
+from typing import (
+    TYPE_CHECKING,
+    Literal,
+)
+
+from agent_comms.coordination.cohort import sealed_cohort_assignments
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.execution.child_process import Platform
+from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
+    AssignmentId,
+    ClaimId,
+    FieldCodec,
+    MalformedRecord,
+    MessageId,
+    RootId,
+)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import (
+    ClaimedIdentity,
+    ClaimScoped,
+    RecordedThreadIncarnation,
+)
+from agent_comms.storage.locked_store import (
+    DurableFile,
+    PatternFile,
+)
+from agent_comms.storage.private_path import (
+    PrivateDirectoryRole,
+    PrivateFileRole,
+)
+from agent_comms.storage.store_files import AtomicFile
+
+if TYPE_CHECKING:
+    from agent_comms.acp_extension import SelectedWriteAcceptedUpdate
+    from agent_comms.comms import Comms
+    from agent_comms.coordination.tables.assignments import WakeAssignment
+    from agent_comms.registry.threads import Thread
+
+_MAX_BYTES = 1024 * 1024
+
+
+@dataclass(frozen=True)
+class PlannedWrite:
+    resource: ExistingFileClaim
+    contents: bytes
+    operation_id: ClaimId
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedWriteBinding(ClaimScoped):
+    root_id: RootId
+    source: MessageReference
+    assignment_id: AssignmentId
+
+
+@dataclass(frozen=True, kw_only=True)
+class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
+    """The existing one-use plan file owns its state and exact source binding."""
+
+    family_discriminator = "status"
+    schema: Literal[1]
+    root_id: RootId
+    source_seq: int
+    source_message_id: MessageId
+    claim_id: AssignmentId
+    owner: RecordedThreadIncarnation
+    claim_epoch: int
+    expected_attempt_ordinal: Literal[1]
+    operation_id: ClaimId
+    resource: str
+    contents_b64: str
+    digest: str
+
+    @property
+    def binding(self) -> SelectedWriteBinding:
+        return SelectedWriteBinding(
+            root_id=self.root_id, source=MessageReference(self.source_seq, self.source_message_id),
+            assignment_id=self.claim_id,
+            claimed_identity=ClaimedIdentity(self.owner, self.claim_epoch),
+        )
+
+    def require_accepted(self):
+        raise IdentityConflict("Selected write intent is already applied or uncertain")
+
+
+class AcceptedWriteIntent(SelectedWriteIntent, declared_name="accepted"):
+    def require_accepted(self):
+        return self
+
+    def planned(self, worktree: Checkout) -> PlannedWrite:
+        raw = base64.b64decode(self.contents_b64, validate=True)
+        if not raw or len(raw) > _MAX_BYTES or hashlib.sha256(raw).hexdigest() != self.digest:
+            raise IdentityConflict("Selected write intent bytes are corrupt")
+        resource = ExistingFileClaim(Path(self.resource))
+        resource.normalized(worktree.path)
+        return PlannedWrite(resource, raw, self.operation_id)
+
+    def applied(self):
+        return AppliedWriteIntent(**{item.name: getattr(self, item.name) for item in fields(self)})
+
+
+class AppliedWriteIntent(SelectedWriteIntent, declared_name="applied"):
+    pass
+
+
+class SelectedWritePlans(DurableFile, PatternFile):
+    filename = "{source_seq}-{lookup}.json"
+    root_directory = "selected-write-plans"
+
+    def __init__(self, comms: Comms, root_id: RootId):
+        self.comms = comms
+        self.root_id = root_id
+        self.directory = self.directory_in(comms.root)
+
+    def _prepare_dir(self) -> None:
+        with suppress(FileExistsError):
+            self.directory.mkdir(mode=0o700)
+        self._validate_dir()
+        # Also on an existing directory: a previous mkdir may have survived
+        # while its parent fsync failed. Do not acknowledge a later intent
+        # until the directory entry itself is known durable.
+        Platform.current().sync_directory(self.comms.root)
+
+    def _validate_dir(self) -> bool:
+        try:
+            info = self.directory.lstat()
+        except FileNotFoundError:
+            return False
+        if PrivateDirectoryRole.violation(info) is not None:
+            raise IdentityConflict("Selected write plan directory is not private")
+        return True
+
+    def _read(self, path: Path) -> SelectedWriteIntent | None:
+        if not self._validate_dir():
+            return None
+        try:
+            stream = PrivateFileRole.stream(
+                path, IdentityConflict("Selected write intent is not private"))
+        except FileNotFoundError:
+            return None
+        with stream:
+            if os.fstat(stream.fileno()).st_size > 2 * _MAX_BYTES:
+                raise IdentityConflict("Selected write intent has unsafe identity")
+            try:
+                return FieldCodec.decode(SelectedWriteIntent, FieldCodec.parse(stream.read()))
+            except MalformedRecord as error:
+                raise IdentityConflict("Selected write intent is malformed") from error
+
+    def submit(
+        self,
+        *,
+        owner_name: str,
+        source_seq: int,
+        source_message_id: MessageId,
+        resource: str,
+        contents: str,
+    ) -> SelectedWriteAcceptedUpdate:
+        """Persist exactly one predispatch operator intent; no native/model call."""
+        if type(source_seq) is not int or source_seq <= 0:
+            raise IdentityConflict("Selected write requires a positive source sequence")
+        try:
+            FieldCodec.decode(str, resource)
+            FieldCodec.decode(str, contents)
+        except MalformedRecord as error:
+            raise IdentityConflict("Selected write request is not typed") from error
+        if not resource:
+            raise IdentityConflict("Selected write request requires its source and resource")
+        raw = contents.encode("utf-8")
+        if not raw or len(raw) > _MAX_BYTES:
+            raise IdentityConflict("Selected write requires 1..1048576 UTF-8 bytes")
+        with self.comms.registry.store.current_snapshot() as cut:
+            cut.privacy.require_root(
+                self.root_id, IdentityConflict("Selected write requires its original native namespace"),
+            )
+            owner, claimed_generation = self.comms.registry.live_owner_with_claim(owner_name)
+            if not owner.process_identity.runs_here() or owner.executing:
+                raise IdentityConflict("Selected write owner is not idle in this process")
+            initial = self.comms.bus.bus.delivery(source_seq)
+            if initial.message.message_id != source_message_id:
+                raise IdentityConflict("Selected write source identity changed")
+            lookup = owner.incarnation.lookup
+            with Coordination(str(CoordinationStore.path_in(self.comms.root))) as store:
+                assignments = sealed_cohort_assignments(store, lookup, after_seq=source_seq - 1)
+                selected = [
+                    pending
+                    for assignment in assignments
+                    for pending in assignment.lifecycle.writable_pending_assignments(assignment)
+                    if pending.source == MessageReference(source_seq, source_message_id)
+                    and pending.recipient_lookup == lookup
+                ]
+                if len(selected) != 1:
+                    raise IdentityConflict("Selected write has no one pending FULL selected claim")
+            path = ExistingFileClaim(Path(resource)).normalized(owner.worktree.path)
+            self._prepare_dir()
+            record_path = self.path_in(self.directory, source_seq=str(source_seq), lookup=lookup)
+            operation_id = ClaimId.mint()
+            record = AcceptedWriteIntent(
+                schema=1, root_id=self.root_id, source_seq=source_seq,
+                source_message_id=source_message_id, claim_id=selected[0].assignment_id,
+                owner=owner.incarnation.require_recorded(), claim_epoch=claimed_generation,
+                expected_attempt_ordinal=1, operation_id=operation_id, resource=str(path),
+                contents_b64=base64.b64encode(raw).decode("ascii"), digest=hashlib.sha256(raw).hexdigest(),
+            )
+            data = FieldCodec.compact(FieldCodec.encode(record), sort_keys=True).encode()
+            with ExitStack() as writing:
+                # Only the create answers "already accepted"; a failure below leaves the
+                # visible file as an UNKNOWN barrier and is never unlinked or retried.
+                try:
+                    fd = writing.enter_context(PrivateFileRole.creating(
+                        record_path, IdentityConflict("Selected write intent is not private")))
+                except FileExistsError as error:
+                    raise IdentityConflict(
+                        "Selected write intent already accepted or UNKNOWN; never retry"
+                    ) from error
+                stream = writing.enter_context(os.fdopen(fd, "wb", closefd=False))
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+                Platform.current().sync_directory(self.directory)
+            from agent_comms.acp_extension import SelectedWriteAcceptedUpdate
+
+            return SelectedWriteAcceptedUpdate(operation_id, source_seq, selected[0].assignment_id)
+
+    def load(
+        self, assignment: WakeAssignment, owner: Thread, claimed_generation: int
+    ) -> PlannedWrite | None:
+        lookup = owner.incarnation.lookup
+        path = self.path_in(self.directory, source_seq=str(assignment.wire_seq), lookup=lookup)
+        row = self._read(path)
+        if row is None:
+            return None
+        row = row.require_accepted()
+        expected = SelectedWriteBinding(
+            root_id=self.root_id, source=assignment.source, assignment_id=assignment.assignment_id,
+            claimed_identity=ClaimedIdentity(owner.incarnation, claimed_generation),
+        )
+        if row.binding != expected:
+            raise IdentityConflict("Selected write intent is stale or uncertain")
+        return row.planned(owner.worktree)
+
+    def applied(self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId) -> None:
+        path = self.path_in(self.directory, source_seq=str(assignment.wire_seq),
+                            lookup=owner.incarnation.lookup)
+        row = self._read(path)
+        if row is None:
+            raise IdentityConflict("Selected write intent is missing")
+        accepted = row.require_accepted()
+        if accepted.operation_id != operation_id:
+            raise IdentityConflict("Selected write intent is no longer unique")
+        completed = accepted.applied()
+        AtomicFile(path).write_bytes(FieldCodec.compact(FieldCodec.encode(completed), sort_keys=True).encode())

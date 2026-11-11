@@ -1,19 +1,17 @@
 """Standby liveness preserves goal authority and never replays an input."""
 
 
-from agent_comms.repo import Checkout
-from agent_comms.messages import ConversationRole, NoticeRole
 import os
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.turn_lease import NoFinishedTurn
-
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.turn_lease import NoFinishedTurn
+from agent_comms.messaging.messages import ConversationRole, NoticeRole
 from agent_comms.nominal.field_codec import TurnId
-from agent_comms.goal_actions import (
+from agent_comms.planning.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
     OwnerInvocable,
@@ -21,15 +19,17 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.planning.goal_waits import GoalWaits
-from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-from goal_owner_fixture import canonical_goal_wire
-from agent_comms.planning.goal_waits import NoGoalWait
-from agent_comms.planning.goal_waits import RecordedGoalWait
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goal_waits import GoalWaits, NoGoalWait, RecordedGoalWait
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_status import (
+    RunningThreadStatus,
+    StoppedThreadStatus,
+)
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
-from agent_comms.goal_scope import OneGoal
-
+from agent_comms.storage.locked_store import RegistryFile
+from goal_owner_fixture import canonical_goal_wire
 
 
 def _thread(comms, name, worktree):
@@ -73,7 +73,7 @@ def test_stopped_target_refusal_is_side_effect_free(tmp_path, had_turn):
     comms.registry.register(comms.registry.require("child").without_turn(), StoppedThreadStatus())
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Work"))
     assert goal is not None
-    authoritative = ("registry.json", "goal_waits.sqlite3", "input_dispositions.sqlite3")
+    authoritative = (RegistryFile.filename, "goal_waits.sqlite3", "input_dispositions.sqlite3")
     before = {
         name: (comms.root / name).read_bytes() if (comms.root / name).exists() else None
         for name in authoritative

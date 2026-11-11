@@ -1,10 +1,10 @@
 """A line still being appended is not history yet, so a newer read never stalls on it."""
 
-from agent_comms.transcripts import LaterThan, Through
-from agent_comms.repo import Checkout
 import json
 
-from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.transcript_sources import LaterThan, Through
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 
 

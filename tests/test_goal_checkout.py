@@ -6,19 +6,29 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.cli_commands import GoalCheckoutGrant
+from agent_comms.cli_verbs.cli_commands import GoalCheckoutGrant
 from agent_comms.comms import Comms
-from agent_comms.goals import Goal
-from agent_comms.repo import Checkout, DetachedStart, GitHubRepositorySource, Repo, RepositoryReads, RepositorySource
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.thread_creation import RecordedCreationTime
-from agent_comms.shell_effects import AcquireRepositoryStorageEffect
-from agent_comms.tool_denial import StorageDenied
-from agent_comms.storage_projection import StorageProjection
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.repository_name import RepositoryName
-from agent_comms.storage_rules import StorageRule
+from agent_comms.planning.goal_actions import ClearGoalAction, SetGoalAction
+from agent_comms.planning.goals import Goal
+from agent_comms.projects.checkouts import (
+    Checkout,
+    DetachedStart,
+    RepositoryReads,
+)
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.repository_sources import (
+    GitHubRepositorySource,
+    LocalRepositorySource,
+    RepositorySource,
+)
+from agent_comms.projects.shell_effects import AcquireRepositoryStorageEffect
+from agent_comms.projects.storage_projection import StorageProjection
+from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.registry.thread_creation import RecordedCreationTime
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
+from agent_comms.transport.tool_denial import StorageDenied
 from cli_command import core_process
 from source_revision_fixture import SourceRepository
 
@@ -90,6 +100,13 @@ class RemoteGoalCheckout:
     def run(self, operation: str = 'add') -> subprocess.CompletedProcess[str]:
         return core_process('--root', str(self.comms.root), 'goal-checkout', '--from',
                             self.worker.name, operation, self.source.to_wire())
+
+    def read(self, source: RepositorySource) -> subprocess.CompletedProcess[str]:
+        return core_process(
+            '--root', str(self.comms.root), 'tool', '--from', self.worker.name,
+            '--tool', 'comms_repository_read',
+            '--arguments', FieldCodec.compact({'repository': source.to_wire()}),
+        )
 
 
 @pytest.fixture
@@ -348,3 +365,121 @@ def test_new_goal_reuses_existing_repository_tree_and_donor(remote_goal_checkout
     current = case.comms.registry.require(case.worker.name)
     assert case.rule.repository_donor(current, case.repository.github) == donor
     StorageProjection(case.rule, current, case.comms).require_write(original / 'next-change.py')
+
+
+@pytest.fixture
+def repository_read_case(remote_goal_checkout: RemoteGoalCheckout) -> RemoteGoalCheckout:
+    case = remote_goal_checkout
+    case.comms.goals.update_goal(case.worker.name, ClearGoalAction())
+    owner = case.comms.registry.require(case.worker.name)
+    assert tuple(owner.goal) == ()
+    assert not case.comms.goals.todos.held_by(owner.incarnation)
+    return case
+
+
+def test_repository_read_needs_no_goal_or_order_and_grants_no_edits(
+    repository_read_case: RemoteGoalCheckout,
+) -> None:
+    case = repository_read_case
+    project = case.comms.registry.snapshot().team_project
+    assert case.repository.github not in project.repository_names()
+    acquired = case.read(case.source)
+    assert acquired.returncode == 0, acquired.stdout + acquired.stderr
+    result = FieldCodec.parse(acquired.stdout)
+    assert isinstance(result, dict)
+    repository = Repo.from_wire(result['repository'])
+    assert repository.checkout == case.donor
+    assert repository.github == case.repository.github
+    assert (case.donor / 'owner.py').read_text() == case.repository.main_source
+    assert case.repository.git(case.donor, 'rev-parse', 'HEAD').strip() == case.repository.git(
+        case.repository.remote_path, 'rev-parse', 'master').strip()
+    assert not case.path.exists()
+    current = case.comms.registry.require(case.worker.name)
+    assert tuple(current.goal) == ()
+    assert not case.comms.goals.todos.held_by(current.incarnation)
+    assert case.comms.registry.snapshot().team_project == project
+    with pytest.raises(StorageDenied, match='not allocated editable work'):
+        StorageProjection(case.rule, current, case.comms).require_write(case.donor / 'change.py')
+    again = case.read(case.source)
+    assert again.returncode == 0, again.stdout + again.stderr
+    assert FieldCodec.parse(again.stdout) == result
+
+
+def test_repository_read_follows_origins_new_declared_default(
+    repository_read_case: RemoteGoalCheckout,
+) -> None:
+    case = repository_read_case
+    acquired = case.read(case.source)
+    assert acquired.returncode == 0, acquired.stdout + acquired.stderr
+    case.repository.git(case.repository.checkout, 'push', 'origin', 'feature:refs/heads/feature')
+    case.repository.git(case.repository.remote_path, 'symbolic-ref', 'HEAD', 'refs/heads/feature')
+    refreshed = case.read(case.source)
+    assert refreshed.returncode == 0, refreshed.stdout + refreshed.stderr
+    assert case.repository.git(case.donor, 'rev-parse', 'HEAD').strip() == case.repository.branch_commit
+    assert Repo.from_origin(case.donor).default_branch() == 'feature'
+
+
+def test_local_repository_read_keeps_the_explicit_source_branch_and_bytes(
+    repository_read_case: RemoteGoalCheckout,
+) -> None:
+    case = repository_read_case
+    case.repository.git(case.repository.checkout, 'checkout', '-b', 'local-reading')
+    path = case.repository.checkout / 'owner.py'
+    path.write_text('local uncommitted text\n')
+    before = case.repository.git(case.repository.checkout, 'status', '--porcelain')
+    strict = replace(case.rule, floor_gib=2**40)
+    StorageRule.path_in(case.comms.root).write_text(FieldCodec.compact(FieldCodec.encode(strict)))
+    acquired = case.read(LocalRepositorySource(case.repository))
+    assert acquired.returncode == 0, acquired.stdout + acquired.stderr
+    result = FieldCodec.parse(acquired.stdout)
+    assert isinstance(result, dict)
+    assert Repo.from_wire(result['repository']).checkout == case.repository.checkout
+    assert case.repository.git(case.repository.checkout, 'branch', '--show-current').strip() == 'local-reading'
+    assert case.repository.git(case.repository.checkout, 'status', '--porcelain') == before
+    assert path.read_text() == 'local uncommitted text\n'
+    assert not case.donor.exists()
+
+
+@pytest.mark.parametrize('blocked', ('occupied', 'symlink', 'disk'))
+def test_repository_read_keeps_acquisition_safety_without_a_write_allocation(
+    repository_read_case: RemoteGoalCheckout, tmp_path: Path, blocked: str,
+) -> None:
+    case = repository_read_case
+    if blocked == 'disk':
+        strict = replace(case.rule, floor_gib=2**40)
+        StorageRule.path_in(case.comms.root).write_text(FieldCodec.compact(FieldCodec.encode(strict)))
+    else:
+        occupied = case.donor if blocked == 'occupied' else tmp_path / 'foreign'
+        occupied.mkdir(parents=True)
+        (occupied / 'keep').write_text('untouched')
+        if blocked == 'symlink':
+            case.donor.parent.mkdir(parents=True, exist_ok=True)
+            case.donor.symlink_to(occupied, target_is_directory=True)
+    refused = case.read(case.source)
+    assert refused.returncode != 0
+    assert not case.path.exists()
+    if blocked == 'disk':
+        assert 'GiB free' in refused.stdout + refused.stderr
+        assert not case.donor.exists()
+    else:
+        assert str(case.donor) in refused.stdout + refused.stderr
+        assert (occupied / 'keep').read_text() == 'untouched'
+        assert not (occupied / '.git').exists()
+
+
+def test_repository_reads_keep_independent_callers_separate(
+    repository_read_case: RemoteGoalCheckout,
+) -> None:
+    case = repository_read_case
+    peer = case.comms.registry.declare(ExternalThread(
+        'read-peer', frozenset(), Checkout(case.repository.checkout)))
+    other = replace(case, worker=peer)
+    for reader in (case, other):
+        acquired = reader.read(reader.source)
+        assert acquired.returncode == 0, acquired.stdout + acquired.stderr
+    assert case.donor != other.donor
+    for reader in (case, other):
+        current = case.comms.registry.require(reader.worker.name)
+        assert tuple(current.goal) == ()
+        with pytest.raises(StorageDenied):
+            StorageProjection(case.rule, current, case.comms).require_write(reader.donor / 'edit.py')

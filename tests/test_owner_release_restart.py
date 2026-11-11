@@ -1,9 +1,5 @@
 """Real release-before-exit: a host's retirement keeps checking the exact owner fence."""
 
-from agent_comms.owner_release import NoRelease
-from agent_comms.repo import Checkout
-from agent_comms.restart_scope import OwnersNamed
-
 import os
 import signal
 import sys
@@ -13,19 +9,24 @@ from pathlib import Path
 
 import pytest
 
-from bus_record_fixture import configure_local_native, prepare_native_comms, start_source_owner
-
-from agent_comms.child_process import ObservedProcess
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.launch_runtime import RestoredRuntime
-from agent_comms.owner_cutover import PreserveOwnerRuntime
+from agent_comms.execution.launch_runtime import RestoredRuntime
+from agent_comms.execution.owner_cutover import PreserveOwnerRuntime
 from agent_comms.execution.owner_lifecycle import OwnerLifecycle, OwnerRestartSelection
-from agent_comms.owner_restart import FencedOwnerBatch, OwnerRestartRequest, StoppedOwnerFailure
-from agent_comms.pi_vocabulary import OffThinkingLevel
-from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.execution.owner_restart import (
+    FencedOwnerBatch,
+    OwnerRestartRequest,
+    StoppedOwnerFailure,
+)
+from agent_comms.execution.pi_vocabulary import OffThinkingLevel
+from agent_comms.execution.restart_scope import OwnersNamed
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.owner_release import NoRelease
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
+from bus_record_fixture import configure_local_native, prepare_native_comms, start_source_owner
 
 
 def source_runtime() -> RestoredRuntime:
@@ -53,16 +54,14 @@ def hosted_owner(tmp_path, monkeypatch):
     ))
     start_source_owner(comms, "worker", source_runtime())
     original = comms.registry.require("worker")
-    try:
-        yield comms, original
-    finally:
-        for thread in (original, comms.registry.require("worker")):
-            if thread.process_alive:
-                ObservedProcess(thread.process_identity).stop_sync()
+    yield comms, original
 
 
 def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
-    from agent_comms.child_process import NoProcess, ProcessIdentity
+    from agent_comms.execution.child_process import (
+        NoProcess,
+        ProcessIdentity,
+    )
 
     comms = wire(tmp_path / "wire")
     declared = comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path)))

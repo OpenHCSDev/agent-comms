@@ -1,42 +1,59 @@
 
-from agent_comms.repo import Checkout, LaunchCheckout
-from conftest import transcript_records
 import json
 import os
 import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
-from pydantic import JsonValue
 
 import pytest
+from pydantic import JsonValue
 
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.native_entries import CompactionEntry, ModelChangeEntry
-from agent_comms.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
-from agent_comms.channels import AnyChannel
-from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
-from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.context_reading import ContextUsage
+from agent_comms.execution.launch_runtime import CallingThreadUnavailable, ThreadLaunch
+from agent_comms.execution.native_entries import CompactionEntry, ModelChangeEntry
+from agent_comms.execution.pi_vocabulary import HighThinkingLevel
+from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.history_views import CallingThreadTarget, NamedThreadTarget
-from agent_comms.launch_runtime import CallingThreadUnavailable, ThreadLaunch
-from agent_comms.message_page import PageBounds
-from agent_comms.messages import QuestionKind
+from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
+from agent_comms.messaging.channels import AnyChannel
+from agent_comms.messaging.message_page import PageBounds
+from agent_comms.messaging.messages import QuestionKind
+from agent_comms.messaging.read_basis import NamedViewer
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_counts import PiCount
-from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.presentation import CountedInbox, CountedRead, UncountedRead
-from agent_comms.context_reading import ContextUsage
-from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, ToolStartTranscript, ToolEndTranscript
-from agent_comms.read_basis import NamedViewer
-from agent_comms.thread_management import ForkSpec
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.registry.threads import ChosenModel, NextTurnConfiguration, NativeThread
-from agent_comms.thread_text import ForkedParent, GivenThreadText
-from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_status import ArchivedThreadStatus, HeartbeatThreadStatus, RunningThreadStatus, StoppedThreadStatus
+from agent_comms.projects.checkouts import (
+    Checkout,
+    LaunchCheckout,
+)
+from agent_comms.registry.activity import ActivityState
+from agent_comms.registry.thread_management import ForkSpec
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_status import (
+    ArchivedThreadStatus,
+    HeartbeatThreadStatus,
+    RunningThreadStatus,
+    StoppedThreadStatus,
+)
+from agent_comms.registry.thread_text import (
+    ForkedParent,
+    GivenThreadText,
+)
+from agent_comms.registry.threads import ChosenModel, NativeThread, NextTurnConfiguration
+from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.transcript.transcript_events import (
+    AssistantTranscript,
+    NoticeTranscript,
+    ToolEndTranscript,
+    ToolStartTranscript,
+)
+from agent_comms.transport.tool_caller import ThreadCaller
+from conftest import transcript_records
 
 
 def test_calling_thread_is_declared_by_owner_launch_environment() -> None:
@@ -494,7 +511,7 @@ class TestPollAndWire:
     def test_runtime_files_created_on_demand(self, tmp_path: Path) -> None:
         comms = wire(tmp_path / "fresh")
         comms.registry.declare(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
-        assert (tmp_path / "fresh" / "registry.json").exists()
+        assert (RegistryFile.path_in(tmp_path / "fresh")).exists()
 
 
 class TestCrossWireIsolation:

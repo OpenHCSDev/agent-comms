@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import annotationlib
 import ast
-from copy import deepcopy
 import builtins
 import hashlib
 import json
@@ -19,14 +18,15 @@ import sqlite3
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
-from itertools import batched
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
+from copy import deepcopy
 from dataclasses import dataclass, field, is_dataclass
 from enum import Enum, IntEnum, IntFlag
 from functools import cache
 from importlib import import_module
 from importlib.metadata import entry_points
 from inspect import getsource
+from itertools import batched
 from pathlib import Path
 from symtable import symtable
 from tempfile import TemporaryDirectory
@@ -46,10 +46,11 @@ from typing import (
     overload,
 )
 
-from ..class_fact import ClassFact
-from ..nominal.declared_family import DeclaredFamily, FamilyMember, declared_words
-from ..errors import RelationViolationError
-from ..nominal.field_codec import (
+from agent_comms.errors import RelationViolationError
+from agent_comms.messaging.projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
+from agent_comms.nominal.class_fact import ClassFact
+from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMember, declared_words
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     FieldDirective,
     FieldPlan,
@@ -66,8 +67,9 @@ from ..nominal.field_codec import (
     WireValue,
     compile_decoder,
 )
-from ..lifecycle import LifecycleState
-from .locked_store import (
+from agent_comms.nominal.lifecycle import LifecycleState
+from agent_comms.package_stamp import STAMP
+from agent_comms.storage.locked_store import (
     DeclaredFile,
     ExternalFile,
     FilesRequest,
@@ -81,11 +83,13 @@ from .locked_store import (
     StoreCommittedError,
     WrittenFile,
 )
-from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, MaintenanceHolder
-from ..package_stamp import STAMP
-from ..projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
-from .private_path import PrivateDirectoryRole
-from .store_files import (
+from agent_comms.storage.maintenance_barrier import (
+    HolderWrittenFile,
+    MaintenanceBarrier,
+    MaintenanceHolder,
+)
+from agent_comms.storage.private_path import PrivateDirectoryRole
+from agent_comms.storage.store_files import (
     BorrowedStoreLock,
     ExclusiveAtomicFile,
     StoreGuard,
@@ -93,7 +97,7 @@ from .store_files import (
 )
 
 if TYPE_CHECKING:
-    from ..execution_states import ExecutionState
+    from agent_comms.coordination.execution_states import ExecutionState
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 

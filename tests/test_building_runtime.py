@@ -14,13 +14,13 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.runtime_processes import RuntimeProcesses
 from agent_comms.installer.building_runtime import BuildingRuntime
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.installer.runtime_retention import RuntimeRetention
 from agent_comms.installer.runtime_stack import RuntimeStack
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.runtime_processes import RuntimeProcesses
 
 
 def unbuilt(runtimes: Path, name: str) -> LaunchRuntime:

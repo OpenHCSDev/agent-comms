@@ -5,7 +5,6 @@ Ordinary conversation sends no longer acquire or manually release files.
 """
 from __future__ import annotations
 
-from agent_comms.repo import Checkout
 import json
 import os
 import signal
@@ -20,16 +19,21 @@ from threading import Barrier
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.session import NativeCapture
-from agent_comms.envelope_claim_transitions import ClaimConflict, ExistingFileClaim, NativeClaim
 from agent_comms.errors import RelationViolationError
-from agent_comms.exporting import EverythingScope, FullLimit, JsonlFormat
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.messaging.envelope_claim_transitions import (
+    ClaimConflict,
+    ExistingFileClaim,
+    NativeClaim,
+)
+from agent_comms.messaging.exporting import EverythingScope, FullLimit, JsonlFormat
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
-from agent_comms.thread_status import RunningThreadStatus
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_status import RunningThreadStatus
 from agent_comms.registry.threads import NativeThread
 from bus_history import read_history
 
@@ -262,7 +266,7 @@ import os, signal, sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[2])
 sys.path.insert(0, str(Path(sys.argv[2]).parent / 'tests'))
-from agent_comms.bus import Bus
+from agent_comms.messaging.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import InputId, TurnId
 from test_envelope_bus_integration import acquire_message

@@ -1,6 +1,6 @@
 
 
-from agent_comms.routing import MessageRoute
+from agent_comms.messaging.routing import MessageRoute
 
 
 def test_incoming_route_distinguishes_channel_and_direct_delivery():

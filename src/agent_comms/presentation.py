@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from agent_comms.messaging.display_sources import ChannelSortView
+from agent_comms.messaging.notification_contracts import RevisionChanges
+
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -9,26 +12,48 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import Annotated, ClassVar, Self
 
-from . import relationships
-from .activity import Activity, ActivityData, ActivityState, ObservedActivity
-from .activity_clocks import ChannelActivity
-from .agent_activity import (
-    AgentActivity,
+from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.coordination.errors import DMPaintedBoundChanged
+from agent_comms.display_order import ChannelSort, NameChannelSort
+from agent_comms.execution.runtime_info import RuntimeInfo
+from agent_comms.execution.transcript_sources import ExternalTranscript
+from agent_comms.messaging.activity_clocks import ChannelActivity
+from agent_comms.messaging.bus import BusSnapshot, DisplayUnread
+from agent_comms.messaging.bus_read_source import BusReadSource
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.channels import Channel, ChannelMemberIndex, Channels
+from agent_comms.messaging.display_references import CurrentDisplayReferences
+from agent_comms.messaging.mentions import MentionCandidate
+from agent_comms.messaging.message_notification import MessageNotification
+from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.read_basis import (
+    AnonymousViewer,
+    ChannelDisplayScope,
+    DisplayViewer,
+    NamedViewer,
 )
-from .bus import DisplayUnread
-from .channel_targets import CommandTarget
-from .channels import Channel, ChannelMemberIndex, Channels
-from .cli_result import CliResult
-from .team_frame_file import TeamFrameFile
-from .todos import TodoStore
-from .coordination.errors import DMPaintedBoundChanged, StaleRevision
-from .nominal.declared_family import DeclaredFamily
-from .display_order import ChannelSort, NameChannelSort
-from .display_references import CurrentDisplayReferences
-from .external_transcript import ExternalTranscript
-from .nominal.field_codec import (
+from agent_comms.messaging.read_ledger import NoReadNotice, ReadNotice
+from agent_comms.messaging.read_selection import CapturedSelection
+from agent_comms.messaging.recorded_bus import NoRecordedBus, RecordedBusIdentity
+from agent_comms.messaging.revision_views import (
+    ActivityView,
+    BusSourceView,
+    ExternalTranscriptsView,
+    NotificationEvidenceView,
+    NotificationsView,
+    RegistrationsView,
+    RevisionView,
+    SidebarView,
+    StatusSourced,
+    StoresView,
+    TeamBoardView,
+    TeamFramesView,
+)
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     Differs,
     FieldCodec,
     JsonShapeFamily,
@@ -41,63 +66,40 @@ from .nominal.field_codec import (
     WireOmitDefault,
     projected,
 )
-from .goal_presentation import GoalExecution
-from .planning.goal_waits import GoalWaits
-from .storage.locked_store import GoalWakeFile
-from .mentions import MentionCandidate
-from .message_page import (
-    NEWEST_PAGE,
-    MessagePage,
-    PageBounds,
+from agent_comms.notification_assignment import NotificationAssignment
+from agent_comms.pi_counts import PiCount
+from agent_comms.planning.goal_execution import GoalExecution
+from agent_comms.planning.goal_execution_snapshot import GoalExecutionSnapshot
+from agent_comms.planning.goal_snapshots import GoalSnapshots
+from agent_comms.planning.goal_waits import GoalWaits
+from agent_comms.planning.orders import TodoStore
+from agent_comms.registry import relationships
+from agent_comms.registry.activity import Activity, ActivityData, ActivityState, ObservedActivity
+from agent_comms.registry.agent_activity import AgentActivity
+from agent_comms.registry.catalog_document import CatalogDocument
+from agent_comms.registry.catalog_store import ChannelCatalog
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_names import DeletedThread
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
+from agent_comms.registry.thread_presentation import (
+    ThreadOwnerBinding,
+    ThreadPresentation,
+    UnavailableThreadOwnerBinding,
 )
-from .message_reference import MessageReference
-from .notification_assignment import NotificationAssignment
-from agent_comms.message_notification import NotificationPass
-from .storage.private_path import FileRevision
-from .read_selection import CapturedSelection
-from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer
-from .read_ledger import NoReadNotice, ReadNotice
-from .recorded_bus import NoRecordedBus, RecordedBusIdentity
-from .registry.registry_document import DEFAULT_ROSTER, RosterVisibility
-from .revision_views import (
-    ActivityView,
-    BusSourceView,
-    TeamFramesView,
-    TeamBoardView,
-    ExternalTranscriptsView,
-    NotificationEvidenceView,
-    NotificationsView,
-    RegistrationsView,
-    RevisionView,
-    SidebarView,
-    StatusSourced,
-    StoresView,
+from agent_comms.registry.thread_status import ActiveThreadPresence, ThreadStatus, ThreadStatusName
+from agent_comms.registry.threads import Thread
+from agent_comms.storage.locked_store import GoalWakeFile
+from agent_comms.storage.private_path import FileRevision
+from agent_comms.storage.storage_room import RoomLedger
+from agent_comms.team.team_frame_file import TeamFrameFile
+from agent_comms.transport.tool_result import ToolResult
+from agent_comms.ui_model.unread import (
+    ExactUnread,
+    IndexingUnread,
+    UnobservedUnread,
+    UnreadPresentation,
 )
-from .runtime_info import RuntimeInfo
-from .storage_room import RoomLedger
-from .thread_presentation import ThreadOwnerBinding, UnavailableThreadOwnerBinding
-from .thread_presentation import ThreadPresentation
-from .thread_status import ActiveThreadPresence, ThreadStatus, ThreadStatusName
-from .registry.threads import Thread
-from .tool_result import ToolResult
-from .ui_model.unread import ExactUnread, IndexingUnread, UnobservedUnread, UnreadPresentation
-
-from .message_notification import MessageNotification
-
-if TYPE_CHECKING:
-    from .agent_activity import AgentActivity
-    from .bus import BusSnapshot
-    from .catalog_document import CatalogDocument
-    from .catalog_store import ChannelCatalog
-    from .comms import Comms
-    from .goal_management import Goals
-    from .history_views import HistoryViews
-    from .message_bus import MessageBus
-    from .pi_counts import PiCount
-    from .registry.registration import Registration
-    from .registry.registry_document import RegistrySnapshot
-    from .registry_provenance import DeletedThread
-    from .ui_model.observation import ThreadsObserved
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,8 +168,8 @@ class ReadThrough(ChannelReadMark):
 
 class BusPresentation:
     def __init__(
-        self, bus: MessageBus, registry: Registration, catalog: ChannelCatalog,
-        agents: AgentActivity, goals: Goals,
+        self, bus: BusReadSource, registry: Registration, catalog: ChannelCatalog,
+        agents: AgentActivity, goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot],
     ):
         self.bus = bus
         self.registry = registry
@@ -242,7 +244,7 @@ class BusPresentation:
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelView(ToolResult):
+class ChannelView(ToolResult, ChannelSortView[type[ChannelSort]]):
     """Wire form: the channel's own fields beside its roster; agent counts stay in process."""
 
     channel: Annotated[Channel, WireInline()]
@@ -309,19 +311,19 @@ class InboxRead(DeclaredFamily, affix="Read"):
     """Whether a thread read counts each thread's unread messages."""
 
     @abstractmethod
-    def counts(self, bus: MessageBus, names: Sequence[str]) -> Mapping[str, InboxCount]: ...
+    def counts(self, bus: BusReadSource, names: Sequence[str]) -> Mapping[str, InboxCount]: ...
 
 
 @dataclass(frozen=True)
 class CountedRead(InboxRead):
-    def counts(self, bus: MessageBus, names: Sequence[str]) -> Mapping[str, InboxCount]:
+    def counts(self, bus: BusReadSource, names: Sequence[str]) -> Mapping[str, InboxCount]:
         # One bus snapshot for every thread, not one per thread.
         return {name: CountedInbox(count) for name, count in bus.pending_counts_all(names).items()}
 
 
 @dataclass(frozen=True)
 class UncountedRead(InboxRead):
-    def counts(self, bus: MessageBus, names: Sequence[str]) -> Mapping[str, InboxCount]:
+    def counts(self, bus: BusReadSource, names: Sequence[str]) -> Mapping[str, InboxCount]:
         return {name: UncountedInbox() for name in names}
 
 
@@ -339,7 +341,7 @@ class ThreadRecord(CliResult):
 
     @classmethod
     def read(cls, snapshot: RegistrySnapshot, agents: AgentActivity,
-             goals: Goals, threads: Iterable[Thread],
+             goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot], threads: Iterable[Thread],
              pending: Mapping[str, InboxCount]) -> tuple[ThreadRecord, ...]:
         """Only active threads are observed; the rest show the absent activity."""
         threads = tuple(threads)
@@ -379,7 +381,7 @@ class ThreadView(ThreadRecord):
     @classmethod
     def roster(
         cls, snapshot: RegistrySnapshot, agents: AgentActivity,
-        goals: Goals,
+        goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot],
         visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> tuple[ThreadView, ...]:
         threads = tuple(snapshot.visible_threads(visibility, names=names))
@@ -441,7 +443,7 @@ class CoordinationSnapshot:
         cls, root: Path, registry: RegistrySnapshot, catalog: CatalogDocument,
         agents: AgentActivity, declarations: Channels,
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
-        goals: Goals, unread: Mapping[str, int], channel_unread: Mapping[str, int],
+        goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot], unread: Mapping[str, int], channel_unread: Mapping[str, int],
         visibility: RosterVisibility, read_marker_notice: ReadNotice = NoReadNotice(),
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
@@ -500,11 +502,11 @@ class CoordinationSnapshot:
         )
 
 
-def revision_source(paths: Callable[[HistoryViews], tuple[Path, ...]], *views: type[RevisionView]):
+def revision_source(paths: Callable[..., tuple[Path, ...]], *views: type[RevisionView]):
     return WatchPaths(paths), WatchViews(views)
 
 
-class ReadState:
+class ReadState(RevisionChanges):
     """Without a revision on either side, every view has changed."""
     __slots__ = ()
 
@@ -519,28 +521,8 @@ class NoRevision(ReadState):
     __slots__ = ()
 
 
-def room_ledger_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root)
-
-
-def relationship_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return (relationships.RelationshipStore.path_in(views.root),)
-
-
-def notification_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return NotificationAssignment.source_paths(views.root)
-
-
-def external_transcript_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return ExternalTranscript.source_paths(views.root)
-
-
-def team_frame_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return TeamFrameFile.source_paths(views.root)
-
-
 def expiry_period_changed(before: int, now: int) -> bool:
-    return before // WireRevision.expiry_seconds != now // WireRevision.expiry_seconds
+    return WireRevision.period_for(before) != WireRevision.period_for(now)
 
 
 @dataclass(frozen=True, slots=True)
@@ -550,7 +532,7 @@ class WireRevision(ReadState, ToolResult):
     registry: Annotated[
         tuple[FileRevision, ...],
         *revision_source(
-            lambda views: (views.registry.store.path,),
+            lambda views: views.registry.store.source_paths(views.root),
             *StatusSourced.views(),
             RegistrationsView,
             ActivityView,
@@ -592,7 +574,7 @@ class WireRevision(ReadState, ToolResult):
     ]
     work_room: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(room_ledger_paths, *StatusSourced.views(), ActivityView),
+        *revision_source(lambda views: RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root), *StatusSourced.views(), ActivityView),
     ]
     reads: Annotated[
         tuple[FileRevision, ...],
@@ -613,20 +595,20 @@ class WireRevision(ReadState, ToolResult):
     ]
     relationships: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(relationship_paths, *StatusSourced.views()),
+        *revision_source(lambda views: (relationships.RelationshipStore.path_in(views.root),), *StatusSourced.views()),
     ]
     notifications: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(notification_paths, *StatusSourced.views(), NotificationsView,
+        *revision_source(lambda views: NotificationAssignment.source_paths(views.root), *StatusSourced.views(), NotificationsView,
                          NotificationEvidenceView),
     ]
     external_transcripts: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(external_transcript_paths, StoresView, ExternalTranscriptsView),
+        *revision_source(lambda views: ExternalTranscript.source_paths(views.root), StoresView, ExternalTranscriptsView),
     ]
     team_frames: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(team_frame_paths, TeamFramesView),
+        *revision_source(lambda views: TeamFrameFile.source_paths(views.root), TeamFramesView),
     ]
     # Activity-derived views change once per expiry period, not per tick.
     expiry_tick: Annotated[
@@ -654,7 +636,7 @@ class WireRevision(ReadState, ToolResult):
         )
 
     @classmethod
-    def source_paths(cls, views: HistoryViews) -> dict[str, tuple[Path, ...]]:
+    def source_paths[Source](cls, views: Source) -> dict[str, tuple[Path, ...]]:
         """Stat and watch the sources declared by the revision fields themselves."""
         return {
             plan.name: source.value(views)
@@ -662,64 +644,18 @@ class WireRevision(ReadState, ToolResult):
             for source in WatchPaths.single(plan.annotation)
         }
 
-    @classmethod
-    def capture(cls, views: HistoryViews, *, expiry_tick: int) -> WireRevision:
-        """Stat sources only; strict content reads belong to the requesting view."""
-        captured = {
-            name: tuple(revision for path in group
-                        for revision in FileRevision.capture(path).revisions())
-            for name, group in cls.source_paths(views).items()
-        }
-        return cls(**captured, bus_identity=RecordedBusIdentity.capture(views.bus.bus.path),
-                   bus_seq=views.bus.bus.revision(), expiry_tick=expiry_tick)
-
     def selection_reusable_from(self, earlier: WireRevision) -> bool:
         return ((self.registry, self.catalog, self.history) ==
                 (earlier.registry, earlier.catalog, earlier.history)
                 and not self.changed_since(BusSourceView(), earlier))
 
-    def changed_threads(self, previous: ThreadsObserved, comms: Comms,
-                        activity: Mapping[str, ObservedActivity | DeletedThread],
-                        snapshot: RegistrySnapshot, registry_changed: frozenset[str],
-                        ) -> frozenset[str]:
-        """Attribute changes using the retained observation and existing route rows. A
-        registry revision reaches only the threads whose own rows it changed (or their forks):
-        every turn start rewrites the registry, and it re-presented every open thread."""
-        earlier = previous.revision
-        names = previous.results.keys()
-        readable, changed = previous.revision_inputs()
-        if self.changed_since(BusSourceView(), earlier) or not readable:
-            return frozenset(names)
-        changed.update(name for name in names if snapshot.affected_by(name, registry_changed))
-        if self.bus_seq != earlier.bus_seq:
-            source = comms.bus.bus
-            if source.revision() != self.bus_seq:
-                raise StaleRevision("Bus changed before route attribution")
-            actors = source.changed_names(earlier.bus_seq)
-            catalog = comms.channels.catalog.read()
-            with comms.bus.opened_activity() as channel_activity:
-                for actor in actors:
-                    changed.update(CommandTarget.named(actor).changed_threads(
-                        names, snapshot, catalog, channel_activity))
-            changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
-        activity_changed = {name for name in activity
-                            if activity[name] != previous.activity.get(name)}
-        status_names = names if (self.goal_execution, self.expiry_period, self.work_room) != (
-            earlier.goal_execution, earlier.expiry_period, earlier.work_room) else names & activity_changed
-        if status_names:
-            status_batch = comms.views.thread_presentations(status_names)
-            changed.update(name for name in status_names
-                           if not previous.results[name].same_status(status_batch.view(name)))
-        remaining = {name: view for name, view in readable.items() if name not in changed}
-        notifications = NotificationPass(comms, self)
-        changed.update(name for name, view in remaining.items()
-                       if view.notification_window.activity_names() & activity_changed
-                       or notifications.changed(view.notification_window, earlier))
-        return frozenset(changed & names)
+    @classmethod
+    def period_for(cls, tick: int) -> int:
+        return tick // cls.expiry_seconds
 
     @property
     def expiry_period(self) -> int:
-        return self.expiry_tick // self.expiry_seconds
+        return self.period_for(self.expiry_tick)
 
     def changed_since(self, view: RevisionView, earlier: ReadState) -> bool:
         return earlier.changed_before(view, self)

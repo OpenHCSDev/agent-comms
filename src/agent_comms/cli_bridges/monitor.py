@@ -15,19 +15,19 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from types import get_original_bases
-from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, Self, get_args, get_origin
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    BinaryIO,
+    ClassVar,
+    NoReturn,
+    Self,
+    get_args,
+    get_origin,
+)
 
-from agent_comms_hooks.watch import SessionFailure
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.fd_readiness import ready
-from agent_comms.coordination.errors import CoordinationError
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.installer.runtime_wire import CrossesRuntimes
-from agent_comms.nominal.field_codec import FieldCodec, PathText
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms_hooks.board import SessionWire
-
-from .session_watch import (
+from agent_comms.cli_bridges.fd_readiness import ready
+from agent_comms.cli_bridges.session_watch import (
     HeldClaim,
     SessionConnectionClosed,
     SessionRefusedError,
@@ -35,11 +35,17 @@ from .session_watch import (
     WatchClaim,
     WatchRecord,
 )
-
+from agent_comms.coordination.errors import CoordinationError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.installer.runtime_wire import CrossesRuntimes
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, PathText
+from agent_comms_hooks.board import SessionWire
+from agent_comms_hooks.watch import SessionFailure
 
 if TYPE_CHECKING:
-    from .shared import MonitorService
-    from .shared import Serve
+    from agent_comms.cli_bridges.shared import MonitorService, Serve
 
 
 class BridgeExit:

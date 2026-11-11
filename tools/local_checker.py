@@ -18,10 +18,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-from agent_comms.declared_verb import DeclaredVerb
-from agent_comms import integration
+from agent_comms.projects import integration
+from agent_comms.cli_verbs.declared_verb import DeclaredVerb
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.declared_uv import DeclaredUv
-from agent_comms.integration import (
+from agent_comms.projects.integration import (
     CiEvent,
     CiRunner,
     IntegrationFailed,
@@ -29,12 +30,11 @@ from agent_comms.integration import (
     PullRequestSources,
     TestedSources,
 )
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import Argument, FieldCodec
-from agent_comms.repo import Repo
-from agent_comms.repository_name import RepositoryName
-from agent_comms.storage_rules import StorageRule
-from agent_comms.work_branches import WorkBranches
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.projects.work_branches import WorkBranches
 
 
 @dataclass(frozen=True, kw_only=True)

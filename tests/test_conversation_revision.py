@@ -1,19 +1,19 @@
 """A conversation revision tracks its selected scope, not registry traffic."""
 
-from agent_comms.repo import Checkout
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.historical_views import (
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.historical_views import (
     ChannelDisplayHistory,
-    UnobservedConversation,
     DMDisplayHistory,
+    UnobservedConversation,
 )
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.private_path import FileRevision
 from bus_record_fixture import prepare_native_comms
-from agent_comms.registry.threads import NativeThread
 
 
 def declared_wire(root):

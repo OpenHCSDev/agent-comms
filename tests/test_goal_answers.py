@@ -1,6 +1,5 @@
 """Goal absence is dispatched before work; a clear never revives a turn's goal."""
 
-from agent_comms.repo import Checkout
 import asyncio
 import os
 import pickle
@@ -11,22 +10,29 @@ from functools import partial
 import pytest
 
 from agent_comms import agent_events as events
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.coordination.errors import Refused
-from agent_comms.owner_protocol import OwnerFailure
-from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
-from agent_comms.goal_attempts import ProviderUsageTotal
-from agent_comms.goal_attempt_phase import FailedAttempt
-from agent_comms.goal_generation import ReadyGeneration
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
-from agent_comms.goal_turn_permit import NoLaunchPermit
-from agent_comms.goals import NoGoal
-from agent_comms.pi_wire import PiUsage
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.goal_turn_permit import NoLaunchPermit
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.owned_turn import TurnGoalAccount
-from agent_comms.turn_terminal import EndedWithoutResult, OperatorStopped
+from agent_comms.execution.owner_protocol import OwnerFailure
+from agent_comms.execution.pi_wire import PiUsage
+from agent_comms.execution.turn_terminal import (
+    EndedWithoutResult,
+    OperatorStopped,
+)
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
+from agent_comms.planning.goal_actions import (
+    ClearGoalAction,
+    SetGoalAction,
+)
+from agent_comms.planning.goal_attempt_phase import FailedAttempt
+from agent_comms.planning.goal_attempts import ProviderUsageTotal
+from agent_comms.planning.goal_generation import ReadyGeneration
+from agent_comms.planning.goals import NoGoal
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
 
 @contextmanager
@@ -79,7 +85,7 @@ def test_clear_during_original_or_origin_turn_does_not_block_missing_goal(
 @pytest.mark.parametrize("clear_goal", [False, True])
 def test_provider_usage_follows_the_declared_goal(copied_goal_bus, original_goal, clear_goal):
     comms = copied_goal_bus
-    from agent_comms.turn_item import ProviderResponseId
+    from agent_comms.execution.turn_item import ProviderResponseId
 
     response_id = ProviderResponseId("resp-a")
     usage = PiUsage.from_wire({"input": 3, "output": 2, "totalTokens": 5})

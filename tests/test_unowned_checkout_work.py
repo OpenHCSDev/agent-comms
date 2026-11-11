@@ -1,65 +1,70 @@
 """Checkout allocation and unpublished-file protection at their storage owner."""
 
 
-from agent_comms.repo import Checkout, RepositoryReads
-from agent_comms.bus import Bus
-
 import asyncio
 import json
 import os
-from contextlib import nullcontext
 import subprocess
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
 
+from agent_comms.comms import Comms, wire
+from agent_comms.coordination.service_passes import ServicePassStore
+from agent_comms.errors import TodoError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.turn_item import (
+    NativeItemId,
+    NativeTurnId,
+)
+from agent_comms.installer.practice import PracticeCopy
+from agent_comms.messaging.bus import Bus
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
+from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.order_runs import MechanicalOrderRun
+from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.orders import (
+    Assignment,
+    PendingProblemOrder,
+    ProgressRead,
+    ReleaseTodo,
+    StrikeTodo,
+    Todo,
+    TodoConflict,
+    VoidStrikeTodo,
+)
+from agent_comms.planning.problem_findings import ExpectedProblem
+from agent_comms.projects.change_report import FileLine
+from agent_comms.projects.checkouts import (
+    Checkout,
+    RepositoryReads,
+)
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.projects.work_branches import UnreadableCheckoutRead, WorkBranches
+from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.storage.locked_store import RootFile
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.task_attachments.team_pings import RulePing, TeamUpdate
+from agent_comms.team.standing import UnownedWheelSpin
 from agent_comms.team.standing_rules import (
     RepeatedTodoChange,
     ServicePassFailing,
     StaleTodoDecision,
     StandingRule,
 )
-from order_scope_fixture import FIX_SCOPE
-from agent_comms.change_report import FileLine
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.team.standing import UnownedWheelSpin
-from agent_comms.team_heartbeat import (
+from agent_comms.team.team_heartbeat import (
     TeamHeartbeat,
     TeamObservation,
 )
-from agent_comms.task_attachments.team_pings import TeamUpdate, RulePing
-from team_heartbeat_fixture import ObservedHeartbeat, capture_frame
-from agent_comms.comms import Comms, wire
-from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.goals import OrderCheck
-from agent_comms.installer.practice import PracticeCopy
-from agent_comms.storage.locked_store import RootFile
-from agent_comms.launch_root import LaunchRoot
-from agent_comms.order_runs import MechanicalOrderRun
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repository_name import RepositoryName
-from agent_comms.storage_rules import StorageRule
-from agent_comms.service_passes import ServicePassStore
-from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.errors import TodoError
-from agent_comms.todos import (
-    Assignment,
-    ExpectedProblem,
-    PendingProblemOrder,
-    ProgressRead,
-    ReleaseTodo,
-    StrikeReason,
-    StrikeTodo,
-    Todo,
-    TodoConflict,
-    VoidStrikeTodo,
-)
-from agent_comms.transcript_events import AssistantTranscript
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.transcript.transcript_events import AssistantTranscript
 from agent_comms.ui_model.teammate_state import TeammateState, Unreadable
-from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
+from order_scope_fixture import FIX_SCOPE
+from team_heartbeat_fixture import ObservedHeartbeat, capture_frame
 
 
 def git(directory: Path, *arguments: str) -> str:

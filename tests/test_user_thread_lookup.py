@@ -1,18 +1,17 @@
 """The stored registry revision owns human identity and UI history uses it."""
 
-from agent_comms.repo import Checkout
-from agent_comms.channel_targets import CommandTarget, ThreadTarget
-
-
 from dataclasses import replace
 
+from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.registry.registry_document import NoUserThread, RegistryDocument
-from agent_comms.thread_identity import UserThreadRole
-from agent_comms.thread_text import GivenThreadText
-from conftest import installed_comms
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_document import RegistryDocument
+from agent_comms.registry.thread_identity import UserThreadRole
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
+from agent_comms.registry.user_thread_lookup import NoUserThread
+from conftest import installed_comms
 
 
 def test_user_answer_follows_revisions_and_stays_out_of_wire_fields(tmp_path):
