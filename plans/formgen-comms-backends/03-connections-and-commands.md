@@ -98,6 +98,18 @@ Destination `toad/client/commands.py`:
 - Preserve Core's action query and execution-time recheck. `ThreadCommand.available` does not grow another permission rule because the Core query already chose its membership.
 - Retain `CommandCatalog`'s preparation-worker execution, command spelling precedence and recognized-command behavior when the target changes. A stale recognized command must not fall through as an agent prompt.
 
+The shared `CommandHost` also declares these concrete command effects; these are planned signatures, not existing APIs:
+
+| Shared call | Textual owner/body retained | Qt owner/body required |
+|---|---|---|
+| `has_sortable_group(channel: str) -> bool` | `TextualCommandHost` returns membership in `workspace_chrome.channels.roster.groups`, the exact predicate from `SortMembersCommand.available` (:190). It does not query Core permission again | `QtCommandHost` queries the corresponding canonical channel-group model, including groups with no allocated row widget |
+| `open_member_sort(channel: str) -> None` | `TextualCommandHost` retains the original group lookup and `run_worker(group.sort_choice.open_sort(), group="sort-order")` from :193–194 | `QtCommandHost` opens the native sort chooser over that group's original sort-choice owner and starts it through phase 2's native operation owner; no second sorting or persistence algorithm |
+| `copy_to_clipboard(text: str) -> None` | Existing application clipboard operation called by `CopyCommand.execute` (:182) | Actual Qt clipboard effect over the same text |
+
+`SortMembersCommand.available` keeps its original one-target condition, then asks `has_sortable_group(names[0])`; `execute` calls `open_member_sort` with that same selected name. The original target/source/current checks in `ContextualCommand.apply` still precede execution. The shared command no longer reaches `workspace_chrome`, a roster widget, `sort_choice` or `run_worker`.
+
+`CommandCatalog.execute` (:75–76) replaces `conversation.app.notify(..., severity="warning")` with the already selected `conversation.app.show_warning(original_text, title="")`. `TextualCommsHost.show_warning` uses the original warning notice and empty/default title; `QtCommsHost` presents the same text/title. Preserve the `CommandContextChanged` catch and `return True`: this recognized stale command must not become agent input. Retyping `Conversation` alone does not remove that native call.
+
 Remove `TargetContext.show_menu`, `command_choices` and `execute_menu` from the low context owner: their existing menu/catalog invocation moves to the native menu owner using the shared CommandCatalog, not a local import back into a higher module. The original context's selection/current/available_actions/acquired bodies remain shared. Remove Textual Region, screen, sidebar and worker code from this module. A native menu operation captures the original view/source before querying shared choices, checks that same view/source when the reply arrives, and invokes the original command. Clipboard, native menu position and opening a sort dialog are native effects; command meaning/availability and the selected target stay shared.
 
 Move the conversation command contract below its native consumers so shared commands/catalogs can annotate it without TYPE_CHECKING or local imports. Its concrete operations are `command_target_context`, `read_command_catalog`, slash-command refresh and the shared host's feedback methods. A native Conversation inherits this contract; a type alias to a native widget is not the repair.
@@ -199,16 +211,17 @@ Traced on Toad main `1421d01d4`, from every `ImportFrom` and every native name i
 | `target_commands.py` | `ToadApp` annotation on `TargetContext` (:37) | the shared `CommandHost` |
 | `target_commands.py` | `show_target_menu` and `Region` in `TargetContext.show_menu.read` (:81) | the native menu owner (§3.2); the low context loses `show_menu`, `command_choices` and `execute_menu` |
 | `target_commands.py` | `Conversation` in `ContextualCommand.apply` (:126) and `TargetSuggestion.apply` (:232) | the shared conversation command contract (§3.2) |
+| `target_commands.py` | Clipboard call in `CopyCommand.execute` (:182); widget group membership in `SortMembersCommand.available` (:190); group lookup and `run_worker(open_sort())` in `execute` (:193–194) | `CommandHost.copy_to_clipboard`, `has_sortable_group` and `open_member_sort`, with the exact native implementations and preserved predicates in §3.2 |
 | `thread_actions.py` | `ToadApp` in `ThreadActions.__init__` (:30) | `ThreadActions` becomes the application capability; the `self.thread_actions = ThreadActions(self)` at `app.py:193` goes (§3.4) |
 | `thread_actions.py` | `CommandDialog` in `ThreadAction.collect.prepare` (:149) | `CommandOrigin.edit` (§3.4); this removes the local import from shared code |
-| `command_catalog.py` | `Conversation` in `CommandCatalog.execute` (:63) | the shared conversation command contract |
+| `command_catalog.py` | `Conversation` in `CommandCatalog.execute` (:63), and `conversation.app.notify(..., severity="warning")` (:75–76) | the shared conversation command contract and `CommsHost.show_warning(original_text, title="")`; retain the recognized-command return in §3.2 |
 | `comms_host.py` | none | moves as it is, minus the ThemedApp and DOMNode bases (§3.1) |
 
 ### Order
 
 1. **Contracts first:** declare `CommandHost`, `CommandOrigin`, the conversation command contract and `TargetActionState`/`NoTargetAction` in their low modules. Each is new, so this is `insert_before_target` / `insert_class_member`.
 2. **Subscriber metaclass:** drop `AbstractHooksMeta` from the two subscriber ABCs.
-3. **Command modules:** retype the `ToadApp` and `Conversation` uses in `target_commands`, `thread_actions` and `command_catalog` to those contracts. Move `show_menu` and the `CommandDialog` call into native members.
+3. **Command modules:** retype the `ToadApp` and `Conversation` uses in `target_commands`, `thread_actions` and `command_catalog` to those contracts. Move `show_menu` and the `CommandDialog` call into native members. Move sort-group lookup/dialog startup and clipboard effects to the selected native host members; replace the catalog's warning call. Read each original method body, not just its annotations, before declaring it native-free.
 4. **Connection host calls:** apply the `comms_root` host-call migration from §3.1.
 5. **Draft:** extract `CommandDraft` from `CommandDialog` and make the dialog inherit it.
 6. **Relocation:** one stage moves every now-pure module and the declarations above to `toad/client/`.
@@ -220,7 +233,7 @@ Steps 1–5 must leave no Textual import in anything step 6 moves.
 All available in the installed NRA:
 - **Step 6:** `relocate_module_to_new_module` for the whole modules (`comms_host`, `comms_subscribers`, `target_commands`, `thread_actions`, `command_catalog`). `relocate_symbols_to_module` moves the `comms_root` family plus `RelationshipReads`, `PreparedChoices` and `CommandText` out of mixed modules. Both rewrite every importer and remove the old binding. `retarget_module_mentions` follows the strings.
 - **Steps 3 and 5:** `replace_function_signature` for the retyped annotations; `replace_function_body` plus `insert_class_member` to move a construction or native call into its native member.
-- **The gap:** `CommandDialog` gaining `CommandDraft` as a parent that owns its draft state, and the native `TextualCommsHost`/`QtCommsHost` capabilities, are extract-new-base. NRA does not have it yet; it is queued with claude-k-nra. Until it lands, each is a labelled `insert_before_target` stage, followed by `promote_class_members_to_ancestor` for the moved draft members.
+- **Authored base extraction:** create `CommandDraft` and the native host capabilities with `insert_before_target`; use `patch_target` to attach each new parent to its original consumer, then rebuild the source index. Only then run `promote_class_members_to_ancestor` on members whose new ancestor relation is proved. Native sort/menu/clipboard bodies move through traced `insert_class_member`/`patch_target` stages, deleting their former consumer bodies in the same batch. A dedicated extract-new-base recipe is absent, but its absence is not a wait: these existing authoring operations provide the bounded route. They do not certify native constructor/MRO or event behavior; the named consumer controls still do.
 
 ### Importers the relocation rewrites
 
