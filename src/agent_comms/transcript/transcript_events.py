@@ -87,8 +87,8 @@ class TranscriptEvent(EventMerge, Dated, DeclaredFamily, affix="Transcript"):
         """Assistant text after this event starts its own event."""
         events.append(text)
 
-    def for_assigned_source(self, source, published: bool) -> tuple[TranscriptEvent, ...]:
-        return (self,)
+    def for_assigned_source(self, source, published: bool) -> TranscriptEvent | None:
+        return self
 
     def assistant_parts(self) -> tuple[str, ...]:
         return ()
@@ -105,8 +105,8 @@ class TranscriptEvent(EventMerge, Dated, DeclaredFamily, affix="Transcript"):
     def with_publications(self, publications: tuple[MessageReference, ...]) -> TranscriptEvent:
         return self
 
-    def for_external_source(self, source: ReadsPublishedMessages) -> tuple[TranscriptEvent, ...]:
-        return (self,)
+    def for_external_source(self, source: ReadsPublishedMessages) -> TranscriptEvent | None:
+        return self
 
     def as_context(self) -> TranscriptEvent:
         """Non-text native evidence retains its own presentation declaration."""
@@ -308,15 +308,15 @@ class UserTranscript(NativeTextTranscript):
     def selected_input(self, selected: tuple[TranscriptEvent, ...]) -> tuple[TranscriptEvent, ...]:
         return selected
 
-    def for_assigned_source(self, source, published: bool) -> tuple[TranscriptEvent, ...]:
+    def for_assigned_source(self, source, published: bool) -> TranscriptEvent | None:
         if not self.routed:
-            return (self,)
+            return self
         requests = self.routing.requests
         originals = source.assignments(requests)
         remaining = tuple(reference for reference in requests if reference not in originals)
         if not remaining:
-            return ()
-        return (replace(self, routing=self.routing.with_requests(remaining)),)
+            return None
+        return replace(self, routing=self.routing.with_requests(remaining))
 
 
 class ModelOutput:
@@ -345,8 +345,8 @@ class AssistantTranscript(ModelOutput, AgentTextTranscript):
     def take_assistant(self, events: list[TranscriptEvent], text: AssistantTranscript) -> None:
         events[-1] = replace(self, text=self.text + text.text)
 
-    def for_assigned_source(self, source, published: bool) -> tuple[TranscriptEvent, ...]:
-        return () if published else (self,)
+    def for_assigned_source(self, source, published: bool) -> TranscriptEvent | None:
+        return None if published else self
 
     def assistant_parts(self) -> tuple[str, ...]:
         return (self.text,)
@@ -354,7 +354,7 @@ class AssistantTranscript(ModelOutput, AgentTextTranscript):
     def with_publications(self, publications: tuple[MessageReference, ...]) -> AssistantTranscript:
         return replace(self, routing=TurnRouting(publications=publications))
 
-    def for_external_source(self, source: ReadsPublishedMessages) -> tuple[TranscriptEvent, ...]:
+    def for_external_source(self, source: ReadsPublishedMessages) -> TranscriptEvent | None:
         references = self.routing.publications
         published = bool(references) and source.sent_messages(references).keys() >= set(references)
         return self.for_assigned_source(source, published)

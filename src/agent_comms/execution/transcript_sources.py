@@ -500,7 +500,7 @@ class TranscriptSource(ReadsPublishedMessages, ResolvesSentReports):
     def projection(self, source: TranscriptSource, routes: TranscriptRoutes):
         def project(records, *, max_records: int, max_bytes: int):
             return ((record, tuple(retained for event in record.events
-                                   for retained in event.for_external_source(source)))
+                                   if (retained := event.for_external_source(source)) is not None))
                     for record in records)
         yield project
 
@@ -1541,7 +1541,7 @@ class AssignedTranscriptSource(TranscriptSource):
         )
 
         return tuple(retained for event in events
-                     for retained in event.for_assigned_source(self, published))
+                     if (retained := event.for_assigned_source(self, published)) is not None)
 
     def events(self, original: Delivered) -> tuple[TextTranscript, ...]:
         if original.sender_lookup == self.recipient.lookup:

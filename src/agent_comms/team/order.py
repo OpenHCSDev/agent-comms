@@ -380,10 +380,11 @@ class OrderFile:
                             traced: FileLine | NoSourceReference) -> list[str]:
         """The document's selected problems and phase must agree. Whether the unit is free
         for them is IncomingWork's decision, made in the assignment's own Todo transaction."""
-        problems = list(self.order.phase.order_refusals(
-            context.ready_phases,
-            self.unplanned_reason,
-        ))
+        problems = []
+        if (phase_refusal := self.order.phase.order_refusals(
+            context.ready_phases, self.unplanned_reason,
+        )) is not None:
+            problems.append(phase_refusal)
         if not group or any(not ProblemNumber.accepts(pid) for pid in group):
             problems.append('problems: fix: supply an array of P<n> IDs, or use order problem')
         problems.extend(target.refusals(self, group, listed))
