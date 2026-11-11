@@ -617,11 +617,18 @@ class CompactRequest(CommsRequest):
             raise ValueError("Compaction instructions are too long")
 
 
-@dataclass(frozen=True)
-class SelectedWriteRequest(CommsRequest):
+@dataclass(frozen=True, kw_only=True)
+class SelectedWriteSource:
+    """Which message and resource a selected write answers: declared once, inherited by
+    both the request (wire input) and the intent (stored plan)."""
+
     source_seq: int
     source_message_id: MessageId
     resource: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class SelectedWriteRequest(SelectedWriteSource, CommsRequest):
     contents: str
 
     def __post_init__(self):
