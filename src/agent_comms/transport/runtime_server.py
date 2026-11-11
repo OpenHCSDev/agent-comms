@@ -426,7 +426,7 @@ class ServedAttachedRuntimeRequest(
 ):
     def require_owner(self, entry: RegistryEntry) -> Thread:
         owner = entry.thread
-        if not owner.process_identity.runs_here() or not entry.status.running:
+        if not owner.process_identity.runs_here() or not entry.status.is_running():
             raise RelationViolationError("This process no longer owns the thread.")
         self.captured.require(owner)
         return owner

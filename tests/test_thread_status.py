@@ -56,7 +56,7 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
         fresh, = comms.views.thread_views()
         assert fresh.status == StoppedThreadStatus()
         assert fresh.presentation.summary == "Stopped"
-        assert not fresh.presentation.status.working
+        assert not fresh.presentation.status.is_working()
     finally:
         if child.poll() is None:
             child.terminate()
@@ -110,7 +110,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
         child.wait(timeout=5)
         expected = status.declaration().registered(thread, before.seen_at(thread.name))
         assert reopened.status("owner") == expected
-        assert comms.agents.is_live(thread.incarnation, reopened.snapshot()) == expected.running
+        assert comms.agents.is_live(thread.incarnation, reopened.snapshot()) == expected.is_running()
         assert comms.registry.store.rows.mark() == saved
     finally:
         child.kill()
@@ -132,7 +132,7 @@ def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path
     registry.heartbeat("owner")
     assert registry.snapshot().owner_generations == before.owner_generations
     assert registry.snapshot().claim_generation('owner') == before.claim_generation('owner')
-    assert registry.status("owner").running
+    assert registry.status("owner").is_running()
 
 
 @pytest.mark.parametrize("status", [StoppedThreadStatus(), ArchivedThreadStatus()])

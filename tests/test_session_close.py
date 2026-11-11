@@ -82,7 +82,7 @@ async def test_close_retires_one_real_subscription_and_permission(tmp_path, monk
             assert await permissions[0] == CancelledOutcome()
         assert not permissions[1].done()
         assert comms.registry.require("alpha").require_process() == retained_owner
-        assert retained_owner.alive() and comms.registry.status("alpha").running
+        assert retained_owner.alive() and comms.registry.status("alpha").is_running()
         assert {session: published.name for session, published in owner.sessions.published.items()} == {"alpha": "alpha", "beta": "beta"}
         assert other.sessions.proxies["alpha"].controller_token != NoControllerToken()
         assert owner._runtime.is_controller("beta", selected["beta"])
@@ -119,7 +119,7 @@ async def test_close_joins_unsent_request_and_capability_requires_claim(tmp_path
                 await asyncio.sleep(0)
         await client.close_session("cold")
         assert request.cancelled() and not proxy._requests
-        assert comms.registry.status("cold").running
+        assert comms.registry.status("cold").is_running()
         with pytest.raises(ConnectionError):
             await proxy.request("clear_queue")
         with pytest.raises(RequestError):

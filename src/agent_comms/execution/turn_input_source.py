@@ -90,7 +90,7 @@ class OrdinaryRunningRule(ReservationRule):
     explanation = "The ordinary owner is no longer running."
 
     def violated(self, check: OrdinaryOwnerCheck) -> bool:
-        return not check.registry.status(check.canonical).running
+        return not check.registry.status(check.canonical).is_running()
 
 
 class OrdinaryClaimRule(ReservationRule):

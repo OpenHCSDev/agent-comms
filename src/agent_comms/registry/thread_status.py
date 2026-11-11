@@ -160,6 +160,9 @@ class ThreadStatus(
     def require_publication(self) -> None:
         raise RelationViolationError("Message sender is not permitted to publish.")
 
+    def is_running(self) -> bool:
+        return False
+
     def require_running(self) -> None:
         raise RelationViolationError("goal owner is not running")
 
@@ -335,6 +338,9 @@ class ProcessThreadStatus(ActiveThreadPresence):
 
 
 class RunningThreadStatus(SelfRenaming, ActiveThreadPresence):
+    def is_running(self) -> bool:
+        return True
+
     @property
     def answers_later(self) -> bool:
         return True

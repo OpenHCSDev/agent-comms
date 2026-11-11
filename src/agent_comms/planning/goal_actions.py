@@ -151,7 +151,7 @@ class GoalPrecondition:
             raise GoalChangedError(thread, self.expected_checkpoint)
         if self.expected_owner is not None and (
             thread.process_identity != self.expected_owner
-            or not ctx.goals.registry.status(thread.name).running
+            or not ctx.goals.registry.status(thread.name).is_running()
         ):
             raise ValueError("The goal owner changed; refresh its state.")
         self.goal_id.require(goal)
