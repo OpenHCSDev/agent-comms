@@ -46,16 +46,12 @@ class AdvancedOrdinal(OrdinalRule):
 
 @dataclass(frozen=True)
 class ExecutionState(CoordinatorVocabulary, LifecycleState, affix="Execution"):
-    unstarted: ClassVar[bool] = False
-
     @classmethod
     def sql_vocabulary(cls) -> dict[str, str]:
         return dict(
             execution_names=cls.sql_values(cls.names()),
             engaged_execution_names=cls.sql_members(cls.members_with(EngagedExecution)),
-            unstarted_execution_names=cls.sql_members(
-                member for member in cls.members_with(cls) if member.unstarted
-            ),
+            unstarted_execution_names=cls.sql_members(cls.members_with(UnstartedExecution)),
             required_attempt_execution_names=cls.sql_members(cls.members_with(AttemptExecution)),
             optional_attempt_execution_names=cls.sql_members(
                 cls.members_with(InterruptedExecution)
@@ -118,8 +114,6 @@ class EngagedExecution:
 
 
 class UnstartedExecution(EngagedExecution, ExecutionState):
-    unstarted = True
-
     @classmethod
     def load(cls, ordinal: int | None) -> ExecutionState:
         if ordinal is not None:
