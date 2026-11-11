@@ -198,8 +198,7 @@ class GoalScheduler:
             # Resume can discover that a paused attempt failed. Publish the
             # reconciled BLOCKED state even when the action returns an error.
             await self.sessions.config.apply_stored_settings(session_id)
-        if action.schedules_goal:
-            await self.schedule_goal(session_id)
+        await action.after_update(self, session_id)
         return updated
 
     async def retry_goal(self, session_id: AcpSessionId, goal_id: GoalId, expected_revision: int) -> Goal:

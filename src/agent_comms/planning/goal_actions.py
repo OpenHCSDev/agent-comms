@@ -190,7 +190,11 @@ class GoalAction[Result: GoalDeclaration](
     def complete_wait(self, ctx: GoalActionContext) -> None:
         """Clear the goal's wait after apply; members that preserve it override."""
         ctx.thread.goal.clear_wait(ctx.goals.waits.clear)
-    schedules_goal: ClassVar[bool] = False
+
+    async def after_update(self, scheduler: object, session_id: object) -> None:
+        """Called after the goal update; members that schedule override."""
+        pass
+
 
     @classmethod
     def model_choices(cls) -> tuple[str, ...]:
@@ -307,7 +311,8 @@ class ActiveGoalAction(
     GoalReportAction, ModelInvocable, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable,
     PeerInvocable,
 ):
-    schedules_goal = True
+    async def after_update(self, scheduler: object, session_id: object) -> None:
+        await scheduler.schedule_goal(session_id)
 
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return ActiveGoal()
