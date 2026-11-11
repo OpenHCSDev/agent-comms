@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.execution_states import DeferredExecution
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
     IdentityConflict,
@@ -560,7 +561,7 @@ class RecoveryMonitorCapability:
                     store.session, outcome, evidence.reason_code, boundary
                 )
                 settled = store.get(execution_id)
-                kind = DeferredRecovery if settled.execution.lifecycle.retry else FailedRecovery
+                kind = DeferredRecovery if isinstance(settled.execution.lifecycle, DeferredExecution) else FailedRecovery
                 RecoveryAudit(
                     execution_id=execution_id,
                     kind=kind,

@@ -46,7 +46,6 @@ class AdvancedOrdinal(OrdinalRule):
 
 @dataclass(frozen=True)
 class ExecutionState(CoordinatorVocabulary, LifecycleState, affix="Execution"):
-    retry: ClassVar[bool] = False
     queued: ClassVar[bool] = False
     unstarted: ClassVar[bool] = False
 
@@ -215,7 +214,6 @@ class InterruptedExecution(AttemptReference, ExecutionState):
 
 
 class DeferredExecution(StartsAttempt, InterruptedExecution):
-    retry = True
 
     def require_retry_start(self, snapshot: RecoverySnapshot) -> None:
         snapshot.previous_attempt.require_retry(snapshot)

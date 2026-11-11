@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 
 from agent_comms.coordination.assignment_states import EngagedAssignment
 from agent_comms.coordination.attempt_start import AttemptStart
+from agent_comms.coordination.execution_states import DeferredExecution
 from agent_comms.coordination.attempt_states import (
     AttemptState,
     TerminalAttempt,
@@ -72,7 +73,7 @@ class AttemptStore(RecoveryReader):
         db, execution = self.session._connection, snapshot.execution
         for obligation in snapshot.obligations:
             obligation.lifecycle.resume_response(self.session, obligation, request.execution_id)
-        if execution.lifecycle.retry:
+        if isinstance(execution.lifecycle, DeferredExecution):
             for assignment in snapshot.assignments:
                 WakeAssignment.update(
                     db,
