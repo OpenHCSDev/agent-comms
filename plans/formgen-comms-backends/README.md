@@ -1,12 +1,14 @@
 # One comms application, Textual and Qt backends
 
-## Work in progress
+## Implementation plan and review scope
 
-Tristan asked for a concrete implementation plan, split into phases that can be followed largely mechanically. P144 owns that planning work. The backend is not being implemented yet.
+Tristan asked for a source-backed implementation plan that can be followed largely mechanically. P144 owns this planning work; this PR implements no backend. Named new classes/methods are implementation targets, not existing APIs or successful native runs claimed here. Exact-head review and implementation checks are distinct.
 
 The old P142 read-through is evidence of the paths inspected, not an implementation recipe. Its Qt checkout was stale: **current Qt main already fixes both the conversion-call mismatch and the duplicated nested path. Neither is implementation work here.**
 
 Target current mains of our own packages. Refresh the sources before deriving a change. The commit IDs in [sources.md](sources.md) record what was checked; they do not pin future development or authorize compatibility wrappers.
+
+The [ownership and import plan](00-ownership-and-imports.md) fixes the package boundaries used by the phases below.
 
 ## Outcome
 
@@ -14,16 +16,16 @@ One application owns connection, conversation, command, history, navigation, for
 
 Existing Core permissions, channel/thread identities, command declarations, message pages and read proofs remain authoritative. Existing ObjectState, Formbridge field declarations, nominal families and Qt infrastructure are extended rather than wrapped by a second model or manager.
 
-## Implementation order being resolved
+## Implementation order
 
-| Phase | Complete change | State of the plan |
+| Phase | Complete change | Selected design for exact-head review |
 |---|---|---|
-| 1. Shared form behavior | Bound fields, concrete/optional/inherited input, validation, finishing, filtering, dirty marking and model following; both native form users migrated | Current declarations and both form paths identified; exact parent/member/caller map still being written |
-| 2. Application runtime and events | Shared event/subscription lifetime and native delivery, with persistent async execution and a defined shutdown order | Current Qt per-operation executor is not a persistent application runtime; Qt-loop option under investigation |
-| 3. Core connection and commands | Original local/remote observation/capture families and command drafts use shared host capabilities without Textual bases | Source flow traced; complete import direction and destination modules not yet admitted |
-| 4. Navigation | Original tab identities, saved order, back/return history and sidebar selection; native focus and widget creation separated | Current logical owners traced; native call closure still needed |
-| 5. Conversations and history | Original send/outcome/page/read-evidence behavior with separate native rendering and actual-paint reports | Wire path traced; renderer-independent representation and full native transcript closure still needed |
-| 6. Qt application and parity | Qt composes the shared owners, connects its existing widgets and uses the same Core requests; Textual continues using those owners | Starts after the shared families and runtime are settled; no separate app prototype |
+| [1. Shared form behavior](01-fields-and-forms.md) | Bound fields, literal/optional/inherited input, validation, finishing, filtering and model following | One shared selector/field-only constructor; native field/write/view/creation families and ordered authoring stages |
+| [2. Application runtime and events](02-runtime-and-publications.md) | Shared subscriptions/deliveries with native scheduling and shutdown | Receiver-scoped Qt queue/input barriers, native operation owners and qasync context/handle/executor fixes |
+| [3. Core connection and commands](03-connections-and-commands.md) | Original local/remote observation/capture and command drafts | Host signatures, native touch points and importer closure in the phase document |
+| [4. Navigation](04-navigation-and-selection.md) | Original identities/order/back/return/source lifetime with native views | Native touch points, ordering and importer closure; no second native roster |
+| [5. Conversations and history](05-history-and-read-evidence.md) | Original submission/page/read proof with separate rendering | Member-level fragment/geometry/paint boundary; renderer-valued methods stay native; exact-head source review applies |
+| [6. Preferences and native application](06-preferences-and-native-application.md) | One client application, original concrete schema and native entries | Shared store/effects, common Click startup, native constructor order, full-stack Qt extra and original PTY/Neovim owners |
 
 Phases are complete caller-family changes, not individual method moves. Forms and runtime investigations can be independent, but their commits must not leave two semantic implementations alive. Later phases may be combined where their source/MRO proof says they must land together.
 
@@ -31,7 +33,7 @@ Phases are complete caller-family changes, not individual method moves. Forms an
 
 The planning work fills these details from source; they are not homework passed to the implementer:
 
-- The behavior and admitted cases, including failures, late replies, closure and independent future changes.
+- The behavior and supported cases, including failures, late replies, closing views and independent future changes.
 - Existing determining declarations, exact methods and every consumer that changes.
 - Destination modules, public parents, concrete members, capability crossings, constructor order and important lookup winners.
 - Ordered mechanical changes, original bodies to move, caller/import changes and the superseded path to delete.
@@ -40,7 +42,11 @@ The planning work fills these details from source; they are not homework passed 
 - Package declarations and data-reader consequences, if any. No version negotiation between our own components.
 - A finish that can be checked from the code and behavior, rather than a count of files or green syntax checks.
 
-A phase is ready only when its remaining work is execution and verification. An unresolved architectural decision is named beside that phase and prevents a ready claim. A change in main triggers a focused recheck of affected declarations, not a frozen old package set or a ritual full audit after every edit.
+## Completion contract
+
+A phase plan is ready only when its remaining work is execution and verification. An unresolved architectural decision is named beside that phase and prevents a ready claim. P144's completion check is an exact-head source-backed walk of the instructions: original declarations, destination/bases/signatures, every caller/import/deletion, actual NRA operation preflights or bounded refusals, and concrete test/native-run recipes. File counts and a ready label cannot replace that walk.
+
+Implementation completion is separate: the written moves, code and native checks must actually run before the backend is reported working. Those checks remain required; running an unwritten backend is not a prerequisite for completing this documentation-only task. A change in main triggers a focused recheck of affected declarations, not a frozen old package set or a ritual full audit after every edit. Documentation checkpoints land on main while the planning work continues.
 
 ## Settled boundaries
 
@@ -61,7 +67,3 @@ Objects keep their own state. Capabilities compose through multiple inheritance 
 - A draft survives catalog refresh; stale replies cannot overwrite it, and editing clears confirmation.
 - Empty plain text, an optional absence, an inherited value and incomplete native text are not merged simply because a widget currently displays them similarly.
 - Saved tab scope/order and settings have real readers. Identify those readers before changing durable formats.
-
-## Planning completion
-
-P144 finishes when the phase documents have concrete ownership/caller/deletion/check lists, current-main findings have replaced the stale assumptions, the runtime and shared-field decisions are resolved, and a peer can follow the first phase without inventing an architecture. Source inspection and proof limits remain explicit. Documentation checkpoints land on main while that work continues.
