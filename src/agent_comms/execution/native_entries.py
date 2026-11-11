@@ -114,7 +114,8 @@ class RecordedEntry(PiPayload):
 
     id: str | NoEntryId = NoEntryId()
     parent_id: Annotated[str | RootEntry, WireName("parentId")] = RootEntry()
-    is_message: ClassVar[bool] = False
+    def ends_source_import(self) -> bool:
+        return False
     assistant_message: ClassVar[bool] = False
     messages: ClassVar[tuple[PiMessage, ...]] = ()
     final_reply: ClassVar[bool] = False
@@ -184,7 +185,7 @@ class NativeEntry(TaggedPayload, RecordedEntry, DeclaredFamily, affix="Entry"):
 
     @property
     def annotation_id(self) -> FreshNativeId | NoEntryId:
-        return self.id if self.is_message else NoEntryId()
+        return NoEntryId()
 
     def routing_in(self, routes: _SessionRoutes) -> Routing:
         return self.id.routing_in(routes)
@@ -693,7 +694,13 @@ class MessageEntry(NativeEntry):
         return None
 
     message: PiMessage
-    is_message = True
+
+    def ends_source_import(self) -> bool:
+        return True
+
+    @property
+    def annotation_id(self) -> FreshNativeId | NoEntryId:
+        return self.id
 
     @property
     def messages(self):
