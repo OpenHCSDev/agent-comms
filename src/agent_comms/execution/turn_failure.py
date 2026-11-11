@@ -29,7 +29,9 @@ from agent_comms.planning.attempt_resolution import RecordedResolution
 class TurnFailure(DeclaredFamily):
     text: str
     # A failure of the model request itself; Pi re-sending that request ends it.
-    ends_with_request_retry: ClassVar[bool] = False
+    def end_request_failure(self, output: object) -> None:
+        """A failure that doesn't end with a retry keeps its state."""
+        pass
     # Whether a turn ending with this failure is clean; only the absent failure is.
     clean: ClassVar[bool] = False
 
@@ -176,7 +178,8 @@ class ModelRequestFailed(TurnFailure):
     def raise_native[Proof](self, proof: Proof, model: SelectedModel) -> None:
         raise NativePiTerminalFailure[Proof](self.text, proof, model, self)
 
-    ends_with_request_retry = True
+    def end_request_failure(self, output: object) -> None:
+        output.failure = NoTurnFailure()
 
 
 class RetryableProviderFailure:
