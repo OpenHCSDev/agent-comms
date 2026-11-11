@@ -221,7 +221,7 @@ class BoundedStoreReadBudget(StoreReadBudget):
     maximum: int
 
     def __post_init__(self) -> None:
-        if type(self.maximum) is not int or self.maximum < 0:
+        if self.maximum < 0:
             raise ValueError("bus read cap must be a nonnegative integer")
 
     def check(self, path: Path) -> None:

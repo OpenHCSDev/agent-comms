@@ -76,8 +76,6 @@ class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, StoredThr
             object.__setattr__(self, "parent", ChannelTarget.normalize_name(self.parent))
         if not isinstance(self.order, type) or self.order not in ThreadSort.members_with(ThreadSort):
             raise ValueError("Channel ordering must be a declared ThreadSort.")
-        if not isinstance(self.archived, bool) or not isinstance(self.any_mode, bool):
-            raise ValueError("Channel presentation flags must be boolean.")
         if self.any_mode and not self.exact:
             raise ValueError("Only exact tag channels can include member activity.")
         if self.parent is not None:
