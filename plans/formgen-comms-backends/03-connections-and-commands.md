@@ -94,7 +94,7 @@ The native draft-view contract draws confirmation, enables apply, repaints affec
 
 ### Provider login is not a no-op
 
-Current `CatalogFieldSelection.connect_provider` suspends Textual and calls Core `execution/login.py:run_login`; that launches Pi's interactive native login UI with inherited terminal stdio. A plain Qt subprocess without a terminal does not preserve that behavior. Keep this as a required native login effect, including cancel/failure, catalog refresh and the same configured native package. The exact Qt terminal/auth presentation is still an open part of this phase; do not omit the button or pretend `run_login` alone supplies a Qt view.
+[Phase 6's login section](06-preferences-and-native-application.md#66-login-retain-the-actual-request-and-readiness-owner) records the three actual login paths, original request/readiness owners and required native checks. The command catalogue's provider action is part of this complete command flow, not an optional button to omit while the interactive Qt terminal boundary remains unfinished.
 
 ## 3.4 Execution remains one shared operation
 

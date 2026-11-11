@@ -96,9 +96,31 @@ The final native application base lists must compose the shared host, connection
 
 Package optional-backend declarations, installer selection and Python-3.14 Qt-loop support are still unresolved. Do not claim a Qt-only install without Textual while Textual is a mandatory dependency. Do not add an undeclared package to an interpreter to make an import check pass. The existing installation/carry owners must verify that package change before live installation.
 
-Provider login presentation is also unfinished: trace the original provider request/result and browser/input flow before assigning native dialogs. No second login authority or unapproved paid-provider test belongs here.
+Provider login has three distinct existing paths, traced below. Their native terminal/picker implementation is still unfinished; no second login authority or unapproved paid-provider test belongs here.
 
-## 6.6 Ordered work and verification
+## 6.6 Login: retain the actual request and readiness owner
+
+Do not merge these operations because all three involve signing in:
+
+| Current path | Determining owner | Native presentation |
+|---|---|---|
+| Core command catalogue's Connect provider | `CatalogFieldSelection.connect_provider`, `widgets/comms_command_dialog.py:120–133`, calls Core `execution/login.py:run_login` | Textual currently suspends the terminal while the original installed Pi login UI runs. On exit zero, refresh catalogues with the original command arguments only if the selection is still attached; otherwise report the nonzero result and restore focus only on the live control |
+| An ACP agent's advertised authentication method | `Conversation.provider_login`, `widgets/conversation.py:1386–1444`; `AgentSession.authenticate/reconnect_after_login` | Choose from that captured agent's advertised methods. Terminal methods run their original configured command/args/env/cwd in ActionModal; other methods use the original ACP authenticate request |
+| Connector browser approval | Core `transport/connector.py:ApprovalSender` and `Connector.request_approval` | A QuestionKind message carries the bearer link to Core's durable human identity. The view displays the original message; it neither grants the request nor impersonates an agent to send it |
+
+For the first path, `run_login` uses `ConfigOptions.configured().package`, strips thread launch state and runs the login control beside that package's original CLI. It supplies its own process environment and returns the actual process exit status. A Qt implementation must retain that installed-package selection rather than find another `pi` on PATH or copy its provider-authentication code.
+
+For ACP terminal authentication, preserve the original sequence: run the chosen method; return on nonzero exit; wait until the original turn, submission queue and prompt-in-flight work permit restart; disable the prompt; call the session agent's `prepare_login`; then `reconnect_after_login`. The latter explicitly raises `LoginNotReady` unless the restarted session is ready. A zero terminal exit alone never displays login success. `CoordinationIdentity.prepare_login` preserves its existing history, unlike the other source's preparation callback; keep that family dispatch.
+
+For nonterminal ACP authentication, `AgentSession.authenticate` retains `ClientSessionRequest` authority checks before the RPC, after it and after forced initialization. The UI cannot substitute a catalogue refresh for those checks. Picker cancellation restores focus without authenticating. Final cleanup re-enables only the remaining live native controls, under the phase-2 view/task lifetime.
+
+The planned shared owner is `toad/client/provider_login.py`, containing the original selection/result/restart algorithm over the shared session and command owners, not a second provider registry. Textual retains ContextMenu, ActionModal, terminal suspension, feedback and focus. Qt supplies its actual picker and an interactive terminal execution surface; capturing stdout in a QLabel is not equivalent to a login program with terminal input. **The exact Qt terminal owner and shared host signatures remain a named planning gap.** Do not invent an environment-variable switch, replay an authentication call with an unknown result or declare native login working from an exit-code mock.
+
+The connector source was read on main `e44c874924f6383904f9c18ba2d91ea04faa249e`: `ApprovalSender` at `:461` owns service identity; `request_approval` at `:838–849` sends through that identity to the human owner. This is source evidence, not a native Qt approval run. The current approval notice does not require an agent called claude-ai. A test that declares that agent itself does not exercise its absence.
+
+Existing Toad consumer: `tests/textual/test_catalog_command_actions.py`; session-change request controls include `tests/model/test_calls_pending_across_a_session_change.py`. Add shared controls for no advertised methods, cancelled picker, terminal exit failure, zero exit followed by a failed handshake, session replacement during RPC/login and late catalogue replies. Native checks must exercise actual interactive input, cancellation, focus and close while the login surface is open, using the configured provider only. Connector approval is checked separately against a bus without the borrowed agent name; it does not establish provider login or consume a model response.
+
+## 6.7 Ordered work and verification
 
 1. Complete the native-dependent choice/effect/host and CLI class map above. Keep each stored identity and original algorithm; name any required answer a proposed merge would lose (paper1 Theorem 4.8; paper4 Theorem 2.6).
 2. Use NRA binding-removing relocation for pure declarations, and member promotion only where its existing-ancestor proof applies. The completed form scan provides no automatic recipe for these preference moves. Unsupported native descriptor/metaclass/import moves are explicit NRA gaps, not a hand-written codemod exemption.
