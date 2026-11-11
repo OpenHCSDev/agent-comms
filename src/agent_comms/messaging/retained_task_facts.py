@@ -10,40 +10,16 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from agent_comms import input_attempt
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.input_lookup import InputLookup
 from agent_comms.messaging.message_reads import ConversationRead
 from agent_comms.messaging.message_reference import MessageReference
-import agent_comms.messaging.messages as messages
-from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.messaging.task_fact_base import ExactTaskFact
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.registry.task_owner import TaskOwner
 from agent_comms.registry.task_registry import TaskRegistry
 from agent_comms.registry.thread_identity import ThreadIncarnation
-
-
-class ExactTaskFact(DeclaredFamily, affix="TaskFact"):
-    """Membership belongs to each determining source, not the packing policy."""
-
-    def authored_sources(self) -> tuple[messages.Message, ...]:
-        return ()
-
-    def wire_sources(self) -> tuple[messages.Message, ...]:
-        return ()
-
-    def original_sources(self):
-        return tuple((source.reference, source) for source in self.wire_sources())
-
-    def input_sources(self) -> tuple[input_attempt.StoredInput, ...]:
-        return ()
-
-    def for_tasks(self, current: frozenset[MessageReference]) -> ExactTaskFact:
-        return self
-
-    def for_owner(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> ExactTaskFact:
-        return self
 
 
 @dataclass(frozen=True)
