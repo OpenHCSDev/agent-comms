@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from agent_comms.execution.input_key import InputKey
 from agent_comms.execution.original_inputs import OriginalInputs
 from agent_comms.input_attempt import StoredInput
-from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget
 from agent_comms.messaging.messages import Message
 from agent_comms.registry.thread_creation import ThreadCreationSource
 
@@ -49,7 +49,7 @@ class InputBatch(ABC):
         channels = {
             origin.seq: origin
             for origin in origins
-            if origin.seq > 0 and CommandTarget.named(origin.target).batchable
+            if origin.seq > 0 and isinstance(CommandTarget.named(origin.target), ChannelTarget)
         }
         if len(channels) < 2 or tuple(channels.values()) != origins:
             return single

@@ -249,7 +249,6 @@ class NamedTarget(CommandTarget):
     name: str = field()
     sigil: ClassVar[str]
     route: ClassVar[ReplyRoute]
-    batchable = False
 
     @property
     def direct_names(self) -> tuple[str, ...]:
@@ -523,7 +522,6 @@ class ChannelTarget(NamedTarget):
         return views.channel_history(self, worktree=project)
 
     needs_channel_state = True
-    batchable = True
     kind = "channel"
     default_audience = MessageAudience.COLLECTIVE
 
