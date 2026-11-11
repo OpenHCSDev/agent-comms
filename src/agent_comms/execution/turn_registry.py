@@ -11,8 +11,13 @@ class TurnRegistry[Record, Declaration, Locked](ABC):
     @abstractmethod
     def __init__(self, path: Path) -> None: ...
 
+    def read_turn(self, held: Record) -> Declaration:
+        turn, = self.read_turns((held,))
+        return turn
+
     @abstractmethod
-    def read_turn(self, held: Record) -> Declaration: ...
+    def read_turns(self, held: tuple[Record, ...]) -> tuple[Declaration, ...]:
+        """Each held turn, in order, under one registry copy."""
 
     @abstractmethod
     def change_turn[Result](

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from functools import cached_property
@@ -23,7 +24,7 @@ from agent_comms.errors import (
     UnresolvedAttemptError,
 )
 from agent_comms.execution.native_input_owner import GoalLaunchOwner
-from agent_comms.execution.turn_lease import ActiveTurn, TurnDeclaration
+from agent_comms.execution.turn_lease import ActiveTurn, StoredTurnRecord, TurnDeclaration, TurnRecord
 from agent_comms.input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     InputDeliveryScope,
@@ -92,7 +93,7 @@ from agent_comms.planning.orders import (
     TodoStore,
 )
 from agent_comms.planning.owner_requests import NewestOpenRequest, RequestDirective
-from agent_comms.registry.agent_activity import AgentActivity
+from agent_comms.registry.agent_activity import ActivityAnswers, AgentActivity
 from agent_comms.registry.registry_document import RegistryDocument, RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import NativeThread, Thread
@@ -115,11 +116,12 @@ class GoalExecutionSource(
     evidence: GoalFailureEvidence[FailedTurnEvidence]
     owner: Thread
     snapshot: RegistrySnapshot
-    agents: AgentActivity
+    agents: ActivityAnswers
+    turns: Mapping[StoredTurnRecord, TurnDeclaration]
 
     @cached_property
     def turn(self) -> TurnDeclaration:
-        return self.owner.turn_record.read()
+        return self.owner.turn_record.read_in(self.turns)
 
     @cached_property
     def owner_alive(self) -> bool:
@@ -235,7 +237,7 @@ class Goals(
     MessageDirections[Message],
     GoalStoreSource[GoalAttemptStore],
     GoalReadyGrantSource[NativeThread, Generation],
-    GoalSnapshots[Thread, GoalSnapshot, RegistrySnapshot],
+    GoalSnapshots[Thread, GoalSnapshot, RegistrySnapshot, ActivityAnswers],
 ):
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
         """Create a teammate's child goal from its parent's active work."""
@@ -415,19 +417,35 @@ class Goals(
 
     def snapshot_for(self, owner: Thread, snapshot: RegistrySnapshot,
                      wait: Callable[[GoalDeclaration], GoalWait]) -> GoalSnapshot:
-        """All goal readers build the same source from the original records."""
+        snapshot_of_owner, = self.snapshots_for((owner,), snapshot, wait, self.agents)
+        return snapshot_of_owner
+
+    def snapshots_for(self, owners: Iterable[Thread], snapshot: RegistrySnapshot,
+                      wait: Callable[[GoalDeclaration], GoalWait],
+                      activity: ActivityAnswers) -> tuple[GoalSnapshot, ...]:
+        """All goal readers build the same source from the original records. Every owner's
+        generation and failure evidence come from one cut of the goal store; permit
+        attestation keeps GoalAttemptStore's independent fresh readback."""
+        owners = tuple(owners)
+        if not any(owner.goal for owner in owners):
+            return tuple(GoalSnapshot(owner.goal, IdleGoalExecution()) for owner in owners)
+        turns = TurnRecord.read_all(owner.turn_record for owner in owners if owner.goal)
+        with self.open_goal_store().reader_snapshot() as connection:
+            return tuple(self._snapshot_in(connection, owner, snapshot, wait, activity, turns)
+                         for owner in owners)
+
+    @staticmethod
+    def _snapshot_in(connection: sqlite3.Connection, owner: Thread, snapshot: RegistrySnapshot,
+                     wait: Callable[[GoalDeclaration], GoalWait], activity: ActivityAnswers,
+                     turns: Mapping[StoredTurnRecord, TurnDeclaration]) -> GoalSnapshot:
         for goal in owner.goal:
-            store = self.open_goal_store()
-            # Generation and its failure evidence come from one cut. Permit
-            # attestation keeps GoalAttemptStore's independent fresh readback.
-            with store.reader_snapshot() as connection:
-                generation = Generation.require_in(connection, goal.id)
-                source = GoalExecutionSource(
-                    goal=goal, wait=wait(goal), generation=generation,
-                    evidence=generation.lifecycle.evidence(connection, generation),
-                    owner=owner, snapshot=snapshot, agents=self.agents,
-                )
-                return GoalSnapshot(goal, source.execution())
+            generation = Generation.require_in(connection, goal.id)
+            source = GoalExecutionSource(
+                goal=goal, wait=wait(goal), generation=generation,
+                evidence=generation.lifecycle.evidence(connection, generation),
+                owner=owner, snapshot=snapshot, agents=activity, turns=turns,
+            )
+            return GoalSnapshot(goal, source.execution())
         return GoalSnapshot(owner.goal, IdleGoalExecution())
 
     def direct(self, name: str, message: Message) -> None:

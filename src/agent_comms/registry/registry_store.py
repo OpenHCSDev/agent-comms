@@ -458,11 +458,12 @@ class RegistryStore(
         source, = self._copy_sources(self)
         return self._decode_snapshot(source)
 
-    def read_turn(self, held: StoredTurnRecord) -> TurnDeclaration:
-        """Keep a named turn from retiring during capture, then decode after release."""
-        registry, turn = self._copy_sources(self, held.writers)
-        current = self._decode_snapshot(registry).current_turn(held)
-        return current.read_copied(held, turn)
+    def read_turns(self, held: tuple[StoredTurnRecord, ...]) -> tuple[TurnDeclaration, ...]:
+        """Keep named turns from retiring during capture, then decode after release."""
+        registry, *turns = self._copy_sources(self, *(record.writers for record in held))
+        decoded = self._decode_snapshot(registry)
+        return tuple(decoded.current_turn(record).read_copied(record, turn)
+                     for record, turn in zip(held, turns, strict=True))
 
     def change_turn[Result](
         self, record: StoredTurnRecord, change: Callable[[LockedTurn], Result],
