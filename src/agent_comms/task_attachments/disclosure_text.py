@@ -18,6 +18,7 @@ from agent_comms.nominal.field_codec import (
     FieldCodec,
     FieldPlan,
     PublicationExclude,
+    TransientFieldPlan,
     ValueDescription,
     ViewColumn,
     ViewExclusion,
@@ -340,7 +341,7 @@ class RecordText(StructuredText):
     @cached_property
     def fields(self) -> tuple[FieldPlan, ...]:
         """Identity-only summaries never remove original detail children."""
-        return tuple(plan for plan in FieldCodec.field_plans(type(self.value)) if plan.records)
+        return tuple(plan for plan in FieldCodec.field_plans(type(self.value)) if not isinstance(plan, TransientFieldPlan))
 
     @cached_property
     def _field_values(self) -> dict[str, DisclosureText]:

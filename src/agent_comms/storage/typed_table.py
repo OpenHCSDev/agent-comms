@@ -55,6 +55,7 @@ from agent_comms.nominal.field_codec import (
     FieldPlan,
     FieldRepresentation,
     MalformedRecord,
+    TransientFieldPlan,
     NominalText,
     NullMember,
     PathText,
@@ -644,7 +645,7 @@ class TypedRow(SqlProjection):
     def _fields(cls: type[TypedRow]) -> tuple[_Field, ...]:
         if not cls.__dataclass_params__.frozen:
             raise TypeError("SQLite row declarations must be frozen dataclasses")
-        return tuple(_Field.for_field(plan) for plan in FieldCodec.field_plans(cls) if plan.records)
+        return tuple(_Field.for_field(plan) for plan in FieldCodec.field_plans(cls) if not isinstance(plan, TransientFieldPlan))
 
     @classmethod
     def column_projection(cls) -> dict[str, str]:
