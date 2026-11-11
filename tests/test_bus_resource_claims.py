@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.messaging.bus_record_builder import RecordBuilder
+from agent_comms.messaging.messages import RecordBuilder
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.errors import CommittedMessageError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity
