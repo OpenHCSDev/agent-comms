@@ -42,9 +42,9 @@ def test_every_discovery_outcome_crosses_the_existing_wire():
     assert FieldCodec.decode(TailnetBusesRead, FieldCodec.encode(result)) == result
 
 
-def test_the_selected_core_performs_discovery(comms, monkeypatch):
+async def test_the_selected_core_performs_discovery(local_core, monkeypatch):
     monkeypatch.setattr(TailnetBuses, "seen", classmethod(lambda cls: (BUS,)))
-    assert LocalCoreAccess(comms).call(CommsTailnetBusesTool()) == TailnetBusesRead((BUS,))
+    assert await local_core.call(CommsTailnetBusesTool()) == TailnetBusesRead((BUS,))
 
 
 def test_a_read_only_ui_cannot_issue_profiles(comms, monkeypatch):

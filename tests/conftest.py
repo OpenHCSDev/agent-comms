@@ -1,6 +1,7 @@
 """Shared fixtures: an isolated Comms wire per test."""
 
 
+from dataclasses import dataclass
 import asyncio
 import fcntl
 import json
@@ -71,7 +72,9 @@ from agent_comms.team.order import Team
 from agent_comms.team.pi_rule_gate import PiRedeal, PiRuleGate
 from agent_comms.team.rule_deal import ReadSpan, RuleDeal, SessionAudit, StartedDeal
 from agent_comms.transport.native_tool_transport import ToolListener
+from agent_comms.transport.core_access import LocalCoreAccess
 from agent_comms.transport.tool_caller import PeerCaller
+from agent_comms.ui_model.observation import ObservationProcess
 from agent_comms.transport.tool_declaration import NoToolRecord, ToolDeclaration
 from agent_comms_hooks.watch import WatchRecord
 from source_programs import SourcePrograms
@@ -698,3 +701,25 @@ def team_session(tmp_path, monkeypatch, team_bus):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     WatchClaim("s").enrol(WatchRecord("claude-code", str(team_bus.root), (), tmp_path / "state"))
     return team_bus
+
+
+@dataclass(frozen=True)
+class UiCoreReads:
+    """A UI's own Core calls, issued the way a UI issues them: from its thread, never from
+    the delivery loop, which `ObserverSameLoop` refuses because it would await its own answer.
+
+    Nineteen tests built `LocalCoreAccess(comms)` by hand, so the day a local read needed the
+    child serving this root, each of them was its own edit and its own chance to forget the
+    rule. One owner holds both here.
+    """
+
+    access: LocalCoreAccess
+
+    async def call[R](self, request):
+        return await asyncio.to_thread(self.access.call, request)
+
+
+@pytest.fixture
+async def local_core(comms: Comms) -> AsyncIterator[UiCoreReads]:
+    async with ObservationProcess.awaited(comms.route) as reads:
+        yield UiCoreReads(LocalCoreAccess(comms, reads))
