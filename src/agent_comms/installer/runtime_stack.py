@@ -43,6 +43,7 @@ from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_home import RuntimeHome
 from agent_comms.installer.runtime_resolution import (
     ConsoleScriptPackage,
+    CorePackage,
     ProjectMetadata,
     ResolvedLock,
     RuntimePackage,
@@ -109,21 +110,25 @@ class RuntimeStack(Extendable):
             os.replace(fetched, self.uv)
 
     def sync_test_environment(self, checkout: Checkout) -> None:
-        """The live checkout's test interpreter follows the stack this install just resolved.
+        """Use this runtime's dependencies and the live checkout's editable Core.
 
-        On 2026-11-10 pyproject declared immutables without a relock: every order's
-        interpreter failed at import, and the rule forbade the one sync that would have
-        fixed it. Syncing the checkout's own lock fixed that and bought a quieter version of
-        the same defect, because `resolve` refreshes the stack and nothing refreshes that
-        one: the test interpreter spent days on a NominalRefactorAdvisor whose own gate.py
-        and json_reports.py disagreed, while the stack tracked that package's main. Two
-        resolutions of our own packages is one too many, so the test interpreter reads the
-        resolution the runtime is built from and the other is consulted by nobody.
+        The runtime is already qualified. Export its installed sources rather than solve
+        the checkout's stale lock again. This also restores the outgoing package set on
+        rollback, when this stack's source tree still contains the incoming lock.
         """
-        self.commands.run(
-            self.uv, "sync", "--project", "stack", "--locked", "--all-extras",
-            cwd=checkout.path,
-            env={**os.environ, "UV_PROJECT_ENVIRONMENT": str(checkout.test_environment)})
+        development = LaunchRuntime.at_prefix(checkout.test_environment)
+        with tempfile.TemporaryDirectory(dir=self.uv.parent, prefix=".development-") as temporary:
+            requirements = Path(temporary) / "requirements.txt"
+            requirements.write_text(
+                self.commands.run(self.uv, "pip", "freeze", "--python", self.python,
+                                  "--exclude", CorePackage.distribution, cwd=checkout.path)
+                + f"\n-e {checkout.resolved().path.as_uri()}\n")
+            self.commands.run(self.uv, "venv", "--python", self.python,
+                              "--allow-existing", development.prefix, cwd=checkout.path)
+            self.commands.run(self.uv, "pip", "sync", "--python", development.interpreter,
+                              requirements, cwd=checkout.path)
+            self.commands.run(self.uv, "pip", "check", "--python", development.interpreter,
+                              cwd=checkout.path)
 
     def resolve(self) -> None:
         """Refresh every package the lock records as tracking a branch, transitive ones
