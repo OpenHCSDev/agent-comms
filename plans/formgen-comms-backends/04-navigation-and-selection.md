@@ -1,6 +1,6 @@
 # 4. Tabs, navigation and sidebar selection
 
-**Planning status:** the logical owners and transition order below are decided. Exact native factory/base changes and the complete caller/import list still need finishing. This phase is not yet a finished execution recipe.
+**Planning status:** logical owners, transition order, every native touch point and the complete importer list are traced on Toad main `1421d01d4` (§4.8). One operation gap is bounded there: splitting a class into a shared parent and a native child needs NRA's extract-new-base operation, which is queued in NRA (claude-k-nra). Until it lands, that one step is a labelled `patch_target` stage, not an invented recipe.
 
 ## Outcome
 
@@ -104,3 +104,63 @@ Delete moved native factories/imports from the shared modules and migrate all or
 Existing tests to preserve: `tests/model/test_tab_scopes.py`, `test_tab_visit_history.py`; `tests/app/test_tab_order.py`, `test_tab_history.py`, `test_channel_tab_sharing.py`; native restore/parking tests `test_stale_tab_restore.py`, `test_parked_tab_arrives_progressively.py`, `test_parked_session_tab_arrives_progressively.py`, plus `test_hidden_session_retirement.py` and command/remote navigation tests.
 
 Add equivalent native Qt controls for rapid repeated Back/Forward, open-before-mount, shared channel tab, user-authored title, old thread birth replaced under the same name, source change during preparation, close during SQLite write, selected/dependent close, virtualized sidebar selection and scroll restore after layout. Keep original source/read objects in those tests; do not build a private-state fixture that bypasses navigation.
+
+## 4.8 Execution map
+
+Traced on Toad main `1421d01d4`, from every `ImportFrom` in `src/` and every native name inside the modules below. Recheck only the declarations a later main commit touches.
+
+### What stops each module from being shared today
+
+Every native name inside a module that §4.1 moves to `toad/client/`, with the method that uses it and where that use goes:
+
+| Module | Native use (file:line, method) | Goes to |
+|---|---|---|
+| `tab_order.py` | none | moves as it is |
+| `tab_identity/` (`__init__`, `kinds`, `history_origin`) | none directly; `__init__.py:13–14` imports `SessionEntry` and `SessionNavigation`, which are native today | moves last, after those two are clean |
+| `session_tracker.py` | `textual.content.Content` returned by `OpenTab.label` (:39–40) and `ThreadTab.label` (:77–78) | shared `label` returns the existing title, unread and row data; the Textual tab renderer (`widgets/session_tabs.py`, the only native reader via its import at :39) builds `Content` from it |
+| `session_scope.py` | `SessionOrigin(metaclass=AbstractHooksMeta)` (:27); `SessionScope.COMMANDS: ClassVar[set[type[Provider]]]` (:57); `SessionScope.sidebars() -> tuple[SideBar, ...]` (:100) | shared `SessionOrigin` and `SessionScope` become plain ABCs; `COMMANDS` and `sidebars` move to `TextualSessionScope`, whose ToadNode base already brings the Textual metaclass |
+| `session_entry.py` | `MainScreen` as annotation: `SessionEntry.source` (:73), `NativeSessionEntry.__init__` factory (:102), `__call__` (:116), `source` (:126). Constructions: `CommsScreen(...)` in `HistorySessionEntry.__call__` (:228), `FilePreviewScreen(...)` in `PreviewSessionEntry.__call__` (:277), `FilePreview(...)` in `PreviewSessionEntry.content` (:281), `AcpLogPreview(...)` in `AcpLogSessionEntry.content` (:301) | annotations become the shared `SessionScope` contract; each construction becomes a member of that entry's native subclass (`TextualHistorySessionEntry`, `TextualPreviewSessionEntry`, `TextualAcpLogSessionEntry`), chosen by the app's declared entry family |
+| `session_navigation.py` | `MainScreen` as annotation in `source` (:137), `bind_opened` (:196), `new` (:260), `native_entry` (:272); `MainScreen(...)` constructed in `launch_entry` (:357) and `start_agent_session` (:399); `reveal` (:100–110) queries `CommsSidebar`, `SideBar`, `SideBarCollapsible` | annotations become `SessionScope`; the two constructions go through the native entry factory; `reveal` keeps its session choice (`ordered_sessions[-1]`, the notify) and calls a native `reveal_sidebar()` for the widget queries |
+| `workspace_sessions.py` | `sidebars()` on `WorkspaceSource` (:67), `DetachedWorkspaceSource` (:97), `BoundWorkspaceSource` (:141); `WorkspaceHost.workspace_screen: WorkspaceScreen` (:192); resident `WelcomeScreen` (:201); `query_one(SessionHost)` and `mount` in `prepare` (:226); `after_input()` in `select` (:239, :250) | the sidebar family moves to the Textual workspace source; the host annotation names the shared host contract; the native app supplies its resident views; `prepare` calls native `mount_view`; `select` calls native `yield_past_input` at both points, keeping the §4.5 order |
+| `sidebar_navigation.py` | `menu_context(row: CommsRow)` (:71) | the parameter becomes the row's typed target; `CommsRow` stays in `widgets/comms_sidebar.py`, its only importer (:71) |
+
+### Order
+
+1. `session_tracker`: move the `Content` building into `widgets/session_tabs.py`.
+2. `session_scope`: move `COMMANDS` and `sidebars` down to `TextualSessionScope`; drop the metaclass from the shared ABCs.
+3. `session_entry`: move each construction into its native entry subclass.
+4. `session_navigation`: retype the annotations, route both constructions through the factory, split `reveal`.
+5. `workspace_sessions`: the native mount, input-yield and resident operations.
+6. `sidebar_navigation`: the `menu_context` parameter.
+7. One relocation stage moves all eight now-pure modules (the `tab_identity` package last) to `toad/client/`.
+
+Steps 1–6 must leave no Textual import in any module step 7 moves. The finish check below proves that.
+
+### NRA operations
+
+All available in the installed NRA:
+- Step 7: `relocate_module_to_new_module` per module, in one stage. It rewrites every importer and removes the old binding; `retarget_module_mentions` follows string mentions. No re-export is kept.
+- Steps 2, 3 and 5, moving members between a shared class and its native child: `insert_class_member` on the native class, then the deletion on the shared one. Where the native child does not exist yet (`TextualSessionScope`, the `Textual*SessionEntry` family, the Textual workspace source), creating it is extract-new-base, which NRA does not have yet; it is item 1 on claude-k-nra's queue. Until it lands, that one creation is an `insert_before_target` stage, labelled as the gap, followed by the member moves.
+- Retyped annotations and parameters in steps 4 and 6: `replace_function_signature`.
+- Moving a construction into a native member in steps 3 and 4: `replace_function_body` for the shared method, plus `insert_class_member` for the native one. The bodies moved are the original ones, not rewrites.
+
+### Importers that the relocation rewrites
+
+Production importers on main, per module. Test importers are rewritten by the same operation:
+
+- `tab_identity` (12): `app.py:79`, `application_lifetime.py:17`, `core/events.py:30`, `db.py:25`, `navigation_preparation.py:20`, `session_entry.py:41`, `session_navigation.py:51`, `session_projection.py:12`, `session_tracker.py:13`, `tab_identity/history_origin.py:13`, `tab_identity/kinds.py:14`, `tab_order.py:11`; `kinds` also from `application_lifetime.py:16`, `session_navigation.py:52`, `thread_navigation.py:13`.
+- `tab_order` (4): `app.py:80`, `comms_host.py:14`, `session_tracker.py:14`, `widgets/side_bar.py:69`.
+- `session_navigation` (4): `app.py:71`, `core/session_requests.py:16`, `tab_identity/__init__.py:14`, `workspace_sessions.py:22`.
+- `session_entry` (3): `session_navigation.py:42`, `tab_identity/__init__.py:13`, `tab_identity/kinds.py:13`.
+- `session_tracker` (14): `app.py:73`, `conversation_kind.py:48`, `navigation_preparation.py:19`, `screens/main.py:56`, `screens/session_view.py:23`, `session_entry.py:33`, `session_host.py:18`, `session_navigation.py:50`, `session_projection.py:11`, `sidebar_navigation.py:11`, `thread_identity.py:21`, `widgets/comms_sidebar.py:41`, `widgets/session_tabs.py:39`, `widgets/side_bar.py:55`.
+- `session_scope` (21): `app.py:72`, `command_target_scope.py:4`, `screens/comms.py:36`, `screens/main.py:55`, `screens/session_view.py:19`, `screens/welcome.py:32`, `session_entry.py:32`, `session_host.py:17`, `session_navigation.py:49`, `thread_navigation.py:23`, `transcript_publication.py:63`, `widgets/comms_chat.py:30`, `widgets/context_explorer.py:33`, `widgets/conversation.py:138`, `widgets/thread_comms.py:40`, `widgets/thread_identity.py:10`, `widgets/transcript_history.py:61`, `widgets/wire_history.py:17`, `wire_history.py:65`, `workspace_chrome.py:23`, `workspace_sessions.py:17`.
+- `workspace_sessions` (1): `app.py:90`.
+- `sidebar_navigation` (1): `widgets/comms_sidebar.py:71`.
+
+The importers of `SessionScope` that read `COMMANDS` or `sidebars()` must import `TextualSessionScope` after step 2. A Textual screen that subclasses `SessionScope` today becomes a `TextualSessionScope`. The extract-new-base operation is exactly what rewrites those bases; until then it is part of the labelled stage.
+
+### Finish check
+
+- **No native imports in the shared namespace:** after step 7, an import of every module under `toad/client/` with Textual and Qt both blocked imports cleanly. That is the namespace test in [00](00-ownership-and-imports.md).
+- **No old path left:** `git grep -nE "from toad\.(tab_order|session_navigation|session_entry|session_tracker|session_scope|workspace_sessions|sidebar_navigation|tab_identity)\b" -- src tests` returns nothing.
+- **Behaviour:** the existing tests in §4.7 pass, plus the new Qt cases.
