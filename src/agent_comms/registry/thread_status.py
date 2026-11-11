@@ -91,7 +91,8 @@ class ThreadStatus(
     affix='ThreadStatus',
 ):
     may_be_active: ClassVar[bool] = False
-    stopped: ClassVar[bool] = False
+    def is_stopped(self) -> bool:
+        return False
 
     def is_receiving(self) -> bool:
         return False
@@ -367,7 +368,8 @@ class OrphansHolds:
 
 
 class StoppedPresence(Visible, ThreadStatus, declared_name=None):
-    stopped = True
+    def is_stopped(self) -> bool:
+        return True
     vacant = True
 
     def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
@@ -382,7 +384,7 @@ class StoppedPresence(Visible, ThreadStatus, declared_name=None):
         pass
 
     def in_view(self, visibility: RosterVisibility) -> bool:
-        return visibility.stopped
+        return visibility.is_stopped()
 
 
 class StoppedThreadStatus(OrphansHolds, StoppedPresence):
