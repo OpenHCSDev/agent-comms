@@ -40,9 +40,11 @@ class RuntimeReference(DeclaredFamily, ABC, affix="Reference"):
     def describes(self) -> str:
         """This reference in one phrase, for the line its process reports."""
 
-    def names_installation(self) -> bool:
-        """Whether this is about the installation at all."""
-        return True
+    def as_importing_process(self, pid: int) -> tuple[RuntimeProcessOutcome, ...]:
+        return (ImportingRuntimeProcess(pid, self),)
+
+    def as_unattributed_process(self, pid: int) -> tuple[RuntimeProcessOutcome, ...]:
+        return (UnattributedRuntimeProcess(pid, self),)
 
     def hidden(self, identity: ProcessIdentity,
                error: Exception) -> tuple[RuntimeProcessOutcome, ...]:
@@ -124,8 +126,11 @@ class ForeignReference(RuntimeReference):
     def describes(self) -> str:
         return "a path outside the installation"
 
-    def names_installation(self) -> bool:
-        return False
+    def as_importing_process(self, pid: int) -> tuple[RuntimeProcessOutcome, ...]:
+        return ()
+
+    def as_unattributed_process(self, pid: int) -> tuple[RuntimeProcessOutcome, ...]:
+        return ()
 
     def hidden(self, identity: ProcessIdentity,
                error: Exception) -> tuple[RuntimeProcessOutcome, ...]:
@@ -306,8 +311,8 @@ class RuntimeProcesses:
         named = (*environment.get("PYTHONPATH", "").split(os.pathsep),
                  environment.get("VIRTUAL_ENV", ""))
         references = (RuntimeReference.to(Path(value), directory) for value in named if value)
-        return tuple(ImportingRuntimeProcess(identity.pid, reference)
-                     for reference in references if reference.names_installation())
+        return tuple(process for reference in references
+                     for process in reference.as_importing_process(identity.pid))
 
     @classmethod
     def observe(cls, target: LaunchRuntime, proc: Path = Path("/proc")) -> RuntimeProcesses:
@@ -337,8 +342,7 @@ class RuntimeProcesses:
             # when it was launched by a system interpreter from somewhere else entirely.
             outcomes.extend(cls.imports(platform, identity, directory, command))
             if not command.held():
-                if command.names_installation():
-                    outcomes.append(UnattributedRuntimeProcess(pid, command))
+                outcomes.extend(command.as_unattributed_process(pid))
                 continue
             runtime = LaunchRuntime.from_interpreter(interpreter)
             if runtime.prefix == target.prefix:
