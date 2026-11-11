@@ -318,10 +318,15 @@ class ConnectorGrants:
     def waiting(
         self, query: AuthorizationQuery, approval_digest: str, now: float
     ) -> ConnectorGrants:
+        """Issue the secret this call minted, whether or not the request is already waiting.
+
+        Keeping an older record instead would leave the browser holding a secret whose digest
+        this store never kept, so `require_approval` could only ever refuse it: one fact, the
+        live secret for a request, split across the caller and the store with nothing joining
+        them. Re-issuing replaces the whole record, so the newest link is the only live one.
+        """
         current = self.unexpired(now)
-        if query.request_id in current.requests:
-            return current
-        if len(current.requests) >= self.waiting_limit:
+        if query.request_id not in current.requests and len(current.requests) >= self.waiting_limit:
             raise ApprovalQueueFull("The owner approval queue is full; try again later.")
         pending = AuthorizationRequest(query, approval_digest, expires_at=now + CODE_SECONDS)
         return replace(current, requests=current.requests | {query.request_id: pending})
