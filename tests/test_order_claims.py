@@ -5,7 +5,7 @@ import shlex
 import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import chdir
+from contextlib import chdir, contextmanager
 from dataclasses import replace
 
 import pytest
@@ -74,6 +74,7 @@ from agent_comms.registry.thread_status import PausedBridgeThreadStatus
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.storage.store_files import StoreBusy, StoreWait
 from agent_comms.team.order import OrderFile, TeamContext, main
 from agent_comms.team.standing import DeliveryAwaitingJudgement, Scrutinize
 from agent_comms.team.standing_rules import OwedAnswer
@@ -441,6 +442,14 @@ def test_a_busy_begin_answers_every_storage_error_handler() -> None:
         raise caught.value
 
 
+@contextmanager
+def held_bus_writer(ctx: TeamContext):
+    """Hold the real writer; the blocked publication need not spend an outage budget."""
+    with SQLiteFile.writers_drained(ctx.comms.bus.bus.path), pytest.MonkeyPatch.context() as patch:
+        patch.setattr(StoreWait, "timeout", StoreBusy.timeout)
+        yield
+
+
 def unsent_claim(ctx):
     """A real claim whose Todo commits while another writer holds the bus."""
     comms = ctx.comms
@@ -448,8 +457,8 @@ def unsent_claim(ctx):
     request = delivery(
         ctx, "Killed the stupid duplicated count decision; read its actual diff before accepting it.")
     before = comms.bus.bus.revision()
-    # The bus writer's own busy wait expires; nothing in the publisher or claim is patched.
-    with SQLiteFile.writers_drained(comms.bus.bus.path):
+    # SQLite refuses the real locked writer; publication and claim logic stay unpatched.
+    with held_bus_writer(ctx):
         with pytest.raises(ClaimPublicationUnavailable) as unsent:
             ThreadCaller("worker").invoke(request, comms)
     claimed = comms.goals.todos.get("P1")
@@ -534,7 +543,7 @@ def test_a_published_claim_retried_on_a_held_bus_is_unavailable_never_unsent(hel
     ThreadCaller("worker").invoke(request, comms)
     claimed = comms.goals.todos.get("P1")
     published = comms.bus.bus.revision()
-    with SQLiteFile.writers_drained(comms.bus.bus.path):
+    with held_bus_writer(ctx):
         with pytest.raises(ClaimPublicationUnavailable) as unavailable:
             ThreadCaller("worker").invoke(request, comms)
     assert isinstance(unavailable.value.__cause__, sqlite3.Error)
