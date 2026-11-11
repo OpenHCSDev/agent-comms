@@ -52,12 +52,12 @@ def test_named_forge_row_preserves_the_actual_nonmain_merge_target():
 def test_pr_merge_record_requires_both_the_source_head_and_checked_merge():
     request = MergedPullRequest(42, 'fix/order', 'a' * 40, merge='b' * 40, merged_at=1.0)
     delivery = CommitDelivery(commit=request.merge, delivered_commit=request.head)
-    assert request.delivery_merges(delivery) == (MainDeliveryMerge(),)
-    assert request.delivery_merges(replace(delivery, commit='c' * 40)) == ()
-    assert request.delivery_merges(replace(delivery, delivered_commit='c' * 40)) == ()
+    assert request.delivery_merges(delivery) == MainDeliveryMerge()
+    assert request.delivery_merges(replace(delivery, commit='c' * 40)) is None
+    assert request.delivery_merges(replace(delivery, delivered_commit='c' * 40)) is None
     assert delivery.installation_commits == (request.merge,)
     assert replace(request, base='release').delivery_merges(delivery) == (
-        BranchDeliveryMerge('release', request.merge),)
+        BranchDeliveryMerge('release', request.merge))
 
 
 def test_draft_query_row_preserves_membership_without_review_or_git_reads(tmp_path):

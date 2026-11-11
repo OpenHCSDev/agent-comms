@@ -405,7 +405,8 @@ class OrderFile:
         problems.extend(self.assignment_refusals(
             context, unit, group, listed, target, traced))
         problems.extend(self.source_refusals(context, traced))
-        problems.extend(self.order.check_refusals(context.comms.registry.storage_rule.checkout_base))
+        if (check_refusal := self.order.check_refusals(context.comms.registry.storage_rule.checkout_base)) is not None:
+            problems.append(check_refusal)
         problems.extend(reassign.refusals(holders))
         if problems:
             sys.exit('Refused order:\n  ' + '\n  '.join(problems))

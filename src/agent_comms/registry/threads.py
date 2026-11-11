@@ -654,10 +654,10 @@ class Thread(
     def process_alive(self) -> bool:
         return self.process_identity.alive()
 
-    def stop_names(self, release_external: Callable[[str], None]) -> tuple[str, ...]:
+    def stop_names(self, release_external: Callable[[str], None]) -> str | None:
         """The names this thread leaves to the ordinary stop: an agent's owner is fenced and
         its runtime retires it."""
-        return (self.name,)
+        return self.name
 
     def same_local_process(self, process: ProcessIdentity) -> bool:
         return self.process_identity == process
@@ -870,7 +870,7 @@ class ExternalThread(Thread):
         """What this thread is once a process of its own serves it."""
         return self
 
-    def stop_names(self, release_external: Callable[[str], None]) -> tuple[str, ...]:
+    def stop_names(self, release_external: Callable[[str], None]) -> str | None:
         """No owner runtime serves an external endpoint (only RuntimeServer binds the socket a
         stop request dials, and no CLI bridge or inbox watch runs one), so fencing it would
         strand it: its holder's binding is released instead."""
