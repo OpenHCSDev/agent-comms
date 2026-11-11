@@ -1,5 +1,6 @@
 """A holder claims through the real tool boundary on a copied bus."""
 import json
+import os
 import shlex
 import sqlite3
 import time
@@ -13,6 +14,7 @@ from agent_comms.coordination.errors import (
     CoordinationBeginUnavailable,
     CoordinationReadUnavailable,
 )
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.errors import (
     HumanSendRefusedError,
     TodoError,
@@ -60,6 +62,7 @@ from agent_comms.planning.orders import (
 from agent_comms.planning.problem_findings import ExpectedProblem
 from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.projects.change_report import FileLine
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.slop import (
     DeclarationDerivation,
     DeleteCopyDerivation,
@@ -67,6 +70,8 @@ from agent_comms.projects.slop import (
     ExistingLine,
     Slop,
 )
+from agent_comms.registry.thread_status import PausedBridgeThreadStatus
+from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.order import OrderFile, TeamContext, main
@@ -274,6 +279,42 @@ def test_self_assigned_claim_selects_a_reviewer_and_retains_its_choice(held_team
         ThreadCaller(todo.holder).invoke(different, comms)
     assert comms.goals.todos.get(todo.id) == claimed
     assert comms.bus.bus.revision() == after
+
+
+def away_reviewer(ctx: TeamContext) -> NativeThread:
+    return NativeThread("away-reviewer", frozenset(),
+                        Checkout(ctx.root.parent / "away-reviewer"), created_at=16.0)
+
+
+def away_reviewer_delivery(ctx: TeamContext, teammate: NativeThread):
+    """A self-assigned claim naming a reviewer whose bridge paused."""
+    todo = self_assigned_order(ctx)
+    ctx.comms.registry.register(teammate, PausedBridgeThreadStatus())
+    reviewer = SelectedClaimReviewer(ctx.comms.registry.require("away-reviewer").incarnation)
+    return todo, replace(delivery(
+        ctx, "Killed the unjudged-claim slop at orders.py; a reviewer that reads gets it."),
+        problem=todo.id, reviewer=reviewer)
+
+
+def test_a_claim_to_a_reviewer_that_will_never_read_it_is_refused(held_team):
+    """On 2026-11-10 mate-a's P1444 claim sat for a stopped claude-a: nothing read it."""
+    comms = held_team.comms
+    todo, request = away_reviewer_delivery(held_team, away_reviewer(held_team))
+    before = comms.bus.bus.revision()
+    with pytest.raises(TodoError, match="@away-reviewer will not answer this review"):
+        ThreadCaller(todo.holder).invoke(request, comms)
+    assert comms.goals.todos.get(todo.id) == todo
+    assert comms.bus.bus.revision() == before
+
+
+def test_a_claim_to_a_paused_reviewer_whose_process_lives_is_recorded(held_team):
+    comms = held_team.comms
+    todo, request = away_reviewer_delivery(held_team, replace(
+        away_reviewer(held_team), process_identity=ProcessIdentity.capture(os.getpid())))
+    ThreadCaller(todo.holder).invoke(request, comms)
+    claim = comms.goals.todos.get(todo.id).order.claim
+    assert claim.reviewer == request.reviewer
+    assert comms.bus.bus.lookup_message(claim.message.message_id).message.target == "away-reviewer"
 
 
 @pytest.mark.parametrize("change", ("retired", "reborn", "renamed"))
