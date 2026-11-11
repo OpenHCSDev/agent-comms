@@ -98,6 +98,8 @@ from agent_comms.notification_read import (
     StaleNotificationsRead,
     UnreadableNotificationsRead,
 )
+from agent_comms.planning.goal_presentation import GoalExecutionControls
+from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState, WireRevision
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.work_branches import WorkBranchError
@@ -1128,10 +1130,15 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         self.initial = request.threads
         self.located_threads = LocatedThreads({}, request.threads, {})
         self.registry_read: RegistrySnapshot | UnreadRegistry = UnreadRegistry()
+        # Each open thread's goal state at the last goal-store change: a goal write
+        # re-reads the status of the threads whose goal it changed, not every open thread.
+        self.goals: Mapping[str, GoalExecutionControls] = {}
+        self.goals_read = WireRevision.empty().goal_execution
 
     def continue_from(self, previous: Self) -> Self:
         self.observed = previous.observed
         self.registry_read = previous.registry_read
+        self.goals, self.goals_read = previous.goals, previous.goals_read
         self.initial = self.request.threads - previous.request.threads
         return self
 
@@ -1170,7 +1177,9 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         self.located_threads = replace(self.located_threads, activity=activity)
         snapshot = comms.registry.snapshot()
         registry_changed = self.registry_read.changed_names_to(snapshot)
-        changed = previous.changed_threads(revision, comms, activity, snapshot, registry_changed)
+        goals_changed = self.goals_changed(comms, revision, snapshot)
+        changed = previous.changed_threads(revision, comms, activity, snapshot, registry_changed,
+                                           goals_changed)
         self.registry_read = snapshot
         names = (changed | names - previous.results.keys()) & names
         self.located_threads = replace(self.located_threads, names=names)
@@ -1179,6 +1188,20 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
             self.located_threads = replace(
                 self.located_threads, reads={name: partial(batch.read, name) for name in names})
         return self.located_threads
+
+    def goals_changed(self, comms: Comms, revision: WireRevision,
+                      snapshot: RegistrySnapshot) -> frozenset[str]:
+        """The open threads whose goal state moved since the goal store last changed."""
+        if revision.goal_execution == self.goals_read and self.goals:
+            return frozenset()
+        threads = tuple(snapshot.threads[name] for name in self.request.threads
+                        if name in snapshot.threads)
+        waits = partial(GoalWaits.for_goal, rows=comms.goals.waits.read())
+        goals = {thread.name: goal.execution for thread, goal in zip(
+            threads, comms.goals.snapshots_for(threads, snapshot, waits, comms.agents), strict=True)}
+        changed = frozenset(name for name, goal in goals.items() if self.goals.get(name) != goal)
+        self.goals, self.goals_read = goals, revision.goal_execution
+        return changed
 
     @staticmethod
     def failed(names: frozenset[str], result: ThreadReadResult,
@@ -1557,6 +1580,7 @@ class ThreadsObserved(Observed):
     def changed_threads(self, revision: WireRevision, comms: Comms,
                         activity: Mapping[str, ObservedActivity | DeletedThread],
                         snapshot: RegistrySnapshot, registry_changed: frozenset[str],
+                        goals_changed: frozenset[str] = frozenset(),
                         ) -> frozenset[str]:
         """Attribute changes using the retained observation and existing route rows. A
         registry revision reaches only the threads whose own rows it changed (or their forks):
@@ -1580,8 +1604,8 @@ class ThreadsObserved(Observed):
             changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
         activity_changed = {name for name in activity
                             if activity[name] != self.activity.get(name)}
-        status_names = names if (revision.goal_execution, revision.expiry_period, revision.work_room) != (
-            earlier.goal_execution, earlier.expiry_period, earlier.work_room) else names & activity_changed
+        status_names = names if (revision.expiry_period, revision.work_room) != (
+            earlier.expiry_period, earlier.work_room) else names & (activity_changed | goals_changed)
         if status_names:
             status_batch = comms.views.thread_presentations(status_names)
             changed.update(name for name in status_names
