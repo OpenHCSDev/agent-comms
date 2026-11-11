@@ -183,7 +183,9 @@ class NoTurnAcceptance(TurnAcceptance):
 class TurnInputSource(StartedInput, ABC):
     acceptance: TurnAcceptance
     goal_permission: TurnGoalPermission
-    bypasses_goal_permit: ClassVar[bool] = False
+    def require_goal_permit(self, goal_permit: object, goal_store: object) -> None:
+        """Check the goal permit; members that bypass it override."""
+        goal_permit.check_grant(goal_store)
     owner_check: ClassVar[type[OrdinaryOwnerCheck]] = OrdinaryOwnerCheck
     origins: ClassVar[tuple[Message, ...]] = ()
 
@@ -443,7 +445,8 @@ class FollowingTurnInput(TurnInputSource):
 
 
 class AcceptedFollowingInput(FollowingTurnInput, DirectInput):
-    bypasses_goal_permit = True
+    def require_goal_permit(self, goal_permit: object, goal_store: object) -> None:
+        pass
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -43,7 +43,10 @@ class TagChangeResult(RecordMember, TargetEditResult):
 class TagDisposition(DeclaredFamily, affix="TagDisposition"):
     """Each declared channel operation owns its membership effect and warning."""
     label: ClassVar[str]
-    requires_confirmation: ClassVar[bool] = True
+    def require_confirmed(self, name: tuple[str, ...], confirmed: bool) -> None:
+        """Raise if confirmation is needed and not given."""
+        if not confirmed:
+            raise ValueError(self.confirmation(name))
 
     @abstractmethod
     def confirmation(self, tags: tuple[str, ...]) -> str: ...
@@ -58,7 +61,8 @@ class TagDisposition(DeclaredFamily, affix="TagDisposition"):
 
 class KeepThreadsTagDisposition(TagDisposition):
     label = "Remove tag; keep threads"
-    requires_confirmation = False
+    def require_confirmed(self, name: tuple[str, ...], confirmed: bool) -> None:
+        pass
 
     def confirmation(self, tags: tuple[str, ...]) -> str:
         return f"Remove {self.tag_names(tags)} from their threads? Threads, saved views and history remain."
@@ -284,8 +288,7 @@ class ChannelManagement(ChannelOrderSource[type[ThreadSort], type[ChannelSort]],
     def delete_tag(self, name: str, *, disposition: TagDisposition = KeepThreadsTagDisposition(),
                    confirmed: bool = False) -> TagChangeResult:
         Tag.validate(name)
-        if disposition.requires_confirmation and not confirmed:
-            raise ValueError(disposition.confirmation((name,)))
+        disposition.require_confirmed((name,), confirmed)
         snapshot = self.registry.snapshot()
         self.catalog.read().require_changeable_tag(name)
         cohort = tuple(thread for thread in snapshot.threads.values() if name in thread.tags)

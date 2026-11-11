@@ -6,6 +6,8 @@ fresh native session, accept an input or replace a returned durable acknowledgem
 
 from __future__ import annotations
 
+from agent_comms.coordination.errors import IdentityConflict
+
 import os
 import stat
 from abc import ABC, abstractmethod
@@ -55,6 +57,9 @@ class ObservedPath(ABC):
     def is_absent(self) -> bool:
         return False
 
+    def require_absent(self) -> None:
+        raise IdentityConflict('Private sidecar has an unresolved commit intent; no retry.')
+
 
 @dataclass(frozen=True, slots=True)
 class AbsentPath(ObservedPath):
@@ -63,6 +68,9 @@ class AbsentPath(ObservedPath):
 
     def is_absent(self) -> bool:
         return True
+
+    def require_absent(self) -> None:
+        pass
 
 
 @dataclass(frozen=True, slots=True)

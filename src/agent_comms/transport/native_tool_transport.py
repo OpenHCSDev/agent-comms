@@ -111,8 +111,7 @@ class NativeToolRound(Generic[Call]):
                     raise DuplicateToolCallIdentity(call.call_id)
                 seen.add(call.call_id)
                 declared.append(call)
-            if not item.tool_round_allowed:
-                raise SelectedToolDenied("Invalid native tool content")
+            item.require_tool_round_allowed()
         if not declared:
             raise SelectedToolDenied("Native tool round has no declared call")
         return cls(number, tuple(declared))

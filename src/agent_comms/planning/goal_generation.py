@@ -67,8 +67,9 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
     def require_ready(self) -> None:
         raise UnresolvedAttemptError(UnresolvedAttemptError.diagnostic_text)
 
-    def permits_retirement_without_attempt(self) -> bool:
-        return False
+    def require_retirement_without_attempt(self) -> None:
+        from agent_comms.coordination import errors
+        raise errors.StaleAttemptError('Goal or attempt is no longer eligible for retirement.')
 
     def permits_retirement(self, phase: GoalAttemptPhase) -> bool:
         return False
@@ -112,8 +113,8 @@ class ReadyGeneration(GenerationState):
     def validate_attempt(self, attempt_id: AttemptId | NoAttemptId) -> None:
         attempt_id.require_absent()
 
-    def permits_retirement_without_attempt(self) -> bool:
-        return True
+    def require_retirement_without_attempt(self) -> None:
+        pass
 
     @classmethod
     def successors(cls) -> tuple[type[GenerationState], ...]:

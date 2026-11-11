@@ -72,16 +72,13 @@ class PrivateSendClaim(FollowingPromptBoundary):
             inputs=inputs,
             goal_store=inputs.comms.goals.open_goal_store(),
             session_id=session_id,
-            thread=self.owner.thread,
-            turn=self.owner.turn_lease.turn_id,
-            claim_generation=self.owner.claimed_generation,
+            thread=self.selected.owner.thread,
+            turn=self.selected.owner.turn_lease.turn_id,
+            claim_generation=self.selected.owner.claimed_generation,
             original_source=SelectedOriginalInput.answering(prompt, self.selected.goal_permission),
             goal_permit=NoLaunchPermit(),
         )
 
-    @property
-    def bus(self) -> MessageBus:
-        return self.selected.bus
 
     @property
     def following_after_seq(self) -> int:
@@ -92,13 +89,6 @@ class PrivateSendClaim(FollowingPromptBoundary):
     def store_path(self) -> Path:
         return self.selected.store.session.path
 
-    @property
-    def wire_root_id(self) -> RootId:
-        return self.selected.root_id
-
-    @property
-    def owner(self) -> RegistryOwner:
-        return self.selected.owner
 
     @classmethod
     async def reserve(
@@ -153,11 +143,11 @@ class PrivateSendClaim(FollowingPromptBoundary):
             self.input_id,
             self.token_digest,
             context,
-            wire_root_id=self.wire_root_id,
+            wire_root_id=self.selected.root_id,
             prompt=self.prompt.text,
             source_reads=source_reads,
         )
-        self.owner.require_running_turn(self.bus._registry)
+        self.selected.owner.require_running_turn(self.selected.bus._registry)
 
     async def execute(
         self,
@@ -174,11 +164,11 @@ class PrivateSendClaim(FollowingPromptBoundary):
         follows cleanup; disconnect and unknown outcomes are never committed here.
         The raw writer keeps the single-use send token after the input is recorded.
         """
-        lease = self.owner.thread.require_turn_lease()
-        startup = NativeStartup(self.bus.bus.path.parent, measurements=self.measurements)
+        lease = self.selected.owner.thread.require_turn_lease()
+        startup = NativeStartup(self.selected.bus.bus.path.parent, measurements=self.measurements)
         def snapshot_registry() -> RegistrySnapshot:
             with self.measurements.operation("selected_registry_snapshot_worker"):
-                return self.bus._registry.snapshot()
+                return self.selected.bus._registry.snapshot()
 
         try:
             with self.measurements.operation("selected_registry_snapshot"):
@@ -188,20 +178,20 @@ class PrivateSendClaim(FollowingPromptBoundary):
                 input_id=self.input_id,
                 prompt=self.prompt.text,
                 context_contributions=self.prompt.contributions,
-                worktree=self.owner.thread.worktree.path.absolute(),
+                worktree=self.selected.owner.thread.worktree.path.absolute(),
                 session=self.session,
                 model=model,
-                thinking_level=self.owner.thread.thinking_level,
+                thinking_level=self.selected.owner.thread.thinking_level,
                 environment=ProjectRuntimeRequest.native_environment(
-                    self.owner.thread,
-                    self.bus.bus.path.parent, registry,
+                    self.selected.owner.thread,
+                    self.selected.bus.bus.path.parent, registry,
                 ),
-                ingress=MaintenanceBarrier(self.bus._registry.store.path),
+                ingress=MaintenanceBarrier(self.selected.bus._registry.store.path),
                 startup=startup,
                 selected_tool_mode=selected_tool_mode,
                 observe_event=observe_event,
                 request_observer=partial(
-                    record_request_progress, self.bus.bus.path.parent, lease,
+                    record_request_progress, self.selected.bus.bus.path.parent, lease,
                 ),
                 prompt_send_boundary=self,
                 execution=execution,
@@ -224,7 +214,7 @@ class PrivateSendClaim(FollowingPromptBoundary):
             raise
         finally:
             await Coordination.run_worker(partial(
-                record_acquisition_progress, self.bus.bus.path.parent, lease,
+                record_acquisition_progress, self.selected.bus.bus.path.parent, lease,
                 self.input_id, self.measurements, startup.native_process,
             ))
         async with self.selected.cursor_delivery.reading() as source_reads:
@@ -267,10 +257,10 @@ class PrivateSendClaim(FollowingPromptBoundary):
                 store = authority.enter_context(Coordination(str(self.store_path)))
             with self.measurements.operation("maintenance_ingress"):
                 authority.enter_context(MaintenanceBarrier(
-                    self.bus._registry.store.path
+                    self.selected.bus._registry.store.path
                 ).allow_input())
             with self.measurements.operation("registry_exclusion"):
-                cut = authority.enter_context(self.bus._registry.store.current_snapshot())
+                cut = authority.enter_context(self.selected.bus._registry.store.current_snapshot())
                 registry = cut.snapshot
             with self.measurements.operation("prompt_binding"):
                 authority.enter_context(self.stage.bound_prompt(
@@ -286,7 +276,7 @@ class PrivateSendClaim(FollowingPromptBoundary):
             if not self._once.acquire(blocking=False):
                 raise IdentityConflict("native send claim_scope cannot be reused")
             with self.measurements.operation("claim_checks"):
-                self.owner.require_snapshot(
+                self.selected.owner.require_snapshot(
                     registry, "recipient registry owner changed before native send"
                 )
                 NativeRuntimeTable.require_installed(db)
@@ -297,7 +287,7 @@ class PrivateSendClaim(FollowingPromptBoundary):
                 self.stage.require_claim(store)
             with self.measurements.operation("native_claim_record"):
                 reserved.sent_owner_claimed_generation.record(
-                    reserved, db, self.owner.claimed_generation, identity
+                    reserved, db, self.selected.owner.claimed_generation, identity
                 )
             # ExitStack commits and closes the database before releasing the
             # registry and bus locks. The selected claim and prompt were already

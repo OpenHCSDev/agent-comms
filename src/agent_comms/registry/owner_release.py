@@ -125,8 +125,7 @@ class SessionRetiredOwnerCompletion(OwnerCompletion):
         current = snapshot.owner_identity(thread.name)
         if current.incarnation != self.owner.incarnation or current.generation <= self.owner.generation:
             raise RelationViolationError("Retired session still holds its original owner lease")
-        if not thread.process_identity.allows_owner_start():
-            raise RelationViolationError("Retired session acquired another process")
+        thread.process_identity.require_owner_startable()
 
     def require_loss(self, snapshot: RegistrySnapshot, release: OwnerReleaseEvidence) -> None:
         if self.owner.incarnation != release.incarnation():

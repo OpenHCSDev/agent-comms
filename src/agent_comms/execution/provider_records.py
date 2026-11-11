@@ -91,7 +91,10 @@ class PiContent(PresentMember, OpenPayload, affix="Content"):
         return []
 
     text: ClassVar[str] = ""
-    tool_round_allowed: ClassVar[bool] = False
+    def require_tool_round_allowed(self) -> None:
+        """Content that does not allow a tool round refuses here."""
+        from agent_comms.transport.native_tool_transport import SelectedToolDenied
+        raise SelectedToolDenied('Invalid native tool content')
 
     @property
     def final_text(self) -> str:
@@ -117,7 +120,9 @@ class TextContent(PiContent):
     text_signature: Annotated[
         PiField[str | PiOmitted], WireName("textSignature")
     ] = PiOmitted()
-    tool_round_allowed = True
+    def require_tool_round_allowed(self) -> None:
+        pass
+
 
     @property
     def final_text(self) -> str:
@@ -133,7 +138,9 @@ class ThinkingContent(PiContent):
     thinking_signature: Annotated[
         PiField[str | PiOmitted], WireName("thinkingSignature")
     ] = PiOmitted()
-    tool_round_allowed = True
+    def require_tool_round_allowed(self) -> None:
+        pass
+
 
     @property
     def final_text(self) -> str:
@@ -154,7 +161,9 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
     id: ToolCallId
     name: str
     arguments: object
-    tool_round_allowed = True
+    def require_tool_round_allowed(self) -> None:
+        pass
+
 
 
 @dataclass(frozen=True)

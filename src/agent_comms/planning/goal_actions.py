@@ -187,8 +187,14 @@ class GoalAction[Result: GoalDeclaration](
     GoalMutation[Goal, GoalActionContext, Result], affix="GoalAction"
 ):
     expect: GoalPrecondition = GoalPrecondition()
-    preserve_wait: ClassVar[bool] = False
-    schedules_goal: ClassVar[bool] = False
+    def complete_wait(self, ctx: GoalActionContext) -> None:
+        """Clear the goal's wait after apply; members that preserve it override."""
+        ctx.thread.goal.clear_wait(ctx.goals.waits.clear)
+
+    async def after_update(self, scheduler: object, session_id: object) -> None:
+        """Called after the goal update; members that schedule override."""
+        pass
+
 
     @classmethod
     def model_choices(cls) -> tuple[str, ...]:
@@ -234,8 +240,7 @@ class GoalAction[Result: GoalDeclaration](
             ctx.edit.document.status(ctx.thread.name), new_owner=False,
         )
         ctx.goals.registry._commit_registration(ctx.edit, change)
-        if not self.preserve_wait:
-            ctx.thread.goal.clear_wait(ctx.goals.waits.clear)
+        self.complete_wait(ctx)
         return goal
 
     @abstractmethod
@@ -306,7 +311,8 @@ class ActiveGoalAction(
     GoalReportAction, ModelInvocable, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable,
     PeerInvocable,
 ):
-    schedules_goal = True
+    async def after_update(self, scheduler: object, session_id: object) -> None:
+        await scheduler.schedule_goal(session_id)
 
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return ActiveGoal()
@@ -344,7 +350,9 @@ class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
 class StandbyGoalAction(GoalReportAction, ModelInvocable, RuntimeInvocable):
     wait_for: tuple[str, ...] = ()
     reviewed_inputs: tuple[Annotated[InputKey, InputKeyText], ...] = ()
-    preserve_wait = True
+    def complete_wait(self, ctx: GoalActionContext) -> None:
+        pass
+
 
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return ActiveGoal()
@@ -754,7 +762,9 @@ class ClearGoalAction(
 @dataclass(frozen=True, kw_only=True)
 class EditGoalAction(GoalAction[Goal], OwnerInvocable, RuntimeInvocable, PeerInvocable):
     text: str
-    preserve_wait = True
+    def complete_wait(self, ctx: GoalActionContext) -> None:
+        pass
+
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         goal.order.require_edit()

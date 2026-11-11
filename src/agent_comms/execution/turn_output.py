@@ -70,8 +70,7 @@ class TurnOutput(SessionOutputCallbacks):
 
     def _end_request_failure(self) -> None:
         """The refused request's failure no longer decides the turn."""
-        if self.failure.ends_with_request_retry:
-            self.failure = NoTurnFailure()
+        self.failure.end_request_failure(self)
 
     def request_retried(self) -> None:
         """Pi re-sends the refused request; that refusal no longer decides the turn."""

@@ -148,8 +148,7 @@ def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
             os.stat, StoreOwner.snapshot_intent(path).name,
             dir_fd=directory.fd, follow_symlinks=False,
         ))
-        if not intent.is_absent():
-            raise IdentityConflict("Private sidecar has an unresolved commit intent; no retry.")
+        intent.require_absent()
         yield directory
         directory.unchanged(lock_name, os.fstat(lock))
 

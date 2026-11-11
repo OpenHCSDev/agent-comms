@@ -411,22 +411,6 @@ class AssignmentDecision:
             "OR (execution_id IS NOT NULL AND exact_target IS NOT NULL))"
         )
 
-    @property
-    def mode(self):
-        return self.decision.mode
-
-    @property
-    def verdict(self):
-        return self.decision.verdict
-
-    @property
-    def execution_id(self):
-        return self.decision.execution_id
-
-    @property
-    def exact_target(self):
-        return self.decision.exact_target
-
 
 @dataclass(frozen=True)
 class BoundAssignment(ChangedNotification, AssignmentDecision, AssignmentState):
@@ -451,7 +435,7 @@ class EngagedAssignment(SelectedResponseNotification, BoundAssignment):
             source.exact_reply_target,
         ):
             raise IdentityConflict("full wake frame requires the current response obligation")
-        return self.mode.full_expectation(), "you owe a response: " + FieldCodec.compact(
+        return self.decision.mode.full_expectation(), "you owe a response: " + FieldCodec.compact(
             {
                 "target": obligation.exact_target,
                 "source_seq": source.seq,
@@ -507,7 +491,7 @@ class DeferredAssignment(
     EngageableAssignment, Deferred, SelectedResponseNotification, InterruptedAssignment
 ):
     def requires_selected_triage(self) -> bool:
-        if self.execution_id is not None:
+        if self.decision.execution_id is not None:
             return False
         return super().requires_selected_triage()
 
