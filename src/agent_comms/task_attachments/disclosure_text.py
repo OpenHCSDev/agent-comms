@@ -325,7 +325,7 @@ class ViewHeading(DeclaredFamily, declared_name=None):
 
     @classmethod
     def heading(cls) -> str:
-        return cls.declared_name.replace("_", " ").upper()
+        return cls.display_name().upper()
 
     @classmethod
     def count_heading(cls, count: int) -> str:
@@ -397,7 +397,7 @@ class FamilyText(ClassText):
 
     @cached_property
     def summary(self) -> str:
-        return self.value.declared_name
+        return self.value.display_name()
 
 
 class CollectionText(StructuredText):

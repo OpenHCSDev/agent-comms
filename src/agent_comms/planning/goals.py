@@ -936,4 +936,4 @@ class Goal(RecordMember, GoalDeclaration):
 
     @property
     def summary(self) -> str:
-        return f"Goal · {self.state.declared_name}: {self.text}"
+        return f"Goal · {self.state.display_name()}: {self.text}"

@@ -210,6 +210,11 @@ class DeclaredFamily(FamilyMember, ABC, metaclass=FamilyMeta):
         return cls.declared_name
 
     @classmethod
+    def display_name(cls) -> str:
+        """Human-readable label derived from the wire name; override per member when it differs."""
+        return cls.declared_name.replace("_", " ").replace("-", " ").title()
+
+    @classmethod
     def validate_selection(cls, members: Iterable[type[DeclaredFamily]]) -> None:
         """Named declarations use the registry's existing duplicate-name check."""
 

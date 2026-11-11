@@ -90,7 +90,7 @@ class WaitingRoomPhase(RoomPhase):
 
     def project(self, activity, work):
         return activity.with_status(ActivityState.WAITING_FOR_ROOM,
-                                    ', '.join(kind.declared_name for kind in work))
+                                    ', '.join(kind.display_name() for kind in work))
 
 
 @dataclass(frozen=True)
@@ -109,7 +109,7 @@ class RoomShortfall(Exception):  # raising sets __traceback__, so never frozen
 
     def __str__(self) -> str:
         gib = lambda need: f"{need.memory / 2**30:.1f} GiB RAM, {need.disk / 2**30:.1f} GiB disk"
-        holders = "; ".join(f"{unit} ({', '.join(kind.declared_name for kind in work)}): {gib(need)}"
+        holders = "; ".join(f"{unit} ({', '.join(kind.display_name() for kind in work)}): {gib(need)}"
                             for unit, work, need in self.held) or "nothing"
         return (f"needs {gib(self.need)} above the {gib(self.floor)} floor; free is {gib(self.free)};"
                 f" other runs hold: {holders}")
@@ -343,7 +343,7 @@ class RoomAllocation:
                     except RoomShortfall as shortfall:
                         if time.monotonic() >= deadline:
                             raise StorageDenied(
-                                f"StorageRule: no room for {', '.join(kind.declared_name for kind in work)}"
+                                f"StorageRule: no room for {', '.join(kind.display_name() for kind in work)}"
                                 f" after {self.room_wait_seconds:.0f}s: {shortfall}. Retry when a"
                                 " holder finishes, or run a smaller selection.") from None
                     else:

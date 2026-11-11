@@ -52,4 +52,4 @@ class GoalAuthority(RecordMember, GoalTurnAuthority):
         return self.goal_id == captured.goal_id and self.state.continues_turn_from(captured.state)
 
     def describe(self) -> str:
-        return f"goal {self.goal_id} in state {self.state.declared_name}"
+        return f"goal {self.goal_id} in state {self.state.display_name()}"
