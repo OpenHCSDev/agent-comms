@@ -1544,7 +1544,6 @@ class TableSchema(ABC):
             row.take_previous_name(db)
             StoredColumnCarry.carry_columns(row, db)
             if SQLiteColumnShape.only_constraints_differ(db, row):
-                import sys; print(f"CARRY REBUILD: {row.name} in {db}", file=sys.stderr, flush=True)
                 row.rebuild(db)
         SQLiteCatalogObject.carry(db, cls.declared_schema(),
                                   frozenset(item.name for item in cls.stored_schema(db, sharing)))
