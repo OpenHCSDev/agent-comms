@@ -171,13 +171,9 @@ class ConnectorObservationPeer(ObservationPeer):
         return ConnectorObserverClosed(self.url, self.ending)
 
 
-class ConnectorClient(ObservationSource):
+class ConnectorClient(UiConnectionProfile, ObservationSource):
     """Reaching one connector: its endpoint, the credential it accepts, the route this machine
     reaches it by, and the TLS trust both the calls and the observation use."""
-
-    endpoint: HttpsMcpEndpoint
-    credential: UiCredential
-    route: EndpointRoute
 
     def viewer_end(self, handle: int) -> Connection:
         """The caller owns how received observation records are decoded."""
@@ -205,7 +201,7 @@ class ThreadConnection(threading.local):
 
 
 class RemoteCoreAccess(
-    UiConnectionProfile, CoreAccess, ConnectorClient, RequestPoster, AwaitsWork
+    CoreAccess, ConnectorClient, RequestPoster, AwaitsWork
 ):
     """The owner's UI profile is the remote access: its endpoint and credential are all a
     call needs, and the server still decides scope, expiry and revocation."""
