@@ -25,7 +25,7 @@ from agent_comms.cli_bridges.cli_protocol import Declared, HistoryRecord
 from agent_comms.cli_bridges.cli_protocol import OpenWire
 from agent_comms.cli_bridges.cli_protocol import TimestampedWire
 from agent_comms.cli_bridges.cli_protocol import WireHeader
-from agent_comms.execution.turn_context import HistoricalInstructionProvenance
+from agent_comms.execution.turn_context import DigestedSpan, HistoricalInstructionProvenance
 from agent_comms.nominal.field_codec import ToolCallId
 from agent_comms.cli_bridges.runtime_updates import HiddenItem
 from agent_comms.cli_bridges.runtime_updates import HistoryNotice
@@ -41,13 +41,10 @@ from agent_comms.cli_bridges.wire_models import WireModel
 
 
 @dataclass(frozen=True)
-class CodexRolloutProvenance(HistoricalInstructionProvenance):
+class CodexRolloutProvenance(DigestedSpan, HistoricalInstructionProvenance):
     """Authenticate historical role-record bytes; never current instructions."""
 
     path: str
-    offset: int
-    length: int
-    sha256: str
     instruction: int
 
     def instruction_position(self) -> tuple[int, int]:

@@ -757,18 +757,25 @@ class ContextSegment(
 
     def contribution(self, offset: int, text: str, images=()) -> InputContributionCoordinates:
         raw = text.encode()
-        return InputContributionCoordinates(type(self), self.provenance, offset,
-                                 len(raw), hashlib.sha256(raw).hexdigest())
+        return InputContributionCoordinates(
+            type(self), self.provenance,
+            offset=offset, length=len(raw), sha256=hashlib.sha256(raw).hexdigest())
 
 
-@dataclass(frozen=True)
-class ContributionCoordinates:
-    """Byte coordinates and proof in one owner's rendered public value."""
-    kind: type[ContextSegment]
-    provenance: tuple[Provenance, ...]
+@dataclass(frozen=True, kw_only=True)
+class DigestedSpan:
+    """A byte range and its SHA-256: position + integrity in one declaration."""
+
     offset: int
     length: int
     sha256: str
+
+
+@dataclass(frozen=True)
+class ContributionCoordinates(DigestedSpan):
+    """Byte coordinates and proof in one owner's rendered public value."""
+    kind: type[ContextSegment]
+    provenance: tuple[Provenance, ...]
 
     def __post_init__(self):
         if not self.provenance or min(self.offset, self.length) < 0:

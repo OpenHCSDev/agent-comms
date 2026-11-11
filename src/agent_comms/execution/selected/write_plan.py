@@ -52,6 +52,7 @@ from agent_comms.storage.private_path import (
     PrivateDirectoryRole,
     PrivateFileRole,
 )
+from agent_comms.acp_extension import SelectedWriteSource
 from agent_comms.storage.store_files import AtomicFile
 
 if TYPE_CHECKING:
@@ -78,20 +79,17 @@ class SelectedWriteBinding(ClaimScoped):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
+class SelectedWriteIntent(SelectedWriteSource, DeclaredFamily, affix="WriteIntent"):
     """The existing one-use plan file owns its state and exact source binding."""
 
     family_discriminator = "status"
     schema: Literal[1]
     root_id: RootId
-    source_seq: int
-    source_message_id: MessageId
     claim_id: AssignmentId
     owner: RecordedThreadIncarnation
     claim_epoch: int
     expected_attempt_ordinal: Literal[1]
     operation_id: ClaimId
-    resource: str
     contents_b64: str
     digest: str
 
