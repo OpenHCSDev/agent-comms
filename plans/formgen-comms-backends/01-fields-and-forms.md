@@ -32,6 +32,8 @@ The preservation target includes each original form's observable input semantics
 
 Formbridge `bridge/object_state.py:539–547` calls the same converter from `ObjectStateFieldMutationService._converted_value`; mutation at `:498–510` also has an authorization callback and its own accepted/rejected receipt. It must be in the migration and test set. Changing only widgets would leave the bridge answering a different question for the same inherited edit.
 
+A converted None is not automatically a reset. The bridge's reset request calls `state.reset_parameter`; an ordinary request calls `state.update_parameter` with the converted value, even when that value is None. The result also preserves the original reset flag. Keep those calls, authorization order and receipts distinct. Do not implement the inherited reader by mapping every empty/None result to reset merely because one current displayed value happens to agree (paper1 Theorem 4.8).
+
 ## 1.2 Determining owners
 
 | Required fact | Owner retained | What is removed from consumers |
@@ -74,9 +76,33 @@ The following public parents are the destination design, not existing APIs. Impl
 
 `FollowingForm` follows the original ObjectState and actual field-view index. Its change work is proportional to the affected visible paths, not a full rebuild or repaint. Subscriptions attach once, detach before the native view disappears, and late callbacks cannot act on a replacement view.
 
-### Native composition and lookup checks
+### Selected Textual editor bases and constructor order
 
-- Textual retains the `toad.forms.editors` and `toad.forms.form_view` native modules. Their classes inherit the shared algorithms and retain only native controls/events/rendering. Moving a name does not justify leaving a re-export shim.
+Keep the existing native names in `toad/forms/editors.py`; the following are the intended bases after extraction, not classes claimed implemented here. Shared editing parents in `formbridge/forms/value_editing.py` own the original pure bodies; native classes keep controls, events, styling and native value/feedback access.
+
+| Native class | Intended bases / own declaration | Important winner |
+|---|---|---|
+| `ValueEditor` | `ValueEditing, DeclaredViews, Widget`, with native `FormEditorMeta(type(FormInput), ABCMeta)` | Native constructor binds field before native control initialization; shared send/refuse/value text; native feedback and paint hooks |
+| `BoolEditor` | `ValueEditor, FormCheckbox`; original `shows=(bool,)` | Native checkbox events/paint; shared send and validation |
+| `LineEditor` | `LineEditing, ValueEditor, FormInput` | Shared read/acceptable/finish; native text access, control arguments/events and paint |
+| `IntEditor`, `FloatEditor`, `StrEditor` | Original `LineEditor` parent and each original shows declaration | Keep the native InputType setting; do not repeat parse/finish bodies |
+| `MultilineEditor` | `MultilineEditing, ValueEditor, UntintedTonePaint, FramedControl, TextArea`; original Multiline declaration | Shared empty default-note policy; native TextArea event/paint/geometry |
+| `SelectEditor` | `SelectEditing, ValueEditor, WidgetView, Select[object]` | Shared label interpretation; native offered-value/NULL boundary, option installation, focus and paint |
+| `ChoicesEditor` | `ChoicesEditing, SelectEditor`; original AnnotationChoices declaration | Shared choices/options projection; native option refresh during paint |
+| `EnumEditor` | `EnumEditing, SelectEditor`; original Enum declaration | Original enum/label generator on the shared parent |
+| `OptionalEditor` | `OptionalEditing, ValueEditor, WidgetView, containers.VerticalGroup`; original Optional declaration | Shared member/held-value algorithm; native checkbox, container and silent feedback operations |
+
+Delete the current `if TYPE_CHECKING: EditorWidget = Widget; else: EditorWidget = object` workaround and its alias. The native ValueEditor is a real Widget; Formbridge's ValueEditing is not. Keep DeclaredViews before the actual native widget chain so it consumes shows first. Preserve each class's own shows declaration rather than inheriting the parent's roster. The native form metaclass combines the actual Textual metaclass with ABCMeta; it does not copy abstract-method flags by hand. Verify the actual MRO, abstract enforcement, focus and widget metadata in the implementation checks. Current Widget.__init_subclass__ only assigns can_focus when explicitly supplied; do not add a blanket focus override or claim a prototype proves the finished classes.
+
+Retain the native constructor sequence: bind the one original DeclaredField; compute the control arguments from it; initialize the actual control once through the MRO; bind native events afterward. Shared editing parents do not start another native constructor or store a second committed value. Their field annotation lives once on the shared parent. Numeric/choice/optional member construction still receives the original narrowed DeclaredField/OptionalMemberField.
+
+The shared primitive signatures are `display_feedback(text: str) -> None`, `clear_feedback() -> None`, `read_text() -> str` for line controls, and `displayed_options() -> Iterable[tuple[str, object]]` plus `lists(value: object) -> bool` for selects. `clear_feedback` is deliberately silent: OptionalEditor currently uses set_reactive on the hidden member; turning that into a later feedback event could overwrite the parent's newer refusal. Shared LineEditing.finish reads through read_text; its acceptable calls the existing field.validate. Shared SelectEditing.value_text reads the actual installed native options rather than keeping another option cache. Native callbacks decode their foreign event/NULL marker once and call the shared operation.
+
+OptionalEditing retains the actual member editor as ValueEditing, not another value record. Its native primitives are `set_member_shown(held: bool) -> None` and `paint_held(held: bool) -> None`; the latter changes the native checkbox without echo. Native held_changed decodes the checkbox event and calls shared `change_held(held: bool)`, retaining the original silent-member-clear/send-None sequence. Model None, optional membership and inherited fallback remain the different meanings in §1.1; this declared/literal matrix does not authorize sending an inherited reset through the wrong field contract.
+
+### Remaining native composition
+
+- Textual retains the `toad.forms.editors` and `toad.forms.form_view` native modules. Moving a name does not justify leaving a re-export shim.
 - The native `ValueEditor` keeps `DeclaredViews` before its widget base so `shows=` is consumed before Textual sees it. Preserve the intentional non-inheritance of `DeclaredViews.shows` from parent to child.
 - A boolean editor composes value editing and the checkbox; a line editor composes line editing and native input; an optional editor composes held/member behavior and a native container. A multiline editor keeps its framing/paint capabilities. These crossings stay parents, not constructor flags.
 - Qt must compose the same literal/inherited semantic parents with its real controls. Do not call the current inherited `ParameterFormManager` a declared comms form without changing its input family.

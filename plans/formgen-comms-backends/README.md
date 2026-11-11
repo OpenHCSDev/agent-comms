@@ -20,7 +20,7 @@ Existing Core permissions, channel/thread identities, command declarations, mess
 
 | Phase | Complete change | State of the plan |
 |---|---|---|
-| [1. Shared form behavior](01-fields-and-forms.md) | Bound fields, concrete/optional/inherited input, validation, finishing, filtering, dirty marking and model following; both native form users migrated | Literal/inherited input meanings and validation owner resolved; exact Qt bases, constructors, NRA steps and full caller list still being finished |
+| [1. Shared form behavior](01-fields-and-forms.md) | Bound fields, concrete/optional/inherited input, validation, finishing, filtering, dirty marking and model following; both native form users migrated | Literal/inherited/reset distinctions and Textual editor bases/primitives specified; Qt composition, complete caller/import map and NRA steps still being finished |
 | [2. Application runtime and events](02-runtime-and-publications.md) | Shared event/subscription lifetime and native delivery, with persistent async execution and a defined shutdown order | qasync selected; context/handle/default-executor owner fixes specified; exact native queue/class/caller graph still being finished |
 | [3. Core connection and commands](03-connections-and-commands.md) | Original local/remote observation/capture families and command drafts use shared host capabilities without Textual bases | Source flow traced; module placement decided in the ownership document; full caller changes still being written |
 | [4. Navigation](04-navigation-and-selection.md) | Original tab identities, saved order, back/return history and sidebar selection; native focus and widget creation separated | Current logical owners traced; full list of native calls still needed |
