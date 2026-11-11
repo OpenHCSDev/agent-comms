@@ -45,6 +45,7 @@ from agent_comms.messaging.response_policy import (
     ResponseEligibility,
     ResponsePolicy,
 )
+import agent_comms.messaging.retained_task_facts as task_facts
 from agent_comms.messaging.task_attachment import NoTaskAttachment, TaskAttachment
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -1348,8 +1349,6 @@ class ClaimMessage(Claimed, Message):
     def retained_task_facts(self) -> Iterator[task_facts.ExactTaskFact]:
         yield from super().retained_task_facts()
         yield task_facts.ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))
-
-import agent_comms.messaging.retained_task_facts as task_facts
 
 
 type RecordBuilder = Callable[[int, sqlite3.Connection], BusRecord]

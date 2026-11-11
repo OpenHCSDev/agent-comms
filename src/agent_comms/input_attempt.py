@@ -10,13 +10,7 @@ from typing import Annotated, ClassVar, Self
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.context_provenance_source import ContextProvenanceSource
 from agent_comms.execution.input_key import InputKey, InputKeyText, PublicInputKeyText
-from agent_comms.execution.input_origin import (
-    InputDelivery,
-    InputOrigin,
-    InputProvenance,
-    UnattributedInputOrigin,
-    UndeliveredInput,
-)
+import agent_comms.execution.input_origin as input_origin
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.reported_turn import ReportedTurnState
 from agent_comms.messaging.notification_evidence import ConsumptionEvidence
@@ -131,7 +125,7 @@ class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, aff
     def matches_owner(self, source_owner: ThreadIncarnation) -> bool:
         return False
 
-    def require_original_provenance(self, source: InputProvenance):
+    def require_original_provenance(self, source: input_origin.InputProvenance):
         raise RelationViolationError("Constraint lacks its original input provenance")
 
     def matches_claim(self, claim_scope: int) -> bool:
@@ -150,7 +144,7 @@ class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, aff
     def require_started(self, claim_scope: int) -> StartedInput:
         raise RelationViolationError("Input start lacks its original native disposition")
 
-    def context_provenance(self) -> InputProvenance:
+    def context_provenance(self) -> input_origin.InputProvenance:
         raise RelationViolationError("Constraint lacks its original input")
 
     def model_contexts(self) -> tuple[NativeContextProof, ...]:
@@ -203,15 +197,15 @@ class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, aff
     ) -> bool:
         return False
 
-    def unbound_delivery(self, root_id: RootId) -> InputDelivery:
+    def unbound_delivery(self, root_id: RootId) -> input_origin.InputDelivery:
         """Explicit withdrawal never grants an automatic delivery retry."""
-        return UndeliveredInput()
+        return input_origin.UndeliveredInput()
 
     def delivered_in(
         self, lease: TurnFence, root_id: RootId, snapshot: RegistryNames[ThreadIdentitySource]
-    ) -> InputDelivery:
+    ) -> input_origin.InputDelivery:
         """The bus message this input delivered into the lease's turn."""
-        return UndeliveredInput()
+        return input_origin.UndeliveredInput()
 
 
 class InputDeliveryScope(DeclaredFamily, affix="InputDeliveryScope"):
@@ -305,7 +299,7 @@ class HistoricalInput(UnresolvedInput):
 
 
 @dataclass(frozen=True)
-class StoredInput(InputAttempt, ContextProvenanceSource[InputProvenance]):
+class StoredInput(InputAttempt, ContextProvenanceSource[input_origin.InputProvenance]):
     """The recorded owner name and input generation, without inventing a thread identity."""
 
     exists = True
@@ -313,10 +307,10 @@ class StoredInput(InputAttempt, ContextProvenanceSource[InputProvenance]):
     def source_text_or(self, fallback: str) -> str:
         return self.source_text
 
-    def context_provenance(self) -> InputProvenance:
-        return InputProvenance(self.key, self.origin)
+    def context_provenance(self) -> input_origin.InputProvenance:
+        return input_origin.InputProvenance(self.key, self.origin)
 
-    def require_original_provenance(self, source: InputProvenance):
+    def require_original_provenance(self, source: input_origin.InputProvenance):
         if self.context_provenance() != source:
             raise RelationViolationError("Constraint lacks its original input provenance")
         self.origin.require_human()
@@ -328,8 +322,8 @@ class StoredInput(InputAttempt, ContextProvenanceSource[InputProvenance]):
     claim_generation: int
     target: str
     source_text: str
-    origin: Annotated[InputOrigin, WireOmitDefault()] = field(
-        default_factory=UnattributedInputOrigin, kw_only=True
+    origin: Annotated[input_origin.InputOrigin, WireOmitDefault()] = field(
+        default_factory=input_origin.UnattributedInputOrigin, kw_only=True
     )
     notice_dismissed: Annotated[bool, WireOmitDefault()] = field(
         default=False, kw_only=True
@@ -385,7 +379,7 @@ class StoredInput(InputAttempt, ContextProvenanceSource[InputProvenance]):
 
 
 class RecoverableUnboundInput(StoredInput):
-    def unbound_delivery(self, root_id: RootId) -> InputDelivery:
+    def unbound_delivery(self, root_id: RootId) -> input_origin.InputDelivery:
         return self.origin.delivery_reference(root_id)
 
 
@@ -480,10 +474,10 @@ class StartedInput(KnownInputState, SentInput):
             and self.turn_id == lease.turn_id
         )
 
-    def delivered_in(self, lease, root_id, snapshot) -> InputDelivery:
+    def delivered_in(self, lease, root_id, snapshot) -> input_origin.InputDelivery:
         if self.matches_lease(lease, snapshot):
             return self.origin.delivery_reference(root_id)
-        return UndeliveredInput()
+        return input_origin.UndeliveredInput()
 
     def started_for_native(
         self,
