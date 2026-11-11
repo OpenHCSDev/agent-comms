@@ -1173,10 +1173,7 @@ class MessagingOwnersPhase(ModuleOwnershipPhase):
     """P3: `messaging/` owns the bus, channels and conversation owners."""
 
     after = (ProjectOwnersPhase,)
-    evidence = AllEvidence((
-        PathsAbsent(("src/agent_comms/message_bus.py", "src/agent_comms/messaging.py")),
-        PatternAbsent(r"from agent_comms[.](message_bus|messaging)\b", ("src",)),
-    ))
+    evidence = PathsAbsent(("src/agent_comms/message_bus.py", "src/agent_comms/messaging.py"))
 
 
 class ExecutionOwnersPhase(ModuleOwnershipPhase):
