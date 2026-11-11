@@ -37,7 +37,11 @@ from agent_comms.planning.phase_tasks import PhaseTask, UnspecifiedPhaseTask
 from agent_comms.planning.plan_reading import PlanReading
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.thread_identity import BirthlessIncarnation
+from agent_comms.execution.turn_item import TurnItem
+from agent_comms.planning.todo_refusals import SharedWorktreeRefusal
+from agent_comms.registry.thread_identity import ClaimScoped
 from agent_comms.storage.store_files import MultiFileStore, SingleFileStore, SqliteStore
+from agent_comms.storage.typed_table import SingletonRow, WithoutRowid
 from agent_comms_hooks.process_claim import ProcessSingleton
 from agent_comms_hooks.queue_bypass import QueueBypassGuard
 
@@ -492,10 +496,10 @@ class FieldDirectivesPhase(MultipleInheritancePhase):
 
     evidence = ParentsShared(
         names=(
-            "TurnItem",
-            "ClaimScoped",
-            "SingletonRow",
-            "WithoutRowid",
+            TurnItem,
+            ClaimScoped,
+            SingletonRow,
+            WithoutRowid,
         )
     )
 
@@ -887,7 +891,7 @@ class TeamAwarenessPhase(TeamNativePhase, declared_name=None):
 class OneHolderPerWorktreePhase(TeamAwarenessPhase):
     """One holder per worktree, refused at order time."""
 
-    evidence = ClassDeclared("SharedWorktreeRefusal", ("src/agent_comms",))
+    evidence = ClassDeclared(SharedWorktreeRefusal, ("src/agent_comms",))
 
 
 class DriftOverlapRulesPhase(TeamAwarenessPhase):

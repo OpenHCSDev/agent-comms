@@ -896,10 +896,17 @@ class OwnClassChecksAbsent(MainEvidence):
 @dataclass(frozen=True)
 class ParentsShared(MainEvidence):
     """Every named class, and every class declared in ``paths``, is a direct base of at least
-    two classes in ``src``: a capability or mixin left with one member is folded back."""
+    two classes in ``src``: a capability or mixin left with one member is folded back.
 
-    names: tuple[str, ...] = ()
+    ``names`` accepts classes or strings: a class's ``__name__`` is read once."""
+
+    names: tuple[str | type, ...] = ()
     paths: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        resolved = tuple(n.__name__ if isinstance(n, type) else n for n in self.names)
+        if resolved != self.names:
+            object.__setattr__(self, "names", resolved)
 
     def read(self, main: MainTree) -> bool:
         declared = {*self.names, *(name for module in main.source_facts(self.paths)
@@ -1271,12 +1278,19 @@ class DeclaredScopes:
 @dataclass(frozen=True)
 class DeclarationEvidence(MainEvidence, DeclaredFamily, affix="Declared"):
     """Whether ``paths`` on main declare a member's kind of declaration called ``name``, read
-    from the walk of their import roots; each member's declared name is the kind it reads. The
-    name is a string because it is the declared target of a declaration the phase's work may
-    not have written yet."""
+    from the walk of their import roots; each member's declared name is the kind it reads.
 
-    name: str
+    ``name`` accepts a class or a string. Pass the class when it already exists
+    on main; its ``__name__`` is read once at construction, so the identity is
+    nominal and a rename is one edit. Pass a string only when the class is a
+    future target that the phase's work has not written yet."""
+
+    name: str | type
     paths: tuple[str, ...] = ("src",)
+
+    def __post_init__(self) -> None:
+        if isinstance(self.name, type):
+            object.__setattr__(self, "name", self.name.__name__)
 
     def read(self, main: MainTree) -> bool:
         roots = tuple(dict.fromkeys(PurePosixPath(path).parts[0] for path in self.paths))
