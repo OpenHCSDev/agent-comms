@@ -307,6 +307,8 @@ class MonitorShown(MonitorFrame, declared_name='shown'):
         with bridge.uncertain_on_contention(identity):
             for delivery in await bridge.attempts(identity):
                 message = await bridge.message(delivery.reference)
+                if message is None:
+                    continue
                 observed = tuple(line.rstrip() for line in self.lines)
                 if ClaudeMonitorFrame(message).observed != observed:
                     await bridge.record_mismatch(

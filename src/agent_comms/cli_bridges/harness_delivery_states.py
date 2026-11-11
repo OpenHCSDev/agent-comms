@@ -118,6 +118,8 @@ class ReceivingMonitor(MonitorEvidence):
         if len(parts) != self.total:
             return ()
         message = await bridge.message(delivery.reference)
+        if message is None:
+            return ()
         if (''.join(part.body for part in parts) != message.body
                 or any(part.sender != message.sender for part in parts)):
             await bridge.record_mismatch(delivery, 'Observed parts do not equal the original message')
