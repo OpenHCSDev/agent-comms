@@ -726,7 +726,7 @@ class RegistryStore(
 
     @PublishedProperty
     def coordinator_reader(self) -> ReadableStore:
-        return ReadableStore(CoordinationStore.path_in(self.path.parent))
+        return ReadableStore.at(CoordinationStore.path_in(self.path.parent))
 
     def coordinator_schema(self) -> type[TableSchema]:
         """Read schema declarations without loading executable registry state.
