@@ -501,7 +501,7 @@ class AcquiredThreadPresentation(NotifiedThreadPresentation):
     sent_references: tuple[MessageReference, ...] = field(kw_only=True)
     notification_window: NotificationWindow = field(kw_only=True)
 
-    def published(self) -> ThreadPresentation:
+    def published(self) -> NotifiedThreadPresentation:
         return NotifiedThreadPresentation(**{declared.name: getattr(self, declared.name)
                                              for declared in fields(NotifiedThreadPresentation)})
 

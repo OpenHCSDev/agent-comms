@@ -83,7 +83,7 @@ from agent_comms.registry.thread_management import (
     ProjectChangeResult,
     RenameThreadResult,
 )
-from agent_comms.registry.thread_presentation import ThreadPresentation
+from agent_comms.transcript.transcripts import NotifiedThreadPresentation
 from agent_comms.registry.thread_text import ExpectedSession
 from agent_comms.registry.threads import Thread
 from agent_comms.transport.request import (
@@ -565,8 +565,12 @@ class CommsThreadConfigurationTool(ReadRequest[CoordinationChangedUpdate]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadPresentationTool(ReadRequest[ThreadPresentation]):
-    """One thread's published presentation, as the sidebar and session header show it."""
+class CommsThreadPresentationTool(ReadRequest[NotifiedThreadPresentation]):
+    """One thread's published presentation, as the sidebar and session header show it.
+
+    The result is the published NotifiedThreadPresentation, with its notifications and read
+    identity: a read answered across a pipe decodes as the declared type, and on 2026-11-10
+    declaring the parent made every local Toad read refuse those two fields as unknown."""
 
     label = "Thread presentation"
     description = "Read one thread's published presentation."

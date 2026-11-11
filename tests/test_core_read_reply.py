@@ -96,3 +96,20 @@ async def test_a_read_with_no_attachment_coming_still_refuses_by_name(tmp_path, 
         await asyncio.to_thread(worker.join, 5)
         with pytest.raises(ObserverUnattached, match="attached no reader"):
             raise outcome.get_nowait()
+
+
+async def test_a_thread_presentation_read_decodes_across_the_child(tmp_path):
+    """Core serves a thread presentation as the published NotifiedThreadPresentation. On
+    2026-11-10 the read declared the parent ThreadPresentation, so the reply's notifications and
+    read_identity were refused as unknown fields on every local Toad read."""
+    from agent_comms.projects.checkouts import Checkout
+    from agent_comms.registry.threads import NativeThread
+    from agent_comms.transcript.transcripts import NotifiedThreadPresentation
+    from agent_comms.transport.tools.sidebar import CommsThreadPresentationTool
+
+    comms = wire(tmp_path / "wire")
+    comms.registry.declare(NativeThread("presented", frozenset(), Checkout(tmp_path)))
+    async with ObservationProcess.awaited(comms.route) as process:
+        request = CoreReadOperation(str(comms.root), CommsThreadPresentationTool(thread="presented"))
+        presentation = await asyncio.to_thread(process.read_from_thread, request)
+    assert isinstance(presentation, NotifiedThreadPresentation)
