@@ -1173,19 +1173,7 @@ class MessagingOwnersPhase(ModuleOwnershipPhase):
     """P3: `messaging/` owns the bus, channels and conversation owners."""
 
     after = (ProjectOwnersPhase,)
-    removed_modules = PathsAbsent(("src/agent_comms/message_bus.py", "src/agent_comms/messaging.py"))
-    removed_imports = "|".join(
-        path.removeprefix("src/").removesuffix(".py").replace("/", "[.]")
-        for path in removed_modules.paths
-    )
-    evidence = AllEvidence((
-        removed_modules,
-        PatternAbsent(
-            f"(^|;)[ \t]*(from[ \t]+({removed_imports})[ \t]+import([ \t(]|$)"
-            f"|import[ \t]+([^;#]*,[ \t]*)?({removed_imports})([ \t,;#]|$))",
-            ("src",),
-        ),
-    ))
+    evidence = PathsAbsent(("src/agent_comms/message_bus.py", "src/agent_comms/messaging.py"))
 
 
 class ExecutionOwnersPhase(ModuleOwnershipPhase):

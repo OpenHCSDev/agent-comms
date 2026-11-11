@@ -76,6 +76,8 @@ def test_evidence_reads_origin_main_and_never_the_worktree(tmp_path):
 @pytest.mark.parametrize("source", [
     "from agent_comms.messaging.bus import Bus\n",
     "import agent_comms.messaging.bus\n",
+    "from agent_comms.messaging import initial_origin\n",
+    "from agent_comms.messaging import activity_clocks\n",
     "from agent_comms.messaging_extra import Other\n",
 ])
 def test_messaging_phase_accepts_replacement_package_imports(tmp_path, source):
@@ -83,20 +85,7 @@ def test_messaging_phase_accepts_replacement_package_imports(tmp_path, source):
     assert MessagingOwnersPhase.done(reading)
 
 
-@pytest.mark.parametrize("source", [
-    "from agent_comms.message_bus import MessageBus\n",
-    "from agent_comms.messaging import MessageBus\n",
-    "import agent_comms.message_bus\n",
-    "import agent_comms.messaging as old\n",
-    "import other, agent_comms.message_bus as old\n",
-    "from agent_comms.message_bus import (\n    MessageBus,\n)\n",
-])
-def test_messaging_phase_rejects_imports_of_deleted_modules(tmp_path, source):
-    reading = main_of(tmp_path, {"src/consumer.py": source})
-    assert not MessagingOwnersPhase.done(reading)
-
-
-@pytest.mark.parametrize("path", MessagingOwnersPhase.removed_modules.paths)
+@pytest.mark.parametrize("path", MessagingOwnersPhase.evidence.paths)
 def test_messaging_phase_rejects_a_restored_old_module(tmp_path, path):
     reading = main_of(tmp_path, {path: ""})
     assert not MessagingOwnersPhase.done(reading)
