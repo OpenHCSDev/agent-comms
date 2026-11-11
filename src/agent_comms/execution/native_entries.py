@@ -712,7 +712,7 @@ class MessageEntry(NativeEntry):
 
     @property
     def assistant_message(self) -> bool:
-        return self.message.assistant
+        return self.message.update_context
 
     @property
     def input_id(self) -> ReportedInputId | PiOmitted:

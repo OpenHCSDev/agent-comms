@@ -583,7 +583,7 @@ class NativeTranscript(ReadsNativeInputs, TranscriptSource):
                     timestamp = entry.timestamp.at.timestamp()
                     if timestamp < since:
                         return
-                    if any(message.assistant and message.tool_calls
+                    if any(message.update_context and message.tool_calls
                            for message in entry.messages):
                         yield timestamp
         except FileNotFoundError:
