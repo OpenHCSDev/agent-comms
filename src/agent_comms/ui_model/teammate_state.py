@@ -396,7 +396,7 @@ class Detached(NeedsTeamAttention, TeammateState):
 
     @classmethod
     def derive(cls, source: TeammateObservation) -> Iterator[Self]:
-        if not source.presence.receiving:
+        if not source.presence.is_receiving():
             yield cls(source.thread.incarnation, source.orders, source.presence, source)
 
     def detail(self) -> str:

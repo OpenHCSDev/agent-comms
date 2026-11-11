@@ -461,7 +461,7 @@ class TestSelectedTargetActions:
         assert isinstance(result, TargetBatchResult) and result.successful
         assert len(result.outcomes) == 2
         assert {outcome.result.stopped for outcome in result.outcomes} == {"alpha", "beta"}
-        assert all(comms.registry.status(name).stopped for name in ("alpha", "beta"))
+        assert all(comms.registry.status(name).is_stopped() for name in ("alpha", "beta"))
         assert not result.reconnect_targets()
 
     def test_channel_start_uses_native_visible_roster_without_launching(self, tmp_path):

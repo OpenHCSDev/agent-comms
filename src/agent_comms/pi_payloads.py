@@ -503,6 +503,9 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
     def update_context(self):
         return False
 
+    def is_user_message(self) -> bool:
+        return False
+
     def preserve_evidence(self, raw: Mapping[str, object]) -> Self:
         return self
 
@@ -597,6 +600,9 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
 
 
 class UserMessage(PiMessage):
+    def is_user_message(self) -> bool:
+        return True
+
     @property
     def invalidates_start(self):
         return True

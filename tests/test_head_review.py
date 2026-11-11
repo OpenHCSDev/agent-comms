@@ -1465,7 +1465,7 @@ def test_a_request_no_order_links_reaches_the_thread_working_on_its_branch(
     assert stuck.line().endswith(" -> fix debt-src at its owner at armer")
 
     snapshot = comms.registry.snapshot()
-    assert snapshot.statuses["author"].stopped and not snapshot.statuses["author"].archived
+    assert snapshot.statuses["author"].is_stopped() and not snapshot.statuses["author"].archived
     reader = WorkBranches(reviewed_source.checkout)
     worktrees = reader.worktrees()
     path = str(snapshot.require("author").worktree.path)

@@ -135,7 +135,7 @@ def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
     generation = registry.snapshot().claim_generation('owner')
     with registry.store.editing() as edit:
         assert edit.fence_restart_owners(((current, generation),))[0][1] > generation
-    assert registry.status('owner').stopped
+    assert registry.status('owner').is_stopped()
 
 
 def test_batch_idle_fence_refuses_busy_second_without_partial_commit(tmp_path):
@@ -164,5 +164,5 @@ def test_restart_fence_ends_a_wedged_turn_the_way_stop_does(tmp_path, monkeypatc
     monkeypatch.setattr(ActiveTurn, "wedged_after", 0.0)  # its transcript has been silent past the limit
     with registry.store.editing() as edit:
         edit.fence_restart_owners(selected)
-    assert registry.status("owner").stopped
+    assert registry.status("owner").is_stopped()
     assert not registry.require("owner").executing
