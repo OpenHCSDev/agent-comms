@@ -35,6 +35,7 @@ from agent_comms.nominal.field_codec import (
     SubclassUnion,
 )
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
+from agent_comms.storage.private_path import FileObservation, FileRevision
 
 if TYPE_CHECKING:
     from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
@@ -49,6 +50,12 @@ class TakenInputCursor(ReadCursor):
 
     def unread_rule(self) -> str:
         raise TypeError("A taken-input cursor reads only once attached to its root's coordinator")
+
+    @staticmethod
+    def revision(root: Path) -> FileObservation:
+        """The coordinator's commit signal: every take is a coordinator commit."""
+        signal, = CoordinationStore.source_paths(root)
+        return FileRevision.capture(signal)
 
     def attached(self, db: sqlite3.Connection, root: Path, privacy: RegistryPrivacy) -> AttachedTakenInputs:
         """The coordinator joins the bus reader read-only, once per reader: readers are reused
