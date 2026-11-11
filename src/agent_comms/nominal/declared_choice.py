@@ -8,7 +8,7 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 class DeclaredChoice(DeclaredFamily):
     @classmethod
     def choice_label(cls) -> str:
-        return cls.declared_name.replace("-", " ").replace("_", " ").title()
+        return cls.display_name()
 
 
 class TitledChoice:

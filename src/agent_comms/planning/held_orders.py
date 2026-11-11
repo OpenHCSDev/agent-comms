@@ -27,7 +27,7 @@ class LiveHold:
     def recalled(self) -> str:
         """The holder, problem, scope and last numbered edit, read from the stored order."""
         order = self.todo.order.checked()
-        return (f"{self.holder.name} {self.todo.id} {order.scope.declared_name}: "
+        return (f"{self.holder.name} {self.todo.id} {order.scope.display_name()}: "
                 + shorten(" ".join(order.edits[-1:]), 160, placeholder="..."))
 
 
