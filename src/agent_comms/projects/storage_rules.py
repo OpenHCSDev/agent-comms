@@ -81,7 +81,7 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
         The one declaration of that question. Ownership tests and spill decisions
         both ask it, and asking it in two places let the answers drift apart.
         """
-        return any(allocation.reserves_boundary()
+        return any(isinstance(allocation, EditableCheckoutAllocation)
                    for owner in owners
                    for allocation in cls.for_path(rule, owner, path))
 
@@ -146,9 +146,6 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
                     continue
         return frozenset(roots)
 
-    def reserves_boundary(self) -> bool:
-        return False
-
     def edit_boundary(self, rule: StorageRule, owner: Thread, path: Path,
                       store: TodoStore, reads: RepositoryReads) -> frozenset[Path]:
         return frozenset()
@@ -185,9 +182,6 @@ class HomeCheckoutAllocation(CheckoutAllocation):
 
 class EditableCheckoutAllocation(CheckoutAllocation):
     """Declared editable members acquire Git identity once at the source-write boundary."""
-
-    def reserves_boundary(self) -> bool:
-        return True
 
     def edit_boundary(self, rule: StorageRule, owner: Thread, path: Path,
                       store: TodoStore, reads: RepositoryReads) -> frozenset[Path]:
@@ -441,7 +435,7 @@ class StorageRule(RoomAllocation, DurableFile, ThreadCheckoutSource[Thread], Rep
         return ((path / '.git').is_file() and not path.is_symlink()
                 and any(allocation.owns_present(self, owner, path, reads)
                         for allocation in CheckoutAllocation.for_path(self, owner, path)
-                        if allocation.reserves_boundary())
+                        if isinstance(allocation, EditableCheckoutAllocation))
                 and reads.repository(path).github == repository)
 
     def owned_checkouts(self, owner: Thread, repository: RepositoryName,
