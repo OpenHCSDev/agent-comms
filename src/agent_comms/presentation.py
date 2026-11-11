@@ -490,7 +490,7 @@ class CoordinationSnapshot:
             member for name in view.members
             if (person := self.threads.get(name)) is not None
             for member in person.status.items_with(ActiveThreadPresence, person)
-            if member.presentation.status.working
+            if member.presentation.status.is_working()
         )
 
     def mention_candidates(self, channel: str) -> tuple[MentionCandidate, ...]:
