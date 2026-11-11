@@ -169,6 +169,38 @@ class GoalWaitRecovery:
         goal = self.registry.require(name).goal
         return self.waits.resolve(goal)
 
+    def recover_replied_goal_wait(self, name: str) -> tuple[str, ...]:
+        """Release a standby whose declared target sent a qualifying direct reply."""
+        try:
+            incarnation = self.registry.require(name).incarnation.require_recorded()
+            review = GoalWaitReview.capture(self, incarnation)
+        except UnregisteredThreadError:
+            return ()
+        owner = review.owner
+        if not any(
+            review.wait.current_for(goal, owner.incarnation.require_recorded())
+            for goal in owner.goal.active()
+        ):
+            return ()
+        owner_incarnation = owner.incarnation.require_recorded()
+        with self.bus.bus.reading() as source:
+            if not review.wait.has_reply(source, owner_incarnation):
+                return ()
+        def release(edit: RegistryEdit) -> tuple[str, ...]:
+            snapshot = edit.original.snapshot
+            actual_owner, = snapshot.threads_for(owner_incarnation)
+            note = (
+                "A declared dependency sent a qualifying direct reply. "
+                "Standby was released."
+            )
+            if self._release_reviewed_wait(edit, review, note):
+                return (actual_owner.name,)
+            return ()
+        with self.registry.store.editing() as edit:
+            if not review.current_for(self):
+                return ()
+            return release(edit)
+
     def recover_closed_goal_wait(self, name: str) -> tuple[str, ...]:
         """Read silence outside the registry, then release only the observed wait."""
         try:

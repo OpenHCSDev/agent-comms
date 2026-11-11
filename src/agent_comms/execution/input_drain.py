@@ -487,8 +487,12 @@ class InputObservation(BusSessionsRuntime, ABC):
                 drained = await self.drain_inbox(session_id)
                 if self.effects.turns.goals.in_standby(attachment):
                     await Coordination.run_worker(partial(
-                        self.comms.goals.recover_closed_goal_wait, session_id,
+                        self.comms.goals.recover_replied_goal_wait, session_id,
                     ))
+                    if self.effects.turns.goals.in_standby(attachment):
+                        await Coordination.run_worker(partial(
+                            self.comms.goals.recover_closed_goal_wait, session_id,
+                        ))
                 await self.effects.turns.project_resume_check(session_id, self).schedule()
                 await self.effects.turns.goals.schedule_goal(attachment)
                 current = await Coordination.run_worker(partial(self.comms.registry.require, thread))
