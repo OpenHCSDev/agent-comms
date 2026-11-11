@@ -18,8 +18,8 @@ class RuleCheck:
     """A check selects applicable declarations from the one reservation rule family."""
 
     def require_valid(self) -> None:
-        for declaration in ReservationRule.members_with(ReservationRule):
-            if isinstance(self, declaration.check_type):
+        for cls in type(self).__mro__:
+            for declaration in cls.__dict__.get('_reservation_rules', ()):
                 rule = declaration()
                 if rule.violated(self):
                     raise ReservationViolationError(rule, self)
@@ -28,6 +28,12 @@ class RuleCheck:
 class ReservationRule(DeclaredFamily, affix="Rule"):
     check_type: ClassVar[type[RuleCheck]]
     explanation: ClassVar[str]
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        if 'check_type' in vars(cls):
+            own = cls.check_type.__dict__.get('_reservation_rules', ())
+            cls.check_type._reservation_rules = own + (cls,)
 
     def explanation_for(self, check: RuleCheck | None) -> str:
         """The declared sentence, unless this rule reads the check to say what changed."""
