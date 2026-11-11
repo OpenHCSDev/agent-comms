@@ -8,10 +8,14 @@ from threading import Event, Thread
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import MalformedRecord
 from agent_comms.transport.tools.sidebar import CommsChannelTool
+import pytest
+
 from agent_comms.ui_model.observation import (
     CoreReadAnswered,
     CoreReadOperation,
+    LocalRouteObservation,
     ObservationProcess,
+    ObserverUnattached,
 )
 
 
@@ -50,3 +54,45 @@ async def test_malformed_reply_releases_actual_waiting_worker(tmp_path, monkeypa
         assert process.reads == {}
 
     assert process.peer.process.exitcode == 0
+
+
+def asked_from_a_worker(process: ObservationProcess, request: CoreReadOperation):
+    """One worker thread's read, with whatever it ended in."""
+    outcome = SimpleQueue()
+
+    def ask():
+        try:
+            outcome.put(process.read_from_thread(request))
+        except BaseException as error:
+            outcome.put(error)
+
+    worker = Thread(target=ask, daemon=True)
+    worker.start()
+    return worker, outcome
+
+
+async def test_a_read_asked_before_attachment_waits_for_it(tmp_path):
+    """On 2026-11-10 Toad made an observation current, scheduled its attachment, and its tab
+    restore read from a worker in between: the launch failed with ObserverUnattached."""
+    comms = wire(tmp_path / "wire")
+    comms.channels.create_tag("early-read")
+    async with ObservationProcess(LocalRouteObservation(comms.route)) as process:
+        request = CoreReadOperation(str(comms.root), CommsChannelTool(name="#early-read"))
+        worker, outcome = asked_from_a_worker(process, request)
+        await asyncio.sleep(0.2)
+        assert worker.is_alive(), "the early read refused instead of waiting"
+        process.start_receiving(process.observed, process.failed)
+        await asyncio.to_thread(worker.join, 15)
+        answered = outcome.get_nowait()
+        assert not isinstance(answered, BaseException), answered
+
+
+async def test_a_read_with_no_attachment_coming_still_refuses_by_name(tmp_path, monkeypatch):
+    monkeypatch.setattr(ObservationProcess, "attach_seconds", 0.1)
+    comms = wire(tmp_path / "wire")
+    async with ObservationProcess(LocalRouteObservation(comms.route)) as process:
+        request = CoreReadOperation(str(comms.root), CommsChannelTool(name="#never"))
+        worker, outcome = asked_from_a_worker(process, request)
+        await asyncio.to_thread(worker.join, 5)
+        with pytest.raises(ObserverUnattached, match="attached no reader"):
+            raise outcome.get_nowait()
