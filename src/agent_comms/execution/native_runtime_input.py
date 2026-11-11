@@ -29,6 +29,7 @@ from agent_comms.execution.native_input_record import (
     NativeInputExecution,
     NativeInputPosition,
     NativeInputRecord,
+    NativeInputReference,
     NativeStageStorage,
     RecordedNativePosition,
     TriageNativeExecution,
@@ -261,7 +262,7 @@ class NativeRuntimeInput(
         )]
         for row in rows:
             user.require_tracked_user()
-            if row.reference.recorded and not row.session_entry_id.holds(user.id):
+            if isinstance(row.reference, NativeInputReference) and not row.session_entry_id.holds(user.id):
                 raise IdentityConflict("Native transcript input conflicts with its original entry")
         return rows
 

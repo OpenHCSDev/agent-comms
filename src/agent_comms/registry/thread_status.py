@@ -91,10 +91,7 @@ class ThreadStatus(
     affix='ThreadStatus',
 ):
     may_be_active: ClassVar[bool] = False
-    running: ClassVar[bool] = False
     stopped: ClassVar[bool] = False
-    # Whether a message sent now is read now; each status answers, none by default.
-    receiving: ClassVar[bool] = False
     # Whether the thread has left every new audience and presence; only an archive has.
     archived: ClassVar[bool] = False
     # Whether a role slot in this lifecycle may take a new occupant: no one holds it now.
@@ -144,7 +141,7 @@ class ThreadStatus(
     @property
     def answers_later(self) -> bool:
         """Whether a wait on this thread is answered once it reads; a running thread does."""
-        return self.running
+        return isinstance(self, RunningThreadStatus)
 
     def require_visible(self, message: str = "Initial direct target must be visible.") -> None:
         raise ThreadNotVisibleError(message)
@@ -255,7 +252,6 @@ class ActiveThreadPresence(
 ):
     """Shared semantics of running and idle owners; not a second state family."""
 
-    receiving = True
     may_be_active = True
 
     def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
@@ -331,7 +327,6 @@ class ProcessThreadStatus(ActiveThreadPresence):
 
 
 class RunningThreadStatus(SelfRenaming, ActiveThreadPresence):
-    running = True
 
     def declaration(self) -> ThreadStatus:
         return ProcessThreadStatus()

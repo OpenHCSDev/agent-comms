@@ -155,7 +155,6 @@ class BoundedTriageEngagement(Engagement):
 
 @dataclass(frozen=True)
 class WakePolicy(LifecycleCapability, CoordinatorVocabulary, SourceProofRequirement, affix="Wake"):
-    triage: ClassVar[bool] = False
 
     @classmethod
     def sql_vocabulary(cls) -> dict[str, str]:
@@ -202,7 +201,6 @@ class PassiveWake(NoSourceProof, WakePolicy):
 
 
 class BoundedTriageWake(Active, TriageSourceProof, WakePolicy):
-    triage = True
 
     @classmethod
     def engagement_type(cls) -> type[Engagement]:

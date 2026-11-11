@@ -585,7 +585,7 @@ class GoalAttemptStore(
             if (
                 current is None
                 or current.number != expected_generation
-                or not current.lifecycle.ready
+                or not isinstance(current.lifecycle, ReadyGeneration)
             ):
                 raise ReservationConflictError("Goal generation is not ready or already reserved.")
             raise errors.UnresolvedAttemptError(
@@ -660,7 +660,7 @@ class GoalAttemptStore(
         current = self.snapshot(goal_id)
         if current is None or current.number != expected_generation:
             raise errors.StaleAttemptError("Goal generation changed before resume.")
-        if not current.lifecycle.ready:
+        if not isinstance(current.lifecycle, ReadyGeneration):
             raise errors.UnresolvedAttemptError("Explicit attempt resolution is required before resume.")
         self.ready_grant(goal_id, expected_generation)
         return current

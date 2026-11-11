@@ -36,7 +36,7 @@ from agent_comms.planning.orders import (
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.work_branches import WorkBranchError
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.registry.thread_status import ThreadStatus
+from agent_comms.registry.thread_status import ActiveThreadPresence, ThreadStatus
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.standing_rules import (
@@ -286,7 +286,7 @@ class TeammateState(UndatedStandingRule, FamilyScan, ObservedTeammate, declared_
         eligible.update(
             reading.thread.incarnation
             for reading in candidates
-            if reading.thread.role.executor(reading.thread) and reading.presence.receiving
+            if reading.thread.role.executor(reading.thread) and isinstance(reading.presence, ActiveThreadPresence)
         )
         return tuple(reading for reading in readings if reading.thread.incarnation in eligible)
 
