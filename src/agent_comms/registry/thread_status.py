@@ -384,7 +384,7 @@ class StoppedPresence(Visible, ThreadStatus, declared_name=None):
         pass
 
     def in_view(self, visibility: RosterVisibility) -> bool:
-        return visibility.is_stopped()
+        return visibility.stopped
 
 
 class StoppedThreadStatus(OrphansHolds, StoppedPresence):
