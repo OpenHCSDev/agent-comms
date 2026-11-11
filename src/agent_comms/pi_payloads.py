@@ -462,8 +462,6 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
         return []
 
     wire_tag = "role"
-    assistant: ClassVar[bool] = False
-    user: ClassVar[bool] = False
     final_reply: ClassVar[bool] = False
     part_separator: ClassVar[str] = ""
     content: ReportedText | ReportedParts | PiOmitted = PiOmitted()
@@ -499,11 +497,11 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
 
     @property
     def invalidates_start(self):
-        return self.user or self.assistant
+        return False
 
     @property
     def update_context(self):
-        return self.assistant
+        return False
 
     def preserve_evidence(self, raw: Mapping[str, object]) -> Self:
         return self
@@ -535,7 +533,13 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
     provider_thinking_level: Annotated[
         PiField[str | PiOmitted], WireName("providerThinkingLevel")
     ] = PiOmitted()
-    assistant = True
+    @property
+    def invalidates_start(self):
+        return True
+
+    @property
+    def update_context(self):
+        return True
 
     def committed_outputs(self) -> tuple[NativeOutputScope, ...]:
         return (AssistantOutput(),)
@@ -593,7 +597,9 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
 
 
 class UserMessage(PiMessage):
-    user = True
+    @property
+    def invalidates_start(self):
+        return True
     part_separator = "\n"
 
     def preserve_evidence(self, raw: Mapping[str, object]) -> Self:
