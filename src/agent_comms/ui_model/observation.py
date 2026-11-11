@@ -83,6 +83,8 @@ from agent_comms.messaging.revision_views import (
     TeamFramesView,
 )
 from agent_comms.messaging.watched import FileSource
+from agent_comms.transport.tool_caller import HumanCaller
+from agent_comms.transport.tool_request import CoreRead, ServedRequest
 from agent_comms.nominal.field_codec import (
     DeclaredError,
     FieldCodec,
@@ -310,6 +312,24 @@ class ReadingObservation[InterestT: InterestRequest](Observation[InterestT]):
 
 
 @final
+class ObserverUnattached(RuntimeError, DeclaredError):  # noqa: N818 - nominal reader state
+    """A read was handed to an observation process whose reader is not attached yet.
+
+    Attachment is what names the loop that delivers answers, so there is nobody to answer on
+    until it has happened.
+    """
+
+
+@final
+class ObserverSameLoop(RuntimeError, DeclaredError):  # noqa: N818 - nominal caller state
+    """The delivery loop asked itself for a read and would wait for its own answer.
+
+    Every caller today reaches this through a worker thread. A caller on the loop is refused by
+    name rather than left waiting, because the wait would never end.
+    """
+
+
+@final
 class UnreadableHistory(ValueError, DeclaredError):  # noqa: N818 - nominal stored-read state
     """A strict stored-data read failed, not the observer or the whole UI.
 
@@ -490,9 +510,19 @@ class ReadRequest(AwaitedRead, declared_name=None):
                 value = self.read(comms)
             except self.deferred_reads:
                 return ReadBusy(self.request_id)
-            return ReadAnswered.of(self.request_id, value)
+            return self.answered_value(value)
         except self.refusal_errors as error:
             return self.refused(error)
+
+
+    def answered_value(self, value: object) -> ReadOutcome:
+        """The outcome carrying ``value`` back to the waiter.
+
+        A native read answers as the member declared for its result, so the other side
+        decodes it as itself. A read whose result is only known from the request overrides
+        this, and inherits every refusal and busy path above unchanged.
+        """
+        return ReadAnswered.of(self.request_id, value)
 
     async def answered(self, comms: Comms) -> object:
         """This process answers the read from ``comms`` itself; the outcome settles it the
@@ -514,6 +544,29 @@ class ReadOperation(ReadRequest):
     def read(self, comms: Comms) -> object:
         return UiRead.serving(self.operation).read(comms)
 
+
+@dataclass(frozen=True)
+class CoreReadOperation(ReadRequest):
+    """A read the UI asks of Core with the caller it already asks as, answered in the child.
+
+    ReadOperation beside this one serves the native reads, whose implementations declare
+    their own caller. This one keeps the caller the UI already uses, so routing a read out
+    of the asking interpreter changes where it runs and nothing about what it answers.
+    """
+
+    operation: ToolRequest
+
+    @property
+    def refusal_errors(self) -> tuple[type[Exception], ...]:
+        return (*super().refusal_errors, ToolRefusedError, WorkBranchError)
+
+    def read(self, comms: Comms) -> object:
+        # CoreRead admits only the reads it declares, so a mutating request never decodes or
+        # runs here; LocalCoreAccess keeps every other request on its own path.
+        return CoreRead.serving(self.operation).apply_without_thread(comms, HumanCaller())
+
+    def answered_value(self, value: object) -> ReadOutcome:
+        return CoreReadAnswered(self.request_id, FieldCodec.encode(value))
 
 @dataclass(frozen=True)
 class OwnerRead(AwaitedRead, declared_name=None):
@@ -1155,6 +1208,19 @@ class ServiceResult(TaggedUnion, affix=""):
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None: ...
 
 
+@dataclass(frozen=True)
+class PendingRead:
+    """One read in flight: what was asked, and the waiter it answers.
+
+    The request stays beside its waiter so a shared reply is decoded as the result that
+    request declares, rather than as a type named by the reply. A reply that arrives after
+    its waiter is gone has nothing to resolve against, which is the ignored reply it always
+    was.
+    """
+
+    asked: AwaitedRead
+    waiter: asyncio.Future
+
 class ReadOutcome(TaggedRecordMember, ServiceResult, declared_name=None):
     """The service's answer to a read, including a read that remains busy."""
 
@@ -1220,8 +1286,8 @@ class ReadAnswered(ReadOutcome, declared_name=None):
         raise TypeError(f"No read answer is declared for {type(value).__qualname__}")
 
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
-        if (waiter := process.reads.pop(self.request_id, None)) is not None and not waiter.done():
-            waiter.set_result(self.value)
+        if (pending := process.reads.pop(self.request_id, None)) is not None and not pending.waiter.done():
+            pending.waiter.set_result(self.value)
 
     async def settled(self, request: ReadRequest, comms: Comms) -> object:
         return self.value
@@ -1262,6 +1328,43 @@ class DeliveryAnswered(ReadAnswered):
     value: DeliveryOverview
 
 
+
+
+
+@dataclass(frozen=True)
+class CoreReadAnswered(ReadOutcome):
+    """The one reply for a shared Core read, carrying its result as the wire value.
+
+    A native read has a member per result so the other side can decode it from the reply
+    alone. A shared Core read does not need one: the waiter still holds the request it
+    sent, and that request declares its result, so this reply carries the value and the
+    request names the type. Twenty-one members would say the same thing twenty-one times.
+    """
+
+    request_id: int
+    wire: object
+
+    async def received(
+        self, process: ObservationProcess, observed: Callable[[Observed], None],
+    ) -> None:
+        pending = process.reads.get(self.request_id)
+        if pending is None or pending.waiter.done():
+            return  # Cancelled, retired, or already answered: the same ignored reply as ever.
+        # The waiter stays owned until it is settled. Popping first and then decoding leaves a
+        # thread waiting on a future nobody holds any more: a malformed reply ends the reader,
+        # and retirement cannot settle a waiter it can no longer find.
+        try:
+            value = FieldCodec.decode(pending.asked.operation.result_type(), self.wire)
+        except Exception as undecodable:
+            process.reads.pop(self.request_id, None)
+            pending.waiter.set_exception(undecodable)
+            raise
+        process.reads.pop(self.request_id, None)
+        pending.waiter.set_result(value)
+
+    async def settled(self, request: ReadRequest, comms: Comms) -> object:
+        return FieldCodec.decode(request.operation.result_type(), self.wire)
+
 @dataclass(frozen=True)
 class ReadBusy(ReadOutcome):
     """Source busy: the original read remains pending, not a failed input."""
@@ -1296,9 +1399,9 @@ class ReadRefused(ReadOutcome):
     trace: str
 
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
-        if (waiter := process.reads.pop(self.request_id, None)) is not None and not waiter.done():
+        if (pending := process.reads.pop(self.request_id, None)) is not None and not pending.waiter.done():
             self.error.add_note(f"Raised in the comms observation service:\n{self.trace}")
-            waiter.set_exception(self.error)
+            pending.waiter.set_exception(self.error)
 
     async def settled(self, request: ReadRequest, comms: Comms) -> object:
         raise self.error
@@ -2071,8 +2174,9 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         """``source`` names who serves the observation: a route locally, a remote UI profile
         across the connector."""
         self._resources = ExitStack()
+        self._delivery: asyncio.AbstractEventLoop | None = None
         self.request_ids = itertools.count(1)
-        self.reads: dict[int, asyncio.Future] = {}
+        self.reads: dict[int, PendingRead] = {}
         self.status: ObserverStatus = NoObserverFailure()
         self.peer = source.observation_peer()
         self.connection = self.peer.connection
@@ -2086,7 +2190,13 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
     def start_receiving(
         self, observed: Callable[[Observed], None], failed: Callable[[Exception], None],
     ) -> None:
-        """Start this process's reader on the delivery loop, once at attachment."""
+        """Start this process's reader on the delivery loop, once at attachment.
+
+        The loop is taken here rather than in ``__init__``: a process is built wherever its
+        owner happens to run, including a worker thread, and only attachment runs on the loop
+        that will deliver its answers.
+        """
+        self._delivery = asyncio.get_running_loop()
         receiving = asyncio.create_task(self.receive(observed, failed))
         receiving.add_done_callback(partial(self.receive_ended, failed))
         self._reader.push_async_callback(self.stop_receiving, receiving)
@@ -2157,6 +2267,26 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         self.abandon_reads(died)
         return died
 
+    def read_from_thread(self, request: AwaitedRead):
+        """Answer ``request`` for a caller on another thread, on this process's own loop.
+
+        The loop stays private: a caller hands over the request and waits for the answer the
+        delivery loop settles, so read ids, cancellation, retirement and refusals keep their
+        existing owners. A caller already on that loop would be waiting for itself, so it is
+        refused by name instead.
+        """
+        delivery = self._delivery
+        if delivery is None:
+            raise ObserverUnattached("This observation process has not attached its reader yet")
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is delivery:
+            raise ObserverSameLoop(
+                "A read from the delivery loop itself would wait for its own answer")
+        return asyncio.run_coroutine_threadsafe(self.read(request), delivery).result()
+
     async def read(self, request: AwaitedRead):
         """Send ``request`` and await its loop-delivered answer.
 
@@ -2164,7 +2294,7 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         """
         request = replace(request, request_id=next(self.request_ids))
         waiter = asyncio.get_running_loop().create_future()
-        self.reads[request.request_id] = waiter
+        self.reads[request.request_id] = PendingRead(request, waiter)
         try:
             self.request(request)
             return await waiter
@@ -2184,9 +2314,9 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
     def abandon_reads(self, error: BaseException) -> None:
         """The reader's retirement settles its waiters with the original cause."""
         reads, self.reads = self.reads, {}
-        for waiter in reads.values():
-            if not waiter.done():
-                waiter.set_exception(error)
+        for pending in reads.values():
+            if not pending.waiter.done():
+                pending.waiter.set_exception(error)
 
     async def readable(self) -> None:
         """Wait until one packet can be received by the worker."""

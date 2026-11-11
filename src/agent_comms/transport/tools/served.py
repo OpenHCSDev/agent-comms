@@ -10,6 +10,7 @@ from typing import Annotated, ClassVar
 
 from pydantic import JsonValue
 
+from agent_comms.transport.sync_answer import run_awaited
 from agent_comms.acp_extension import CoordinationChangedUpdate
 from agent_comms.cli_bridges.history import OfflineHistory
 from agent_comms.cli_verbs.archive import ArchiveCliCommand
@@ -534,7 +535,7 @@ class ServedCommsPrepareTargetActionTool(CoreRead[PreparedTargetAction], CommsPr
     """Serving CommsPrepareTargetActionTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> PreparedTargetAction:
-        return asyncio.run(self.action.prepared(ConfigOptions.for_route(comms.route)))
+        return run_awaited(self.action.prepared(ConfigOptions.for_route(comms.route)))
 
 
 class ServedCommsTargetEditTool(HumanToolRequest[TargetEditResult | Channel], CommsTargetEditTool):
