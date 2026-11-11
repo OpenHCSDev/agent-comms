@@ -908,6 +908,7 @@ class Install[Rehearsed: Rehearsal](ABC):
         with LiveCheckoutPreparePhase().running(self.staged.commands.clock):
             self.staged.commands.git(self.checkout, "merge", "--ff-only", "-q", self.target)
             Checkout(self.checkout).update_submodules()
+            self.staged.sync_test_environment(Checkout(self.checkout))
 
     def publish(self, backup: StoreBackup, selected: RouteFileSelection) -> str:
         """The converted bus's route is ready before new runtime entrypoints open it."""
@@ -1271,6 +1272,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                                 self.installed.commands.git(
                                     self.checkout, "reset", "-q", "--keep", self.current)
                                 Checkout(self.checkout).update_submodules()
+                                self.installed.sync_test_environment(Checkout(self.checkout))
                         self.installed.publish(self.root)
                         self.installed.require_opens(self.root)
                     holder.close()

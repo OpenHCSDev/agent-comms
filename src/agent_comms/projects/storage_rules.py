@@ -724,8 +724,11 @@ class StorageRule(RoomAllocation, DurableFile, ThreadCheckoutSource[Thread], Rep
             f'--from {thread.name} --source EXACT_OWNED_PATH remove REPOSITORY; '
             'your only scratch dir is '
             f'{self.roots_of(thread).scratch}/. '
-            f'Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}; '
-            'never create a venv, never uv sync, never write .artifacts, never git clone. '
+            f'Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}: '
+            'install syncs each from the lock it installs, and nothing else writes them. '
+            'Never create a venv, never uv sync or pip install into a shared one, never write '
+            '.artifacts, never git clone. A shared interpreter missing a declared dependency '
+            'means the lock is wrong: relock at its owner and say so, never install around it. '
             f'Below {self.floor_gib:g} GB free on {self.volume}, no worktree, venv, build, install '
             'or recording.'
         )
