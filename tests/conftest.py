@@ -3,6 +3,7 @@
 
 from dataclasses import dataclass
 import asyncio
+from contextlib import asynccontextmanager
 import fcntl
 import json
 import os
@@ -719,7 +720,28 @@ class UiCoreReads:
         return await asyncio.to_thread(self.access.call, request)
 
 
-@pytest.fixture
-async def local_core(comms: Comms) -> AsyncIterator[UiCoreReads]:
+@asynccontextmanager
+async def ui_core_reads(comms: Comms) -> AsyncIterator[UiCoreReads]:
+    """For a test that builds its own bus; the fixture below is the shared-bus case."""
     async with ObservationProcess.awaited(comms.route) as reads:
         yield UiCoreReads(LocalCoreAccess(comms, reads))
+
+
+def ui_core_read[R](comms: Comms, request):
+    """One Core call as a UI makes it, for a synchronous test that owns its own bus.
+
+    The child answers on the delivery loop while this read waits on a worker thread, which
+    is the arrangement `ObserverSameLoop` exists to require.
+    """
+
+    async def once():
+        async with ui_core_reads(comms) as core:
+            return await core.call(request)
+
+    return asyncio.run(once())
+
+
+@pytest.fixture
+async def local_core(comms: Comms) -> AsyncIterator[UiCoreReads]:
+    async with ui_core_reads(comms) as reads:
+        yield reads
