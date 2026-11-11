@@ -101,7 +101,8 @@ class DeckReader(DealtSources):
         return start.held(trigger, comms, snapshot)
 
     def deaf(self, session: str) -> tuple[str, ...]:
-        return tuple(deaf.line() for deaf in WatchClaim(session).deaf())
+        deaf = WatchClaim(session).deaf()
+        return (deaf.line(),) if deaf is not None else ()
 
     @classmethod
     def slices(cls) -> list[str]:

@@ -72,11 +72,11 @@ class SessionSubagents(ClaudeTranscriptHook):
         return tuple(SubagentId.of_transcript(path)
                      for path in sorted(directory.glob("agent-*.jsonl")))
 
-    def end_subagents(self, comms: Comms, binding: Binding) -> tuple[str, ...]:
+    def end_subagents(self, comms: Comms, binding: Binding) -> str | None:
         comms.registry.snapshot().born(binding.owner.require_recorded().lookup)
         try:
             ForkCaller.end_session(
                 comms, tuple(ForkCaller(agent.fork) for agent in self.subagents()))
         except ToolRefusedError as refused:
-            return (str(refused),)
-        return ()
+            return str(refused)
+        return None

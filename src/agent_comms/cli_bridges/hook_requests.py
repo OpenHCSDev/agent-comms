@@ -166,7 +166,7 @@ class SubagentStopRequest(SubagentStopProgram, HookRequest[SubagentStopHook], de
 @dataclass(frozen=True)
 class SessionEndRequest(SessionEnded, HookRequest[SessionSubagents], declared_name=SessionEnded.wire_name()):
     def run_hook(self, event: SessionSubagents, comms: Comms, binding: Binding) -> None:
-        for refusal in event.end_subagents(comms, binding):
+        if (refusal := event.end_subagents(comms, binding)) is not None:
             raise ToolRefusedError(refusal)
 
     def completed(self, service: MonitorService) -> None:

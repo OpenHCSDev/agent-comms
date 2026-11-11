@@ -213,7 +213,8 @@ class StopHook(ClaudeTranscriptHook):
             return
         snapshot = self.comms.registry.snapshot()
         thread = snapshot.born(self.binding.owner.require_recorded().lookup)
-        deaf = tuple(watch.line() for watch in WatchClaim(self.session_id).deaf())
+        deaf_watch = WatchClaim(self.session_id).deaf()
+        deaf = (deaf_watch.line(),) if deaf_watch is not None else ()
         # The bus goal is the session's goal: while it is active the turn does not end,
         # background jobs or not. stop_hook_active lets the following stop through.
         held = tuple(reason for goal in thread.goal for reason in goal.held_stop())
