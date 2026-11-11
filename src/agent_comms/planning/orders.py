@@ -2027,8 +2027,15 @@ class CheckedProblemOrder(CheckCorrectionSource, ProblemOrder, declared_name=Non
     def require_linkable(self) -> None:
         """An order still taking work accepts another pull request."""
 
+    def prepare_link(self, link: PullRequestLink) -> PullRequestAdoption:
+        if link in self.pull_requests:
+            return NewWorkPullRequestAdoption()
+        return self.unrecorded_link(link)
+
+    def unrecorded_link(self, link: PullRequestLink) -> PullRequestAdoption:
+        return NewWorkPullRequestAdoption()
+
     def linked_to(self, link: PullRequestLink) -> Self:
-        self.require_linkable()
         return replace(self, pull_requests=(*self.pull_requests, link))
 
     def unlinked(self, link: PullRequestLink) -> Self:
@@ -2272,9 +2279,13 @@ class CheckedProblemOrder(CheckCorrectionSource, ProblemOrder, declared_name=Non
             f"Order: {self.id}", *self.scope.instructions(todo.id),
             *self.work_instructions()))
 
+    @property
+    def delivered_type(self) -> type[DeliveredProblemOrder]:
+        return DeliveredProblemOrder
+
     def delivered(self, delivery: CheckedDelivery):
         delivery.at.require_delivery()
-        return self.copy_as(DeliveredProblemOrder, delivery=delivery)
+        return self.copy_as(self.delivered_type, delivery=delivery)
 
     def installed(self, works: str, artifact: str) -> ProblemOrder:
         raise TodoError("Check the delivered order before recording installation.")
@@ -2324,6 +2335,16 @@ class OpenProblemOrder(CheckedProblemOrder, declared_name=None):
 
 @dataclass(frozen=True, kw_only=True)
 class AwaitingInstallationProblemOrder(OpenProblemOrder, declared_name=None):
+
+    @property
+    @abstractmethod
+    def installed_type(self) -> type[InstalledEvidence]:
+        """The installed member retaining this order's required evidence."""
+
+    def installed(self, works: str, artifact: str) -> InstalledEvidence:
+        self.run.require_closing(works)
+        return self.copy_as(self.installed_type, works=works, artifact=artifact)
+
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return (todo,)
 
@@ -2368,6 +2389,18 @@ class MergedProblemOrder(CommittedCheckSource, AwaitingInstallationProblemOrder)
     def closed_in(self, todo: Todo) -> Todo:
         return DoneTodoState.closed(todo, self)
 
+    def unrecorded_link(self, link: PullRequestLink) -> PullRequestAdoption:
+        repository = Repo.of(self.check.directory)
+        if link.repo != repository.github:
+            raise TodoError("A late link must name the repository of the observed merge.")
+        merged = tuple(
+            request for row in ProgressRead().query(link.repo, (link.number,))
+            for request in row.as_merged()
+        )
+        if len(merged) != 1 or not repository.contains(merged[0].merge.oid, self.sha):
+            raise TodoError("A late link must already be merged into the order's observed source.")
+        return ObservedPullRequestAdoption(self, link)
+
     def require_linkable(self) -> None:
         raise TodoError(f"Order {self.id} merged as {self.sha[:9]}; its pull requests are closed. "
                          "Ask the teammate for a send-back before opening or linking another PR.")
@@ -2402,9 +2435,13 @@ class MergedProblemOrder(CommittedCheckSource, AwaitingInstallationProblemOrder)
     def installation_commits(self) -> tuple[str, ...]:
         return (self.sha,)
 
-    def installed(self, works: str, artifact: str) -> ProblemOrder:
-        self.run.require_closing(works)
-        return self.copy_as(InstalledMergedProblemOrder, works=works, artifact=artifact)
+    @property
+    def delivered_type(self) -> type[MergedDeliveredProblemOrder]:
+        return MergedDeliveredProblemOrder
+
+    @property
+    def installed_type(self) -> type[InstalledMergedProblemOrder]:
+        return InstalledMergedProblemOrder
 
     def closing_artifact(self) -> str:
         raise TodoError("A merged order records no delivered run; pass --artifact FILE "
@@ -2689,12 +2726,27 @@ class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
     def installation_build(self) -> BuildIdentity:
         return self.delivery.installation_build
 
-    def installed(self, works: str, artifact: str) -> InstalledProblemOrder:
-        self.run.require_closing(works)
-        return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
+    def merged(self, sha: str) -> MergedProblemOrder:
+        return self.copy_as(MergedDeliveredProblemOrder, sha=sha)
+
+    @property
+    def installed_type(self) -> type[InstalledProblemOrder]:
+        return InstalledProblemOrder
 
     def require_checked(self, problem: str) -> None:
         """The delivery passed the order's check, so its result is recorded."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class MergedDeliveredProblemOrder(DeliveredProblemOrder, MergedProblemOrder):
+    """The observed merge keeps its already checked delivery."""
+
+    # Installation follows the observed merge, not a pre-merge or squash head.
+    installation_commits = MergedProblemOrder.installation_commits
+
+    @property
+    def installed_type(self) -> type[InstalledMergedDeliveredProblemOrder]:
+        return InstalledMergedDeliveredProblemOrder
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2761,12 +2813,23 @@ class InstalledEvidence(CheckedProblemOrder, declared_name=None):
 @dataclass(frozen=True, kw_only=True)
 class InstalledProblemOrder(InstalledEvidence, DeliveredProblemOrder):
     def merged(self, sha: str) -> MergedProblemOrder:
-        return self.copy_as(InstalledMergedProblemOrder, sha=sha)
+        return self.copy_as(InstalledMergedDeliveredProblemOrder, sha=sha)
 
 
 @dataclass(frozen=True, kw_only=True)
 class InstalledMergedProblemOrder(InstalledEvidence, MergedProblemOrder):
     """The installed merge and the recorded run share the same evidence behavior."""
+
+    @property
+    def delivered_type(self) -> type[InstalledMergedDeliveredProblemOrder]:
+        return InstalledMergedDeliveredProblemOrder
+
+
+@dataclass(frozen=True, kw_only=True)
+class InstalledMergedDeliveredProblemOrder(
+    InstalledProblemOrder, InstalledMergedProblemOrder, MergedDeliveredProblemOrder,
+):
+    """The installed merge retains its checked delivery and recorded run."""
 
 
 @dataclass(frozen=True)
@@ -4855,16 +4918,46 @@ class OrderMessage(TodoOperation, StoryEvent):
         return replace(current, revision=current.revision + 1)
 
 
+class PullRequestAdoption(ABC):
+    """Why recording this existing link is admitted at the current work stage."""
+
+    @abstractmethod
+    def require(self, order: CheckedProblemOrder, link: PullRequestLink) -> None: ...
+
+
+class NewWorkPullRequestAdoption(PullRequestAdoption):
+    def require(self, order: CheckedProblemOrder, link: PullRequestLink) -> None:
+        order.require_linkable()
+
+
+@dataclass(frozen=True)
+class ObservedPullRequestAdoption(PullRequestAdoption):
+    order: CheckedProblemOrder
+    link: PullRequestLink
+
+    def require(self, order: CheckedProblemOrder, link: PullRequestLink) -> None:
+        if (order, link) != (self.order, self.link):
+            raise TodoError("The observed pull request belongs to another order or link.")
+
+
 @dataclass(frozen=True)
 class RecordPullRequest(TodoCommand):
     actor: ThreadIncarnation
     link: PullRequestLink
     generation: GoalId
+    adoption: Annotated[PullRequestAdoption, WireTransient()] = field(
+        default_factory=NewWorkPullRequestAdoption, kw_only=True, compare=False, repr=False,
+    )
 
     @classmethod
     def for_order(cls, todo: Todo, actor: ThreadIncarnation, link: PullRequestLink) -> Self:
         """Creation and adoption derive the same revision and hold from the actual order."""
-        return cls(todo.revision, actor, link, todo.held().generation)
+        return cls(todo.revision, actor, link, todo.held().generation,
+                   adoption=todo.order.checked().prepare_link(link))
+
+    def prepare(self, goals: ProblemGoals, current: Todo) -> Self:
+        self.require_current(current)
+        return replace(self, adoption=current.order.checked().prepare_link(self.link))
 
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
         """A companion link is checked against the registered project under the write."""
@@ -4882,7 +4975,7 @@ class RecordPullRequest(TodoCommand):
         order = current.order.checked()
         if self.link in order.pull_requests:
             return current
-        order.require_linkable()
+        self.adoption.require(order, self.link)
         current.state.require_open(current)
         return replace(current, revision=current.revision + 1, order=order.linked_to(self.link))
 
