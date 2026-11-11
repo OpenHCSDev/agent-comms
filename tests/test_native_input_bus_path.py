@@ -156,7 +156,7 @@ async def test_agent_settled_preserves_unwritten_input_for_the_next_run(
             following = await native.run(steering_input.content.text)
             assert following[-1].ok, following[-1]
             assert native.provider.posts == 2 and len(native.starts) == 2
-            assert sum(UserMessage.from_wire(message).original_text() == steering_input.content.text
+            assert sum(UserMessage.from_wire(message).original_text == steering_input.content.text
                        for message in native.saved_inputs()) == 1
         finally:
             task.cancel()
