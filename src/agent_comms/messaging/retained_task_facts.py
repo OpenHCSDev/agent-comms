@@ -243,7 +243,7 @@ class RetainedTaskFacts:
         effective: dict[MessageReference, tuple[messages.Message, messages.Message]] = {}
         for fact in self.facts:
             for message in fact.authored_sources():
-                for root in message.task.current_roots(message, originals, owner, registry):
+                if (root := message.task.current_roots(message, originals, owner, registry)) is not None:
                     originals[message.reference] = root
                     lineage = root.task.lineage_reference(root)
                     _, previous = effective.get(lineage, (root, root))

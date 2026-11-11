@@ -119,8 +119,8 @@ class TaskAttachment(
         raise RelationViolationError("Ordinary message is not a decision lineage event")
 
     def current_roots(self, message: messages.Message, originals: dict[MessageReference, messages.Message],
-                      owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> tuple[messages.Message, ...]:
-        return ()
+                      owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> messages.Message | None:
+        return None
 
     def revises_after(self, previous: messages.Message) -> bool:
         raise RelationViolationError("Ordinary message cannot revise a declared choice")

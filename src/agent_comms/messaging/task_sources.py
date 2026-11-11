@@ -125,8 +125,8 @@ class UserTaskSupersession(TaskAttachment, declared_name="user_supersession"):
         # This exact user row may address a recipient who never received the
         # private original. It only revises an eligible captured owned lineage.
         if self.change.original not in originals:
-            return ()
-        return (self.root_source(message, originals),)
+            return None
+        return self.root_source(message, originals)
 
     def revises_after(self, previous: messages.Message) -> bool:
         return True
@@ -192,8 +192,8 @@ class ScopedTaskDeclaration(TaskAttachment):
 
     def current_roots(self, message: messages.Message, originals: dict[MessageReference, messages.Message], owner: TaskOwner, registry: TaskRegistry[TaskOwner]):
         if not self.applies(owner, registry):
-            return ()
-        return (self.root_source(message, originals),)
+            return None
+        return self.root_source(message, originals)
 
     def revises_after(self, previous: messages.Message) -> bool:
         return previous.task.permits_agent_revision
