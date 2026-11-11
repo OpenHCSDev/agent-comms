@@ -74,15 +74,18 @@ class QueueActionRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None
     """A queue action any client asks of a thread's owner, attached over ACP or not. Each
     member names the declared QueueAction it serves."""
 
-    serves: ClassVar[dict[type[QueueAction], type[QueueActionRuntimeRequest]]] = {}
+    action: ClassVar[type[QueueAction]]
 
     def __init_subclass__(cls, *, action: type[QueueAction], **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
-        QueueActionRuntimeRequest.serves[action] = cls
+        cls.action = action
 
     @classmethod
     def serving(cls, action: type[QueueAction]) -> type[QueueActionRuntimeRequest]:
-        return cls.serves[action]
+        for member in cls.members_with(cls):
+            if member.action is action:
+                return member
+        raise KeyError(action)
 
     @classmethod
     def at_owner(cls, root: Path, thread: Thread) -> None:
