@@ -18,7 +18,7 @@ import aiohttp
 from pydantic import JsonValue
 from yarl import URL
 
-from agent_comms.transport.sync_answer import run_awaited
+from agent_comms.transport.sync_answer import AwaitsWork
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.nominal.field_codec import FieldCodec, RpcCallId
 from agent_comms.transport.connector_profile import (
@@ -204,7 +204,9 @@ class ThreadConnection(threading.local):
         self.connection = profile.connection(context, timeout)
 
 
-class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, RequestPoster):
+class RemoteCoreAccess(
+    UiConnectionProfile, CoreAccess, ConnectorClient, RequestPoster, AwaitsWork
+):
     """The owner's UI profile is the remote access: its endpoint and credential are all a
     call needs, and the server still decides scope, expiry and revocation."""
 
@@ -258,7 +260,7 @@ class RemoteCoreAccess(UiConnectionProfile, CoreAccess, ConnectorClient, Request
     def post_observed[R: ToolResult](self, request: ObservedRequest[R]) -> dict[str, JsonValue]:
         """A call the client asked progress for: its events reach the request's observer, and a
         cancel there reaches the running call on Core."""
-        return run_awaited(self.streamed(request))
+        return self.run_awaited(self.streamed(request))
 
     async def streamed[R: ToolResult](
         self, request: ObservedRequest[R],
