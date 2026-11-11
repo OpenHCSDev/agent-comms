@@ -62,8 +62,12 @@ class AttachmentScope(AcceptsNull, ExternalJsonShape, WireValue):
         raise ValueError('Attachment has no live local owner scope.')
 
 
+@dataclass(frozen=True)
 class LiveAttachmentScope(AttachmentScope, ClaimScoped):
-    """Logical ACP attachment and executor evidence have separate identities."""
+    """Logical ACP attachment and executor evidence have separate identities.
+
+    A dataclass, so every live scope inherits these two fields from here.
+    """
     session_id: AcpSessionId
     owner: ProcessIdentity
 
@@ -163,9 +167,7 @@ class NoCursorScope(CursorScope):
 
 @dataclass(frozen=True)
 class LiveCursorScope(CursorScope, LiveAttachmentScope):
-    session_id: AcpSessionId
     wire_root_id: RootId
-    owner: ProcessIdentity
 
     def __post_init__(self):
         self.claimed_identity.incarnation.require_recorded()
