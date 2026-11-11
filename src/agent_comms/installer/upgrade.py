@@ -41,7 +41,6 @@ from agent_comms.cli_verbs.reconcile_stores import ReconcileStoresCliCommand
 from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.cli_verbs.target_action import TargetActionCliCommand
-from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.execution.runtime_processes import RuntimeProcesses
@@ -660,7 +659,7 @@ class Stack(RuntimeStack):
             except CliUndecodableError as undecodable:
                 raise UpgradeRefused(f"{verb}: undecodable answer: {undecodable}") from undecodable
             except CliRefusedError as refused:
-                if not issubclass(refused.failure.exception_type, CoordinationReadUnavailable):
+                if not refused.failure.retryable:
                     raise UpgradeRefused(f"{verb}: {refused}") from refused
                 waited = refused
             time.sleep(5)
