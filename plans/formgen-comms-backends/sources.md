@@ -14,6 +14,7 @@ Do not reproduce the stale P142 comparison by reading an old pinned OpenHCS chil
 |---|---|---|
 | agent-comms | `7edd87580ffa41dd0e2a50f694f630c7145ff199` | Initial inspected planning main |
 | agent-comms | `df39479a45e257cf35df3d05de0818d7e3dce036` | Refreshed main used for the Qt field/write-boundary checkpoint |
+| agent-comms | `e2144eca31073e2e760263d5a4f9b55daf235c52` | Refreshed main used for the Qt editor/factory checkpoint |
 | Toad | `cdc6a761b476bd0b25bd323d88860cf5f7d56fe4` | Freshly fetched main |
 | PyQtReactive | `b11a218ebffc992bf7ed1a3798bc6a609c48d7f3` | Refreshed main, including native Formbridge migration |
 | Formbridge | `0547625fd956077b3130fb1bad9e942f38783149` | Refreshed main |
@@ -148,3 +149,20 @@ The retained native constructor/build map comes from `parameter_form_manager.py:
 The metaclass read distinguishes the opposite orders at `widget_creation_types.py:70` and `protocols/widget_adapters.py:40`, including the latter's no-Qt fallback. The selected native owner is the existing PyQtWidgetMeta, not a new generic metaclass. The source search also finds the _CombinedMeta copies in status_indicator, abstract_manager_widget and zmq_server_browser_widget, plus the actual control/import/test consumers listed in phase 1. This is not a native SIP/ABC execution result. Conditional classes remain outside any claimed resolved runtime family.
 
 NRA operation constructors/proof scopes were read at the same inspected 5af050d8 source: class_member_authority_codemod.py:1234,1645; codemod.py:1058,1091,2516,2538; module_move_codemod.py:922–931. Phase 1 now names the supported whole-member/import operations and the precise unsupported fragment/receiver and native-metaclass/write-policy obligations. No new codemod preflight, simulation, application or native test is claimed. The earlier full form scan does not supply those missing proofs.
+
+## Qt editor/factory follow-up
+
+Core was fetched and the planning branch rebased onto e2144eca31073e2e760263d5a4f9b55daf235c52, retaining the documentation through autostash; `p144-editors-refresh.log/exit` and `p144-editors-rebase.log/exit` record exit 0. The dependency-source receipts remain the unchanged fetched Qt/Formbridge mains above.
+
+The factory/binding trace reads `widget_creation_config.py:441–476,525–527,618–768,1013–1082`, the manager's `_widget_creator` assignment at `parameter_form_manager.py:552`, and `widget_strategies.py:1056–1072,1471–1522`. The selected manager hooks replace that mutable function field and the ordinary inherited callback binding. Nested and inline creation have different existing store/signal behavior; disabling the whole pipeline would lose the inline callback rather than remove a duplicate. The plan leaves literal inline admission open and permits no inherited fallback.
+
+`widget_protocols.py:92–107`, `widget_service.py:230–326` and `parameter_form_chrome_sync.py:270–396` distinguish raw assignment/placeholder refresh from repainting a bound field's resolved value. The new editor role does not claim ValueSettable. The exact FollowingForm field-view index and removal of inherited raw/placeholder paints from that declared path remain unfinished. FormValueValidationService (`form_value_validation.py:13–35`) validates capable native widgets before reading/converting their value; the selected declared conversion hook preserves empty text and the literal None string through that caller too.
+
+A bounded metadata experiment used the **already existing** `/home/ts/code/projects/openhcs/.venv/bin/python`: Python 3.12.0, PyQt 6.11.0, Qt 6.11.0. No environment/package changes, QWidget instances, QApplication, display or app runs were involved. These experiments used small generic class shapes, not the unwritten backend or actual future editor classes:
+
+- `p144-qt-metaclass-shapes.log` retains the first comparison's TypeError from an omitted explicit common metaclass. Earlier plain-mixin observations in that same output are not a passing whole run.
+- `p144-qt-selected-mixin-metadata.log/exit` passes with exit 0: a pure mixin before QLineEdit retains feedback signal registration, own shows declarations and abstract-member metadata.
+- `p144-qt-common-widget-metadata.log/exit` fails with exit 1: a signal declared only on the later common QWidget branch is absent from the QLineEdit-derived class's native metadata, despite a valid Python MRO.
+- `p144-qt-signal-capability-metadata.log/exit` passes with exit 0: a separate signal capability before QLineEdit retains feedback_changed, editingFinished and textChanged; the common QWidget role's abstract signal property is satisfied in metadata. The native Qt superclass remains QLineEdit.
+
+Artifacts are in the scratch directory above. This bounds the selected QtEditorSignals/ControlConstruction/native-control/QtValueEditor composition; it proves neither actual constructor execution, event emission, destruction, arbitrary additional bases nor Python-3.14 compatibility. Those are explicit implementation checks. The plan names the selected editor/control bases and native event methods rather than inferring a working backend from these metadata results.
