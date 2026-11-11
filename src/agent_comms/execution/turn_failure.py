@@ -32,8 +32,8 @@ class TurnFailure(DeclaredFamily):
     def end_request_failure(self, output: object) -> None:
         """A failure that doesn't end with a retry keeps its state."""
         pass
-    # Whether a turn ending with this failure is clean; only the absent failure is.
-    clean: ClassVar[bool] = False
+    def is_clean(self) -> bool:
+        return False
 
     def with_text(self, text: str) -> TurnFailure:
         return replace(self, text=text)
@@ -301,7 +301,8 @@ class NoTurnFailure(TurnFailure):
     """The turn has not failed: every declared failure supersedes it, and it raises nothing."""
 
     text: str = ""
-    clean: ClassVar[bool] = True
+    def is_clean(self) -> bool:
+        return True
 
     def superseded_by(self, failure: TurnFailure) -> bool:
         return True
