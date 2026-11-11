@@ -247,6 +247,11 @@ class ProcessState(SubclassUnion, affix=""):
 
     @abstractmethod
     def allows_owner_start(self) -> bool: ...
+
+    def require_owner_startable(self) -> None:
+        """Refuse if the process state does not allow starting an owner."""
+        if not self.allows_owner_start():
+            raise RelationViolationError('Retired session acquired another process')
     @abstractmethod
     def allows_inactive_stop(self) -> bool: ...
 
