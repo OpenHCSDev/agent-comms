@@ -12,23 +12,23 @@ class OrderPhase(DeclaredFamily, affix="Phase", discovery_package='agent_comms.p
 
     @classmethod
     def order_refusals(cls, read_ready: Callable[[], tuple[type[OrderPhase], ...]],
-                       reason: str) -> tuple[str, ...]:
-        return ()
+                       reason: str) -> str | None:
+        return None
 
 
 class UnplannedPhase(OrderPhase):
     @classmethod
     def order_refusals(cls, read_ready: Callable[[], tuple[type[OrderPhase], ...]],
-                       reason: str) -> tuple[str, ...]:
+                       reason: str) -> str | None:
         """Read the heartbeat's ready phases only when the stated reason does not answer the
         refusal."""
         if len(reason.split()) >= 8:
-            return ()
+            return None
         ready = read_ready()
         if ready:
             return (
                 "Plan phases are ready: "
                 + ", ".join(phase.declared_name for phase in ready)
-                + ". Name a phase, or provide an explicit unplanned_reason of 8+ words.",
+                + ". Name a phase, or provide an explicit unplanned_reason of 8+ words."
             )
-        return ()
+        return None
