@@ -13,7 +13,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.storage.private_path import FileRevision
 from agent_comms.ui_model.observation import (
     NotificationReading,
-    ObservationPending,
+    ObservationStep,
     ObservationService,
     ObserveNotifications,
     ObserveSidebar,
@@ -38,7 +38,7 @@ class EndlessReading(ReadingObservation):
         try:
             for _ in count():
                 self.visits += 1
-                yield ObservationPending()
+                yield ObservationStep()
         finally:
             self.finished = True
 
@@ -101,7 +101,7 @@ class CountReads:
 
     def read(self, comms, revision):
         self.visits += 1
-        yield ObservationPending()
+        yield ObservationStep()
 
 
 @pytest.mark.parametrize('member,interest,own_field,unrelated_field', [
@@ -147,4 +147,4 @@ def test_reading_without_a_declared_view_fails_at_class_creation():
     with pytest.raises(TypeError, match='must declare its revision view'):
         class UndeclaredReading(ReadingObservation):
             def read(self, comms, revision):
-                yield ObservationPending()
+                yield ObservationStep()

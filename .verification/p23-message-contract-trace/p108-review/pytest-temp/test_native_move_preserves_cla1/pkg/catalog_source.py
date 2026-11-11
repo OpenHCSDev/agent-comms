@@ -1,2 +1,0 @@
-class RelationshipCatalogSource:
-    pass

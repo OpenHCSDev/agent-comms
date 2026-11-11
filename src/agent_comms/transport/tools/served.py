@@ -224,11 +224,7 @@ class ThreadTags(ToolResult):
 
 
 @dataclass(frozen=True)
-class ProjectSet(ToolResult):
-    thread: str
-    previous: str
-    current: str
-    changed: bool
+class ProjectSet(ProjectChangeResult):
     instruction: str
 
 
@@ -784,8 +780,9 @@ class CommsSetProjectTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProjectSet:
         result = comms.threads.set_project(caller.identity(comms), self.path)
         return ProjectSet(
-            result.thread, result.previous, result.current, result.changed,
-            (
+            previous=result.previous, current=result.current, changed=result.changed,
+            thread=result.thread,
+            instruction=(
                 (
                     "Project saved. End this turn now; the runtime automatically resumes this same "
                     "conversation in the new project with refreshed tools and context."

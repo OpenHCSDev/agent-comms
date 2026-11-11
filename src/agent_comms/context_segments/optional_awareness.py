@@ -12,6 +12,7 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import ClassVar
 
 from agent_comms.coordination.cohort_schema import (
     AwarenessClaimGenerations,
@@ -29,6 +30,7 @@ from agent_comms.execution.turn_context import (
     InstructionSegment,
     TurnContext,
 )
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 from agent_comms.nominal.lifecycle_capability import Complete
 from agent_comms.waking.errors import ProjectionUnavailableError
@@ -128,6 +130,49 @@ class OptionalAwarenessResult(ABC):
     def render(self, max_text_bytes: int) -> str: ...
 
 
+class OmissionReason(DeclaredFamily):
+    """Why one delivery's optional awareness was omitted. Each member is one of the
+    read's named states and says it in its own words; the delivered input and the
+    log render ``said``."""
+
+    said: ClassVar[str]
+
+
+@dataclass(frozen=True)
+class BuilderBusy(OmissionReason):
+    said = "another awareness read is still building"
+
+
+@dataclass(frozen=True)
+class PastDeadline(OmissionReason):
+    said = "the read ran past its foreground deadline"
+
+
+@dataclass(frozen=True)
+class OverBudget(OmissionReason):
+    said = "rendered awareness exceeds the resource budget"
+
+
+@dataclass(frozen=True)
+class CoordinationUnavailable(OmissionReason):
+    said = "coordination state was unavailable"
+
+
+@dataclass(frozen=True)
+class ProjectionUnavailable(OmissionReason):
+    said = "the wake projection was unavailable"
+
+
+@dataclass(frozen=True)
+class RelationViolated(OmissionReason):
+    said = "a relation the read depends on was violated"
+
+
+@dataclass(frozen=True)
+class StoreLocked(OmissionReason):
+    said = "the store was locked by another writer"
+
+
 @dataclass(frozen=True, kw_only=True)
 class OmittedAwareness(InstructionSegment, OptionalAwarenessResult):
     """The named visible state of a delivery whose optional awareness dropped.
@@ -137,14 +182,14 @@ class OmittedAwareness(InstructionSegment, OptionalAwarenessResult):
     log line.
     """
 
-    reason: str
+    reason: OmissionReason
 
     @classmethod
     def instruction_name(cls):
         return "selected-awareness-omitted.md"
 
     def values(self) -> dict[str, object]:
-        return {"reason": self.reason}
+        return {"reason": self.reason.said}
 
     def segments(self, max_text_bytes: int) -> tuple[ContextSegment, ...]:
         # The instruction file owns the omission wording; the log and the
@@ -168,9 +213,7 @@ class CompleteAwareness(Complete, ContextSegment, OptionalAwarenessResult):
 
     def segments(self, max_text_bytes):
         if len(self.text().encode("utf-8")) > max_text_bytes:
-            return OmittedAwareness.capture(
-                reason="rendered awareness exceeds the resource budget"
-            ).segments(max_text_bytes)
+            return OmittedAwareness.capture(reason=OverBudget()).segments(max_text_bytes)
         return (self,)
 
     def context(self) -> dict:

@@ -24,7 +24,7 @@ from agent_comms.coordination.cohort_schema import ClaimBatchAcknowledgements, C
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (
     IdentityConflict,
-    PublicationUncertain,
+    CoordinationError,
     StaleFence,
 )
 from agent_comms.coordination.obligation_states import PublishedResponse, PublishingResponse
@@ -149,10 +149,10 @@ class PublicationAppendDispatches(ResponseTable, WithoutRowid):
                         wire_root_id, current_id, attempt.owner_generation,
                         attempt.attempt_ordinal, frozen.exact_target,
                     ):
-                        raise PublicationUncertain("no matching durable append dispatch")
+                        raise CoordinationError("no matching durable append dispatch")
                     matched = intent.published_message(bus.bus)
                     if matched is None:
-                        raise PublicationUncertain("no keyed bus acknowledgement; no resend authorized")
+                        raise CoordinationError("no keyed bus acknowledgement; no resend authorized")
                     completed.append(
                         dispatch.complete(store, boundary, snapshot, intent, obligation, matched)
                     )
@@ -484,7 +484,7 @@ def _terminal_replay(
     _require_cohort_assignments(store, bus, snapshot, privacy, terminal=snapshot.completed_response())
     matched = intent.published_message(bus.bus)
     if matched is None or matched.reference != acknowledgement.reference:
-        raise PublicationUncertain("published SQL acknowledgement has no exact durable bus row")
+        raise CoordinationError("published SQL acknowledgement has no exact durable bus row")
     return AlreadyApplied(snapshot)
 
 
@@ -539,11 +539,11 @@ def _settle_fenced_response(
             intent, obligation = snapshot.require_publishing_intent(exact_target, registry_snapshot)
             dispatch = PublicationAppendDispatches.one(db, execution_id=fence.execution_id, exact_target=exact_target)
             if dispatch is None or not dispatch.matches(wire_root_id, fence, exact_target):
-                raise PublicationUncertain("no matching durable append dispatch")
+                raise CoordinationError("no matching durable append dispatch")
             matched = intent.published_message(bus.bus)
             if matched is None:
                 if not first_dispatch:
-                    raise PublicationUncertain("no keyed bus acknowledgement; no resend authorized")
+                    raise CoordinationError("no keyed bus acknowledgement; no resend authorized")
                 # This call created the durable dispatch barrier, and owns the
                 # only authorized first append while its final fence is locked.
                 from agent_comms.messaging.response_conversation import ResponseConversation

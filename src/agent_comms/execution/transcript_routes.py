@@ -210,7 +210,7 @@ class _SessionRoutes:
     def close(self) -> None:
         self._lifetime.close()
 
-    def __enter__(self) -> "_SessionRoutes":
+    def __enter__(self) -> _SessionRoutes:
         return self
 
     def __exit__(self, *_error: object) -> None:

@@ -15,7 +15,7 @@ from agent_comms.coordination.assignment_states import (
 )
 from agent_comms.coordination.errors import (
     IdentityConflict,
-    IntegrityViolationError,
+    CoordinationError,
     ResponseClaimBlocked,
 )
 from agent_comms.coordination.vocabulary import CoordinatorVocabulary
@@ -36,10 +36,6 @@ class OrdinalRule:
     def accepts(self, following: ExecutionState, previous: ExecutionState) -> bool:
         return (isinstance(previous, self.predecessors)
                 and following.current_attempt_ordinal == (self.next_ordinal(previous) or None))
-
-
-class PreservedOrdinal(OrdinalRule):
-    """Keep the previous attempt, including its absence before the first start."""
 
 
 @dataclass(frozen=True)
@@ -108,7 +104,7 @@ class ExecutionState(CoordinatorVocabulary, LifecycleState, affix="Execution"):
     def accepts_attempt(self, phase) -> bool:
         return False
 
-    ordinal_rule: ClassVar[OrdinalRule] = PreservedOrdinal()
+    ordinal_rule: ClassVar[OrdinalRule] = OrdinalRule()
 
     def accepts_previous(self, previous: ExecutionState) -> bool:
         return self.ordinal_rule.accepts(self, previous)
@@ -129,7 +125,7 @@ class UnstartedExecution(EngagedExecution, ExecutionState):
     @classmethod
     def load(cls, ordinal: int | None) -> ExecutionState:
         if ordinal is not None:
-            raise IntegrityViolationError("unstarted execution cannot reference an attempt")
+            raise CoordinationError("unstarted execution cannot reference an attempt")
         return cls()
 
 
@@ -173,7 +169,7 @@ class AttemptExecution(AttemptReference, ExecutionState):
 
     def __post_init__(self):
         if type(self.ordinal) is not int or self.ordinal < 1:
-            raise IntegrityViolationError("active/completed execution requires an attempt")
+            raise CoordinationError("active/completed execution requires an attempt")
 
 
 class ActiveExecution(Active, EngagedExecution, AttemptExecution):
@@ -191,7 +187,7 @@ class ActiveExecution(Active, EngagedExecution, AttemptExecution):
 
     def validate_snapshot(self, snapshot, authorized):
         if not snapshot.is_current:
-            raise IntegrityViolationError("active snapshot must carry exact owner pointer")
+            raise CoordinationError("active snapshot must carry exact owner pointer")
 
 
 class CompletedExecution(Complete, Terminal, AttemptExecution):
@@ -206,7 +202,7 @@ class CompletedExecution(Complete, Terminal, AttemptExecution):
     def validate_snapshot(self, snapshot, authorized):
         for row in snapshot.obligations:
             row.lifecycle.require(Successful,
-                IntegrityViolationError("completed wire execution requires terminal obligation")
+                CoordinationError("completed wire execution requires terminal obligation")
             )
 
 
@@ -235,11 +231,11 @@ class DeferredExecution(StartsAttempt, InterruptedExecution):
     def validate_budget(self, maximum: int) -> None:
         super().validate_budget(maximum)
         if self.ordinal is not None and self.ordinal >= maximum:
-            raise IntegrityViolationError("post-attempt deferral requires retry budget")
+            raise CoordinationError("post-attempt deferral requires retry budget")
 
     def validate_snapshot(self, snapshot, authorized):
         if snapshot.attempt is not None and not authorized:
-            raise IntegrityViolationError("post-attempt deferral requires authorized retry")
+            raise CoordinationError("post-attempt deferral requires authorized retry")
 
     def can_retry(self, *, authorized: bool, attempt, is_current: bool) -> bool:
         if self.ordinal is None or attempt is None:
@@ -256,6 +252,6 @@ class FailedExecution(Failed, Terminal, InterruptedExecution):
 
     def validate_snapshot(self, snapshot, authorized):
         if bool(snapshot.publication_evidence):
-            raise IntegrityViolationError("failed execution cannot erase a publication acknowledgement")
+            raise CoordinationError("failed execution cannot erase a publication acknowledgement")
         if snapshot.attempt is not None and authorized:
-            raise IntegrityViolationError("authorized retry cannot settle failed")
+            raise CoordinationError("authorized retry cannot settle failed")

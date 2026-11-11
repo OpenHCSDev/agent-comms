@@ -38,7 +38,7 @@ class SubagentMeta(WireModel):
     description: str
 
 
-class ClaudeJsonLines(JsonLines):
+class ClaudeJsonLines(JsonLines[ClaudeRecord]):
     """How a Claude Code transcript file decodes, whether stored or still being written."""
 
     records = CLAUDE_RECORD
@@ -75,7 +75,7 @@ class ClaudeJsonLines(JsonLines):
             yield from update.during(state.phase)
 
 
-class ClaudeTranscript(ClaudeJsonLines, JsonLinesFile, ClaudeHistory, OfflineHistory):
+class ClaudeTranscript(ClaudeJsonLines, JsonLinesFile[ClaudeRecord], ClaudeHistory, OfflineHistory):
     """Claude Code writes one transcript file per session (`<id>.jsonl`) and per subagent
     (`<id>/subagents/agent-<id>.jsonl`), under ~/.claude/projects."""
 

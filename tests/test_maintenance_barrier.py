@@ -433,7 +433,7 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
 def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path: Path, monkeypatch) -> None:
     """The installer stops only its owners; the connector, bridges and forks keep running, so the
     registry itself refuses their writes during a hold, and the holder's own writes still land."""
-    from agent_comms.coordination.errors import ParticipantNotRegistered
+    from agent_comms.coordination.errors import IdentityConflict
     from agent_comms.coordination.participant_store import ParticipantStore
     from agent_comms.coordination.session import CoordinationSession
     from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
@@ -453,7 +453,7 @@ def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path:
     assert comms.registry.store.path.read_bytes() == before
     with CoordinationSession(str(CoordinationSession.path_in(tmp_path))) as session:
         participants = ParticipantStore(session)
-        with pytest.raises(ParticipantNotRegistered):
+        with pytest.raises(IdentityConflict):
             participants.get(requested.incarnation.lookup)
         monkeypatch.setenv(HOLDER_NONCE, hold.nonce)
         comms.registry.declare(requested)

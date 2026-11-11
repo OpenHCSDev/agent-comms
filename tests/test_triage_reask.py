@@ -24,7 +24,7 @@ async def test_an_unreadable_decision_leaves_the_claim_deferred(tmp_path: Path):
         await acknowledge_context(claim, context)
         captured = tuple(claim.stage.assignments)
         with Coordination(claim.store_path) as store:
-            claim.stage.burn_turn(store, claim.participant, claim.input_id,
+            claim.stage.burn_turn(store, claim.selected.identity, claim.input_id,
                                   claim.token_digest, context)
             # The claims are not failed: the reader still owes a decision.
             failed = "FailedAssignment"
@@ -44,14 +44,14 @@ async def test_one_claim_takes_an_original_ask_and_one_replacement(tmp_path: Pat
         with Coordination(claim.store_path) as store:
             # The unreadable answer is closed first; that is what returns the claim to
             # triage-pending and makes one replacement legal.
-            claim.stage.burn_turn(store, claim.participant, claim.input_id,
+            claim.stage.burn_turn(store, claim.selected.identity, claim.input_id,
                                   claim.token_digest, context)
             stage = claim.stage.refreshed(store)
-            replacement = stage.reserve(store, claim.participant, claim.token_digest, attempt=1)
+            replacement = stage.reserve(store, claim.selected.identity, claim.token_digest, attempt=1)
             assert replacement != claim.input_id
             assert len(NativeRuntimeInput.select(store.session._connection)) == 2
             with pytest.raises(Exception):
-                stage.refreshed(store).reserve(store, claim.participant,
+                stage.refreshed(store).reserve(store, claim.selected.identity,
                                                claim.token_digest, attempt=1)
 
 
@@ -62,14 +62,14 @@ async def test_the_replacement_alone_proves_the_source(tmp_path: Path):
         context = await recorded_input_context(claim)
         await acknowledge_context(claim, context)
         with Coordination(claim.store_path) as store:
-            claim.stage.burn_turn(store, claim.participant, claim.input_id,
+            claim.stage.burn_turn(store, claim.selected.identity, claim.input_id,
                                   claim.token_digest, context)
             db = store.session._connection
             # Between the burn and the replacement's reservation the claim is triage-pending
             # again; an inbox read in that window must not take the burned input as proof.
             assert TriageNativeExecution().retried_in(db, claim.input_id)
             replacement = claim.stage.refreshed(store).reserve(
-                store, claim.participant, claim.token_digest, attempt=1)
+                store, claim.selected.identity, claim.token_digest, attempt=1)
             # Historical evidence keeps one triage input per source: the burned original is
             # superseded, as a FULL attempt behind a later one is.
             assert TriageNativeExecution().retried_in(db, claim.input_id)

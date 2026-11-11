@@ -12,7 +12,7 @@ from pydantic import JsonValue
 
 from agent_comms.execution.annotation_disclosure import PublicInstructionAnnotations
 from agent_comms.pi_payloads import PiMessage
-from agent_comms.execution.turn_context import ContextEntryManifest
+from agent_comms.execution.turn_context import ContextEntryManifest, ProviderContext
 from agent_comms.execution.turn_context import ContextEntryReference
 from agent_comms.execution.turn_context import ContextSpan
 from agent_comms.execution.turn_context import ContributionCoordinates
@@ -54,8 +54,9 @@ class NativeMessages(MeasuredNativeSegment, declared_name=None):
             offset += len(text.encode("utf-8")) + 1
         return tuple(ranges)
 
-    def render_into(self, prompt_parts, provider):
-        provider.setdefault("messages", []).extend(self.messages)
+    def render_into(self, prompt_parts, provider: ProviderContext) -> ProviderContext:
+        provider.messages.extend(self.messages)
+        return provider
 
 
 class NativeAnnotations(NativeMessages, declared_name=None):

@@ -21,7 +21,7 @@ from agent_comms.execution.child_process import (
     NoResidentManager,
     ResidentManager,
     SystemdUserManager,
-    UnmanagedHomeError,
+    RelationViolationError,
 )
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.launch_runtime import LaunchRuntime
@@ -169,7 +169,7 @@ UNIT = InstallUnit(Id128.mint(), Path("/nonexistent"))
 def test_a_private_home_cannot_change_the_users_units(reachable_manager, tmp_path, monkeypatch,
                                                        verb):
     monkeypatch.setenv("HOME", str(tmp_path))
-    with pytest.raises(UnmanagedHomeError, match="not the user's own home|no user manager"):
+    with pytest.raises(RelationViolationError, match="not the user's own home|no user manager"):
         verb()
 
 

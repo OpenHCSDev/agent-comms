@@ -300,10 +300,6 @@ def resolve_comms_route(root: Path | str | None = None) -> CommsRoute:
     return LocalRoute(LaunchRoot.current().path)
 
 
-class RoutePublicationUnknownError(RelationViolationError):
-    """The new route may be visible after a failed durability boundary."""
-
-
 def active_route_path() -> Path:
     return Path.home() / ".local/state/agent-comms" / RouteFile.filename
 
@@ -390,7 +386,7 @@ class RouteFile(ABC):
         try:
             publish()
         except (OSError, ValueError) as error:
-            raise RoutePublicationUnknownError(
+            raise RelationViolationError(
                 "active comms route publication outcome UNKNOWN after replacement") from error
         return backup
 
@@ -424,7 +420,7 @@ class AbsentRoute(RouteFile):
         except FileExistsError as error:
             raise ValueError("active comms route is already installed") from error
         except (OSError, ValueError) as error:
-            raise RoutePublicationUnknownError(
+            raise RelationViolationError(
                 "active comms route publication outcome UNKNOWN after link") from error
         return f"published {path}"
 

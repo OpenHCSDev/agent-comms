@@ -102,7 +102,7 @@ async def test_triage_consumption_precedes_and_survives_later_verdict(tmp_path: 
             original = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
             assert original.verdict == AbsentTriageDecisionRecord()
             claim.commit(store, context)
-            claim.stage.commit(store, claim.participant, claim.input_id, claim.token_digest,
+            claim.stage.commit(store, claim.selected.identity, claim.input_id, claim.token_digest,
                                context, IgnoreSelectedTriage())
             retained = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
             assert retained.require_context_proof() == context
@@ -120,12 +120,12 @@ async def test_triage_failure_keeps_previously_acknowledged_context_and_no_retry
         context = await recorded_input_context(claim)
         await acknowledge_context(claim, context)
         with Coordination(claim.store_path) as store:
-            claim.stage.fail_decision(store, claim.participant, claim.input_id, claim.token_digest, context)
+            claim.stage.fail_decision(store, claim.selected.identity, claim.input_id, claim.token_digest, context)
             retained = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
             assert retained.require_context_proof() == context
             assert retained.verdict == AbsentTriageDecisionRecord()
             with pytest.raises(IdentityConflict):
-                claim.stage.reserve(store, claim.participant, claim.token_digest)
+                claim.stage.reserve(store, claim.selected.identity, claim.token_digest)
             assert len(NativeRuntimeInput.select(store.session._connection)) == 1
 
 

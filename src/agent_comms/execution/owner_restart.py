@@ -200,12 +200,18 @@ class StoppedOwnerFailure(CoordinationError):
 
 
 @dataclass(frozen=True)
-class FencedOwnerBatch:
+class OwnerBatchLaunch:
+    """An owner batch's lifecycle and the launches it captured for one request on a runtime."""
+
     lifecycle: OwnerLifecycle
     captured: tuple[tuple[Thread, int], ...]
     launches: tuple[RetainedOwnerLaunch, ...]
     request: OwnerRestartRequest
     runtime: RestartEnvironment
+
+
+@dataclass(frozen=True)
+class FencedOwnerBatch(OwnerBatchLaunch):
     retired: tuple[RetiredOwnerLaunch, ...] = ()
     ownership: ExitStack = field(default_factory=ExitStack, repr=False, compare=False)
 
@@ -258,13 +264,7 @@ class FencedOwnerBatch:
 
 
 @dataclass(frozen=True)
-class ClaimedOwnerBatch:
-    lifecycle: OwnerLifecycle
-    captured: tuple[tuple[Thread, int], ...]
-    launches: tuple[RetainedOwnerLaunch, ...]
-    request: OwnerRestartRequest
-    runtime: RestartEnvironment
-
+class ClaimedOwnerBatch(OwnerBatchLaunch):
     @classmethod
     def restart(cls, lifecycle: OwnerLifecycle, request: OwnerRestartRequest,
                 cutover: OwnerCutover) -> tuple[OwnerRestartResult, ...]:

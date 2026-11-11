@@ -19,6 +19,7 @@ from agent_comms.messaging.display_references import (
     ThreadDisplayReference,
     ThreadNames,
     ThreadReference,
+    ThreadReferenceIdentity,
     ThreadReferenceReader,
     UnavailableReferences,
 )
@@ -48,8 +49,7 @@ class PersonUnread(ConversationPreparation):
 
 
 @dataclass(frozen=True)
-class ThreadRowModel:
-    incarnation: ThreadIncarnation
+class ThreadRowModel(ThreadReferenceIdentity):
     title: str
     label: str
     summary: str
@@ -57,10 +57,6 @@ class ThreadRowModel:
     model: ThreadModel
     unread: UnreadPresentation
     active: bool
-
-    @property
-    def name(self) -> str:
-        return self.incarnation.name
 
     def disconnected(self, status: SessionDisconnected) -> ThreadRowModel:
         shown = status.presentation(self.title)

@@ -133,7 +133,7 @@ class InputForwarding(MroDispatch, SessionInputsCallbacks):
     async def prepare_session(self, item: PreparedSession, session: NativeSessionCallbacks) -> bool:
         session.native.forget_context()
         state = session.native.attestation.require_state()
-        identity = session.native.attestation.require_identity()
+        identity = session.native.attestation.identity.require_identity()
         session.launch.session.attest(identity)
         if (
             state.session_busy or not state.pending_message_count.matches(0)

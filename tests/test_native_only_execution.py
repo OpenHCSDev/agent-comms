@@ -27,7 +27,7 @@ def test_headless_discovery_cannot_admit_an_unnamed_owner(tmp_path, arguments, c
     environment = LaunchRoot.environment(os.environ)
     environment.pop('AGENT_COMMS_THREAD', None)
     result = subprocess.run(
-        (sys.executable, '-c', 'from agent_comms.execution.worker import main; raise SystemExit(main())', *LaunchRoot.from_path(root).arguments(), *arguments),
+        (sys.executable, '-c', 'from agent_comms.execution.worker.__main__ import main; raise SystemExit(main())', *LaunchRoot.from_path(root).arguments(), *arguments),
         env=environment, capture_output=True, timeout=30,
     )
     assert result.returncode == code, result.stderr.decode()

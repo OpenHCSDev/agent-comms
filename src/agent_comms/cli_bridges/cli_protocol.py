@@ -31,6 +31,22 @@ from agent_comms.storage.recorded_time import UnrecordedTimeError
 from agent_comms.transcript.external_transcript_rows import RequestedEarlierPage
 
 
+class HistoryRecord(ABC):
+    """One stored line of a harness session, as JsonLines reads it."""
+
+    def begins_history(self) -> bool:
+        """Whether the harness replaced everything before this record (compaction)."""
+        return False
+
+    def request(self) -> str:
+        """The prompt this record carries, read without the session around it."""
+        return ''
+
+    def owner_words(self) -> tuple[str, ...]:
+        """What the person typed in this record; most records carry none."""
+        return ()
+
+
 class TimestampedWire(WireModel):
     """A source record's original ISO timestamp, decoded before making any events."""
 

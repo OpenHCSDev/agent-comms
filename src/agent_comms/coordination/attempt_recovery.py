@@ -16,7 +16,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
     IdentityConflict,
-    PublicationUncertain,
+    CoordinationError,
     RecoveryBlocked,
     StaleFence,
     StaleRevision,
@@ -232,7 +232,7 @@ class VerifiedAttemptOwnerLoss(VerifiedOwnerLoss):
         attempt = snapshot.attempt
         assert attempt is not None  # Required by the release observer.
         if bool(snapshot.publication_intents):
-            raise PublicationUncertain("UNKNOWN abandonment cannot resolve frozen publication")
+            raise CoordinationError("UNKNOWN abandonment cannot resolve frozen publication")
         self.require_native_exit()
         return recovery_cls(store, _grant=_MONITOR_GRANT).terminalize_dead_attempt(
             execution_id,
@@ -574,5 +574,5 @@ class RecoveryMonitorCapability:
             # Death and genuinely observed backend completion commit even when
             # publication remains unresolved.  Neither state clears the pointer.
         if unresolved and (attempt.lifecycle.backend_done or evidence.backend_done):
-            raise PublicationUncertain("frozen publication requires bus-keyed acknowledgement")
+            raise CoordinationError("frozen publication requires bus-keyed acknowledgement")
         raise RecoveryBlocked("process death alone is not backend-final proof")

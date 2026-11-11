@@ -583,10 +583,6 @@ class StoredTurnReference(RecordMember, TurnRecord):
         raise RelationViolationError("Turn reference must be bound by its registry")
 
 
-class MissingTurnRecordError(RelationViolationError):
-    """A turn file is gone: superseded since its registry named it, or never written."""
-
-
 class TurnFile(DurableFile, PatternFile):
     """Where one turn generation's file lives; its record and its writer lock own the rest."""
 
@@ -605,7 +601,7 @@ class LockedTurnFile(SingleFileStore, TurnFile, LockedFile,
     record_type = ActiveTurn
 
     def empty(self) -> ActiveTurn:
-        raise MissingTurnRecordError(f"Active turn record is missing: {self.path}")
+        raise RelationViolationError(f"Active turn record is missing: {self.path}")
 
     def read(self) -> ActiveTurn:
         return self.read_copied(DocumentBytes.capture(self.path))

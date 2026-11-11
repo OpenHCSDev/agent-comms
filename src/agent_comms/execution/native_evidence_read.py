@@ -31,10 +31,6 @@ class NativeEvidencePrefixChanged(NativePiUnavailable):
     """The retained verified prefix must be reacquired from byte zero."""
 
 
-class NativeEvidenceRemoved(NativePiUnavailable):
-    """The recorded recipient session no longer exists at its owned path."""
-
-
 class UnverifiedNativeEvidencePrefix:
     """No captured cut yet; the private writer owns append-only content."""
 
@@ -90,7 +86,7 @@ class PrivateEvidenceRead:
         except FileNotFoundError as error:
             if stream is not None:
                 stream.close()
-            raise NativeEvidenceRemoved("Native Pi evidence session was removed") from error
+            raise NativePiUnavailable("Native Pi evidence session was removed") from error
         except (OSError, ValueError) as error:
             if stream is not None:
                 stream.close()

@@ -19,6 +19,7 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import agent_comms.execution.worker
 from agent_comms.cli_verbs.cli_result import TargetEditResult
 from agent_comms.coordination.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.errors import RelationViolationError
@@ -408,7 +409,7 @@ class OwnerLifecycle:
         agent_args.apply(env)
         host = RootRuntimeStore.at(self.root).acquire_host(
             launch_runtime,
-            (str(launch_runtime.interpreter), "-m", "agent_comms.execution.worker",
+            (str(launch_runtime.interpreter), "-m", agent_comms.execution.worker.__name__,
              *LaunchRoot.from_path(self.launch_authority.child_root).arguments()),
             environment=launch_runtime.environment(ThreadLaunch.strip(dict(os.environ))),
             cwd=str(self.root),

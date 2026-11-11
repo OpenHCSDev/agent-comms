@@ -33,7 +33,7 @@ class HistoricalInstruction(RuntimeUpdate):
         history.instructions.add(self.source)
 
 
-class CodexRollout(JsonLinesFile, CodexHistory, OfflineHistory):
+class CodexRollout(JsonLinesFile[RolloutRecord], CodexHistory, OfflineHistory):
     """`~/.codex/sessions/.../rollout-*.jsonl`: Codex's stored session, which it appends to while it runs."""
 
     suffixes = frozenset({'.jsonl'})

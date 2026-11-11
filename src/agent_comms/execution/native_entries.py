@@ -675,7 +675,7 @@ class SessionEntry(NativeEntry):
 @dataclass(frozen=True, kw_only=True)
 class MessageEntry(NativeEntry):
     def preserve_evidence(self, raw: dict) -> MessageEntry:
-        message = raw["message"]
+        message = raw[FieldCodec.record_key(type(self), "message")]
         # Opaque display roles must not hide a tracked ID from proof readers.
         if message.get("inputId") is not None and not self.message.user:
             raise MalformedRecord("Tracked native input must belong to a user")

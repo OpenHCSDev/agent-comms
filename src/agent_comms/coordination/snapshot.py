@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Annotated
 from agent_comms.coordination.attempt_states import SucceededAttempt
 from agent_comms.coordination.errors import (
     IdentityConflict,
-    IntegrityViolationError,
-    PublicationUncertain,
+    CoordinationError,
+    CoordinationError,
     RecoveryBlocked,
     StaleFence,
 )
@@ -165,46 +165,46 @@ class RecoverySnapshot:
         ) or any(
             assignment.lifecycle.execution_id != execution_id for assignment in self.assignments
         ):
-            raise IntegrityViolationError("snapshot records belong to another execution")
+            raise CoordinationError("snapshot records belong to another execution")
         assignment_ids = tuple(assignment.assignment_id for assignment in self.assignments)
         if (
             tuple(link.assignment_id for link in self.links) != assignment_ids
             or tuple(link.ordinal for link in self.links) != tuple(range(len(self.assignments)))
             or any(link.execution_id != execution_id for link in self.links)
         ):
-            raise IntegrityViolationError(
+            raise CoordinationError(
                 "snapshot execution-claim links disagree with ordered claims"
             )
         if len(assignment_ids) != len(set(assignment_ids)) or any(
             assignment.recipient_lookup != execution.owner_lookup for assignment in self.assignments
         ):
-            raise IntegrityViolationError("snapshot claims have duplicate IDs or wrong owner")
+            raise CoordinationError("snapshot claims have duplicate IDs or wrong owner")
         assignment_kind = execution.lifecycle.assignment_state()
         if any(
             type(assignment.lifecycle) is not assignment_kind for assignment in self.assignments
         ):
-            raise IntegrityViolationError("snapshot claims disagree with execution disposition")
+            raise CoordinationError("snapshot claims disagree with execution disposition")
 
     def validate_attempt_identity(self) -> None:
         execution = self.execution
         execution_id = execution.execution_id
         attempt = self.attempt
         if (execution.lifecycle.current_attempt_ordinal is None) != (attempt is None):
-            raise IntegrityViolationError("snapshot attempt does not match execution reference")
+            raise CoordinationError("snapshot attempt does not match execution reference")
         if attempt is not None and (
             (attempt.execution_id, attempt.attempt_ordinal, attempt.owner_lookup)
             != (execution_id, execution.lifecycle.current_attempt_ordinal, execution.owner_lookup)
         ):
-            raise IntegrityViolationError("snapshot attempt identity/owner mismatch")
+            raise CoordinationError("snapshot attempt identity/owner mismatch")
         if attempt is not None and not execution.lifecycle.accepts_attempt(attempt.lifecycle):
-            raise IntegrityViolationError("snapshot status/attempt phase mismatch")
+            raise CoordinationError("snapshot status/attempt phase mismatch")
 
     def validate_current_pointer(self) -> None:
         execution = self.execution
         execution_id = execution.execution_id
         attempt = self.attempt
         if self.current_execution_id.pointed != self.current_attempt_ordinal.pointed:
-            raise IntegrityViolationError("snapshot pointer tuple is incomplete")
+            raise CoordinationError("snapshot pointer tuple is incomplete")
         if self.is_current != (
             self.current_execution_id.otherwise(None) == execution_id
             and self.current_attempt_ordinal.otherwise(None) == execution.lifecycle.current_attempt_ordinal
@@ -212,18 +212,18 @@ class RecoverySnapshot:
             and attempt is not None
             and attempt.lifecycle.accepts_active_execution()
         ):
-            raise IntegrityViolationError("snapshot current pointer is inconsistent")
+            raise CoordinationError("snapshot current pointer is inconsistent")
 
     def validate_response_route(self) -> None:
         self.execution.origin.validate_routes(self.assignments, self.obligations)
         expected = {row.lifecycle.exact_target for row in self.assignments}
         targets = tuple(row.exact_target for row in self.obligations)
         if len(set(targets)) != len(targets) or set(targets) != expected:
-            raise IntegrityViolationError("response obligations differ from original claim routes")
+            raise CoordinationError("response obligations differ from original claim routes")
         for records in (self.publication_intents, self.publication_evidence):
             routes = tuple(row.exact_target for row in records)
             if len(set(routes)) != len(routes) or not set(routes) <= expected:
-                raise IntegrityViolationError("publication routes differ from original obligations")
+                raise CoordinationError("publication routes differ from original obligations")
 
     def validate_publication_receipt(self) -> None:
         for obligation in self.obligations:
@@ -247,7 +247,7 @@ class RecoverySnapshot:
         db = session._connection
         execution, attempt = self.execution, self.attempt
         if self.publication_intents:
-            raise PublicationUncertain("publication requires bus-keyed acknowledgement resolution")
+            raise CoordinationError("publication requires bus-keyed acknowledgement resolution")
         if (
             attempt is None
             or not self.is_current

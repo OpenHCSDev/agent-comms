@@ -55,9 +55,6 @@ class NativeAttestation(SnapshotAttestation):
     state = None
     identity: SessionRetention = NoSessionRetention()
 
-    def require_identity(self) -> NativeSessionIdentity:
-        return self.identity.require_identity()
-
     def require_state(self) -> StateData:
         raise NativePiUnavailable("Native child has not reported its original state")
 

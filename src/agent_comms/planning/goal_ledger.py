@@ -239,10 +239,10 @@ class Generation(GoalLedgerTable, TypedTable, GoalGenerationRead, GenerationFail
 
 
 @dataclass(frozen=True, slots=True)
-class Reservation(GoalFailureReservation["GoalLedgerWriter", FailedTurnObservation]):
-    goal_id: GoalId
-    generation: int
-    attempt_id: AttemptId
+class Reservation(
+    GoalAttemptIdentity,
+    GoalFailureReservation[GoalLedgerWriter, FailedTurnObservation],
+):
     token: AttemptToken
 
     @property

@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.coordination.assignment_states import AssignmentState, BoundAssignment
 from agent_comms.coordination.attempt_states import AttemptState, LiveAttempt
-from agent_comms.coordination.errors import IntegrityViolationError
+from agent_comms.coordination.errors import CoordinationError
 from agent_comms.coordination.execution_states import (
     AttemptExecution,
     DeferredExecution,
@@ -60,7 +60,7 @@ def active(tmp_path):
 
 
 def rejected(value, **changes):
-    with pytest.raises((ValueError, TypeError, IntegrityViolationError)):
+    with pytest.raises((ValueError, TypeError, CoordinationError)):
         replace(value, **changes)
 
 
@@ -82,16 +82,16 @@ def test_assignment_decision_and_binding_owned_by_policy(policy):
         initial = type(mode).initial_state()
         state = initial.load(mode, None, None, None)
         assert state.mode == mode and state.exact_target is None
-        with pytest.raises(IntegrityViolationError):
+        with pytest.raises(CoordinationError):
             initial.load(mode, "invalid-verdict", None, None)
-        with pytest.raises(IntegrityViolationError):
+        with pytest.raises(CoordinationError):
             initial.load(mode, None, None, "unowned")
         for active in mode.items_with(Active, mode):
             for owner in AssignmentState.members_with(BoundAssignment):
                 bound = owner.build(active, "exec", "owner")
                 assert bound.execution_id == "exec" and bound.exact_target == "owner"
                 for execution_id, target in ((None, "owner"), ("exec", None)):
-                    with pytest.raises(IntegrityViolationError):
+                    with pytest.raises(CoordinationError):
                         owner.build(active, execution_id, target)
 
 
@@ -99,12 +99,12 @@ def test_assignment_decision_and_binding_owned_by_policy(policy):
 def test_execution_attempt_reference_and_budget(owner, pending):
     if owner.unstarted:
         state = owner.load(None)
-        with pytest.raises(IntegrityViolationError):
+        with pytest.raises(CoordinationError):
             owner.load(1)
     else:
         state = owner.load(1)
         if issubclass(owner, AttemptExecution):
-            with pytest.raises(IntegrityViolationError):
+            with pytest.raises(CoordinationError):
                 owner.load(None)
     assert state.current_attempt_ordinal in (None, 1)
     record = replace(pending.execution, lifecycle=state)
@@ -113,7 +113,7 @@ def test_execution_attempt_reference_and_budget(owner, pending):
         if owner.retry:
             rejected(record, max_attempts=1)
         with pytest.raises(
-            (ValueError, IntegrityViolationError)
+            (ValueError, CoordinationError)
         ):
             owner.load(4).validate_budget(3)
 
@@ -137,7 +137,7 @@ def test_replay_bits_revision_and_ambiguity(pending):
     mask = sum(int(fact) for fact in ReplayFact)
     rejected(row, facts=mask + 1)
     for fact in ReplayFact:
-        with pytest.raises(IntegrityViolationError):
+        with pytest.raises(CoordinationError):
             replace(row, facts=fact)
         assert not replace(row, facts=fact, replay_safe=False).replay_safe
 
@@ -160,7 +160,7 @@ def test_response_receipt_and_publication_constraints(owner, pending):
             ("", 1),
             ("acknowledgement", 0),
         ):
-            with pytest.raises((ValueError, IntegrityViolationError)):
+            with pytest.raises((ValueError, CoordinationError)):
                 FieldCodec.decode(ResponseState, {**record, 'message_id': message_id, 'seq': seq})
     else:
         state = FieldCodec.decode(ResponseState, record)
@@ -179,7 +179,7 @@ def test_response_receipt_and_publication_constraints(owner, pending):
                 intent if has_intent else None, acknowledgement if has_receipt else None
             )
         else:
-            with pytest.raises(IntegrityViolationError):
+            with pytest.raises(CoordinationError):
                 state.validate_publication(
                     intent if has_intent else None, acknowledgement if has_receipt else None
                 )
@@ -299,11 +299,11 @@ def test_snapshot_retry_terminal_coupling(active):
             assert value.can_retry is phase().permits_retry()
             rejected(value, replay=replace(value.replay, replay_safe=False))
             with pytest.raises(
-                IntegrityViolationError
+                CoordinationError
             ):
                 terminal_snapshot(active, FailedExecution, phase, response, replay_safe=True)
         else:
-            with pytest.raises(IntegrityViolationError):
+            with pytest.raises(CoordinationError):
                 terminal_snapshot(active, DeferredExecution, phase, response, replay_safe=True)
         failed = terminal_snapshot(active, FailedExecution, phase, response, replay_safe=False)
         assert not failed.can_retry
@@ -315,7 +315,7 @@ def test_snapshot_retry_terminal_coupling(active):
                         active, owner, phase, response, replay_safe=True
                     ).can_retry
                 else:
-                    with pytest.raises(IntegrityViolationError):
+                    with pytest.raises(CoordinationError):
                         terminal_snapshot(active, owner, phase, response, replay_safe=True)
 
 

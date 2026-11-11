@@ -60,10 +60,6 @@ class UnprivateSidecarFile(IdentityConflict):
         super().__init__("Private sidecar file must be regular, owner-only and unaliased.")
 
 
-class SidecarCommitUnknown(IdentityConflict):
-    """No successful durability acknowledgement; callers must not send or retry input."""
-
-
 def _identity(info: os.stat_result) -> tuple[int, int]:
     return info.st_dev, info.st_ino
 
@@ -153,7 +149,7 @@ def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
             dir_fd=directory.fd, follow_symlinks=False,
         ))
         if not intent.is_absent():
-            raise SidecarCommitUnknown("Private sidecar has an unresolved commit intent; no retry.")
+            raise IdentityConflict("Private sidecar has an unresolved commit intent; no retry.")
         yield directory
         directory.unchanged(lock_name, os.fstat(lock))
 
@@ -328,7 +324,7 @@ def _publish(
         return actual
     except BaseException as error:
         if begun:
-            raise SidecarCommitUnknown(
+            raise IdentityConflict(
                 "Private sidecar commit is uncertain; do not send or retry."
             ) from error
         raise

@@ -400,7 +400,7 @@ class TrackedTurnSession(TurnSession, FollowingTurnSource[OwnedSend]):
             self.native.attestation
         )
         if self.native.attestation.observed:
-            identity = self.native.attestation.require_identity()
+            identity = self.native.attestation.identity.require_identity()
             self.active_session_file = self.launch.session.attest(identity)
             return
         request = self.native.attestation.request

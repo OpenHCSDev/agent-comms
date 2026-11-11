@@ -274,13 +274,18 @@ class ExecutionWaitingObservation(PrivateObservation):
         return 0
 
 
-class InputObservation(ABC):
-    """File-driven observation and process-local wake behavior."""
+class BusSessionsRuntime:
+    """The bus, its sessions and the runtime an owner reads."""
 
     comms: Comms
     sessions: SessionLifecycle
-    effects: InputEffects
     runtime: RuntimeServer
+
+
+class InputObservation(BusSessionsRuntime, ABC):
+    """File-driven observation and process-local wake behavior."""
+
+    effects: InputEffects
     auto_wake: bool
     closing: bool
     drained: dict[AcpSessionId, DrainedSession]

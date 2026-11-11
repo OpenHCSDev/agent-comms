@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.coordination.errors import IdentityConflict, IntegrityViolationError
+from agent_comms.coordination.errors import IdentityConflict, CoordinationError
 from agent_comms.coordination.reason_codes import NoReasonCode
 from agent_comms.coordination.vocabulary import CoordinatorVocabulary
 from agent_comms.messaging.message_reference import MessageReference
@@ -57,7 +57,7 @@ class ResponseState(CoordinatorVocabulary, LifecycleState, affix="Response"):
         return Unpublished()
 
     def published_reference(self) -> MessageReference:
-        raise IntegrityViolationError("only published obligations have an acknowledgement")
+        raise CoordinationError("only published obligations have an acknowledgement")
 
     def require_preparation(self) -> None:
         raise IdentityConflict("response obligation cannot prepare a new intent")
@@ -80,16 +80,16 @@ class ResponseState(CoordinatorVocabulary, LifecycleState, affix="Response"):
 
     def validate_publication(self, intent, acknowledgement) -> None:
         if intent is not None and not self.allows_intent:
-            raise IntegrityViolationError("publication intent is invalid for obligation state")
+            raise CoordinationError("publication intent is invalid for obligation state")
         if intent is None and self.requires_intent:
-            raise IntegrityViolationError("publishing and published obligations require intent")
+            raise CoordinationError("publishing and published obligations require intent")
         self.validate_acknowledgement(acknowledgement)
         if acknowledgement is not None:
             intent.validate_acknowledgement(acknowledgement)
 
     def validate_acknowledgement(self, acknowledgement) -> None:
         if acknowledgement is not None:
-            raise IntegrityViolationError("publication acknowledgement exists iff published")
+            raise CoordinationError("publication acknowledgement exists iff published")
 
 
 class PendingResponse(Pending, ResponseState):
@@ -166,9 +166,9 @@ class PublishedResponse(Successful, ResponseState):
 
     def validate_acknowledgement(self, acknowledgement) -> None:
         if acknowledgement is None:
-            raise IntegrityViolationError("publication acknowledgement exists iff published")
+            raise CoordinationError("publication acknowledgement exists iff published")
         if (acknowledgement.message_id, acknowledgement.seq) != (self.message_id, self.seq):
-            raise IntegrityViolationError("obligation acknowledgement does not match publication")
+            raise CoordinationError("obligation acknowledgement does not match publication")
 
 
 class SilentResponse(Successful, ResponseState):

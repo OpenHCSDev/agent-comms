@@ -19,7 +19,7 @@ from agent_comms.installer.active_route import (
     ActiveRouteFile,
     NoRouteSelection,
     PublishedRouteSelection,
-    RoutePublicationUnknownError,
+    RelationViolationError,
     active_route_path,
     read_active_route,
     route_new_bus,
@@ -141,7 +141,7 @@ def test_unknown_publication_is_still_owned_by_rollback(tmp_path, route_bus, had
         return fsync(fd)
 
     monkeypatch.setattr(os, "fsync", fail_directory_once)
-    with pytest.raises(RoutePublicationUnknownError):
+    with pytest.raises(RelationViolationError):
         selected = PublishedRouteSelection(route_bus.root) if had_route else NoRouteSelection()
         backup.rebind_route(route_bus, selected)
     assert failed
@@ -202,7 +202,7 @@ def test_failure_after_backup_link_restores_a_single_private_route(tmp_path, rou
         return replace(source, destination, **directories)
 
     monkeypatch.setattr(os, "replace", fail_route_replace)
-    with pytest.raises(RoutePublicationUnknownError):
+    with pytest.raises(RelationViolationError):
         backup.rebind_route(route_bus, PublishedRouteSelection(route_bus.root))
     assert path.read_bytes() == original
     assert path.stat().st_nlink == 2

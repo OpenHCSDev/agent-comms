@@ -26,7 +26,7 @@ from agent_comms.coordination.contracts import POLICY_VERSION, RESOLVER_VERSION
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (
     IdentityConflict,
-    IntegrityViolationError,
+    CoordinationError,
 )
 from agent_comms.coordination.results import AlreadyApplied, Applied
 from agent_comms.coordination.tables.assignments import WakeAssignment
@@ -125,7 +125,7 @@ def _expected_assignments(
     result: list[WakeAssignment] = []
     for recipient, member in zip(initial.recipients, initial.decisions, strict=True):
         if recipient.recipient_lookup != member.recipient:
-            raise IntegrityViolationError("bus decision does not match frozen N")
+            raise CoordinationError("bus decision does not match frozen N")
         for decision in member.claim_decisions():
             result.append(
                 WakeAssignment(

@@ -292,10 +292,6 @@ class ContextRequest(ContextStoreRows, RowidSequenced):
         return changed
 
 
-class ContextPriorSupersededError(RelationViolationError):
-    """Another writer recorded this thread's context after the prior this writer holds."""
-
-
 class ContextPrior(ABC):
     """What a context writer knows about its thread's previous request."""
 
@@ -339,7 +335,7 @@ class AbsentContext(RecordedContextState):
         self, db: sqlite3.Connection, source: ContextStoreIdentity, owner: ThreadIncarnation
     ) -> None:
         if ContextRequest.newest(db, owner):
-            raise ContextPriorSupersededError(
+            raise RelationViolationError(
                 f"{owner.name} has recorded context this writer never read"
             )
 
@@ -362,7 +358,7 @@ class CapturedContext(RecordedContextState):
     ) -> None:
         newest = ContextRequest.newest(db, owner)
         if source != self.source or not newest or newest[0].id != self.record_id:
-            raise ContextPriorSupersededError(
+            raise RelationViolationError(
                 f"{owner.name} recorded context after request {self.record_id}"
             )
 

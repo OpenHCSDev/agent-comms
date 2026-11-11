@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import ClassVar, Self
 
 import agent_comms_hooks
+import agent_comms.cli_bridges
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import Platform, ResidentManager
 from agent_comms.host_services import SystemdUserService
@@ -134,7 +135,7 @@ class InstalledHarness(Harness):
         return Path(sys.executable).parent / name
 
     def links(self) -> dict[Path, Path]:
-        skills = Path(str(files("agent_comms") / "skills"))
+        skills = Path(str(files(agent_comms) / "skills"))
         return {
             self.home / self.skills_dir / skill.name: skill
             for skill in skills.iterdir()
@@ -255,7 +256,7 @@ class OpenCodeHarness(InstalledHarness, declared_name="opencode"):
 
     def links(self) -> dict[Path, Path]:
         return super().links() | {
-            self.plugin: Path(str(files("agent_comms.cli_bridges") / "opencode_tui.ts"))
+            self.plugin: Path(str(files(agent_comms.cli_bridges) / "opencode_tui.ts"))
         }
 
     def configure(self) -> tuple[Path, ...]:

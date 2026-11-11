@@ -39,10 +39,6 @@ class PiHelperFailed(PiHelperError):
         )
 
 
-class PiHelperOutputExceeded(PiHelperError):
-    """The helper succeeded but wrote more than its output bound."""
-
-
 @dataclass(frozen=True)
 class SessionHelperRequest:
     package: str
@@ -110,7 +106,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         if not outcome.outcome.successful:
             raise cls.failure(request, outcome)
         if len(outcome.stdout) > cls.output_bound:
-            raise PiHelperOutputExceeded(
+            raise PiHelperError(
                 f"{cls.declared_name} wrote {len(outcome.stdout)} bytes; bound is {cls.output_bound}"
             )
         try:

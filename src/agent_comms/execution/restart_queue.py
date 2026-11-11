@@ -104,10 +104,6 @@ class PendingRestart(Pending, Active, RestartState):
         ))
 
 
-class RestartAlreadyAttemptingError(RelationViolationError):
-    """An attempted restart cannot be replaced or replayed by enqueue."""
-
-
 class AttemptingRestart(Active, RestartState):
     def restart(self, comms: Comms, record: QueuedRestart) -> Iterator[QueuedRestart]:
         try:
@@ -133,7 +129,7 @@ class AttemptingRestart(Active, RestartState):
 
     def enqueue(self, previous: QueuedRestart, selection: OwnerRestartSelection,
                 target: RestartTarget) -> QueuedRestart:
-        raise RestartAlreadyAttemptingError(
+        raise RelationViolationError(
             f"Restart {previous.id} for {previous.name} is already attempting"
         )
 
@@ -372,7 +368,7 @@ class RestartQueue(DurableStore):
         """The queue's reader runs current code; each target keeps its own launch runtime."""
         runtime = LaunchRuntime.running()
         return SpawnedProcess.launch(
-            (str(runtime.interpreter), "-m", "agent_comms.execution.restart_queue", str(self.root.resolve())),
+            (str(runtime.interpreter), "-m", __spec__.name, str(self.root.resolve())),
             env=MaintenanceHolder.outside(RestartEnvironment.inherit(os.environ).encode()), runtime=runtime,
             lifetime=OutlivesLauncherLifetime,
         )

@@ -1,8 +1,0 @@
-Traceback (most recent call last):
-  File "/home/ts/wt/comms-friction--P17/.verification/p23-message-contract-trace/guarded_closure.py", line 111, in <module>
-    raise SystemExit(main())
-                     ~~~~^^
-  File "/home/ts/wt/comms-friction--P17/.verification/p23-message-contract-trace/guarded_closure.py", line 42, in main
-    for _, node in parsed.syntax_index.indexed_nodes_of_type(ast.ClassDef))
-                   ^^^^^^^^^^^^^^^^^^^
-AttributeError: 'ParsedModule' object has no attribute 'syntax_index'

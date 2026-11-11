@@ -56,7 +56,7 @@ Issues = "https://github.com/OpenHCSDev/agent-comms/issues"
 [project.scripts]
 agent-comms = "agent_comms.cli:main"
 agent-comms-acp = "agent_comms.execution.acp:main"
-agent-comms-agent = "agent_comms.execution.worker:main"
+agent-comms-agent = "agent_comms.execution.worker.__main__:main"
 agent-comms-nk-foreground = "agent_comms.execution.nk_foreground:main"
 pi-comms-native = "agent_comms.execution.native_pi:main"
 agent-comms-claude-bridge = "agent_comms.cli_bridges.claude:main"

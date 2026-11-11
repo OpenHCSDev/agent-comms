@@ -61,16 +61,15 @@ class ProjectionSource(ProjectionOutputs):
 
     @staticmethod
     def writers_for(table: type[ProducedRow]) -> set[type[ProjectionSource]]:
-        """Reverse the writers' declarations of the owners registered when it is called,
-        without discovering unrelated modules.
+        """Reverse the writers' declarations over the complete family.
 
-        Whether an owner writes the table is one answer for the whole owner, so it is asked
-        before that owner's writers are traversed: resolving a lazy declaration may register
-        more writers under that owner, and they are then part of the traversal instead of
-        invalidating it."""
-        return {
-            writer
-            for owner, writers in tuple(ProjectionSource._declarations.items())
-            if table in owner.writes
-            for writer in writers
-        }
+        Resolving an owner's lazy ``writes`` can import the module declaring another writer,
+        which registers new owners. Owners are resolved until none registers, then every
+        writing owner's writers are read, including those registered during resolution; so
+        the reverse is one answer whichever writer modules a process imported first."""
+        writing: list[type[ProjectionOutputs]] = []
+        resolved: set[type[ProjectionOutputs]] = set()
+        while unresolved := ProjectionSource._declarations.keys() - resolved:
+            resolved |= unresolved
+            writing += [owner for owner in unresolved if table in owner.writes]
+        return {writer for owner in writing for writer in ProjectionSource._declarations[owner]}

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.coordination.errors import (
     IdentityConflict,
-    IntegrityViolationError,
+    CoordinationError,
     RecoveryBlocked,
     ResponseClaimBlocked,
 )
@@ -106,7 +106,7 @@ class LiveAttempt(AttemptState):
 
     def __post_init__(self):
         if type(self.lease_expires_at_ms) is not int or self.lease_expires_at_ms < 0:
-            raise IntegrityViolationError("active attempt requires a lease")
+            raise CoordinationError("active attempt requires a lease")
 
     def accepts_active_execution(self) -> bool:
         return True
@@ -147,9 +147,9 @@ class TerminalAttempt(Terminal, AttemptState):
     @classmethod
     def load(cls, lease, done, dead):
         if lease is not None:
-            raise IntegrityViolationError("terminal attempt must release lease")
+            raise CoordinationError("terminal attempt must release lease")
         if not (done and dead):
-            raise IntegrityViolationError("terminal attempt requires final completion/death")
+            raise CoordinationError("terminal attempt requires final completion/death")
         return cls()
 
 
@@ -166,8 +166,10 @@ class PromptStartingAttempt(LiveAttempt):
         )
 
 
-class PromptAcceptedAttempt(LiveAttempt):
-    allows_tool_claim = True
+class BeforeModelRun:
+    """An attempt about to run the model: it can abort, fail, run or stall."""
+
+    __slots__ = ()
 
     @classmethod
     def successors(cls):
@@ -177,6 +179,11 @@ class PromptAcceptedAttempt(LiveAttempt):
             ModelRunningAttempt,
             ModelStalledAttempt,
         )
+
+
+class PromptAcceptedAttempt(BeforeModelRun, LiveAttempt):
+    allows_tool_claim = True
+
 
 
 class ContextualAttempt(LiveAttempt):
@@ -215,15 +222,8 @@ class ToolRunningAttempt(ContextualAttempt):
         )
 
 
-class CompactionAttempt(ContextualAttempt):
-    @classmethod
-    def successors(cls):
-        return (
-            AbortingAttempt,
-            UnsuccessfulTerminal,
-            ModelRunningAttempt,
-            ModelStalledAttempt,
-        )
+class CompactionAttempt(BeforeModelRun, ContextualAttempt):
+    """A compaction about to run the model."""
 
 
 class SettlingAttempt(ContextualAttempt):

@@ -120,8 +120,13 @@ class Edit(EditCall):
         """The edits awaiting judgement on the board ``teammate`` reads; a fork's is its parent's."""
         thread = comms.registry.require(teammate)
         board = thread.teammate()
-        reply = CommsUnjudgedTool.invoke(comms, {'thread': board}, caller=ThreadCaller(board))
-        return list(FieldCodec.decode(tuple[cls, ...], reply['edits']))
+        reading = CommsUnjudgedTool(thread=board).apply(comms, ThreadCaller(board))
+        if reading.unavailable:
+            raise TodoError('Unjudged edits could not be read, so nothing counts as judged: '
+                            + '; '.join(f'{unread.problem}: {unread.cause}'
+                                        for unread in reading.unavailable))
+        # Edit narrows each EditCall's hunks to judge's Hunk; the codec is that boundary.
+        return list(FieldCodec.decode(tuple[cls, ...], FieldCodec.encode(reading.edits)))
 
     def code(self) -> str:
         """Four hex digits derived from the edit's own text; shown only after its full hunks."""

@@ -186,7 +186,7 @@ class LiveObservationInterest(ObservationInterest):
     def receive(self, request: InterestRequest, service: ObservationService) -> None:
         observation = request.observation()
         kind = type(observation)
-        self.observations[kind] = self.observations.get(kind, NotObserved()).for_interest(observation)
+        self.observations[kind] = self.observations.get(kind, ObservationLifetime()).for_interest(observation)
         service.observe_again()
 
     def stop(self) -> ObservationInterest:
@@ -196,7 +196,7 @@ class LiveObservationInterest(ObservationInterest):
         return StoppedObservationInterest()
 
     def remove(self, kind: type[Observation]) -> None:
-        self.observations.pop(kind, NotObserved()).close()
+        self.observations.pop(kind, ObservationLifetime()).close()
 
     def prepared(self, observation: ReadingObservation, service: ObservationService) -> None:
         if self.observations.get(type(observation)) is observation:
@@ -228,17 +228,9 @@ class ObservationLifetime:
         """Retire any unfinished read owned by this interest."""
 
 
-class NotObserved(ObservationLifetime):
-    pass
-
-
 class ObservationStep:
     def publish(self, service: ObservationService) -> None:
         pass
-
-
-class ObservationPending(ObservationStep):
-    pass
 
 
 class Observation[InterestT: InterestRequest](ObservationLifetime):
@@ -658,14 +650,21 @@ class TranscriptRequest[ResultT](ReadRequest):
     def result(self, read: TranscriptRead) -> ResultT: ...
 
 
+class SnapshotFromRead:
+    """A transcript request whose result is the snapshot read from its transcript."""
+
+    __slots__ = ()
+
+    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate:
+        return TranscriptSnapshotUpdate.from_read(read)
+
+
 @dataclass(frozen=True)
-class ReadTranscript(TranscriptRequest[TranscriptSnapshotUpdate]):
+class ReadTranscript(SnapshotFromRead, TranscriptRequest[TranscriptSnapshotUpdate]):
     """Read a complete page, including its current draft."""
 
     deferred_reads: ClassVar[tuple[type[Exception], ...]] = (DeferredRead,)
 
-    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate:
-        return TranscriptSnapshotUpdate.from_read(read)
 
 
 class SubscribeTranscript(ReadTranscript):
@@ -684,9 +683,8 @@ class TranscriptPublicationState(TaggedUnion, affix=""):
 
 
 @dataclass(frozen=True)
-class NotPublished(TaggedRecordMember, TranscriptPublicationState):
-    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate:
-        return TranscriptSnapshotUpdate.from_read(read)
+class NotPublished(SnapshotFromRead, TaggedRecordMember, TranscriptPublicationState):
+    """A transcript nobody has published yet: its result is the snapshot read from the transcript."""
 
 
 @dataclass(frozen=True)
@@ -891,9 +889,9 @@ class RetainedTeamFrames:
             lambda: TeamHudObserved(revision, TeamFrame.read_all(comms.root)),
         ).answer(
             lambda observed: observed,
-            lambda error: ObservationPending(),  # Keep the interest until its source can be read.
+            lambda error: ObservationStep(),  # Keep the interest until its source can be read.
             lambda error: TeamHudUnreadable(revision, error),
-            lambda error: ObservationPending(),  # Bounds-free: only a frame replaced under both reads.
+            lambda error: ObservationStep(),  # Bounds-free: only a frame replaced under both reads.
         )
 
 
@@ -1005,7 +1003,7 @@ class PendingBatch(BatchRead):
     def settled(self, family: ReadNotifications, current: list[NotificationBatch],
                 pending: set[ReadNotifications]) -> Iterator[ObservationStep]:
         pending.add(family)
-        yield ObservationPending()  # Keep the interest until its source can be read.
+        yield ObservationStep()  # Keep the interest until its source can be read.
 
 
 @dataclass(frozen=True, eq=False)
@@ -1195,7 +1193,7 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
             results[name] = UnreadableHistory.outcome(read).answer(
                 ThreadPresented,
                 lambda error: ThreadBusy(), ThreadUnavailable, lambda error: ThreadBusy())
-            yield ObservationPending()
+            yield ObservationStep()
 
 
 class ViewReading(Observation[ObserveViews]):

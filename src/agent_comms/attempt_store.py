@@ -13,7 +13,7 @@ from agent_comms.coordination.attempt_states import (
 )
 from agent_comms.coordination.errors import (
     IdentityConflict,
-    PublicationUncertain,
+    CoordinationError,
     StaleFence,
     StaleRevision,
 )
@@ -136,7 +136,7 @@ class AttemptStore(RecoveryReader):
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
             if bool(snapshot.publication_intents):
-                raise PublicationUncertain("UNKNOWN failure cannot resolve frozen publication")
+                raise CoordinationError("UNKNOWN failure cannot resolve frozen publication")
             if not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead):
                 attempt.advance(
                     self.session,

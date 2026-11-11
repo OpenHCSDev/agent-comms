@@ -4,7 +4,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.coordination.errors import IntegrityViolationError, ParticipantNotRegistered
+from agent_comms.coordination.errors import CoordinationError, IdentityConflict
 from agent_comms.coordination.participant_store import ParticipantStore
 from agent_comms.coordination.session import CoordinationSession
 from agent_comms.coordination.tables.participants import Participants
@@ -39,11 +39,11 @@ def test_participant_failure_cannot_publish_registry_incarnation(tmp_path, monke
     comms = wire(tmp_path / "wire")
 
     def failed(self, lookup, *, committed=False):
-        raise IntegrityViolationError("participant creation failed")
+        raise CoordinationError("participant creation failed")
 
     with monkeypatch.context() as changed:
         changed.setattr(ParticipantStore, "register", failed)
-        with pytest.raises(IntegrityViolationError, match="participant creation failed"):
+        with pytest.raises(CoordinationError, match="participant creation failed"):
             comms.registry.declare(NativeThread("missing", frozenset(), Checkout(tmp_path)))
     assert "missing" not in comms.registry.snapshot().threads
 
@@ -60,5 +60,5 @@ def test_existing_public_participant_survives_native_root_preparation(tmp_path):
 
 def test_missing_participant_reader_names_lookup(tmp_path):
     with CoordinationSession(str(CoordinationStore.path_in(tmp_path))) as session:
-        with pytest.raises(ParticipantNotRegistered, match=UNRELATED_LOOKUP):
+        with pytest.raises(IdentityConflict, match=UNRELATED_LOOKUP):
             ParticipantStore(session).get(UNRELATED_LOOKUP)

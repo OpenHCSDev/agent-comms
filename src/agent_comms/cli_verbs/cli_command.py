@@ -383,7 +383,7 @@ class TargetCompleted(Successful, TargetOutcome, RecordMember):
     @classmethod
     def from_wire(cls, data: object) -> Self:
         record = FieldCodec.decode(dict[str, JsonValue], data)
-        command = FieldCodec.decode(CliCommand, record["command"])
+        command = FieldCodec.decode(CliCommand, record[FieldCodec.record_key(cls, "command")])
         return FieldCodec.decode_record(cls, record, field_types={"result": command.result_type()})
 
     def reconnect_targets(self) -> tuple[str, ...]:

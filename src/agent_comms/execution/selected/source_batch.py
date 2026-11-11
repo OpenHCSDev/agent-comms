@@ -61,7 +61,7 @@ class SelectedSourceBatch:
             raise IdentityConflict("Selected batch crosses recipient ownership")
 
     @classmethod
-    def first_route(cls, sources: tuple[SelectedSource, ...]) -> "SelectedSourceBatch":
+    def first_route(cls, sources: tuple[SelectedSource, ...]) -> SelectedSourceBatch:
         """One selected turn answers originals of one reply route.
 
         The answer is one shared text, so a batch mixing a direct and a channel

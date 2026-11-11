@@ -23,7 +23,6 @@ from copy import deepcopy
 from dataclasses import dataclass, field, is_dataclass
 from enum import Enum, IntEnum, IntFlag
 from functools import cache
-from importlib import import_module
 from importlib.metadata import entry_points
 from inspect import getsource
 from itertools import batched
@@ -3076,8 +3075,6 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
 
         An ancestor declaring other outputs owns those outputs alone.
         """
-        # Complete the same declared family for direct source reads and wheel builds.
-        import_module("agent_comms.producer_stamp")
         return tuple(
             tuple(
                 parent for parent in writer.__mro__

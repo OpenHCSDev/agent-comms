@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from agent_comms.coordination.contracts import validate_execution_id
 from agent_comms.coordination.errors import (
     IdentityConflict,
-    IntegrityViolationError,
+    CoordinationError,
     StaleFence,
     StaleRevision,
 )
@@ -98,7 +98,7 @@ class ClaimlessOrigin(ExecutionProvenance, declared_name=None):
         cls, assignments: tuple[WakeAssignment, ...], obligations: tuple[ResponseObligation, ...],
     ) -> None:
         if assignments or obligations:
-            raise IntegrityViolationError("claimless snapshots cannot have claims or obligations")
+            raise CoordinationError("claimless snapshots cannot have claims or obligations")
 
     @classmethod
     def retry_authorized(cls, obligations: tuple[ResponseObligation, ...]) -> bool:
@@ -120,7 +120,7 @@ class WireOrigin(ExecutionProvenance):
         cls, assignments: tuple[WakeAssignment, ...], obligations: tuple[ResponseObligation, ...],
     ) -> None:
         if not assignments or not obligations:
-            raise IntegrityViolationError("wire snapshots require original obligations")
+            raise CoordinationError("wire snapshots require original obligations")
 
     @classmethod
     def retry_authorized(cls, obligations: tuple[ResponseObligation, ...]) -> bool:
@@ -231,7 +231,7 @@ class CurrentExecutions(
 
     def __post_init__(self) -> None:
         if self.execution_id.pointed != self.attempt_ordinal.pointed:
-            raise IntegrityViolationError("pointer execution and ordinal must pair")
+            raise CoordinationError("pointer execution and ordinal must pair")
         if self.pointer_revision < 0:
             raise ValueError("pointer_revision cannot be negative")
 
@@ -586,7 +586,7 @@ class NoReplayAssessment(NullMember, ReplayState):
         """No recorded assessment claims an execution identity."""
 
     def require_assessment(self) -> ReplayAssessments:
-        raise IntegrityViolationError("replay assessment is absent")
+        raise CoordinationError("replay assessment is absent")
 
     def authorize_retry(self, db: sqlite3.Connection, execution_id: str) -> None:
         self.observe(
@@ -690,7 +690,7 @@ class ReplayAssessments(
 
     def require_execution(self, execution_id: str) -> None:
         if self.execution_id != execution_id:
-            raise IntegrityViolationError("snapshot records belong to another execution")
+            raise CoordinationError("snapshot records belong to another execution")
 
     def require_assessment(self) -> ReplayAssessments:
         return self
@@ -736,7 +736,7 @@ class ReplayAssessments(
         if int(self.facts) < 0 or int(self.facts) & ~APPROVED_REPLAY_FACT_MASK:
             raise ValueError("unrecognized replay fact bits")
         if self.facts != ReplayFact.NONE and self.replay_safe:
-            raise IntegrityViolationError("an execution with ambiguity facts cannot be replay-safe")
+            raise CoordinationError("an execution with ambiguity facts cannot be replay-safe")
 
     retry_authorized: ClassVar[Generated] = Generated(
         int,

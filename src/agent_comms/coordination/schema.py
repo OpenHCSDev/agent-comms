@@ -13,13 +13,18 @@ from agent_comms.storage.typed_table import DurableTables, SharedFileTables, Typ
 COORDINATION_SNAPSHOT_VERSION: Final = 3
 
 
-class CoordinatorTable(SharedFileTables, DurableTables):
+class CoordinationFileTable(SharedFileTables, DurableTables):
+    """A durable table in the shared coordination file; a version it cannot read raises
+    SchemaVersionError."""
+
+    schema_error = SchemaVersionError
+
+
+class CoordinatorTable(CoordinationFileTable):
     """The coordinator schema; cases and transitions come from their owners.
 
     The live objects are compared to these declarations; nothing seals a copy of them.
     """
-
-    schema_error = SchemaVersionError
 
     @classmethod
     def schema_rows(cls) -> tuple[type[TypedTable], ...]:

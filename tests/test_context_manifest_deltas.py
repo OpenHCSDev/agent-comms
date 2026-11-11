@@ -17,7 +17,7 @@ from agent_comms.context_store import (
     CapturedContext,
     ContextEntry,
     ContextManifestReference,
-    ContextPriorSupersededError,
+    RelationViolationError,
     ContextRequest,
     ContextSegmentVersion,
     ContextStore,
@@ -302,7 +302,7 @@ def test_threads_record_concurrently_and_a_superseded_prior_is_refused(tmp_path)
     following = comms.contexts.record_after(alice, context(owners[0], tmp_path, 4, 2))
     assert following.recorded.recording_turn == alice.recorded.recording_turn + 1
     assert comms.contexts.page('Bob', comms.registry).resources[-1].record_id == recorded[1].record_id
-    with pytest.raises(ContextPriorSupersededError):
+    with pytest.raises(RelationViolationError):
         comms.contexts.record_after(alice, context(owners[0], tmp_path, 5, 3))
 
 

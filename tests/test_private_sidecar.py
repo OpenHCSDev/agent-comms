@@ -80,9 +80,9 @@ def test_declared_private_snapshot_carries_old_checks_without_changing_records(p
     with PromptBindings.connection_at(copied, read_only=True) as db:
         assert [tuple(row) for row in db.execute("SELECT * FROM prompt_binding")] == before
     sidecar.StoreOwner.snapshot_intent(path).write_text("uncertain", encoding="utf-8")
-    with pytest.raises(sidecar.SidecarCommitUnknown):
+    with pytest.raises(sidecar.IdentityConflict):
         PromptBindings.copy_file(path, copied)
-    with pytest.raises(sidecar.SidecarCommitUnknown):
+    with pytest.raises(sidecar.IdentityConflict):
         PromptBindings.reconcile_at(path)
     assert path.read_bytes() == carried
 
@@ -127,7 +127,7 @@ def test_pending_intent_is_present_without_following_or_opening_it(path, kind):
     else:
         os.mkfifo(intent, 0o600)
     identity = intent.lstat()
-    with pytest.raises(sidecar.SidecarCommitUnknown):
+    with pytest.raises(sidecar.IdentityConflict):
         with PromptBindings.connection_at(path):
             pytest.fail("a pending commit reached the database caller")
     assert path.read_bytes() == before
@@ -313,7 +313,7 @@ def test_process_crash_before_or_after_replacement_leaves_unreplayable_intent(pa
         stdout, stderr = child.communicate("GO\n", timeout=10)
         assert child.returncode < 0, stderr
         assert "OK" not in stdout
-        with pytest.raises(sidecar.SidecarCommitUnknown):
+        with pytest.raises(sidecar.IdentityConflict):
             PromptBindings.create_at(path)
     finally:
         if child.poll() is None:
