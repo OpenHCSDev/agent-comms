@@ -51,10 +51,10 @@ class PartnerActivitySegment(InstructionSegment):
             if change is not None
         )
         if not changes:
-            return ()
+            return None
         changes = tuple(sorted(changes, key=lambda change: change.observed_at)[-cls.LATEST:])
         revision = hashlib.sha256(json.dumps(FieldCodec.encode(changes)).encode()).hexdigest()
-        return (super().capture((OwnerProvenance(owner.incarnation, revision),), changes=changes),)
+        return super().capture((OwnerProvenance(owner.incarnation, revision),), changes=changes)
 
     def values(self):
         return {"changes": FieldCodec.compact(FieldCodec.encode(self.changes))}

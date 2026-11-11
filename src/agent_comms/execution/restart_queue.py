@@ -328,10 +328,10 @@ class RestartQueue(DurableStore):
             self._settle(db)
             return QueuedRestart.select(db, pending=True, order_by=("id",))
 
-    def _attempt(self, comms: Comms, initial: QueuedRestart) -> tuple[QueuedRestart, ...]:
+    def _attempt(self, comms: Comms, initial: QueuedRestart) -> QueuedRestart | None:
         with self.writing() as db:
             if self._active(db, owner_birth=initial.owner.created_at) != [initial]:
-                return ()
+                return None
             record = initial
             snapshot = comms.registry.snapshot()
             try:
@@ -340,7 +340,7 @@ class RestartQueue(DurableStore):
             except RestartRefusal as refusal:
                 record = record.transition(refusal.queue_state())
             except RelationViolationError:
-                return ()  # Busy owners retain their pending request.
+                return None  # Busy owners retain their pending request.
             else:
                 try:
                     record.target.require_available(comms)
@@ -349,7 +349,7 @@ class RestartQueue(DurableStore):
                 else:
                     record = record.transition(AttemptingRestart())
             record.upsert(db)
-        return (record,)
+        return record
 
     def _complete(self, attempted: QueuedRestart, result: QueuedRestart) -> None:
         with self.writing() as db:
@@ -359,8 +359,7 @@ class RestartQueue(DurableStore):
 
     def step(self, comms: Comms) -> None:
         for initial in self._ready():
-            for attempt in self._attempt(comms, initial):
-                # The transaction has committed Attempting before any side effect.
+            if (attempt := self._attempt(comms, initial)) is not None:
                 for result in attempt.state.restart(comms, attempt):
                     self._complete(attempt, result)
 

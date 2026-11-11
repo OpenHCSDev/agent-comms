@@ -32,10 +32,11 @@ class ContextAssembly:
         self, context: TurnContext, owner: ContextOwner, relations: tuple[PeerRelation, ...],
     ) -> TurnContext:
         """Append relationships, addressed messages and partner goal changes."""
-        for segment in (
-            *RelationshipsSegment.capture(owner, relations),
-            *self.bus.awareness_segments(owner, relations),
-            *PartnerActivitySegment.capture(owner, relations, self.goals),
-        ):
+        segments = list(self.bus.awareness_segments(owner, relations))
+        if (rel := RelationshipsSegment.capture(owner, relations)) is not None:
+            segments.append(rel)
+        if (act := PartnerActivitySegment.capture(owner, relations, self.goals)) is not None:
+            segments.append(act)
+        for segment in segments:
             context = context.append(segment)
         return context
