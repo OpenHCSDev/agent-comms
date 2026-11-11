@@ -49,7 +49,7 @@ class InputBatch(ABC):
         channels = {
             origin.seq: origin
             for origin in origins
-            if origin.seq > 0 and CommandTarget.named(origin.target).batchable
+            if CommandTarget.named(origin.target).accepts_batch(origin.seq)
         }
         if len(channels) < 2 or tuple(channels.values()) != origins:
             return single

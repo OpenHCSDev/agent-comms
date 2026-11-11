@@ -1558,9 +1558,7 @@ class OrderProgress(DisclosedRecord, DeclaredFamily, affix="Progress"):
         """The held order this progress leaves waiting on the fleet's install."""
         return ()
 
-    @property
-    def judgeable(self) -> bool:
-        """Whether a head verdict can still gate this order's work: until its PR merges."""
+    def for_verdict(self) -> bool:
         return True
 
     def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
@@ -1642,9 +1640,7 @@ class MergedProgress(FoundProgress):
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         return (todo,)
 
-    @property
-    def judgeable(self) -> bool:
-        """A merged head has nothing left for a verdict to gate."""
+    def for_verdict(self) -> bool:
         return False
 
 
@@ -2454,7 +2450,7 @@ class DeliverableProblemOrder(FreshMainCheck, OpenProblemOrder, declared_name=No
 
     def writes_source(self, todo: Todo, read: dict[str, OrderProgress]) -> bool:
         """Until its PR merges; a merged order's proof run writes no source."""
-        return read[todo.id].judgeable
+        return read[todo.id].for_verdict()
 
     def sent_back(self, reason: StrikeReason) -> PendingProblemOrder:
         return self.fresh_order(time.time(), (*self.edits, reason.text))

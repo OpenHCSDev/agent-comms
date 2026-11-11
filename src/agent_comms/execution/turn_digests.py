@@ -219,7 +219,7 @@ class OrderEditRead[Result](OrderRead[Result]):
         judge, so its edits are nobody's review and its transcript is never read."""
         return (replace(read, progress=progress[read.todo.id])
                 for read in cls.for_orders(root, holds, workplaces)
-                if progress[read.todo.id].judgeable)
+                if progress[read.todo.id].for_verdict())
 
     @classmethod
     def for_orders(cls, root: Path, holds: Iterable[LiveHold],
