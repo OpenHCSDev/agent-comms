@@ -25,6 +25,11 @@ pytest_plugins = ("test_held_problem_orders",)
 WORKS = "The real application retains its checked delivery and installed evidence after every observation."
 
 
+from agent_comms.planning.orders import UnmergedListedPullRequest
+from github_fixture import GitHubFixture
+from agent_comms.projects.work_branches import WorkBranches
+
+
 @pytest.fixture
 def application_team(held_team: Team) -> Team:
     ctx = held_team
@@ -84,6 +89,32 @@ def test_checked_delivery_survives_later_merge_observations(
         if observation:
             assert current.revision == previous.revision
         previous = current
+
+
+def test_late_adoption_rejects_open_and_later_merged_work(
+    application_team: Team, cited_source: SourceRepository, tmp_path: Path,
+    github_cli: GitHubFixture,
+) -> None:
+    ctx = application_team
+    store = ctx.comms.goals.todos
+    _, head, merge = merge_two_commit_fix(cited_source, tmp_path / "bin", 42)
+    current = store.get("P1")
+    store.record_merges((current.order.merged(merge).waiting_in(current),))
+    before = store.get("P1")
+    worker = ctx.comms.registry.require("worker").incarnation
+    link = PullRequestLink(before.repo, 43)
+    github_cli.put(before.repo, UnmergedListedPullRequest(
+        number=43, branch="fix/43", head=head, updated="2026-10-23T12:00:00Z",
+        base=WorkBranches.main, reviewable_times=("2026-10-23T12:00:00Z",),
+    ), body="The next repair remains open.")
+    with pytest.raises(TodoError, match="already be merged into"):
+        RecordPullRequest.for_order(before, worker, link).record(ctx.comms.goals, before.id)
+    assert store.get(before.id) == before
+
+    merge_two_commit_fix(cited_source, tmp_path / "bin", 43)
+    with pytest.raises(TodoError, match="already be merged into"):
+        RecordPullRequest.for_order(before, worker, link).record(ctx.comms.goals, before.id)
+    assert store.get(before.id) == before
 
 
 def test_holder_records_existing_merged_pr_without_reopening_work(
