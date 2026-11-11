@@ -223,7 +223,7 @@ def test_claim_refuses_retired_or_reborn_current_parent(held_team, parent_state)
         ctx, "Killed the historical-author routing slop at todos.py; the assignment owns the target."),
         problem=original.id,
     )
-    with pytest.raises(HumanSendRefusedError):
+    with pytest.raises(TodoError, match=f"@{parent} will not answer this review"):
         ThreadCaller(original.holder).invoke(request, comms)
     assert comms.goals.todos.get(original.id) == original
     assert comms.bus.bus.revision() == before
