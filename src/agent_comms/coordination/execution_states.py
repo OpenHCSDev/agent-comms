@@ -168,7 +168,7 @@ class AttemptExecution(AttemptReference, ExecutionState):
     ordinal: int
 
     def __post_init__(self):
-        if type(self.ordinal) is not int or self.ordinal < 1:
+        if self.ordinal < 1:
             raise CoordinationError("active/completed execution requires an attempt")
 
 

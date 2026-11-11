@@ -105,7 +105,7 @@ class LiveAttempt(AttemptState):
     process_dead: bool = False
 
     def __post_init__(self):
-        if type(self.lease_expires_at_ms) is not int or self.lease_expires_at_ms < 0:
+        if self.lease_expires_at_ms < 0:
             raise CoordinationError("active attempt requires a lease")
 
     def accepts_active_execution(self) -> bool:

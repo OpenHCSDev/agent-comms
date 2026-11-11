@@ -618,12 +618,9 @@ class Thread(
         super(Thread, self).__post_init__()
         self.incarnation.require_recorded()  # Archives may lack a birth; live threads may not.
         self.process_identity.require_held_by(self.role)
-        if (
-            type(self.channel_scope_generation) is not int
-            or not 0 <= self.channel_scope_generation < 1 << 63
-        ):
+        if not 0 <= self.channel_scope_generation < 1 << 63:
             raise ValueError("Channel scope generation must be a nonnegative 63-bit integer.")
-        if type(self.turn_generation) is not int or not 0 <= self.turn_generation < 1 << 63:
+        if not 0 <= self.turn_generation < 1 << 63:
             raise ValueError("Turn generation must be an exact nonnegative 63-bit integer.")
         self.turn_record.require_generation(self.turn_generation)
         if self.parent.named(self.name):

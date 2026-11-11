@@ -349,7 +349,7 @@ class FileLine(WireValue, SourceReference):
     def __post_init__(self) -> None:
         if not self.file or not self.file.strip() or "\n" in self.file:
             raise ValueError(f"FileLine file must be a single nonempty path: {self.file!r}")
-        if type(self.line) is not int or self.line < 1:
+        if self.line < 1:
             raise ValueError(f"FileLine line must be a positive line number: {self.line!r}")
 
     def require(self, reason: str) -> FileLine:

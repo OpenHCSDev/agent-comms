@@ -593,13 +593,8 @@ class GenerationCounter(ProjectionSource):
     generations: MutableMapping[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if (
-            type(self.counter) is not int
-            or self.counter < 0
-            or any(
-                type(name) is not str or type(value) is not int or not 0 < value <= self.counter
-                for name, value in self.generations.items()
-            )
+        if self.counter < 0 or any(
+            not 0 < value <= self.counter for value in self.generations.values()
         ):
             raise ValueError("invalid registry generation counter")
 
