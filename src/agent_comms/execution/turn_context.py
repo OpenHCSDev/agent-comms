@@ -433,8 +433,11 @@ _NO_CONTEXT_RECORDS: Mapping[int, RecordedContextManifest] = MappingProxyType({}
 class ContextPredecessor(SubclassUnion, affix="ContextPredecessor"):
     """An absent predecessor or the position that owns its lookup."""
 
-    @abstractmethod
-    def is_direct(self) -> bool: ...
+    def require_direct(self) -> None:
+        raise ValueError("Recorded segment predecessor is not a direct keyframe")
+
+    def require_predecessor_for_inherited(self, inherited_entries: int) -> None:
+        pass
 
     @abstractmethod
     def predecessors(self, offset: int) -> tuple[int, ...]: ...
@@ -464,8 +467,12 @@ class ContextPredecessor(SubclassUnion, affix="ContextPredecessor"):
 
 @dataclass(frozen=True)
 class NoContextPredecessor(NullMember, ContextPredecessor):
-    def is_direct(self) -> bool:
-        return True
+    def require_direct(self) -> None:
+        pass
+
+    def require_predecessor_for_inherited(self, inherited_entries: int) -> None:
+        if inherited_entries:
+            raise ValueError("Recorded transcript prefix requires its predecessor")
 
     def predecessors(self, offset: int) -> tuple[int, ...]:
         return ()
@@ -497,9 +504,6 @@ class NoContextPredecessor(NullMember, ContextPredecessor):
 class RecordedContextPredecessor(SingleFieldValue, ContextPredecessor):
     record_id: int
 
-    def is_direct(self) -> bool:
-        return False
-
     def predecessors(self, offset: int) -> tuple[int, ...]:
         if not 0 <= self.record_id < offset:
             raise ValueError("Context predecessor is not an earlier record")
@@ -522,8 +526,7 @@ class RecordedContextPredecessor(SingleFieldValue, ContextPredecessor):
             prior = records[self.record_id].segments[position]
         except (KeyError, IndexError) as error:
             raise ValueError("Recorded segment predecessor is missing") from error
-        if not prior.previous.is_direct():
-            raise ValueError("Recorded segment predecessor is not a direct keyframe")
+        prior.previous.require_direct()
         if prior.manifest.kind is not kind:
             raise ValueError("Recorded segment predecessor has a different kind")
         return prior
@@ -550,8 +553,9 @@ class RecordedSegmentManifest:
     def __post_init__(self) -> None:
         if self.entries and self.manifest.contributors:
             raise ValueError("Recorded segment cannot inline and reference contributors")
-        if self.inherited_entries < 0 or (self.inherited_entries and self.previous.is_direct()):
+        if self.inherited_entries < 0:
             raise ValueError("Recorded transcript prefix requires its predecessor")
+        self.previous.require_predecessor_for_inherited(self.inherited_entries)
 
     def predecessors(self, offset: int) -> tuple[int, ...]:
         return self.previous.predecessors(offset)
