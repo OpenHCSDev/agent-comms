@@ -474,8 +474,8 @@ class FullNativeSend(NativeSendStage):
         current.lifecycle.require_engagement()
         if (
             not snapshot.execution.lifecycle.items_with(Active, snapshot.execution)
-            or not attempt.lifecycle.starting
             or attempt.lifecycle.backend_done
             or attempt.lifecycle.process_dead
         ):
             raise StaleFence("full execution is not running before native send")
+        attempt.lifecycle.require_starting()
