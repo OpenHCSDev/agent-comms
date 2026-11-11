@@ -19,7 +19,7 @@ from agent_comms.nominal.field_codec import MessageId
 from agent_comms.planning.order_phase import OrderPhase
 from agent_comms.planning.orders import HeadVerdict, StoredHeadReview
 from agent_comms.planning.owner_requests import OwnerRequestId
-from agent_comms.planning.plan_phases import PlanPhase
+from agent_comms.planning.plan_phase_base import PlanPhase
 from agent_comms.projects.head_review import PullRequestHead
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
