@@ -86,8 +86,8 @@ class MutatesSession:
 class PiCommand(DeclaredFamily):
     family_discriminator = "type"  # Pi's RPC names the command in ``type``
     response_payload: ClassVar[type[PiResponseData]] = EmptyData
-    # The answering child appends to its own session file (a retained child stays current).
-    writes_session: ClassVar[bool] = False
+    def writes_session(self) -> bool:
+        return False
     id: Annotated[PiRequestId, WireAbsentNone()] = field(
         default_factory=lambda: RequestId(PiRequestKey.fresh())
     )
@@ -454,7 +454,8 @@ class Compact(NativeQuery):
     """Pi's own compaction engine, run now; Pi adds Core's task brief to the instructions."""
 
     response_payload = CompactionData
-    writes_session = True
+    def writes_session(self) -> bool:
+        return True
     custom_instructions: Annotated[
         str | PiOmitted, WireOmitDefault(), WireName("customInstructions")
     ] = PiOmitted()

@@ -436,7 +436,7 @@ class RetainedNative(ChildNative):
         async with persistent.lock:
             current = persistent.child_state.idle()
             data = await current.child.request(request)
-            if request.writes_session:
+            if request.writes_session():
                 # This child wrote the file itself; its loaded context is the new revision.
                 launch = current.child.key[0]
                 current.revision = SessionRevision.observe(
