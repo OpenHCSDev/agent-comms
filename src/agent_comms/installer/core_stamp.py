@@ -54,8 +54,11 @@ class WheelStamp(CoreStamp):
         (an archived revision's pinned audit scripts), then the inherited import path. It is
         given the known commit, so a source with no Git checkout still states its identity.
         """
+        site_packages = os.pathsep.join(
+            p for p in sys.path if "site-packages" in p
+        )
         path = os.pathsep.join(
-            dict.fromkeys(filter(None, (str(src), *source_paths, os.environ.get("PYTHONPATH"))))
+            dict.fromkeys(filter(None, (str(src), site_packages, *source_paths, os.environ.get("PYTHONPATH"))))
         )
         return cls(
             commit,
