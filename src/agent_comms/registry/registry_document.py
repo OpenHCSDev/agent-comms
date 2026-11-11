@@ -51,6 +51,7 @@ from agent_comms.messaging.channel_targets import ResolvedTarget, SurroundingCha
 from agent_comms.messaging.channels import Channel, ChannelMemberIndex
 from agent_comms.messaging.delivery_recipients import DeliveryRecipients
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.snapshot_slices import (
     OwnRow,
     SharedRowsSlice,
@@ -291,6 +292,11 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](
                     (self.threads[name] for name in dict.fromkeys(map(self.canonical_name, names))
                      if name in self.threads and self.status(name).in_view(visibility)))
         return (executor for thread in selected for executor in thread.role.executor(thread))
+
+    def mentions(self, body: str) -> tuple[ThreadMention, ...]:
+        """The live threads the body @-names; any other @word stays plain text."""
+        return ThreadMention.find(body, lambda name: next(
+            (thread.name for thread in self.visible_threads(DEFAULT_ROSTER, names=(name,))), None))
 
     def active_threads(self, candidates: Iterable[Thread]) -> Iterator[Thread]:
         """Select activity-bearing presences from this already acquired registry cut."""

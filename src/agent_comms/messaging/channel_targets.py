@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.errors import (
     HumanSendRefusedError,
+    MentionOutsideChannelError,
     RelationViolationError,
     UnregisteredThreadError,
 )
@@ -621,6 +622,12 @@ class ChannelTarget(NamedTarget):
         names = [recipient.name for thread in snapshot.channel_audience()
                  for recipient in thread.channel_recipients()
                  if recipient.name != sender and channel.matches(recipient.tags)]
+        outside = sorted({mention.thread for mention in snapshot.mentions(message.body)}
+                         - {sender, *names})
+        if outside:
+            raise MentionOutsideChannelError(
+                f"{', '.join(f'@{name}' for name in outside)} not in {self.name}, so this post "
+                f"would never reach them. DM them, or tag them into {self.name}.")
         return self, message, names
 
     def display_scope(
