@@ -64,10 +64,6 @@ class SessionConfigOptions(ConfigurationChanges[ConfigOptions]):
     async def describe(self, option: CatalogConfigOption, thread: CatalogSelection) -> SessionConfigOptionSelect:
         choices = await option.display_choices(thread)
         configured = option.current_value(thread)
-        try:
-            option.require_value(configured, choices)
-        except InvalidConfigChoice as error:
-            raise NativePiUnavailable(str(error)) from error
         return SessionConfigOptionSelect(
             id=FieldCodec.encode(type(option)), name=option.title,
             description=option.description, category=option.category, type="select",

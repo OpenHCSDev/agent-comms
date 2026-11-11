@@ -61,3 +61,28 @@ async def test_menu_reports_the_model_the_runtime_runs(tmp_path, monkeypatch):
         assert menu.current_value == coordination.model == "test/two"
     finally:
         await owner.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_menu_offers_the_catalog_when_the_running_model_left_it(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/one,test/two")
+    comms = installed_comms(tmp_path / "w")
+    owner = CommsAgent(comms, auto_wake=False)
+    try:
+        project = tmp_path / "alpha"
+        project.mkdir()
+        name = owner.sessions.declare_thread(str(project)).name
+        comms.agents.observe_runtime_info(
+            name, NativeMetadataObservation(model=DeclaredModel("gone/model")))
+        menu = await owner.sessions.config.describe(
+            owner.inputs.configuration.catalog_for(ModelConfigOption),
+            comms.threads.running_selection(name),
+        )
+        assert menu.current_value == "gone/model"
+        assert [(choice.name, choice.value) for choice in menu.options] == [
+            ("gone/model (unavailable)", "gone/model"),
+            ("test/one", "test/one"),
+            ("test/two", "test/two"),
+        ]
+    finally:
+        await owner.shutdown()
