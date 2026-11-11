@@ -10,6 +10,8 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass
 
+import agent_comms.input_attempt as input_attempt
+import agent_comms.messaging.messages as messages
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.input_lookup import InputLookup
 from agent_comms.messaging.message_reads import ConversationRead
