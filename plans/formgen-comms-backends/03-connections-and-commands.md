@@ -1,6 +1,6 @@
 # 3. Connections, commands and drafts
 
-**Planning status:** the original connection families, Core request boundary, command draft owner and source checks below are decided. The native host method list, full import/caller changes and Qt provider-login presentation still need finishing. Do not call this whole phase executable yet.
+**Planning status:** the connection families, Core request boundary, command draft owner, host method list and source checks are decided. Every native touch and importer is traced on Toad main `1421d01d4` (§3.6). Qt provider-login presentation belongs to [phase 6 §6.6](06-preferences-and-native-application.md#66-login-retain-the-actual-request-and-readiness-owner). The one operation gap is the same as phase 4: extract-new-base for shared and native classes, bounded in §3.6.
 
 ## Outcome
 
@@ -170,3 +170,74 @@ Existing tests to retain/run include:
 - `tests/guards/test_thread_action_dispatch.py`: declaration-owned action names, each mixed-target outcome once, Core refusal shown and the action released.
 - `tests/guards/test_core_event_handlers_receive_their_event.py` and phase 2 resource tests.
 - Field/draft tests: empty literal values, stale catalog/confirmation replies, focused pending edits, changed source/view, confirm-then-edit, provider login completion/failure and close during preparation.
+
+## 3.6 Execution map
+
+Traced on Toad main `1421d01d4`, from every `ImportFrom` and every native name inside the modules this phase moves. The host calls inside `comms_root.py` (`call_next`, `_handle_exception`, the read-position warning, `saved_settings`, `set_interval`) are not imports. They are already listed with their lines in §3.1's exact connection-call migration.
+
+### Where each moved declaration lives today
+
+| Declarations | Current module | Destination |
+|---|---|---|
+| The connection, observation, answering and registry-read families, `CoordinationAccess` (17 classes) | `comms_root.py` | `toad/client/connection.py` |
+| `RelationshipReads` | `widgets/thread_comms_source.py` (pure Core reads, placed in `widgets/`) | `toad/client/connection.py`, beside `Observing`, which inherits it (`comms_root.py:597`) |
+| `CommsHost` | `comms_host.py` | `toad/client/host.py` |
+| `SidebarSubscriber`, `NotificationSubscriber` | `comms_subscribers.py` | `toad/client/subscribers.py` |
+| `TargetContext` and the command family (10 classes) | `target_commands.py` | `toad/client/commands.py`, with `ThreadAction` (§3.2) |
+| `ThreadAction`, `ThreadActions`, `ThreadActionExecution` | `thread_actions.py` | `ThreadAction` to `commands.py`; the other two to `toad/client/thread_actions.py` |
+| `CommandCatalog` | `command_catalog.py` | `toad/client/command_catalog.py` |
+| `PreparedChoices` | `widgets/comms_command_dialog.py` | `toad/client/command_draft.py` |
+| `CommandText` | `prompt_cursor.py` | `toad/client/command_draft.py` |
+| `CommandDialog` | `widgets/comms_command_dialog.py` | stays native; it gains `CommandDraft` as a base (§3.3) |
+
+### Native uses inside moved modules
+
+| Module | Native use (line, owner) | Goes to |
+|---|---|---|
+| `comms_root.py` | `RelationshipReads` imported from `toad.widgets.thread_comms_source` (:130) | relocated with the family; no split |
+| `comms_subscribers.py` | `AbstractHooksMeta` on `SidebarSubscriber` (:10) and `NotificationSubscriber` (:23) | plain ABCs; the native subscriber widgets keep the Textual metaclass through their own widget bases |
+| `target_commands.py` | `ToadApp` annotation on `TargetContext` (:37) | the shared `CommandHost` |
+| `target_commands.py` | `show_target_menu` and `Region` in `TargetContext.show_menu.read` (:81) | the native menu owner (§3.2); the low context loses `show_menu`, `command_choices` and `execute_menu` |
+| `target_commands.py` | `Conversation` in `ContextualCommand.apply` (:126) and `TargetSuggestion.apply` (:232) | the shared conversation command contract (§3.2) |
+| `thread_actions.py` | `ToadApp` in `ThreadActions.__init__` (:30) | `ThreadActions` becomes the application capability; the `self.thread_actions = ThreadActions(self)` at `app.py:193` goes (§3.4) |
+| `thread_actions.py` | `CommandDialog` in `ThreadAction.collect.prepare` (:149) | `CommandOrigin.edit` (§3.4); this removes the local import from shared code |
+| `command_catalog.py` | `Conversation` in `CommandCatalog.execute` (:63) | the shared conversation command contract |
+| `comms_host.py` | none | moves as it is, minus the ThemedApp and DOMNode bases (§3.1) |
+
+### Order
+
+1. **Contracts first:** declare `CommandHost`, `CommandOrigin`, the conversation command contract and `TargetActionState`/`NoTargetAction` in their low modules. Each is new, so this is `insert_before_target` / `insert_class_member`.
+2. **Subscriber metaclass:** drop `AbstractHooksMeta` from the two subscriber ABCs.
+3. **Command modules:** retype the `ToadApp` and `Conversation` uses in `target_commands`, `thread_actions` and `command_catalog` to those contracts. Move `show_menu` and the `CommandDialog` call into native members.
+4. **Connection host calls:** apply the `comms_root` host-call migration from §3.1.
+5. **Draft:** extract `CommandDraft` from `CommandDialog` and make the dialog inherit it.
+6. **Relocation:** one stage moves every now-pure module and the declarations above to `toad/client/`.
+
+Steps 1–5 must leave no Textual import in anything step 6 moves.
+
+### NRA operations
+
+All available in the installed NRA:
+- **Step 6:** `relocate_module_to_new_module` for the whole modules (`comms_host`, `comms_subscribers`, `target_commands`, `thread_actions`, `command_catalog`). `relocate_symbols_to_module` moves the `comms_root` family plus `RelationshipReads`, `PreparedChoices` and `CommandText` out of mixed modules. Both rewrite every importer and remove the old binding. `retarget_module_mentions` follows the strings.
+- **Steps 3 and 5:** `replace_function_signature` for the retyped annotations; `replace_function_body` plus `insert_class_member` to move a construction or native call into its native member.
+- **The gap:** `CommandDialog` gaining `CommandDraft` as a parent that owns its draft state, and the native `TextualCommsHost`/`QtCommsHost` capabilities, are extract-new-base. NRA does not have it yet; it is queued with claude-k-nra. Until it lands, each is a labelled `insert_before_target` stage, followed by `promote_class_members_to_ancestor` for the moved draft members.
+
+### Importers the relocation rewrites
+
+Production import sites on main. Test sites are rewritten by the same operation:
+
+- **Connection family, `comms_root` (22):** `app.py:50`, `cli.py:23`, `conversation_kind.py:41`, `conversation_submission.py:42`, `core/context_inspection.py:55`, `navigation_preparation.py:21`, `navigation_target.py:16`, `screens/historical_sessions.py:21`, `session_entry.py:24`, `session_host.py:12`, `session_presentation.py:34`, `sidebar_model_view.py:24`, `submission_queue.py:26`, `target_commands.py:21`, `thread_identity.py:20`, `transcript_preparation.py:61`, `transcript_scope.py:46`, `widgets/channel_activity.py:17`, `widgets/comms_transfer.py:67`, `widgets/session_sort.py:37`, `widgets/thread_comms.py:26`, `wire_history.py:58`. 24 test sites.
+- **`CommsHost` (2):** `comms_root.py:104`, `session_host.py:11`.
+- **Subscribers (3):** `comms_root.py:105`, `sidebar_model_view.py:25`, `widgets/message_notifications.py:25`.
+- **Command family, `target_commands` (7):** `command_catalog.py:9`, `navigation_target.py:31`, `session_navigation.py:53`, `slash_command.py:27`, `thread_actions.py:24`, `widgets/conversation.py:142`, `wire_history.py:67`. 5 test sites.
+- **`thread_actions` (3):** `app.py:83`, `session_navigation.py:54`, `target_commands.py:24`. 3 test sites, including `tests/guards/test_thread_action_dispatch.py` (§3.4).
+- **`CommandCatalog` (3):** `conversation_submission.py:41`, `target_commands.py:88`, `widgets/conversation.py:78`. 3 test sites.
+- **`CommandDialog`/`PreparedChoices` (1):** `thread_actions.py:120`, replaced by `CommandOrigin.edit` in step 3. 1 test site.
+- **`CommandText` (1):** `widgets/prompt.py:77`.
+
+### Finish check
+
+- **No native imports in the shared namespace:** every module under `toad/client/` imports cleanly with Textual and Qt blocked. That is the namespace test in [00](00-ownership-and-imports.md).
+- **No old path left:** `git grep -nE "from toad\.(comms_root|comms_host|comms_subscribers|target_commands|thread_actions|command_catalog)\b|thread_comms_source import RelationshipReads" -- src tests` returns nothing.
+- **No guarded imports:** `git grep -n "TYPE_CHECKING" -- src/toad/client` returns nothing, which proves the `target_commands -> thread_actions` cycle is gone rather than hidden.
+- **Behaviour:** the existing tests in §3.5 pass, plus the scheduler controls in §3.1.
