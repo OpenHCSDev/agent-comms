@@ -512,7 +512,7 @@ class Thread(
     @property
     def accepts_following_input(self) -> bool:
         """A changed project needs a fresh native turn, not the old child's inbox."""
-        return not self.project_resume_due and self.turn_state.active.phase.accepts_followup
+        return not self.project_resume_due and self.turn_state.active.phase.accepts_followup()
 
     @property
     def owes_project_resume(self) -> bool:

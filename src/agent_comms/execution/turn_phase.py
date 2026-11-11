@@ -43,8 +43,8 @@ class AcceptsPrompt:
 class ClosingTurn:
     """Native tail observations cannot reopen a closing turn."""
 
-    accepts_followup: ClassVar[bool] = False
-    can_cancel: ClassVar[bool] = False
+    def accepts_followup(self) -> bool:
+        return False
 
     def observed(self, phase: TurnPhase) -> Self:
         return self
@@ -71,15 +71,19 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     # An excursion (tool, retry, compaction) runs without RPC events; an input
     # queued behind it cannot start yet, so its start budget waits and the
     # excursion's own backstop bounds the stall instead.
-    pauses_input_clock: ClassVar[bool] = False
     busy: ClassVar[bool] = True
-    accepts_followup: ClassVar[bool] = True
-    can_compact: ClassVar[bool] = False
-    can_cancel: ClassVar[bool] = True
-    # A turn released in this phase still owes the turn after its project change.
-    keeps_project_resume: ClassVar[bool] = True
-    # Refusal reports wait while a retry excursion owns the turn's outcome.
-    holds_refusal_reports: ClassVar[bool] = False
+
+    def pauses_input_clock(self) -> bool:
+        return False
+
+    def accepts_followup(self) -> bool:
+        return True
+
+    def keeps_project_resume(self) -> bool:
+        return True
+
+    def holds_refusal_reports(self) -> bool:
+        return False
     activity_state: ClassVar[ActivityState] = ActivityState.THINKING
     label: ClassVar[str] = "Waiting for model"
 
@@ -135,7 +139,8 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
 
 
 class Excursion(TurnPhase, declared_name=None):
-    pauses_input_clock = True
+    def pauses_input_clock(self) -> bool:
+        return True
 
 
 class PromptAcceptancePhase(TurnPhase):
@@ -154,9 +159,9 @@ class PreparingPhase(TurnPhase):
 
 class IdlePhase(ActivityWord, TurnPhase):
     busy = False
-    accepts_followup = False
-    can_compact = True
-    can_cancel = False
+
+    def accepts_followup(self) -> bool:
+        return False
     activity_state = ActivityState.IDLE
     label = "Ready"
 
@@ -173,7 +178,8 @@ class FailedPhase(ClosingTurn, TurnPhase):
 
 
 class CancellingPhase(ClosingTurn, TurnPhase):
-    keeps_project_resume = False
+    def keeps_project_resume(self) -> bool:
+        return False
     label = "Cancelling"
 
 
@@ -193,7 +199,8 @@ class ModelWaitPhase(StallExempt, ActivityWord, TurnPhase):
 
 
 class SettlingStatsPhase(TurnPhase):
-    accepts_followup = False
+    def accepts_followup(self) -> bool:
+        return False
     label = "Finishing native statistics"
 
 
@@ -227,7 +234,8 @@ class ProviderRetryPhase(StallExempt, Excursion):
     label = "Provider retry"
     # The recovery re-requests each refused empty response; its end event
     # reports the outcome, so a retried refusal never reports interim.
-    holds_refusal_reports = True
+    def holds_refusal_reports(self) -> bool:
+        return True
 
 
 class SummarizationRetryPhase(StallExempt, Excursion):

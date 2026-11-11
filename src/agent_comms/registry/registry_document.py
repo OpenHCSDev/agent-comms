@@ -1217,7 +1217,7 @@ class RegistryDocument(RegistryPresence[MutableMapping[str, ThreadStatus]]):
                     and turn.held_by(canonical_lease))
         completion = (self.status(name).completed_turn(canonical_lease)
                       if attested else NoFinishedTurn())
-        keeps_resume = turn.phase.keeps_project_resume
+        keeps_resume = turn.phase.keeps_project_resume()
         record.without_claim()
         self.threads[name] = replace(
             current,

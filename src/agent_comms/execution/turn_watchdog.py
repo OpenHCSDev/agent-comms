@@ -243,7 +243,7 @@ class ProgressWatchdog(
         if session.awaiting_native_attestation:
             return self.preflight_wait
         active = self.phase.model_wait(self.model_wait, self.unbounded_wait)
-        if session.prompt_state.awaiting_start and not self.phase.pauses_input_clock:
+        if session.prompt_state.awaiting_start and not self.phase.pauses_input_clock():
             active = self.input_wait
         return session.stats.wait_for(self, active)
 

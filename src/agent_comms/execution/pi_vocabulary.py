@@ -167,7 +167,7 @@ class ErrorStopReason(FailedPiStop, PiStopReason):
     async def apply(cls, session, message):
         async for event in super().apply(session, message):
             yield event
-        if not cls.interrupted(session) and session.watchdog.phase.holds_refusal_reports:
+        if not cls.interrupted(session) and session.watchdog.phase.holds_refusal_reports():
             # A refusal the recovery is re-requesting is interim evidence; the
             # recovery's own end event reports the final outcome.
             return
