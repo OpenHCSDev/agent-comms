@@ -96,7 +96,7 @@ class TurnOutput(SessionOutputCallbacks):
 
     @property
     def clean(self) -> bool:
-        return self.failure.clean and self.error_message is None
+        return self.failure.is_clean() and self.error_message is None
 
     def redact(self, text: str) -> str:
         return "Image prompt failed; backend diagnostics withheld." if self.sensitive else text
