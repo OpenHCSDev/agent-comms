@@ -380,20 +380,20 @@ class TeamUpdate(OwnerNotice, TeamObservation, declared_name=None):
     def report_failure(cls, recipient: ThreadIncarnation, failure: ServicePassFailing,
                        previous: tuple[TeamUpdate, ...], *,
                        published: tuple[TeamUpdate, ...],
-                       now: float) -> tuple[TeamUpdate, ...]:
+                       now: float) -> TeamUpdate | None:
         """A failed pass clears nothing. Keep its original age, and retry an occurrence
         not yet published even when a muted/failed attempt already retained it."""
         ping = RulePing.capture(failure)
         if any(ping in packet.handled for packet in published):
-            return ()
+            return None
         handled = tuple(line for packet in previous for line in packet.handled)
         retained = (handled if ping in handled else
                     (*handled, replace(ping, since=ping.since.continued_from(now))))
         current = next(line for line in retained if line == ping)
-        return (TeamDecisions(
+        return TeamDecisions(
             recipient, retained, (current,), (),
             not_applied=tuple(line for packet in previous for line in packet.not_applied),
-        ),)
+        )
 
     def send(self, comms: Comms, hud: tuple[str, ...], *,
              publication: PublicationFacts = UnpublishedFacts()) -> tuple[Message, ...]:
