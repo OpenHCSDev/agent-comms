@@ -6,10 +6,7 @@ import pytest
 
 from agent_comms.execution.native_session_prepare import NativeSessionPreparation
 from agent_comms.execution.pi_vocabulary import OffThinkingLevel
-from agent_comms.execution.turn_failure import (
-    QueuedInputMissing,
-    QueuedInputNotSent,
-)
+from agent_comms.execution.turn_failure import QueuedInputMissing
 from agent_comms.execution.turn_inbox import (
     ClearQueuedInputs,
     FollowUpInputPolicy,
@@ -56,7 +53,6 @@ def test_returned_controls_are_not_undelivered_user_inputs(
     assert session.inputs.queue.has_ready_work
     assert not session.inputs.unwritten_inputs and session.inputs.settled
     assert not QueuedInputMissing.detected(session, transport_ok=True)
-    assert not QueuedInputNotSent.detected(session, transport_ok=True)
     session.inputs.current = session.inputs.queue.get_nowait()
     assert not session.inputs.unwritten_inputs and session.inputs.settled
 
@@ -69,7 +65,7 @@ def test_certainly_unwritten_input_does_not_claim_uncertain_delivery(
                         when_busy=FollowUpInputPolicy)
     session.inputs.queue.begin(item)
     assert session.inputs.unwritten_inputs == (item.input_id,)
-    assert QueuedInputNotSent.detected(session, transport_ok=True)
+    assert session.inputs.settled
     assert not QueuedInputMissing.detected(session, transport_ok=True)
 
 

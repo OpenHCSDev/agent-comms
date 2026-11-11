@@ -21,9 +21,11 @@ from agent_comms.execution.turn_inbox import (
     SteerInputPolicy,
     TurnInbox,
 )
+from agent_comms.execution.turn_failure import QueuedInputMissing
 from agent_comms.execution.turn_watchdog import ModelWait
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import InputId
+from agent_comms.pi_payloads import UserMessage
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.store_files import RegistryLocking
@@ -96,6 +98,8 @@ async def test_written_following_input_settles_after_native_queue_decision(
             inbox.put_nowait(following)
             await wait_for(lambda: bool(running.inputs.pending))
             await running.native.reader.pending.before_settlement()
+            assert QueuedInputMissing.detected(running, transport_ok=True)
+            assert not running.inputs.settled
             if clear:
                 inbox.put_nowait(ClearQueuedInputs((following.input_id,)))
                 await wait_for(lambda: not running.inputs.pending)
@@ -126,7 +130,7 @@ async def test_stalled_real_native_run_records_phase_failure_instead_of_name_err
         assert len(native.starts) == 1
 
 
-async def test_agent_settled_returns_an_unwritten_inflight_steer_and_reports_not_sent(
+async def test_agent_settled_preserves_unwritten_input_for_the_next_run(
     tmp_path: Path, native_runtime_package: VerifiedNativePackage, steering_input: InputRequest,
 ):
     async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
@@ -144,11 +148,16 @@ async def test_agent_settled_returns_an_unwritten_inflight_steer_and_reports_not
                 gate.set()
                 await wait_for(lambda: inbox.has_ready_work)
             result = await task
-            assert not result[-1].ok
-            assert result[-1].reason_code == "queued_input_not_sent"
+            assert result[-1].ok, result[-1]
             assert inbox.get_nowait() is steering_input
+            assert inbox.empty()
             assert native.provider.posts == 1 and len(native.starts) == 1
-            assert not native.persistent.child_state.retained
+            assert native.persistent.child_state.retained
+            following = await native.run(steering_input.content.text)
+            assert following[-1].ok, following[-1]
+            assert native.provider.posts == 2 and len(native.starts) == 2
+            assert sum(UserMessage.from_wire(message).original_text == steering_input.content.text
+                       for message in native.saved_inputs()) == 1
         finally:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
