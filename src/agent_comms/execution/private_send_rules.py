@@ -208,7 +208,7 @@ class NativeAlreadyProvenRule(ReservationRule):
     explanation = "The native input already has a proven session result."
 
     def violated(self, check: NativeReservationCheck) -> bool:
-        return check.row.reference.recorded
+        return check.row.reference.has_session_proof()
 
 
 class NativeAlreadyDecidedRule(ReservationRule):

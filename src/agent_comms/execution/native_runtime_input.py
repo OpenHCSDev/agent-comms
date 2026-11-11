@@ -261,8 +261,7 @@ class NativeRuntimeInput(
         )]
         for row in rows:
             user.require_tracked_user()
-            if row.reference.recorded and not row.session_entry_id.holds(user.id):
-                raise IdentityConflict("Native transcript input conflicts with its original entry")
+            row.reference.require_transcript_identity(row.session_entry_id, user)
         return rows
 
     @classmethod
