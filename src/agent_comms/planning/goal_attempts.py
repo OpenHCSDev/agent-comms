@@ -137,7 +137,7 @@ class LaunchPermit(
         original = store.read_attempt(self.reservation.attempt_id)
         return original.reserved_by(self.reservation, errors.StaleAttemptError(
             "Original launch attempt changed or is unavailable.",
-        )).phase.verified_progress
+        )).phase.has_verified_progress()
 
     def charge_for(
         self, goal_id: GoalId, goals: GoalStoreSource[GoalAttemptStore],

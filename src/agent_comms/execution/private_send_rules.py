@@ -44,10 +44,10 @@ class RegistryClaimCheck(RegistryIdentityCheck):
     """
 
     def model_matches(self) -> bool:
-        return self.expected.turn_lease.leased or super().model_matches()
+        return self.expected.turn_lease.is_leased() or super().model_matches()
 
     def thinking_matches(self) -> bool:
-        return self.expected.turn_lease.leased or super().thinking_matches()
+        return self.expected.turn_lease.is_leased() or super().thinking_matches()
 
 
 class RunningTurnRegistryCheck(RegistryClaimCheck):

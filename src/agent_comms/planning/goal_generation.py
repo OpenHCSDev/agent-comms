@@ -190,7 +190,7 @@ class BlockedGeneration(Failed, GenerationState):
         store.authorize_current_retry(generation.goal_id, witness)
 
     def permits_retirement(self, phase: GoalAttemptPhase) -> bool:
-        return phase.permits_retirement
+        return phase.permits_retirement()
 
     @classmethod
     def successors(cls) -> tuple[type[GenerationState], ...]:
