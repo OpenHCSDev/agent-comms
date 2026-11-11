@@ -39,7 +39,8 @@ if TYPE_CHECKING:
 class RetirementState(DeclaredFamily):
     """The shutdown result owns completion, failure and cancellation behavior."""
 
-    retired: ClassVar[bool] = False
+    def is_retired(self) -> bool:
+        return False
 
     @property
     def release_failure(self) -> BaseException | None:
@@ -60,7 +61,9 @@ class RetirementPending(RetirementState):
 @dataclass(frozen=True)
 class Retired(RetirementState):
     outcome: ChildOutcome
-    retired: ClassVar[bool] = True
+
+    def is_retired(self) -> bool:
+        return True
 
     def require_outcome(self) -> ChildOutcome:
         return self.outcome

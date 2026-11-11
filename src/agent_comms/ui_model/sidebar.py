@@ -269,7 +269,7 @@ class SidebarModel:
         threads = {name: ThreadRowModel.of(
             person, person.thread.prepare_conversation(PersonUnread(person, snapshot)))
             for name, person in snapshot.threads.items()}
-        working = frozenset(name for name, row in threads.items() if row.status.working)
+        working = frozenset(name for name, row in threads.items() if row.status.is_working())
         channels = {name: ChannelRowModel.of(view, snapshot, working)
                     for name, view in snapshot.channels.items()}
         return channels, threads
