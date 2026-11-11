@@ -66,7 +66,7 @@ def test_a_channel_post_naming_a_live_thread_outside_the_channel_is_refused(tmp_
     comms = installed_comms(tmp_path)
     comms.registry.declare(NativeThread("member", frozenset({"team"}), Checkout(tmp_path)))
     comms.registry.declare(NativeThread("outsider", frozenset(), Checkout(tmp_path)))
-    with pytest.raises(MentionOutsideChannelError, match="@outsider not in #team"):
+    with pytest.raises(MentionOutsideChannelError, match="#team does not deliver to @outsider"):
         comms.messaging.send("member", "#team", "@outsider your PR is back")
     assert not read_history(wire(tmp_path), "#team")
     comms.channels.update_tags("outsider", add=frozenset({"team"}), remove=frozenset())
@@ -277,6 +277,6 @@ def test_committed_channel_mention_follows_recipient_renames_without_expanding_a
         in ScheduledTurn.incoming(message, aliases=aliases).prompt
     )
     assert message.mentions[0].thread == "alpha"  # Original wire record is unchanged.
-    with pytest.raises(MentionOutsideChannelError, match="@outsider not in #team"):
+    with pytest.raises(MentionOutsideChannelError, match="#team does not deliver to @outsider"):
         comms.messaging.send_user_message(CommandTarget.named('#team'), "@outsider review", worktree=Checkout(tmp_path))
     assert not comms.bus.inbox("outsider").page.messages

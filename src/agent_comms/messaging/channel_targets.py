@@ -626,8 +626,8 @@ class ChannelTarget(NamedTarget):
                          - {sender, *names})
         if outside:
             raise MentionOutsideChannelError(
-                f"{', '.join(f'@{name}' for name in outside)} not in {self.name}, so this post "
-                f"would never reach them. DM them, or tag them into {self.name}.")
+                f"{self.name} does not deliver to {', '.join(f'@{name}' for name in outside)}, "
+                "so this post would never reach them. DM them.")
         return self, message, names
 
     def display_scope(
