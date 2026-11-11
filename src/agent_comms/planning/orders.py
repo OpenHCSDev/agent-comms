@@ -83,7 +83,7 @@ from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.planning.goal_work import GoalAssignment, GoalAssignments
 from agent_comms.planning.goals import CheckedCommit, OrderCheck
 from agent_comms.planning.order_phase import OrderPhase, UnplannedPhase
-from agent_comms.planning.order_runs import OrderRun
+from agent_comms.planning.order_runs import ApplicationOrderRun, OrderRun
 from agent_comms.planning.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.planning.order_words import (
     DirectiveText,
@@ -1731,6 +1731,9 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def corrected(self, correction: CorrectOrderTodo) -> ProblemOrder:
         raise TodoError("Only an active checked order takes a correction.")
 
+    def reopening(self) -> OrderCheckChange:
+        raise TodoError("Only a recorded merged completion can be reopened.")
+
     finding: Annotated[ProblemFinding, WireOmitDefault()] = field(
         default_factory=UnlocatedProblemFinding
     )
@@ -1973,6 +1976,7 @@ class TriageScope(OrderScope[ReportDelivery]):
         return ()
 
     def completed(self, todo: Todo, delivery: ReportDelivery) -> Todo:
+        todo.order.checked().run.require_closing(delivery.report)
         order = todo.order.checked().copy_as(ReportedProblemOrder, delivery=delivery)
         return DoneTodoState.closed(todo, order)
 
@@ -2375,6 +2379,10 @@ class MergedProblemOrder(CommittedCheckSource, AwaitingInstallationProblemOrder)
         """Pending again under its own id, check, run, edits and times, without ``link``."""
         return self.unlinked(link).copy_as(PendingProblemOrder)
 
+    def reopening(self) -> OrderCheckChange:
+        """Retain earlier publications as corrections, not fresh completion claims."""
+        return ReopenedOrderCheck(tuple(self.merged_link(link) for link in self.pull_requests))
+
     def waiting_in(self, todo: Todo) -> Todo:
         return (todo if todo.order == self
                 else replace(todo, order=self, revision=todo.revision + 1))
@@ -2466,6 +2474,16 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         """An undelivered order waits on install once its PR merged."""
         return read[todo.id].waiting_on_install(todo)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReopenedProblemOrder(PendingProblemOrder):
+    """Partial publications stay work until their requested review is recorded."""
+
+    def closed_by_merge(
+        self, todo: Todo, pulls: ProgressRead, checkout_base: Path,
+    ) -> tuple[Todo, ...]:
+        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -3195,6 +3213,10 @@ class TodoState(DeclaredFamily, affix="TodoState"):
         raise TodoConflict(current)
 
     @classmethod
+    def reopened(cls, current: Todo, command: ReopenTodo) -> Todo:
+        raise TodoError(f"{current.id} is not a completed problem to reopen.")
+
+    @classmethod
     def change(cls, current: Todo, command: ChangeTodoState) -> Todo:
         return command.state.decide(current, command)
 
@@ -3244,6 +3266,12 @@ class DoneTodoState(TodoState):
         return replace(current, state=cls, order=order, assignment=None,
                        revision=current.revision + 1)
 
+    @classmethod
+    def reopened(cls, current: Todo, command: ReopenTodo) -> Todo:
+        return replace(current, state=OpenTodoState, assignment=command.previous,
+                       order=command.corrected_order(current.order.checked()),
+                       revision=current.revision + 1)
+
 
 type DirectedTodo = Todo
 
@@ -3281,12 +3309,15 @@ class TodoCommand(Command[DirectedTodo, DirectedTodo], DeclaredFamily, StorySour
         result = self.apply(current)
         if result != current:
             self.validate(db, current, store)
-            StoredOrderStory.archive(db, current, result.order)
+            self.archive_order(db, current, result.order)
             events = self.history_events(current)
             for event in (*events, *self.assignment_events(current, result, events)):
                 StoredOrderStory.append(db, current.id, event)
             result.upsert(db)
         return result
+
+    def archive_order(self, db: sqlite3.Connection, current: Todo, following: ProblemOrder) -> None:
+        StoredOrderStory.archive(db, current, following)
 
     def assignment_events(
         self, current: Todo, following: Todo, events: Sequence[TodoCommand],
@@ -4623,6 +4654,70 @@ class RestoreHolderTodo(TodoCommand):
         restored = current.holder_state.restored(current)
         return (replace(restored, revision=current.revision + 1)
                 if restored != current else current)
+
+
+@dataclass(frozen=True)
+class ReviewedOrderRun(ApplicationOrderRun):
+    """The requested source-backed review, not execution of an unwritten backend."""
+
+    label: ClassVar[str] = "Reviewed when:"
+
+    def holder_runs(self) -> bool:
+        return False
+
+    def merged_line(self, state: str) -> str:
+        return f"{OrderRun.merged_line(self, state)}, awaiting review"
+
+    def require_merge_close(self) -> None:
+        raise TodoError("A partial publication never closes a review order; record the requested review.")
+
+
+@dataclass(frozen=True)
+class ReopenTodo(RestoreHolderTodo, TodoOperation, StoryEvent):
+    """Correct mistaken completion without replacing the original work or goal."""
+
+    check: OrderCheck
+    review: ReviewedOrderRun
+    reason: str
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()), kw_only=True)
+    preparation: Annotated[OrderCheckChange, WireTransient()] = field(
+        default_factory=UnpreparedOrderCheck, kw_only=True, compare=False, repr=False,
+    )
+
+    def prepare(self, goals: ProblemGoals, current: Todo) -> Self:
+        self.require_current(current)
+        OrderCorrectionReason(self.reason)
+        preparation = current.order.reopening()
+        self.check.require_directory()
+        self.check.require_writable()
+        return replace(self, preparation=preparation)
+
+    def corrected_order(self, order: CheckedProblemOrder) -> OpenProblemOrder:
+        correction = CorrectCheckTodo(
+            expected_revision=self.expected_revision, actor=self.actor, reason=self.reason,
+            previous=order.check, check=self.check, at=self.at, preparation=self.preparation,
+        )
+        return order.corrected(correction).copy_as(ReopenedProblemOrder, run=self.review)
+
+    def proposed_work(self, store: TodoStore, problem: str) -> tuple[Todo, ...]:
+        return (self.apply(store.get(problem)),)
+
+    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
+        super().validate(db, current, store)
+        owner = store.registry_cut().born(self.previous.owner_identity.require_recorded().lookup)
+        owner.goal.matching(self.previous.generation).require_active()
+
+    def changed(self, current: Todo) -> Todo:
+        current.require_previous_assignment(self.previous)
+        replace(current, assignment=self.previous).require_maintainer(self.actor)
+        return current.state.reopened(current, self)
+
+    def archive_order(self, db: sqlite3.Connection, current: Todo, following: ProblemOrder) -> None:
+        """This correction retains a completed publication under the same order id."""
+        StoredOrderStory.append(db, current.id, current.order.checked())
+
+    def story_text(self) -> str:
+        return f"{self.actor.name} reopened completed work for {self.previous.owner}: {self.reason}"
 
 
 @dataclass(frozen=True)

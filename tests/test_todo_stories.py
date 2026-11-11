@@ -26,6 +26,8 @@ from agent_comms.planning.orders import (
     OrderMessage,
     PeerAcceptedVerdict,
     ReleaseTodo,
+    ReopenTodo,
+    ReviewedOrderRun,
     RewrittenVerdict,
     SendBackStrike,
     SendBackVerdict,
@@ -94,6 +96,9 @@ def test_story_members_round_trip_in_one_append_only_table(recorded_problem):
     todo = store.get("P1")
     actor = recorded_problem.registry.require("colleague").incarnation
     events += (
+        ReopenTodo(todo.revision, actor, todo.held(), todo.order.checked().check,
+                   ReviewedOrderRun("A peer reviewed the original source and every remaining required outcome."),
+                   "The first source publication did not finish the remaining required work."),
         FailedCheckStrike.make(todo, 4000, "The declared acceptance command failed at its source owner."),
         PeerAcceptedVerdict(todo.revision, actor, todo.held(), ToolCallId("peer-call"),
             quote="Repair the existing record owner", peer=MessageId.mint("peer review")),
