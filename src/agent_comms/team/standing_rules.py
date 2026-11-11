@@ -64,7 +64,7 @@ from agent_comms.planning.orders import (
     TodoStore,
 )
 from agent_comms.planning.owner_requests import OwnerRequestId, RequestDirective
-from agent_comms.planning.plan_phases import PlanPhase
+from agent_comms.planning.plan_phase_base import PlanPhase
 from agent_comms.planning.plan_reading import PlanReading, PlanReadings
 from agent_comms.planning.pull_requests import MergeBlock
 from agent_comms.projects.git_errors import GitCommandError
