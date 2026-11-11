@@ -272,11 +272,11 @@ class TeamHeartbeat(TeamBoardRead, TeamPass,
             actions = TeamHistory.of(comms, snapshot, self.actors(snapshot))
             duty = self.duty(comms.registry, comms.goals)
             for thread in self.served(comms.registry, comms.goals):
-                for update in TeamUpdate.report_failure(
+                if (update := TeamUpdate.report_failure(
                     thread.incarnation, failure,
                     TeamUpdate.latest(comms, thread.incarnation),
                     published=TeamUpdate.published(comms, thread.incarnation), now=now,
-                ):
+                )) is not None:
                     TeamUpdateStore.record(comms.root, update)
                     sections = AlarmGroup.sections((update,), update.open_pings(actions),
                                                    update.stopped(snapshot))
