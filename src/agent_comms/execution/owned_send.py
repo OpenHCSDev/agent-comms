@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import partial
@@ -44,7 +43,6 @@ if TYPE_CHECKING:
     from agent_comms.execution.turn_goal_permission import TurnGoalPermission
     from agent_comms.registry.registry_document import RegistrySnapshot
 
-_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -115,9 +113,8 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
         if not source.bypasses_goal_permit:
             self.goal_permit.check_grant(self.goal_store)
 
-    def _refusal(self, rule: ReservationRule) -> SendOutcome:
-        _LOG.info("Ordinary input refused: %s", ReservationViolationError(rule))
-        return AuthorityChangedSend()
+    def _refusal(self, refusal: ReservationViolationError) -> SendOutcome:
+        return AuthorityChangedSend(refusal)
 
     def send_original(self, native_id: InputId, text: str) -> AbstractContextManager[SendOutcome]:
         return self.original_source.prepare_send(self, native_id, text)
