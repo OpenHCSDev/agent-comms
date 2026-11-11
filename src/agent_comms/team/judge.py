@@ -385,9 +385,10 @@ class RoastText(WordedText):
     def problems(cls, value: str) -> dict[str, str]:
         because = ({} if re.search(r'\bbecause\b', value)
                    else {'because': str(cls.refusal()) + '; fix: explain the defect with because'})
-        return super().problems(value) | because | {
-            'blunt': refused + '; fix: name why the work is stupid, not a gentle suggestion'
-            for refused in BluntText.wording_refusal(value)}
+        refused = BluntText.wording_refusal(value)
+        blunt = ({} if refused is None
+                 else {'blunt': refused + '; fix: name why the work is stupid, not a gentle suggestion'})
+        return super().problems(value) | because | blunt
 
 
 class FixText(WordedText):
@@ -562,7 +563,7 @@ class OkVerb(ReasonedVerb, QuotingVerb):
         return super().argument_problems() | {
             f'{GrowthReason.option} {number}': refused
             for number, text in enumerate(self.growth, 1)
-            for refused in GrowthReason.wording_refusal(text)}
+            if (refused := GrowthReason.wording_refusal(text)) is not None}
 
     def check_edits(self, edits: list[Edit]) -> None:
         for edit in edits:
@@ -725,7 +726,8 @@ class BackVerb(ReasonedVerb, HeadVerdictVerb):
 
     def reason_problems(self) -> dict[str, str]:
         """The recorded reason composes every argument and is held to its own wording."""
-        return {'reason': refused for refused in StrikeReason.wording_refusal(self.rejection_text)}
+        refused = StrikeReason.wording_refusal(self.rejection_text)
+        return {} if refused is None else {'reason': refused}
 
     @cached_property
     def rejection_text(self) -> str:
