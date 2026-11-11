@@ -63,8 +63,6 @@ if TYPE_CHECKING:
 class ChannelSelection(SubclassUnion, affix="Channel"):
     """Decoded menu context; its members cross a boundary by shape: none is null, one
     surrounding channel is its name, and per-target channels are their mapping."""
-    needs_catalog: ClassVar[bool] = True
-
     @abstractmethod
     def channels_for(self, target: str) -> tuple[SurroundingChannel, ...]: ...
 
@@ -85,7 +83,6 @@ class SurroundingChannel(ChannelSelection, declared_name=None):
 
 @dataclass(frozen=True)
 class NoChannel(NullMember, SurroundingChannel):
-    needs_catalog: ClassVar[bool] = False
 
     def channels_for(self, target: str) -> tuple[SurroundingChannel, ...]:
         return (self,)
