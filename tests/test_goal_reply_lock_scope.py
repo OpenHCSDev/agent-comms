@@ -27,7 +27,8 @@ from agent_comms.planning.goal_actions import (
     StandbyGoalAction,
 )
 from agent_comms.planning.goal_scope import OneGoal
-from agent_comms.planning.goal_waits import GoalWaitReview, NoGoalWait, RecordedGoalWait
+from agent_comms.planning.goal_wait_recovery import GoalWaitReview
+from agent_comms.planning.goal_waits import NoGoalWait, RecordedGoalWait
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.thread_text import GivenThreadText

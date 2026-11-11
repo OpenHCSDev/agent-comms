@@ -1,0 +1,20 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "p23-original-recipient-availability-below-acquisition",
+      "reason": "Both current startup roots show Bus -> original unread selection -> RegistryProvenance -> agent_activity solely for UnavailableRecipientActivity, dragging AgentBackend/Pi/Coordination back into the incomplete coordinator. Move the whole original RecipientActivity declaration and its RecordedRecipientActivity/UnavailableRecipientActivity cases into the existing registry domain's low recipient_activity module. Keep every class name, DeclaredFamily affix, callback base, concrete notice/progress types, methods, constructors and identity. LiveRecipientActivity and AgentActivity remain high with their original concrete Thread/ObservedActivity fields and acquisition behavior. Native migration owns all src/tests/tools/Toad consumers; no surrogate activity, copied fallback, alias, import guard or local-import replacement.",
+      "operations": [
+        {
+          "operation": "relocate_symbols_to_new_module",
+          "file_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/agent_activity.py",
+          "destination_path": "/home/ts/wt/comms-friction--P17/src/agent_comms/registry/recipient_activity.py",
+          "symbol_qualnames": [
+            "RecipientActivity",
+            "RecordedRecipientActivity",
+            "UnavailableRecipientActivity"
+          ]
+        }
+      ]
+    }
+  ]
+}

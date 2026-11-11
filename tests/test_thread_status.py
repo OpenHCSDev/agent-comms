@@ -18,7 +18,7 @@ from agent_comms.presentation import CountedRead, ThreadView
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.activity import Activity, ActivityState
 from agent_comms.registry.registration import Registration
-from agent_comms.registry.registry_document import DEFAULT_ROSTER
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
 from agent_comms.registry.thread_status import (
     ArchivedThreadStatus,
     ConnectedThreadStatus,
@@ -99,7 +99,6 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
             assert individual.read_identity.thread.incarnation == thread.incarnation
             assert individual.same_status(visible[0].presentation)
         else:
-            from agent_comms.registry.registry_document import RosterVisibility
             if expected.in_view(RosterVisibility(archived=True)):
                 assert individual.require("owner") is individual
             else:
@@ -192,8 +191,6 @@ def test_inactive_owner_survives_a_refused_viewer(tmp_path, status):
     (DeletingThreadStatus(), False, False),
 ])
 def test_presence_owns_roster_membership_and_self_rename(status, listed, rename):
-    from agent_comms.registry.registry_document import RosterVisibility
-
     assert status.in_view(RosterVisibility(stopped=False)) == listed
     if rename:
         status.require_self_rename()

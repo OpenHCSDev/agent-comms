@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Annotated, Callable, ClassVar, Self
+from typing import Annotated, Callable, ClassVar, Self
+
+from acp.schema import AgentMessageChunk, TextContentBlock
 
 from agent_comms.agent_events import CompactionEvent
 from agent_comms.execution.acp_failure import (
@@ -25,6 +27,7 @@ from agent_comms.execution.native_output import NativeOutputScope
 from agent_comms.execution.native_runtime_input import CurrentNativeCursor
 from agent_comms.execution.owner_protocol import IncompatibleOwner
 from agent_comms.execution.pi_wire import McpLiveAcknowledgement
+from agent_comms.execution.queue_publication import QueuePublication
 from agent_comms.execution.reported_turn import ReportedTurn, ReportedTurnState
 from agent_comms.execution.transcript_sources import DraftRow, TranscriptCursor
 from agent_comms.execution.turn_context import ContextManifest
@@ -45,7 +48,7 @@ from agent_comms.nominal.field_codec import (
     WireName,
     WireOmitDefault,
 )
-from agent_comms.planning.goal_presentation import GoalExecution, GoalSnapshot
+from agent_comms.planning.goal_presentation import GoalExecutionControls, GoalSnapshot
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ClaimedIdentity, ThreadIncarnation
 from agent_comms.transcript.transcript_drafts import NoDraft
@@ -61,11 +64,6 @@ from agent_comms.transport.attachment_scope import AttachmentScope, CursorScope,
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.working_memory.working_memory_labels import ModelLabel
 
-if TYPE_CHECKING:
-    from acp.schema import AgentMessageChunk
-
-    from agent_comms.execution.input_drain import InputDrain
-
 
 class AgentCommsUpdate(DeclaredFamily, affix="Update"):
     """One declared fact; member identity supplies its wire discriminator."""
@@ -78,8 +76,6 @@ class AgentCommsUpdate(DeclaredFamily, affix="Update"):
 
     def acp_chunk(self) -> AgentMessageChunk:
         """Carry this declared observation in its original empty ACP envelope."""
-        from acp.schema import AgentMessageChunk, TextContentBlock
-
         return AgentMessageChunk(
             session_update="agent_message_chunk",
             content=TextContentBlock(type="text", text=""),
@@ -144,7 +140,7 @@ class UpdateMetadata:
 class GoalSnapshotReply(ToolResult, GoalSnapshot):
     """A goal request's reply: the owner's goal snapshot and its turn state."""
 
-    execution: Annotated[GoalExecution, WireName("goalExecution")]
+    execution: Annotated[GoalExecutionControls, WireName("goalExecution")]
     meta: Annotated[UpdateMetadata, WireName("_meta")]
 
 
@@ -273,7 +269,7 @@ class QueueScope(AttachmentScope):
     def validate_scope(self, projection: QueueProjection) -> None:
         projection.without_scope()
 
-    def start_revision(self, inputs: InputDrain, session_id: AcpSessionId) -> int | None:
+    def start_revision(self, inputs: QueuePublication, session_id: AcpSessionId) -> int | None:
         return None
 
     def accepts_request(self, projection: QueueProjection) -> bool:
@@ -312,7 +308,7 @@ class LiveQueueScope(QueueScope, LiveAttachmentScope):
     def validate_scope(self, projection: QueueProjection) -> None:
         pass
 
-    def start_revision(self, inputs: InputDrain, session_id: AcpSessionId) -> int:
+    def start_revision(self, inputs: QueuePublication, session_id: AcpSessionId) -> int:
         return inputs.next_revision(session_id)
 
     def accepts_request(self, projection: QueueProjection) -> bool:
@@ -590,7 +586,7 @@ class PromptRequest(CommsRequest):
     @abstractmethod
     def enqueue_control(self, inbox: TurnInbox, input_id: InputId) -> None: ...
 
-    async def publish_acceptance(self, inputs: InputDrain, session_id: AcpSessionId) -> None:
+    async def publish_acceptance(self, inputs: QueuePublication, session_id: AcpSessionId) -> None:
         await inputs.emit_queue_state(session_id)
 
 

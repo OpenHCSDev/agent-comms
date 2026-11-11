@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, T
 
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
-from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
+from agent_comms.agent_runtime import ExternalRuntime, PublishesTranscript
 from agent_comms.cli_bridges.cli_arguments import CliArguments
 from agent_comms.cli_bridges.cli_protocol import CoreError, EarlierItems, TaggedWire
 from agent_comms.cli_bridges.harness_delivery_states import (
@@ -95,6 +95,7 @@ from agent_comms.execution.child_process import (
     ProcessIdentity,
     SpawnedProcess,
 )
+from agent_comms.execution.delivers_input import DeliversInput
 from agent_comms.execution.launch_runtime import LaunchRuntime, RunningSource
 from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.installer.harness_install import HarnessSession
@@ -1248,7 +1249,14 @@ class HarnessDeliveryRecords(WaitsOnBusyStore, ABC):
 
 
 @dataclass(eq=False, repr=False)
-class CliBridge(HarnessDeliveryRecords, ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOptions], declared_name=None):
+class CliBridge(
+    HarnessDeliveryRecords,
+    ExternalRuntime,
+    DeliversInput[Message],
+    HarnessSession,
+    Generic[BridgeOptions],
+    declared_name=None,
+):
     """Core delivery and lifetime shared by CLI-specific transports."""
 
     state_directory: ClassVar[Path]
@@ -1626,11 +1634,8 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
         refusal = RelationViolationError(f'Message export directory {parent} is not private')
         PrivateDirectoryRole.make_parents(parent)
         TrustedAncestorRole.require_path(parent.parent, refusal)
-        directory = PrivateDirectoryRole.read(parent, refusal)
-        try:
+        with PrivateDirectoryRole.reading(parent, refusal) as directory:
             yield directory
-        finally:
-            os.close(directory)
 
     def export(self, lines: tuple[str, ...]) -> None:
         """Publish the message's lines once. A file already at this path must
@@ -1642,8 +1647,8 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
             try:
                 ExclusiveDirectoryAtomicFile(path, directory=directory).write_bytes(data)
             except FileExistsError:
-                with os.fdopen(PrivateFileRole.read(path.name, refusal, dir_fd=directory),
-                               'rb') as existing:
+                with (PrivateFileRole.reading(path.name, refusal, dir_fd=directory) as fd,
+                      os.fdopen(fd, 'rb', closefd=False) as existing):
                     if existing.read() != data:
                         raise refusal from None
 

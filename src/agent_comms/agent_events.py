@@ -1,26 +1,23 @@
+from agent_comms.execution.runtime_info_projection import RuntimeInfoProjection
+
 """Nominal, in-process backend events and the reactions shared by consumers.
 
 These values are never decoded from a transport. Pi JSON is parsed by backend;
 ACP publication constructs SDK updates directly from these declared fields.
 """
 
-from __future__ import annotations
-
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import partial
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
-from metaclass_registry.mro_dispatch import (
-    MroDispatch,
-    handles,
-)
+from metaclass_registry.mro_dispatch import MroDispatch, handles
 
+from agent_comms.execution.agent_event import AgentEvent as AgentEvent
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.acp_failure import (
-    FailedNativeTurnOutcome,
     FailureSource,
     NativeTurnOutcome,
     NoRetry,
@@ -44,76 +41,23 @@ from agent_comms.execution.pi_wire import (
     PiRequestId,
     PiUsage,
 )
+from agent_comms.execution.runtime_info import AgentRuntimeInfo
+from agent_comms.execution.started_input import StartedInput
 from agent_comms.execution.tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from agent_comms.execution.turn_failure import NoTurnFailure, TurnFailure
 from agent_comms.execution.turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
 from agent_comms.execution.turn_item import UsageChargeId
 from agent_comms.execution.turn_terminal import FailedGoalTurn
 from agent_comms.input_attempt import InputAttempt
+from agent_comms.execution.input_event_source import InputEventSource
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import InputId, NullMember, ToolCallId, TurnId
+from agent_comms.nominal.field_codec import AcpSessionId, InputId, ToolCallId, TurnId
 from agent_comms.pi_counts import PiCount, UnreportedCount
-from agent_comms.planning.goal_presentation import GoalSnapshot
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
-from agent_comms.team.rule_deal import CompactedDeal
+from agent_comms.execution.runtime_info_source import RuntimeInfoSource
+from agent_comms.team.rule_deal import CompactedDeal, Redeals
 from agent_comms.transcript.transcript_events import SentTranscript
 from agent_comms.transport.tool_declaration import OtherAction, ToolAction, ToolDeclaration
-
-if TYPE_CHECKING:
-    from agent_comms.acp_extension import AgentCommsUpdate, TextNoticeUpdate
-    from agent_comms.agent_event_updates import AcpEventConsumer
-    from agent_comms.comms import Comms
-    from agent_comms.execution.input_drain import InputDrain
-    from agent_comms.execution.runtime_info import AgentRuntimeInfo
-    from agent_comms.execution.started_input import StartedInput
-    from agent_comms.execution.turn_input_source import OriginalTurnInput
-    from agent_comms.execution.turn_progress import TurnProgress
-    from agent_comms.input_disposition import InputDocument
-    from agent_comms.planning.goal_presentation import GoalPublicationSnapshot
-    from agent_comms.team.rule_deal import Redeals
-
-
-class AgentEvent:
-    """Identity and data for one observation, with its constructor owned by its dataclass."""
-
-    def require_preparation_success(self) -> None:
-        pass
-
-    def retain_terminal(self, turn) -> None:
-        pass
-
-
-class GoalChange(ABC):
-    """A goal observation publishes its own change, including no change."""
-
-    @abstractmethod
-    async def publish(
-        self, consumer: AcpEventConsumer, previous: GoalPublicationSnapshot,
-    ) -> GoalPublicationSnapshot: ...
-
-
-class GoalUnchanged(NullMember, GoalChange):
-    async def publish(
-        self, consumer: AcpEventConsumer, previous: GoalPublicationSnapshot,
-    ) -> GoalPublicationSnapshot:
-        return previous
-
-
-@dataclass(frozen=True)
-class GoalChanged(AgentEvent, GoalChange):
-    """Current goal authority observed after durable registry/history publication.
-
-    Cross-process notification uses the existing registry watcher/poll; the
-    authoritative snapshot supplies this event, never a tool's spelling.
-    """
-
-    snapshot: GoalSnapshot
-
-    async def publish(
-        self, consumer: AcpEventConsumer, previous: GoalPublicationSnapshot,
-    ) -> GoalPublicationSnapshot:
-        await consumer.dispatch(self)
-        return self.snapshot
 
 
 @dataclass(frozen=True)
@@ -133,35 +77,35 @@ class PromptAccepted(AgentEvent):
 
 class InputStarted(AgentEvent):
     @abstractmethod
-    def captured(self, inputs: InputDrain, session_id: str) -> StartedInput: ...
+    def captured(self, inputs: InputEventSource, session_id: AcpSessionId) -> StartedInput: ...
 
 
 @dataclass(frozen=True)
 class OriginalInputStarted(InputStarted):
     id: ClassVar[None] = None
 
-    def captured(self, inputs: InputDrain, session_id: str) -> StartedInput:
+    def captured(self, inputs: InputEventSource, session_id: AcpSessionId) -> StartedInput:
         return inputs.state(session_id).require_first_source()
 
 
 @dataclass(frozen=True)
 class FollowingInputStarted(InputStarted):
-    id: str
+    id: InputId
 
-    def captured(self, inputs: InputDrain, session_id: str) -> StartedInput:
+    def captured(self, inputs: InputEventSource, session_id: AcpSessionId) -> StartedInput:
         return inputs.state(session_id).following[self.id]
 
 
 class InputRefused(AgentEvent):
     @abstractmethod
-    async def apply_to(self, inputs: InputDrain, session_id: str) -> None: ...
+    async def apply_to(self, inputs: InputEventSource, session_id: AcpSessionId) -> None: ...
 
 
 @dataclass(frozen=True)
 class FollowingInputRefused(InputRefused):
-    id: str
+    id: InputId
 
-    async def apply_to(self, inputs: InputDrain, session_id: str) -> None:
+    async def apply_to(self, inputs: InputEventSource, session_id: AcpSessionId) -> None:
         await inputs.input_refused(session_id, self.id)
 
 
@@ -169,11 +113,11 @@ class FollowingInputRefused(InputRefused):
 class InputCleared(InputRefused):
     """The native queue positively confirmed removal of this exact input."""
 
-    id: str
+    id: InputId
     native_id: InputId
     text: str
 
-    async def apply_to(self, inputs: InputDrain, session_id: str) -> None:
+    async def apply_to(self, inputs: InputEventSource, session_id: AcpSessionId) -> None:
         await inputs.input_cleared(session_id, self.id, self.native_id, self.text)
 
 
@@ -306,10 +250,11 @@ class Done(AgentEvent, FailedGoalTurn):
         turn.terminal = self
 
     def resolve(
-        self, error: Error | None, document: InputDocument, original: OriginalTurnInput,
+        self, error: Error | None,
+        resolve_failure: Callable[[Done, Error | None], NativeTurnOutcome],
     ) -> Done:
         outcome = (SuccessfulNativeTurnOutcome() if self.ok else
-                   FailedNativeTurnOutcome.resolve(self, error, document, original))
+                   resolve_failure(self, error))
         return replace(self, outcome=outcome)
 
     @property
@@ -339,11 +284,11 @@ class Done(AgentEvent, FailedGoalTurn):
     def require_reported(self) -> Done:
         return self
 
-    async def prepare_publication(self, progress: TurnProgress) -> Done:
+    async def prepare_publication(self, progress: object) -> Done:
         return self
 
     async def report_failure(
-        self, progress: TurnProgress, error: Exception, kind: type[TurnFailure]
+        self, progress: object, error: Exception, kind: type[TurnFailure]
     ) -> NativeTurnOutcome:
         return self.outcome
 
@@ -359,9 +304,9 @@ class TextEvent(AgentEvent):
 
     text: str
 
-    def acp_updates(
-        self, notice_update: type[TextNoticeUpdate],
-    ) -> tuple[AgentCommsUpdate, ...]:
+    def acp_updates[Update](
+        self, notice_update: Callable[[], Update],
+    ) -> tuple[Update, ...]:
         return ()
 
 
@@ -384,9 +329,9 @@ class Thinking(AgentEvent):
 class Notice(TextEvent):
     """A standalone message, complete independently of the native turn phase."""
 
-    def acp_updates(
-        self, notice_update: type[TextNoticeUpdate],
-    ) -> tuple[AgentCommsUpdate, ...]:
+    def acp_updates[Update](
+        self, notice_update: Callable[[], Update],
+    ) -> tuple[Update, ...]:
         return (notice_update(),)
 
 
@@ -400,13 +345,15 @@ class Error(AgentEvent):
     source: FailureSource = UnrecordedFailureSource()
 
 
-class RuntimeInfoObservation(AgentEvent):
+class RuntimeInfoObservation(AgentEvent, RuntimeInfoProjection[AgentRuntimeInfo]):
     """Record one producer observation through the existing runtime-info owner."""
 
     def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
         return current
 
-    async def record_in(self, consumer: AgentEventConsumer) -> None:
+    async def record_in[Client: RuntimeInfoSource[RuntimeInfoObservation]](
+        self, consumer: AgentEventConsumer[Client],
+    ) -> None:
         await Coordination.run_worker(partial(
             consumer.comms.agents.observe_runtime_info, consumer.thread_name, self,
         ))
@@ -459,7 +406,9 @@ class NativeMetadataObservation(ModelObservation):
     session_file: str | None = None
     thinking_level: ThinkingLevelField = NoThinkingOverride
 
-    async def record_in(self, consumer: AgentEventConsumer) -> None:
+    async def record_in[Client: RuntimeInfoSource[RuntimeInfoObservation]](
+        self, consumer: AgentEventConsumer[Client],
+    ) -> None:
         await consumer.before_native_metadata(self)
         await super().record_in(consumer)
         await consumer.after_native_metadata(self)
@@ -497,15 +446,15 @@ class TurnSettled(AgentEvent):
     turn_id: TurnId
 
 
-class AgentEventConsumer(MroDispatch):
+class AgentEventConsumer[Client: RuntimeInfoSource[RuntimeInfoObservation]](MroDispatch):
     """Shared activity and metadata algorithms; owners supply their context."""
 
-    def __init__(self, *, comms: Comms, thread_name: str):
+    def __init__(self, *, comms: Client, thread_name: str):
         self._comms = comms
         self._thread_name = thread_name
 
     @property
-    def comms(self) -> Comms:
+    def comms(self) -> Client:
         return self._comms
 
     @property

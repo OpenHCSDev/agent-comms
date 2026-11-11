@@ -62,7 +62,8 @@ from agent_comms.planning.work_dispatch import ReusedWorkDispatch, WorkDispatch
 from agent_comms.projects.head_review import PullRequestHead
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
-from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.recorded_time import RecordedEventTime

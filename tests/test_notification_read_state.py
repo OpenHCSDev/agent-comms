@@ -18,6 +18,7 @@ from agent_comms.messaging.bus_read import (
     OwnerScopedRead,
     UiRead,
 )
+from agent_comms.messaging.bus_read import BusRead, OwnerScopedRead, UiRead
 from agent_comms.messaging.message_notification import NotificationPass
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_reads import (
@@ -39,7 +40,7 @@ from agent_comms.nominal.field_codec import FieldCodec, MessageId, OrderId
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
 from agent_comms.presentation import NoRevision, WireRevision
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.registry_provenance import DeletedThread
+from agent_comms.registry.registry_names import DeletedThread
 from agent_comms.registry.thread_identity import (
     AgentThreadRole,
     RecordedThreadIncarnation,

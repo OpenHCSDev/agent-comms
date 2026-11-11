@@ -25,6 +25,7 @@ from agent_comms.coordination.session import CoordinationCapture
 from agent_comms.coordination.snapshot import RecoverySnapshot
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.attempts import AttemptRecord
+from agent_comms.coordination.tables.executions import ReplayAssessments
 from agent_comms.execution.turn_failure import TurnFailure
 
 
@@ -165,7 +166,7 @@ class AttemptStore(RecoveryReader):
                 raise StaleRevision("pointer revision changed")
             if failure is not None:
                 failure.prepare_execution_retry(
-                    self.session._connection, fence.execution_id
+                    self.session._connection, fence.execution_id, ReplayAssessments,
                 )
                 snapshot, _ = self.require_fence(fence)
             snapshot.settle(self.session, outcome, reason_code, acquired)

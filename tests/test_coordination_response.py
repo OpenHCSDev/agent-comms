@@ -356,7 +356,7 @@ def test_response_answers_the_messages_its_turn_took_in(tmp_path: Path) -> None:
         follow_up = case.comms.messaging.send("sender", "owner", "Part 2, mid-turn").message
         lease = case.witness.thread.require_turn_lease()
         inputs = InputDispositions(case.comms.root)
-        key = inputs.bus_key(follow_up, case.witness.thread)
+        key = follow_up.bus_key(case.witness.thread)
         text = "Part 2, mid-turn"
         assert inputs.record(
             key, seq=follow_up.seq, owner="owner", claim_scope=lease.claimed_generation,

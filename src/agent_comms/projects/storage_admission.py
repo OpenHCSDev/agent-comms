@@ -15,6 +15,10 @@ class StorageAdmission(ABC):
     @abstractmethod
     def deny(self, reason: str) -> None: ...
 
+    def deny_repository_operation(self, reason: str) -> None:
+        """Non-Core admission contexts keep the refusal without tool discovery."""
+        self.deny(reason)
+
     @abstractmethod
     def require_floor(self) -> None: ...
 

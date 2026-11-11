@@ -4,36 +4,39 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import ClassVar, Self
 
 from agent_comms.coordination.response_acknowledgement import KeyedResponseAcknowledgement
-from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
+from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.audience_manifest import AudiencedMessage
-from agent_comms.messaging.bus_tables import (
-    AwaitingAnswerSource,
-    MessageIdentitySource,
-    ReceivedSource,
-    SentSource,
-)
+from agent_comms.messaging.bus_record_builder import RecordBuilder
+from agent_comms.messaging.bus_tables import AwaitingAnswerSource, ReceivedSource, SentSource
 from agent_comms.messaging.channel_targets import ThreadTarget
+from agent_comms.messaging.delivery_recipients import DeliveryRecipients
+from agent_comms.messaging.initial_origin import InitialOrigin, OwnerVoiceOrigin
+from agent_comms.messaging.message_directions import MessageDirections
+from agent_comms.messaging.message_reads import MessageDeliveryRead, MessageIdentityRead
+from agent_comms.messaging.message_send_reads import PublishedMessageRead
+from agent_comms.messaging.message_writer import MessageWriter
 from agent_comms.messaging.messages import BusRecord, BusRow, Message
 from agent_comms.messaging.projection_source import ProducedRow
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, ThreadLookup
-from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.task_owner import TaskOwner
+from agent_comms.registry.task_registry import TaskRegistry
 from agent_comms.storage.typed_table import Column, Generated, sql_literal
 from agent_comms.waking.wake_policy import RecipientDecision
 
-if TYPE_CHECKING:
-    from agent_comms.messaging.bus import Bus, BusReader, RecordBuilder
-    from agent_comms.planning.goal_management import Goals
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry.threads import Thread
 
-
-class Delivered(BusRecord, AudiencedMessage, declared_name=None):
+class Delivered(
+    BusRecord,
+    AudiencedMessage,
+    MessageDeliveryRead[Message],
+    DeliveryRecipients,
+    PublishedMessageRead,
+    declared_name=None,
+):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
@@ -105,65 +108,24 @@ class KeyedPublication(BusRecord, declared_name=None):
         return super().append_to(db, seq)
 
 
-class InitialOrigin(ABC):
-    """Who sends an initial message, checked under the bus lock before its append."""
-
-    __slots__ = ()
-
-    @abstractmethod
-    def require_sender(
-        self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot
-    ) -> None:
-        """Refuse a sender this origin cannot speak for."""
-
-    @abstractmethod
-    def require_source(self, source: BusReader, sender: str, message_id: MessageId) -> None:
-        """Check the sender and message ID on the actual append connection."""
-
-    @abstractmethod
-    def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
-        """Commit the record, reporting failure as this origin requires."""
-
-    @abstractmethod
-    def published(self, goals: Goals, message: Message) -> None:
-        """What a committed message from this origin records beyond the bus."""
-
-    def complete(self, goals: Goals, record: BusRecord) -> BusRecord:
-        """Keep the actual committed record when an origin's remaining work fails."""
-        try:
-            self.published(goals, record.message)
-        except BaseException as error:
-            raise CommittedMessageError(record) from error
-        return record
-
-
-class OwnerVoiceOrigin(InitialOrigin):
-    """An origin that speaks for the owner; its message may direct the thread it reaches."""
-
-    __slots__ = ()
-
-    def published(self, goals: Goals, message: Message) -> None:
-        message.task.direct(goals, message)
-
-
 @dataclass(frozen=True, slots=True)
 class AutomatedOrigin(InitialOrigin):
     """Shared non-human publication, without an implied owner turn or directive."""
 
-    def published(self, goals: Goals, message: Message) -> None:
+    def published(self, goals: MessageDirections[Message], message: Message) -> None:
         """An automated message directs no thread: only the owner's voice does."""
 
     def require_sender(
-        self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot
+        self, message: Message, sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
     ) -> None:
         sender_thread.role.require_automated_publication(
             RelationViolationError("Initial sender must be a registered automated publisher.")
         )
 
-    def require_source(self, source: BusReader, sender: str, message_id: MessageId) -> None:
+    def require_source(self, source: MessageIdentityRead, sender: str, message_id: MessageId) -> None:
         """A resend is decided by the bus's own write, not by a read before it."""
 
-    def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
+    def append(self, bus: MessageWriter, build: RecordBuilder) -> BusRecord:
         """A resend of the same message returns its committed original, never a copy."""
         return bus.append_original(build)
 
@@ -173,7 +135,7 @@ class AgentOrigin(AutomatedOrigin):
     """An executable thread's owner; it may resend under the same message id."""
 
     def require_sender(
-        self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot
+        self, message: Message, sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
     ) -> None:
         sender_thread.role.require_executable(
             RelationViolationError("Initial sender must be a visible registered executable.")
@@ -185,7 +147,7 @@ class ServiceOrigin(AutomatedOrigin):
     """A service publisher does not impersonate an executable colleague."""
 
     def require_sender(
-        self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot
+        self, message: Message, sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
     ) -> None:
         sender_thread.role.require_service_publication(
             RelationViolationError("Initial sender must be a declared service publisher.")
@@ -195,55 +157,3 @@ class ServiceOrigin(AutomatedOrigin):
 @dataclass(frozen=True, slots=True)
 class DirectorOrigin(OwnerVoiceOrigin, AgentOrigin):
     """claude-ai's thread, which speaks for the owner on the bus."""
-
-
-@dataclass(frozen=True, slots=True)
-class HumanOrigin(OwnerVoiceOrigin):
-    """Cooperative local UI origin, checked against the registered USER under lock.
-
-    This is not a cryptographic credential against another process of this UID.
-    It never grants an executable owner, claim, tool, or selected source authority.
-    """
-
-    sender: str
-    created_at: float
-    worktree: Checkout
-
-    @classmethod
-    def of(cls, user: Thread) -> HumanOrigin:
-        return cls(user.name, user.incarnation.wire_birth, user.worktree)
-
-    def require_sender(
-        self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot
-    ) -> None:
-        self.require_registered(snapshot)
-        if message.sender != self.sender:
-            raise RelationViolationError("Local USER origin differs from registered identity.")
-
-    def require_source(self, source: BusReader, sender: str, message_id: MessageId) -> None:
-        with source.observing() as db:
-            if MessageIdentitySource.exists(db, sender=sender, message_id=message_id):
-                raise HumanSendRefusedError(RelationViolationError(
-                    "Human message identity was already published."))
-
-    def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
-        try:
-            return bus.append(build)
-        except (CommittedMessageError, HumanSendRefusedError):
-            raise
-        except (OSError, sqlite3.Error, ValueError) as error:
-            # The transaction owns rollback for storage and declared-data refusals.
-            # Programming errors propagate as defects, not ordinary send refusals.
-            raise HumanSendRefusedError(error) from error
-
-    def require_registered(self, snapshot: RegistrySnapshot) -> None:
-        """Check the determining USER declaration, never a transport or prose role."""
-        user = snapshot.threads.get(self.sender)
-        if user is None:
-            raise RelationViolationError("Local USER origin is no longer registered")
-        user.role.require_user(
-            RelationViolationError("A user correction requires the original human sender")
-        )
-        registered = (user.name, user.created_at, user.worktree)
-        if registered != (self.sender, self.created_at, self.worktree):
-            raise RelationViolationError("Local USER origin differs from registered identity")

@@ -10,12 +10,8 @@ from agent_comms.coordination.errors import Refused
 from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
-from agent_comms.planning.goal_actions import (
-    OwnerInvocable,
-    PausedGoalAction,
-    SetGoalAction,
-)
-from agent_comms.planning.goal_presentation import GoalExecution
+from agent_comms.planning.goal_actions import OwnerInvocable, PausedGoalAction, SetGoalAction
+from agent_comms.planning.goal_execution import GoalExecution
 from delivery_owner_fixture import canonical_agent
 
 

@@ -6,9 +6,12 @@ import os
 import sqlite3
 import sys
 from abc import abstractmethod
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from agent_comms.execution.provider_records import ReportedText
+from native_proof_cases import read_context_proof, read_proof_rows, write_proof_rows
 
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.execution.native_arguments import SelectedModel
@@ -18,23 +21,36 @@ from agent_comms.execution.native_entries import (
     NativeInputEvidenceRead,
 )
 from agent_comms.execution.native_failures import NativePiUnavailable
-from agent_comms.execution.native_input_proof import NativeContextJournal, NativeContextProof
-from agent_comms.execution.native_pi import (
-    NativePiRpcLaunch,
-    NativePiTerminalFailure,
+from agent_comms.execution.native_input_proof import (
+    NativeContextJournal,
+    NativeContextProof,
 )
+from agent_comms.execution.native_pi import NativePiPromptRejected, NativePiRpcLaunch
 from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.native_startup import NATIVE_STARTUP_POLICY
-from agent_comms.execution.pi_events import ContextCommitted, InputCommitted
+from agent_comms.execution.transcript_sources import NativeTranscript
+from agent_comms.execution.pi_events import (
+    ContextCommitted,
+    FailedResponseOutcome,
+    InputCommitted,
+    PiEvent,
+    Response,
+)
 from agent_comms.execution.selected.actions import NoSelectedTools
 from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.execution.tracked_turn import TrackedTurnSession
-from agent_comms.execution.transcript_sources import NativeTranscript
+from agent_comms.execution.turn_failure import (
+    ModelRequestFailed,
+    NativePiTerminalFailure,
+)
+from agent_comms.execution.turn_output import TurnOutput
+from agent_comms.execution.turn_usage import UsageAccount
+from agent_comms.execution.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog
+from agent_comms.execution.pi_events import ContextCommitted, InputCommitted
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, InputId
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-from native_proof_cases import read_context_proof, read_proof_rows, write_proof_rows
 
 INPUT_ID = InputId('a' * 32)
 DIGEST = 'b' * 64
@@ -212,15 +228,6 @@ def test_missing_native_model_fails_before_any_session_side_effect(tmp_path, pro
     ('error','provider failed'),('length','Model output limit reached'),('aborted','provider failed'),
 ])
 async def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detail):
-    from agent_comms.execution.pi_events import PiEvent
-    from agent_comms.execution.turn_failure import ModelRequestFailed
-    from agent_comms.execution.turn_output import TurnOutput
-    from agent_comms.execution.turn_usage import UsageAccount
-    from agent_comms.execution.turn_watchdog import (
-        DEFAULT_MODEL_WAIT,
-        ProgressWatchdog,
-    )
-
     event = PiEvent.from_wire({'type':'message_end','message':{
         'role':'assistant','content':[],'stopReason':stop_reason,
         'errorMessage':detail if stop_reason != 'length' else None,
@@ -237,8 +244,6 @@ async def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason,
 
 
 def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_path):
-    from agent_comms.execution.turn_failure import ModelRequestFailed
-
     files = _evidence(tmp_path)
     session = files.session
     _header, record = NativeTranscript(session).forward(0, session.stat().st_size)
@@ -254,8 +259,6 @@ def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_pat
 
 
 def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
-    from dataclasses import replace
-
     files = _evidence(tmp_path)
     session = files.session
     _header, record = NativeTranscript(session).forward(0, session.stat().st_size)
@@ -311,10 +314,6 @@ def test_a_rejected_prompt_carries_the_providers_own_words():
     """Pi's reason reaches the failure, not only the diagnostic file: on 2026-11-07 a thread
     could not resume after install because summarisation hit "The usage limit has been
     reached", and the turn reported only that something had been rejected."""
-    from agent_comms.execution.native_pi import NativePiPromptRejected
-    from agent_comms.execution.pi_events import FailedResponseOutcome, Response
-    from agent_comms.pi_payloads import ReportedText
-
     response = Response(
         success=FailedResponseOutcome(),
         error=ReportedText("Summarization failed: Codex error: The usage limit has been reached"),

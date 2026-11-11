@@ -8,6 +8,7 @@ from functools import partial
 
 import pytest
 
+from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.session_file import RegistrySessionLocation
@@ -15,14 +16,31 @@ from agent_comms.execution.turn_lease import NoTurnLease
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.messages import InfoKind, Message, NoticeRole
-from agent_comms.messaging.task_sources import Decision
+from agent_comms.messaging.retained_task_facts import (
+    CurrentConstraintTaskFact,
+    CurrentDecisionTaskFact,
+    CurrentHumanConstraintTaskFact,
+    CurrentUserTaskCorrectionFact,
+    DecisionTaskFact,
+    RetainedTaskFacts,
+)
+from agent_comms.messaging.task_sources import (
+    Constraint,
+    CorrectionTaskChange,
+    Decision,
+    HumanConstraintPin,
+    UserTaskDrop,
+    UserTaskSupersession,
+)
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.planning.goals import Goal
+from agent_comms.planning.task_scope import ExplicitTaskScopeSelection, GoalTaskScope, TurnTaskScope
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
 from bus_history import read_history
+from conftest import declare_test_bus
 
 # These source declarations belong to alpha unless a case explicitly supplies beta.
 invoke_tool = partial(invoke_tool, caller=ThreadCaller("alpha"))
@@ -49,19 +67,6 @@ def admit(comms, name):
 
 
 def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms):
-    from agent_comms.messaging.retained_task_facts import (
-        CurrentHumanConstraintTaskFact,
-        RetainedTaskFacts,
-    )
-    from agent_comms.messaging.task_sources import (
-        CorrectionTaskChange,
-        ExplicitTaskScopeSelection,
-        HumanConstraintPin,
-        TurnTaskScope,
-        UserTaskDrop,
-        UserTaskSupersession,
-    )
-
     owner = comms.registry.declare(NativeThread('recipient', frozenset({'team'}), Checkout(comms.root)))
     comms.registry.declare(NativeThread('unaddressed', frozenset(), Checkout(comms.root)))
     exact = "Never replay UNKNOWN.\nUse original λ /artifacts/source; no substitute."
@@ -121,8 +126,6 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
 def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     goal_one_goal_id = GoalId.mint()
     goal_two_goal_id = GoalId.mint()
-    from agent_comms.messaging.task_sources import CorrectionTaskChange, GoalTaskScope
-
     owner = comms.registry.declare(NativeThread('recipient', frozenset(), Checkout(comms.root),
         goal=Goal('Original goal', goal_one_goal_id, published_seq=0)))
     subject = comms.messaging.send_user_message(CommandTarget.named(owner.name), "Use the original coordinates.",
@@ -133,7 +136,6 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     with pytest.raises(RelationViolationError):
         comms.messaging.pin_user_constraint(owner.name,
             replace(subject.reference, message_id="foreign-original"), worktree=owner.worktree)
-    from conftest import declare_test_bus
     declare_test_bus(comms, channels=("team",))
     with pytest.raises(RelationViolationError):
         comms.messaging.send_user_message(CommandTarget.named('#team'), "wrong audience", worktree=owner.worktree, task=pin.task)
@@ -157,16 +159,6 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
 def test_constraint_original_wording_scope_correction_and_human_authority(comms, monkeypatch):
     new_goal_id = GoalId.mint()
     original_goal_id = GoalId.mint()
-    from agent_comms.messaging.retained_task_facts import (
-        CurrentConstraintTaskFact,
-        RetainedTaskFacts,
-    )
-    from agent_comms.messaging.task_sources import (
-        Constraint,
-        CorrectionTaskChange,
-        UserTaskSupersession,
-    )
-
     owner = admit(comms, "alpha")
     admit(comms, "beta")
     comms.registry.register(replace(owner, goal=Goal("Bounded source task", original_goal_id,
@@ -234,8 +226,6 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     assert len(rows) == 2 and rows[0] == original
     assert rows[1].task.change.original == original.reference
     assert correction["reference"] == FieldCodec.encode(rows[1].reference)
-    from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
-
     retained = comms.views.retained_context(alpha.name).retained
     assert tuple(fact.source.reference for fact in retained.facts) == tuple(
         row.reference for row in rows
@@ -263,16 +253,12 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     with pytest.raises(ValueError):
         invoke_tool(comms, "comms_decision", request)
     assert read_history(comms) == before
-    from agent_comms.comms import wire
-
     assert read_history(wire(comms.root)) == rows
 
 
 def test_equal_text_choices_keep_original_identity_through_rename_and_goal_replacement(comms, monkeypatch):
     goal_id = GoalId.mint()
     replacement_goal_id = GoalId.mint()
-    from agent_comms.messaging.retained_task_facts import CurrentDecisionTaskFact, RetainedTaskFacts
-
     owner = admit(comms, "alpha")
     owner = replace(owner, goal=Goal("Keep checked root", goal_id, published_seq=0, revision=1))
     comms.registry.register(owner)
@@ -359,12 +345,6 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
 
 def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_choice(comms, monkeypatch):
     goal_id = GoalId.mint()
-    from agent_comms.messaging.retained_task_facts import (
-        CurrentUserTaskCorrectionFact,
-        RetainedTaskFacts,
-    )
-    from agent_comms.messaging.task_sources import CorrectionTaskChange, UserTaskSupersession
-
     owner = admit(comms, "alpha")
     owner = replace(owner, goal=Goal("Keep project scope", goal_id, published_seq=0, revision=1))
     comms.registry.register(owner)
@@ -394,21 +374,11 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     assert current.source == Message.from_message(corrected)
     assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
     assert original.task.chosen in retained.text and original.task.rejected[0] in retained.text
-    from agent_comms.comms import wire
-
     reopened = wire(comms.root)
     assert read_history(reopened)[1] == corrected
 
 
 def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, monkeypatch):
-    from agent_comms.messaging.retained_task_facts import (
-        CurrentDecisionTaskFact,
-        CurrentUserTaskCorrectionFact,
-        DecisionTaskFact,
-        RetainedTaskFacts,
-    )
-    from agent_comms.messaging.task_sources import CorrectionTaskChange, UserTaskSupersession
-
     for name in ("alpha", "beta", "gamma"):
         owner = admit(comms, name)
         saved = comms.root / f"{name}-source.jsonl"

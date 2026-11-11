@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import (
-    dataclass,
-    field,
-)
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from agent_comms import agent_events as events
@@ -15,17 +12,18 @@ from agent_comms.execution.acp_failure import (
     UnrecordedFailureSource,
 )
 from agent_comms.execution.native_arguments import SelectedModel
+from agent_comms.execution.native_session_callbacks import (
+    NativeSessionCallbacks,
+    SessionOutputCallbacks,
+)
+from agent_comms.execution.pi_wire import PiDiagnostic
 from agent_comms.execution.turn_failure import NoTurnFailure, TurnFailure
-from agent_comms.pi_payloads import NativeMessageFailureSource
-
-if TYPE_CHECKING:
-    from agent_comms.execution.backend import NativeSession
-    from agent_comms.execution.pi_wire import PiDiagnostic
-    from agent_comms.pi_payloads import AssistantMessage
+from agent_comms.execution.turn_failure_reads import TerminalOutputRead
+from agent_comms.pi_payloads import AssistantMessage, NativeMessageFailureSource
 
 
 @dataclass
-class TurnOutput:
+class TurnOutput(SessionOutputCallbacks):
     sensitive: bool = False
     failure: TurnFailure = field(default_factory=NoTurnFailure)
     error_message: str | None = None
@@ -118,7 +116,7 @@ class TurnOutput:
         if stderr.strip() and not self.sensitive:
             self.failure = self.failure.with_startup_diagnostics(stderr.strip())
 
-    def done(self, session: NativeSession, stderr: str) -> Iterator[events.AgentEvent]:
+    def done(self, session: NativeSessionCallbacks, stderr: str) -> Iterator[events.AgentEvent]:
         # Output checks turn permission and child ownership; it grants neither.
         transport_ok = not self.failure_text and (
             session.native_session.child_state.retained or session.native.proc.returncode == 0
@@ -146,7 +144,7 @@ class TurnOutput:
             yield self.error(terminal.text, source=self._failed_message_source)
         yield terminal
 
-    def permits_retention(self, session: NativeSession) -> bool:
+    def permits_retention(self, session: NativeSessionCallbacks) -> bool:
         # Called only after the native lifecycle has proved the child idle. Apply
         # declaration-owned terminal evidence before handing the child back.
         session.prompt_state.validate_terminal(session, transport_ok=True)

@@ -1,47 +1,21 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
 from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.messaging.bus import BusSnapshot
 from agent_comms.messaging.channels import Channels
+from agent_comms.messaging.display_unread_selection import DisplayUnreadSelection
 from agent_comms.messaging.read_basis import (
     ChannelDisplayScope,
     DisplayViewer,
     ReadCursor,
-    UnreadQuery,
 )
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.registry.registry_provenance import RegistryProvenance
-
-
-@dataclass(frozen=True, slots=True)
-class DisplayUnreadSelection:
-    """The complete captured inputs that determine an unread count."""
-
-    seen: ReadCursor
-    scopes: tuple[ChannelDisplayScope, ...]
-    viewer_names: tuple[str, ...]
-    registry: RegistryProvenance
-
-    def queries(self) -> tuple[UnreadQuery, ...]:
-        """Each scope's count resolved against this registry and cursor."""
-        names = json.dumps(self.viewer_names)
-        return tuple(
-            UnreadQuery(
-                scope.channel,
-                ReadCursor.rows(self.registry, {"viewer": self.seen.counted(scope, self.registry)}),
-                self.seen.lower_bound(scope, self.registry),
-                *scope.index_predicate,
-                names,
-            )
-            for scope in self.scopes
-        )
 
 
 @dataclass(frozen=True, slots=True)

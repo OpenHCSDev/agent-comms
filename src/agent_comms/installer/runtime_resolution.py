@@ -879,6 +879,11 @@ class ResolvedLock(BaseModel):
         return tuple(dict.fromkeys(
             name for entry in self.package for name in entry.source.tracked(entry.name)))
 
+    def refresh_arguments(self) -> tuple[str, ...]:
+        """``uv lock`` arguments moving every branch-tracking package to its branch head while
+        the release and revision pins stay: what the installer and every CI sync run first."""
+        return tuple(argument for name in self.tracked() for argument in ("--upgrade-package", name))
+
     def tracked_requirements(self, excluded: frozenset[str] = frozenset()) -> tuple[str, ...]:
         """The same packages as requirements naming their branch, for installers outside this lock.
 

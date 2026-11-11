@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
+from agent_comms.cli_bridges.codex_records import CodexRolloutProvenance
 from agent_comms.cli_verbs import cli_command
 from agent_comms.cli_verbs.cli_result import CliResult, TargetEditResult
 from agent_comms.comms import Comms
@@ -25,7 +26,6 @@ from agent_comms.execution.owner_lifecycle import OwnerRestartResult
 from agent_comms.execution.pi_vocabulary import ServiceTier, ThinkingLevelField
 from agent_comms.execution.session_file import SessionFile
 from agent_comms.execution.turn_context import (
-    CodexRolloutProvenance,
     ContextManifest,
     ContextSegment,
     ContributionCoordinates,

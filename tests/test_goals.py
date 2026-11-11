@@ -6,7 +6,6 @@ from agent_comms.comms import wire
 from agent_comms.context_segments.wake_values import NoWakeGoalContext, WakeGoalContext
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
-from agent_comms.messaging.task_sources import GoalTaskScope, TurnTaskScope
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
@@ -19,10 +18,8 @@ from agent_comms.planning.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.planning.goal_scope import OneGoal
-from agent_comms.planning.goals import (
-    Goal,
-    NoGoal,
-)
+from agent_comms.planning.goals import Goal, NoGoal
+from agent_comms.planning.task_scope import GoalTaskScope, TurnTaskScope
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import ChosenModel, NativeThread, NextTurnConfiguration, Thread
@@ -129,6 +126,39 @@ def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(comms, tm
     assert stored().task_scope == GoalTaskScope(project=Checkout(tmp_path), goal=replacement.revision_key)
     with pytest.raises(RelationViolationError):
         scope.require_context(stored())
+
+
+@pytest.mark.parametrize("matched", (True, False))
+def test_turn_scope_checks_project_before_its_original_predicate(comms, tmp_path, matched: bool):
+    owner = comms.registry.require("worker")
+    scope = owner.task_scope
+    calls: list[str] = []
+
+    def turn_scope_matches() -> bool:
+        calls.append(owner.name)
+        return matched
+
+    assert scope.applies(owner, turn_scope_matches) is matched
+    assert calls == [owner.name]
+    foreign = comms.registry.declare(NativeThread(
+        name="another-project", tags=frozenset(), worktree=Checkout(tmp_path / "another-project"),
+    ))
+    assert not scope.applies(foreign, turn_scope_matches)
+    assert calls == [owner.name]
+
+
+def test_turn_scope_checks_original_scope_before_its_turn_correction(comms):
+    scope = comms.registry.require("worker").task_scope
+    calls: list[str] = []
+
+    def require_same_turn() -> None:
+        calls.append("original turn checked")
+
+    scope.require_correction(scope, require_same_turn)
+    assert calls == ["original turn checked"]
+    with pytest.raises(RelationViolationError, match="preserve its original scope"):
+        scope.require_correction(scope.for_human(), require_same_turn)
+    assert calls == ["original turn checked"]
 
 
 def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(comms):

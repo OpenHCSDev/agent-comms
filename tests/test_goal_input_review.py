@@ -20,7 +20,7 @@ from agent_comms.planning.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.planning.goal_presentation import GoalExecution
+from agent_comms.planning.goal_execution import GoalExecution
 from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread

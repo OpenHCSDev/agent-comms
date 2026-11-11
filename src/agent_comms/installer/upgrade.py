@@ -104,7 +104,6 @@ from agent_comms.installer.owner_starts import OwnerStart
 from agent_comms.installer.practice import (
     PracticeCopy,
     PracticeMeasurement,
-    RehearsalHome,
 )
 from agent_comms.installer.probes.carry import (
     Carried,
@@ -140,6 +139,7 @@ from agent_comms.installer.reporting import (
     UnpostedWriter,
 )
 from agent_comms.installer.request import InstallRequest
+from agent_comms.installer.runtime_home import RehearsalHome
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.installer.runtime_retention import (
     RetirementOutcome,
@@ -908,6 +908,7 @@ class Install[Rehearsed: Rehearsal](ABC):
         with LiveCheckoutPreparePhase().running(self.staged.commands.clock):
             self.staged.commands.git(self.checkout, "merge", "--ff-only", "-q", self.target)
             Checkout(self.checkout).update_submodules()
+            self.staged.sync_test_environment(Checkout(self.checkout))
 
     def publish(self, backup: StoreBackup, selected: RouteFileSelection) -> str:
         """The converted bus's route is ready before new runtime entrypoints open it."""
@@ -1279,6 +1280,9 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                           "original runtime selected; owners start on it; "
                           f"backup: {backup.description}",
                           file=sys.stderr)
+                    # Only after the bus is back: the restored lock may itself fail to sync,
+                    # and a test interpreter must never stop the original bus from reopening.
+                    self.installed.sync_test_environment(Checkout(self.checkout))
                     raise InstallRolledBack(
                         error, backup.description,
                         runtime=self.installed.runtime) from error

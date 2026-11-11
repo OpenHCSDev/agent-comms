@@ -2,10 +2,13 @@
 
 
 from contextlib import closing
+from unittest.mock import patch
 
 import pytest
 
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.presence import PresenceRows, PresenceStore
+from agent_comms.storage.row_mapping import RowMapping
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import InvalidRegistryDocument
 from agent_comms.registry.registry_store import RegistryStore
@@ -13,6 +16,43 @@ from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.store_files import AtomicFile
+
+
+def test_complete_declaration_keeps_row_reads_bounded_as_the_registry_grows(tmp_path):
+    counts = []
+    for size in (8, 64):
+        root = tmp_path / str(size)
+        registry = Registration(RegistryFile.path_in(root))
+        for index in range(size):
+            registry.declare(NativeThread(f"worker-{index}", frozenset(), Checkout(tmp_path)))
+        with patch.object(RowMapping, "__getitem__", autospec=True,
+                          side_effect=RowMapping.__getitem__) as reads:
+            registry.declare(NativeThread("measured", frozenset(), Checkout(tmp_path)))
+            counts.append(reads.call_count)
+    assert counts[0] == counts[1]
+
+
+def test_presence_updates_and_presentations_do_not_enumerate_unchanged_rows(tmp_path, monkeypatch):
+    store = PresenceStore(tmp_path)
+    store.set_rows({f"worker-{i}": float(i) for i in range(400)}, {})
+    before = store.read()
+    scope = before.seen.keyset()
+    retained = PresenceRows().presented(before, scope)
+    changed = retained.copy()
+    changed["worker-0"] = 1000.0
+    original = RowMapping.__iter__
+
+    def require_changed_rows_only(rows):
+        if len(rows):
+            raise AssertionError("presence enumerated a complete row mapping")
+        return original(rows)
+
+    monkeypatch.setattr(RowMapping, "__iter__", require_changed_rows_only)
+    store.set_rows(changed, retained)
+    following = retained.presented(store.read(before), scope)
+    assert retained["worker-0"] == 0.0
+    assert following["worker-0"] == 1000.0
+    assert following["worker-399"] == 399.0
 
 
 def test_replacing_a_database_at_the_same_counter_does_not_reuse_its_cached_rows(tmp_path):
@@ -27,7 +67,9 @@ def test_replacing_a_database_at_the_same_counter_does_not_reuse_its_cached_rows
     RegistryFile.copy_file(second.store.path, staged)
     # Publish a complete replacement, as rollback does; this is not a row update.
     AtomicFile(first.store.path).replace(staged)
-    first.store.presence.replace(second.store.presence.read())
+    staged_presence = staged.parent / second.store.presence.path.name
+    second.store.presence.copy_file(second.store.presence.path, staged_presence)
+    AtomicFile(first.store.presence.path).replace(staged_presence)
     assert set(first.all_threads()) == {"replacement"}
     assert not first.store.has_revision(before.source.revision)
 
@@ -202,6 +244,130 @@ def test_assigning_and_removing_thread_rows_changes_only_the_written_rows(thread
     assert FieldCodec.decode(Thread, encoded["second"]) == changed
     del rows["second"]
     assert rows.to_wire() == {"first": wire["first"]}
+
+
+def test_thread_rows_keep_their_owned_wire_form_at_the_codec_boundary(thread_rows_wire, monkeypatch):
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.registry.registry_document import StoredThreadRow, ThreadRows
+
+    def decoded(_row):
+        raise AssertionError("encoding stored thread rows decoded a declaration")
+
+    monkeypatch.setattr(StoredThreadRow.thread, "func", decoded)
+    assert FieldCodec.encode(ThreadRows.from_wire(thread_rows_wire)) == thread_rows_wire
+
+
+def test_popping_a_thread_row_does_not_remove_it_when_decoding_fails(thread_rows_wire):
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.registry.registry_document import ThreadRows
+
+    malformed = {**thread_rows_wire["first"], FieldCodec.record_key(Thread, "tags"): 42}
+    rows = ThreadRows.from_wire({"first": malformed})
+    with pytest.raises(InvalidRegistryDocument):
+        rows.popitem()
+    assert "first" in rows
+    assert rows.to_wire() == {"first": malformed}
+
+
+def test_thread_row_copies_share_decodes_without_sharing_writes(thread_rows_wire):
+    from dataclasses import replace
+
+    from agent_comms.registry.registry_document import ThreadRows
+    from agent_comms.registry.thread_text import GivenThreadText
+
+    rows = ThreadRows.from_wire(thread_rows_wire)
+    edit, frozen = rows.copy(), rows.freeze()
+    learned = frozen["first"]
+    assert rows["first"] is learned
+    assert edit["first"] is learned
+    edit["first"] = replace(learned, task=GivenThreadText("edited"))
+    assert edit.differing(rows) == frozenset({"first"})
+    assert frozen["first"] is learned
+    assert rows["first"] is learned
+    assert list(edit.only(frozenset({"second", "first"}))) == ["first", "second"]
+    with pytest.raises(TypeError, match="read-only"):
+        frozen.popitem()
+    with pytest.raises(TypeError, match="read-only"):
+        frozen.clear()
+
+
+def test_birth_index_survives_copies_rename_and_removal_without_a_row_walk(thread_rows_wire, monkeypatch):
+    from dataclasses import replace
+
+    from agent_comms.registry.registry_document import ThreadRows
+    from agent_comms.registry.thread_creation import CreationIdentityCollisionError
+
+    rows = ThreadRows.from_wire(thread_rows_wire)
+    first, second = rows["first"], rows["second"]
+    frozen, edit = rows.freeze(), rows.copy()
+
+    def enumerated(_rows):
+        raise AssertionError("birth query enumerated thread rows")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(ThreadRows, "__iter__", enumerated)
+        assert first.created_at in edit.births()
+        edit.require_distinct_births()
+        edit["renamed"] = replace(first, name="renamed")
+        with pytest.raises(CreationIdentityCollisionError):
+            edit.require_distinct_births()
+        del edit["first"]
+        edit.require_distinct_births()
+        del edit["renamed"]
+        assert first.created_at not in edit.births()
+        assert first.created_at in frozen.births()
+        assert first.created_at in rows.births()
+        assert second.created_at in edit.births()
+    selected = rows.only(frozenset({"second"}))
+    assert set(selected.births()) == {second.created_at}
+    edit.clear()
+    assert not edit.births()
+    edit.require_distinct_births()
+
+
+def test_birth_errors_stay_local_and_a_row_replacement_repairs_the_index(thread_rows_wire):
+    from dataclasses import replace
+
+    from agent_comms.registry.registry_document import ThreadRows
+
+    rows = ThreadRows.from_wire({"bad": {"name": "bad", "not": "a thread"}})
+    with pytest.raises(InvalidRegistryDocument):
+        rows.births()
+    valid = ThreadRows.from_wire(thread_rows_wire)["first"]
+    rows["bad"] = replace(valid, name="bad")
+    assert set(rows.births()) == {valid.created_at}
+    rows.require_distinct_births()
+
+
+def test_captures_and_row_commits_visit_only_changed_keys(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.registry.registry_tables import RegistryThreads
+    from agent_comms.registry.thread_text import GivenThreadText
+    from agent_comms.storage.row_mapping import RowMapping
+
+    registry = Registration(RegistryFile.path_in(tmp_path))
+    for name in ("first", "second"):
+        registry.register(NativeThread(name, frozenset(), Checkout(tmp_path)))
+    original = registry.store.read_revision()
+    document = original.document.copy()
+    changed = replace(document.threads["second"], task=GivenThreadText("updated"))
+    document.threads["second"] = changed
+    iterate = RowMapping.__iter__
+
+    def bounded_rows(rows):
+        if len(rows):
+            raise AssertionError("capture or commit enumerated an unchanged row collection")
+        return iterate(rows)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(RowMapping, "__iter__", bounded_rows)
+        encoded = original.source.encoded(document, original.document)
+        registry.store.rows.commit(encoded, original.source)
+        refreshed = registry.store.rows.captured(original.source)
+    assert RegistryThreads.mapping_in(refreshed.raw)["second"] == FieldCodec.encode(changed)
+    assert RegistryThreads.mapping_in(refreshed.raw)["first"] is RegistryThreads.mapping_in(original.source.raw)["first"]
 
 
 def test_a_changed_revision_is_checked_as_a_whole(tmp_path):

@@ -7,10 +7,11 @@ the goal snapshot a heartbeat publishes; the served wiring for the other tools s
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
 from pydantic import JsonValue
 
+from agent_comms.comms import Comms
 from agent_comms.execution.input_key import InputKeyText
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -38,8 +39,9 @@ from agent_comms.planning.goal_actions import (
     SetGoalAction,
     TransitionGoalAction,
 )
+from agent_comms.planning.goal_execution import GoalExecution
 from agent_comms.planning.goal_history import RecordedGoalHistory
-from agent_comms.planning.goal_presentation import GoalExecution, GoalSnapshot
+from agent_comms.planning.goal_presentation import GoalSnapshot
 from agent_comms.planning.goal_scope import AllGoals, OneGoal
 from agent_comms.planning.goals import GoalDeclaration
 from agent_comms.planning.progress_claims import ProgressClaim
@@ -48,9 +50,6 @@ from agent_comms.transport.tool_caller import ThreadCaller, ToolCaller
 from agent_comms.transport.tool_request import ThreadReadTool, ThreadToolRequest
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
-
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
 
 
 class OwnGoalPublication(ToolResult):

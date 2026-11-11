@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from agent_comms import agent_events as events
 from agent_comms.agent_events import FollowingInputRefused, InputCleared
 from agent_comms.execution.image_input import ImageInput
 from agent_comms.execution.native_session_prepare import NativeSessionPreparation
@@ -13,6 +14,7 @@ from agent_comms.execution.pi_commands import (
     FollowingPrompt,
     GetSessionStats,
     GetState,
+    InterruptSteering,
     PiCommand,
     Prompt,
     SettingCommand,
@@ -26,6 +28,7 @@ from agent_comms.execution.turn_inbox import (
     InputRequest,
 )
 from agent_comms.execution.turn_inputs import InputForwarding
+from agent_comms.execution.turn_progress import TurnProgress
 from agent_comms.execution.turn_item import PiRequestKey
 from agent_comms.execution.turn_stats import (
     ReadingStats,
@@ -222,6 +225,43 @@ async def test_explicit_following_rejection_retires_only_its_transient_write(
     assert session.rejected_commands == [FollowingInputRefused(id=following.input.input_id)]
     assert session.rejected_signal.is_set()
     assert await receipt.response() is response
+
+
+def interrupt_answer(interrupted: bool) -> tuple[InterruptSteering, tuple]:
+    """Pi's reply to one Send now, decoded through the real channel."""
+    channel = PiRpcChannel(asyncio.StreamReader())
+    interrupt = InterruptSteering(input_ids=[InputId.mint()])
+    channel.track(interrupt)
+    response = channel.decode_record(json.dumps({
+        "type": "response", "command": "interrupt_steering", "id": interrupt.require_id(),
+        "success": True, "data": {"interrupted": interrupted},
+    }).encode())
+    assert channel.correlate(response) is interrupt
+    channel.pending.cancel_all()
+    return interrupt, response
+
+
+async def test_a_declined_send_now_is_shown_and_never_ends_the_turn(
+    native_response_session: NativeSessionPreparation,
+):
+    """On 2026-11-10 Send now did nothing on screen: Pi had declined, and Core read it as done.
+    The decline is shown as a notice; TurnProgress's Error handler would fail the turn."""
+    interrupt, response = interrupt_answer(False)
+    (notice,) = interrupt.on_response(response, native_response_session)
+    assert type(notice) is events.Notice
+    assert notice.text.startswith("Send now did nothing")
+    assert notice.acp_updates(lambda: "shown") == ("shown",)
+    # TurnProgress.error is @handles(events.Error), chosen through the MRO: a Notice that
+    # is no Error can never reach it and fail the turn it could not interrupt.
+    assert not issubclass(events.Notice, events.Error)
+    assert TurnProgress.handler_for(events.Error) is TurnProgress.error
+
+
+async def test_an_accepted_send_now_reports_nothing(
+    native_response_session: NativeSessionPreparation,
+):
+    interrupt, response = interrupt_answer(True)
+    assert tuple(interrupt.on_response(response, native_response_session)) == ()
 
 
 async def test_queue_clear_reply_applies_without_a_forwarding_waiter(

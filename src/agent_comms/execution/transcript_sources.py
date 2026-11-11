@@ -46,11 +46,21 @@ from agent_comms.execution.native_record_file import (
     record_end,
     reverse_records,
 )
-from agent_comms.execution.native_records import NativeRecord, NoNativeInput, TranscriptRecord
-from agent_comms.execution.native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+from agent_comms.execution.native_records import (
+    NativeRecord,
+    NoNativeInput,
+    TranscriptRecord,
+)
+from agent_comms.execution.native_runtime_input import (
+    NativeRuntimeInput,
+    PublishedReplyRevision,
+)
 from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
-from agent_comms.execution.transcript_cursor_reads import MarksSourceRead, TranscriptRuntime
+from agent_comms.execution.transcript_cursor_reads import (
+    MarksSourceRead,
+    TranscriptRuntime,
+)
 from agent_comms.execution.transcript_routes import TranscriptRoutes, _SessionRoutes
 from agent_comms.execution.turn_bound import TurnBound
 from agent_comms.execution.turn_context import SegmentManifest
@@ -60,7 +70,10 @@ from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.messaging.published_messages import ReadsPublishedMessages
-from agent_comms.messaging.sent_message import AssignedSourceIdentity, PublishedSentMessage
+from agent_comms.messaging.sent_message import (
+    AssignedSourceIdentity,
+    PublishedSentMessage,
+)
 from agent_comms.messaging.sent_reports import ResolvesSentReports
 from agent_comms.messaging.watched import FileSource, Watched
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -84,7 +97,12 @@ from agent_comms.storage.recorded_time import (
     RecordedEventTime,
     UnrecordedEventTime,
 )
-from agent_comms.storage.typed_table import Column, DurableStore, StoreWriter, TypedTable
+from agent_comms.storage.typed_table import (
+    Column,
+    DurableStore,
+    StoreWriter,
+    TypedTable,
+)
 from agent_comms.team.rule_deal import Mute, Speaking, Voice
 from agent_comms.transcript.external_transcript_rows import (
     ActiveReplies,
@@ -112,7 +130,6 @@ from agent_comms.transcript.transcript_events import (
     TurnDigest,
 )
 from agent_comms.transport.tool_declaration import ToolDeclaration
-
 
 
 class WireFrontier(DeclaredFamily, ResolvesSentReports, affix="WireFrontier"):

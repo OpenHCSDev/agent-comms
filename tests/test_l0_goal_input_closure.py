@@ -19,15 +19,11 @@ from agent_comms.planning.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.planning.goal_attempts import GoalWorkDecision
 from agent_comms.planning.goal_generation import ReadyGeneration
 from agent_comms.planning.goal_history import GoalHistoryEntry
+from agent_comms.planning.goal_ledger import GoalWorkDecision
 from agent_comms.planning.goal_scope import OneGoal
-from agent_comms.planning.goal_states import (
-    BlockedGoal,
-    GoalState,
-    UnrecordedBlockGoal,
-)
+from agent_comms.planning.goal_states import BlockedGoal, GoalState, UnrecordedBlockGoal
 from agent_comms.planning.goal_waits import GoalWait, GoalWaits
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout

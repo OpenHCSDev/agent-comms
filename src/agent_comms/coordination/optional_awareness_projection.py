@@ -56,7 +56,8 @@ from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.store_files import StoreBusy
 from agent_comms.storage.typed_table import TypedRow
-from agent_comms.waking.wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
+from agent_comms.waking.errors import ProjectionUnavailableError
+from agent_comms.waking.wake_candidate_index import WakeCandidateIndex
 
 
 @dataclass(frozen=True)

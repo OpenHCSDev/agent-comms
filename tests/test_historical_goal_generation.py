@@ -20,11 +20,9 @@ from agent_comms.planning.goal_actions import (
     RetryGoalAction,
     RuntimeInvocable,
 )
-from agent_comms.planning.goal_attempts import (
-    GoalAttemptStore,
-    MissingGoalGenerationError,
-)
+from agent_comms.planning.goal_attempts import GoalAttemptStore
 from agent_comms.planning.goal_generation import ReadyGeneration
+from agent_comms.planning.goal_ledger import MissingGoalGenerationError
 from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.planning.goal_states import BlockedGoal
 from agent_comms.planning.goals import Goal

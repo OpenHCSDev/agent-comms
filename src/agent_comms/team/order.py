@@ -57,6 +57,7 @@ from agent_comms.planning.delivery_evidence import DeliveryEvidence, TodoProblem
 from agent_comms.planning.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.planning.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
 from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.order_phase import OrderPhase
 from agent_comms.planning.order_words import (
     BluntText,
     DirectiveText,
@@ -85,7 +86,7 @@ from agent_comms.planning.orders import (
     WithdrawTodo,
 )
 from agent_comms.planning.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
-from agent_comms.planning.plan_phases import OrderPhase, PlanPhase
+from agent_comms.planning.plan_phases import PlanPhase
 from agent_comms.planning.problem_findings import (
     ExpectedProblem,
     LocatedProblemFinding,
@@ -103,7 +104,7 @@ from agent_comms.projects.change_report import (
     NoSourceReference,
     RegisteredRoots,
 )
-from agent_comms.projects.checkouts import RepositoryReads
+from agent_comms.projects.checkouts import Checkout, RepositoryReads
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.slop import Slop
@@ -112,11 +113,7 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from agent_comms.storage.recorded_time import EventTime, RecordedEventTime
 from agent_comms.storage.typed_table import RowNotFoundError
-from agent_comms.team.standing import (
-    DeliveryAwaitingJudgement,
-    InstallDue,
-    UnownedWheelSpin,
-)
+from agent_comms.team.standing import DeliveryAwaitingJudgement, InstallDue, UnownedWheelSpin
 from agent_comms.team.standing_rules import ClearingVerb, HuntDue, OwedAnswer
 from agent_comms.team.team_hud import TeamPlanDocument
 from agent_comms.transport.tool_caller import ForkCaller, NoThreadCaller, PeerCaller
@@ -421,7 +418,7 @@ class OrderFile:
         replacement = '\nThis replaces my earlier order on it; drop that one.' if replacing else ''
         storage = context.comms.registry.storage_rule.order_text(
             context.comms.registry.require(unit),
-            [str(LaunchRuntime.at_prefix(repo.checkout / '.venv').interpreter)
+            [str(LaunchRuntime.at_prefix(Checkout(repo.checkout).test_environment).interpreter)
              for repo in context.repos])
         return (instructions + replacement + reassign.note() + '\n' + storage
                 + '\nIf two lines of this order conflict, take the narrower reading, '

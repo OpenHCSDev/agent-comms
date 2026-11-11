@@ -8,7 +8,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 from acp.schema import (
     AgentCapabilities,
@@ -43,6 +43,8 @@ from agent_comms.execution.owner_protocol import IncompatibleOwner, Incompatible
 from agent_comms.execution.runtime import RuntimeProxy
 from agent_comms.execution.session_config_options import SessionConfigOptions
 from agent_comms.execution.session_effects import SessionEffects
+from agent_comms.execution.session_owner_reads import OwnedSessionLifetime
+from agent_comms.execution.session_reads import SessionClient, SessionConfigurationSource
 from agent_comms.execution.turn_input_source import NoTurnAcceptance
 from agent_comms.nominal.field_codec import (
     AcpSessionId,
@@ -76,10 +78,6 @@ from agent_comms.transport.runtime_requests import (
 )
 from agent_comms.transport.runtime_server import RuntimeServer
 
-if TYPE_CHECKING:
-    from agent_comms.execution.acp import SdkSessionConnection
-    from agent_comms.execution.input_drain import OwnerSession
-
 
 @dataclass(frozen=True)
 class PublishedSession:
@@ -94,7 +92,7 @@ class PublishedSession:
         return cls(thread.name, thread.title, thread.worktree)
 
 
-class SessionLifecycle:
+class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwner]):
     def __init__(
         self,
         comms: Comms,
@@ -104,7 +102,7 @@ class SessionLifecycle:
         self.comms = comms
         self.runtime, self.effects = runtime, effects
         self.published: dict[AcpSessionId, PublishedSession] = {}
-        self.client: SdkSessionConnection | NoController = NO_CONTROLLER
+        self.client: SessionClient | NoController = NO_CONTROLLER
         self.proxies: dict[AcpSessionId, RuntimeProxy | IncompatibleOwner] = {}
         self._attachment_lock = asyncio.Lock()
         self._identity_lock = asyncio.Lock()
@@ -193,7 +191,7 @@ class SessionLifecycle:
         are its to retire, under the lease they were bound with."""
         return (owner.identifier for owner in self._retained() if owner.owner.incarnation == incarnation)
 
-    def _retained(self) -> Iterator[OwnerSession]:
+    def _retained(self) -> Iterator[OwnedSessionLifetime]:
         """The published sessions holding local execution, with the owner lease each bound."""
         return (owner for state in self.effects.inputs.drained.values() for owner in state.executors()
                 if owner.identifier in self.published)
@@ -246,7 +244,7 @@ class SessionLifecycle:
     async def bind_owner(
         self, thread: Thread, session_id: AcpSessionId,
         configuration: ConfigOptions, owner: OwnerIdentity,
-    ) -> OwnerSession:
+    ) -> OwnedSessionLifetime:
         async with self._attachment_lock:
             await self.retire_proxy(session_id)
         await Coordination.run_worker(PiRedeal.of(self.comms, thread).start)
@@ -307,7 +305,7 @@ class SessionLifecycle:
         if key:
             self.runtime.background(self.run_startup_input(state, InputKeyText.decode(key)))
 
-    async def run_startup_input(self, state: OwnerSession, key: InputKey) -> None:
+    async def run_startup_input(self, state: OwnedSessionLifetime, key: InputKey) -> None:
         """Consume only the explicitly authorized first input; never scan or replay."""
         session_id = state.identifier
         async with state.turn_lock:
@@ -332,7 +330,7 @@ class SessionLifecycle:
             ProcessIdentity.capture(os.getpid()), claim.claimed_generation,
         ))
 
-    async def retire_owner(self, state: OwnerSession, expected: OwnerIdentity, claim: ClaimedIdentity) -> None:
+    async def retire_owner(self, state: OwnedSessionLifetime, expected: OwnerIdentity, claim: ClaimedIdentity) -> None:
         """Only a completed retirement is remembered: a failed attempt (a busy store lock)
         fails its own stop request and leaves the next stop to retry every idempotent step."""
         async with state.retirement_lock:

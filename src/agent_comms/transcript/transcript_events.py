@@ -30,11 +30,17 @@ from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.messaging.published_messages import ReadsPublishedMessages
-from agent_comms.messaging.routing import MessageRoute, NoTurnRouting, Routing, TurnRouting
+from agent_comms.messaging.routing import (
+    MessageRoute,
+    NoTurnRouting,
+    Routing,
+    TurnRouting,
+)
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     ActivityExclude,
     FieldCodec,
+    InputId,
     ToolCallId,
     WireBind,
     WireOmitDefault,
@@ -53,7 +59,6 @@ from agent_comms.ui_model.message_category import (
     ToolCategory,
     UserCategory,
 )
-
 
 
 @dataclass(frozen=True, kw_only=True)

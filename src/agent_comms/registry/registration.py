@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Container, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Concatenate
+from typing import Concatenate
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.input_ingress import InputRegistration
 from agent_comms.execution.native_input_owner import RegistryOwner
+from agent_comms.execution.selected.owner_source import RegistryOwnerSource
+from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
 from agent_comms.messaging.channel_targets import DeclaredTag
 from agent_comms.messaging.routing import NoTurnRouting, Routing
 from agent_comms.nominal.field_codec import ThreadLookup, TurnId
 from agent_comms.planning.goal_history import GoalHistoryEntry, GoalHistoryStore
+from agent_comms.planning.goal_mutation import GoalFork
 from agent_comms.planning.goal_scope import AllGoals, GoalScope
 from agent_comms.projects.checkouts import Checkout, CheckoutTransfer, RepositoryReads
 from agent_comms.projects.repo import Repo
@@ -22,6 +26,7 @@ from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration_change import RegistrationChange
+from agent_comms.registry.registration_reads import ActivityRegistration
 from agent_comms.registry.registry_document import (
     FoundProjectThread,
     ProjectThreadSelection,
@@ -43,17 +48,14 @@ from agent_comms.registry.thread_status import (
 from agent_comms.registry.thread_text import ForkedParent, SubagentRole
 from agent_comms.registry.threads import ExternalThread, NativeThread, SubagentThread, Thread
 
-if TYPE_CHECKING:
-    from agent_comms.agent_backend import RuntimeLocation
-    from agent_comms.execution.selected.participant import SelectedParticipant
-    from agent_comms.planning.goal_management import Goals
-    from agent_comms.planning.goals import GoalDeclaration
-    from agent_comms.registry.catalog_document import CatalogDocument
-
 _DEFAULT_PRESENCE = ProcessThreadStatus()
 
 
-class Registration:
+class Registration(
+    Container[str],
+    InputRegistration[Thread],
+    ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],
+):
     """Own registration transactions; never borrow a Comms or facade's state."""
 
     def __init__(self, store_path: Path):
@@ -179,13 +181,13 @@ class Registration:
             return self._declare_in(edit, child, _DEFAULT_PRESENCE)
 
     def register_child(
-        self, name: str, parent_name: str, execution: type[SubagentThread], goals: Goals,
+        self, name: str, parent_name: str, execution: type[SubagentThread], goals: GoalFork[Thread, goals.GoalDeclaration],
     ) -> Thread:
         """Declare or resume one named child of `parent_name` under the registry's lock."""
         with self.store.editing() as edit:
             return self._child_in(edit, name, edit.document.require(parent_name), execution, goals)
 
-    def claim_slot(self, parent_name: str, role: SubagentRole, goals: Goals) -> Thread:
+    def claim_slot(self, parent_name: str, role: SubagentRole, goals: GoalFork[Thread, goals.GoalDeclaration]) -> Thread:
         """Seat a subagent in the first vacant slot of its role under `parent_name`; a slot it
         takes over keeps its bus history, so the new occupant reads what the last one did."""
         with self.store.editing() as edit:
@@ -196,7 +198,7 @@ class Registration:
 
     def _child_in(
         self, edit: RegistryEdit, name: str, parent: Thread,
-        execution: type[SubagentThread], goals: Goals,
+        execution: type[SubagentThread], goals: GoalFork[Thread, goals.GoalDeclaration],
     ) -> Thread:
         if edit.document.canonical_name(name) != name:
             raise RelationViolationError(f"Child thread {name!r} is an alias.")
@@ -286,12 +288,12 @@ class Registration:
         with self.store.editing() as edit:
             return self._attach_native_session(edit, original, session_file)
 
-    def claim_fresh_session(self, participant: SelectedParticipant) -> RuntimeLocation:
+    def claim_fresh_session(self, participant: RegistryOwnerSource[RegistryOwner]) -> agent_backend.RuntimeLocation:
         """Create and record the first session while the registry owns its selection.
 
         An execution captured before the first claim joins the recorded session;
         its process, incarnation, claim and turn must still pass the source fence.
-        RuntimeLocation.new_location already retains saved locations and creates
+        agent_backend.RuntimeLocation.new_location already retains saved locations and creates
         only for UnstartedRuntime, so selection has no second absence test here.
         """
         original = participant.owner
@@ -351,11 +353,11 @@ class Registration:
 
     def _declare_in(
         self, edit: RegistryEdit, thread: Thread, status: ThreadStatus = _DEFAULT_PRESENCE,
-        *, prepare_goal: Callable[[Thread], GoalDeclaration] = lambda prepared: prepared.goal,
+        *, prepare_goal: Callable[[Thread], goals.GoalDeclaration] = lambda prepared: prepared.goal,
     ) -> Thread:
         catalog = ChannelCatalog.at(self.store.path.parent)
 
-        def declare(channels: CatalogDocument) -> Thread:
+        def declare(channels: catalog_document.CatalogDocument) -> Thread:
             change = self._prepare_declaration(edit.document, channels, thread, status)
             change = replace(change, thread=replace(change.thread, goal=prepare_goal(change.thread)))
             result = self._commit_registration(edit, change).thread
@@ -517,3 +519,7 @@ class Registration:
 
     def __contains__(self, name: str) -> bool:
         return name in self.store.read()
+
+from agent_comms import agent_backend
+from agent_comms.planning import goals
+from agent_comms.registry import catalog_document

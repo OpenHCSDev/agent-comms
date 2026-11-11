@@ -254,7 +254,7 @@ async def test_runner_obtains_one_backend_per_session_from_the_thread_declaratio
     from agent_comms.errors import RelationViolationError
     from agent_comms.execution.child_process import ProcessIdentity
     from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
-    from agent_comms.pi_native_backend import PersistentPiSession
+    from agent_comms.execution.persistent_pi_session import PersistentPiSession
 
     agent = CommsAgent(
         comms, auto_wake=False, agent_bin=GivenBinary("pi"),

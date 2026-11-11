@@ -7,7 +7,8 @@ import pytest
 from agent_comms.execution.native_attestation import ObservedAttestation
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
 from agent_comms.execution.pi_rpc import PiRpcChannel
-from agent_comms.pi_payloads import ReportedText, StateData
+from agent_comms.execution.provider_records import ReportedText
+from agent_comms.pi_payloads import StateData
 
 
 def snapshot(command, data):

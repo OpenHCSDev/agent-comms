@@ -13,7 +13,11 @@ from sqlite3 import Connection
 from typing import Annotated, ClassVar, NoReturn
 
 from agent_comms.agent_backend import RuntimeLocation
-from agent_comms.coordination.database import CoordinationStore, InvalidStore, MissingStore
+from agent_comms.coordination.database import (
+    CoordinationStore,
+    InvalidStore,
+    MissingStore,
+)
 from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
     ReloadRequired,
@@ -28,7 +32,10 @@ from agent_comms.execution.native_output import NativeRecordLocation
 from agent_comms.execution.native_record_file import RecordsCut, SessionCut
 from agent_comms.execution.native_runtime_input import PublishedReplyRevision
 from agent_comms.execution.native_session_files import NativeSessionFiles
-from agent_comms.execution.transcript_cursor_reads import MarksSourceRead, TranscriptRuntime
+from agent_comms.execution.transcript_cursor_reads import (
+    MarksSourceRead,
+    TranscriptRuntime,
+)
 from agent_comms.execution.transcript_routes import TranscriptRoutes
 from agent_comms.execution.transcript_sources import (
     AssignedTranscriptSource,
@@ -59,7 +66,10 @@ from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.historical_views import HistorySource
 from agent_comms.messaging.message_bus import MessageBus
-from agent_comms.messaging.message_notification import MessageNotification, NotificationWindow
+from agent_comms.messaging.message_notification import (
+    MessageNotification,
+    NotificationWindow,
+)
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_evidence import OwnerOutcomes
 from agent_comms.messaging.page_traversal import HistorySourceKey
@@ -75,7 +85,10 @@ from agent_comms.nominal.field_codec import (
     WireName,
     projected,
 )
-from agent_comms.notification_assignment import NotificationAssignment, NotificationSelection
+from agent_comms.notification_assignment import (
+    NotificationAssignment,
+    NotificationSelection,
+)
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
@@ -99,7 +112,6 @@ from agent_comms.transcript.transcript_events import (
     ForkTaskTranscript,
     TranscriptEvent,
 )
-
 
 _LOG = logging.getLogger(__name__)
 
@@ -489,7 +501,7 @@ class AcquiredThreadPresentation(NotifiedThreadPresentation):
     sent_references: tuple[MessageReference, ...] = field(kw_only=True)
     notification_window: NotificationWindow = field(kw_only=True)
 
-    def published(self) -> ThreadPresentation:
+    def published(self) -> NotifiedThreadPresentation:
         return NotifiedThreadPresentation(**{declared.name: getattr(self, declared.name)
                                              for declared in fields(NotifiedThreadPresentation)})
 

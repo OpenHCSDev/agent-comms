@@ -33,8 +33,10 @@ from agent_comms.projects.checkouts import Checkout, RepositoryReads
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.repository_storage import RepositoryStorage
 from agent_comms.projects.work_branches import WorkBranches
 from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_reads import ThreadCheckoutSource
 from agent_comms.registry.thread_storage import CheckoutReuse, StoragePath, StorageRoots
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.locked_store import DurableFile
@@ -341,7 +343,7 @@ class ScopedDirectory(ValueDirective[Path]):
 
 
 @dataclass(frozen=True)
-class StorageRule(RoomAllocation, DurableFile):
+class StorageRule(RoomAllocation, DurableFile, ThreadCheckoutSource[Thread], RepositoryStorage[Thread]):
     filename: ClassVar[str] = "storage.json"
     # Shared Python control host, measured through real three/29-owner journeys.
     host_memory_bytes: ClassVar[int] = 512 * 2**20
@@ -722,8 +724,12 @@ class StorageRule(RoomAllocation, DurableFile):
             f'--from {thread.name} --source EXACT_OWNED_PATH remove REPOSITORY; '
             'your only scratch dir is '
             f'{self.roots_of(thread).scratch}/. '
-            f'Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}; '
-            'never create a venv, never uv sync, never write .artifacts, never git clone. '
+            f'Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}: '
+            "install syncs agent-comms' from the lock it installs; nothing writes the others. "
+            'Never create a venv, never uv sync or pip install into a shared one, never write '
+            '.artifacts, never git clone. A shared interpreter missing a declared dependency '
+            'means its lock is wrong or its sync is stale: relock at the owner or say which '
+            'interpreter is stale, never install around it. '
             f'Below {self.floor_gib:g} GB free on {self.volume}, no worktree, venv, build, install '
             'or recording.'
         )

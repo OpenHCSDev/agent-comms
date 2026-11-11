@@ -8,6 +8,8 @@ from functools import partial
 
 import pytest
 from acp.schema import SessionInfoUpdate
+from delivery_owner_fixture import canonical_agent
+from goal_owner_fixture import canonical_goal_wire
 from pydantic import BaseModel
 
 from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
@@ -16,21 +18,15 @@ from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.transcript_sources import ExternalTranscript
-from agent_comms.execution.turn_phase import (
-    IdlePhase,
-    ToolRunningPhase,
-)
+from agent_comms.execution.turn_phase import IdlePhase, ToolRunningPhase
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.planning.goal_actions import (
     EditGoalAction,
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.planning.goal_attempts import (
-    Generation,
-    GoalAttemptStore,
-    StorageUncertainError,
-)
+from agent_comms.planning.goal_attempts import GoalAttemptStore
+from agent_comms.planning.goal_ledger import Generation, StorageUncertainError
 from agent_comms.planning.goal_presentation import StandbyExecution
 from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.projects.checkouts import Checkout
@@ -38,8 +34,6 @@ from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.storage.locked_store import GoalWakeFile, RegistryFile
-from delivery_owner_fixture import canonical_agent
-from goal_owner_fixture import canonical_goal_wire
 
 
 @dataclass

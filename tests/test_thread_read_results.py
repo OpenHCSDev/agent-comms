@@ -124,8 +124,8 @@ def test_assignment_row_changes_attribute_only_their_view(
         later = replace(later, expiry_tick=revision.expiry_tick + 60)
     assert later != revision
     snapshot = comms.registry.snapshot()
-    assert later.changed_threads(
-        previous, comms, activity, snapshot, earlier_registry.changed_names_to(snapshot),
+    assert previous.changed_threads(
+        later, comms, activity, snapshot, earlier_registry.changed_names_to(snapshot),
     ) == expected
     assert notification_read.live_changed(comms, NotificationPass(comms, later)) == bool(expected)
 

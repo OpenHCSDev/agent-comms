@@ -15,7 +15,6 @@ from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.nominal.field_codec import MalformedRecord
 
 
-
 class TranscriptRecord:
     """A source position; only native records can project a decoded native entry."""
 

@@ -46,6 +46,7 @@ from agent_comms.execution.native_input_owner import (
 )
 from agent_comms.execution.native_runtime_input import NativeRuntimeTable
 from agent_comms.execution.pi_events import TurnContextObserved
+from agent_comms.execution.selected.owner_source import RegistryOwnerSource
 from agent_comms.execution.selected.source_batch import (
     SelectedSource,
     SelectedSourceBatch,
@@ -95,7 +96,7 @@ class TriagePublication(MroDispatch):
 
 
 @dataclass
-class SelectedParticipant(MroDispatch):
+class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
     comms: Comms
     bus: MessageBus
     store: Coordination

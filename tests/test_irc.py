@@ -166,7 +166,7 @@ class TestPresence:
         registry.remove("a")
         reader.cache.entry = UncachedRegistry()
         stale = reader._decode_revision(captured).document.seen_at("a")
-        assert PresenceStore.at(tmp_path).read().seen["a"] == stale
+        assert PresenceStore(tmp_path).read().seen["a"] == stale
         time.sleep(0.01)
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         assert Registration(path).last_seen("a") > stale

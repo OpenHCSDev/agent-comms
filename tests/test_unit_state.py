@@ -149,7 +149,9 @@ def unread_checkout(comms, tmp_path):
 
 
 @pytest.mark.parametrize("member", TeammateState.worst_first(), ids=lambda member: member.__name__)
-def test_teammate_state_family_uses_real_records(held_bus, tmp_path, request, member):
+async def test_teammate_state_family_uses_real_records(
+    held_bus, tmp_path, request, goal_turn_owners, member
+):
     comms = held_bus
     teammate = "worker"
     with LaunchRoot.from_path(comms.root).selected():
@@ -158,7 +160,7 @@ def test_teammate_state_family_uses_real_records(held_bus, tmp_path, request, me
         elif member is Idle:
             teammate = "outsider"
         elif member is Blocked:
-            blocked_holder(comms, request.getfixturevalue("native_runtime_package"))
+            await blocked_holder(comms, goal_turn_owners)
         elif member is Detached:
             comms.registry.register(comms.registry.require(teammate), StoppedThreadStatus())
         elif member is AwaitingTeam:

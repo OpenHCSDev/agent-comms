@@ -8,12 +8,14 @@ from pathlib import Path
 from agent_comms.comms import Comms
 from agent_comms.projects.checkouts import Checkout, RepositoryReads
 from agent_comms.projects.repository_sources import RepositorySource
+from agent_comms.projects.repository_storage import RepositoryReader
 from agent_comms.projects.shell_effects import StorageEffect
 from agent_comms.projects.storage_admission import StorageAdmission
 from agent_comms.projects.storage_rules import CheckoutAllocation, StorageRule, UnitStorage
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
 from agent_comms.transport.native_tool_call import CodingCall
+from agent_comms.transport.tool_declaration import ToolDeclaration
 
 
 @dataclass
@@ -76,6 +78,13 @@ class StorageProjection(StorageAdmission):
     def deny(self, reason: str) -> None:
         self.rule.deny(reason)
 
+    def deny_repository_operation(self, reason: str) -> None:
+        examples = tuple(
+            reader.example(self.comms.root)
+            for reader in ToolDeclaration.members_with(RepositoryReader)
+        )
+        self.deny(f"{reason}. Read without an editable allocation: " + '; '.join(examples))
+
     def require_floor(self) -> None:
         self.rule.require_floor()
 
@@ -94,6 +103,7 @@ class StorageProjection(StorageAdmission):
 
     def require_repository_donors(self, repository: RepositorySource) -> None:
         for donor in repository.allocations(self.rule, self.thread):
+            self.require_floor()
             self.rule.require_repository_donor(self.thread, repository.github, donor)
 
     def remove_checkout(self, path: Path) -> None:

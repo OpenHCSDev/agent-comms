@@ -50,8 +50,8 @@ if TYPE_CHECKING:
     from agent_comms.coordination.database import InvalidStore, MissingStore
     from agent_comms.messaging.message_notification import MessageNotification
     from agent_comms.messaging.notification_progress import DeliveryProgress
-    from agent_comms.registry.agent_activity import RecipientActivity
     from agent_comms.registry.private_registry_guard import RegistryPrivacy
+    from agent_comms.registry.recipient_activity import RecipientActivity
 
 
 @dataclass(frozen=True)
@@ -435,7 +435,7 @@ class NotificationAssignment(NotificationSource):
         """
         registry = RegistryStore.at(root).snapshot()
         keys = {
-            InputDispositions.bus_key(page.source.message, thread): key
+            page.source.message.bus_key(thread): key
             for page in read.selection.pages
             for key, recipient in page.entries
             for thread in registry.recipient(recipient, page.source).input_owners()

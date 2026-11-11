@@ -62,6 +62,7 @@ from agent_comms.history_views import RetiredViews
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.installer.active_route import CommsRoute
 from agent_comms.messaging.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_notification import (
     MessageNotification,
     NotificationPass,
@@ -71,6 +72,7 @@ from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_reads import NotificationRead
 from agent_comms.messaging.read_basis import DisplayCut, NoDisplaySelection
 from agent_comms.messaging.revision_views import (
+    BusSourceView,
     NotificationsView,
     RegistrationsView,
     RevisionView,
@@ -81,6 +83,8 @@ from agent_comms.messaging.revision_views import (
     TeamFramesView,
 )
 from agent_comms.messaging.watched import FileSource
+from agent_comms.transport.tool_caller import HumanCaller
+from agent_comms.transport.tool_request import CoreRead, ServedRequest
 from agent_comms.nominal.field_codec import (
     DeclaredError,
     FieldCodec,
@@ -98,12 +102,9 @@ from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.work_branches import WorkBranchError
 from agent_comms.registry.activity import ObservedActivity
-from agent_comms.registry.registry_document import (
-    RegistrySnapshot,
-    RosterVisibility,
-    UnreadRegistry,
-)
-from agent_comms.registry.registry_provenance import DeletedThread
+from agent_comms.registry.registry_document import RegistrySnapshot, UnreadRegistry
+from agent_comms.registry.registry_names import DeletedThread
+from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_presentation import ThreadPresentation
 from agent_comms.registry.view_unread import ReplyIndexResult
@@ -311,6 +312,24 @@ class ReadingObservation[InterestT: InterestRequest](Observation[InterestT]):
 
 
 @final
+class ObserverUnattached(RuntimeError, DeclaredError):  # noqa: N818 - nominal reader state
+    """A read was handed to an observation process whose reader is not attached yet.
+
+    Attachment is what names the loop that delivers answers, so there is nobody to answer on
+    until it has happened.
+    """
+
+
+@final
+class ObserverSameLoop(RuntimeError, DeclaredError):  # noqa: N818 - nominal caller state
+    """The delivery loop asked itself for a read and would wait for its own answer.
+
+    Every caller today reaches this through a worker thread. A caller on the loop is refused by
+    name rather than left waiting, because the wait would never end.
+    """
+
+
+@final
 class UnreadableHistory(ValueError, DeclaredError):  # noqa: N818 - nominal stored-read state
     """A strict stored-data read failed, not the observer or the whole UI.
 
@@ -491,9 +510,19 @@ class ReadRequest(AwaitedRead, declared_name=None):
                 value = self.read(comms)
             except self.deferred_reads:
                 return ReadBusy(self.request_id)
-            return ReadAnswered.of(self.request_id, value)
+            return self.answered_value(value)
         except self.refusal_errors as error:
             return self.refused(error)
+
+
+    def answered_value(self, value: object) -> ReadOutcome:
+        """The outcome carrying ``value`` back to the waiter.
+
+        A native read answers as the member declared for its result, so the other side
+        decodes it as itself. A read whose result is only known from the request overrides
+        this, and inherits every refusal and busy path above unchanged.
+        """
+        return ReadAnswered.of(self.request_id, value)
 
     async def answered(self, comms: Comms) -> object:
         """This process answers the read from ``comms`` itself; the outcome settles it the
@@ -515,6 +544,29 @@ class ReadOperation(ReadRequest):
     def read(self, comms: Comms) -> object:
         return UiRead.serving(self.operation).read(comms)
 
+
+@dataclass(frozen=True)
+class CoreReadOperation(ReadRequest):
+    """A read the UI asks of Core with the caller it already asks as, answered in the child.
+
+    ReadOperation beside this one serves the native reads, whose implementations declare
+    their own caller. This one keeps the caller the UI already uses, so routing a read out
+    of the asking interpreter changes where it runs and nothing about what it answers.
+    """
+
+    operation: ToolRequest
+
+    @property
+    def refusal_errors(self) -> tuple[type[Exception], ...]:
+        return (*super().refusal_errors, ToolRefusedError, WorkBranchError)
+
+    def read(self, comms: Comms) -> object:
+        # CoreRead admits only the reads it declares, so a mutating request never decodes or
+        # runs here; LocalCoreAccess keeps every other request on its own path.
+        return CoreRead.serving(self.operation).apply_without_thread(comms, HumanCaller())
+
+    def answered_value(self, value: object) -> ReadOutcome:
+        return CoreReadAnswered(self.request_id, FieldCodec.encode(value))
 
 @dataclass(frozen=True)
 class OwnerRead(AwaitedRead, declared_name=None):
@@ -1104,7 +1156,7 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         self.located_threads = replace(self.located_threads, activity=activity)
         snapshot = comms.registry.snapshot()
         registry_changed = self.registry_read.changed_names_to(snapshot)
-        changed = revision.changed_threads(previous, comms, activity, snapshot, registry_changed)
+        changed = previous.changed_threads(revision, comms, activity, snapshot, registry_changed)
         self.registry_read = snapshot
         names = (changed | names - previous.results.keys()) & names
         self.located_threads = replace(self.located_threads, names=names)
@@ -1155,6 +1207,19 @@ class ServiceResult(TaggedUnion, affix=""):
     @abstractmethod
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None: ...
 
+
+@dataclass(frozen=True)
+class PendingRead:
+    """One read in flight: what was asked, and the waiter it answers.
+
+    The request stays beside its waiter so a shared reply is decoded as the result that
+    request declares, rather than as a type named by the reply. A reply that arrives after
+    its waiter is gone has nothing to resolve against, which is the ignored reply it always
+    was.
+    """
+
+    asked: AwaitedRead
+    waiter: asyncio.Future
 
 class ReadOutcome(TaggedRecordMember, ServiceResult, declared_name=None):
     """The service's answer to a read, including a read that remains busy."""
@@ -1221,8 +1286,8 @@ class ReadAnswered(ReadOutcome, declared_name=None):
         raise TypeError(f"No read answer is declared for {type(value).__qualname__}")
 
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
-        if (waiter := process.reads.pop(self.request_id, None)) is not None and not waiter.done():
-            waiter.set_result(self.value)
+        if (pending := process.reads.pop(self.request_id, None)) is not None and not pending.waiter.done():
+            pending.waiter.set_result(self.value)
 
     async def settled(self, request: ReadRequest, comms: Comms) -> object:
         return self.value
@@ -1263,6 +1328,43 @@ class DeliveryAnswered(ReadAnswered):
     value: DeliveryOverview
 
 
+
+
+
+@dataclass(frozen=True)
+class CoreReadAnswered(ReadOutcome):
+    """The one reply for a shared Core read, carrying its result as the wire value.
+
+    A native read has a member per result so the other side can decode it from the reply
+    alone. A shared Core read does not need one: the waiter still holds the request it
+    sent, and that request declares its result, so this reply carries the value and the
+    request names the type. Twenty-one members would say the same thing twenty-one times.
+    """
+
+    request_id: int
+    wire: object
+
+    async def received(
+        self, process: ObservationProcess, observed: Callable[[Observed], None],
+    ) -> None:
+        pending = process.reads.get(self.request_id)
+        if pending is None or pending.waiter.done():
+            return  # Cancelled, retired, or already answered: the same ignored reply as ever.
+        # The waiter stays owned until it is settled. Popping first and then decoding leaves a
+        # thread waiting on a future nobody holds any more: a malformed reply ends the reader,
+        # and retirement cannot settle a waiter it can no longer find.
+        try:
+            value = FieldCodec.decode(pending.asked.operation.result_type(), self.wire)
+        except Exception as undecodable:
+            process.reads.pop(self.request_id, None)
+            pending.waiter.set_exception(undecodable)
+            raise
+        process.reads.pop(self.request_id, None)
+        pending.waiter.set_result(value)
+
+    async def settled(self, request: ReadRequest, comms: Comms) -> object:
+        return FieldCodec.decode(request.operation.result_type(), self.wire)
+
 @dataclass(frozen=True)
 class ReadBusy(ReadOutcome):
     """Source busy: the original read remains pending, not a failed input."""
@@ -1297,9 +1399,9 @@ class ReadRefused(ReadOutcome):
     trace: str
 
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
-        if (waiter := process.reads.pop(self.request_id, None)) is not None and not waiter.done():
+        if (pending := process.reads.pop(self.request_id, None)) is not None and not pending.waiter.done():
             self.error.add_note(f"Raised in the comms observation service:\n{self.trace}")
-            waiter.set_exception(self.error)
+            pending.waiter.set_exception(self.error)
 
     async def settled(self, request: ReadRequest, comms: Comms) -> object:
         raise self.error
@@ -1437,6 +1539,45 @@ class ThreadsObserved(Observed):
     results: Mapping[str, ThreadReadResult]
     changed: frozenset[str]
     activity: Mapping[str, ObservedActivity | DeletedThread]
+
+    def changed_threads(self, revision: WireRevision, comms: Comms,
+                        activity: Mapping[str, ObservedActivity | DeletedThread],
+                        snapshot: RegistrySnapshot, registry_changed: frozenset[str],
+                        ) -> frozenset[str]:
+        """Attribute changes using the retained observation and existing route rows. A
+        registry revision reaches only the threads whose own rows it changed (or their forks):
+        every turn start rewrites the registry, and it re-presented every open thread."""
+        earlier = self.revision
+        names = self.results.keys()
+        readable, changed = self.revision_inputs()
+        if revision.changed_since(BusSourceView(), earlier) or not readable:
+            return frozenset(names)
+        changed.update(name for name in names if snapshot.affected_by(name, registry_changed))
+        if revision.bus_seq != earlier.bus_seq:
+            source = comms.bus.bus
+            if source.revision() != revision.bus_seq:
+                raise StaleRevision("Bus changed before route attribution")
+            actors = source.changed_names(earlier.bus_seq)
+            catalog = comms.channels.catalog.read()
+            with comms.bus.opened_activity() as channel_activity:
+                for actor in actors:
+                    changed.update(CommandTarget.named(actor).changed_threads(
+                        names, snapshot, catalog, channel_activity))
+            changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
+        activity_changed = {name for name in activity
+                            if activity[name] != self.activity.get(name)}
+        status_names = names if (revision.goal_execution, revision.expiry_period, revision.work_room) != (
+            earlier.goal_execution, earlier.expiry_period, earlier.work_room) else names & activity_changed
+        if status_names:
+            status_batch = comms.views.thread_presentations(status_names)
+            changed.update(name for name in status_names
+                           if not self.results[name].same_status(status_batch.view(name)))
+        remaining = {name: view for name, view in readable.items() if name not in changed}
+        notifications = NotificationPass(comms, revision)
+        changed.update(name for name, view in remaining.items()
+                       if view.notification_window.activity_names() & activity_changed
+                       or notifications.changed(view.notification_window, earlier))
+        return frozenset(changed & names)
 
     def revision_inputs(self) -> tuple[dict[str, AcquiredThreadPresentation], set[str]]:
         readable: dict[str, AcquiredThreadPresentation] = {}
@@ -2023,6 +2164,9 @@ class LocalObservationPeer(ObservationPeer):
 class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
     """One ordered receive/decode task, loop-owned delivery, and joined retirement."""
 
+    attach_seconds: ClassVar[float] = 10.0
+    """How long a read from another thread waits for attachment already under way."""
+
     @classmethod
     def awaited(cls, route: CommsRoute) -> Self:
         process = cls(LocalRouteObservation(route))
@@ -2033,8 +2177,10 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         """``source`` names who serves the observation: a route locally, a remote UI profile
         across the connector."""
         self._resources = ExitStack()
+        # Resolved once, at attachment, with the loop that delivers answers.
+        self._delivery: Future[asyncio.AbstractEventLoop] = Future()
         self.request_ids = itertools.count(1)
-        self.reads: dict[int, asyncio.Future] = {}
+        self.reads: dict[int, PendingRead] = {}
         self.status: ObserverStatus = NoObserverFailure()
         self.peer = source.observation_peer()
         self.connection = self.peer.connection
@@ -2048,7 +2194,13 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
     def start_receiving(
         self, observed: Callable[[Observed], None], failed: Callable[[Exception], None],
     ) -> None:
-        """Start this process's reader on the delivery loop, once at attachment."""
+        """Start this process's reader on the delivery loop, once at attachment.
+
+        The loop is taken here rather than in ``__init__``: a process is built wherever its
+        owner happens to run, including a worker thread, and only attachment runs on the loop
+        that will deliver its answers.
+        """
+        self._delivery.set_result(asyncio.get_running_loop())
         receiving = asyncio.create_task(self.receive(observed, failed))
         receiving.add_done_callback(partial(self.receive_ended, failed))
         self._reader.push_async_callback(self.stop_receiving, receiving)
@@ -2119,6 +2271,33 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         self.abandon_reads(died)
         return died
 
+    def read_from_thread(self, request: AwaitedRead):
+        """Answer ``request`` for a caller on another thread, on this process's own loop.
+
+        The loop stays private: a caller hands over the request and waits for the answer the
+        delivery loop settles, so read ids, cancellation, retirement and refusals keep their
+        existing owners. A caller already on that loop would be waiting for itself, so it is
+        refused by name instead.
+        """
+        # A UI makes an observation current and schedules its attachment on the app loop, so a
+        # worker thread can ask in between: on 2026-11-10 Toad's tab restore did, and the launch
+        # failed with this refusal. It waits for the attachment under way, and still refuses
+        # by name when none arrives.
+        try:
+            delivery = self._delivery.result(timeout=self.attach_seconds)
+        except TimeoutError as unattached:
+            raise ObserverUnattached(
+                f"This observation process attached no reader within {self.attach_seconds:g} s"
+            ) from unattached
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is delivery:
+            raise ObserverSameLoop(
+                "A read from the delivery loop itself would wait for its own answer")
+        return asyncio.run_coroutine_threadsafe(self.read(request), delivery).result()
+
     async def read(self, request: AwaitedRead):
         """Send ``request`` and await its loop-delivered answer.
 
@@ -2126,7 +2305,7 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         """
         request = replace(request, request_id=next(self.request_ids))
         waiter = asyncio.get_running_loop().create_future()
-        self.reads[request.request_id] = waiter
+        self.reads[request.request_id] = PendingRead(request, waiter)
         try:
             self.request(request)
             return await waiter
@@ -2146,9 +2325,9 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
     def abandon_reads(self, error: BaseException) -> None:
         """The reader's retirement settles its waiters with the original cause."""
         reads, self.reads = self.reads, {}
-        for waiter in reads.values():
-            if not waiter.done():
-                waiter.set_exception(error)
+        for pending in reads.values():
+            if not pending.waiter.done():
+                pending.waiter.set_exception(error)
 
     async def readable(self) -> None:
         """Wait until one packet can be received by the worker."""

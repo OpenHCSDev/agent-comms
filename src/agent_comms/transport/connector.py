@@ -82,6 +82,7 @@ from agent_comms.planning.owner_requests import NewestOpenRequest, RequestSelect
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.closed_pull_requests import ClosedPullRequestWatch
 from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.registry.service_sender import ServiceSender
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.team.standing import UnownedOrderWatch
 from agent_comms.team.team_heartbeat import TeamHeartbeat
@@ -221,6 +222,52 @@ class ApprovalLink:
     request_id: str
     secret: str = field(repr=False)
     route: ClassVar[str] = "/approve/{request_id}/{secret}"
+
+
+class ApprovalAudience(DeclaredFamily, affix="Audience"):
+    """Who may read a one-use approval link, decided by what reaching this connector proved.
+
+    `transport/served_endpoints.py` already owns that distinction for this machine's URLs:
+    reaching a tailnet-only one means tailscale admitted the caller's machine first
+    (`TailnetServed.offers_profiles`), while a Funnel URL "proves nothing about its caller".
+    Tailscale marks every Funnel request with its own header, so the same rule decides it
+    per request, once, at the HTTP boundary.
+    """
+
+    funnel_header: ClassVar[str] = "Tailscale-Funnel-Request"
+
+    @classmethod
+    def of(cls, request: web.Request) -> ApprovalAudience:
+        """Only tailscale sets this header, and only on the way in from the internet; a
+        caller cannot clear it, and adding it only gives itself the stricter member."""
+        return PublicAudience() if cls.funnel_header in request.headers else TailnetAudience()
+
+    @abstractmethod
+    def deliver(self, connector: Connector, client: str, link: str) -> str:
+        """Hand the link to whoever may read it and answer with the page that says so."""
+
+
+@dataclass(frozen=True, slots=True)
+class TailnetAudience(ApprovalAudience):
+    """Came in over the tailnet, which tailscale admitted before this connector saw it. The
+    person at that browser is the owner, so sending them elsewhere to fetch their own link
+    protects nobody and is the step that strands them when comms cannot deliver."""
+
+    def deliver(self, connector: Connector, client: str, link: str) -> str:
+        return (f"<p>Approve {html.escape(json.dumps(client))} and remember this browser:</p>"
+                f'<p><a href="{html.escape(link)}">{html.escape(link)}</a></p>')
+
+
+@dataclass(frozen=True, slots=True)
+class PublicAudience(ApprovalAudience):
+    """Came in through Funnel, where anyone who knows the hostname can reach `/authorize`.
+    Showing the link here would let a stranger approve their own browser, so only the owner's
+    own comms thread reads it."""
+
+    def deliver(self, connector: Connector, client: str, link: str) -> str:
+        connector.request_approval(client, link)
+        return ("<p>An approval link was sent to the owner on comms.</p>"
+                "<p>Open that link and confirm to connect and remember this browser.</p>")
 
 
 @dataclass(frozen=True)
@@ -409,6 +456,18 @@ class RunningRequest(RequestWait):
         elapsed = now - self.started
         overdue = " OVERDUE" if self.bound.overdue(elapsed) else ""
         return f"{overdue} {elapsed:.3f}s into {self.method} {self.template},"
+
+
+class ApprovalSender(ServiceSender):
+    """Who the connector is when it speaks for itself, the way `installer (service)` does.
+
+    `CALLER` stays the authority a granted token acts as, which is a real agent on this bus.
+    Borrowing it to send the owner's sign-in link meant any bus without an agent of that name
+    answered with a 500. Kept off `Connector` because its OAuth client-registration route is
+    already named `register`, and one class cannot own two facts under one name.
+    """
+
+    sender: ClassVar[str] = "connector"
 
 
 @dataclass(frozen=True)
@@ -745,7 +804,6 @@ class Connector(ConnectorService, McpServer):
             raise web.HTTPBadRequest(text=str(error)) from error
         code, approval = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
         browser = request.cookies.get(TrustedBrowser.cookie_name, "")
-        notices: list[AuthorizationRequest] = []
 
         def decided(grants: ConnectorGrants) -> DocumentChange[ConnectorGrants, ConnectorGrants]:
             now = time.time()
@@ -754,10 +812,7 @@ class Connector(ConnectorService, McpServer):
                 raise web.HTTPBadRequest(text="Unknown client.")
             if grants.trusts(browser):
                 return DocumentChange.to(grants.code_issued(query, code, now))
-            if query.request_id not in grants.requests:
-                grants = grants.waiting(query, digest(approval), now)
-                notices.append(grants.requests[query.request_id])
-            return DocumentChange.to(grants)
+            return DocumentChange.to(grants.waiting(query, digest(approval), now))
 
         try:
             grants = await asyncio.to_thread(self.store.update, decided)
@@ -765,35 +820,33 @@ class Connector(ConnectorService, McpServer):
             raise web.HTTPTooManyRequests(
                 text=str(refusal), headers={"Retry-After": str(CODE_SECONDS)}
             ) from refusal
-        for pending in notices:
-            path = request.app.router[self.approve.__name__].url_for(
-                **FieldCodec.encode(ApprovalLink(pending.query.request_id, approval))
-            )
-            await asyncio.to_thread(
-                self.request_approval, grants.clients[query.client_id].name, f"{self.issuer}{path}"
-            )
-        if query.request_id in grants.requests:
-            return web.Response(
-                content_type="text/html",
-                headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
-                text=(
-                    "<!doctype html><title>Approve connector</title>"
-                    "<p>An approval link was sent to the owner on comms.</p>"
-                    "<p>Open that link and confirm to connect and remember this browser.</p>"
-                ),
-            )
-        raise web.HTTPFound(query.redirect(code), headers={"Cache-Control": "no-store"})
+        if grants.trusts(browser):
+            raise web.HTTPFound(query.redirect(code), headers={"Cache-Control": "no-store"})
+        path = request.app.router[self.approve.__name__].url_for(
+            **FieldCodec.encode(ApprovalLink(query.request_id, approval))
+        )
+        notice = await asyncio.to_thread(
+            ApprovalAudience.of(request).deliver,
+            self, grants.clients[query.client_id].name, f"{self.issuer}{path}",
+        )
+        return web.Response(
+            content_type="text/html",
+            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+            text=f"<!doctype html><title>Approve connector</title>{notice}",
+        )
 
     def request_approval(self, client: str, link: str) -> None:
         """Only the durable human identity receives the bearer approval link."""
         with self.opened_wire() as comms:
             owner = comms.messaging.user_identity(Checkout(self.root))
+            ApprovalSender.register(comms.registry)
             comms.messaging.send(
-                CALLER.name, owner.name,
+                ApprovalSender.sender, owner.name,
                 f"Connector sign-in requested by {json.dumps(client)}. "
                 f"Open the link and confirm only if you started this connection; it expires in "
                 f"{CODE_SECONDS} seconds and remembers this browser.\n{link}",
                 QuestionKind,
+                origin=ApprovalSender.origin,
             )
 
     async def approve(self, request: web.Request) -> web.Response:

@@ -29,7 +29,7 @@ from agent_comms.execution.queued_input import InitialInput
 from agent_comms.execution.selected.actions import NoSelectedTools
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.nominal.lifecycle_capability import Unresolved
-from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.execution.persistent_pi_session import PersistentPiSession
 from agent_comms.registry.activity import ActivityState
 from bus_record_fixture import prepare_native_comms
 from conftest import answer_rules

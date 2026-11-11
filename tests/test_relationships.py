@@ -8,7 +8,6 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.registry_document import RosterVisibility
 from agent_comms.registry.relationships import (
     ChildrenRelationshipGroup,
     CollaboratingRelationshipGroup,
@@ -17,10 +16,8 @@ from agent_comms.registry.relationships import (
     ParentRelationshipGroup,
     RelationshipEdit,
 )
-from agent_comms.registry.thread_text import (
-    ForkedParent,
-    NoParent,
-)
+from agent_comms.registry.roster_visibility import RosterVisibility
+from agent_comms.registry.thread_text import ForkedParent, NoParent
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.tools.served import invoke_tool
 from bus_history import read_history

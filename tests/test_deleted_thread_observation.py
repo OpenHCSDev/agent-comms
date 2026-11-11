@@ -9,8 +9,8 @@ from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry import activity
 from agent_comms.registry.activity import ActivityState, ObservedActivity
-from agent_comms.registry.registry_document import DEFAULT_ROSTER
-from agent_comms.registry.registry_provenance import DeletedThread
+from agent_comms.registry.registry_names import DeletedThread
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
 from agent_comms.registry.thread_presentation import NoThreadPresentation, ThreadRetired
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import ExternalThread, NativeThread

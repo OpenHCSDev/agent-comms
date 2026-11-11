@@ -42,7 +42,7 @@ from agent_comms.team.rule_deal import DealDelivery
 from agent_comms.transport.tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from agent_comms.agent_events import AgentEvent
+    from agent_comms.execution.agent_event import AgentEvent
     from agent_comms.execution.launch_runtime import LaunchRuntime
     from agent_comms.execution.owned_turn import TurnDelivery
     from agent_comms.execution.transcript_sources import TranscriptSource

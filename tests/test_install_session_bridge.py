@@ -41,10 +41,7 @@ from agent_comms.cli_bridges.shared import (
     UnobservedBridge,
 )
 from agent_comms.comms import wire
-from agent_comms.execution.child_process import (
-    ProcessIdentity,
-    SpawnedProcess,
-)
+from agent_comms.execution.child_process import ProcessIdentity, SpawnedProcess
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.root_runtime import RootRuntime
 from agent_comms.execution.turn_bound import LastTurns

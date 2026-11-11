@@ -10,8 +10,10 @@ from dataclasses import dataclass, replace
 from functools import partial
 from itertools import groupby
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.input_publication_source import InputPublicationSource
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.tables.publications import PublicationIntents
 from agent_comms.errors import (
@@ -21,15 +23,8 @@ from agent_comms.errors import (
 )
 from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.messaging.audience_manifest import freeze_audience
-from agent_comms.messaging.bus import (
-    Bus,
-    BusReader,
-    BusSnapshot,
-    ClaimRecord,
-    PrivateRecord,
-    RecordBuilder,
-)
-from agent_comms.messaging.bus_publication import InitialOrigin
+from agent_comms.messaging.bus import Bus, BusSnapshot, ClaimRecord, PrivateRecord
+from agent_comms.messaging.bus_record_builder import RecordBuilder
 from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
 from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.envelope_claim_transitions import (
@@ -41,7 +36,7 @@ from agent_comms.messaging.envelope_claim_transitions import (
     WakeClaims,
 )
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
-from agent_comms.messaging.mentions import ThreadMention
+from agent_comms.messaging.initial_origin import InitialOrigin
 from agent_comms.messaging.messages import BusRecord, ClaimNoticeKind, Message
 from agent_comms.messaging.wake import OrdinaryControl, resolve_wake_cohort
 from agent_comms.nominal.field_codec import ClaimId
@@ -49,12 +44,12 @@ from agent_comms.projects.change_report import OrderRoots
 from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
-from agent_comms.registry.registry_document import DEFAULT_ROSTER, RegistrySnapshot
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.storage.private_path import FileRevision
 
-if TYPE_CHECKING:
-    from agent_comms.coordination.session import NativeCapture
-    from agent_comms.registry.threads import Thread
+
+class PublicationSnapshot(InputPublicationSource, BusSnapshot):
+    """The original held bus cut with input-publication acquisition."""
 
 
 @dataclass(eq=False, repr=False)
@@ -92,13 +87,9 @@ class Publisher:
         target: NamedTarget,
         sequence: int,
         snapshot: RegistrySnapshot,
-        original_source: BusReader,
+        original_source: PublicationSnapshot,
     ) -> Message:
         message.require_task_publication(sender, snapshot, original_source)
-
-        def resolve_mention(name: str) -> str | None:
-            return next((thread.name for thread in
-                         snapshot.visible_threads(DEFAULT_ROSTER, names=(name,))), None)
 
         return replace(
             message,
@@ -106,7 +97,7 @@ class Publisher:
             target=target.name,
             seq=sequence,
             sender_role=snapshot.threads[sender].role,
-            mentions=ThreadMention.find(message.body, resolve_mention),
+            mentions=snapshot.mentions(message.body),
         )
 
 
@@ -114,7 +105,7 @@ class ClaimWrites(Publisher):
     """Publishes claim envelopes."""
 
     def release_resources(
-        self, boundary: NativeCapture, claims: Sequence[ClaimOwner], wording: str,
+        self, boundary: coordination_session.NativeCapture, claims: Sequence[ClaimOwner], wording: str,
     ) -> None:
         """Release only still-current acquisitions, in bounded whole-set envelopes.
 
@@ -152,7 +143,7 @@ class ClaimWrites(Publisher):
         def build(seq: int, db: sqlite3.Connection) -> ClaimRecord:
             stored = self._prepare_message_unlocked(
                 message, sender=sender, target=target, sequence=seq, snapshot=snapshot,
-                original_source=BusSnapshot.from_connection(db),
+                original_source=PublicationSnapshot.from_connection(db),
             )
             transition = make_transition(owner=stored.sender, seq=seq,
                                          message_id=stored.message_id)
@@ -169,7 +160,7 @@ class ClaimWrites(Publisher):
             ) from error
 
     def _publish_acquisition_unlocked(
-        self, snapshot: RegistrySnapshot, owner: Thread,
+        self, snapshot: RegistrySnapshot, owner: threads.Thread,
         resource: str, claim: RecordedScope, *, activity: ActivityClocks,
     ) -> ClaimOwner:
         build = self._claim_builder(
@@ -215,7 +206,7 @@ class InitialWrites(Publisher):
             lookups = [thread.incarnation.lookup for thread in selected]
             sender_lookup = snapshot.threads[sender].incarnation.lookup
             def build(seq: int, db: sqlite3.Connection) -> PrivateRecord:
-                source = BusSnapshot.from_connection(db)
+                source = PublicationSnapshot.from_connection(db)
                 stored = self._prepare_message_unlocked(
                     message, sender=sender, target=target, sequence=seq,
                     snapshot=snapshot, original_source=source,
@@ -273,7 +264,7 @@ class ResponseWrites(Publisher):
         def build(seq: int, db: sqlite3.Connection):
             stored = self._prepare_message_unlocked(
                 message, sender=sender, target=target, sequence=seq, snapshot=registry_snapshot,
-                original_source=BusSnapshot.from_connection(db),
+                original_source=PublicationSnapshot.from_connection(db),
             )
             if not intent.matches_publication(stored):
                 raise RelationViolationError("Stored response does not match publication intent.")
@@ -288,3 +279,6 @@ class OwnerPublisher(InitialWrites, ClaimWrites):
 
 class ParticipantPublisher(ResponseWrites, ClaimWrites):
     """A selected participant's bus: its keyed responses and its claims."""
+
+from agent_comms.coordination import session as coordination_session
+from agent_comms.registry import threads

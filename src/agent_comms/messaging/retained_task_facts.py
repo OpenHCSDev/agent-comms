@@ -9,49 +9,46 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
+from agent_comms import input_attempt
 from agent_comms.errors import RelationViolationError
-from agent_comms.input_attempt import StoredInput
+from agent_comms.execution.input_lookup import InputLookup
+from agent_comms.messaging.message_reads import ConversationRead
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.messaging.messages import ClaimMessage, Message
+import agent_comms.messaging.messages as messages
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.nominal.text_digest import TextDigest
-
-if TYPE_CHECKING:
-    from agent_comms.input_disposition import InputDispositions
-    from agent_comms.messaging.bus import BusReader
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry.thread_identity import ThreadIncarnation
-    from agent_comms.registry.threads import Thread
+from agent_comms.registry.task_owner import TaskOwner
+from agent_comms.registry.task_registry import TaskRegistry
+from agent_comms.registry.thread_identity import ThreadIncarnation
 
 
 class ExactTaskFact(DeclaredFamily, affix="TaskFact"):
     """Membership belongs to each determining source, not the packing policy."""
 
-    def authored_sources(self) -> tuple[Message, ...]:
+    def authored_sources(self) -> tuple[messages.Message, ...]:
         return ()
 
-    def wire_sources(self) -> tuple[Message, ...]:
+    def wire_sources(self) -> tuple[messages.Message, ...]:
         return ()
 
     def original_sources(self):
         return tuple((source.reference, source) for source in self.wire_sources())
 
-    def input_sources(self) -> tuple[StoredInput, ...]:
+    def input_sources(self) -> tuple[input_attempt.StoredInput, ...]:
         return ()
 
     def for_tasks(self, current: frozenset[MessageReference]) -> ExactTaskFact:
         return self
 
-    def for_owner(self, owner: Thread, registry: RegistrySnapshot) -> ExactTaskFact:
+    def for_owner(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> ExactTaskFact:
         return self
 
 
 @dataclass(frozen=True)
 class UserSourceTaskFact(ExactTaskFact):
-    source: Message
+    source: messages.Message
 
     def wire_sources(self):
         return (self.source,)
@@ -65,7 +62,7 @@ class UserSourceTaskFact(ExactTaskFact):
 @dataclass(frozen=True)
 class AuthoredTaskFact(ExactTaskFact):
     """Captured projection only; its original declaration owns applicability."""
-    source: Message
+    source: messages.Message
 
     def authored_sources(self):
         return (self.source,)
@@ -87,7 +84,7 @@ class AuthoredTaskFact(ExactTaskFact):
 @dataclass(frozen=True)
 class DecisionTaskFact(AuthoredTaskFact, declared_name="historical_decision"):
     def __post_init__(self):
-        self.source.require_decision()
+        self.source.task.require_decision()
 
     def current_fact(self):
         return CurrentDecisionTaskFact(self.source)
@@ -173,7 +170,7 @@ class CurrentHumanConstraintTaskFact(HumanConstraintTaskFact,
 
 @dataclass(frozen=True)
 class ClaimTaskFact(ExactTaskFact):
-    source: ClaimMessage
+    source: messages.ClaimMessage
 
     def __post_init__(self) -> None:
         self.source.require_claim_transition()
@@ -184,9 +181,9 @@ class ClaimTaskFact(ExactTaskFact):
 
 @dataclass(frozen=True)
 class InputTaskFact(ExactTaskFact):
-    source: StoredInput
+    source: input_attempt.StoredInput
 
-    def input_sources(self) -> tuple[StoredInput, ...]:
+    def input_sources(self) -> tuple[input_attempt.StoredInput, ...]:
         return (self.source,)
 
     def original_sources(self):
@@ -218,7 +215,7 @@ class RetainedTaskFacts:
     facts: tuple[ExactTaskFact, ...]
 
     @classmethod
-    def capture(cls, source: BusReader, owner: ThreadIncarnation) -> RetainedTaskFacts:
+    def capture(cls, source: ConversationRead[messages.BusRecord], owner: ThreadIncarnation) -> RetainedTaskFacts:
         """Capture declared facts from one participant's immutable native read."""
         lookup = owner.require_recorded().lookup
         after = 0
@@ -234,7 +231,7 @@ class RetainedTaskFacts:
         """Describe this exact captured payload, never unrelated bus activity."""
         return TextDigest.of(self.canonical_bytes(FieldCodec.encode(self)).decode())
 
-    def original_input_facts(self, inputs: InputDispositions) -> tuple[ExactTaskFact, ...]:
+    def original_input_facts(self, inputs: InputLookup[input_attempt.InputAttempt]) -> tuple[ExactTaskFact, ...]:
         """Resolve pins through their original declarations and input owner.
 
         The lookup is local to this read. A pin cannot supply replacement input
@@ -249,7 +246,7 @@ class RetainedTaskFacts:
     def canonical_bytes(record: object) -> bytes:
         return FieldCodec.compact(record, sort_keys=True, allow_nan=False).encode()
 
-    def original_text_source(self, reference: MessageReference) -> Message | StoredInput:
+    def original_text_source(self, reference: MessageReference) -> messages.Message | input_attempt.StoredInput:
         originals = {key: source for fact in self.facts
                      for key, source in fact.original_sources()}
         for fact in self.facts:
@@ -258,14 +255,14 @@ class RetainedTaskFacts:
                     return message.task.original_text_source(message, originals)
         raise RelationViolationError("Authored source is outside this captured read")
 
-    def current_authored_lineages(self, owner: Thread, registry: RegistrySnapshot) -> tuple[tuple[Message, Message], ...]:
+    def current_authored_lineages(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> tuple[tuple[messages.Message, messages.Message], ...]:
         """Resolve explicit original-reference lineage, never equal text or time.
 
         These local maps live only for this read and have no update lifecycle.
         All original records remain present in the immutable source evidence.
         """
-        originals: dict[MessageReference, Message] = {}
-        effective: dict[MessageReference, tuple[Message, Message]] = {}
+        originals: dict[MessageReference, messages.Message] = {}
+        effective: dict[MessageReference, tuple[messages.Message, messages.Message]] = {}
         for fact in self.facts:
             for message in fact.authored_sources():
                 for root in message.task.current_roots(message, originals, owner, registry):
@@ -277,11 +274,11 @@ class RetainedTaskFacts:
         return tuple((root, message) for root, message in effective.values()
                      if root.task.require_scoped_task().applies(owner, registry))
 
-    def current_authored_sources(self, owner: Thread, registry: RegistrySnapshot) -> tuple[Message, ...]:
+    def current_authored_sources(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> tuple[messages.Message, ...]:
         return tuple(selected for _, message in self.current_authored_lineages(owner, registry)
                      for selected in message.task.selected_sources(message))
 
-    def for_owner(self, owner: Thread, registry: RegistrySnapshot) -> RetainedTaskFacts:
+    def for_owner(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> RetainedTaskFacts:
         """Classify the same original facts at the existing frozen source cut."""
         selected = self.current_authored_sources(owner, registry)
         for message in selected:

@@ -25,7 +25,7 @@ from agent_comms.execution.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.execution.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.installer.backup import StoreBackup, bus_files
-from agent_comms.installer.carry import STEPS, CarryChain, FinishedCarryStore
+from agent_comms.installer.carry import CarryChain, FinishedCarryStore
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstallClock, TargetProgram
 from agent_comms.installer.launch import InstallReport
@@ -34,7 +34,7 @@ from agent_comms.installer.probes.carry import Carried, Carry, MigrateOperation
 from agent_comms.installer.probes.commands import CliOutput, CliUndecodableError
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.installer.runtime_resolution import RuntimeResolution
-from agent_comms.installer.target_tree import TargetTree
+from agent_comms.installer.target_tree import STEPS, TargetTree
 from agent_comms.installer.upgrade import (
     ExistingBusInstall,
     HeldOwnersStopped,
@@ -324,13 +324,14 @@ def test_a_rollback_holds_the_root_until_every_store_opens_under_its_runtime(
             migration.carry((step(LiveFilesRequest(comms.root), comms.root.parent / "spill"),), staged)
         with owners.held_on_failure():
             hold = backup.restore(partial(staged.restore_stores, hold))
+            outgoing = replace(staged, runtime=RootRuntimeStore.at(comms.root).read().runtime())
             with hold.holding():
-                staged.require_opens(comms.root)
+                outgoing.require_opens(comms.root)
         with hold.holding():
             ledger_one_failure_short(comms.root)
             with pytest.raises(UpgradeRefused, match="goal_attempts.sqlite3"):
                 with owners.held_on_failure():
-                    staged.require_opens(comms.root)
+                    outgoing.require_opens(comms.root)
     owners.release()
     owners.give_back.close()
     assert started == []

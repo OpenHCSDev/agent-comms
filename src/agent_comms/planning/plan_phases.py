@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import (
-    TYPE_CHECKING,
-    ClassVar,
-)
+from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.cli_bridges.tool_calls import CliToolArguments
 from agent_comms.execution.pi_events import PiEvent
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import Id128, MessageId, NominalSpelling, NominalText
+from agent_comms.planning.order_phase import OrderPhase
+from agent_comms.planning.orders import Todo
 from agent_comms.planning.phase_artifacts import RecordedArtifact
 from agent_comms.planning.phase_evidence import (
     AllEvidence,
@@ -36,15 +34,12 @@ from agent_comms.planning.phase_evidence import (
     RestatedMembersAbsent,
 )
 from agent_comms.planning.phase_tasks import PhaseTask, UnspecifiedPhaseTask
+from agent_comms.planning.plan_reading import PlanReading
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
 from agent_comms.registry.thread_identity import BirthlessIncarnation
 from agent_comms.storage.store_files import SqliteStore
 from agent_comms_hooks.process_claim import ProcessSingleton
 from agent_comms_hooks.queue_bypass import QueueBypassGuard
-
-if TYPE_CHECKING:
-    from agent_comms.planning.orders import Todo
-    from agent_comms.planning.plan_reading import PlanReading
 
 
 class Plan(DeclaredFamily, affix="Plan"):
@@ -90,33 +85,6 @@ class ModuleOwnershipPlan(Plan):
 
     document = "plans/MODULE-OWNERSHIP-PLAN.md"
     evidence_manifest: ClassVar[str] = "docs/plan-evidence/module-map-manifest.json"
-
-
-class OrderPhase(DeclaredFamily, affix="Phase"):
-    """What an order serves: one plan phase, or nothing in any plan."""
-
-    @classmethod
-    def order_refusals(cls, read_ready: Callable[[], tuple[type[PlanPhase], ...]],
-                       reason: str) -> tuple[str, ...]:
-        return ()
-
-
-class UnplannedPhase(OrderPhase):
-    @classmethod
-    def order_refusals(cls, read_ready: Callable[[], tuple[type[PlanPhase], ...]],
-                       reason: str) -> tuple[str, ...]:
-        """Read the heartbeat's ready phases only when the stated reason does not answer the
-        refusal."""
-        if len(reason.split()) >= 8:
-            return ()
-        ready = read_ready()
-        if ready:
-            return (
-                "Plan phases are ready: "
-                + ", ".join(phase.declared_name for phase in ready)
-                + ". Name a phase, or provide an explicit unplanned_reason of 8+ words.",
-            )
-        return ()
 
 
 class PlanPhase(OrderPhase, declared_name=None):
@@ -1205,10 +1173,7 @@ class MessagingOwnersPhase(ModuleOwnershipPhase):
     """P3: `messaging/` owns the bus, channels and conversation owners."""
 
     after = (ProjectOwnersPhase,)
-    evidence = AllEvidence((
-        PathsAbsent(("src/agent_comms/message_bus.py", "src/agent_comms/messaging.py")),
-        PatternAbsent(r"from agent_comms[.](message_bus|messaging)\b", ("src",)),
-    ))
+    evidence = PathsAbsent(("src/agent_comms/message_bus.py", "src/agent_comms/messaging.py"))
 
 
 class ExecutionOwnersPhase(ModuleOwnershipPhase):

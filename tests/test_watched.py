@@ -16,12 +16,9 @@ from agent_comms.messaging.bus import Bus, PublicRecord
 from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.messaging.watched import ChangeSignal, FileLifetimeSource, FileSource
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, GoalWaitId, WatchPaths
-from agent_comms.planning.goal_attempts import (
-    Generation,
-    GoalAttemptStore,
-    StorageUncertainError,
-)
-from agent_comms.planning.goal_presentation import GoalWaitTarget
+from agent_comms.planning.goal_attempts import GoalAttemptStore
+from agent_comms.planning.goal_ledger import Generation, StorageUncertainError
+from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goal_waits import GoalWaits, RecordedGoalWait
 from agent_comms.presentation import WireRevision
 from agent_comms.projects.checkouts import Checkout

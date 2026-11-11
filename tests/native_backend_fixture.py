@@ -32,7 +32,7 @@ from agent_comms.execution.turn_inbox import (
 )
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
-from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.execution.persistent_pi_session import PersistentPiSession
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation

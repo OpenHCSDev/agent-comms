@@ -1,7 +1,12 @@
 """Original sealed messaging survives silent context rows through every projection."""
 import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 
+from agent_comms.context_segments.awareness import AwarenessSegment
+from agent_comms.context_segments.native_messages import TranscriptSegment
+from agent_comms.context_store import ContextRequest, ContextSegmentVersion
 from agent_comms.execution.image_input import ImageInput
 from agent_comms.execution.pi_commands import Prompt
 from agent_comms.execution.turn_context import (
@@ -9,7 +14,6 @@ from agent_comms.execution.turn_context import (
     OwnerProvenance,
     RecordedContextTurn,
     SegmentManifest,
-    TranscriptSegment,
     TurnContext,
     UserInputSegment,
 )
@@ -36,7 +40,6 @@ def manifest(owner, generation=1):
 
 def corrupt_context_kind(comms, name, kind):
     """Damage only one owner's stored payload, not its schema or message bus."""
-    from agent_comms.context_store import ContextRequest, ContextSegmentVersion
 
     selected = comms.contexts.page(name, comms.registry).resources[-1]
     with comms.contexts.writing() as db:
@@ -51,10 +54,7 @@ def corrupt_context_kind(comms, name, kind):
 
 
 def test_awareness_inspection_reads_the_committed_source_beside_a_held_writer(tmp_path):
-    from concurrent.futures import ThreadPoolExecutor
-    from threading import Event
 
-    from agent_comms.context_segments.awareness import AwarenessSegment
 
     comms = context_comms(tmp_path)
     publish_initial(comms, 'sender', '#team', '@Alice original question')
@@ -79,7 +79,7 @@ def test_awareness_inspection_reads_the_committed_source_beside_a_held_writer(tm
         finally:
             release.set()
         writer.result(timeout=2)
-    inspection = TurnContext.for_inspection(comms, owner)
+    inspection = comms.context_for(owner)
     assert original[0] in inspection.segments
     assert comms.bus.bus.revision() == before
 

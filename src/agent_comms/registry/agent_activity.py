@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
+from agent_comms.execution.runtime_info_projection import RuntimeInfoProjection
+from agent_comms.execution.runtime_info_source import RuntimeInfoWrites
+from agent_comms.messaging.assignment_notice import AssignmentNotice
+from agent_comms.messaging.delivery_recipients import DeliveryRecipients
+
 import logging
 import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+from agent_comms.agent_backend import AgentBackend
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.diagnostics import record_drain_failure
 from agent_comms.execution.native_input_owner import RegistryOwner
-from agent_comms.execution.runtime_info import RuntimeInfo, RuntimeInfoStore
+from agent_comms.execution.runtime_info import AgentRuntimeInfo, RuntimeInfo, RuntimeInfoStore
 from agent_comms.execution.turn_lease import (
     NoFinishedTurn,
     TurnCompletion,
@@ -22,10 +28,14 @@ from agent_comms.execution.turn_lease import (
 )
 from agent_comms.execution.turn_phase import IdlePhase, PreparingPhase, TurnPhase
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
-from agent_comms.messaging.notification_progress import TakenProgress, WorkingTakenProgress
+from agent_comms.messaging.notification_progress import (
+    DeliveryProgress,
+    TakenProgress,
+    WorkingTakenProgress,
+)
 from agent_comms.messaging.routing import NoTurnRouting, Routing
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import ThreadLookup, TurnId
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.activity import (
     Activity,
     ActivityCapture,
@@ -36,63 +46,15 @@ from agent_comms.registry.activity import (
     NoDrainDiagnostic,
     ObservedActivity,
 )
+from agent_comms.registry.activity_registry_reads import ActivityRegistryRead
+from agent_comms.registry.recipient_activity import RecipientActivity
+from agent_comms.registry.registration_reads import ActivityRegistration
 from agent_comms.registry.thread_identity import OwnerIdentity, ThreadIncarnation
-from agent_comms.registry.threads import Thread
+from agent_comms.registry.thread_status import ThreadStatus
+from agent_comms.registry.threads import NativeThread, Thread
 
-if TYPE_CHECKING:
-    from agent_comms.agent_backend import AgentBackend
-    from agent_comms.agent_events import RuntimeInfoObservation
-    from agent_comms.messaging.bus_publication import Delivered
-    from agent_comms.messaging.message_notification import MessageNotification
-    from agent_comms.messaging.notification_progress import AssignmentProgress, DeliveryProgress
-    from agent_comms.registry.registration import Registration
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry.thread_status import ThreadStatus
 
 _LOG = logging.getLogger(__name__)
-
-
-class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
-    """Acquired recipient availability; no assignment, start or retry authority."""
-
-    def turn_started_by(self, updated_at_ms: int) -> bool:
-        return False
-
-    def displayed_recipient(self, notification, source, reads, document, snapshot):
-        return reads.displayed_recipient(
-            source, notification.recipient_identity, snapshot, document=document
-        )
-
-    def selected_response(
-        self,
-        notification: MessageNotification,
-        updated_at_ms: int,
-        progress: AssignmentProgress,
-    ) -> MessageNotification:
-        return progress.selected_notification(
-            notification, busy=self.turn_started_by(updated_at_ms)
-        )
-
-    def taken_response(
-        self, notification: MessageNotification, progress: DeliveryProgress,
-    ) -> MessageNotification:
-        """A message a running turn took, shown without a claim about current work."""
-        return replace(notification, state=TakenProgress(progress))
-
-
-@dataclass(frozen=True)
-class RecordedRecipientActivity(RecipientActivity):
-    """Durable history supplies no current process, readiness or inbox check."""
-
-    def displayed_recipient(self, notification, source, reads, document, snapshot):
-        return reads.historical_displayed_recipient(
-            source.message, notification.recipient_identity, snapshot, document=document
-        )
-
-
-@dataclass(frozen=True)
-class UnavailableRecipientActivity(RecipientActivity):
-    pass
 
 
 @dataclass(frozen=True)
@@ -104,14 +66,13 @@ class LiveRecipientActivity(RecipientActivity):
         return self.thread.turn_started_by(updated_at_ms)
 
     def taken_response(
-        self, notification: MessageNotification, progress: DeliveryProgress,
-    ) -> MessageNotification:
+        self, notification: AssignmentNotice[DeliveryProgress], progress: DeliveryProgress,
+    ) -> AssignmentNotice[DeliveryProgress]:
         state = (WorkingTakenProgress if self.activity.state.busy else TakenProgress)(progress)
-        return replace(notification, state=state)
+        return notification.with_state(state)
 
-
-class AgentActivity:
-    def __init__(self, root: Path, registry: Registration):
+class AgentActivity(RuntimeInfoWrites[RuntimeInfoProjection[AgentRuntimeInfo]]):
+    def __init__(self, root: Path, registry: ActivityRegistration[Thread, NativeThread, ActivityRegistryRead, StorageRule, Routing, TurnLeaseFence, TurnCompletion]):
         self.registry = registry
         self.activity = ActivityStore(root)
         self.runtime_info = RuntimeInfoStore.at(root)
@@ -126,24 +87,24 @@ class AgentActivity:
         """Native turns, bridges and seated subagents publish the phase's own activity."""
         self.set_activity(thread, phase.activity_state, " ".join(phase.activity_detail.split()))
 
-    def activity_of(self, thread: str, *, snapshot: RegistrySnapshot) -> ObservedActivity:
+    def activity_of(self, thread: str, *, snapshot: ActivityRegistryRead) -> ObservedActivity:
         participant = snapshot.require(thread)
         return self.all_activity((participant,), snapshot=snapshot)[participant.name]
 
-    def is_live(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
+    def is_live(self, incarnation: ThreadIncarnation, snapshot: ActivityRegistryRead) -> bool:
         """The registered presence owns liveness for this exact incarnation."""
         return incarnation.current(snapshot) and self.presence(incarnation, snapshot).running
 
-    def answers_later(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
+    def answers_later(self, incarnation: ThreadIncarnation, snapshot: ActivityRegistryRead) -> bool:
         """Whether a wait on this exact incarnation is answered once it reads its inbox."""
         return (incarnation.current(snapshot)
                 and self.presence(incarnation, snapshot).answers_later)
 
     @staticmethod
-    def presence(incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> ThreadStatus:
+    def presence(incarnation: ThreadIncarnation, snapshot: ActivityRegistryRead) -> ThreadStatus:
         return snapshot.status(snapshot.canonical_name(incarnation.name))
 
-    def is_working(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
+    def is_working(self, incarnation: ThreadIncarnation, snapshot: ActivityRegistryRead) -> bool:
         return self.is_live(incarnation, snapshot) and self.activity_of(
             snapshot.canonical_name(incarnation.name), snapshot=snapshot,
         ).state.busy
@@ -153,11 +114,11 @@ class AgentActivity:
         activity = ObservedActivity.acquire(event, owner)
         return participant.project_activity(activity)
 
-    def all_activity(self, threads: Iterable[Thread], *, snapshot: RegistrySnapshot) -> Mapping[str, ObservedActivity]:
+    def all_activity(self, threads: Iterable[Thread], *, snapshot: ActivityRegistryRead) -> Mapping[str, ObservedActivity]:
         return self.captured(threads, snapshot=snapshot).activity
 
     def captured(self, threads: Iterable[Thread], *,
-                 snapshot: RegistrySnapshot) -> ActivityCapture[ObservedActivity]:
+                 snapshot: ActivityRegistryRead) -> ActivityCapture[ObservedActivity]:
         requested = {thread.name: thread for thread in threads}
         if not requested:
             return ActivityCapture.empty()
@@ -177,16 +138,16 @@ class AgentActivity:
                 observed[name], readiness=observed[name].readiness.stalled(oldest))
         return ActivityCapture(observed, events.expires_at)
 
-    def stalled(self, readers: tuple[str, ...], snapshot: RegistrySnapshot) -> Mapping[str, float]:
+    def stalled(self, readers: tuple[str, ...], snapshot: ActivityRegistryRead) -> Mapping[str, float]:
         """Each claimed reader that stopped taking its inbox, by when. A store without the bus
         reads no inbox, so it sees no stall; Comms's store reads the taken-input inbox."""
         return {}
 
     def observe_recipients(
         self,
-        recipients: Iterable[tuple[Delivered, FrozenRecipient]],
+        recipients: Iterable[tuple[DeliveryRecipients, FrozenRecipient]],
         *,
-        snapshot: RegistrySnapshot,
+        snapshot: ActivityRegistryRead,
     ) -> Mapping[ThreadLookup, RecipientActivity]:
         """Acquire one bounded window's recipients from the original sends."""
         selected = {}
@@ -220,7 +181,7 @@ class AgentActivity:
         if diagnostic.owner != owner:
             raise RelationViolationError("Drain diagnostic belongs to another owner.")
         if source_error is not None:
-            from agent_comms.execution.diagnostics import record_drain_failure
+
 
             path = record_drain_failure(
                 self.registry.store.path.parent,
@@ -320,7 +281,7 @@ class AgentActivity:
         self._emit_activity(IdlePhase().activity_event(lease.identity.incarnation.name))
         return fence
 
-    def observe_runtime_info(self, thread: str, observation: RuntimeInfoObservation) -> None:
+    def observe_runtime_info(self, thread: str, observation: RuntimeInfoProjection[AgentRuntimeInfo]) -> None:
         """Serialize the original observation with thread rename/retirement."""
         canonical = self.registry.require(thread).name
         self.runtime_info.observe(canonical, time.time(), observation)

@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Coro
 from contextlib import AbstractContextManager, AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, NoReturn
+from typing import TYPE_CHECKING, ClassVar, NoReturn, Self
 
 from agent_comms.execution.child_process import AttachedChild, ChildOutcome, join_retirement
 from agent_comms.execution.launch_runtime import INHERITED_ENVIRONMENT
@@ -17,23 +17,21 @@ from agent_comms.execution.native_failures import NativePiUnavailable, NativeReq
 from agent_comms.execution.native_pi import NativePiRpcLaunch
 from agent_comms.execution.native_prompt_send import send_fenced_prompt
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+from agent_comms.execution.participant_identity import ParticipantIdentity
 from agent_comms.execution.pending_requests import PendingRequest
 from agent_comms.execution.pi_events import PiEvent
 from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.publication_measurements import PublicationMeasurements
+from agent_comms.execution.session_retention import NativeSessionRetention
 from agent_comms.execution.session_revision import SessionRevision
-from agent_comms.execution.turn_context import Provenance
+from agent_comms.execution.turn_context import Provenance, TurnContext
+from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.storage.private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
-    from typing import Self
 
-    from agent_comms.execution.participant_identity import ParticipantIdentity
     from agent_comms.execution.pi_commands import ExtensionUiResponse, PiCommand
-    from agent_comms.execution.turn_context import TurnContext
-    from agent_comms.installer.native_package import VerifiedNativePackage
-    from agent_comms.pi_native_backend import PiNativeBackend
     from agent_comms.pi_payloads import PiResponseData, StateData
     from agent_comms.registry.threads import Thread
 
@@ -338,7 +336,7 @@ class NativeChildState(ABC):
         raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
 
     async def inspect(
-        self, persistent: PiNativeBackend, prepare: Callable[[], Awaitable[StateData]],
+        self, persistent: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity], prepare: Callable[[], Awaitable[StateData]],
         request: PiCommand,
     ) -> PiResponseData:
         """Prepare once, then inspect through the acquired idle capability."""
@@ -388,7 +386,7 @@ class RetiringNative(SuccessorNative):
     available = False
 
     async def inspect(
-        self, persistent: PiNativeBackend, prepare: Callable[[], Awaitable[StateData]],
+        self, persistent: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity], prepare: Callable[[], Awaitable[StateData]],
         request: PiCommand,
     ) -> PiResponseData:
         raise NativePiUnavailable("Native context requires an acquired native child")
@@ -405,7 +403,7 @@ class RetiringNative(SuccessorNative):
 class BorrowedNative(SuccessorNative):
 
     async def inspect(
-        self, persistent: PiNativeBackend, prepare: Callable[[], Awaitable[StateData]],
+        self, persistent: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity], prepare: Callable[[], Awaitable[StateData]],
         request: PiCommand,
     ) -> PiResponseData:
         # The active TurnSession owns receive/correlation. Borrow its original
@@ -431,7 +429,7 @@ class RetainedNative(ChildNative):
             return super().idle()
         return self
 
-    async def inspect_acquired(self, persistent: PiNativeBackend, request: PiCommand) -> PiResponseData:
+    async def inspect_acquired(self, persistent: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity], request: PiCommand) -> PiResponseData:
         async with persistent.lock:
             current = persistent.child_state.idle()
             data = await current.child.request(request)

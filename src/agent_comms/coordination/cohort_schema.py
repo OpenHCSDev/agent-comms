@@ -45,7 +45,7 @@ from agent_comms.storage.typed_table import (
     TypedTable,
     WithoutRowid,
 )
-from agent_comms.waking.wake_candidate_index import ProjectionUnavailableError
+from agent_comms.waking.errors import ProjectionUnavailableError
 
 if TYPE_CHECKING:
     from agent_comms.coordination.coordinator import Coordination

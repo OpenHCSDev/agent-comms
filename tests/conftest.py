@@ -1,7 +1,10 @@
 """Shared fixtures: an isolated Comms wire per test."""
 
 
+from dataclasses import dataclass
 import asyncio
+from threading import Thread
+from contextlib import asynccontextmanager
 import fcntl
 import json
 import os
@@ -37,6 +40,7 @@ from agent_comms.installer.native_package import (
     pinned_native_package,
 )
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
+from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.messaging.bus import Bus, BusRecord
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.channel_targets import CommandTarget
@@ -56,10 +60,7 @@ from agent_comms.projects.repo import Repo
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_model import DeclaredModel
-from agent_comms.registry.thread_text import (
-    ForkedParent,
-    GivenThreadText,
-)
+from agent_comms.registry.thread_text import ForkedParent, GivenThreadText
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import (
@@ -73,7 +74,9 @@ from agent_comms.team.order import Team
 from agent_comms.team.pi_rule_gate import PiRedeal, PiRuleGate
 from agent_comms.team.rule_deal import ReadSpan, RuleDeal, SessionAudit, StartedDeal
 from agent_comms.transport.native_tool_transport import ToolListener
+from agent_comms.transport.core_access import LocalCoreAccess
 from agent_comms.transport.tool_caller import PeerCaller
+from agent_comms.ui_model.observation import LocalRouteObservation, ObservationProcess
 from agent_comms.transport.tool_declaration import NoToolRecord, ToolDeclaration
 from agent_comms_hooks.watch import WatchRecord
 from source_programs import SourcePrograms
@@ -570,8 +573,8 @@ def ledger_one_failure_short(root: Path) -> Path:
     from contextlib import closing
 
     from agent_comms.execution.turn_failure import TurnFailure
+    from agent_comms.planning.goal_ledger import FailedTurnEvidence
     from agent_comms.planning.goal_attempts import GoalAttemptStore
-    from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
     from agent_comms.storage.typed_table import sql_literal
 
     directory = root / GoalAttemptStore.root_directory
@@ -700,3 +703,55 @@ def team_session(tmp_path, monkeypatch, team_bus):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     WatchClaim("s").enrol(WatchRecord("claude-code", str(team_bus.root), (), tmp_path / "state"))
     return team_bus
+
+
+@dataclass(frozen=True)
+class UiCoreReads:
+    """A UI's own Core calls, issued the way a UI issues them: from its thread, never from
+    the delivery loop, which `ObserverSameLoop` refuses because it would await its own answer.
+
+    Nineteen tests built `LocalCoreAccess(comms)` by hand, so the day a local read needed the
+    child serving this root, each of them was its own edit and its own chance to forget the
+    rule. One owner holds both here.
+    """
+
+    access: LocalCoreAccess
+
+    async def call[R](self, request):
+        return await asyncio.to_thread(self.access.call, request)
+
+
+@asynccontextmanager
+async def ui_core_reads(comms: Comms) -> AsyncIterator[UiCoreReads]:
+    """For a test that builds its own bus; the fixture below is the shared-bus case."""
+    async with ObservationProcess.awaited(comms.route) as reads:
+        yield UiCoreReads(LocalCoreAccess(comms, reads))
+
+
+def ui_core_read[R](comms: Comms, request):
+    """One Core call as a UI makes it, for a synchronous test that owns its own bus.
+
+    The child answers on the delivery loop while this read waits on a worker thread, which
+    is the arrangement `ObserverSameLoop` exists to require.
+
+    One child per read. Holding one open for a whole test needs the delivery loop on a
+    background thread, and two things stop that today: `ObservationProcess.awaited` takes
+    the loop and spawns the child together, although `start_receiving` documents that only
+    attachment belongs on the loop; and a closed process can stop the loop it was attached
+    to, so the next `run_coroutine_threadsafe` waits on a loop whose thread has already
+    exited. Splitting construction from attachment and retiring the loop with its children
+    both still hang at the second child (test_thread_names.py:111). The cost is one process
+    per read and it is named in the PR rather than traded for an intermittent hang.
+    """
+
+    async def once():
+        async with ui_core_reads(comms) as core:
+            return await core.call(request)
+
+    return asyncio.run(once())
+
+
+@pytest.fixture
+async def local_core(comms: Comms) -> AsyncIterator[UiCoreReads]:
+    async with ui_core_reads(comms) as reads:
+        yield reads

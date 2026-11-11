@@ -21,6 +21,7 @@ from agent_comms.coordination.errors import DMPaintedBoundChanged, DMScopeChange
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.launch_runtime import CallingThreadUnavailable
 from agent_comms.messaging.activity_clocks import ChannelActivity
+from agent_comms.messaging.channel_sources import ChannelHistorySource
 from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.message_reference import MessageReference
@@ -40,6 +41,8 @@ from agent_comms.nominal.field_codec import (
     TaggedUnion,
 )
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_names import RegistryNames
+from agent_comms.registry.tagged_thread_source import TaggedThreadSource
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.storage.bound_set import BoundSet
 from agent_comms.storage.private_path import FileObservation, MissingFile
@@ -49,7 +52,6 @@ if TYPE_CHECKING:
 
     from agent_comms.history_views import HistoryViews
     from agent_comms.messaging.bus import Bus, BusReader, BusSnapshot
-    from agent_comms.messaging.channels import TagChannel
     from agent_comms.messaging.historical_views import DMHistory, HistoricalSelection, HistorySource
     from agent_comms.messaging.message_bus import MessageBus
     from agent_comms.messaging.message_page import MessagePage, PageBounds
@@ -59,9 +61,10 @@ if TYPE_CHECKING:
     from agent_comms.presentation import BusPresentation
     from agent_comms.registry.private_registry_guard import RegistryPrivacy
     from agent_comms.registry.registration import Registration
-    from agent_comms.registry.registry_document import RegistrySnapshot, UserThreadLookup
+    from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.registry.registry_provenance import RegistryProvenance
     from agent_comms.registry.threads import Thread
+    from agent_comms.registry.user_thread_lookup import UserThreadLookup
 
 
 class DisplayViewer(SubclassUnion, affix="Viewer"):
@@ -1178,7 +1181,7 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
         return reads.capture(viewer, rows, snapshot, source, document=document)
 
     @classmethod
-    def capture(cls, channel: TagChannel, snapshot: RegistryProvenance) -> MemberActivityDisplayScope:
+    def capture(cls, channel: ChannelHistorySource, snapshot: RegistryNames[TaggedThreadSource]) -> MemberActivityDisplayScope:
         members = frozenset(name for name, thread in snapshot.threads.items()
                             if channel.tags <= thread.tags)
         names = members | frozenset(alias for alias, owner in snapshot.aliases.items()

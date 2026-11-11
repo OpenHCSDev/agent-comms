@@ -7,7 +7,7 @@ import pytest
 from agent_comms.execution.native_entries import NativeEntry
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.pi_wire import PiOmitted
-from agent_comms.pi_payloads import ReportedText, TextContent, UnknownContent
+from agent_comms.execution.provider_records import ReportedText, TextContent, UnknownContent
 
 
 def test_original_header_preserves_project_and_fork_lineage(tmp_path):

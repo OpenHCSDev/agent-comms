@@ -7,9 +7,11 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
+from typing import get_type_hints
 
 import pytest
 
+from agent_comms.context_segments.native_messages import TranscriptSegment
 from agent_comms.context_store import (
     UNREAD_CONTEXT,
     CapturedContext,
@@ -26,16 +28,17 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
 from agent_comms.execution.turn_context import (
     ContextManifest,
+    ContextRecording,
     JournalProvenance,
     NativeProvenance,
     ObservedDispatchRequest,
+    RecordedContextManifest,
     RecordedContextPredecessor,
     RecordedContextTurn,
     RecordedSegmentManifest,
     SegmentManifest,
     SystemLayerSegment,
     ToolCatalogSegment,
-    TranscriptSegment,
 )
 from agent_comms.execution.turn_item import PiRequestKey
 from agent_comms.installer.practice import PracticeCopy
@@ -43,6 +46,11 @@ from agent_comms.nominal.field_codec import ContextStoreId, FieldCodec, TurnId
 from agent_comms.registry.thread_identity import TurnIdentity
 from agent_comms.storage.typed_table import RowNotFoundError, SQLitePageSize
 from bus_record_fixture import context_comms
+
+
+def test_manifest_reads_the_original_recording_contract() -> None:
+    assert get_type_hints(RecordedContextManifest.capture)["previous"] is ContextRecording
+    assert issubclass(CapturedContext, ContextRecording)
 
 
 def context(owner, path, count, turn):

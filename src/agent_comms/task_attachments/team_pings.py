@@ -25,6 +25,7 @@ from agent_comms.messaging.messages import (
     TeamUpdatePosition,
 )
 from agent_comms.messaging.projection_source import ProducedRow
+from agent_comms.messaging.task_callbacks import TeamObservation
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -247,7 +248,7 @@ class PublishedFacts(PublicationFacts):
 
 
 @dataclass(frozen=True)
-class TeamUpdate(OwnerNotice, declared_name=None):
+class TeamUpdate(OwnerNotice, TeamObservation, declared_name=None):
     teammate: ThreadIncarnation
     handled: tuple[Ping, ...]
     not_applied: tuple[str, ...] = field(default=(), kw_only=True)

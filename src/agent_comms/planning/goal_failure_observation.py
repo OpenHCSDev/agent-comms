@@ -1,138 +1,26 @@
-from __future__ import annotations
+"""Failure readings used by goal execution; stored rows live in goal_ledger."""
 
-import math
-import sqlite3
-from abc import (
-    ABC,
-    abstractmethod,
-)
+
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import (
-    TYPE_CHECKING,
-    Annotated,
-)
+from sqlite3 import Connection
 
-from agent_comms.execution.turn_failure import TurnFailure
-from agent_comms.nominal.field_codec import AttemptId, GoalId, TurnId
-from agent_comms.planning.goal_attempt_identity import GoalAttemptIdentity
-from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_identity import (
-    ClaimedIdentity,
-    RecordedThreadIncarnation,
-    ThreadIncarnation,
-    TurnFence,
-    TurnIdentity,
-)
-from agent_comms.storage.typed_table import (
-    Column,
-    DurableTables,
-    ForeignKey,
-    TextStorage,
-    TypedTable,
-)
-
-if TYPE_CHECKING:
-    from agent_comms.planning.goal_attempts import FailedTurnObservation, Reservation
-    from agent_comms.planning.goal_presentation import GoalExecution
-    from agent_comms.registry.threads import Thread
+from agent_comms.planning.goal_mutation import GoalFailureProjection
 
 
-class GoalLedgerTable(DurableTables):
-    """Declarations in the durable goal-attempt and passive evidence ledger."""
-
-
-class GoalFailureEvidence(ABC):
+class GoalFailureEvidence[Failure](ABC):
     @abstractmethod
-    def execution(self, goal_id: GoalId) -> GoalExecution: ...
+    def execution[Execution](self, source: GoalFailureProjection[Execution, Failure]) -> Execution: ...
 
 
 @dataclass(frozen=True)
-class NoFailedTurnEvidence(GoalFailureEvidence):
-    def execution(self, goal_id: GoalId) -> GoalExecution:
-        from agent_comms.planning.goal_presentation import AttemptUnresolvedExecution
-        return AttemptUnresolvedExecution(goal_id)
+class NoFailedTurnEvidence[Failure](GoalFailureEvidence[Failure]):
+    def execution[Execution](self, source: GoalFailureProjection[Execution, Failure]) -> Execution:
+        return source.unresolved()
 
 
-@dataclass(frozen=True)
-class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
-    attempt_id: Annotated[AttemptId, Column(primary_key=True)]
-    goal_id: GoalId
-    generation: Annotated[int, Column(check="generation>0")]
-    owner: str
-    owner_created_at: float
-    worktree: Annotated[Checkout, Column(storage=TextStorage)]
-    claim_generation: Annotated[
-        int, Column(record_key=True, check="{claim_generation}>0")
-    ]
-    turn_generation: Annotated[int, Column(check="turn_generation>0")]
-    goal_revision: Annotated[int, Column(check="goal_revision>=0")]
-    turn_id: Annotated[TurnId, Column(unique=True)]
-    failure: type[TurnFailure]
-    failure_text: str = "recorded before Core kept the failure's text"
-    """What the failure said; a row written before the text was kept says that instead."""
+class GenerationFailureSource[Failure](ABC):
+    __slots__ = ()
 
-    def __post_init__(self) -> None:
-        # These are the durable observation's constraints, independent of any
-        # caller's authority. SQL/FieldCodec remains the single stored decoder.
-        if type(self.claim_generation) is not int or self.claim_generation <= 0:
-            raise ValueError("Observation claim_scope must be positive")
-        if type(self.turn_generation) is not int or self.turn_generation <= 0:
-            raise ValueError("Observation turn generation must be positive")
-        if not math.isfinite(self.owner_created_at):
-            raise ValueError("Observation incarnation must be finite")
-
-    def execution(self, goal_id: GoalId) -> GoalExecution:
-        from agent_comms.planning.goal_presentation import AttemptFailedExecution
-        return AttemptFailedExecution(goal_id, self)
-
-    @property
-    def identity(self) -> GoalAttemptIdentity:
-        return GoalAttemptIdentity(self.goal_id, self.generation, self.attempt_id)
-
-    @property
-    def incarnation(self) -> ThreadIncarnation:
-        return RecordedThreadIncarnation(self.owner, self.owner_created_at)
-
-    @property
-    def claimed_identity(self) -> ClaimedIdentity:
-        return ClaimedIdentity(self.incarnation, self.claim_generation)
-
-    @property
-    def turn(self) -> TurnFence:
-        return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), self.turn_id, self.claim_generation)
-
-    def matches_owner(self, owner: Thread, claim_scope: int | None) -> bool:
-        if claim_scope is None:
-            return False
-        if self.claimed_identity != ClaimedIdentity(owner.incarnation, claim_scope):
-            return False
-        if self.worktree != owner.worktree:
-            return False
-        if self.turn != owner.observed_turn(claim_scope):
-            return False
-        return owner.goal.accepts_observation(self.goal_id, self.goal_revision)
-
-    @classmethod
-    def references(cls):
-        from agent_comms.planning.goal_attempts import AttemptRecord
-
-        return (ForeignKey(columns=("attempt_id",), target=AttemptRecord, target_columns=("attempt_id",)),)
-
-
-def record_observation(
-    conn: sqlite3.Connection, reservation: Reservation, observation: FailedTurnObservation
-) -> None:
-    """Optional observation cannot roll back the enclosing failure fence.
-
-    Savepoint errors which cannot be rolled back still escape to the store's
-    normal StorageUncertainError path. They never yield a successful execution.
-    """
-    if observation.reservation != reservation or observation.evidence.identity != reservation.identity:
-        return
-    conn.execute("SAVEPOINT passive_observation")
-    try:
-        observation.evidence.insert(conn)
-    except sqlite3.Error:
-        conn.execute("ROLLBACK TO passive_observation")
-    finally:
-        conn.execute("RELEASE passive_observation")
+    @abstractmethod
+    def failure_evidence(self, conn: Connection) -> GoalFailureEvidence[Failure]: ...

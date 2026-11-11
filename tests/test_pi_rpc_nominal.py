@@ -14,6 +14,7 @@ import agent_comms.execution.turn_failure as failures
 from agent_comms.execution.native_session_prepare import NativeSessionPreparation
 from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.pi_wire import AnonymousRequest, RequestId
+from agent_comms.execution.provider_records import ReportedText
 from agent_comms.execution.turn_item import PiRequestKey
 from agent_comms.execution.turn_phase import (
     CompactionPhase,
@@ -25,7 +26,6 @@ from agent_comms.execution.turn_phase import (
     TurnPhase,
 )
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord
-from agent_comms.pi_payloads import ReportedText
 from agent_comms.transport.native_tool_transport import OwnerToolConnection
 from native_response_fixture import native_response_session
 

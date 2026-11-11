@@ -84,8 +84,8 @@ class PrivateEvidenceRead:
         try:
             if path != path.resolve(strict=True):
                 raise NativePiUnavailable("Native Pi evidence session path is not canonical")
-            stream = os.fdopen(PrivateFileRole.read(
-                path, NativePiUnavailable("Native Pi evidence file is unavailable")), "rb")
+            stream = PrivateFileRole.stream(
+                path, NativePiUnavailable("Native Pi evidence file is unavailable"))
             return stream
         except FileNotFoundError as error:
             if stream is not None:

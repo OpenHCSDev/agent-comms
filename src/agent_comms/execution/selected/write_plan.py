@@ -11,7 +11,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import os
-from contextlib import suppress
+from contextlib import ExitStack, suppress
 from dataclasses import (
     dataclass,
     fields,
@@ -158,22 +158,17 @@ class SelectedWritePlans(DurableFile, PatternFile):
         if not self._validate_dir():
             return None
         try:
-            fd = PrivateFileRole.read(path, IdentityConflict("Selected write intent is not private"))
+            stream = PrivateFileRole.stream(
+                path, IdentityConflict("Selected write intent is not private"))
         except FileNotFoundError:
             return None
-        try:
-            info = os.fstat(fd)
-            if info.st_size > 2 * _MAX_BYTES:
+        with stream:
+            if os.fstat(stream.fileno()).st_size > 2 * _MAX_BYTES:
                 raise IdentityConflict("Selected write intent has unsafe identity")
-            with os.fdopen(fd, "rb") as stream:
-                fd = -1
-                try:
-                    return FieldCodec.decode(SelectedWriteIntent, FieldCodec.parse(stream.read()))
-                except MalformedRecord as error:
-                    raise IdentityConflict("Selected write intent is malformed") from error
-        finally:
-            if fd >= 0:
-                os.close(fd)
+            try:
+                return FieldCodec.decode(SelectedWriteIntent, FieldCodec.parse(stream.read()))
+            except MalformedRecord as error:
+                raise IdentityConflict("Selected write intent is malformed") from error
 
     def submit(
         self,
@@ -231,23 +226,21 @@ class SelectedWritePlans(DurableFile, PatternFile):
                 contents_b64=base64.b64encode(raw).decode("ascii"), digest=hashlib.sha256(raw).hexdigest(),
             )
             data = FieldCodec.compact(FieldCodec.encode(record), sort_keys=True).encode()
-            try:
-                fd = PrivateFileRole.create(
-                    record_path, IdentityConflict("Selected write intent is not private"))
-            except FileExistsError as error:
-                raise IdentityConflict(
-                    "Selected write intent already accepted or UNKNOWN; never retry"
-                ) from error
-            try:
-                with os.fdopen(fd, "wb") as stream:
-                    stream.write(data)
-                    stream.flush()
-                    os.fsync(stream.fileno())
+            with ExitStack() as writing:
+                # Only the create answers "already accepted"; a failure below leaves the
+                # visible file as an UNKNOWN barrier and is never unlinked or retried.
+                try:
+                    fd = writing.enter_context(PrivateFileRole.creating(
+                        record_path, IdentityConflict("Selected write intent is not private")))
+                except FileExistsError as error:
+                    raise IdentityConflict(
+                        "Selected write intent already accepted or UNKNOWN; never retry"
+                    ) from error
+                stream = writing.enter_context(os.fdopen(fd, "wb", closefd=False))
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
                 Platform.current().sync_directory(self.directory)
-            except BaseException:
-                # The visible file may have committed despite the error. Keep
-                # it as an UNKNOWN barrier; never unlink/retry the operation.
-                raise
             from agent_comms.acp_extension import SelectedWriteAcceptedUpdate
 
             return SelectedWriteAcceptedUpdate(operation_id, source_seq, selected[0].assignment_id)

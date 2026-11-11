@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
+from agent_comms.execution.session_retention import NativeSessionRetention
 from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -19,7 +20,6 @@ from agent_comms.nominal.field_codec import (
 if TYPE_CHECKING:
     from agent_comms.execution.native_child import PiSessionChild
     from agent_comms.execution.native_runtime_input import NativeRuntimeInput
-    from agent_comms.pi_native_backend import PersistentPiSession
 
 
 class NativeReopenError(ValueError):
@@ -56,7 +56,7 @@ class SessionRetention(ABC):
     """Only an attested saved identity can return a child to its session owner."""
 
     @abstractmethod
-    def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool: ...
+    def retain[State](self, child: PiSessionChild, session: NativeSessionRetention[PiSessionChild, State, NativeSessionIdentity]) -> bool: ...
 
     @abstractmethod
     def require_identity(self) -> NativeSessionIdentity: ...
@@ -70,7 +70,7 @@ class SessionRetention(ABC):
 
 
 class NoSessionRetention(NullMember, SessionRetention):
-    def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool:
+    def retain[State](self, child: PiSessionChild, session: NativeSessionRetention[PiSessionChild, State, NativeSessionIdentity]) -> bool:
         return False
 
     def require_identity(self) -> NativeSessionIdentity:
@@ -103,7 +103,7 @@ class NativeSessionIdentity(PresentMember, SessionRetention):
         if not self.session_id or not Path(self.session_file).is_absolute():
             raise NativeReopenError("Saved native session identity is incomplete")
 
-    def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool:
+    def retain[State](self, child: PiSessionChild, session: NativeSessionRetention[PiSessionChild, State, NativeSessionIdentity]) -> bool:
         return session.retain(child, self)
 
     @property

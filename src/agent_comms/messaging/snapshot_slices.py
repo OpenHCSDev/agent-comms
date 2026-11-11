@@ -7,15 +7,21 @@ display references both declare their fields with these policies; neither owns t
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Collection, Mapping, MutableMapping
 from types import MappingProxyType
 from typing import Self
 
-from agent_comms.nominal.field_codec import FieldCodec, FieldPlan, SlicePolicy
+from agent_comms.nominal.field_codec import FieldCodec, FieldPlan, MalformedRecord, SlicePolicy
+from agent_comms.storage.row_mapping import RowMapping, SnapshotRows
 
 
 class ThreadSlice[Value](ABC):
     """How a registry field is copied. Each field declares its policy in metadata."""
+
+    @classmethod
+    def owned(cls, value: Value) -> Value:
+        """Admit a field into the representation its declared policy owns."""
+        return value
 
     @classmethod
     @abstractmethod
@@ -33,14 +39,19 @@ class ThreadSlice[Value](ABC):
         raise TypeError(f"{plan.name} declares no snapshot value policy")
 
     @classmethod
-    def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
-              earlier: Value, changed: Value) -> None:
+    def reuse(cls, rows: Mapping[str, object], changed_names: Collection[str],
+              earlier: Value, changed: Value) -> Value:
         raise TypeError(f"{cls.__name__} does not hold reusable rows")
 
     @classmethod
-    def own_row_plans(cls, plan: FieldPlan) -> tuple[FieldPlan, ...]:
-        """The plans holding one row per thread name: none, unless the field is an own row."""
-        return ()
+    def wire_changes(cls, current: object, earlier: object) -> object:
+        """Whole-field values are decoded as declared; row policies narrow their payload."""
+        return current
+
+    @classmethod
+    def refreshed(cls, current: object, previous: object, earlier: Value, decoded: Value) -> Value:
+        """Merge a decoded revision according to the field's declared representation."""
+        return decoded
 
     @classmethod
     def only(cls, value: Value, names: frozenset[str]) -> Value:
@@ -95,12 +106,25 @@ class OwnRow[Rows](SnapshotValue[Rows]):
 
     @classmethod
     @abstractmethod
-    def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
-              earlier: Rows, changed: Rows) -> None: ...
+    def reuse(cls, rows: Mapping[str, object], changed_names: Collection[str],
+              earlier: Rows, changed: Rows) -> Rows: ...
 
     @classmethod
-    def own_row_plans(cls, plan: FieldPlan) -> tuple[FieldPlan, ...]:
-        return (plan,)
+    def wire_rows(cls, value: object) -> RowMapping:
+        """Admit a wire mapping at the row decoder boundary, retaining owned change evidence."""
+        if not isinstance(value, Mapping):
+            raise MalformedRecord("registry rows must be an object")
+        return RowMapping.owning(value)
+
+    @classmethod
+    def wire_changes(cls, current: object, earlier: object) -> dict[str, object]:
+        rows, before = cls.wire_rows(current), cls.wire_rows(earlier)
+        return {name: rows[name] for name in rows.changed_in_order(before) if name in rows}
+
+    @classmethod
+    def refreshed(cls, current: object, previous: object, earlier: Rows, decoded: Rows) -> Rows:
+        rows, before = cls.wire_rows(current), cls.wire_rows(previous)
+        return cls.reuse(rows, rows.changed_in_order(before), earlier, decoded)
 
     @classmethod
     @abstractmethod
@@ -113,6 +137,8 @@ class OwnRow[Rows](SnapshotValue[Rows]):
 
 
 class MappingRowsSlice(OwnRow[MutableMapping]):
+    """A plain mapping snapshot, without imposing a persistent representation."""
+
     @classmethod
     def copy(cls, value: Mapping) -> dict:
         return dict(value)
@@ -122,11 +148,10 @@ class MappingRowsSlice(OwnRow[MutableMapping]):
         return MappingProxyType(cls.copy(value))
 
     @classmethod
-    def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
-              earlier: MutableMapping, changed: MutableMapping) -> None:
-        merged = {name: (earlier if name in kept else changed)[name] for name in rows}
-        changed.clear()
-        changed.update(merged)
+    def reuse(cls, rows: Mapping[str, object], changed_names: Collection[str],
+              earlier: MutableMapping, changed: MutableMapping) -> MutableMapping:
+        changed_keys = frozenset(changed_names)
+        return {name: (changed if name in changed_keys else earlier)[name] for name in rows}
 
     @classmethod
     def only(cls, value: MutableMapping, names: frozenset[str]) -> MutableMapping:
@@ -137,6 +162,41 @@ class MappingRowsSlice(OwnRow[MutableMapping]):
         absent = object()
         return frozenset(name for name in earlier.keys() | current.keys()
                          if earlier.get(name, absent) != current.get(name, absent))
+
+
+class SharedRowsSlice(MappingRowsSlice):
+    """Edits and snapshots share immutable roots and compare their changed keys."""
+
+    @classmethod
+    def owned(cls, value: Mapping) -> SnapshotRows:
+        return RowMapping.owning(value)
+
+    @classmethod
+    def copy(cls, value: Mapping) -> SnapshotRows:
+        return cls.owned(value).copy()
+
+    @classmethod
+    def freeze(cls, value: Mapping) -> Mapping:
+        return cls.owned(value).freeze()
+
+    @classmethod
+    def reuse(cls, rows: Mapping[str, object], changed_names: Collection[str],
+              earlier: MutableMapping, changed: MutableMapping) -> SnapshotRows:
+        merged = cls.owned(earlier).copy()
+        for name in changed_names:
+            if name in rows:
+                merged[name] = changed[name]
+            else:
+                del merged[name]
+        return merged
+
+    @classmethod
+    def only(cls, value: MutableMapping, names: frozenset[str]) -> MutableMapping:
+        return cls.owned(value).only(names)
+
+    @classmethod
+    def differing(cls, earlier: Mapping, current: Mapping) -> frozenset[str]:
+        return cls.owned(current).differing(cls.owned(earlier))
 
 
 class WholeDocumentValue[Value](SnapshotValue[Value]):

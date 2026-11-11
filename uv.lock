@@ -20,6 +20,7 @@ source = { editable = "." }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "aiohttp" },
+    { name = "immutables" },
     { name = "metaclass-registry" },
     { name = "nominal-refactor-advisor" },
     { name = "packaging" },
@@ -46,6 +47,7 @@ requires-dist = [
     { name = "agent-client-protocol", specifier = ">=0.8" },
     { name = "aiohttp", specifier = ">=3.14" },
     { name = "black", marker = "extra == 'dev'", specifier = "==26.5.1" },
+    { name = "immutables" },
     { name = "metaclass-registry", git = "https://github.com/OpenHCSDev/metaclass-registry?rev=main" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==2.3.0" },
     { name = "nominal-refactor-advisor", git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main" },
@@ -365,6 +367,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/f5/08/8eea9d4b8302028f3
 wheels = [
     { url = "https://files.pythonhosted.org/packages/58/a2/bb081bab032533a855d44de1d56f8e8426114ff1ba5d1f07a438a0a654f8/idna-3.20-py3-none-any.whl", hash = "sha256:ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c", size = 69583, upload-time = "2026-09-17T14:11:03.168Z" },
 ]
+
+[[package]]
+name = "immutables"
+version = "0.21"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/69/41/0ccaa6ef9943c0609ec5aa663a3b3e681c1712c1007147b84590cec706a0/immutables-0.21.tar.gz", hash = "sha256:b55ffaf0449790242feb4c56ab799ea7af92801a0a43f9e2f4f8af2ab24dfc4a", size = 89008, upload-time = "2024-10-10T00:55:01.434Z" }
 
 [[package]]
 name = "iniconfig"

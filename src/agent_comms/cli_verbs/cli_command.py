@@ -22,11 +22,12 @@ from pydantic import JsonValue
 from agent_comms.cli_support.cli_failures import CLI_FAILURES
 from agent_comms.cli_verbs.cli_result import CliResult, ResultShower, TargetEditResult
 from agent_comms.cli_verbs.declared_verb import DeclaredCommand
+from agent_comms.cli_verbs.target_command_bindings import TargetCommandBindings
 from agent_comms.cli_verbs.target_fields import TargetField
 from agent_comms.comms import Comms
 from agent_comms.config_options import CatalogChoice, ConfigOptions
 from agent_comms.execution.launch_root import LaunchRoot
-from agent_comms.installer.active_route import ActiveRoute
+from agent_comms.installer.active_route import ActiveRoute, CommsRoute
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.messaging.channel_targets import (
     ChannelSelection,
@@ -52,13 +53,10 @@ from agent_comms.planning.command import Command
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.catalog_document import CatalogAccess, NoCatalog
 from agent_comms.registry.registry_document import RegistrySnapshot, ResolvedChannel
+from agent_comms.registry.thread_status import ThreadStatus
+from agent_comms.registry.threads import Thread
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
-
-if TYPE_CHECKING:
-    from agent_comms.installer.active_route import CommsRoute
-    from agent_comms.registry.thread_status import ThreadStatus
-    from agent_comms.registry.threads import Thread
 
 
 class ChannelBound(TargetBound):
@@ -93,9 +91,10 @@ class CliCommand(
     ModuleMembers,
     DeclaredCommand,
     CliExecution[Answer],
+    TargetCommandBindings[Comms, Thread, ThreadStatus, SurroundingChannel, Checkout, RegistrySnapshot, CatalogAccess, ResolvedChannel],
     Generic[Answer],
-    affix="CliCommand",
-    discovery_package="agent_comms.cli_verbs",
+    affix='CliCommand',
+    discovery_package='agent_comms.cli_verbs',
 ):
     def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
         result = TargetCompleted(batch.target, self, self.apply(comms))

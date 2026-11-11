@@ -7,7 +7,7 @@ from typing import ClassVar
 from agent_comms.cli_support.context_option import ContextOptionCliCommand
 from agent_comms.cli_verbs.cli_commands import ImportedContextSources
 from agent_comms.comms import Comms
-from agent_comms.importing import ImportedSessionMetadata
+from agent_comms.execution.imported_session_metadata import ImportedSessionMetadata
 
 
 class ImportedContextCliCommand(ContextOptionCliCommand):

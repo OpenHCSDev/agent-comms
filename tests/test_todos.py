@@ -21,15 +21,9 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.errors import TodoError
-from agent_comms.execution.child_process import (
-    NoProcess,
-    ProcessIdentity,
-)
+from agent_comms.execution.child_process import NoProcess, ProcessIdentity
 from agent_comms.execution.launch_root import LaunchRoot
-from agent_comms.execution.turn_item import (
-    NativeItemId,
-    NativeTurnId,
-)
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.runtime_resolution import CorePackage, TextualPackage, ToadPackage
 from agent_comms.messaging.bus import Bus
@@ -39,8 +33,10 @@ from agent_comms.planning.goals import (
     GoalChangedError,
     NoGoal,
     OrderCheck,
+    ProblemGoalOrder,
 )
 from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.order_phase import UnplannedPhase
 from agent_comms.planning.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
@@ -76,16 +72,9 @@ from agent_comms.planning.orders import (
     WithdrawTodo,
 )
 from agent_comms.planning.owner_requests import NewestOpenRequest
-from agent_comms.planning.plan_phases import (
-    PlanPhase,
-    RetainedStorePhase,
-    UnplannedPhase,
-)
+from agent_comms.planning.plan_phases import PlanPhase, RetainedStorePhase
 from agent_comms.planning.problem_findings import ExpectedProblem
-from agent_comms.planning.pull_requests import (
-    PullRequestCommit,
-    PullRequestLink,
-)
+from agent_comms.planning.pull_requests import PullRequestCommit, PullRequestLink
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import StorageRule
@@ -103,10 +92,7 @@ from agent_comms.team.standing import (
     UnownedOrderWatch,
     UnownedWheelSpin,
 )
-from agent_comms.team.standing_rules import (
-    OwedAnswer,
-    StandingRule,
-)
+from agent_comms.team.standing_rules import OwedAnswer, StandingRule
 from agent_comms.team.team_heartbeat import TeamHeartbeat
 from agent_comms.transcript.transcript_events import AssistantTranscript
 from agent_comms.ui_model.teammate_state import AwaitingTeam
@@ -164,6 +150,10 @@ def test_phase_checks_keep_folded_declarations_and_exact_creator_birth(
             declaration = FoldedProblemOrder(original=declaration, into='elsewhere', why='duplicate')
         with store.writing() as db:
             Todo.update(db, where='id=?', parameters=(todo.id,), order=declaration)
+    originals = tuple(store.get(f"P{index}") for index in range(1, len(declarations) + 1))
+    expected = tuple(row.order.instructions(row) for row in originals if row.pending)
+    assert tuple(text for row in originals for text in row.goal_instructions()) == expected
+    assert ProblemGoalOrder().instructions(originals) == "\n\n".join(expected)
     assert store.phases_checked(frozenset()) == {}
     assert store.phases_checked(frozenset({colleague.incarnation})) == {
         RetainedStorePhase: 20, UnplannedPhase: 30,

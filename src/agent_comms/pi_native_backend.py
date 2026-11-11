@@ -29,7 +29,9 @@ from agent_comms.agent_backend import (
     RuntimeLocation,
 )
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.fresh_private_session import create_fresh_private_session
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_failures import NativePiUnavailable
@@ -41,16 +43,20 @@ from agent_comms.execution.native_session_files import (
     NativeSessionLocks,
 )
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+from agent_comms.execution.persistent_pi_session import (
+    PersistentPiSession as PersistentPiSession,
+)
+from agent_comms.execution.transcript_sources import NativeTranscript
 from agent_comms.execution.pi_commands import Compact, NativeQuery
 from agent_comms.execution.pi_events import NativePiEvent
 from agent_comms.execution.pi_wire import PiOmitted
 from agent_comms.execution.selected.session import SavedSelectedSession
+from agent_comms.execution.session_revision import SessionObservation, SessionRevision
 from agent_comms.execution.session_revision import (
     SessionObservation,
     SessionRevision,
     SessionRevisionUnavailable,
 )
-from agent_comms.execution.transcript_sources import NativeTranscript
 from agent_comms.execution.turn_inbox import InputContent
 from agent_comms.installer.native_package import SYSTEM_PROMPT
 from agent_comms.nominal.field_codec import AcpSessionId
@@ -59,12 +65,9 @@ from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.team.rule_deal import SystemPromptDelivery
 
 if TYPE_CHECKING:
-    from agent_comms.agent_events import AgentEvent, AgentInfo
+    from agent_comms.agent_events import AgentInfo
     from agent_comms.comms import Comms
     from agent_comms.config_options import ConfigOptions
-    from agent_comms.execution.launch_runtime import LaunchRuntime
-    from agent_comms.execution.native_child import NativeChildState, PiSessionChild
-    from agent_comms.execution.native_session_reopen import NativeSessionIdentity
     from agent_comms.execution.owned_turn import TurnDelivery
     from agent_comms.execution.turn_runner import TurnRunner
     from agent_comms.pi_payloads import StateData
@@ -134,70 +137,6 @@ class PiSessionFile(RuntimeLocation):
                      for model in entry.saved_models), UndeclaredModel())
 
 
-class PersistentPiSession:
-    """Serialize borrowing and retirement of one native session's actual child."""
-
-    def __init__(self) -> None:
-        from agent_comms.execution.native_child import EmptyNative
-
-        self.lock = asyncio.Lock()
-        self.child_state: NativeChildState = EmptyNative()
-
-    @property
-    def available(self) -> bool:
-        return self.child_state.available
-
-    async def open(self, launch, *, reuse, startup, watchdog) -> PiSessionChild:
-        from agent_comms.execution.native_child import BorrowedNative, EmptyNative, PiSessionChild
-
-        key = (launch, launch.configuration.auth_revision())
-        child = self.child_state.reuse(key) if reuse else None
-        if child is None:
-            await self.close()
-            attestation = launch.session.attestation()
-            watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
-            with startup.measurements.operation("native_spawn"):
-                child = await PiSessionChild.start(key, attestation)
-            self.child_state = BorrowedNative(child, self.child_state)
-            watchdog.spawned()
-        else:
-            watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
-            self.child_state = BorrowedNative(child, EmptyNative())
-            watchdog.reused()
-        return child
-
-    async def context_for_input(self, thread, context):
-        async with self.lock:
-            return await self.child_state.context_for_input(thread, context)
-
-    def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:
-        from agent_comms.execution.native_child import RetainedNative
-
-        if not child.proc.alive():
-            return False
-        try:
-            launch = child.key[0]
-            revision = SessionRevision.observe(launch.session.files(launch.root)).require_available()
-        except SessionRevisionUnavailable:
-            return False
-        self.child_state = RetainedNative(child, identity, revision)
-        return True
-
-    async def close(self) -> None:
-        await self._finish_retirement(self.child_state.retire())
-
-    async def _finish_retirement(self, retiring: NativeChildState) -> None:
-        self.child_state = retiring
-        try:
-            await retiring.closed()
-        finally:
-            self.child_state = retiring.settled
-
-    async def close_idle(self) -> None:
-        async with self.lock:
-            await self.close()
-
-
 class PiNativeBackend(
     PersistentPiSession,
     Interrupts,
@@ -245,7 +184,9 @@ class PiNativeBackend(
 
     async def prepare(self, thread: Thread, *, open_native=None) -> StateData:
         """Launch (or reuse) and attest the idle child for ``thread``'s saved session."""
-        from agent_comms.execution.native_session_prepare import NativeSessionPreparation
+        from agent_comms.execution.native_session_prepare import (
+            NativeSessionPreparation,
+        )
 
         if open_native is None:
             open_native = NativeSessionPreparation.open

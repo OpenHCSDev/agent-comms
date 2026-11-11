@@ -14,6 +14,11 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, FieldRepresentation, WireValue
 
 
+class CreationIdentityCollisionError(RelationViolationError):
+    def __init__(self) -> None:
+        super().__init__("Registry creation identities collide.")
+
+
 class CreationTime(float, WireValue, ABC):
     @abstractmethod
     def distinct_from(self, used: Set[float]) -> CreationTime: ...
@@ -30,10 +35,17 @@ class CreationTime(float, WireValue, ABC):
         return FieldCodec.value_schema(float)
 
 
+class ThreadCreationSource(ABC):
+    """The original creation value used to distinguish an owner-scoped input key."""
+
+    __slots__ = ()
+    created_at: CreationTime
+
+
 class RecordedCreationTime(CreationTime):
     def distinct_from(self, used: Set[float]) -> CreationTime:
         if self in used:
-            raise RelationViolationError("Registry creation identities collide.")
+            raise CreationIdentityCollisionError()
         return self
 
 
@@ -43,7 +55,7 @@ class GeneratedCreationTime(CreationTime):
         while candidate in used:
             candidate = math.nextafter(candidate, math.inf)
         if not math.isfinite(candidate):
-            raise RelationViolationError("Registry creation identities collide.")
+            raise CreationIdentityCollisionError()
         return RecordedCreationTime(candidate)
 
     @classmethod

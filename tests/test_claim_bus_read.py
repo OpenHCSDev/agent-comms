@@ -13,8 +13,10 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.comms import Comms
+from agent_comms.context_segments.native_messages import TranscriptSegment
 from agent_comms.context_store import UNREAD_CONTEXT
 from agent_comms.coordination.attempt_start import AttemptStart
+from agent_comms.coordination.attempt_states import AttemptFailedAttempt
 from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict
@@ -33,14 +35,10 @@ from agent_comms.execution.turn_context import (
     OwnerProvenance,
     RecordedContextTurn,
     SegmentManifest,
-    TranscriptSegment,
 )
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim, WakeClaim
-from agent_comms.messaging.message_page import (
-    ConversationMessagePageRequest,
-    MessagePageRequest,
-)
+from agent_comms.messaging.message_page import ConversationMessagePageRequest, MessagePageRequest
 from agent_comms.messaging.messages import ClaimMessage, ClaimNoticeKind
 from agent_comms.messaging.read_basis import AllChannelDisplayScope, DMDisplayScope
 from agent_comms.nominal.field_codec import ClaimId, TurnId
@@ -137,7 +135,6 @@ def selected_turn(private_comms, private_directory):
 
 
 def settle_failed(store):
-    from agent_comms.coordination.attempt_states import AttemptFailedAttempt
 
     with store.session.settlement() as boundary:
         snapshot = store.get("execution")

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from agent_comms.execution.runtime_info_projection import RuntimeInfoProjection
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
+
 from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
@@ -18,9 +21,7 @@ from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 
-if TYPE_CHECKING:
-    from agent_comms.agent_events import RuntimeInfoObservation
-    from agent_comms.registry.threads import Thread
+
 
 
 class RuntimeInfo(DeclaredFamily, affix="RuntimeInfo"):
@@ -98,7 +99,7 @@ class RuntimeInfoStore(SingleFileStore, ThreadOwnedState, CarriedDocument[Runtim
                 resolved[name] = UnobservedRuntimeInfo()
         return resolved
 
-    def observe(self, thread: str, timestamp: float, observation: RuntimeInfoObservation) -> None:
+    def observe(self, thread: str, timestamp: float, observation: RuntimeInfoProjection[AgentRuntimeInfo]) -> None:
         """Apply only this observation's fields in the original store transaction."""
 
         def apply(
@@ -113,7 +114,7 @@ class RuntimeInfoStore(SingleFileStore, ThreadOwnedState, CarriedDocument[Runtim
 
         self.update(apply)
 
-    def remove_threads(self, threads: Sequence[Thread]) -> None:
+    def remove_threads(self, threads: Sequence[ThreadIdentitySource]) -> None:
         names = {thread.name for thread in threads}
         self.update(
             lambda document: DocumentChange.to(

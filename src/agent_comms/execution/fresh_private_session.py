@@ -33,9 +33,9 @@ def create_fresh_private_session(
     NativeSessionFiles.prepare_private_directory(session_dir)
     encoded = FieldCodec.compact(header.to_wire(), allow_nan=False).encode() + b"\n"
     try:
-        descriptor = PrivateFileRole.create(
-            path, NativePiUnavailable("Fresh-session creation durability UNKNOWN"))
-        try:
+        with PrivateFileRole.creating(
+            path, NativePiUnavailable("Fresh-session creation durability UNKNOWN"),
+        ) as descriptor:
             pending = memoryview(encoded)
             while pending:
                 written = os.write(descriptor, pending)
@@ -43,8 +43,6 @@ def create_fresh_private_session(
                     raise OSError("Fresh-session write made no progress")
                 pending = pending[written:]
             os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
         Platform.current().sync_directory(session_dir)
         return NativeSessionIdentity(session_id, str(path))
     except OSError as error:

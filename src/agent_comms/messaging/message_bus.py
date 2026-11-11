@@ -1,18 +1,8 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import (
-    Awaitable,
-    Callable,
-    Iterable,
-    Iterator,
-    Mapping,
-    Sequence,
-)
-from contextlib import (
-    aclosing,
-    contextmanager,
-)
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import aclosing, contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -21,6 +11,7 @@ from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.messaging.agent_inbox import TakenInputCursor
 from agent_comms.messaging.bus import Bus, BusSnapshot
+from agent_comms.messaging.bus_read_source import BusReadSource
 from agent_comms.messaging.bus_route_counts import HeldUnseenCounts
 from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.messaging.channels import AnyChannel, Channel
@@ -47,9 +38,9 @@ from agent_comms.messaging.routing import DeliveryScope
 from agent_comms.messaging.watched import FileSource
 from agent_comms.peer_relevance import Prioritized
 from agent_comms.registry.catalog_store import ChannelCatalog
+from agent_comms.registry.peer_relation import PeerRelation
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.registry.relationships import PeerRelation
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
 
@@ -76,7 +67,7 @@ class UnreadCut:
         return counts
 
 
-class MessageBus[Writes: Publisher](PublishedBus[Writes]):
+class MessageBus[Writes: Publisher](PublishedBus[Writes], BusReadSource):
     def __init__(
         self, root: Path, registry: Registration, publisher: type[Writes],
     ):

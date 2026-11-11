@@ -1,34 +1,35 @@
 from __future__ import annotations
 
+from agent_comms.execution.finish_signal import FinishSignal
+from agent_comms.execution.stats_callbacks import StatsWatchdogRead, StatsProgressRead, WatchdogSessionRead
+
+from agent_comms.execution.native_session_callbacks import SessionStatsCallbacks
+
 import asyncio
 from collections.abc import (
     AsyncIterator,
     Collection,
 )
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from agent_comms import agent_events as events
 from agent_comms.execution.pending_requests import PendingRequest
 from agent_comms.execution.pi_commands import GetSessionStats, GetState
 from agent_comms.execution.turn_failure import BackendFailed
-from agent_comms.execution.turn_phase import ModelWaitPhase
-
-if TYPE_CHECKING:
-    from agent_comms.execution.backend import FinishSignal, NativeSession
-    from agent_comms.execution.turn_watchdog import ProgressWatchdog, TurnWait
+from agent_comms.execution.turn_phase import ModelWaitPhase, TurnPhase
 
 
-class StatsRequest:
+
+class StatsRequest(SessionStatsCallbacks):
     """No native settlement observation is waiting for its snapshot."""
 
-    def wait_for(self, watchdog: ProgressWatchdog, active: TurnWait) -> TurnWait:
+    def wait_for[Wait](self, watchdog: StatsWatchdogRead[Wait], active: Wait) -> Wait:
         return active
 
     def finish_waiters(self, signal: FinishSignal) -> tuple[asyncio.Task[bool], ...]:
         return signal.waiters()
 
-    def permits_live_status(self, session: NativeSession) -> bool:
+    def permits_live_status(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest]) -> bool:
         return session.prompt_state.permits_extension_ui(session)
 
     @property
@@ -39,14 +40,14 @@ class StatsRequest:
     def tasks(self) -> tuple[asyncio.Task[ReadingStats], ...]:
         return ()
 
-    async def request(self, session: NativeSession) -> None:
+    async def request(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest]) -> None:
         # A newer native settlement replaces an older in-flight snapshot. Its
         # reply, not a copied event counter, determines the current operation.
         await self.close()
         session.stats = RequestingStats(asyncio.create_task(self._request(session)))
 
     @staticmethod
-    async def _request(session: NativeSession) -> ReadingStats:
+    async def _request(session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest]) -> ReadingStats:
         # Forwarding has stopped. No get_state query may overtake an input still
         # in async prompt preflight; join its original RPC acknowledgement first.
         await session.native.reader.pending.before_settlement()
@@ -57,18 +58,18 @@ class StatsRequest:
         await session.native.drain()
         return ReadingStats(pending)
 
-    def advance_if_done(self, session: NativeSession, completed: Collection[object]) -> bool:
+    def advance_if_done(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest], completed: Collection[object]) -> bool:
         return False
 
     async def close(self) -> None:
         pass
 
-    def expired(self, session: NativeSession) -> None:
+    def expired(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest]) -> None:
         session.output.record_failure(BackendFailed(
             "Pi did not finish its native settlement snapshot."
         ))
 
-    async def settle(self, session: NativeSession) -> AsyncIterator[events.AgentEvent]:
+    async def settle(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest]) -> AsyncIterator[events.AgentEvent]:
         return
         yield
 
@@ -79,7 +80,7 @@ class RequestedStats(StatsRequest):
     def finish_waiters(self, signal: FinishSignal) -> tuple[asyncio.Task[bool], ...]:
         return ()
 
-    def permits_live_status(self, session: NativeSession) -> bool:
+    def permits_live_status(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest]) -> bool:
         return False
 
 
@@ -91,7 +92,7 @@ class RequestingStats(RequestedStats):
     def tasks(self) -> tuple[asyncio.Task[ReadingStats], ...]:
         return (self.task,)
 
-    def advance_if_done(self, session: NativeSession, completed: Collection[object]) -> bool:
+    def advance_if_done(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest], completed: Collection[object]) -> bool:
         if self.task not in completed:
             return False
         session.stats = self.task.result()
@@ -106,7 +107,7 @@ class RequestingStats(RequestedStats):
 class ReadingStats(RequestedStats):
     pending: tuple[PendingRequest[GetState], PendingRequest[GetSessionStats]]
 
-    def wait_for(self, watchdog: ProgressWatchdog, active: TurnWait) -> TurnWait:
+    def wait_for[Wait](self, watchdog: StatsWatchdogRead[Wait], active: Wait) -> Wait:
         # Only the metadata replies use the short snapshot wait. A prompt still
         # in preflight keeps its active input/model/UI wait in RequestingStats.
         return watchdog.poll_wait
@@ -117,7 +118,7 @@ class ReadingStats(RequestedStats):
                    and entry.future.result().success.proves_idle(entry.future.result())
                    for entry in self.pending)
 
-    async def settle(self, session: NativeSession) -> AsyncIterator[events.AgentEvent]:
+    async def settle(self, session: WatchdogSessionRead[StatsProgressRead[TurnPhase], StatsRequest]) -> AsyncIterator[events.AgentEvent]:
         if not all(entry.future.done() for entry in self.pending):
             return
         snapshots = tuple(entry.future.result().require_data()

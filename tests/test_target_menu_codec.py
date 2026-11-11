@@ -1,5 +1,6 @@
 """A thread's context menu crosses the connector as its own records."""
 
+from conftest import ui_core_read
 from pathlib import Path
 
 import pytest
@@ -88,7 +89,6 @@ def test_a_ui_lists_and_applies_a_menu_action_through_core(tmp_path):
     from agent_comms.cli_verbs.read_target import ReadTargetCliCommand
     from agent_comms.comms import wire
     from agent_comms.messaging.channels import Channel
-    from agent_comms.transport.core_access import LocalCoreAccess
     from agent_comms.transport.tools.sidebar import (
         CommsTargetActionsTool,
         CommsTargetEditTool,
@@ -98,14 +98,14 @@ def test_a_ui_lists_and_applies_a_menu_action_through_core(tmp_path):
     comms = wire(tmp_path / "wire")
     project = Checkout(tmp_path)
     targets = CommandTarget.arguments(("#all",), project)
-    core = LocalCoreAccess(comms)
+    # one child per read; see ui_core_read
 
-    menu = core.call(CommsTargetActionsTool(project=project, targets=targets))
+    menu = ui_core_read(comms, CommsTargetActionsTool(project=project, targets=targets))
     assert FieldCodec.decode(TargetActionsRead, FieldCodec.encode(menu)) == menu
     assert [action.declaration.declared_name for action in menu.actions] == ["read-target"]
 
     edit = TargetEdit(ReadTargetCliCommand, ReadTargetCliCommand.selected_targets(targets), {}, project=project)
-    answer = core.call(CommsTargetEditTool(edit=edit))
+    answer = ui_core_read(comms, CommsTargetEditTool(edit=edit))
     received = FieldCodec.decode(TargetEditResult | Channel, FieldCodec.encode(answer, TargetEditResult | Channel))
     assert received == answer
 
@@ -113,7 +113,6 @@ def test_a_ui_lists_and_applies_a_menu_action_through_core(tmp_path):
 def test_an_opened_action_is_prepared_through_core(tmp_path):
     """Opening an action, or editing it, asks Core for the choices it offers."""
     from agent_comms.comms import wire
-    from agent_comms.transport.core_access import LocalCoreAccess
     from agent_comms.transport.tools.sidebar import (
     CommsPrepareTargetActionTool,
     CommsTargetActionsTool,
@@ -121,9 +120,9 @@ def test_an_opened_action_is_prepared_through_core(tmp_path):
 
     comms = wire(tmp_path / "wire")
     project = Checkout(tmp_path)
-    core = LocalCoreAccess(comms)
-    (action,) = core.call(CommsTargetActionsTool(
+    # one child per read; see ui_core_read
+    (action,) = ui_core_read(comms, CommsTargetActionsTool(
         project=project, targets=CommandTarget.arguments(("#all",), project))).actions
-    prepared = core.call(CommsPrepareTargetActionTool(action=action.edited({})))
+    prepared = ui_core_read(comms, CommsPrepareTargetActionTool(action=action.edited({})))
     assert FieldCodec.decode(PreparedTargetAction, FieldCodec.encode(prepared)) == prepared
     assert tuple(item.name for item in prepared.fields) == tuple(item.name for item in action.editable_fields)

@@ -11,8 +11,9 @@ import argparse
 import tempfile
 from pathlib import Path
 
+from agent_comms.execution.test_lease import InheritedTestRun, TestLease
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.practice import TestHome
+from agent_comms.installer.runtime_home import TestHome
 from agent_comms.installer.runtime_stack import RuntimeStack
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.storage_rules import StorageRule
@@ -29,6 +30,8 @@ def main() -> None:
             default=Path(temporary) / "home",
             help="private runtime home to retain for inspection",
         )
+        parser.add_argument(InheritedTestRun.option, type=InheritedTestRun.argument,
+                            default=TestLease.default_start)
         options, arguments = parser.parse_known_args()
         home = options.home.expanduser().resolve()
         if home == Path.home().resolve():
@@ -37,7 +40,7 @@ def main() -> None:
         with InstallCommands() as commands:
             built = RuntimeStack.build(Checkout.prepared(Path.cwd()), commands, home)
             built.complete()
-            built.test(*arguments)
+            built.test(*arguments, start=options.integration_lease)
 
 
 if __name__ == "__main__":

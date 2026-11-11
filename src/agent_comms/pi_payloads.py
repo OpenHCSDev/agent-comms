@@ -10,12 +10,7 @@ import typing
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields, replace
-from typing import (
-    TYPE_CHECKING,
-    Annotated,
-    ClassVar,
-    Self,
-)
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import JsonValue
 
@@ -25,7 +20,6 @@ from agent_comms.execution.annotation_disclosure import (
     PublicInstructionAnnotations,
     WithheldAnnotations,
 )
-from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_file_artifact import NativeFileArtifact
 from agent_comms.execution.native_output import AssistantOutput, NativeOutputScope, ToolOutput
 from agent_comms.execution.native_session_reopen import (
@@ -55,6 +49,18 @@ from agent_comms.execution.pi_wire import (
     TaggedPayload,
     UnknownPayload,
 )
+from agent_comms.execution.provider_records import (
+    CodedProviderDiagnosticError as CodedProviderDiagnosticError,
+    CodelessProviderDiagnosticError as CodelessProviderDiagnosticError,
+    ImageContent as ImageContent,
+    PiContent as PiContent,
+    ProviderDiagnosticError as ProviderDiagnosticError,
+    ReportedText as ReportedText,
+    TextContent as TextContent,
+    ThinkingContent as ThinkingContent,
+    ToolCallContent as ToolCallContent,
+    UnknownContent as UnknownContent,
+)
 from agent_comms.execution.tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from agent_comms.execution.turn_context import (
     ContextTurn,
@@ -74,7 +80,6 @@ from agent_comms.nominal.field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,
-    PresentMember,
     SingleExternalMember,
     SingleFieldValue,
     TextRepresentation,
@@ -92,14 +97,10 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.storage.recorded_time import EventMilliseconds, EventTime, UnrecordedEventTime
 from agent_comms.transcript.transcript_events import (
-    AssistantTranscript,
     NoticeTranscript,
     SentTranscript,
-    ThinkingTranscript,
     ToolEndTranscript,
-    ToolStartTranscript,
     TranscriptEvent,
-    UserTranscript,
 )
 from agent_comms.transport.tool_declaration import ToolDeclaration
 from agent_comms.transport.tool_result import DeclaredReply
@@ -125,34 +126,6 @@ class NativeMessageFailureSource(FailureSource):
         )
 
 
-@dataclass(frozen=True)
-class ProviderDiagnosticError(PiPayload, DeclaredFamily, affix="ProviderDiagnosticError"):
-    message: str
-    name: PiField[ReportedText | PiOmitted] = PiOmitted()
-
-    @classmethod
-    def wire_member(cls, value: dict[str, object]) -> type[ProviderDiagnosticError]:
-        return CodedProviderDiagnosticError if "code" in value else CodelessProviderDiagnosticError
-
-    @property
-    def description(self) -> str:
-        return self.name.text_or("Provider transport error")
-
-
-@dataclass(frozen=True)
-class CodelessProviderDiagnosticError(ProviderDiagnosticError):
-    """Pi reported a provider error without a code."""
-
-
-@dataclass(frozen=True, kw_only=True)
-class CodedProviderDiagnosticError(ProviderDiagnosticError):
-    code: int | str
-
-    @property
-    def description(self) -> str:
-        return f"{super().description} (code {self.code})"
-
-
 class StrictFields(PiPayload):
     """A closed native record rejects every undeclared external field."""
 
@@ -166,7 +139,7 @@ class StrictFields(PiPayload):
         return super().decode_fields(value, decoded)
 
 if TYPE_CHECKING:
-    from agent_comms.agent_events import AgentEvent
+    from agent_comms.execution.agent_event import AgentEvent
     from agent_comms.execution.backend import NativeSession, TurnSession
     from agent_comms.execution.native_entries import TranscriptProjection
     from agent_comms.execution.pi_events import AutoRetryEnd
@@ -184,22 +157,6 @@ class ReportedTimestamp(PiReported[int]):
     """The Unix-millisecond clock Pi stamped a record with."""
 
     value: int
-
-
-@dataclass(frozen=True)
-class ReportedText(PiReported[str]):
-    value: str
-
-    @property
-    def message_parts(self) -> tuple[PiContent, ...]:
-        return (TextContent(self.value),)
-
-    def rendered_text(self, separator: str) -> str:
-        return self.value
-
-    def text_or[D](self, default: D) -> str | D:
-        """Pi's empty text falls back exactly as its omitted text does."""
-        return self.value or default
 
 
 @dataclass(frozen=True)
@@ -283,109 +240,6 @@ class UnreportedUsage(PiUsage):
 
     def charged(self, identity: UsageChargeId | PiOmitted) -> tuple[UsageChargeId, ...]:
         return ()
-
-
-@dataclass(frozen=True)
-class PiContent(PresentMember, OpenPayload, affix="Content"):
-    def text_parts(self) -> tuple[str, ...]:
-        return ()
-
-    def with_display_text(self, text: str) -> PiContent | PiOmitted:
-        """Keep non-text content beside the message's replacement display block."""
-        return self
-
-    def tool_calls(self) -> tuple[ToolCallContent, ...]:
-        return ()
-
-    def preserve_evidence(self, raw: dict) -> PiContent:
-        """Keep unrepresented native fields opaque, never equivalent to plain text."""
-        return self if self.to_wire() == raw else UnknownContent(payload=raw)
-
-    def user_transcript(self, position: int, timestamp: float):
-        return []
-
-    def assistant_transcript(self, position: int, timestamp: float):
-        return []
-
-    text: ClassVar[str] = ""
-    tool_round_allowed: ClassVar[bool] = False
-
-    @property
-    def final_text(self) -> str:
-        raise NativePiUnavailable("Native Pi assistant returned non-text content")
-
-
-@dataclass(frozen=True)
-class TextContent(PiContent):
-    def text_parts(self) -> tuple[str, ...]:
-        return (self.text,)
-
-    def with_display_text(self, text: str) -> PiOmitted:
-        """The message places the display text once, replacing every original block."""
-        return PiOmitted()
-
-    def user_transcript(self, position: int, timestamp: float):
-        return [UserTranscript(self.text, position=position, timestamp=timestamp)]
-
-    def assistant_transcript(self, position: int, timestamp: float):
-        return [AssistantTranscript(self.text, position=position, timestamp=timestamp)]
-
-    text: str = field()
-    text_signature: Annotated[
-        PiField[str | PiOmitted], WireName("textSignature")
-    ] = PiOmitted()
-    tool_round_allowed = True
-
-    @property
-    def final_text(self) -> str:
-        return self.text
-
-
-@dataclass(frozen=True)
-class ThinkingContent(PiContent):
-    def assistant_transcript(self, position: int, timestamp: float):
-        return [ThinkingTranscript(self.thinking, position=position, timestamp=timestamp)]
-
-    thinking: str = ""
-    thinking_signature: Annotated[
-        PiField[str | PiOmitted], WireName("thinkingSignature")
-    ] = PiOmitted()
-    tool_round_allowed = True
-
-    @property
-    def final_text(self) -> str:
-        return ""
-
-
-@dataclass(frozen=True)
-class ToolCallContent(PiContent, declared_name="toolCall"):
-    def tool_calls(self) -> tuple[ToolCallContent, ...]:
-        return (self,)
-
-    def assistant_transcript(self, position: int, timestamp: float):
-        return [
-            ToolStartTranscript(position=position, timestamp=timestamp, tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments,
-                                tool=ToolDeclaration.record(self.name, self.arguments, call_id=self.id))
-        ]
-
-    id: ToolCallId
-    name: str
-    arguments: object
-    tool_round_allowed = True
-
-
-@dataclass(frozen=True)
-class ImageContent(PiContent):
-    def user_transcript(self, position: int, timestamp: float):
-        return [UserTranscript(f"[Image attachment: {self.mime_type or 'image'}]", position=position, timestamp=timestamp)]
-
-    data: str
-    mime_type: Annotated[PiField[str], WireName("mimeType")] = None
-
-
-@dataclass(frozen=True)
-class UnknownContent(UnknownPayload, PiContent):
-    pass
 
 
 @dataclass(frozen=True)
@@ -1044,6 +898,13 @@ class QueueClearedData(PiResponseData):
         if len(set(self.input_ids)) != len(self.input_ids) or not set(self.input_ids) <= set(requested):
             raise ValueError("Native clear returned duplicate or unrequested input IDs")
         return self.input_ids
+
+
+@dataclass(frozen=True)
+class SteeringInterruptData(PiResponseData):
+    """Pi's answer to Send now: whether it stopped the run to place the steering inputs."""
+
+    interrupted: bool
 
 
 class EmptyData(PiResponseData):

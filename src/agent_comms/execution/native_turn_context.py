@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.agent_events import AgentEvent
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.turn_context import (
     ContextManifest,
     DispatchRequest,

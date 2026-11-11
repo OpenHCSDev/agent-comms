@@ -17,6 +17,7 @@ class ImportLimits:
         if min(self.messages, self.characters, self.per_message) <= 0:
             raise ValueError("Import budgets must be positive.")
 
+
 TRUNCATED = "\n[Import excerpt truncated]"
 
 

@@ -9,6 +9,10 @@ from agent_comms.cli_bridges.runtime_updates import ThreadOutput
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.pi_events import ToolExecutionStart
+from agent_comms.execution.provider_records import (
+    CodelessProviderDiagnosticError,
+    ReportedText,
+)
 from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_phase import (
     FailedPhase,
@@ -20,10 +24,6 @@ from agent_comms.nominal.field_codec import (
     FieldCodec,
     ToolCallId,
     TurnId,
-)
-from agent_comms.pi_payloads import (
-    CodelessProviderDiagnosticError,
-    ReportedText,
 )
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.activity import (

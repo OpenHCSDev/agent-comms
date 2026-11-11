@@ -22,7 +22,7 @@ from pathlib import Path
 
 from agent_comms.installer.native_package import OWNER_INSTRUCTIONS, SYSTEM_PROMPT
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.team.rule_deal import DealtRead, DealtSource, PromptReads, SystemPromptDelivery
+from agent_comms.team.prompt_reads import DealtRead, DealtSource, PreparedPrompt, PromptReads
 from agent_comms_hooks.skill import DeckReader
 
 
@@ -64,7 +64,7 @@ class DealPrompt:
         prompt = cls.render()
         digest = hashlib.sha256(prompt.text.encode("utf-8")).hexdigest()[:16]
         launched = path.with_name(f"{path.stem}-{digest}{path.suffix}")
-        cls.publish(SystemPromptDelivery(launched).manifest, json.dumps(FieldCodec.encode(prompt.reads)))
+        cls.publish(PreparedPrompt(launched).manifest, json.dumps(FieldCodec.encode(prompt.reads)))
         cls.publish(launched, prompt.text)
         link = path.with_name(f".{path.name}.link")
         link.unlink(missing_ok=True)

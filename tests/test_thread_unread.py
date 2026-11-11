@@ -9,7 +9,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.registry_document import DEFAULT_ROSTER
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
 from agent_comms.registry.threads import NativeThread
 from agent_comms.registry.view_unread import (
     CappedCount,
@@ -33,7 +33,7 @@ from agent_comms.ui_model.unread import (
     UnobservedUnread,
     UnreadPresentation,
 )
-from conftest import installed_comms
+from conftest import installed_comms, ui_core_read
 from native_unread_fixture import completed_counts, completed_snapshot
 
 
@@ -248,7 +248,6 @@ def test_a_closed_reader_is_not_reused_and_other_views_keep_their_marks(tmp_path
 def test_a_ui_marks_a_thread_read_through_core(tmp_path):
     """The owner's acknowledgement crosses the wire as a request and lands as the local one."""
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.transport.core_access import LocalCoreAccess
     from agent_comms.transport.tools.sidebar import CommsMarkThreadViewReadTool
 
     comms, source = setup_thread(tmp_path)
@@ -258,6 +257,6 @@ def test_a_ui_marks_a_thread_read_through_core(tmp_path):
     assert completed_counts(state, viewer).counts == {'worker': ReplyUnread(1)}
     request = CommsMarkThreadViewReadTool(
         thread='worker', through=comms.transcripts.transcript_checkpoint('worker'))
-    LocalCoreAccess(comms).call(
+    ui_core_read(comms, 
         FieldCodec.decode(CommsMarkThreadViewReadTool, FieldCodec.encode(request)))
     assert completed_counts(state, viewer).counts == {'worker': ReplyUnread(0)}

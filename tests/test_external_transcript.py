@@ -4,21 +4,18 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.execution.transcript_sources import (
-    LatestPage,
-    UnreadTranscriptCursor,
-)
+from agent_comms.execution.transcript_sources import LatestPage, UnreadTranscriptCursor
 from agent_comms.execution.turn_bound import LastTurns
-from agent_comms.execution.turn_item import (
-    NativeItemId,
-    NativeTurnId,
-)
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transcript.transcript_drafts import NoDraft
-from agent_comms.transcript.transcript_events import AssistantTranscript, NoticeTranscript
+from agent_comms.transcript.transcript_events import (
+    AssistantTranscript,
+    NoticeTranscript,
+)
 from agent_comms.transcript.transcripts import TranscriptReadIdentity
 
 
@@ -111,6 +108,7 @@ def test_captured_draft_cannot_delete_a_later_turns_draft(tmp_path):
 @pytest.mark.asyncio
 async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
     turn_turn_id = NativeTurnId('turn')
+    from agent_comms.execution.transcript_sources import TurnDraftPublication
     from agent_comms.messaging.watched import ChangeSignal, FileSource
     from agent_comms.execution.transcript_sources import TurnDraftPublication
 
@@ -134,8 +132,12 @@ async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
 
 def test_turn_owned_draft_refuses_maintenance_without_changing_the_saved_draft(tmp_path):
     from agent_comms.errors import RelationViolationError
-    from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
     from agent_comms.execution.transcript_sources import TurnDraftPublication
+    from agent_comms.storage.maintenance_barrier import (
+        MaintenanceBarrier,
+        MaintenanceOperator,
+    )
+    from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
     comms = wire(tmp_path / 'wire')
     comms.registry.declare(NativeThread('cli', frozenset(), Checkout(tmp_path)))
@@ -205,7 +207,11 @@ def test_a_native_session_thread_takes_no_cli_items(tmp_path):
 def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     t_turn_id = NativeTurnId('t')
     t2_turn_id = NativeTurnId('t2')
-    from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates, encode_updates
+    from agent_comms.acp_extension import (
+        TranscriptSnapshotUpdate,
+        decode_updates,
+        encode_updates,
+    )
     from agent_comms.coordination.errors import StaleRevision
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread('codex', frozenset(), Checkout(tmp_path)))

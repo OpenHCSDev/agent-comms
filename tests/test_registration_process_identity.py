@@ -1,20 +1,26 @@
 """Actual process birth is the registration/claim_scope authority, never PID alone."""
 
+import json
 import os
+import subprocess
+import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from agent_comms.comms import wire
+from agent_comms.config_options import ConfigOptions
 from agent_comms.errors import RelationViolationError
-from agent_comms.execution.child_process import (
-    NoProcess,
-    ProcessIdentity,
-    SpawnedProcess,
-)
+from agent_comms.execution.child_process import NoProcess, ProcessIdentity, SpawnedProcess
+from agent_comms.execution.launch_runtime import ThreadLaunch
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
-from agent_comms.nominal.field_codec import TurnId
+from agent_comms.messaging.bus import Bus
+from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.registry.thread_text import GivenThreadText
@@ -25,16 +31,14 @@ from agent_comms.storage.maintenance_barrier import (
     MaintenanceOperator,
     PausedPhase,
 )
+from agent_comms.transport import runtime_requests
+from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.transport.project_request import ProjectRuntimeRequest
+from agent_comms.transport.runtime_request import RuntimeRequest
 from served_requests import served
 
 
 def test_cli_worktree_edit_preserves_live_external_owner(tmp_path):
-    import subprocess
-    import sys
-
-    from agent_comms.messaging.bus import Bus
-
     comms = wire(tmp_path / 'wire')
     Bus.install(Bus.path_in(comms.root))
     identity = ProcessIdentity.capture(os.getpid())
@@ -86,12 +90,6 @@ def test_bridge_cannot_write_the_registry_during_maintenance(tmp_path, phases):
 
 
 def test_concurrent_starters_reserve_one_current_owner(tmp_path):
-    import subprocess
-    import sys
-    import threading
-    from concurrent.futures import ThreadPoolExecutor
-    from contextlib import ExitStack
-
     registry = wire(tmp_path).registry
     original = registry.declare(NativeThread("owner", frozenset(), Checkout(tmp_path)))
     title = GivenThreadText("metadata changed during launch preparation")
@@ -189,6 +187,40 @@ def test_project_request_entry_retains_original_birth_across_rename(tmp_path):
         replace(request, thread="stranger").require_original(current)
     with pytest.raises(RelationViolationError):
         request.require_original(replace(current, owner_generation=current.owner_generation + 1))
+
+
+def test_configured_native_launch_preserves_original_project_binding(tmp_path: Path) -> None:
+    comms = wire(tmp_path)
+    process = ProcessIdentity.capture(os.getpid())
+    owner = comms.registry.declare(NativeThread(
+        "owner", frozenset(), Checkout(tmp_path), process_identity=process,
+    ))
+    snapshot = comms.registry.snapshot()
+    configuration = ConfigOptions(RetainedOwnerLaunch.configured(), comms.route)
+    environment = configuration.native_environment(owner, snapshot)
+    launch = ThreadLaunch.current(environment)
+    assert launch.name == owner.name and launch.managed
+    assert launch.worktree == owner.worktree
+    request = FieldCodec.decode(
+        RuntimeRequest, json.loads(environment["AGENT_COMMS_PROJECT_REQUEST"]),
+    )
+    assert request == ProjectRuntimeRequest.for_native(snapshot, owner)
+    assert served(request).require_original(comms.registry.entry(owner.name).entry) == owner
+    stale = replace(owner, process_identity=replace(process, start_time=process.start_time + 1))
+    with pytest.raises(RelationViolationError):
+        configuration.native_environment(stale, snapshot)
+
+
+@pytest.mark.parametrize("first_module", (
+    NativeThread.__module__, ProjectRuntimeRequest.__module__,
+    ConfigOptions.__module__, runtime_requests.__name__,
+))
+def test_native_project_command_cold_contracts(first_module: str) -> None:
+    result = subprocess.run(
+        (sys.executable, str(Path(__file__).with_name("project_launch_probe.py")), first_module),
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, (result.stdout, result.stderr)
 
 
 def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path):

@@ -1,0 +1,100 @@
+diff --git a/tests/bus_record_fixture.py b/tests/bus_record_fixture.py
+index 9849a1c92..3eedc4c93 100644
+--- a/tests/bus_record_fixture.py
++++ b/tests/bus_record_fixture.py
+@@ -8,6 +8,8 @@ import sys
+ from multiprocessing.context import ForkServerContext
+ from pathlib import Path
+ 
++import pytest
++
+ from agent_comms.audience_manifest import freeze_audience
+ from agent_comms.frozen_recipient import FrozenRecipient
+ from agent_comms.bus import PrivateRecord
+@@ -46,17 +48,18 @@ def prepare_native_comms(comms: Comms) -> Comms:
+     return comms
+ 
+ 
+-def configure_local_native(directory: Path, monkeypatch, *, provider: str, port: int,
+-                           models: tuple[str, ...]) -> None:
++def configure_local_native(directory: Path, monkeypatch: pytest.MonkeyPatch, *, provider: str, port: int,
++                           models: tuple[str, ...]) -> str:
+     """Point native Pi at a local provider, so a real host starts with no credential or network."""
+     directory.mkdir(mode=0o700)
++    api_key = "local-only"
+     (directory / "models.json").write_text(json.dumps({"providers": {provider: {
+         "baseUrl": f"http://127.0.0.1:{port}/v1",
+         "api": "openai-completions",
+         "models": [{"id": name, "name": name, "contextWindow": 32768, "maxTokens": 2048}
+                    for name in models],
+     }}}))
+-    (directory / "auth.json").write_text(json.dumps({provider: {"type": "api_key", "key": "local-only"}}))
++    (directory / "auth.json").write_text(json.dumps({provider: {"type": "api_key", "key": api_key}}))
+     (directory / "settings.json").write_text(json.dumps({
+         "compaction": {"enabled": False},
+         "retry": {"enabled": False, "maxRetries": 0},
+@@ -74,6 +77,7 @@ def configure_local_native(directory: Path, monkeypatch, *, provider: str, port:
+         monkeypatch.setenv(key, value)
+     for key in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
+         monkeypatch.delenv(key, raising=False)
++    return api_key
+ 
+ 
+ def start_source_owner(comms: Comms, name: str, runtime: RestoredRuntime):
+diff --git a/tests/test_selected_execution_native.py b/tests/test_selected_execution_native.py
+index 5fdc59a56..69e020ebf 100644
+--- a/tests/test_selected_execution_native.py
++++ b/tests/test_selected_execution_native.py
+@@ -3,6 +3,7 @@ from agent_comms.lifecycle_capability import Complete
+ from bus_history import read_history
+ from agent_comms.pi_vocabulary import LowThinkingLevel
+ from binding_reads import binding_rows
++from bus_record_fixture import configure_local_native
+ 
+ import asyncio
+ import json
+@@ -111,7 +112,7 @@ async def test_native_full_four_tools_publish_and_release(
+                 phase = comms.registry.require('beta').turn_record.read().require_active().phase
+                 phases.append(phase.declared_name)
+                 assert request["model"] == "fixture"
+-                assert self.headers["Authorization"] == "Bearer offline-only-fixture"
++                assert self.headers["Authorization"] == f"Bearer {api_key}"
+                 assert len(requests) <= 2 + triage
+                 if triage and len(requests) == 1:
+                     assert not request.get("tools")
+@@ -186,32 +187,10 @@ async def test_native_full_four_tools_publish_and_release(
+     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+     thread = threading.Thread(target=server.serve_forever, daemon=True)
+     thread.start()
+-    config = tmp_path / "canonical-offline"
+-    config.mkdir(mode=0o700)
+-    (config / "models.json").write_text(
+-        json.dumps(
+-            {
+-                "providers": {
+-                    "selected-offline": {
+-                        "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
+-                        "api": "openai-completions",
+-                        "models": [
+-                            {
+-                                "id": "fixture",
+-                                "name": "Offline fixture",
+-                                "contextWindow": 32768,
+-                                "maxTokens": 2048,
+-                            }
+-                        ],
+-                    }
+-                }
+-            }
+-        )
+-    )
+-    (config / "auth.json").write_text(
+-        json.dumps({"selected-offline": {"type": "api_key", "key": "offline-only-fixture"}})
++    api_key = configure_local_native(
++        tmp_path / "canonical-offline", monkeypatch,
++        provider="selected-offline", port=server.server_port, models=("fixture",),
+     )
+-    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(config))
+     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+     execution = SelectedExecution(
+         root=root,

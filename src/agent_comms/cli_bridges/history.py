@@ -17,18 +17,22 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, ClassVar, Self
+from typing import BinaryIO, ClassVar, Self
 
 from pydantic import TypeAdapter
 
-from agent_comms.agent_runtime import ReadsHistory
+from agent_comms.cli_bridges.opencode_parts import SavedMessage
+from agent_comms.cli_bridges.opencode_protocol import Session
 from agent_comms.cli_bridges.runtime_updates import (
     EarlierRequest,
     HistoryNotice,
     RuntimeUpdate,
     SessionFacts,
 )
+from agent_comms.execution.import_history_source import ImportHistorySource
+from agent_comms.execution.imported_conversation import ImportedConversation
 from agent_comms.execution.imported_messages import ImportLimits
+from agent_comms.importing import ImportSnapshot
 from agent_comms.importing import ImportedConversation, ImportSnapshot
 from agent_comms.installer.harness_install import (
     ClaudeCodeHarness,
@@ -48,12 +52,8 @@ from agent_comms.registry.thread_text import (
     ThreadText,
 )
 
-if TYPE_CHECKING:
-    from agent_comms.cli_bridges.opencode_parts import SavedMessage
-    from agent_comms.cli_bridges.opencode_protocol import Session
 
-
-class History(ReadsHistory, HarnessSession, declared_name=None):
+class History(ImportHistorySource, declared_name=None):
     """One session's past, oldest first, as transcript updates."""
 
     @classmethod

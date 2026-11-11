@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
+from agent_comms.messaging.display_sources import (
+    ChannelOrderSource,
+    ChannelSortView,
+    SentHistorySource,
+)
 from agent_comms.nominal.declared_choice import DeclaredChoice, TitledChoice
 from agent_comms.nominal.declared_family import DeclaredFamily
 
-if TYPE_CHECKING:
-    from agent_comms.history_views import HistoryViews
-    from agent_comms.messaging.channel_management import ChannelManagement
-    from agent_comms.presentation import ChannelView
-    from agent_comms.registry.registry_document import RegistrySnapshot
+type ChannelOrders = ChannelOrderSource[type[ThreadSort], type[ChannelSort]]
+type ChannelDisplay = ChannelSortView[type[ChannelSort]]
 
 
 class DisplayOrder(TitledChoice, DeclaredChoice, ABC):
@@ -24,7 +26,7 @@ class DisplayOrder(TitledChoice, DeclaredChoice, ABC):
 
     @classmethod
     @abstractmethod
-    def store_channel_order(cls, channels: ChannelManagement, channel: str | None) -> type[DisplayOrder]: ...
+    def store_channel_order(cls, channels: ChannelOrders, channel: str | None) -> type[DisplayOrder]: ...
 
 
 class ThreadSort(DisplayOrder, DeclaredFamily, affix="ThreadSort"):
@@ -41,13 +43,15 @@ class ThreadSort(DisplayOrder, DeclaredFamily, affix="ThreadSort"):
     def timestamp(created: float, activity: float, sent: float) -> float: ...
 
     @classmethod
-    def store_channel_order(cls, channels: ChannelManagement, channel: str | None) -> type[ThreadSort]:
+    def store_channel_order(cls, channels: ChannelOrders, channel: str | None) -> type[ThreadSort]:
         if channel is None:
             raise ValueError("Member ordering requires a channel")
         return channels.set_channel_sort(channel, cls).order
 
     @staticmethod
-    def sent_timestamps(views: HistoryViews, *, registry: RegistrySnapshot) -> dict[str, float]:
+    def sent_timestamps[Registry](
+        views: SentHistorySource[Registry], *, registry: Registry,
+    ) -> dict[str, float]:
         """Only ordering by sent messages requires this source."""
         return {}
 
@@ -60,7 +64,9 @@ class LastMessageThreadSort(ThreadSort, declared_name="last_message_sent"):
         return sent
 
     @staticmethod
-    def sent_timestamps(views: HistoryViews, *, registry: RegistrySnapshot) -> dict[str, float]:
+    def sent_timestamps[Registry](
+        views: SentHistorySource[Registry], *, registry: Registry,
+    ) -> dict[str, float]:
         with views.bus.opened_activity() as clocks:
             return views.last_sent_timestamps(clocks.sent.items(), registry=registry)
 
@@ -85,23 +91,23 @@ class ChannelSort(DisplayOrder, DeclaredFamily, affix="ChannelSort"):
     """Pins partition every order; builtins keep their declared order in each partition."""
 
     @classmethod
-    def key(cls, view: ChannelView) -> tuple[int, int, float, float, str]:
+    def key(cls, view: ChannelDisplay) -> tuple[int, int, float, float, str]:
         return view.channel.sort_key(cls, view)
 
     @classmethod
-    def store_channel_order(cls, channels: ChannelManagement, channel: str | None) -> type[ChannelSort]:
+    def store_channel_order(cls, channels: ChannelOrders, channel: str | None) -> type[ChannelSort]:
         return channels.set_channel_order(cls)
 
     @classmethod
     @abstractmethod
-    def sort_fields(cls, view: ChannelView) -> tuple[float, float, str]: ...
+    def sort_fields(cls, view: ChannelDisplay) -> tuple[float, float, str]: ...
 
 
 class NameChannelSort(ChannelSort):
     title = "Name"
 
     @classmethod
-    def sort_fields(cls, view: ChannelView) -> tuple[float, float, str]:
+    def sort_fields(cls, view: ChannelDisplay) -> tuple[float, float, str]:
         return 0, 0, view.channel.name.casefold()
 
 
@@ -109,19 +115,19 @@ class RecentChannelSort(ChannelSort):
     """Clock-based channel orders share creation/name tie-breaks, not name ordering."""
 
     @classmethod
-    def sort_fields(cls, view: ChannelView) -> tuple[float, float, str]:
+    def sort_fields(cls, view: ChannelDisplay) -> tuple[float, float, str]:
         return -cls.timestamp(view), -view.channel.created_at, view.channel.name.casefold()
 
     @staticmethod
     @abstractmethod
-    def timestamp(view: ChannelView) -> float: ...
+    def timestamp(view: ChannelDisplay) -> float: ...
 
 
 class CreatedChannelSort(RecentChannelSort, declared_name="created_at"):
     title = "Created"
 
     @staticmethod
-    def timestamp(view: ChannelView) -> float:
+    def timestamp(view: ChannelDisplay) -> float:
         return view.channel.created_at
 
 
@@ -129,7 +135,7 @@ class LastActivityChannelSort(RecentChannelSort):
     title = "Active"
 
     @staticmethod
-    def timestamp(view: ChannelView) -> float:
+    def timestamp(view: ChannelDisplay) -> float:
         return view.last_activity
 
 
@@ -137,5 +143,5 @@ class LastUserInputChannelSort(RecentChannelSort):
     title = "Input"
 
     @staticmethod
-    def timestamp(view: ChannelView) -> float:
+    def timestamp(view: ChannelDisplay) -> float:
         return view.last_user_input

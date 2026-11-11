@@ -14,6 +14,11 @@ from agent_comms.execution.native_startup import NativeStartupPolicy
 from agent_comms.execution.pi_events import PiEvent
 from agent_comms.execution.pi_vocabulary import CompactionReason, PiStopReason
 from agent_comms.execution.pi_wire import PiDiagnostic, PiPayload, UnknownPayload
+from agent_comms.execution.provider_records import (
+    PiContent,
+    TextContent,
+    UnknownContent,
+)
 from agent_comms.execution.turn_output import TurnOutput
 from agent_comms.execution.turn_phase import (
     ModelWaitPhase,
@@ -37,14 +42,11 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.pi_payloads import (
     ContentDelta,
     NativeToolDetails,
-    PiContent,
     PiDelta,
     PiMessage,
     PiResponseData,
     SessionSwitchData,
     StateData,
-    TextContent,
-    UnknownContent,
     UnknownData,
 )
 

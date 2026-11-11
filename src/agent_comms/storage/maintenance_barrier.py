@@ -417,25 +417,20 @@ class MaintenanceWitness:
     @classmethod
     def observe_file(cls, path: Path) -> Self | NoMaintenanceWitness:
         try:
-            descriptor = PrivateFileRole.read(
+            source = PrivateFileRole.stream(
                 path, RelationViolationError("Maintenance witness is not private and regular"))
         except FileNotFoundError:
             return NoMaintenanceWitness()
         except OSError as error:
             raise RelationViolationError("Maintenance witness is inaccessible") from error
         try:
-            info = os.fstat(descriptor)
-            if info.st_size > 4096:
-                raise RelationViolationError("Maintenance witness is not private and regular")
-            with os.fdopen(descriptor, "rb") as stream:
-                descriptor = -1
-                value = FieldCodec.decode(cls, FieldCodec.parse(stream.read()))
+            with source:
+                if os.fstat(source.fileno()).st_size > 4096:
+                    raise RelationViolationError(
+                        "Maintenance witness is not private and regular")
+                return FieldCodec.decode(cls, FieldCodec.parse(source.read()))
         except (OSError, MalformedRecord) as error:
             raise RelationViolationError("Maintenance witness is invalid") from error
-        finally:
-            if descriptor >= 0:
-                os.close(descriptor)
-        return value
 
 
 @dataclass(frozen=True, kw_only=True)

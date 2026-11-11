@@ -221,6 +221,12 @@ class Checkout(SingleFieldValue, PresentMember):
             raise ValueError("Project path must not be empty")
         return Path(path)
 
+    @property
+    def test_environment(self) -> Path:
+        """The interpreter prefix every order names for this tree's tests. Install syncs the
+        live checkout's from the lock it moves to; nothing else writes it."""
+        return self.path / ".venv"
+
     def resolved(self, *, strict: bool = False) -> Self:
         """Resolve this recorded path without imposing launch qualification."""
         return type(self)(self.path.expanduser().resolve(strict=strict))

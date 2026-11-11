@@ -1,33 +1,32 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import (
-    Awaitable,
-    Callable,
-)
+from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING
 
 from acp.exceptions import RequestError
 from acp.schema import PromptResponse
-from metaclass_registry.mro_dispatch import (
-    MroDispatch,
-    handles,
-)
+from metaclass_registry.mro_dispatch import MroDispatch, handles
 from pydantic import JsonValue
 
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import AgentBackend
 from agent_comms.agent_event_updates import AcpEventConsumer, TurnEventConsumer
+from agent_comms.comms import Comms
+from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution import pi_events as pi
+from agent_comms.execution.context_reading import ContextUsage
 from agent_comms.execution.controller import Controller
 from agent_comms.execution.goal_scheduler import GoalScheduler
 from agent_comms.execution.image_input import ImageInput
 from agent_comms.execution.input_drain import (
     BackgroundWake,
+    DrainTurn,
+    InputDrain,
     SessionScheduleCheck,
     WakeScheduleCheck,
 )
@@ -35,6 +34,7 @@ from agent_comms.execution.input_key import InputKey
 from agent_comms.execution.input_origin import InputOrigin, UnattributedInputOrigin
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.owned_turn import OwnedTurn
+from agent_comms.execution.owned_turn_runner import OwnedTurnRunner
 from agent_comms.execution.pi_commands import (
     AgentCommsInspectContext,
     AgentCommsInspectContextSegment,
@@ -43,6 +43,8 @@ from agent_comms.execution.pi_commands import (
 from agent_comms.execution.pi_events import CancelledUiChoice, DialogUiRequest, ExtensionUiChoice
 from agent_comms.execution.queued_input import InitialInput
 from agent_comms.execution.reservation_rules import ReservationRule, ReservationViolationError
+from agent_comms.execution.session_lifecycle import SessionLifecycle
+from agent_comms.execution.session_owner_reads import SessionTaskOwner
 from agent_comms.execution.turn_context import SegmentManifest
 from agent_comms.execution.turn_effects import TurnEffects
 from agent_comms.execution.turn_input_source import (
@@ -65,13 +67,6 @@ from agent_comms.registry.threads import Thread
 from agent_comms.team.pi_rule_gate import PiRedeal
 from agent_comms.transcript.transcript_updates import TurnTranscriptUpdate
 from agent_comms.transport.runtime_server import RuntimeServer, SubscriberClosed
-
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-    from agent_comms.coordinated_runtime import SelectedExecution
-    from agent_comms.execution.context_reading import ContextUsage
-    from agent_comms.execution.input_drain import DrainTurn, InputDrain, OwnerSession
-    from agent_comms.execution.session_lifecycle import SessionLifecycle
 
 AGENT_PREFIX = "!agent "
 
@@ -151,7 +146,7 @@ class CompactionObservation(MroDispatch):
         await self.publish(self.phase.compaction_ended())
 
 
-class TurnRunner:
+class TurnRunner(OwnedTurnRunner):
     """Own session turn locks/tasks and each session's agent backend."""
 
     def __init__(
@@ -536,7 +531,7 @@ class TurnRunner:
             owner for state in self.inputs.drained.values() for owner in state.executors()
         ))
 
-    async def close_sessions(self, owners: tuple[OwnerSession, ...]) -> None:
+    async def close_sessions(self, owners: tuple[SessionTaskOwner, ...]) -> None:
         """Retire only these sessions; sibling turns and native children keep running."""
         tasks = {
             owner.identifier: owner.retire_turn_task()

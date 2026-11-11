@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Annotated, Literal
 
 from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.messaging.message_send_reads import CommittedMessageRead
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, WireName
@@ -41,7 +43,7 @@ class CorrectionUnreported(CorrectionResult, declared_name="unreported"):
 
 
 @dataclass(frozen=True)
-class SendResult:
+class SendResult(CommittedMessageRead):
     message: Message
     correction: CorrectionResult
 

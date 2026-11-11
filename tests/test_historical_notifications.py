@@ -39,7 +39,7 @@ from agent_comms.messaging.read_basis import ReadCursor
 from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.nominal.field_codec import InputId, MessageId, TurnId
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.agent_activity import (
+from agent_comms.registry.recipient_activity import (
     RecordedRecipientActivity,
     UnavailableRecipientActivity,
 )
@@ -398,7 +398,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
     )
     lease = owner.require_turn_lease()
     inputs = InputDispositions(old.root)
-    key = inputs.bus_key(original, owner)
+    key = original.bus_key(owner)
     source_text = "delivered original"
     assert inputs.record(
         key,
@@ -476,7 +476,7 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
 
 def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
     from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry.agent_activity import RecipientActivity
+    from agent_comms.registry.recipient_activity import RecipientActivity
 
     old, live, source, messages, _root_id = archived_notification
     old.registry.declare(old.registry.require("agent").as_member(ExternalThread))

@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.input_key import InputKey
 from agent_comms.execution.turn_origin import TurnOrigin
+from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.messaging.messages import PublicSender
+from agent_comms.messaging.messages import Message
 from agent_comms.messaging.read_basis import DMDisplayScope, MessageDisplayScope
 from agent_comms.messaging.response_policy import NO_ALIASES
 from agent_comms.nominal.field_codec import (
@@ -25,19 +26,13 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.planning.goal_scope import AllGoals, GoalScope
 from agent_comms.projects.checkouts import Checkout
-
-if TYPE_CHECKING:
-    from agent_comms.execution.transcript_routes import NoSentInputText, SentInputText
-    from agent_comms.input_disposition import InputDispositions
-    from agent_comms.messaging.bus_publication import Delivered
-    from agent_comms.messaging.messages import Message
-    from agent_comms.registry.catalog_document import CatalogDocument
-    from agent_comms.registry.registry_provenance import RegistryProvenance
-    from agent_comms.registry.thread_identity import ThreadIncarnation
-    from agent_comms.registry.threads import Thread
+from agent_comms.registry.catalog_document import CatalogDocument
+from agent_comms.registry.registry_names import RegistryNames
+from agent_comms.registry.tagged_thread_source import TaggedThreadSource
+from agent_comms.registry.thread_creation import ThreadCreationSource
 
 
-class NoTurnOrigin(NullMember, TurnOrigin):
+class NoTurnOrigin(NullMember, TurnOrigin[Message]):
     """An autonomous turn has no message, delivery key or reply destination."""
 
     separate_turn = False
@@ -50,7 +45,7 @@ class NoTurnOrigin(NullMember, TurnOrigin):
     def batch_target(self) -> NoTurnOrigin:
         return self
 
-    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[InputKey, ...]:
+    def bus_keys(self, owner: ThreadCreationSource) -> tuple[InputKey, ...]:
         return ()
 
 
@@ -113,7 +108,7 @@ class Routing(SubclassUnion, affix="Routing"):
     def outgoing(self) -> bool:
         return False
 
-    def validate_input(self, sent_text: SentInputText | NoSentInputText) -> None:
+    def validate_input(self, sent_text: PresentMember | NullMember) -> None:
         pass
 
     def with_requests(self, requests: tuple[MessageReference, ...]) -> Routing:
@@ -141,7 +136,7 @@ class TurnRouting(RecordMember, Routing):
     def outgoing(self) -> bool:
         return bool(self.reply.present())
 
-    def validate_input(self, sent_text: SentInputText | NoSentInputText) -> None:
+    def validate_input(self, sent_text: PresentMember | NullMember) -> None:
         sent_text.require_present()
         self.reply.require_absent("Input routing requires exact sent text and no outgoing reply claim.")
 
@@ -165,7 +160,7 @@ class TurnRouting(RecordMember, Routing):
 @dataclass(frozen=True, slots=True)
 class ScheduledTurn:
     prompt: str
-    origin: TurnOrigin = NO_TURN_ORIGIN
+    origin: TurnOrigin[Message] = NO_TURN_ORIGIN
     goal_id: GoalScope = AllGoals()
 
     @property
@@ -220,7 +215,7 @@ class DeliveryScope(MessageDisplayScope):
 
     @classmethod
     def capture(
-        cls, name: str, snapshot: RegistryProvenance, catalog: CatalogDocument
+        cls, name: str, snapshot: RegistryNames[TaggedThreadSource], catalog: CatalogDocument
     ) -> DeliveryScope:
         thread = snapshot.require(name)
         return cls(thread.name, snapshot.aliases, catalog.targets_for(thread.tags))
@@ -254,22 +249,6 @@ class DeliveryScope(MessageDisplayScope):
     def delivers_sql(actor: str, sender: str, canonical_sender: str) -> str:
         """Sender exclusion for SQL routes already selected by index_targets."""
         return f"coalesce({canonical_sender},{sender})<>{actor}"
-
-    @staticmethod
-    def sender_lookups(
-        source: ThreadIncarnation, on_unrecorded: Callable[[], None]
-    ) -> Iterator[ThreadLookup | PublicSender]:
-        """Share format discovery; each consumer owns its missing-birth action.
-
-        The unstamped format matches before a birth is required. An index must
-        probe for an assigned stamp; starting input requires a verified stamp.
-        """
-        def missing() -> tuple[ThreadLookup, ...]:
-            on_unrecorded()
-            return ()
-
-        yield PublicSender()
-        yield from source.recorded_or(lambda recorded: (recorded.lookup,), missing)
 
     def conversation(self, sender: str, target: str) -> str:
         return CommandTarget.named(target).conversation(sender, self.actor, self.canonical)

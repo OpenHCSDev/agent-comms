@@ -9,12 +9,14 @@ import pytest
 
 from agent_comms.execution.channel_coding_tools import CodingToolSocket
 from agent_comms.execution.pi_events import ToolExecutionEnd, ToolExecutionStart
+from agent_comms.execution.provider_records import (
+    ReportedText,
+    ToolCallContent,
+)
 from agent_comms.pi_payloads import (
     AssistantMessage,
     ReportedFlag,
     ReportedParts,
-    ReportedText,
-    ToolCallContent,
 )
 from agent_comms.transport.native_tool_call import ArgumentRefusal
 from agent_comms.transport.native_tools import NativeToolDeclaration

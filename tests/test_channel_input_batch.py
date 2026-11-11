@@ -20,7 +20,7 @@ def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path, *
     origins = tuple(
         Message("peer", "#comms", f"text {seq}", InfoKind, seq=seq) for seq in (1, 2)
     )
-    keys = tuple(ledger.bus_key(message, owner) for message in origins)
+    keys = tuple(message.bus_key(owner) for message in origins)
     for key, message in zip(keys, origins, strict=True):
         ledger.record(
             key,

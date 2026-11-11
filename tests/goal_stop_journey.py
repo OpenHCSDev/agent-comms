@@ -11,13 +11,9 @@ from agent_comms.comms import wire
 from agent_comms.execution.native_arguments import GivenArguments
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.planning.goal_actions import SetGoalAction
-from agent_comms.planning.goal_attempt_phase import (
-    FailedAttempt,
-    SucceededAttempt,
-)
-from agent_comms.planning.goal_attempts import AttemptRecord
-from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
+from agent_comms.planning.goal_attempt_phase import FailedAttempt, SucceededAttempt
 from agent_comms.planning.goal_generation import ReadyGeneration
+from agent_comms.planning.goal_ledger import AttemptRecord, FailedTurnEvidence
 from agent_comms.planning.goal_states import ActiveGoal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import NoObservedTurn

@@ -5,44 +5,26 @@ import math
 import time
 from abc import ABC, abstractmethod
 from collections import Counter
-from collections.abc import (
-    Iterable,
-    Iterator,
-    Mapping,
-    Sequence,
-)
-from dataclasses import (
-    dataclass,
-    field,
-    fields,
-)
-from functools import (
-    cache,
-    cached_property,
-)
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field, fields
+from functools import cache, cached_property
 from itertools import combinations
 from pathlib import Path
 from subprocess import TimeoutExpired
-from typing import (
-    ClassVar,
-    Self,
-    cast,
-)
+from typing import ClassVar, Self, cast
 
 from agent_comms.cli_verbs.declared_verb import DeclaredVerb
 from agent_comms.comms import Comms
-from agent_comms.coordination.service_passes import FailingPass, ServicePasses, ServicePassStore
+from agent_comms.coordination.service_passes import (
+    FailingPass,
+    ServicePasses,
+    ServicePassStore,
+)
 from agent_comms.errors import RejectedEnforcementError, RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, ResidentMemory
 from agent_comms.execution.root_runtime import RootRuntimeStore
-from agent_comms.execution.turn_bound import (
-    LastTurns,
-    RecentTurnsSince,
-)
-from agent_comms.execution.turn_digests import (
-    OrderEditCountRead,
-    TurnDigestRead,
-)
+from agent_comms.execution.turn_bound import LastTurns, RecentTurnsSince
+from agent_comms.execution.turn_digests import OrderEditCountRead, TurnDigestRead
 from agent_comms.heartbeat_subjects import (
     AnswerSubject,
     HeadSubject,
@@ -54,7 +36,12 @@ from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.declared_family import DeclaredFamily, RegisteredFamily
-from agent_comms.nominal.field_codec import DefaultedName, DefaultExternalName, FieldCodec, OrderId
+from agent_comms.nominal.field_codec import (
+    DefaultedName,
+    DefaultExternalName,
+    FieldCodec,
+    OrderId,
+)
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.planning.goal_management import Goals
 from agent_comms.planning.held_orders import HeldOrders
@@ -91,7 +78,10 @@ from agent_comms.projects.work_branches import (
     UnparsedSource,
     WorkBranchError,
 )
-from agent_comms.registry.registry_document import RegisteredTeamProject, RegistrySnapshot
+from agent_comms.registry.registry_document import (
+    RegisteredTeamProject,
+    RegistrySnapshot,
+)
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.recorded_time import EventTime, RecordedEventTime

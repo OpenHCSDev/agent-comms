@@ -53,6 +53,16 @@ class UnknownChannelError(ToolRefusedError):
     """A target is absent from the catalog and current thread tags."""
 
 
+class SourceOutsideImport(ToolRefusedError):  # noqa: N818 - a refusal, named for its case
+    """A requested source is not one the imported session recorded. A bare ValueError here
+    was no refusal the observer child knew, so one such read killed every UI read with it."""
+
+
+class MentionOutsideChannelError(ToolRefusedError):
+    """A channel post @-names a live thread the channel does not reach. On 2026-11-10 two
+    review send-backs to an untagged cloud session went to 22 other threads and never to it."""
+
+
 class ExportDestinationExists(ToolRefusedError, FileExistsError):
     """A wire export was pointed at a path that already exists and was not told to replace it:
     the caller's choice to refuse, and still the file-exists condition it is."""

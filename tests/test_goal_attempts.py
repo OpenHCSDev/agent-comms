@@ -27,27 +27,26 @@ from agent_comms.nominal.field_codec import AttemptId, GoalId, MalformedRecord, 
 from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.planning.attempt_resolution import OperatorStopped, RetryDecision
 from agent_comms.planning.goal_actions import SetGoalAction
-from agent_comms.planning.goal_attempt_phase import (
-    ClaimedAttempt,
-    FailedAttempt,
-    SucceededAttempt,
-)
+from agent_comms.planning.goal_attempt_phase import ClaimedAttempt, FailedAttempt, SucceededAttempt
 from agent_comms.planning.goal_attempts import (
-    AttemptRecord,
-    Generation,
     GoalAttemptStore,
-    GoalWorkDecision,
+    LaunchPermit,
     ProviderUsageTotal,
     ReservationConflictError,
-    StorageUncertainError,
 )
-from agent_comms.planning.goal_failure_observation import FailedTurnEvidence
 from agent_comms.planning.goal_generation import (
     BlockedGeneration,
     CancelledGeneration,
     CompletedGeneration,
     ReadyGeneration,
     ReservedGeneration,
+)
+from agent_comms.planning.goal_ledger import (
+    AttemptRecord,
+    FailedTurnEvidence,
+    Generation,
+    GoalWorkDecision,
+    StorageUncertainError,
 )
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_creation import RecordedCreationTime
@@ -531,7 +530,7 @@ def test_stopped_reserved_generation_refuses_its_missing_attempt(store):
     attempt_id = AttemptId.mint()
     generation = Generation(goal_id, 1, ReservedGeneration(), attempt_id)
     with pytest.raises(StorageUncertainError, match=attempt_id):
-        generation.lifecycle.stopped_permit(store, generation)
+        generation.lifecycle.stopped_permit(store, generation, LaunchPermit)
 
 
 def test_incomplete_current_schema_is_not_repaired_or_regranted(store):

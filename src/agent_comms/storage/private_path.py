@@ -10,7 +10,7 @@ import os
 import stat
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, ClassVar
@@ -233,10 +233,12 @@ class FilesystemRole(DeclaredFamily, affix="Role"):
             raise refusal from RelationViolationError(f"{cls.declared_name}: {failed.declared_name}")
 
     @classmethod
-    def _opened(
+    def _checked(
         cls, path: str | Path, flags: int, refusal: Exception, *,
         dir_fd: int | None = None, mode: int = 0o600,
     ) -> int:
+        """Open and check this path. Private because an int owns nothing: the two
+        owners below are the only ways a descriptor leaves this class."""
         fd = os.open(path, flags | os.O_NOFOLLOW | cls.kind_flags(), mode, dir_fd=dir_fd)
         try:
             cls.require(os.fstat(fd), refusal)
@@ -246,12 +248,56 @@ class FilesystemRole(DeclaredFamily, affix="Role"):
         return fd
 
     @classmethod
-    def read(cls, path: str | Path, refusal: Exception, *, dir_fd: int | None = None) -> int:
-        return cls._opened(path, os.O_RDONLY, refusal, dir_fd=dir_fd)
+    @contextmanager
+    def opened(
+        cls, path: str | Path, flags: int, refusal: Exception, *,
+        dir_fd: int | None = None, mode: int = 0o600,
+    ) -> Iterator[int]:
+        """Open this path under the role's rule; the scope that asked for it closes it.
+
+        A descriptor is an int, so a role that returned one made its own lifetime a fact
+        every caller restated as try/finally, and a caller that forgot held the file for
+        as long as its process lived. A live worker host held 157 descriptors on one
+        database this way. Yielding it leaves no int to forget: a caller that must keep
+        the file open enters this on an ExitStack it owns, and that stack is the scope.
+        """
+        fd = cls._checked(path, flags, refusal, dir_fd=dir_fd, mode=mode)
+        try:
+            yield fd
+        finally:
+            os.close(fd)
 
     @classmethod
-    def update(cls, path: str | Path, refusal: Exception, *, dir_fd: int | None = None) -> int:
-        return cls._opened(path, os.O_RDWR, refusal, dir_fd=dir_fd)
+    def _as_stream(cls, fd: int, mode: str) -> BinaryIO:
+        """The one place a checked descriptor becomes a file object that owns it."""
+        try:
+            return os.fdopen(fd, mode)
+        except BaseException:
+            os.close(fd)
+            raise
+
+    @classmethod
+    def stream(
+        cls, path: str | Path, refusal: Exception, *, dir_fd: int | None = None,
+    ) -> BinaryIO:
+        """Give this path to a file object, which owns the descriptor and closes it.
+
+        Some holders outlive any scope: a source that reopens itself keeps its stream on
+        the object and closes it there. Those take this owner rather than a bare int.
+        """
+        return cls._as_stream(cls._checked(path, os.O_RDONLY, refusal, dir_fd=dir_fd), "rb")
+
+    @classmethod
+    def reading(
+        cls, path: str | Path, refusal: Exception, *, dir_fd: int | None = None,
+    ) -> AbstractContextManager[int]:
+        return cls.opened(path, os.O_RDONLY, refusal, dir_fd=dir_fd)
+
+    @classmethod
+    def updating(
+        cls, path: str | Path, refusal: Exception, *, dir_fd: int | None = None,
+    ) -> AbstractContextManager[int]:
+        return cls.opened(path, os.O_RDWR, refusal, dir_fd=dir_fd)
 
     @classmethod
     def held(cls, fd: int, path: Path, refusal: Exception) -> None:
@@ -268,10 +314,23 @@ class PrivateRole(FilesystemRole):
     def accepts_permissions(cls, observed: os.stat_result) -> bool:
         return stat.S_IMODE(observed.st_mode) == cls.permissions
 
+    create_flags: ClassVar[int] = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+
     @classmethod
-    def create(cls, path: str | Path, refusal: Exception, *, dir_fd: int | None = None) -> int:
-        return cls._opened(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, refusal,
-                           dir_fd=dir_fd, mode=cls.permissions)
+    def creating(
+        cls, path: str | Path, refusal: Exception, *, dir_fd: int | None = None,
+    ) -> AbstractContextManager[int]:
+        """Create this path with the role's own permissions; its scope closes it."""
+        return cls.opened(path, cls.create_flags, refusal,
+                          dir_fd=dir_fd, mode=cls.permissions)
+
+    @classmethod
+    def created_stream(
+        cls, path: str | Path, refusal: Exception, *, dir_fd: int | None = None,
+    ) -> BinaryIO:
+        """Create this path and give it to a file object that owns the descriptor."""
+        return cls._as_stream(cls._checked(
+            path, cls.create_flags, refusal, dir_fd=dir_fd, mode=cls.permissions), "wb")
 
 
 class PrivateFileRole(PrivateRole):
@@ -335,13 +394,10 @@ class PrivateSocketRole(PrivateRole):
         """
         path = Path(path).absolute()
         refusal = ValueError("Socket directory changed during acquisition")
-        fd = TrustedAncestorRole.read(path.parent, refusal)
-        try:
+        with TrustedAncestorRole.reading(path.parent, refusal) as fd:
             TrustedAncestorRole.held(fd, path.parent, refusal)
             with Platform.current().socket_address(path, fd) as address:
                 yield address
-        finally:
-            os.close(fd)
 
 
 class OwnedDirectoryRole(FilesystemRole):

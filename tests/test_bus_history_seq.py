@@ -17,14 +17,12 @@ from agent_comms.execution.transcript_sources import (
     TranscriptCursor,
 )
 from agent_comms.messaging.bus import Bus, BusSnapshot, PublicRecord
-from agent_comms.messaging.bus_publication import AgentOrigin, HumanOrigin
+from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.bus_tables import MessageIdentitySource
 from agent_comms.messaging.historical_views import HistoryArchive
+from agent_comms.messaging.initial_origin import HumanOrigin
 from agent_comms.messaging.message_bus import MessageBus
-from agent_comms.messaging.message_page import (
-    MessagePageRequest,
-    PageBounds,
-)
+from agent_comms.messaging.message_page import MessagePageRequest, PageBounds
 from agent_comms.messaging.messages import BusRow, InfoKind, Message
 from agent_comms.messaging.page_traversal import LiveCursor, OlderTraversal
 from agent_comms.messaging.publisher import Publisher

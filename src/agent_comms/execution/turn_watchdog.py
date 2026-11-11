@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from agent_comms.execution.pi_events import PiEvent
+from agent_comms.execution.stats_callbacks import WatchdogSessionRead, StatsWatchdogRead, StatsProgressRead
+from agent_comms.execution.turn_stats import StatsRequest
+
 import asyncio
 import math
 from collections.abc import (
@@ -8,10 +12,7 @@ from collections.abc import (
     Iterator,
 )
 from contextlib import contextmanager
-from typing import (
-    TYPE_CHECKING,
-    ClassVar,
-)
+from typing import ClassVar
 
 from metaclass_registry.mro_dispatch import (
     MroDispatch,
@@ -19,15 +20,11 @@ from metaclass_registry.mro_dispatch import (
 )
 
 from agent_comms import agent_events as events
-from agent_comms.execution.native_startup import SessionLoad
+from agent_comms.execution.native_startup import NativeStartupPolicy, SessionLoad
 from agent_comms.execution.turn_failure import InputMissing, ModelStalled, NativePreflightTimeout
 from agent_comms.execution.turn_phase import AcceptsPrompt, PromptAcceptancePhase, TurnPhase
 from agent_comms.nominal.declared_family import DeclaredFamily
 
-if TYPE_CHECKING:
-    from agent_comms.execution.backend import TurnSession
-    from agent_comms.execution.native_startup import NativeStartupPolicy
-    from agent_comms.execution.pi_events import PiEvent
 
 
 class TurnWaitExpired(TimeoutError):
@@ -67,17 +64,17 @@ class TurnWait(DeclaredFamily, affix="Wait"):
         finally:
             self.elapsed += min(remaining, max(0.0, clock() - started_at))
 
-    def diagnosis(self, session: TurnSession) -> str:
+    def diagnosis(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> str:
         return f"{self.reason}: phase={self.phase}"
 
-    def expired(self, session: TurnSession) -> TurnWaitExpired:
+    def expired(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> TurnWaitExpired:
         return TurnWaitExpired(
             self,
             f"{self.diagnosis(session)}; no progress for "
             f"{self.elapsed:.3f}s; input_started={session.started_input}"
         )
 
-    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+    async def expire(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> AsyncIterator[events.AgentEvent]:
         session.finish_request()
         return
         yield  # an expiry without events is still this event stream
@@ -87,7 +84,7 @@ class PreflightWait(TurnWait):
     reason = NativePreflightTimeout.declared_name
     phase = "await_get_state"
 
-    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+    async def expire(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> AsyncIterator[events.AgentEvent]:
         watchdog = session.watchdog
         elapsed_ms = round((watchdog.clock() - watchdog.launch_started_at) * 1000)
         wait_ms = round(self.elapsed * 1000)
@@ -117,7 +114,7 @@ class InputStartWait(TurnWait):
     reason = "input_start_timeout"
     phase = "await_input"
 
-    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+    async def expire(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> AsyncIterator[events.AgentEvent]:
         session.output.record_failure(
             InputMissing("Pi RPC run ended without this prompt's user message start.")
         )
@@ -132,11 +129,11 @@ class ModelWait(TurnWait):
             raise ValueError("A model progress wait must be positive and finite")
         super().__init__(budget)
 
-    def diagnosis(self, session: TurnSession) -> str:
+    def diagnosis(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> str:
         stalled = session.watchdog.phase.stalled()
         return f"{stalled.stall_reason}: phase={stalled.declared_name}"
 
-    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+    async def expire(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> AsyncIterator[events.AgentEvent]:
         await session.abort_stalled_rpc()
         for started in session.started_during_abort:
             yield started
@@ -165,7 +162,7 @@ class PollWait(UnchargedWait, TurnWait):
     def timeout(self) -> float:
         return 5.0
 
-    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+    async def expire(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> AsyncIterator[events.AgentEvent]:
         session.stats.expired(session)
         async for event in super().expire(session):
             yield event
@@ -179,7 +176,11 @@ class UnboundedWait(UnchargedWait, TurnWait):
         return None
 
 
-class ProgressWatchdog(MroDispatch):
+class ProgressWatchdog(
+    MroDispatch,
+    StatsWatchdogRead[TurnWait],
+    StatsProgressRead[TurnPhase],
+):
     """Select a declared wait once; never grant input or replay authority."""
 
     def __init__(
@@ -230,7 +231,7 @@ class ProgressWatchdog(MroDispatch):
         self.phase = self.phase.model_progress()
 
     @handles(AcceptsPrompt)
-    def accept_prompt(self, event: PiEvent, session: TurnSession) -> None:
+    def accept_prompt(self, event: PiEvent, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> None:
         if event.invalidates_stop:
             session.output.final_assistant_stop = False
         self.accepted()
@@ -238,7 +239,7 @@ class ProgressWatchdog(MroDispatch):
     def transition(self, event: PiEvent) -> None:
         self.phase = event.on(self.phase)
 
-    def wait_for(self, session: TurnSession) -> TurnWait:
+    def wait_for(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> TurnWait:
         if session.awaiting_native_attestation:
             return self.preflight_wait
         active = self.phase.model_wait(self.model_wait, self.unbounded_wait)
@@ -246,7 +247,7 @@ class ProgressWatchdog(MroDispatch):
             active = self.input_wait
         return session.stats.wait_for(self, active)
 
-    async def read(self, session: TurnSession) -> bytes:
+    async def read(self, session: WatchdogSessionRead[ProgressWatchdog, StatsRequest]) -> bytes:
         if session.rejected_signal.is_set():
             return b"\n"
         read_task = asyncio.create_task(session.native.reader.readline())

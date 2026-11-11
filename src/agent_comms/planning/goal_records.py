@@ -3,31 +3,29 @@ from __future__ import annotations
 from collections.abc import Sequence
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.published_bus import PublishedBus
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.planning.goal_attempts import GoalAttemptFile, GoalAttemptStore
-from agent_comms.planning.goal_presentation import GoalWaitTarget
-from agent_comms.planning.goal_waits import (
+from agent_comms.planning.goal_wait_recovery import (
     GoalInputReview,
     GoalWaitRecovery,
     GoalWaitReview,
-    GoalWaits,
 )
+from agent_comms.planning.goal_wait_target import GoalWaitTarget
+from agent_comms.planning.goal_waits import GoalWaits
+from agent_comms.planning.goal_work import GoalWorkSource
 from agent_comms.planning.orders import TodoStore
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import Thread
 
-if TYPE_CHECKING:
-    from agent_comms.messaging.messages import Message
 
-
-class GoalRecords(GoalWaitRecovery):
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus, agents: AgentActivity):
+class GoalRecords(GoalWaitRecovery, GoalWorkSource):
+    def __init__(self, root: Path, registry: Registration, bus: PublishedBus, agents: AgentActivity):
         self.root = root
         self.registry = registry
         self.bus = bus
@@ -87,7 +85,7 @@ class GoalRecords(GoalWaitRecovery):
             ) if sequences else ()
             while True:
                 replies.update({
-                    InputDispositions.bus_key(original.message, thread): original.message
+                    original.message.bus_key(thread): original.message
                     for original in page
                 })
                 page = source.direct_replies(

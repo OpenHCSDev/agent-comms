@@ -17,6 +17,10 @@ from agent_comms.execution.acp_failure import (
 from agent_comms.execution.pi_events import MessageEnd
 from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.pi_vocabulary import ErrorStopReason
+from agent_comms.execution.provider_records import (
+    CodedProviderDiagnosticError,
+    CodelessProviderDiagnosticError,
+)
 from agent_comms.execution.turn_failure import (
     ModelRequestFailed,
     ProviderTransportFailed,
@@ -26,8 +30,6 @@ from agent_comms.input_attempt import StartedInput
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_payloads import (
     AfterMessageStreamStartStage,
-    CodedProviderDiagnosticError,
-    CodelessProviderDiagnosticError,
     RequestBytes,
     UnrecognizedTransportStage,
 )

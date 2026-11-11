@@ -7,15 +7,17 @@ from typing import TYPE_CHECKING, Never
 
 from agent_comms.execution.native_input_proof import NativeInputCommit
 from agent_comms.execution.native_pi import NativePiInputNotSent
+from agent_comms.execution.native_session_callbacks import (
+    NativeSessionCallbacks,
+    SessionPromptCallbacks,
+)
 from agent_comms.execution.pi_events import AgentSettled, MessageStart, Response
 from agent_comms.execution.turn_failure import TerminalFailure
+from agent_comms.execution.turn_failure_reads import TerminalPromptRead
 from agent_comms.execution.turn_inbox import TurnInboxItem
 
-if TYPE_CHECKING:
-    from agent_comms.execution.backend import NativeSession
 
-
-class PromptState:
+class PromptState(SessionPromptCallbacks):
     acknowledged = False
     awaiting_start = False
     started = False
@@ -35,16 +37,16 @@ class PromptState:
     def settle(self, event: AgentSettled) -> PromptState:
         return self
 
-    def validate_terminal(self, session: NativeSession, transport_ok: bool) -> None:
+    def validate_terminal(self, session: NativeSessionCallbacks, transport_ok: bool) -> None:
         """A user prompt owes its declared input, answer and queue evidence."""
         for cause in TerminalFailure.members_with(TerminalFailure):
             if cause.detected(session, transport_ok):
                 session.output.record_failure(cause(cause.explanation(session.output)))
 
-    def permits_extension_ui(self, session: NativeSession) -> bool:
+    def permits_extension_ui(self, session: NativeSessionCallbacks) -> bool:
         return False
 
-    def permits_retention(self, session: NativeSession) -> bool:
+    def permits_retention(self, session: NativeSessionCallbacks) -> bool:
         return False
 
 
@@ -70,10 +72,10 @@ class UnwrittenPrompt(QueuedOperation):
 class PreparedSession(QueuedOperation):
     """An idle-session preparation owns metadata, not an unwritten user prompt."""
 
-    def validate_terminal(self, session: NativeSession, transport_ok: bool) -> None:
+    def validate_terminal(self, session: NativeSessionCallbacks, transport_ok: bool) -> None:
         """Preparation owes metadata replies, not a user input or assistant answer."""
 
-    def permits_retention(self, session: NativeSession) -> bool:
+    def permits_retention(self, session: NativeSessionCallbacks) -> bool:
         return session.stats.complete and session.output.clean
 
 

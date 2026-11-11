@@ -6,8 +6,10 @@ import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from agent_comms.execution.reservation_rules import ReservationViolationError
 from agent_comms.execution.turn_failure import AuthorityChanged
 from agent_comms.nominal.field_codec import InputId
 
@@ -70,12 +72,20 @@ class RefusedSend(SendOutcome):
         return asyncio.sleep(0, result=True)
 
 
+@dataclass(frozen=True)
 class AuthorityChangedSend(SendOutcome):
+    """A send its reservation rules refused, carrying the rule that refused it. On
+    2026-11-10 every Send Now failed as a bare "authority changed": the rule was logged at
+    INFO and dropped, so nobody could see which check was wrong."""
+
+    refusal: ReservationViolationError
+
     def apply(self, inputs: InputForwarding, session: NativeSession,
               item: TurnInboxItem, write: Callable[[], None]) -> Awaitable[bool]:
         inputs.uncertain = True
         session.output.final_assistant_stop = False
-        session.output.record_failure(AuthorityChanged("Input authority changed before native send."))
+        session.output.record_failure(AuthorityChanged(
+            f"Input authority changed before native send: {self.refusal}"))
         return asyncio.sleep(0, result=False)
 
 

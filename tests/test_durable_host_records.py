@@ -23,11 +23,12 @@ from agent_comms.execution.pi_durable_backend import (
 from agent_comms.execution.pi_events import DurablePiEvent, PiEvent, UnknownPiEvent
 from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.pi_wire import RequestId
+from agent_comms.execution.provider_records import ReportedText
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_item import PiRequestKey
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.pi_counts import PiCount, UnreportedCount
-from agent_comms.pi_payloads import PiContextUsage, ReportedContextUsage, ReportedText
+from agent_comms.pi_payloads import PiContextUsage, ReportedContextUsage
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.recorded_time import UnrecordedTimeError

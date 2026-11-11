@@ -1,11 +1,11 @@
 """The install's first stage: build the target's locked runtime, then become it.
 
-Any runtime's launcher, the outgoing one included, starts ``python -m agent_comms.installer``
-inside the target tree with the tree's ``src`` on its path and the install request on stdin
-(InstallRun.spawn). That interpreter predates the target's dependencies, so this stage
-imports only installer-internal modules: it reads nothing of the request, builds the
-runtime the tree's lock declares, and execs that runtime's interpreter into the target
-stage (installer/prepared.py), which still finds the request on stdin.
+The launcher starts its own installer inside the target checkout, with the install
+request still on stdin (InstallRun.spawn). Its current build policy chooses and checks
+all target packages before old target code can refresh their versions. This stage imports
+only installer-internal modules, then execs the checked runtime into its own target stage
+(installer/prepared.py), which still finds the request on stdin. Carry remains owned by
+the target runtime and the target checkout.
 """
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from typing import ClassVar, Never
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import LaunchedPhaseTiming
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_stack import RuntimeStack
 from agent_comms.installer.target_tree import ScratchTree
 from agent_comms.nominal.field_codec import FieldCodec
@@ -59,3 +60,16 @@ class BuiltRuntime:
     @classmethod
     def argument(cls) -> BuiltRuntime:
         return FieldCodec.decode(cls, FieldCodec.parse(sys.argv[1]))
+
+
+def main() -> None:
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(signum, stopped)
+    try:
+        BuiltRuntime.bootstrap()
+    except UpgradeRefused as error:
+        raise SystemExit(str(error))
+
+
+if __name__ == "__main__":
+    main()

@@ -3,61 +3,20 @@
 from __future__ import annotations
 
 import json
-import re
-from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from functools import cached_property, partial
 from pathlib import Path
-from typing import Generic, TypeVar
 
-from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
-from agent_comms.messaging.messages import PublicSender
-from agent_comms.messaging.routing import DeliveryScope
+from agent_comms.messaging.message_sender import PublicSender
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
-from agent_comms.registry.agent_activity import UnavailableRecipientActivity
-from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.namespace_reads import NamespaceRead
+from agent_comms.registry.recipient_activity import UnavailableRecipientActivity
+from agent_comms.registry.recipient_selection import RecipientSelection
+from agent_comms.registry.registry_names import RegistryNames as RegistryNames
 from agent_comms.registry.threads import Thread, ThreadProvenance
-from agent_comms_hooks import ToolRefusedError
-
-Member = TypeVar("Member", bound=ThreadProvenance, covariant=True)
-
-
-@dataclass(frozen=True, slots=True)
-class DeletedThread:
-    """A participant whose declaration was permanently deleted.
-
-    Its messages remain on the bus. It has no birth, owner or transcript;
-    readers show its recorded name and nothing else.
-    """
-
-    name: str
-
-    def answering_thread(self, reader: Thread) -> Thread:
-        """No transcript survives deletion, so what it owed falls to whoever reads the debt."""
-        return reader
-
-    @property
-    def incarnation(self) -> ThreadIncarnation:
-        return ThreadIncarnation.deleted(self.name)
-
-
-class RecipientSelection(ABC):
-    """One registry selection owns live, archived and retired recipient behavior."""
-
-    def activity_threads(self) -> tuple[Thread, ...]:
-        return ()
-
-    @abstractmethod
-    def activity(self, observations, snapshot): ...
-
-    @abstractmethod
-    def read_effect(self, reads, message, snapshot, *, document=None): ...
-
-    def input_owners(self) -> tuple[Thread, ...]:
-        """The live thread whose stored inputs this recipient's deliveries are keyed by."""
-        return ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,99 +62,6 @@ class RetiredRecipient(RecipientSelection):
         return ()
 
 
-class RegistryNames(Generic[Member]):
-    """Shared resolution behavior for live and recorded registry namespaces."""
-
-    __slots__ = ()
-
-    aliases: Mapping[str, str]
-    threads: Mapping[str, Member]
-
-    def canonical_name(self, name: str) -> str:
-        """Resolve this namespace without requiring current membership."""
-        return self.aliases.get(name, name)
-
-    def taken(self, name: str, owner: str | None = None) -> bool:
-        """A canonical name or permanent alias occupies this text, and it is not one of
-        ``owner``'s own names; with no owner, any occupied text is taken."""
-        return (name in self.threads or name in self.aliases) and self.canonical_name(name) != owner
-
-    def require_fresh_name(self, name: str) -> None:
-        """A new declaration cannot replace a current participant or permanent alias."""
-        if self.taken(name):
-            raise RelationViolationError(f"Thread name {name!r} is already reserved.")
-
-    @staticmethod
-    def thread_slug(text: str) -> str:
-        """Characters a name cannot hold become "-", trimmed; empty text names a session."""
-        return re.sub(r"[^A-Za-z0-9_-]+", "-", text).strip("-") or "session"
-
-    def claim_name(self, wanted: str, owner: str | None = None) -> str:
-        """The first free thread name for wanted text: its slug, then slug-2, slug-3.
-
-        A name that already resolves to ``owner`` is free for that owner, so a
-        rename to one of its own names keeps it.
-        """
-        base = self.thread_slug(wanted)
-        name, suffix = base, 2
-        while self.taken(name, owner):
-            name, suffix = f"{base}-{suffix}", suffix + 1
-        return name
-
-    def named_members(self) -> Iterator[tuple[str, Member]]:
-        """Original declarations under their canonical and retained alias names."""
-        yield from self.threads.items()
-        for alias in self.aliases:
-            yield alias, self.require(alias)
-
-    def named_incarnations(self) -> Iterator[tuple[str, ThreadIncarnation]]:
-        """Every current and retained name with its identity."""
-        for name, source in self.named_members():
-            yield name, source.incarnation
-
-    def names_for(self, name: str) -> frozenset[str]:
-        """Current and retained names of one declared member."""
-        canonical = self.canonical_name(name)
-        return frozenset({canonical, *(
-            alias for alias, target in self.aliases.items() if target == canonical
-        )})
-
-    def retired(self, name: str) -> bool:
-        """Whether this namespace records that canonical ``name`` was declared and removed.
-
-        Only a snapshot or a recorded namespace answers; the mutable document does not.
-        """
-        raise NotImplementedError(f"{type(self).__name__} keeps no deletion record")
-
-    def participant(self, name: str) -> Member | DeletedThread:
-        """Resolve a message participant: a declaration, or a deleted thread.
-
-        A name this namespace never declared is not a participant; it fails.
-        """
-        canonical = self.canonical_name(name)
-        thread = self.threads.get(canonical)
-        if thread is not None:
-            return thread
-        if self.retired(canonical):
-            return DeletedThread(canonical)
-        raise UnregisteredThreadError(f"Thread {canonical!r} was never registered.")
-
-    def require(self, name: str) -> Member:
-        canonical = self.canonical_name(name)
-        try:
-            return self.threads[canonical]
-        except KeyError as error:
-            raise self.unregistered(canonical) from error
-
-    def unregistered(self, name: str) -> ToolRefusedError:
-        """The refusal for a name this namespace does not hold."""
-        return UnregisteredThreadError(f"Thread {name!r} is not registered.")
-
-    def require_member[Kind: Thread](self, name: str, kind: type[Kind]) -> Kind:
-        """The registered declaration, narrowed to the member an operation needs."""
-        return kind.stored(self.require(name))
-
-
 @dataclass(frozen=True, slots=True)
 class SenderBindings:
     """The namespace's SQL inputs, built together from its original members once per snapshot,
@@ -218,7 +84,7 @@ class SenderBindings:
 
 
 @dataclass(frozen=True, kw_only=True)
-class RegistryProvenance(RegistryNames[ThreadProvenance]):
+class RegistryProvenance(NamespaceRead[ThreadProvenance, RecipientSelection]):
     threads: dict[str, ThreadProvenance]
     aliases: dict[str, str]
 
@@ -226,11 +92,6 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         if any(name != thread.name for name, thread in self.threads.items()):
             raise RelationViolationError("Provenance name differs from its original declaration")
         self.require_alias_names()
-
-    def require_alias_names(self) -> None:
-        names = set(self.threads)
-        if any(target not in names or alias in names for alias, target in self.aliases.items()):
-            raise RelationViolationError("Provenance alias has no exclusive retained owner")
 
     def bound_to(self, root: Path) -> RegistryProvenance:
         """Recorded transcripts resolve under the root this namespace was captured from."""
@@ -247,10 +108,19 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         senders = {}
         births = {}
         unrecorded: list[str] = []
+
+        def missing_birth(name: str) -> tuple[ThreadLookup, ...]:
+            unrecorded.append(name)
+            return ()
+
         for name, incarnation in self.named_incarnations():
             births[name] = json.dumps(incarnation.wire_birth)
+            public = PublicSender()
+            recorded = incarnation.recorded_or(
+                lambda entry: (entry.lookup,), partial(missing_birth, name),
+            )
             senders[name] = FieldCodec.compact(FieldCodec.encode(
-                tuple(DeliveryScope.sender_lookups(incarnation, partial(unrecorded.append, name))),
+                (public, *recorded),
                 tuple[ThreadLookup | PublicSender, ...],
             ))
         return SenderBindings(senders=senders, births=births, unrecorded=tuple(unrecorded))

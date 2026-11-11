@@ -219,14 +219,14 @@ class TurnInputSource(StartedInput, ABC):
                 sender.inputs, sender.session_id, self, current, sender.claim_generation,
             )
         except ReservationViolationError as error:
-            return sender._refusal(error.rule)
+            return sender._refusal(error)
         if self.defers_send(sender, current):
             return DeferredSend()
         wait = sender.comms.goals.goal_wait(canonical)
         try:
             sender._require_context(self, current, wait)
         except ReservationViolationError as error:
-            return sender._refusal(error.rule)
+            return sender._refusal(error)
         # Binding failures may be uncertain. Exceptions here still propagate;
         # never reinterpret a failed durable operation as a retryable policy refusal.
         if not sender.inputs.dispositions.bind_turn_input(
@@ -237,9 +237,9 @@ class TurnInputSource(StartedInput, ABC):
             text=sent_text,
             already_bound=already_bound,
         ):
-            return sender._refusal(UnboundOrdinaryInputRule())
+            return sender._refusal(ReservationViolationError(UnboundOrdinaryInputRule()))
         if not self.consume_wait(sender.comms, canonical, wait):
-            return sender._refusal(UnconsumedDependencyRule())
+            return sender._refusal(ReservationViolationError(UnconsumedDependencyRule()))
         sender.comms.transcripts.routes.record_input_display(
             native_id,
             self.display(sender.inputs.dispositions, sent_text),

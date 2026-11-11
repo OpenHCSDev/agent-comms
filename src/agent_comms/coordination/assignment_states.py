@@ -58,7 +58,7 @@ if TYPE_CHECKING:
     from agent_comms.messaging.frozen_recipient import FrozenRecipient
     from agent_comms.messaging.message_notification import MessageNotification
     from agent_comms.notification_assignment import AssignmentActivity
-    from agent_comms.registry.agent_activity import RecipientActivity
+    from agent_comms.registry.recipient_activity import RecipientActivity
 
 
 @dataclass(frozen=True)

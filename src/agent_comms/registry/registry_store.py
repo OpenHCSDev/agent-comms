@@ -6,7 +6,7 @@ import os
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
@@ -18,6 +18,7 @@ from agent_comms.coordination.errors import StaleFence
 from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, Platform
+from agent_comms.execution.input_ingress import InputAuthorityCut, InputRegistryStore
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_lease import (
@@ -30,15 +31,17 @@ from agent_comms.execution.turn_lease import (
     TurnDeclaration,
     TurnRecord,
 )
+from agent_comms.execution.turn_registry import TurnRegistry
 from agent_comms.messaging.routing import Routing
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, TurnId
-from agent_comms.registry.presence import PresenceStore
+from agent_comms.registry.presence import PresenceCapture, PresenceRevision, PresenceStore
 from agent_comms.registry.private_registry_guard import (
     PrivateRegistryGuard,
     PublicRegistry,
     RegistryPrivacy,
 )
 from agent_comms.registry.registration_change import InitialRegistration, NativeSourcePublication
+from agent_comms.registry.registration_reads import RegistryPathRead
 from agent_comms.registry.registry_document import (
     HistoricalRootPurpose,
     RegistryDocument,
@@ -46,6 +49,7 @@ from agent_comms.registry.registry_document import (
     RegistrySnapshot,
 )
 from agent_comms.registry.registry_tables import (
+    RawDocument,
     RegistryCapture,
     RegistryRowRevision,
     RegistryRowStore,
@@ -56,6 +60,7 @@ from agent_comms.storage.locked_store import (
     LockedStore,
     PublishedProperty,
     RegistryFile,
+    RootFile,
 )
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.private_path import FileObservation, FileRevision, MissingFile
@@ -74,7 +79,7 @@ class CachedRegistry(ABC):
         """Reuse this revision's answer, or read its replacement."""
 
     @abstractmethod
-    def decoded(self, store: RegistryStore, raw: dict) -> RegistryDocument:
+    def decoded(self, store: RegistryStore, source: RegistryCapture) -> RegistryDocument:
         """Decode ``raw``, reusing the threads this revision already decoded."""
 
     @abstractmethod
@@ -94,8 +99,8 @@ class UncachedRegistry(NullMember, CachedRegistry):
     ) -> Answer:
         return read(self)
 
-    def decoded(self, store: RegistryStore, raw: dict) -> RegistryDocument:
-        return store._decode(raw)
+    def decoded(self, store: RegistryStore, source: RegistryCapture) -> RegistryDocument:
+        return store._decode(source.raw, (RegistryCapture.empty().raw, RegistryDocument()))
 
     def captured(self, store: RegistryStore) -> RegistryCapture:
         return store.rows.captured(RegistryCapture.empty())
@@ -114,19 +119,22 @@ class RegistryRevision(CachedRegistry):
 
     source: RegistryCapture
     document: RegistryDocument
-    presence: FileObservation
-    """The presence.json revision laid over ``document``; presence moves without the registry."""
+    presence: PresenceRevision
+    """The presence commit laid over the document; heartbeats leave declarations alone."""
 
     @classmethod
     def presented(cls, store: RegistryStore, source: RegistryCapture,
                   document: RegistryDocument) -> RegistryRevision:
-        observed = FileRevision.capture(store.presence.path)
-        return cls(source, document.presented(store.presence.read().seen), observed)
+        captured = store.presence.read(store.cache.presence_source)
+        store.cache.presence_source = captured
+        # Validate against the edit's original key root before copying resets its
+        # change baseline. The retained document then owns an independent edit view.
+        return cls(source, document.presented(captured).copy(), captured.revision)
 
     def current(self, store: RegistryStore) -> RegistryRevision:
         """This registry revision with the presence stored now: re-laid, and cached in this
-        revision's place, only when presence.json changed since it was laid."""
-        if FileRevision.capture(store.presence.path) == self.presence:
+        revision's place, only when presence committed since it was laid."""
+        if store.presence.revision() == self.presence:
             return self
         revision = RegistryRevision.presented(store, self.source, self.document)
         store.cache.entry = revision
@@ -138,10 +146,9 @@ class RegistryRevision(CachedRegistry):
     ) -> Answer:
         return reuse(self) if self.source.revision == revision else read(self)
 
-    def decoded(self, store: RegistryStore, raw: dict) -> RegistryDocument:
-        document = RegistryDocument.from_wire(raw, (self.source.raw, self.document))
-        document.threads.bind(store._bind_thread)
-        return document
+    def decoded(self, store: RegistryStore, source: RegistryCapture) -> RegistryDocument:
+        document = store._decode(source.raw, (self.source.raw, self.document))
+        return replace(document, last_seen=self.document.last_seen)
 
     def captured(self, store: RegistryStore) -> RegistryCapture:
         return store.rows.captured(self.source)
@@ -189,7 +196,7 @@ class RegistrySelection:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryCut(RegistrySelection):
+class RegistryCut(RegistrySelection, InputAuthorityCut[Thread]):
     """The complete decoded registry and its original namespace authority."""
 
     snapshot: RegistrySnapshot
@@ -247,6 +254,7 @@ class RegistryCache:
     """
 
     entry: CachedRegistry = field(default_factory=UncachedRegistry)
+    presence_source: PresenceCapture = field(default_factory=PresenceCapture.empty)
     # Observers wake on the same registry change from several threads; one
     # decodes the new revision and the others take its result.
     decoding: threading.Lock = field(default_factory=threading.Lock)
@@ -329,17 +337,17 @@ class RegistryEdit:
             current,
             turn_generation=identity.generation,
             project_resume_due=False,
-            turn_record=StoredTurnRecord.begin(self.store.path, identity, turn),
+            turn_record=StoredTurnRecord.begin(self.store.path, identity, turn, registry_type=RegistryStore),
         )
         if current.turn_generation:
-            self.superseded.append(StoredTurnRecord.for_identity(self.store.path, current.turn_identity))
+            self.superseded.append(StoredTurnRecord.for_identity(self.store.path, current.turn_identity, registry_type=RegistryStore))
         self.document.threads[current.name] = leased
         self.document.last_seen[current.name] = time.time()
         return leased, self.document.owners.generations[current.name]
 
     def commit(self) -> None:
         # Presence rows before the registry, and none dropped: any revision a reader captured,
-        # however long before it reads presence.json, names only threads that have a row.
+        # however long before it reads presence, names only threads that have a row.
         if self.document.last_seen != self.original.document.last_seen:
             self.store.presence.set_rows(self.document.last_seen, self.original.document.last_seen)
         if self.document != self.original.document:
@@ -351,7 +359,15 @@ class RegistryEdit:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocument], declared_name=None):
+class RegistryStore(
+    RegistryLocking,
+    RegistryFile,
+    CarriedDocument[RegistryDocument],
+    TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn],
+    InputRegistryStore[Thread],
+    RegistryPathRead,
+    declared_name=None,
+):
     cache: RegistryCache = field(init=False, compare=False, repr=False)
     presence: PresenceStore = field(init=False, compare=False, repr=False)
     rows: RegistryRowStore = field(init=False, compare=False, repr=False)
@@ -364,7 +380,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         # Guard-loss checks must know every private declaration before taking this store's lock.
         PrivateCoordinatorTable.declarations()
         object.__setattr__(self, "cache", RegistryCache.for_path(self.path))
-        object.__setattr__(self, "presence", PresenceStore.at(self.path.parent))
+        object.__setattr__(self, "presence", PresenceStore(self.path.parent))
         object.__setattr__(self, "rows", RegistryRowStore(self.path.parent))
 
     record_type = RegistryDocument
@@ -432,7 +448,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             ).current(self)
 
     def _cache_revision(self, stale: CachedRegistry, source: RegistryCapture) -> RegistryRevision:
-        entry = RegistryRevision.presented(self, source, stale.decoded(self, source.raw))
+        entry = RegistryRevision.presented(self, source, stale.decoded(self, source))
         self.cache.entry = entry
         with self.cache.measurement:
             self.cache.counts.decodes += 1
@@ -542,9 +558,13 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
 
     @property
     def companion_paths(self) -> tuple[Path, ...]:
-        """The plain files retained with the rows: presence, the guard and turn records."""
-        return (self.presence.path, self.guard_path,
-                *sorted(StoredTurnRecord.matching_in(self.path.parent)))
+        return tuple(self.companion_files)
+
+    @property
+    def companion_files(self) -> dict[Path, type[RootFile]]:
+        """Retain each companion with its owner's copying behavior."""
+        return {self.presence.path: type(self.presence), self.guard_path: PrivateRegistryGuard,
+                **dict.fromkeys(sorted(StoredTurnRecord.matching_in(self.path.parent)), StoredTurnRecord)}
 
     def revision_unlocked(self) -> tuple[RegistryRowRevision, FileObservation]:
         """The database instance, committed counter and guard that brackets every commit."""
@@ -586,14 +606,14 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         return FieldCodec.encode(value)
 
     def _bind_thread(self, thread: Thread) -> Thread:
-        record = thread.turn_record.bound_to(self.path, thread.turn_identity)
+        record = thread.turn_record.bound_to(self.path, thread.turn_identity, registry_type=RegistryStore)
         session = thread.session_file.bound_to(self.path.parent)
         if record is thread.turn_record and session is thread.session_file:
             return thread
         return replace(thread, turn_record=record, session_file=session)
 
-    def _decode(self, data: object) -> RegistryDocument:
-        document = self.record_type.from_wire(data)
+    def _decode(self, data: object, earlier: tuple[Mapping[str, object], RegistryDocument] | None = None) -> RegistryDocument:
+        document = self.record_type.from_wire(data, earlier)
         document.threads.bind(self._bind_thread)
         return document
 
@@ -619,7 +639,8 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
     def stored(self) -> dict:
         """A copy of the committed rows in their stored wire form, before any decoding."""
         with self.guarded_read():
-            return FieldCodec.parse(FieldCodec.compact(self._capture_unlocked().raw))
+            captured = self._capture_unlocked()
+        return FieldCodec.parse(FieldCodec.compact(captured.wire_document()))
 
     def rewrite_stored(self, change: Callable[[dict], dict]) -> None:
         """Change the stored rows under the exclusive guard without decoding thread state.
@@ -629,8 +650,9 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         with self.guarded_write():
             entry = self.cache.entry
             original = self._capture_unlocked()
-            raw = change(FieldCodec.parse(FieldCodec.compact(original.raw)))
-            if raw != original.raw:
+            stored = original.wire_document()
+            raw = change(FieldCodec.parse(FieldCodec.compact(stored)))
+            if raw != stored:
                 self._commit_unlocked(raw, original)
                 # The earlier revision stays cached: the next read applies only the rows this
                 # commit changed, and decodes them then, so a form the decoder refuses is refused
@@ -654,16 +676,17 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
     def save_unlocked(self, document: RegistryDocument) -> None:
         original = self.read_revision_unlocked()
         original.document.purpose.require_write()
+        document.require_valid_rows(original.document)
         document.threads.bind(self._bind_thread)
         raw = original.source.encoded(document, original.document)
         source = self._commit_unlocked(raw, original.source)
         # Still under the exclusive lock: the committed revision is this document.
-        self.cache.entry = RegistryRevision.presented(self, source, document.copy())
+        self.cache.entry = RegistryRevision.presented(self, source, document)
 
     def _publish_unlocked(self, document: RegistryDocument) -> None:
         self.save_unlocked(document)
 
-    def _commit_unlocked(self, raw: dict, previous: RegistryCapture) -> RegistryCapture:
+    def _commit_unlocked(self, raw: RawDocument, previous: RegistryCapture) -> RegistryCapture:
         """Commit the rows of ``raw`` that differ from ``previous``, bracketed by the guard."""
         mark = previous.mark.successor()
         self.cache.entry = UncachedRegistry()

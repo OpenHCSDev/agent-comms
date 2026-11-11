@@ -6,7 +6,9 @@ from abc import abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms.messaging.assignment_notice import AssignmentNotice
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.message_send_reads import PublishedMessageRead
 from agent_comms.nominal.declared_family import DeclaredFamily, DeclaredOrder
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, MessageId, boundary_decoder
 from agent_comms.registry.thread_presentation import (
@@ -14,14 +16,10 @@ from agent_comms.registry.thread_presentation import (
     WorkingThreadPresentationStatus,
 )
 
-if TYPE_CHECKING:
-    from agent_comms.messaging.bus_publication import Delivered
-    from agent_comms.messaging.message_notification import MessageNotification
-
 
 @dataclass(frozen=True)
 class AssignmentResponse(DeclaredFamily, affix="Response"):
-    def recorded(self, message: Delivered) -> AssignmentResponse:
+    def recorded(self, message: PublishedMessageRead) -> AssignmentResponse:
         return self
 
     @classmethod
@@ -45,24 +43,24 @@ class AssignmentResponse(DeclaredFamily, affix="Response"):
 
     @abstractmethod
     def completed_notification(
-        self, progress: AssignmentProgress, notification: MessageNotification
-    ) -> MessageNotification: ...
+        self, progress: AssignmentProgress, notification: AssignmentNotice[DeliveryProgress]
+    ) -> AssignmentNotice[DeliveryProgress]: ...
 
     @abstractmethod
-    def answered(self, notification: MessageNotification) -> MessageNotification:
+    def answered(self, notification: AssignmentNotice[DeliveryProgress]) -> AssignmentNotice[DeliveryProgress]:
         """The notification with this recorded reply attached; consumption stays its proof's."""
 
 
 class UnansweredResponse(AssignmentResponse):
-    def recorded(self, message: Delivered) -> AssignmentResponse:
+    def recorded(self, message: PublishedMessageRead) -> AssignmentResponse:
         return AnsweredResponse(message.reference, message.at_ms)
 
     def completed_notification(
-        self, progress: AssignmentProgress, notification: MessageNotification
-    ) -> MessageNotification:
+        self, progress: AssignmentProgress, notification: AssignmentNotice[DeliveryProgress]
+    ) -> AssignmentNotice[DeliveryProgress]:
         return progress.consumed_notification(notification)
 
-    def answered(self, notification: MessageNotification) -> MessageNotification:
+    def answered(self, notification: AssignmentNotice[DeliveryProgress]) -> AssignmentNotice[DeliveryProgress]:
         return notification
 
 
@@ -72,11 +70,11 @@ class AnsweredResponse(AssignmentResponse):
     received_at_ms: int
 
     def completed_notification(
-        self, progress: AssignmentProgress, notification: MessageNotification
-    ) -> MessageNotification:
+        self, progress: AssignmentProgress, notification: AssignmentNotice[DeliveryProgress]
+    ) -> AssignmentNotice[DeliveryProgress]:
         return progress.answered_notification(notification, self)
 
-    def answered(self, notification: MessageNotification) -> MessageNotification:
+    def answered(self, notification: AssignmentNotice[DeliveryProgress]) -> AssignmentNotice[DeliveryProgress]:
         return notification.state.answered_notification(notification, self)
 
     def detail_texts(self) -> tuple[str, ...]:
@@ -115,7 +113,7 @@ class DeliveryProgress(ThreadPresentationStatus):
     def rank(self) -> int:
         return DeliveryRank.position_of(type(self))
 
-    def notification_label(self, notification: MessageNotification) -> str:
+    def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return self.label
 
     @property
@@ -130,24 +128,24 @@ class DeliveryProgress(ThreadPresentationStatus):
     def seen_working(self) -> bool:
         return False
 
-    def ignored_notification_label(self, notification: MessageNotification) -> str:
+    def ignored_notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         """How a recipient that chose not to answer reads, given this proof."""
         return self.ignored_label
 
-    def working_notification_label(self, notification: MessageNotification) -> str:
+    def working_notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         """How a busy recipient that took this message reads; without context proof, unchanged."""
         return self.notification_label(notification)
 
-    def summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
+    def summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
         """What a summary led by this state prints before its counts."""
         return (notification.label,)
 
-    def counted_summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
+    def counted_summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
         """The lead a counted wrapper prints; a consumed proof is already named by its count."""
         return (notification.label,)
 
-    def answered_notification(self, notification: MessageNotification,
-                              response: AnsweredResponse) -> MessageNotification:
+    def answered_notification(self, notification: AssignmentNotice[DeliveryProgress],
+                              response: AnsweredResponse) -> AssignmentNotice[DeliveryProgress]:
         """An independent answer preserves this state's actual context proof."""
         return replace(notification, state=AnsweredProgress(self, response), changed=True)
 
@@ -170,10 +168,10 @@ class ConsumedDelivery(SettledDelivery):
         """An earlier proof already timed the entry; a later one adds nothing."""
         return self
 
-    def working_notification_label(self, notification: MessageNotification) -> str:
+    def working_notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return WorkingTakenProgress.label
 
-    def counted_summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
+    def counted_summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
         return ()
 
 
@@ -226,17 +224,17 @@ class IgnoredProgress(SettledDelivery, ContextualProgress):
     def seen_not_answering(self) -> bool:
         return self.proof.consumed
 
-    def notification_label(self, notification: MessageNotification) -> str:
+    def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return self.proof.ignored_notification_label(notification)
 
-    def summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
+    def summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
         return self.proof.counted_summary_prefix(notification)
 
 
 class TakenProgress(SettledDelivery, ContextualProgress):
     """A running turn took this message as one of its inputs; its proof says how far."""
 
-    def notification_label(self, notification: MessageNotification) -> str:
+    def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return self.proof.notification_label(notification)
 
 
@@ -249,10 +247,10 @@ class WorkingTakenProgress(ActiveDelivery, TakenProgress, WorkingThreadPresentat
     def seen_working(self) -> bool:
         return self.proof.consumed
 
-    def notification_label(self, notification: MessageNotification) -> str:
+    def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return self.proof.working_notification_label(notification)
 
-    def summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
+    def summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
         return self.proof.counted_summary_prefix(notification)
 
 
@@ -273,12 +271,12 @@ class AnsweredProgress(SettledDelivery, ContextualProgress):
     def answer(self) -> AnsweredResponse:
         return self.response
 
-    def answered_notification(self, notification: MessageNotification,
-                              response: AnsweredResponse) -> MessageNotification:
+    def answered_notification(self, notification: AssignmentNotice[DeliveryProgress],
+                              response: AnsweredResponse) -> AssignmentNotice[DeliveryProgress]:
         """A later independent response cannot replace an already recorded answer."""
         return notification
 
-    def notification_label(self, notification: MessageNotification) -> str:
+    def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return notification.timed_state(self.label, self.response.received_at_ms)
 
 
@@ -294,14 +292,14 @@ class AssignmentProgress(DeliveryProgress):
     @abstractmethod
     def at_ms(self) -> int: ...
 
-    def notification_label(self, notification: MessageNotification) -> str:
+    def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return notification.timed_state(self.label, self.at_ms)
 
     @abstractmethod
-    def selected_notification(self, notification: MessageNotification, *, busy: bool) -> MessageNotification: ...
+    def selected_notification(self, notification: AssignmentNotice[DeliveryProgress], *, busy: bool) -> AssignmentNotice[DeliveryProgress]: ...
 
     @abstractmethod
-    def consumed_notification(self, notification: MessageNotification) -> MessageNotification: ...
+    def consumed_notification(self, notification: AssignmentNotice[DeliveryProgress]) -> AssignmentNotice[DeliveryProgress]: ...
 
 
 @dataclass(frozen=True)
@@ -312,10 +310,10 @@ class SentProgress(WaitingDelivery, AssignmentProgress):
     def at_ms(self) -> int:
         return self.sent_at_ms
 
-    def selected_notification(self, notification: MessageNotification, *, busy: bool) -> MessageNotification:
+    def selected_notification(self, notification: AssignmentNotice[DeliveryProgress], *, busy: bool) -> AssignmentNotice[DeliveryProgress]:
         return replace(notification, state=SendingProgress(self.sent_at_ms) if busy else self)
 
-    def consumed_notification(self, notification: MessageNotification) -> MessageNotification:
+    def consumed_notification(self, notification: AssignmentNotice[DeliveryProgress]) -> AssignmentNotice[DeliveryProgress]:
         raise ValueError("Consumed notification has no model-context proof")
 
 
@@ -336,18 +334,18 @@ class ShownToModelProgress(ConsumedDelivery, AssignmentProgress):
     def at_ms(self) -> int:
         return self.consumed_at_ms
 
-    def ignored_notification_label(self, notification: MessageNotification) -> str:
+    def ignored_notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return notification.timed_state(self.ignored_label, self.at_ms)
 
-    def working_notification_label(self, notification: MessageNotification) -> str:
+    def working_notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return notification.timed_state(WorkingTakenProgress.label, self.at_ms)
 
-    def selected_notification(self, notification: MessageNotification, *, busy: bool) -> MessageNotification:
+    def selected_notification(self, notification: AssignmentNotice[DeliveryProgress], *, busy: bool) -> AssignmentNotice[DeliveryProgress]:
         state: ShownToModelProgress = (ConsumingProgress(self.consumed_at_ms) if busy
                  else SelectedConsumedProgress(self.consumed_at_ms))
         return replace(notification, state=state)
 
-    def consumed_notification(self, notification: MessageNotification) -> MessageNotification:
+    def consumed_notification(self, notification: AssignmentNotice[DeliveryProgress]) -> AssignmentNotice[DeliveryProgress]:
         return replace(notification, state=self)
 
 
@@ -368,6 +366,6 @@ class ConsumingProgress(SelectedConsumedProgress, WorkingThreadPresentationStatu
     def answering(self) -> bool:
         return True
 
-    def summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
+    def summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
         """Its Answering count already names it."""
         return ()

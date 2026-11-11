@@ -1,29 +1,21 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import (
-    Callable,
-    Iterable,
-    Iterator,
-    Mapping,
-)
-from dataclasses import (
-    dataclass,
-    replace,
-)
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import (
-    Annotated,
-    ClassVar,
-    Self,
-)
+from typing import Annotated, ClassVar, Self
 
 from pydantic import JsonValue
 
 from agent_comms.context_store import ContextStore
 from agent_comms.coordination.service_passes import ServiceReading
 from agent_comms.execution.historical_native_inputs import HistoricalNativeAnswers
-from agent_comms.execution.transcript_sources import ExternalTranscript, StoreRead, TranscriptSource
+from agent_comms.execution.transcript_sources import (
+    ExternalTranscript,
+    StoreRead,
+    TranscriptSource,
+)
 from agent_comms.execution.turn_bound import TurnBound, TurnsSince
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.message_reference import MessageReference

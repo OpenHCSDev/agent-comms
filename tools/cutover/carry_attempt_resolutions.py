@@ -8,10 +8,7 @@ from pathlib import Path
 from sqlite3 import Connection
 from typing import ClassVar
 
-from agent_comms.execution.turn_failure import (
-    BackendFailed,
-    FailedTurnResolution,
-)
+from agent_comms.execution.turn_failure import BackendFailed, FailedTurnResolution
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_tables import MessageIdentitySource
@@ -33,15 +30,9 @@ from agent_comms.planning.attempt_resolution import (
     VerifiedTurnDecision,
     WorkDecision,
 )
-from agent_comms.planning.goal_attempts import (
-    AttemptRecord,
-    GoalAttemptStore,
-    GoalWorkDecision,
-)
-from agent_comms.planning.orders import (
-    Todo,
-    TodoStore,
-)
+from agent_comms.planning.goal_attempts import GoalAttemptStore
+from agent_comms.planning.goal_ledger import AttemptRecord, GoalWorkDecision
+from agent_comms.planning.orders import Todo, TodoStore
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.storage.typed_table import TypedRow
 

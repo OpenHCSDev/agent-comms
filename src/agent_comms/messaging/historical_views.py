@@ -20,7 +20,11 @@ from agent_comms.execution.transcript_routes import TranscriptRoutes
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.channel_targets import NamedTarget, ThreadTarget
 from agent_comms.messaging.channels import Channel
-from agent_comms.messaging.display_references import ReferenceContext
+from agent_comms.messaging.display_references import (
+    HistoryReferenceSource,
+    MessageHistory,
+    ReferenceContext,
+)
 from agent_comms.messaging.message_notification import MessageNotification, NotificationWindow
 from agent_comms.messaging.message_page import (
     NEWEST_PAGE,
@@ -30,7 +34,7 @@ from agent_comms.messaging.message_page import (
     PageBounds,
 )
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.messaging.messages import CarriesEnvelope, Message, MessageHistory
+from agent_comms.messaging.messages import CarriesEnvelope, Message
 from agent_comms.messaging.notification_evidence import (
     FirstRecipient,
     OutcomeViewer,
@@ -329,7 +333,7 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
 
 
 @dataclass(frozen=True, slots=True)
-class HistorySource(MessageHistory):
+class HistorySource(MessageHistory, HistoryReferenceSource):
     """An immutable bus/registry snapshot attached by the destination MessageBus."""
 
     root: str
