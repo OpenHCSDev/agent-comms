@@ -345,11 +345,7 @@ class Watching(Announcement):
 
     def reconnectable(self) -> Announcement:
         print(RECONNECTS_ALONE, flush=True)
-        return Reconnectable()
-
-
-class Reconnectable(Announcement):
-    """Both said; a re-dialled socket and its fresh reconnect URL say nothing new."""
+        return Announcement()
 
 
 class Pauses(ABC):

@@ -7,7 +7,6 @@ from dataclasses import dataclass
 
 from agent_comms.coordination.errors import (
     IdentityConflict,
-    ParticipantNotRegistered,
     StaleRevision,
 )
 from agent_comms.coordination.results import AlreadyApplied, Applied
@@ -69,7 +68,7 @@ class ParticipantStore:
             )
             pointer = CurrentExecutions.require(db, owner_lookup=lookup, table_source=table_source)
         except RowNotFoundError as error:
-            raise ParticipantNotRegistered(
+            raise IdentityConflict(
                 f"participant {lookup!r} aggregate is not registered",
             ) from error
         return ParticipantSnapshot(lookup, person.committed, generation, pointer)

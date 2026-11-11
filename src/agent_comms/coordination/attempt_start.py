@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from agent_comms.coordination.attempt_states import PromptStartingAttempt
 from agent_comms.coordination.errors import (
     IdentityConflict,
-    PublicationUncertain,
+    CoordinationError,
     RecoveryBlocked,
     StaleFence,
     StaleRevision,
@@ -83,7 +83,7 @@ class AttemptStart:
         participant.pointer.require_idle()
         execution.lifecycle.require_attempt_start()
         if bool(snapshot.publication_intents):
-            raise PublicationUncertain("no authorized bus-keyed publication resolution")
+            raise CoordinationError("no authorized bus-keyed publication resolution")
         execution.lifecycle.require_retry_start(snapshot)
         if ordinal != self.attempt_ordinal:
             raise IdentityConflict("attempt ordinal must be contiguous")

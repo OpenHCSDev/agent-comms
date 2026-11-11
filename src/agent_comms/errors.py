@@ -114,10 +114,6 @@ class StoredHistoryUnreadable(RelationViolationError):  # noqa: N818 - nominal r
     """Stored wire bytes cannot be decoded as their declared history type."""
 
 
-class ClaimEnvelopeUnknownError(RelationViolationError):
-    """A claim row may be visible after failed durability; never replay automatically."""
-
-
 class HumanSendError(RelationViolationError):
     """A human send Core did not complete; delivery_failure decodes each member for the sender."""
 

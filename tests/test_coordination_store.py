@@ -36,8 +36,7 @@ from agent_comms.coordination.attempt_states import (
 from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.coordination.errors import (
     IdentityConflict,
-    IntegrityViolationError,
-    PublicationUncertain,
+    CoordinationError,
     RecoveryBlocked,
     StaleFence,
     StaleRevision,
@@ -729,7 +728,7 @@ def test_replay_states_own_presence_revision_and_retry_authorization(db_path: Pa
         assert FieldCodec.decode(RecoverySnapshot, encoded) == snapshot
         absent.require_revision(None)
         assert not absent.allows_retry
-        with pytest.raises(IntegrityViolationError):
+        with pytest.raises(CoordinationError):
             absent.require_assessment()
         with pytest.raises(StaleRevision):
             absent.require_revision(1)
@@ -743,7 +742,7 @@ def test_replay_states_own_presence_revision_and_retry_authorization(db_path: Pa
         recorded.require_revision(1)
         with pytest.raises(StaleRevision):
             recorded.require_revision(None)
-        with pytest.raises(IntegrityViolationError):
+        with pytest.raises(CoordinationError):
             recorded.require_execution("another-execution")
         changes = connection.total_changes
         ReplayAssessments.authorize_if_unobserved(connection, "exec")
@@ -1041,9 +1040,9 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
         assert projected.publication_intents == (intent,)
         assert len(projected.obligations) == 1
         assert projected.obligations[0].lifecycle.declared_name == "publishing"
-        with pytest.raises(PublicationUncertain):
+        with pytest.raises(CoordinationError):
             db.fail_unknown(fence, expected_pointer_revision=1)
-        with pytest.raises(PublicationUncertain):
+        with pytest.raises(CoordinationError):
             db.settle_nonpublication(
                 fence,
                 expected_pointer_revision=1,

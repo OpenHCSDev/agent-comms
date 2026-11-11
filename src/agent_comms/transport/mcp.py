@@ -232,9 +232,9 @@ class McpSession:
         """The header is foreign until it is compared with the id issued here."""
         match request.headers.get(SESSION_HEADER):
             case None:
-                return UnclaimedSession()
+                return SessionClaim()
             case self.id:
-                return CurrentSession()
+                return SessionClaim()
             case _:
                 return PastSession()
 
@@ -247,14 +247,6 @@ class SessionClaim:
         http: web.Request,
     ) -> web.StreamResponse:
         return await message.answer(connector, caller, http)
-
-
-class UnclaimedSession(SessionClaim):
-    """No header: a client that has not initialized yet, or one that keeps no session."""
-
-
-class CurrentSession(SessionClaim):
-    """The id this process issued."""
 
 
 class PastSession(SessionClaim):

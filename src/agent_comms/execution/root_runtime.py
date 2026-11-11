@@ -38,10 +38,6 @@ from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 from agent_comms.transport.owner_connection import socket_path
 
 
-class ForeignRuntimeError(RelationViolationError):
-    """The caller is neither this root's owner nor its maintenance target."""
-
-
 class Attachment(ABC):
     @abstractmethod
     def proceed[Result](
@@ -74,7 +70,7 @@ class Succession(Attachment):
         return succeed(self.owner)
 
     def require(self) -> None:
-        raise ForeignRuntimeError(
+        raise RelationViolationError(
             f"Root {self.root} belongs to runtime {self.owner.prefix}; "
             f"foreign runtime {self.caller.prefix} cannot attach"
         )
@@ -94,7 +90,7 @@ class RootHost(DeclaredFamily, affix="RootHost"):
 
     def require_retired(self, root: Path) -> None:
         if self.observed(root).alive():
-            raise ForeignRuntimeError("Retire the root's worker host before changing runtime")
+            raise RelationViolationError("Retire the root's worker host before changing runtime")
 
 
 @dataclass(frozen=True)
@@ -138,7 +134,7 @@ class RootRuntime:
 
     def available_host(self, root: Path, runtime: LaunchRuntime) -> ProcessState:
         if self.prefix != runtime.prefix:
-            raise ForeignRuntimeError("A foreign runtime cannot launch this root's host")
+            raise RelationViolationError("A foreign runtime cannot launch this root's host")
         return self.host.observed(root)
 
     @classmethod

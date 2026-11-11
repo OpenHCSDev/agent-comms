@@ -104,10 +104,6 @@ class PendingRestart(Pending, Active, RestartState):
         ))
 
 
-class RestartAlreadyAttemptingError(RelationViolationError):
-    """An attempted restart cannot be replaced or replayed by enqueue."""
-
-
 class AttemptingRestart(Active, RestartState):
     def restart(self, comms: Comms, record: QueuedRestart) -> Iterator[QueuedRestart]:
         try:
@@ -133,7 +129,7 @@ class AttemptingRestart(Active, RestartState):
 
     def enqueue(self, previous: QueuedRestart, selection: OwnerRestartSelection,
                 target: RestartTarget) -> QueuedRestart:
-        raise RestartAlreadyAttemptingError(
+        raise RelationViolationError(
             f"Restart {previous.id} for {previous.name} is already attempting"
         )
 

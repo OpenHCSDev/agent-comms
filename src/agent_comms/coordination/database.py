@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
-from agent_comms.coordination.errors import CoordinationReadUnavailable, IntegrityViolationError
+from agent_comms.coordination.errors import CoordinationReadUnavailable, CoordinationError
 from agent_comms.coordination.schema import CoordinatorTable
 from agent_comms.execution.child_process import Platform
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -165,9 +165,9 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile, InputCaptureFi
         try:
             info = self.path.lstat()
         except FileNotFoundError as error:
-            raise IntegrityViolationError("coordination database is missing") from error
+            raise CoordinationError("coordination database is missing") from error
         if not stat.S_ISREG(info.st_mode):
-            raise IntegrityViolationError("coordination database must be a regular file")
+            raise CoordinationError("coordination database must be a regular file")
         return info
 
     @contextmanager

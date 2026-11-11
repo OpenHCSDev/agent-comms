@@ -8,7 +8,7 @@ from agent_comms.coordination.assignment_states import (
     FullPendingAssignment,
 )
 from agent_comms.coordination.attempt_states import SucceededAttempt
-from agent_comms.coordination.errors import IntegrityViolationError
+from agent_comms.coordination.errors import CoordinationError
 from agent_comms.coordination.execution_states import (
     ActiveExecution,
     PendingExecution,
@@ -45,7 +45,7 @@ def test_state_data_cannot_be_attached_to_wrong_variant():
         EngagedAssignment()
     with pytest.raises(TypeError):
         SucceededAttempt(lease_expires_at_ms=100)
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         SucceededAttempt.load(None, False, True)
 
 

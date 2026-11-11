@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.coordination.errors import (
     IdentityConflict,
-    IntegrityViolationError,
+    CoordinationError,
     RecoveryBlocked,
     ResponseClaimBlocked,
 )
@@ -106,7 +106,7 @@ class LiveAttempt(AttemptState):
 
     def __post_init__(self):
         if type(self.lease_expires_at_ms) is not int or self.lease_expires_at_ms < 0:
-            raise IntegrityViolationError("active attempt requires a lease")
+            raise CoordinationError("active attempt requires a lease")
 
     def accepts_active_execution(self) -> bool:
         return True
@@ -147,9 +147,9 @@ class TerminalAttempt(Terminal, AttemptState):
     @classmethod
     def load(cls, lease, done, dead):
         if lease is not None:
-            raise IntegrityViolationError("terminal attempt must release lease")
+            raise CoordinationError("terminal attempt must release lease")
         if not (done and dead):
-            raise IntegrityViolationError("terminal attempt requires final completion/death")
+            raise CoordinationError("terminal attempt requires final completion/death")
         return cls()
 
 

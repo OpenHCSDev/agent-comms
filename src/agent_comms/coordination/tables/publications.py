@@ -12,7 +12,7 @@ from agent_comms.coordination.contracts import (
     require_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination.errors import CoordinationError, IntegrityViolationError
+from agent_comms.coordination.errors import CoordinationError
 from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.coordination.tables.executions import ExecutionRecord
@@ -73,7 +73,7 @@ class PublicationIntents(
 
     def validate_acknowledgement(self, acknowledgement: PublicationEvidence) -> None:
         if acknowledgement.message_id != self.expected_message_id:
-            raise IntegrityViolationError("acknowledgement envelope does not match frozen intent")
+            raise CoordinationError("acknowledgement envelope does not match frozen intent")
 
     execution_id: Annotated[
         str,
@@ -114,13 +114,13 @@ class PublicationIntents(
         require_nonempty(self.message.body, "payload")
         require_bounded(self.message.sender, "sender", MAX_IDENTIFIER_CHARS)
         if self.message.target != self.exact_target:
-            raise IntegrityViolationError("publication route is not its message target")
+            raise CoordinationError("publication route is not its message target")
         if len(self.message.body.encode("utf-8")) > MAX_PUBLICATION_PAYLOAD_BYTES:
             raise ValueError("publication payload exceeds byte limit")
         if self.publication_key != canonical_publication_key(self.execution_id, self.exact_target):
-            raise IntegrityViolationError("publication key is not canonical")
+            raise CoordinationError("publication key is not canonical")
         if self.message.message_id != self.expected_message_id:
-            raise IntegrityViolationError("expected message id does not match Message authority")
+            raise CoordinationError("expected message id does not match Message authority")
 
     obligation_intent_required: ClassVar[Generated] = Generated(
         int,

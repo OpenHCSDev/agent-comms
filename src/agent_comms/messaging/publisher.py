@@ -17,7 +17,6 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.tables.publications import PublicationIntents
 from agent_comms.errors import (
-    ClaimEnvelopeUnknownError,
     RelationViolationError,
     UnregisteredThreadError,
 )
@@ -155,7 +154,7 @@ class ClaimWrites(Publisher):
         try:
             return publish()
         except (OSError, RelationViolationError) as error:
-            raise ClaimEnvelopeUnknownError(
+            raise RelationViolationError(
                 "Claim envelope outcome UNKNOWN; inspect durable bus; do not replay."
             ) from error
 

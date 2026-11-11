@@ -33,10 +33,6 @@ class RecordKey(DisclosureKey):
     owner: type
 
 
-class RootKey(RecordKey):
-    """The whole record, not one of its fields."""
-
-
 @dataclass(frozen=True)
 class FieldKey(RecordKey):
     name: str
@@ -45,10 +41,6 @@ class FieldKey(RecordKey):
 @dataclass(frozen=True)
 class EntityKey(RecordKey):
     parts: tuple[object, ...]
-
-
-class AnonymousKey(DisclosureKey):
-    """An undeclared identity cannot inherit another item's selection."""
 
 
 @dataclass(frozen=True)
@@ -66,7 +58,7 @@ class DisclosureText(ValueDescription):
 
     @cached_property
     def sequence_key(self) -> DisclosureKey:
-        return AnonymousKey()
+        return DisclosureKey()
 
     @property
     def identity_part(self) -> object:

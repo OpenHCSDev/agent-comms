@@ -21,10 +21,6 @@ class AgentRuntime:
     """One agent runtime Core reaches."""
 
 
-class OwnedRuntime(AgentRuntime):
-    """Core starts the runtime's process and drives its turns."""
-
-
 class ExternalRuntime(AgentRuntime):
     """The person runs it; Core observes its transcript and acts through hooks and tools."""
 

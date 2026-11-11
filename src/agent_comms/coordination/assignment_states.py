@@ -6,7 +6,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.coordination.errors import IdentityConflict, IntegrityViolationError
+from agent_comms.coordination.errors import IdentityConflict, CoordinationError
 from agent_comms.coordination.vocabulary import CoordinatorVocabulary
 from agent_comms.messaging.notification_progress import (
     CompletedProgress,
@@ -67,7 +67,7 @@ class PendingDecision:
 
     def __post_init__(self):
         if not self.mode.items_with(Active, self.mode):
-            raise IntegrityViolationError("passive decision cannot be deferred or failed")
+            raise CoordinationError("passive decision cannot be deferred or failed")
 
     @property
     def verdict(self):
@@ -222,9 +222,9 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment")
     ) -> Self:
         state = cls.build(mode, execution_id, target)
         if (state.mode, state.verdict, state.execution_id) != (mode, verdict, execution_id):
-            raise IntegrityViolationError("claim decision relation is inconsistent")
+            raise CoordinationError("claim decision relation is inconsistent")
         if state.exact_target != target:
-            raise IntegrityViolationError("claim decision target is inconsistent")
+            raise CoordinationError("claim decision target is inconsistent")
         return state
 
     @classmethod

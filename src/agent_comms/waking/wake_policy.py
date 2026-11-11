@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import ClassVar
 
-from agent_comms.coordination.errors import IntegrityViolationError
+from agent_comms.coordination.errors import CoordinationError
 from agent_comms.coordination.vocabulary import CoordinatorVocabulary
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
@@ -84,7 +84,7 @@ class NoWakeDecision(RecipientDecision):
         match row:
             case {"recipient_lookup": lookup, "no_wake": reason}:
                 return cls(FieldCodec.decode(ThreadLookup, lookup), NoWakeReason(reason))
-        raise IntegrityViolationError("A no-wake decision row is incomplete.")
+        raise CoordinationError("A no-wake decision row is incomplete.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,7 +115,7 @@ class WakeDecision(RecipientDecision):
                     FieldCodec.decode(ThreadLookup, lookup), MessageAudience(audience),
                     WakePolicy.member_named(mode)(),
                 )
-        raise IntegrityViolationError("A wake decision row is incomplete.")
+        raise CoordinationError("A wake decision row is incomplete.")
 
 
 @dataclass(frozen=True)
@@ -125,7 +125,7 @@ class Engagement(DeclaredFamily, affix="Engagement"):
 
     def __post_init__(self):
         if not self.execution_id or not self.exact_target:
-            raise IntegrityViolationError("engaged claim requires execution and exact target")
+            raise CoordinationError("engaged claim requires execution and exact target")
 
     @property
     def mode(self) -> WakePolicy:
@@ -179,7 +179,7 @@ class WakePolicy(LifecycleCapability, CoordinatorVocabulary, SourceProofRequirem
         return InstructionFile.read("reply-relevance.md")
 
     def triage_expectation(self):
-        raise IntegrityViolationError("wake policy does not permit triage")
+        raise CoordinationError("wake policy does not permit triage")
 
     def full_expectation(self):
         return "this is yours; answer the original committed message"
@@ -198,7 +198,7 @@ class PassiveWake(NoSourceProof, WakePolicy):
 
     @classmethod
     def engagement_type(cls) -> type[Engagement]:
-        raise IntegrityViolationError("passive claim cannot engage")
+        raise CoordinationError("passive claim cannot engage")
 
 
 class BoundedTriageWake(Active, TriageSourceProof, WakePolicy):

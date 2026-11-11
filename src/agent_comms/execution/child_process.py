@@ -1211,10 +1211,6 @@ class InactiveUnit(EndedUnit): ...
 class FailedUnit(EndedUnit): ...
 
 
-class UnmanagedHomeError(RelationViolationError):
-    """A home no user manager belongs to asked to change the manager's units."""
-
-
 class ResidentManager(DeclaredFamily, affix="Manager"):
     """What owns this home's units, and a handed-off resident once its launcher is gone: a
     host fact, decoded once, and the only caller of ``systemctl`` and ``systemd-run``.
@@ -1301,7 +1297,7 @@ class ResidentManager(DeclaredFamily, affix="Manager"):
 
     def control(self, *arguments: str) -> None:
         """Start, stop, enable or disable the manager's units."""
-        raise UnmanagedHomeError(
+        raise RelationViolationError(
             f"{Path.home()} is not the user's own home, so no user manager belongs to it; "
             f"refused systemctl {' '.join(arguments)}")
 
@@ -1312,7 +1308,7 @@ class ResidentManager(DeclaredFamily, affix="Manager"):
         follows it to its end and raises on its failure. Without a manager only a caller
         that waits can own it."""
         if not wait:
-            raise UnmanagedHomeError(
+            raise RelationViolationError(
                 f"{Path.home()} has no user manager to keep {unit} past its caller")
         environment = {name: os.environ[name] for name in inherited if name in os.environ}
         # As under systemd-run, the unit gets exactly these variables, its import path included.

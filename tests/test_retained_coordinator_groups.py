@@ -18,7 +18,7 @@ from agent_comms.coordination.assignment_states import (
 from agent_comms.coordination.attempt_start import AttemptStart
 from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.coordination.errors import IdentityConflict, ParticipantNotRegistered
+from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.owner_fence import prepare_fence_token
 from agent_comms.coordination.participant_store import ParticipantRows, ParticipantStore
 from agent_comms.coordination.reason_codes import GivenReasonCode, NoDetail
@@ -270,7 +270,7 @@ def test_selected_participant_keeps_its_generation_and_current_pointer(
     before = CoordinationStore.digest(source.path)
     destination = tmp_path / 'participant-retained' / 'coordination.sqlite3'
     with retaining_coordinator(source.path, destination) as original:
-        with pytest.raises(ParticipantNotRegistered):
+        with pytest.raises(IdentityConflict):
             ParticipantStore.read_at(original.destination, RECIPIENT_LOOKUP)
         assert ParticipantStore.read_at(
             original.destination, RECIPIENT_LOOKUP, table_source=original.source,
@@ -320,11 +320,11 @@ def test_incomplete_original_participant_refuses_selected_publication(
         for guard in delete_guards:
             db.execute(guard.sql)
         CoordinationStore.schema_at(source.path).require_schema(db)
-    with pytest.raises(ParticipantNotRegistered):
+    with pytest.raises(IdentityConflict):
         source.store.participants.get(lookup)
     before = CoordinationStore.digest(source.path)
     destination = tmp_path / 'incomplete-participant' / 'coordination.sqlite3'
-    with pytest.raises(ParticipantNotRegistered):
+    with pytest.raises(IdentityConflict):
         with retaining_coordinator(source.path, destination) as original:
             retain_seed(original, delivery)
     assert not destination.exists()

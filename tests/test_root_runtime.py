@@ -10,7 +10,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.launch_runtime import LaunchRuntime
-from agent_comms.execution.root_runtime import ForeignRuntimeError, RootRuntime, RootRuntimeStore
+from agent_comms.execution.root_runtime import RelationViolationError, RootRuntime, RootRuntimeStore
 from agent_comms.messaging.bus import Bus
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import (
@@ -30,7 +30,7 @@ def test_root_runtime_attachment_family(tmp_path):
     store = RootRuntimeStore.at(root)
     assert store.read() == RootRuntime(owner.prefix)
     RootRuntime.require_attachable(root, owner)
-    with pytest.raises(ForeignRuntimeError) as refused:
+    with pytest.raises(RelationViolationError) as refused:
         RootRuntime.require_attachable(root, foreign)
     assert str(owner.prefix) in str(refused.value)
     assert str(foreign.prefix) in str(refused.value)
@@ -38,7 +38,7 @@ def test_root_runtime_attachment_family(tmp_path):
     barrier = MaintenanceBarrier(RegistryFile.path_in(root))
     original = barrier.begin(MaintenanceOperator.current())
     assert not original.allows_runtime(target)
-    with pytest.raises(ForeignRuntimeError):
+    with pytest.raises(RelationViolationError):
         RootRuntime.require_attachable(root, target)
     held = barrier.retarget(original, target)
     assert held.generation == original.generation + 1
@@ -47,15 +47,15 @@ def test_root_runtime_attachment_family(tmp_path):
     assert not NoMaintenanceTarget().allows_runtime(foreign)
     RootRuntime.require_attachable(root, target)
     RootRuntime.require_attachable(root, owner)
-    with pytest.raises(ForeignRuntimeError):
+    with pytest.raises(RelationViolationError):
         RootRuntime.require_attachable(root, foreign)
     cleared = barrier.clear(held)
     assert cleared.target == NoMaintenanceTarget()
-    with pytest.raises(ForeignRuntimeError):
+    with pytest.raises(RelationViolationError):
         RootRuntime.require_attachable(root, target)
     RootRuntime.publish(root, target)
     RootRuntime.require_attachable(root, target)
-    with pytest.raises(ForeignRuntimeError):
+    with pytest.raises(RelationViolationError):
         RootRuntime.require_attachable(root, owner)
 
 
@@ -90,7 +90,7 @@ def test_comms_creates_a_private_root_and_refuses_foreign_stores(tmp_path):
     original = {path: path.read_bytes() for path in (
         RootRuntimeStore.path_in(root), Bus.path_in(root),
     )}
-    with pytest.raises(ForeignRuntimeError):
+    with pytest.raises(RelationViolationError):
         wire(root)
     assert not RegistryFile.path_in(root).exists()
     assert all(path.read_bytes() == data for path, data in original.items())

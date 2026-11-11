@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Self
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
-    IntegrityViolationError,
+    CoordinationError,
 )
 from agent_comms.execution.publication_measurements import PublicationMeasurements
 from agent_comms.messaging.bus import StoredBusReader
@@ -85,7 +85,7 @@ class NativeCapture(CoordinationCapture, ExitStack, StoredBusReader):
     def acquire(self, session: CoordinationSession) -> Iterator[Self]:
         """Borrow this original decision; never refresh it during settlement."""
         if self.bus.bus.path.parent.resolve() != session.path.parent.resolve():
-            raise IntegrityViolationError("settlement boundary belongs to another coordinator")
+            raise CoordinationError("settlement boundary belongs to another coordinator")
         with self.registry_cut.current():
             yield self
 
@@ -137,14 +137,14 @@ class CoordinationSession(CoordinationStore):
         self, bus: MessageBus, boundary_type: type[Boundary],
     ) -> Boundary:
         if bus.bus.path.parent.resolve() != self.path.parent.resolve():
-            raise IntegrityViolationError("native boundary belongs to another coordinator")
+            raise CoordinationError("native boundary belongs to another coordinator")
         return boundary_type(bus)
 
     @classmethod
     def _begin_transaction(cls, connection: sqlite3.Connection) -> None:
         """Retire existing rollback-journal readers before changing any state."""
         if connection.in_transaction:
-            raise IntegrityViolationError("nested coordinator transaction is not allowed")
+            raise CoordinationError("nested coordinator transaction is not allowed")
         connection.execute("BEGIN EXCLUSIVE")
 
     @contextmanager

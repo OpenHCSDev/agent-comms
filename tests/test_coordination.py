@@ -22,7 +22,7 @@ from agent_comms.coordination.attempt_states import (
     SucceededAttempt,
 )
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.coordination.errors import IntegrityViolationError, SchemaVersionError
+from agent_comms.coordination.errors import CoordinationError, SchemaVersionError
 from agent_comms.coordination.execution_states import (
     ActiveExecution,
     CompletedExecution,
@@ -290,7 +290,7 @@ def fail_defer(db, name="e", ordinal=1):
 def test_typed_execution_and_attempt_authority_are_separate():
     pending = execution()
     first = attempt()
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         replace(
             first, lifecycle=AttemptFailedAttempt.load(None, True, first.lifecycle.process_dead)
         )
@@ -314,12 +314,12 @@ def test_snapshot_projection_retry_and_inert_secrets():
     assert projection["attempt"]["owner_generation"] == 1
     assert "owner_token_digest" not in str(projection)
     assert "digest-1" not in str(projection)
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         replace(deferred.execution, max_attempts=1)
     unsafe = ReplayAssessments("execution-1", ReplayFact.TOOL_EXECUTED, False, True, 2)
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         snapshot(execution_record=deferred.execution, attempt_record=failed_attempt, replay=unsafe)
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         snapshot(
             execution_record=replace(
                 deferred.execution,
@@ -344,9 +344,9 @@ def test_snapshot_projection_retry_and_inert_secrets():
         current=True,
     )
     assert active.is_current and not active.can_retry
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         replace(active, current_attempt_ordinal=PointedAttempt(2))
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         replace(active, is_current=False, current_execution_id=NoPointedExecution(), current_attempt_ordinal=NoPointedAttempt())
 
 
@@ -360,13 +360,13 @@ def test_wire_claim_obligation_and_publication_contract():
     assert [item["claim_id"] for item in primitive["claims"]] == [
         item["claim_id"] for item in primitive["execution_claims"]
     ]
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         replace(valid, links=(ExecutionAssignmentLink(record.execution_id, AssignmentId("claim-1"), 1),))
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         replace(valid, links=(ExecutionAssignmentLink("other", AssignmentId("claim-1"), 0),))
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         replace(valid, assignments=(replace(assignment(), recipient_lookup=RECIPIENT_LOOKUP),))
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         replace(
             valid,
             assignments=(
@@ -381,20 +381,20 @@ def test_wire_claim_obligation_and_publication_contract():
                 ),
             ),
         )
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         replace(
             valid,
             execution=replace(
                 record, lifecycle=FailedExecution.load(record.lifecycle.current_attempt_ordinal)
             ),
         )
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         snapshot(
             execution_record=replace(record, lifecycle=DeferredExecution.load(1)),
             attempt_record=attempt(phase=AttemptFailedAttempt, done=True, dead=True),
             response=obligation(SilentResponse),
         )
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         snapshot(
             execution_record=replace(record, lifecycle=CompletedExecution.load(1)),
             attempt_record=attempt(phase=SucceededAttempt, done=True, dead=True),
@@ -420,7 +420,7 @@ def test_wire_claim_obligation_and_publication_contract():
         publication_key=canonical_publication_key("execution-1", "requester"),
         expected_message_id=message.message_id,
     )
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         replace(intent, expected_message_id=MessageId.mint("fabricated"))
 
 
@@ -951,7 +951,7 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
         )
         assert FieldCodec.project(absent, SnapshotExclude)["replay"] is None
         assert not absent.can_retry
-        with pytest.raises(IntegrityViolationError):
+        with pytest.raises(CoordinationError):
             replace(
                 absent,
                 execution=replace(
@@ -1400,5 +1400,5 @@ def test_unexplained_columns_and_symlinks_rejected(tmp_path):
         CoordinationStore.reconcile_at(path)
     link = tmp_path / "link"
     link.symlink_to(path)
-    with pytest.raises(IntegrityViolationError):
+    with pytest.raises(CoordinationError):
         CoordinationStore(link)

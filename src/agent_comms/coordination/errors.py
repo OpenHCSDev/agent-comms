@@ -160,20 +160,12 @@ class SchemaVersionError(CoordinationError):
     """The durable store's schema differs from its declaration."""
 
 
-class IntegrityViolationError(CoordinationError):
-    """A frozen record or declared relation is inconsistent."""
-
-
 class IdentityConflict(CoordinationError):  # noqa: N818
     """A requested operation conflicts with frozen coordination identity."""
 
 
 class UnrecordedNativeContext(IdentityConflict):  # noqa: N818 - nominal outcome name
     """A native input row recorded no context acknowledgement."""
-
-
-class ParticipantNotRegistered(IdentityConflict):  # noqa: N818 - nominal outcome name
-    """No participant aggregate is recorded for the lookup."""
 
 
 class ReadAgain(CoordinationError):  # noqa: N818 - capability, not an outcome
@@ -237,10 +229,6 @@ class ResponseClaimBlocked(RecoveryBlocked):
 
     def __init__(self):
         super().__init__("response requires final model/death evidence and exact wire route")
-
-
-class PublicationUncertain(CoordinationError):  # noqa: N818 - nominal outcome name
-    """A frozen publishing intent has no authoritative bus-keyed acknowledgement."""
 
 
 class PublicationActivationBlocked(CoordinationError):  # noqa: N818 - nominal outcome name

@@ -9,7 +9,7 @@ from agent_comms.presentation import WireRevision
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_presentation import NoThreadPresentation
 from agent_comms.ui_model.observation import (
-    NotObserved,
+    ObservationLifetime,
     ObserveThreads,
     ThreadBusy,
     ThreadPresented,
@@ -59,7 +59,7 @@ def test_changed_interest_retains_one_results_mapping_and_starts_empty():
     first = ObserveThreads(frozenset({'one'})).observation()
     assert first.observed.results == {}
     first.observed = observed({'one': ThreadBusy()})
-    assert NotObserved().for_interest(first) is first
+    assert ObservationLifetime().for_interest(first) is first
     assert first.for_interest(ObserveThreads(frozenset({'one'})).observation()) is first
     next_read = first.for_interest(ObserveThreads(frozenset({'one', 'two'})).observation())
     assert next_read.observed is first.observed

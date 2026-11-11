@@ -62,10 +62,6 @@ class CommittedInput(InputCommitment):
         return self.digest == digest
 
 
-class UncommittedInput(InputCommitment):
-    """No entry commits the input, so no expected digest can equal it."""
-
-
 class NativePiInputNotSent(NativePiUnavailable):
     """The input never entered its prompt writer; this does not permit replay."""
 
@@ -361,4 +357,4 @@ def read_tracked_input_commitment(
         try:
             return CommittedInput(evidence.tracked(input_id).message.input_digest.require())
         except NativeInputUncommitted:
-            return UncommittedInput()
+            return InputCommitment()

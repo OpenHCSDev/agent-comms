@@ -52,10 +52,6 @@ class UnattemptedPublication(ReportPublication):
     """No publication destination was selected."""
 
 
-class ConfirmedPublication(ReportPublication):
-    """The selected writer returned after the publication."""
-
-
 @dataclass(frozen=True)
 class UnconfirmedPublication(ReportPublication):
     """The worker's exit does not establish whether its write committed."""
@@ -77,7 +73,7 @@ class RootWriter(ABC):
             self.post(lines)
         except InterpreterWorkerDied as failure:
             return UnconfirmedPublication(failure)
-        return ConfirmedPublication()
+        return ReportPublication()
 
     @abstractmethod
     def post(self, lines: tuple[str, ...]) -> None: ...

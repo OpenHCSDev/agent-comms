@@ -306,7 +306,7 @@ class TestAttempt:
     def from_process(cls, result: subprocess.CompletedProcess[bytes], log: Path) -> TestAttempt:
         # The subprocess boundary decodes exit status once into its behavior.
         if result.returncode == 0:
-            return PassedTestAttempt(log)
+            return TestAttempt(log)
         if result.returncode == TimedOutTestAttempt.exit_code:
             return TimedOutTestAttempt(log)
         return FailedTestAttempt(log, result.returncode)
@@ -319,10 +319,6 @@ class TestAttempt:
         self, run: IntegrationRun, base: str, heads: tuple[PullRequestHead, ...]
     ) -> int:
         return self.code
-
-
-class PassedTestAttempt(TestAttempt):
-    pass
 
 
 @dataclass(frozen=True)
