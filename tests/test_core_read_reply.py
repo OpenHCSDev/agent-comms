@@ -113,3 +113,25 @@ async def test_a_thread_presentation_read_decodes_across_the_child(tmp_path):
         request = CoreReadOperation(str(comms.root), CommsThreadPresentationTool(thread="presented"))
         presentation = await asyncio.to_thread(process.read_from_thread, request)
     assert isinstance(presentation, NotifiedThreadPresentation)
+
+
+async def test_an_unencodable_reply_fails_its_own_read_and_the_child_keeps_answering(tmp_path):
+    """On 2026-11-10 Toad asked a registry slice with an AcpSessionId among its thread names; the
+    reply's str-typed ``asked`` could not be encoded, and the whole child died with every UI
+    read in flight. The caller gets the failure now, and the next read is still answered."""
+    from agent_comms.nominal.field_codec import AcpSessionId
+    from agent_comms.projects.checkouts import Checkout
+    from agent_comms.registry.threads import NativeThread
+    from agent_comms.transport.tools.sidebar import CommsRegistrySliceTool
+    from agent_comms.ui_model.observation import UnencodableReply
+
+    comms = wire(tmp_path / "wire")
+    comms.registry.declare(NativeThread("sliced", frozenset(), Checkout(tmp_path)))
+    async with ObservationProcess.awaited(comms.route) as process:
+        bad = CoreReadOperation(
+            str(comms.root), CommsRegistrySliceTool(threads=(AcpSessionId("sliced"),)))
+        with pytest.raises(UnencodableReply, match="CommsRegistrySliceTool answered a RegistrySlice"):
+            await asyncio.to_thread(process.read_from_thread, bad)
+        good = CoreReadOperation(str(comms.root), CommsRegistrySliceTool(threads=("sliced",)))
+        sliced = await asyncio.to_thread(process.read_from_thread, good)
+    assert "sliced" in sliced.threads

@@ -321,6 +321,16 @@ class ObserverUnattached(RuntimeError, DeclaredError):  # noqa: N818 - nominal r
 
 
 @final
+class UnencodableReply(TypeError, DeclaredError):  # noqa: N818 - nominal reply state
+    """A read's answer does not fit the type it declares, so it cannot cross to the UI.
+
+    It is that read's failure, raised to the caller that asked it with the read and the
+    encoder's error. On 2026-11-10 a RegistrySlice holding an AcpSessionId in its str-typed
+    ``asked`` killed the whole child instead, and every other UI read died with it.
+    """
+
+
+@final
 class ObserverSameLoop(RuntimeError, DeclaredError):  # noqa: N818 - nominal caller state
     """The delivery loop asked itself for a read and would wait for its own answer.
 
@@ -480,7 +490,8 @@ class AwaitedRead(TaggedRecordMember, ObservationRequest, declared_name=None):
 
     @property
     def refusal_errors(self) -> tuple[type[Exception], ...]:
-        return (DeferredRead, ReloadRequired, RelationViolationError, UnreadableHistory)
+        return (DeferredRead, ReloadRequired, RelationViolationError, UnreadableHistory,
+                UnencodableReply)
 
     def require_root(self, comms: Comms) -> None:
         if Path(self.root).expanduser().resolve() != comms.root.resolve():
@@ -566,7 +577,12 @@ class CoreReadOperation(ReadRequest):
         return CoreRead.serving(self.operation).apply_without_thread(comms, HumanCaller())
 
     def answered_value(self, value: object) -> ReadOutcome:
-        return CoreReadAnswered(self.request_id, FieldCodec.encode(value))
+        try:
+            return CoreReadAnswered(self.request_id, FieldCodec.encode(value))
+        except TypeError as error:
+            raise UnencodableReply(
+                f"{type(self.operation).__name__} answered a {type(value).__name__} that does "
+                f"not fit its declared types: {error}") from error
 
 @dataclass(frozen=True)
 class OwnerRead(AwaitedRead, declared_name=None):
