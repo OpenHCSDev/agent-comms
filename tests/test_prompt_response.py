@@ -28,6 +28,7 @@ from agent_comms.execution.turn_inbox import (
     InputRequest,
 )
 from agent_comms.execution.turn_inputs import InputForwarding
+from agent_comms.execution.turn_progress import TurnProgress
 from agent_comms.execution.turn_item import PiRequestKey
 from agent_comms.execution.turn_stats import (
     ReadingStats,
@@ -240,14 +241,20 @@ def interrupt_answer(interrupted: bool) -> tuple[InterruptSteering, tuple]:
     return interrupt, response
 
 
-async def test_a_declined_send_now_is_an_error_not_a_silent_success(
+async def test_a_declined_send_now_is_shown_and_never_ends_the_turn(
     native_response_session: NativeSessionPreparation,
 ):
-    """On 2026-11-10 Send now did nothing on screen: Pi had declined, and Core read it as done."""
+    """On 2026-11-10 Send now did nothing on screen: Pi had declined, and Core read it as done.
+    The decline is shown as a notice; TurnProgress's Error handler would fail the turn."""
     interrupt, response = interrupt_answer(False)
-    (error,) = interrupt.on_response(response, native_response_session)
-    assert isinstance(error, events.Error)
-    assert error.text.startswith("Send now did nothing")
+    (notice,) = interrupt.on_response(response, native_response_session)
+    assert type(notice) is events.Notice
+    assert notice.text.startswith("Send now did nothing")
+    assert notice.acp_updates(lambda: "shown") == ("shown",)
+    # TurnProgress.error is @handles(events.Error), chosen through the MRO: a Notice that
+    # is no Error can never reach it and fail the turn it could not interrupt.
+    assert not issubclass(events.Notice, events.Error)
+    assert TurnProgress.handler_for(events.Error) is TurnProgress.error
 
 
 async def test_an_accepted_send_now_reports_nothing(
