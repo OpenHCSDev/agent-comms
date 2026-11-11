@@ -6,10 +6,15 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ObservedTurn
 
 
-class GoalFailureOwner(GoalOwner):
+class ProcessOwner:
+    """Process identity for an owner."""
+
     __slots__ = ()
-    worktree: Checkout
     process_identity: ProcessState
+
+
+class GoalFailureOwner(ProcessOwner, GoalOwner):
+    worktree: Checkout
 
     @abstractmethod
     def observed_turn(self, claim_scope: int) -> ObservedTurn: ...
