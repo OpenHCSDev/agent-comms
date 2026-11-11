@@ -970,14 +970,12 @@ class ItemStream:
     def __init__(self, thread: str):
         self.thread = thread
 
-    def receive(self, notification: RpcNotification) -> tuple[RuntimeUpdate, ...]:
+    def receive(self, notification: RpcNotification) -> RuntimeUpdate | None:
         try:
             declaration = TranscriptNotification.member_named(notification.method)
         except UnknownFamilyMember:
-            # Usage, account, raw/private reasoning and other control
-            # events are not transcript content. Known methods declare a type.
-            return ()
+            return None
         event = declaration.model_validate(notification.params)
         if event.threadId != self.thread:
-            return ()
-        return (event.apply(self),)
+            return None
+        return event.apply(self)
