@@ -11,7 +11,7 @@ from agent_comms.coordination.errors import (
     StaleRevision,
 )
 from agent_comms.coordination.execution_states import ActiveExecution
-from agent_comms.coordination.owner_fence import OwnerFence, _digest
+from agent_comms.coordination.owner_fence import AttemptIdentity, OwnerFence, _digest
 from agent_comms.coordination.participant_store import ParticipantSnapshot
 from agent_comms.coordination.reason_codes import NoReasonCode
 from agent_comms.coordination.snapshot import RecoverySnapshot
@@ -22,18 +22,12 @@ from agent_comms.coordination.tables.executions import (
     PointedAttempt,
     PointedExecution,
 )
-from agent_comms.nominal.field_codec import ThreadLookup
 
 INITIAL_LEASE_DURATION_MS = 60_000
 
 
 @dataclass(frozen=True, slots=True)
-class AttemptStart:
-    execution_id: str
-    attempt_ordinal: int
-    owner_lookup: ThreadLookup
-    owner_generation: int
-    token: str
+class AttemptStart(AttemptIdentity):
     expected_execution_revision: int
     expected_pointer_revision: int
 
