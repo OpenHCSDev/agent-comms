@@ -22,7 +22,6 @@ from agent_comms.planning.goal_actions import (
     EditGoalAction,
     GoalAction,
     GoalPrecondition,
-    OwnerControlInvocable,
     OwnerInvocable,
     RetryGoalAction,
     SetGoalAction,
@@ -179,8 +178,7 @@ class GoalScheduler:
         self, session_id: AcpSessionId, action: type[GoalAction], goal_id: GoalId, expected_revision: int
     ) -> GoalDeclaration:
         """Apply an explicit UI pause, resume, or clear through the current owner."""
-        if not issubclass(action, OwnerControlInvocable):
-            raise ValueError("Goal updates support only active, paused, or clear.")
+        action.require_owner_control()
         name = self.sessions.require(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         goal = thread.goal.require_checkpoint(GoalRevision(goal_id, expected_revision))

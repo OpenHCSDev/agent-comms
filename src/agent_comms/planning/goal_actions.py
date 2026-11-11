@@ -84,6 +84,10 @@ class GoalActor:
     actor_reports_turn: ClassVar[bool] = False
 
     @classmethod
+    def require_owner_control(cls) -> None:
+        raise ValueError("Goal updates support only active, paused, or clear.")
+
+    @classmethod
     def actor_pause_source(cls) -> PauseSource:
         return RuntimePause()
 
@@ -109,7 +113,10 @@ class RuntimeInvocable(GoalActor):
 
 
 class OwnerControlInvocable(GoalActor):
-    pass
+
+    @classmethod
+    def require_owner_control(cls) -> None:
+        pass
 
 
 class PeerInvocable(GoalActor):
