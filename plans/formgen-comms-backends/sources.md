@@ -103,3 +103,13 @@ Full report SHA256: `295390c472acd21435ad36f9e9423ebc6feffb7d0bd7421e4654ea40731
 Read-only sampling during the 240-second run pointed through detector preparation/family collection and product-flow work. Sampling ranks where time went; no unprofiled speed improvement is claimed and no NRA implementation was changed by this assignment.
 
 Scratch artifacts are under `/home/ts/.cache/agent-scratch/comms-toad-selector/`: `formgen-forms-nra-full.json` (20-second incomplete result), `formgen-forms-nra-complete.json` (240-second incomplete result), `formgen-forms-nra-source-index.json` (completed source targets), `formgen-nra-scan.svg` (profile), and `formgen-forms-nra-long.{json,log,exit}` (longer full run). These are investigation evidence, not package inputs or deployment pins.
+
+## History and preferences follow-up
+
+A further fetch of the owned Toad checkout returned exit 0 with both HEAD and `origin/main` still at `cdc6a761b476bd0b25bd323d88860cf5f7d56fe4`. Receipt: `p144-toad-refresh.{log,exit}` in the same scratch directory. This was a source refresh, not an app restart or new environment.
+
+[Phase 5](05-history-and-read-evidence.md) now records the actual paint-to-proof path: Textual `ReadTranscriptPage.capture_render` and `RenderedTranscriptRows.admit`, `WireHistory`'s pending evidence/ReadAgain retirement, `ConversationKind.seen_page`, `WirePageBuffer.mark_page` and Core `MessagePage.select/message_evidence`. It also names source parking/retirement, original coverage owners, direct import consumers and real read-proof tests. Exact shared fragment bases, geometry units and Qt native admission remain unresolved; no source scan or native run is claimed for those moves.
+
+[Phase 6](06-preferences-and-native-application.md) records `SavedSettings`'s original ObjectState, explicit-key/save/discard behavior, native effect dependencies, direct import consumers, durable preference entry point and current CLI construction. The root still imports native choice/effect/layout types. The plan therefore does not claim native-free settings, a Qt-only distribution or a resolved final application MRO.
+
+Both follow-ups are documentation. Existing tests are named as required future checks; none is reported as run here. The full NRA form-scan result above does not prove history or preference refactor recipes.
