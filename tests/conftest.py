@@ -3,6 +3,7 @@
 
 from dataclasses import dataclass
 import asyncio
+from threading import Thread
 from contextlib import asynccontextmanager
 import fcntl
 import json
@@ -75,7 +76,7 @@ from agent_comms.team.rule_deal import ReadSpan, RuleDeal, SessionAudit, Started
 from agent_comms.transport.native_tool_transport import ToolListener
 from agent_comms.transport.core_access import LocalCoreAccess
 from agent_comms.transport.tool_caller import PeerCaller
-from agent_comms.ui_model.observation import ObservationProcess
+from agent_comms.ui_model.observation import LocalRouteObservation, ObservationProcess
 from agent_comms.transport.tool_declaration import NoToolRecord, ToolDeclaration
 from agent_comms_hooks.watch import WatchRecord
 from source_programs import SourcePrograms
@@ -732,6 +733,15 @@ def ui_core_read[R](comms: Comms, request):
 
     The child answers on the delivery loop while this read waits on a worker thread, which
     is the arrangement `ObserverSameLoop` exists to require.
+
+    One child per read. Holding one open for a whole test needs the delivery loop on a
+    background thread, and two things stop that today: `ObservationProcess.awaited` takes
+    the loop and spawns the child together, although `start_receiving` documents that only
+    attachment belongs on the loop; and a closed process can stop the loop it was attached
+    to, so the next `run_coroutine_threadsafe` waits on a loop whose thread has already
+    exited. Splitting construction from attachment and retiring the loop with its children
+    both still hang at the second child (test_thread_names.py:111). The cost is one process
+    per read and it is named in the PR rather than traded for an intermittent hang.
     """
 
     async def once():

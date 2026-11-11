@@ -43,8 +43,13 @@ def test_every_discovery_outcome_crosses_the_existing_wire():
 
 
 async def test_the_selected_core_performs_discovery(local_core, monkeypatch):
+    """Discovery runs wherever the read is answered, which is the selected Core and not the
+    asking process. Replacing `seen` here therefore cannot reach it: the answer comes back
+    from the child's own probe, which is the whole claim in this test's name."""
     monkeypatch.setattr(TailnetBuses, "seen", classmethod(lambda cls: (BUS,)))
-    assert await local_core.call(CommsTailnetBusesTool()) == TailnetBusesRead((BUS,))
+    answer = await local_core.call(CommsTailnetBusesTool())
+    assert isinstance(answer, TailnetBusesRead)
+    assert answer != TailnetBusesRead((BUS,)), "the asking process answered its own read"
 
 
 def test_a_read_only_ui_cannot_issue_profiles(comms, monkeypatch):
