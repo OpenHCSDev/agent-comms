@@ -900,6 +900,13 @@ class QueueClearedData(PiResponseData):
         return self.input_ids
 
 
+@dataclass(frozen=True)
+class SteeringInterruptData(PiResponseData):
+    """Pi's answer to Send now: whether it stopped the run to place the steering inputs."""
+
+    interrupted: bool
+
+
 class EmptyData(PiResponseData):
     pass
 
