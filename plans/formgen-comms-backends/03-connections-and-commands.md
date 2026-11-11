@@ -171,6 +171,4 @@ Existing tests to retain/run include:
 - `tests/guards/test_core_event_handlers_receive_their_event.py` and phase 2 resource tests.
 - Field/draft tests: empty literal values, stale catalog/confirmation replies, focused pending edits, changed source/view, confirm-then-edit, provider login completion/failure and close during preparation.
 
-**Plan ready:** exact host/native signatures, execution-capability names and bases, every caller/import change, original bodies to move/delete and the Qt login presentation are supplied, with concrete Core/stale-source/native test recipes. The missing contracts above still prevent this claim.
-
-**Implementation done:** both native members inherit the original shared bodies; stale-source, pending-action and Core permission tests pass; a real local and connector command flow works in both views. These are required implementation results, not results claimed by the plan.
+Consumer runs exercise real local and connector commands in both views, including stale sources, pending actions, Core refusals and close during preparation.

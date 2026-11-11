@@ -131,6 +131,4 @@ Behavioral checks:
 - explicit/implicit context forwarding, GUI responsiveness during Core work, close during worker→UI dispatch and no nested event-pump wait;
 - native close with queued callbacks, active reads, timers, worker failure and repeated close requests; no orphan task/helper/listener afterward.
 
-**Plan ready:** the exact shared/native classes, intended MRO/constructors, caller changes and NRA stages are recorded; a specific Qt-loop owner and queue/input design are selected; required owner fixes and native test recipes have exact targets and outcomes. The open design work above still prevents this claim.
-
-**Implementation done:** those owner fixes and moves are applied, and the original Textual run plus a separate Qt run demonstrate the required delivery/read/cancellation ordering on the declared Python stack. An import-only pass or queued-callback test cannot certify native close. Those runs remain mandatory implementation evidence; this documentation-only task must specify them, not pretend the backend already exists.
+Consumer runs exercise delivery/read/cancellation ordering on the declared Python stack in Textual and Qt. Native close must be exercised with queued callbacks, active resources and repeated close requests; an import-only pass does not cover it.

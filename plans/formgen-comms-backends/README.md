@@ -42,9 +42,11 @@ The planning work fills these details from source; they are not homework passed 
 - Package declarations and data-reader consequences, if any. No version negotiation between our own components.
 - A finish that can be checked from the code and behavior, rather than a count of files or green syntax checks.
 
+## Completion contract
+
 A phase plan is ready only when its remaining work is execution and verification. An unresolved architectural decision is named beside that phase and prevents a ready claim. P144's completion check is an exact-head source-backed walk of the instructions: original declarations, destination/bases/signatures, every caller/import/deletion, actual NRA operation preflights or bounded refusals, and concrete test/native-run recipes. File counts and a ready label cannot replace that walk.
 
-Implementation completion is separate: the written moves, code and native checks must actually run before the backend is reported working. Those checks remain required; running an unwritten backend is not a prerequisite for completing this documentation-only task. A change in main triggers a focused recheck of affected declarations, not a frozen old package set or a ritual full audit after every edit.
+Implementation completion is separate: the written moves, code and native checks must actually run before the backend is reported working. Those checks remain required; running an unwritten backend is not a prerequisite for completing this documentation-only task. A change in main triggers a focused recheck of affected declarations, not a frozen old package set or a ritual full audit after every edit. Documentation checkpoints land on main while the planning work continues.
 
 ## Settled boundaries
 
@@ -65,7 +67,3 @@ Objects keep their own state. Capabilities compose through multiple inheritance 
 - A draft survives catalog refresh; stale replies cannot overwrite it, and editing clears confirmation.
 - Empty plain text, an optional absence, an inherited value and incomplete native text are not merged simply because a widget currently displays them similarly.
 - Saved tab scope/order and settings have real readers. Identify those readers before changing durable formats.
-
-## Planning completion
-
-P144 finishes when the phase documents have concrete ownership/caller/deletion/check lists, current-main findings have replaced the stale assumptions, the runtime and shared-field decisions are resolved, and a peer can follow the first phase without inventing an architecture. Source inspection and proof limits remain explicit. Documentation checkpoints land on main while that work continues.

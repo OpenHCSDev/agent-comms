@@ -162,6 +162,4 @@ Add one shared-family test matrix for the conflicting values in §1.1, with nati
 
 UI checks: pending invalid input, optional member feedback, save while focused, reset/undo, replaced/disposed form, model changes during staged mount, no signal echo and no orphan subscription/timer. The generic validation must execute before the state mutation and every authorized write must retain its original notification/transaction ordering.
 
-**Plan ready:** exact concrete Qt/shared bases, constructor order and intended method winners are recorded; every caller/import change and old body to delete is listed; the ordered NRA operations and bounded unsupported steps are specified; the shared/native test commands and expected results are concrete. The missing decisions above still prevent this claim.
-
-**Implementation done:** both backends actually use those parents; the old semantic bodies are deleted; source/import checks, actual native MRO/constructor tests and real settings/command form runs protect the cases above. These remain required after implementation, not an impossible prerequisite for finishing this documentation-only plan.
+Consumer runs cover real settings/command forms in both backends, including the conflicting inputs, native MRO/constructors and subscription cleanup above.

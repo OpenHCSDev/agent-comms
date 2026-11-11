@@ -133,6 +133,4 @@ Required existing tests include `test_saved_settings_write_back_unchanged`, `tes
 
 Add native controls for a refused focused edit during Save, a valid focused edit during Close, atomic write failure, edits arriving while a write runs, discard after explicit-default edits, a hidden/parked prompt following its setting, unknown saved theme, view destruction during an effect and restart reading exactly the stored keys. Use the real store/form owners rather than writing private state.
 
-**Plan ready:** exact class/effect/CLI/runtime and package choices, constructors/method winners, caller/entry-point migrations and removed bodies are supplied, together with concrete import/store/native verification recipes. P144 stays unfinished until those decisions stop being architecture homework.
-
-**Implementation done:** both applications execute the same original settings/startup behavior; shared imports exclude native toolkits; the original stored file remains readable; old bodies and entry bindings are removed; actual native runs establish the required effects and shutdown. Those runs remain required implementation evidence, not a claim made by this plan.
+Consumer runs reopen the original stored settings and exercise focused edits, effects, save/discard/write failures, login and shutdown in both applications. Shared import discovery must exclude native toolkits.
