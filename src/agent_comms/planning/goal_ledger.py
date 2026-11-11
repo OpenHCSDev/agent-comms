@@ -34,6 +34,7 @@ from agent_comms.planning.attempt_resolution import (
 )
 from agent_comms.planning.goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from agent_comms.planning.goal_attempt_phase import (
+    ClaimedAttempt,
     FailedAttempt,
     GoalAttemptPhase,
     GoalAttemptTransition,
@@ -272,7 +273,7 @@ class Reservation(
             ) or not attempt.phase.may_become(FailedAttempt()):
                 raise late
             attempt.advance(conn, FailedAttempt(), resolution=diagnostic)
-            if observation is not None and attempt.phase.launched:
+            if observation is not None and isinstance(attempt.phase, ClaimedAttempt):
                 record_observation(conn, reservation, observation)
             return goal.advance(
                 conn,
