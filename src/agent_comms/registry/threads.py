@@ -16,6 +16,7 @@ from agent_comms.context_segments.wake_values import WakeWorkContext, WakeWorkSo
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity, ProcessState
 from agent_comms.execution.launch_runtime import ThreadLaunch
+from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.pi_vocabulary import (
     NoThinkingOverride,
     ServiceTier,
@@ -220,6 +221,11 @@ class ModelChoice(NextTurnSetting, SubclassUnion, ModelSelection, affix="Model")
 
 @dataclass(frozen=True, slots=True)
 class ChosenModel(NamedModel, ModelChoice):
+    def __post_init__(self) -> None:
+        """A choice the owner cannot launch is refused here, not at the next wake."""
+        NamedModel.__post_init__(self)
+        SelectedModel.decode(self.text)
+
     def configured(self, thread: Thread) -> Thread:
         return replace(thread, model=DeclaredModel(self.text))
 
