@@ -445,7 +445,12 @@ class AuditDue:
         faults = []
         for answer in audit.probes:
             others = tuple(other.text() for other in audit.probes if other is not answer)
-            context = ProbeContext(self.owner_words, Path.cwd(), self.repos, (*dealt, *others))
+            try:
+                cwd = Path.cwd()
+            except FileNotFoundError:
+                faults.append("the session's working directory no longer exists; start a new session")
+                break
+            context = ProbeContext(self.owner_words, cwd, self.repos, (*dealt, *others))
             if fault := answer.fault(context):
                 faults.append(f"its {answer.declared_name} probe does not answer: {fault}")
         return "; ".join(faults)
