@@ -245,12 +245,9 @@ class ProcessRestart[Change](ABC):
 class ProcessState(SubclassUnion, affix=""):
     """An exact recorded process or a worker which has never started."""
 
-    @abstractmethod
-    def allows_owner_start(self) -> bool: ...
-
     def require_owner_startable(self) -> None:
         """Refuse if the process state does not allow starting an owner."""
-        if not self.allows_owner_start():
+        if not isinstance(self, NoProcess):
             raise RelationViolationError('Retired session acquired another process')
     @abstractmethod
     def allows_inactive_stop(self) -> bool: ...
@@ -310,9 +307,6 @@ class ProcessState(SubclassUnion, affix=""):
 
 @dataclass(frozen=True)
 class NoProcess(NullMember, ProcessState):
-    def allows_owner_start(self) -> bool:
-        return True
-
     def allows_inactive_stop(self) -> bool:
         return True
 
@@ -403,9 +397,6 @@ class ProcessIdentity(RecordMember, ProcessState):
     @cache
     def _current(pid: int) -> ProcessIdentity:
         return Platform.current().identity(pid)
-
-    def allows_owner_start(self) -> bool:
-        return False
 
     def allows_inactive_stop(self) -> bool:
         return self.runs_here()
