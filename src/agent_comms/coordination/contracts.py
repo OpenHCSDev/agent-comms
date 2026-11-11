@@ -27,15 +27,16 @@ def require_nonempty(value: str, field: str) -> None:
         raise ValueError(f"{field} cannot be empty")
 
 
-def require_bounded(value: str | None, field: str, maximum: int) -> None:
-    if value is not None and len(value) > maximum:
+def require_bounded(value: str, field: str, maximum: int) -> None:
+    if len(value) > maximum:
         raise ValueError(f"{field} exceeds {maximum} characters")
 
 
 def require_optional_nonempty(value: str | None, field: str, maximum: int) -> None:
-    if value is not None:
-        require_nonempty(value, field)
-        require_bounded(value, field, maximum)
+    if value is None:
+        return
+    require_nonempty(value, field)
+    require_bounded(value, field, maximum)
 
 
 def validate_execution_id(execution_id: str) -> None:
