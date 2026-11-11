@@ -73,7 +73,7 @@ from agent_comms.registry.view_unread import transcript_read_state
 from agent_comms.transcript.transcripts import Transcripts
 from agent_comms.transport.tool_result import ToolResult
 
-from agent_comms.registry.registry_provenance import DeletedThread
+from agent_comms.registry.registry_names import DeletedThread
 from agent_comms.messaging.page_traversal import LiveCursor
 from agent_comms.messaging.read_basis import (
     AnonymousViewer,
