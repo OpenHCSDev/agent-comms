@@ -1716,9 +1716,6 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def check_base(self, repo: Path) -> str:
         raise TodoError("This problem has no active checked order.")
 
-    def occupies_holder(self) -> bool:
-        """Whether this order still has work for the unit holding it."""
-        return True
 
     def corrected(self, correction: CorrectOrderTodo) -> ProblemOrder:
         raise TodoError("Only an active checked order takes a correction.")
@@ -2339,9 +2336,6 @@ class AwaitingInstallationProblemOrder(OpenProblemOrder, declared_name=None):
 
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return (todo,)
-
-    def occupies_holder(self) -> bool:
-        return False
 
     def orphan_clearing(self, todo: Todo) -> str:
         return (f"its work is done and waits on install; once installed, close it with "
@@ -3081,10 +3075,10 @@ class IncomingWork:
         work the unit files for itself never asks (SelfFiledWork).
         Assignment owns consent for changing the work already inside this group.
         Creator and previous assigner confer no rank. Work waiting only on install
-        holds no unit, as ProblemOrder.occupies_holder answers."""
+        holds no unit (AwaitingInstallationProblemOrder never occupies)."""
         held = TransactionTodoHistory(db).attach(TodoStore.held_in(db, '1', (), unit=unit))
         if other := tuple(todo for todo in held
-                          if todo.order.occupies_holder() and not self.covers(todo)):
+                          if not isinstance(todo.order, AwaitingInstallationProblemOrder) and not self.covers(todo)):
             raise TeammateOccupied(
                 f"{unit.name} already holds orders "
                 + ", ".join(f"{todo.id} (assigned by {todo.held().parent})" for todo in other)
@@ -3093,7 +3087,7 @@ class IncomingWork:
     def idle(self, db: sqlite3.Connection, snapshot: RegistrySnapshot) -> str:
         """Running candidates with no occupying order, including the requesting colleague."""
         occupied = {thread.name for todo in TodoStore._open(db, "assignment IS NOT NULL", ())
-                    if todo.order.occupies_holder()
+                    if not isinstance(todo.order, AwaitingInstallationProblemOrder)
                     for thread in todo.held().holder_in(snapshot)}
         return ", ".join(sorted(
             candidate.name
