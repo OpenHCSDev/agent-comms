@@ -304,8 +304,8 @@ class ProcessState(SubclassUnion, affix=""):
     def require_release_by(self, process: ProcessIdentity) -> None: ...
 
     @abstractmethod
-    def held_external_stop(self, release: Callable[[], None], name: str) -> tuple[str, ...]:
-        """Stop a CLI endpoint this process holds: the names still for the ordinary stop."""
+    def held_external_stop(self, release: Callable[[], None], name: str) -> str | None:
+        """Stop a CLI endpoint this process holds: the name still for the ordinary stop, if any."""
 
 
 @dataclass(frozen=True)
@@ -365,9 +365,9 @@ class NoProcess(NullMember, ProcessState):
         # Stopping before the first start still produces a valid release.
         pass
 
-    def held_external_stop(self, release: Callable[[], None], name: str) -> tuple[str, ...]:
+    def held_external_stop(self, release: Callable[[], None], name: str) -> str | None:
         """Nothing holds the endpoint, so the ordinary stop finishes it on the bus."""
-        return (name,)
+        return name
 
 
 @dataclass(frozen=True)

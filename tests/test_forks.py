@@ -1069,7 +1069,7 @@ def test_a_team_session_end_ends_each_subagent_core_still_has(subagent_hook, sub
         "session_id": "colleague-session", "hook_event_name": "SessionEnd",
         "transcript_path": str(tmp_path / "colleague-session.jsonl")})
     for _ in range(2):
-        assert session.end_subagents(comms, subagent_bridge.binding) == ()
+        assert session.end_subagents(comms, subagent_bridge.binding) is None
         assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
     assert "claude-never-joined" not in comms.registry
     report, = comms.bus.bus.latest_addressed(frozenset({"claude-a1"}), frozenset({"colleague"}))
@@ -1119,7 +1119,7 @@ def test_an_untagged_peers_sdk_children_keep_real_ids_and_parent_delegation(
             (subagents / f"agent-{agent}.jsonl").write_text("")
         session = SessionSubagents.decode({
             "session_id": "unit", "hook_event_name": "SessionEnd", "transcript_path": str(transcript)})
-        assert session.end_subagents(comms, bridge.binding) == ()
+        assert session.end_subagents(comms, bridge.binding) is None
         assert isinstance(comms.registry.status("claude-a3"), ArchivedThreadStatus)
 
 
