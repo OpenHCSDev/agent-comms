@@ -229,8 +229,8 @@ class ReadLedger(MarksTranscriptRead, SingleFileStore, Sealed, ThreadOwnedState,
         if message.seq in document.for_conversation(
             incarnation.name, conversation, snapshot, ObservedPath.at(Bus.path_in(self.path.parent))
         ):
-            return (incarnation,)
-        return ()
+            return incarnation
+        return None
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         """Drop a deleted viewer's reads and every read of its deleted transcript.
