@@ -215,7 +215,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#4e385f46bd580bf0feb2f4f407650b21f83fde06" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#e06e80266e773da13029f1fae3d7f76f6de92709" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "agent-comms" },
@@ -1115,7 +1115,7 @@ dependencies = [
 [[package]]
 name = "textual-image"
 version = "0.14.1"
-source = { git = "https://github.com/OpenHCSDev/textual-image.git?rev=1f1d8b8ea3c30b39da3b14ea0ac0786ce9c49a80#1f1d8b8ea3c30b39da3b14ea0ac0786ce9c49a80" }
+source = { git = "https://github.com/OpenHCSDev/textual-image.git?branch=main#5086f63674d6bbf17fb3e96e8d6c253527da710c" }
 dependencies = [
     { name = "pillow" },
     { name = "rich" },
