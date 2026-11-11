@@ -979,8 +979,12 @@ class UnreadableAudit(Owed):
 
     @property
     def reason(self) -> str:
+        shapes = self.record.due.probe_shapes()
         return (f"Nothing in {self.audit} counts until it parses: {self.fault}. Repair that spot"
-                " in the file; your saved answers come back with it.")
+                " in the file; your saved answers come back with it."
+                + (f"\n\nProbe shapes (one object per probe in the probes array,"
+                   f' each with a "{Probe.family_discriminator}" field):\n{shapes}'
+                   if shapes else ""))
 
     def permits_read(self, path: Path) -> bool:
         return False
