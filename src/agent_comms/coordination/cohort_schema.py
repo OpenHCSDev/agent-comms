@@ -11,7 +11,7 @@ from agent_comms.coordination.contracts import POLICY_VERSION, RESOLVER_VERSION
 from agent_comms.coordination.errors import IdentityConflict, SchemaVersionError
 from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.coordination.response_acknowledgement import _canonical
-from agent_comms.coordination.schema import CoordinatorTable
+from agent_comms.coordination.schema import CoordinationFileTable, CoordinatorTable
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.participants import OwnerGenerations, OwnerRecord, Participants
 from agent_comms.messaging.audience_manifest import MAX_AUDIENCE_BYTES
@@ -28,7 +28,6 @@ from agent_comms.storage.typed_table import (
     Column,
     ColumnGuard,
     ComposedSchemas,
-    DurableTables,
     ForeignKey,
     FrozenColumn,
     GuardedColumns,
@@ -39,7 +38,6 @@ from agent_comms.storage.typed_table import (
     InitialOneWayColumn,
     NoDelete,
     RetainsChildren,
-    SharedFileTables,
     SQLiteJournalMode,
     TextStorage,
     TypedTable,
@@ -59,11 +57,10 @@ class CohortTable(PrivateCoordinatorTable):
     __slots__ = ()
 
 
-class AwarenessTable(SharedFileTables, DurableTables):
+class AwarenessTable(CoordinationFileTable):
     """Optional provenance captured only during the unsealed acceptance transaction."""
 
     __slots__ = ()
-    schema_error = SchemaVersionError
 
 
 @dataclass(frozen=True, kw_only=True)

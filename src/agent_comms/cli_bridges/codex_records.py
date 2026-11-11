@@ -21,7 +21,7 @@ from pydantic import (
     model_validator,
 )
 
-from agent_comms.cli_bridges.cli_protocol import Declared
+from agent_comms.cli_bridges.cli_protocol import Declared, HistoryRecord
 from agent_comms.cli_bridges.cli_protocol import OpenWire
 from agent_comms.cli_bridges.cli_protocol import TimestampedWire
 from agent_comms.cli_bridges.cli_protocol import WireHeader
@@ -196,7 +196,7 @@ class CustomToolCallOutputItem(FunctionCallOutputItem, declared_name='custom_too
     pass
 
 
-class RolloutRecord(TimestampedWire, OpenWire, ABC, affix=""):
+class RolloutRecord(TimestampedWire, OpenWire, HistoryRecord, affix=""):
     """One rollout line. Conversation is in the items a record carries; the record adds what
     it says about the session."""
 
@@ -214,9 +214,6 @@ class RolloutRecord(TimestampedWire, OpenWire, ABC, affix=""):
 
     def request(self) -> str:
         return next((text for item in reversed(self.entries()) if (text := item.request())), '')
-
-    def begins_history(self) -> bool:
-        return False
 
     @property
     def session(self) -> SessionMeta:

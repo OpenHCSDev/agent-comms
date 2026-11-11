@@ -166,8 +166,10 @@ class PromptStartingAttempt(LiveAttempt):
         )
 
 
-class PromptAcceptedAttempt(LiveAttempt):
-    allows_tool_claim = True
+class BeforeModelRun:
+    """An attempt about to run the model: it can abort, fail, run or stall."""
+
+    __slots__ = ()
 
     @classmethod
     def successors(cls):
@@ -177,6 +179,11 @@ class PromptAcceptedAttempt(LiveAttempt):
             ModelRunningAttempt,
             ModelStalledAttempt,
         )
+
+
+class PromptAcceptedAttempt(BeforeModelRun, LiveAttempt):
+    allows_tool_claim = True
+
 
 
 class ContextualAttempt(LiveAttempt):
@@ -215,15 +222,8 @@ class ToolRunningAttempt(ContextualAttempt):
         )
 
 
-class CompactionAttempt(ContextualAttempt):
-    @classmethod
-    def successors(cls):
-        return (
-            AbortingAttempt,
-            UnsuccessfulTerminal,
-            ModelRunningAttempt,
-            ModelStalledAttempt,
-        )
+class CompactionAttempt(BeforeModelRun, ContextualAttempt):
+    """A compaction about to run the model."""
 
 
 class SettlingAttempt(ContextualAttempt):

@@ -249,22 +249,26 @@ class WatchUnreachable(WatchUnopened):
         return await watch.redials.restarting.retried(watch, url, self)
 
 
+class BackToModel(WatchEnd):
+    """An ending this process cannot repair: the session goes back to the model, which starts
+    the watch again or stops."""
+
+    exit_code = 1
+
+    async def settled(self, watch: InboxSocket) -> WatchEnd:
+        return self
+
+
 @dataclass(frozen=True)
-class WatchReplaced(WatchDropped):
+class WatchReplaced(BackToModel, WatchDropped):
     """A newer watch of this thread took the socket's place. Reconnecting would take it back
     and the two would replace each other for ever, so this one goes back to the model."""
 
-    async def settled(self, watch: InboxSocket) -> WatchEnd:
-        return self
-
 
 @dataclass(frozen=True)
-class WatchRefused(WatchDropped):
+class WatchRefused(BackToModel, WatchDropped):
     """The connector refused the URL: spent, superseded, or forgotten by a restart. Only the
     model can get another."""
-
-    async def settled(self, watch: InboxSocket) -> WatchEnd:
-        return self
 
 
 @dataclass(frozen=True)
@@ -298,13 +302,11 @@ class WatchStopped(WatchEnd):
 
 
 @dataclass(frozen=True)
-class RuntimeReplaced(WatchEnd):
+class RuntimeReplaced(BackToModel):
     """Core was reinstalled while this watch ran from the runtime it replaced. Re-dialling would
     keep the old client watching for ever: on 2026-11-06 the host's watch survived three installs
     on its first runtime, missed every client fix, and showed up as an unretired old-runtime PID
     each time. Only a watch started anew runs the new runtime, so this one goes back to the model."""
-
-    exit_code = 1
 
     def line(self) -> str:
         return ("Core was reinstalled, and this watch was running the old runtime, so it has "

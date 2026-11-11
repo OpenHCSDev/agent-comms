@@ -650,14 +650,21 @@ class TranscriptRequest[ResultT](ReadRequest):
     def result(self, read: TranscriptRead) -> ResultT: ...
 
 
+class SnapshotFromRead:
+    """A transcript request whose result is the snapshot read from its transcript."""
+
+    __slots__ = ()
+
+    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate:
+        return TranscriptSnapshotUpdate.from_read(read)
+
+
 @dataclass(frozen=True)
-class ReadTranscript(TranscriptRequest[TranscriptSnapshotUpdate]):
+class ReadTranscript(SnapshotFromRead, TranscriptRequest[TranscriptSnapshotUpdate]):
     """Read a complete page, including its current draft."""
 
     deferred_reads: ClassVar[tuple[type[Exception], ...]] = (DeferredRead,)
 
-    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate:
-        return TranscriptSnapshotUpdate.from_read(read)
 
 
 class SubscribeTranscript(ReadTranscript):
@@ -676,9 +683,8 @@ class TranscriptPublicationState(TaggedUnion, affix=""):
 
 
 @dataclass(frozen=True)
-class NotPublished(TaggedRecordMember, TranscriptPublicationState):
-    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate:
-        return TranscriptSnapshotUpdate.from_read(read)
+class NotPublished(SnapshotFromRead, TaggedRecordMember, TranscriptPublicationState):
+    """A transcript nobody has published yet: its result is the snapshot read from the transcript."""
 
 
 @dataclass(frozen=True)

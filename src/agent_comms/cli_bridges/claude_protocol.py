@@ -24,6 +24,7 @@ from pydantic import (
 from agent_comms.agent_events import TranscriptModelUsage
 from agent_comms.cli_bridges.cli_protocol import (
     Declared,
+    HistoryRecord,
     OpenWire,
     TaggedWire,
     TextWire,
@@ -600,17 +601,13 @@ class ClaudeHeader(WireHeader):
         return header
 
 
-class ClaudeRecord(TaggedWire, ABC, affix=""):
+class ClaudeRecord(TaggedWire, HistoryRecord, affix=""):
     header = ClaudeHeader
     cwd: str = ''
     version: str | None = None
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
-
-    def begins_history(self) -> bool:
-        """Whether Claude replaced everything before this record (compaction)."""
-        return False
 
     def compacted_at(self) -> tuple[float, ...]:
         """When this record says the context compacted: nothing, unless it is the boundary."""
@@ -621,14 +618,6 @@ class ClaudeRecord(TaggedWire, ABC, affix=""):
 
     def opening_position(self, following: int) -> int:
         return following
-
-    def request(self) -> str:
-        """The prompt this record carries, read without the session around it."""
-        return ''
-
-    def owner_words(self) -> tuple[str, ...]:
-        """What the person typed in this record; most records carry none."""
-        return ()
 
     def delivered(self) -> tuple[MessageReference, ...]:
         """The bus messages this record put in front of the model; most records carry none."""

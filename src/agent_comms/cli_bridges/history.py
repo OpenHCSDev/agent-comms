@@ -21,6 +21,7 @@ from typing import BinaryIO, ClassVar, Self
 
 from pydantic import TypeAdapter
 
+from agent_comms.cli_bridges.cli_protocol import HistoryRecord
 from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Session
 from agent_comms.cli_bridges.runtime_updates import (
@@ -163,7 +164,7 @@ class OnlineHistory(History):
         return reader.connected(thread, address, directory)
 
 
-class JsonLines:
+class JsonLines[Record: HistoryRecord]:
     """A session stored as one JSON record per line, read up to the size it had when opened.
 
     Records appended while reading belong to a later read. Reading starts at the newest record
@@ -172,12 +173,11 @@ class JsonLines:
     """
 
     REVERSE_BLOCK: ClassVar[int] = 64 * 1024
-    # Each record answers `begins_history()` (everything before it was replaced) and `request()`.
     records: ClassVar[TypeAdapter]
     # What decoding remembers between records (open tool calls, the current turn).
     state: ClassVar[type]
 
-    def decode_line(self, raw: bytes, position: int):
+    def decode_line(self, raw: bytes, position: int) -> Record:
         return self.records.validate_json(raw)
 
     def start_state(self):
@@ -257,7 +257,7 @@ class JsonLines:
                 yield offset, raw[:-1]
 
 
-class JsonLinesFile(JsonLines, ReadAtOnce):
+class JsonLinesFile[Record: HistoryRecord](JsonLines[Record], ReadAtOnce):
     """A JSONL session file read once, including a final record its harness never finished."""
 
     source: Path

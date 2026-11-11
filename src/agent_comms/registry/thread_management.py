@@ -92,10 +92,17 @@ from agent_comms_hooks.process_claim import ClaimHeldError, ProcessSingleton
 
 
 @dataclass(frozen=True, slots=True)
-class RenameThreadResult(ToolResult):
+class ChangeResult(ToolResult):
+    """A value that moved from previous to current; changed says whether it differs."""
+
     previous: str
     current: str
     changed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class RenameThreadResult(ChangeResult):
+    """A thread display name change."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -253,11 +260,8 @@ class ThreadDeleted(CliResult):
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectChangeResult(ToolResult):
+class ProjectChangeResult(ChangeResult):
     thread: str
-    previous: str
-    current: str
-    changed: bool
 
 
 @dataclass(eq=False, repr=False)
@@ -407,7 +411,8 @@ class ThreadManagement:
 
         updated = self.registry.update_thread(original.name, move)
         previous, current = str(original.project_path), str(updated.project_path)
-        return ProjectChangeResult(updated.name, previous, current, current != previous)
+        return ProjectChangeResult(
+            previous=previous, current=current, changed=current != previous, thread=updated.name)
 
     def rename_managed_thread(
         self, original: ThreadIncarnation, display_name: str, *, owner: ProcessIdentity
