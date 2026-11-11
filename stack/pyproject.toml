@@ -4,23 +4,28 @@ version = "0.1.0"
 description = "Main-checkout agent-comms with main-branch UI packages"
 requires-python = ">=3.14,<3.15"
 dependencies = [
-    "agent-comms",
+    # The test interpreter installs this stack, so our own packages resolve here and nowhere
+    # else. It used to sync the checkout's own lock, which nothing refreshed, so it kept
+    # installing a NominalRefactorAdvisor old enough that its gate.py and json_reports.py
+    # disagreed with each other while this stack tracked that package's main.
+    #
+    # The tools belong in this list and not in an extra: `package = false` makes this a
+    # virtual project, whose own optional-dependencies `uv sync --all-extras` does not
+    # select, so an extra locks the tools and installs none of them. That is exactly how the
+    # shared test interpreter lost pytest-asyncio, pytest-timeout and pytest-xdist.
+    "agent-comms[dev]",
     "batrachian-toad",
     "textual[syntax]",
 ]
-
-[project.optional-dependencies]
-# The test interpreter installs this, so it resolves our own packages here and nowhere else.
-# It used to sync the checkout's own lock, which nothing refreshed, so it kept installing a
-# NominalRefactorAdvisor old enough that its gate.py and json_reports.py disagreed with each
-# other while this stack tracked that package's main.
-dev = ["agent-comms[dev]"]
 
 [tool.uv]
 package = false
 # This stack owns source selection, including Toad's transitive requirements.
 override-dependencies = [
-    "agent-comms",
+    # The extra travels with the override or it does not travel: an override replaces the
+    # whole requirement, so plain "agent-comms" here silently strips [dev] from the
+    # dependency above and the test interpreter locks its tools without installing them.
+    "agent-comms[dev]",
     "formbridge",
     "metaclass-registry",
     "nominal-refactor-advisor",
