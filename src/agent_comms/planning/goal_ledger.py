@@ -187,7 +187,7 @@ class Generation(GoalLedgerTable, TypedTable, GoalGenerationRead, GenerationFail
         ), NoFailedTurnEvidence[FailedTurnEvidence]())
 
     def has_ready_grant(self, number: int, digest: str) -> bool:
-        return self.lifecycle.ready and self.number == number and self.ready_digest == digest
+        return self.lifecycle.has_ready_grant(self.number == number and self.ready_digest == digest)
 
     def __post_init__(self) -> None:
         self.lifecycle.validate_attempt(self.attempt_id)
