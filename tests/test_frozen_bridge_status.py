@@ -8,6 +8,7 @@ registered process with SIGSTOP and read every surface that showed `connected`.
 import os
 import signal
 import subprocess
+from dataclasses import replace
 from collections.abc import Iterator
 
 import pytest
@@ -17,6 +18,8 @@ from agent_comms.cli_bridges.harness_delivery_states import TakingLedger
 from agent_comms.cli_bridges.inbox_watch import InboxWatch
 from agent_comms.comms import InboxActivity, wire
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.activity import (
     ActivityState,
     ReadyDrainReadiness,
@@ -157,7 +160,7 @@ def test_one_reader_sees_a_take_clear_the_stall_with_no_new_message(
 
 
 def test_captures_at_one_cut_share_one_inbox_read(tmp_path, connected):
-    """One observer pass captures activity through several paths; only a new write re-reads."""
+    """One observer pass shares its oldest-message answer until determining inputs change."""
     observer = wire(tmp_path)
 
     def capture():
@@ -167,4 +170,29 @@ def test_captures_at_one_cut_share_one_inbox_read(tmp_path, connected):
     first = capture()
     assert capture() is first
     sent_to_bridge(connected, "a new message is a new cut")
-    assert capture() is not first
+    first = capture()
+    assert first.oldest.keys() == {"bridge"}
+    assert capture() is first
+
+    # Goal writes share the coordinator, but do not consume this inbox's messages.
+    connected.goals.update_goal("sender", SetGoalAction(text="Unrelated work"))
+    assert capture() is first
+
+    # A presentation edit decodes a new registry object without changing routing.
+    connected.registry.update_thread("sender", lambda thread: replace(thread, title=GivenThreadText("A new title")))
+    assert capture() is first
+
+
+def test_taking_the_minimum_keeps_other_unread_messages(tmp_path, connected):
+    observer = wire(tmp_path)
+    first = sent_to_bridge(connected, "first unread").message
+    assert observer.agents.oldest_untaken(observer.registry.snapshot()) == {
+        "bridge": first.timestamp,
+    }
+    sent_to_bridge(connected, "later unread")
+    assert observer.agents.oldest_untaken(observer.registry.snapshot()) == {
+        "bridge": first.timestamp,
+    }
+    take(tmp_path, first)
+    current = observer.agents.oldest_untaken(observer.registry.snapshot())
+    assert current["bridge"] > first.timestamp

@@ -12,7 +12,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.messaging.agent_inbox import TakenInputCursor
 from agent_comms.messaging.bus import Bus, BusSnapshot
 from agent_comms.messaging.bus_read_source import BusReadSource
-from agent_comms.messaging.bus_route_counts import HeldUnseenCounts
+from agent_comms.messaging.bus_route_counts import HeldUnseenCounts, HeldUnseenOldest
 from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.messaging.channels import AnyChannel, Channel
 from agent_comms.messaging.historical_views import HistoryArchive
@@ -149,18 +149,21 @@ class MessageBus[Writes: Publisher](PublishedBus[Writes], BusReadSource):
                 ), document,
             )
 
-    def oldest_untaken(self, names: Sequence[str], snapshot: RegistrySnapshot) -> Mapping[str, float]:
-        """When each thread's oldest message no harness took was sent: one read for them all,
-        under the taken-input rule that owns the agent inbox."""
+    def advanced_oldest_untaken(
+        self, held: HeldUnseenOldest, names: Sequence[str], snapshot: RegistrySnapshot,
+    ) -> HeldUnseenOldest:
+        """Advance every reader's oldest untaken message under its actual inbox cursor."""
         if not names:
-            return {}
+            return HeldUnseenOldest()
         catalog = self._channels.read()
         deliveries = {delivery.actor: delivery
                       for delivery in (DeliveryScope.capture(name, snapshot, catalog) for name in names)}
         with self.bus.reading() as source:
             with source.observing() as db:
                 taken = TakenInputCursor().attached(db, self.bus.path.parent, self._registry.store.privacy())
-            return source.unseen_oldest(snapshot, deliveries, dict.fromkeys(deliveries, taken))
+            return source.advanced_unseen_oldest(
+                held, snapshot, deliveries, dict.fromkeys(deliveries, taken), source=source.identity,
+            )
 
     async def when_open[Result](self, operation: Callable[[], Result | Awaitable[Result]]) -> Result:
         while True:
