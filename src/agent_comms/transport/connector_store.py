@@ -444,7 +444,6 @@ class HeldProfile(ABC):
     """
 
     path: Path
-    openable: ClassVar[bool] = False
 
     def replacement_grants(self) -> tuple[UiGrantId, ...]:
         """Grants this entry replaces when another profile is accepted."""
@@ -470,7 +469,6 @@ class ReplaceableProfile(HeldProfile):
 class OpenableProfile(ReplaceableProfile):
     """A decoded profile whose grant has not expired."""
 
-    openable = True
 
     def label(self) -> str:
         return f"{self.profile.endpoint.url.host} · {self.profile.credential.namespace}"
