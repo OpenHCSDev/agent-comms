@@ -29,8 +29,12 @@ from agent_comms.execution.native_entries import (
     SessionEntry,
 )
 from agent_comms.execution.turn_context import HistoricalInstructionProvenance
+from agent_comms.execution.turn_item import NativeItemId
+from agent_comms.installer.harness_install import Harness
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.registry.thread_text import NoThreadText, ThreadText
 from agent_comms.transcript.transcript_events import TranscriptEvent
+from agent_comms.transport.tool_result import ToolResult
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
