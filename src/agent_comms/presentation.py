@@ -73,7 +73,6 @@ from agent_comms.planning.goal_execution_snapshot import GoalExecutionSnapshot
 from agent_comms.planning.goal_snapshots import GoalSnapshots
 from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.planning.orders import TodoStore
-from agent_comms.registry import relationships
 from agent_comms.registry.activity import Activity, ActivityData, ActivityState, ObservedActivity
 from agent_comms.registry.agent_activity import ActivityAnswers, AgentActivity, CapturedActivity
 from agent_comms.registry.catalog_document import CatalogDocument
@@ -81,6 +80,7 @@ from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_names import DeletedThread
+from agent_comms.registry.relationship_file import RelationshipFile
 from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
 from agent_comms.registry.thread_presentation import (
     ThreadOwnerBinding,
@@ -602,7 +602,7 @@ class WireRevision(ReadState, ToolResult):
     ]
     relationships: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: (relationships.RelationshipStore.path_in(views.root),), *StatusSourced.views()),
+        *revision_source(lambda views: (RelationshipFile.path_in(views.root),), *StatusSourced.views()),
     ]
     notifications: Annotated[
         tuple[FileRevision, ...],

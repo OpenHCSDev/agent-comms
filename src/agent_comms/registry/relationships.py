@@ -39,6 +39,7 @@ from agent_comms.registry.peer_relation import PeerRelation, RelationRecord, Rel
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.relationship_catalog_source import RelationshipCatalogSource
+from agent_comms.registry.relationship_file import RelationshipFile
 from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
@@ -688,10 +689,12 @@ class RemoveRelationshipEdit(RelationshipEdit[None]):
         return ctx.collaboration.removed(ctx.document), None
 
 
-class RelationshipStore(SingleFileStore, ThreadOwnedState, CarriedDocument[RelationshipDocument], DependentStateTier):
+class RelationshipStore(
+    SingleFileStore, ThreadOwnedState, CarriedDocument[RelationshipDocument], DependentStateTier,
+    RelationshipFile,
+):
     """One current durable typed schema; retired formats are rejected."""
 
-    filename = "relationships.json"
     json_indent = 2
     json_suffix = "\n"
 
