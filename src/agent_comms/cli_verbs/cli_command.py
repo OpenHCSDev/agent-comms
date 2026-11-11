@@ -184,7 +184,7 @@ class CliCommand(
         # the acquired namespace rather than reserving a special actor spelling.
         available_targets = tuple(item for item in selected if item.available(snapshot))
         catalog = (comms.channels.catalog.read()
-                   if channel.needs_catalog or any(item.needs_channel_state for item in selected) else NoCatalog())
+                   if channel.requires_catalog() or any(item.needs_channel_state for item in selected) else NoCatalog())
         resolved_targets = tuple((name, name.resolve(snapshot, comms.bus.require_channel)) for name in available_targets)
         grouped: dict[type[CliCommand], dict[CliCommand, None]] = {}
         for member in target.command_members(cls):
@@ -286,7 +286,7 @@ class CliCommand(
             channel = NoChannel()
         snapshot = comms.registry.snapshot()
         catalog = (comms.channels.catalog.read()
-                   if channel.needs_catalog or any(item.needs_channel_state for item in target.targets) else NoCatalog())
+                   if channel.requires_catalog() or any(item.needs_channel_state for item in target.targets) else NoCatalog())
         return target.run(cls, comms, arguments, confirmed=confirmed, channel=channel,
                              project=project,
                              snapshot=snapshot, catalog=catalog)
@@ -553,7 +553,7 @@ class TargetBatch(TaggedRecordMember, TargetSelection):
             try:
                 current = comms.registry.snapshot()
                 current_catalog = (comms.channels.catalog.read()
-                                   if context.needs_catalog or name.needs_channel_state else NoCatalog())
+                                   if context.requires_catalog() or name.needs_channel_state else NoCatalog())
                 if bound_command not in type(bound_command).bindings(
                         name.resolve(current, comms.bus.require_channel), comms, context,
                         project=project, snapshot=current, catalog=current_catalog):
