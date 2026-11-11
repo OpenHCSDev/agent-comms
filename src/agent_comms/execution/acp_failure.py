@@ -328,7 +328,7 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
 class ProviderConnectionFailure(ACPFailure):
     @classmethod
     def matches(cls, code, detail, diagnostics=()) -> bool:
-        return any(diagnostic.provider_connection_failure for diagnostic in diagnostics)
+        return any(diagnostic.connection_failure_description() for diagnostic in diagnostics)
 
     @property
     def title(self) -> str:
@@ -337,9 +337,9 @@ class ProviderConnectionFailure(ACPFailure):
     @property
     def description(self) -> str:
         known = "\n".join(
-            diagnostic.description
+            desc
             for diagnostic in self.diagnostics
-            if diagnostic.provider_connection_failure
+            for desc in diagnostic.connection_failure_description()
         )
         return "\n".join(part for part in (self.detail, known) if part)
 

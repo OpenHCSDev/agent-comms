@@ -404,8 +404,10 @@ class ProviderTransportDetails(PiPayload):
 
 @dataclass(frozen=True)
 class ProviderTransportFailureDiagnostic(PiDiagnostic):
-    provider_connection_failure = True
     error: ProviderDiagnosticError
+
+    def connection_failure_description(self) -> tuple[str, ...]:
+        return (self.description,)
     details: ProviderTransportDetails
     timestamp: PiField[ReportedTimestamp | PiOmitted] = PiOmitted()
 
