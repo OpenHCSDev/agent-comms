@@ -21,8 +21,8 @@ class OrderWords(WireValue):
     # quoted span. Retrying its greedy prefix at every character is quadratic
     # for long ordinary words with no slash or filename suffix.
     CITED: ClassVar[re.Pattern] = re.compile(
-        r'(?m)^ {4}.*$|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|'
-        r'(?:(?<!\S)|(?<=[`"”]))(?:\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b)|'
+        r'(?m)^ {4}.*$|`[^`\n]*`|"[^"\n]*"|"[^"\n]*"|'
+        r'(?:(?<!\S)|(?<=[`""]))(?:\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b)|'
         r'\b\w+_\w+\b|\b[A-Z][a-z0-9]+[A-Z]\w*\b')  # identifiers are code, not prose
     REFUSED: ClassVar[re.Pattern]
     refusal: ClassVar[str]
@@ -140,9 +140,9 @@ class StrikeReason(VerdictReason):
 
     @classmethod
     def wording_refusal(cls, text: str) -> str | None:
-        cited = [span.group(0).strip('`””” ') for span in cls.CITED.finditer(text)]
+        cited = [span.group(0).strip('`""" ') for span in cls.CITED.finditer(text)]
         if cited and all(PlainText.found(span) for span in cited):
-            return f”{cited} is the teammate's wording; send it a correction, not a strike.”
+            return f"{cited} is the teammate's wording; send it a correction, not a strike."
         return super().wording_refusal(text)
 
 
