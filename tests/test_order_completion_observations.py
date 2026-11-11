@@ -77,6 +77,7 @@ def test_checked_delivery_survives_later_merge_observations(
         current = store.get("P1")
         assert isinstance(current.order, DeliveredProblemOrder)
         assert current.order.delivery == accepted
+        assert current.order.delivered(accepted) == current.order
         assert current.order.delivery.evidence.artifact() == str(artifact)
         assert current.order.installation_commits == (merge,)
         assert current.state is previous.state
@@ -148,4 +149,13 @@ def test_holder_records_existing_merged_pr_without_reopening_work(
     artifact = ctx.root / "late-linked-application.txt"
     artifact.write_text(WORKS)
     main(["done", "worker", "P1", "--seen", str(artifact)], ctx)
-    assert isinstance(store.get(before.id).order, DeliveredProblemOrder)
+    completed = store.get(before.id).order
+    assert isinstance(completed, DeliveredProblemOrder)
+    assert isinstance(completed, type(before.order))
+    assert completed.sha == before.order.sha == merge
+    installed_merge = after.order.installed(WORKS, str(artifact))
+    retained = installed_merge.delivered(completed.delivery)
+    assert isinstance(retained, type(installed_merge))
+    assert isinstance(retained, DeliveredProblemOrder)
+    assert retained.sha == merge
+    assert (retained.works, retained.artifact) == (WORKS, str(artifact))

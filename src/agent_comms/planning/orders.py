@@ -2279,9 +2279,13 @@ class CheckedProblemOrder(CheckCorrectionSource, ProblemOrder, declared_name=Non
             f"Order: {self.id}", *self.scope.instructions(todo.id),
             *self.work_instructions()))
 
+    @property
+    def delivered_type(self) -> type[DeliveredProblemOrder]:
+        return DeliveredProblemOrder
+
     def delivered(self, delivery: CheckedDelivery):
         delivery.at.require_delivery()
-        return self.copy_as(DeliveredProblemOrder, delivery=delivery)
+        return self.copy_as(self.delivered_type, delivery=delivery)
 
     def installed(self, works: str, artifact: str) -> ProblemOrder:
         raise TodoError("Check the delivered order before recording installation.")
@@ -2430,6 +2434,10 @@ class MergedProblemOrder(CommittedCheckSource, AwaitingInstallationProblemOrder)
     @property
     def installation_commits(self) -> tuple[str, ...]:
         return (self.sha,)
+
+    @property
+    def delivered_type(self) -> type[MergedDeliveredProblemOrder]:
+        return MergedDeliveredProblemOrder
 
     @property
     def installed_type(self) -> type[InstalledMergedProblemOrder]:
@@ -2811,6 +2819,10 @@ class InstalledProblemOrder(InstalledEvidence, DeliveredProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class InstalledMergedProblemOrder(InstalledEvidence, MergedProblemOrder):
     """The installed merge and the recorded run share the same evidence behavior."""
+
+    @property
+    def delivered_type(self) -> type[InstalledMergedDeliveredProblemOrder]:
+        return InstalledMergedDeliveredProblemOrder
 
 
 @dataclass(frozen=True, kw_only=True)
