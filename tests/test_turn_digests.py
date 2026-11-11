@@ -29,7 +29,6 @@ from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_context import (
     JournalProvenance,
     SegmentManifest,
-    TranscriptSegment,
     UserInputSegment,
     WireProvenance,
 )

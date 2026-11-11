@@ -16,7 +16,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.imported_conversation import KeptPiSession
 from agent_comms.execution.imported_messages import ImportLimits
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.importing import KeptPiSession
+from agent_comms.execution.imported_conversation import KeptPiSession
 from agent_comms.installer.harness_install import Harness, PiHarness
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_status import StoppedThreadStatus

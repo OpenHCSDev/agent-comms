@@ -33,7 +33,6 @@ from agent_comms.execution.import_history_source import ImportHistorySource
 from agent_comms.execution.imported_conversation import ImportedConversation
 from agent_comms.execution.imported_messages import ImportLimits
 from agent_comms.importing import ImportSnapshot
-from agent_comms.importing import ImportedConversation, ImportSnapshot
 from agent_comms.installer.harness_install import (
     ClaudeCodeHarness,
     CodexHarness,

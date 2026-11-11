@@ -57,7 +57,7 @@ from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_context import FileProvenance
 from agent_comms.importing import ImportBuffer, ImportSnapshot, ThreadImported
-from agent_comms.execution.turn_context import CodexRolloutProvenance
+from agent_comms.execution.turn_context import HistoricalInstructionProvenance
 from agent_comms.importing import (
     ImportBuffer,
     ImportedSessionMetadata,
@@ -87,7 +87,6 @@ from agent_comms.registry.thread_text import (
 from agent_comms.registry.threads import ExternalThread, NativeThread, ThreadProvenance
 from agent_comms.transcript.transcript_events import TextTranscript
 from conftest import ui_core_read
-from agent_comms.transport.core_access import LocalCoreAccess
 from agent_comms.transport.tools.sidebar import CommsImportedSourceTool
 from agent_comms.ui_model.message_category import (
     AgentCategory,
@@ -314,7 +313,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
         OfflineHistory.stored(CodexHarness, source, AnySession()), name="historical")
     assert source.read_bytes() == original
     refs = acknowledgement.historical_instructions
-    assert all(isinstance(ref, CodexRolloutProvenance) for ref in refs)
+    assert all(isinstance(ref, HistoricalInstructionProvenance) for ref in refs)
     assert tuple(ref.public_text(comms) for ref in refs) == (
         "Historical base π.\n", "Historical developer λ.\n")
     assert FieldCodec.decode(ThreadImported, acknowledgement.to_wire()) == acknowledgement
@@ -322,7 +321,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
     saved = [json.loads(line) for line in Path(acknowledgement.session_file).read_text().splitlines()]
     metadata = next(record["data"] for record in saved if record["type"] == "custom")
     assert metadata["format"] == "codex"
-    assert FieldCodec.decode(tuple[CodexRolloutProvenance, ...],
+    assert FieldCodec.decode(tuple[HistoricalInstructionProvenance, ...],
                              metadata["historical_instructions"]) == refs
     original_owner = comms.registry.require("historical")
     assert ImportedSessionMetadata.sources_for_owner(comms.registry, original_owner) == refs
@@ -342,7 +341,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
                 str(tmp_path / "other.jsonl"), comms.root)))
     assert CliInvocation().invoke(["--root", str(comms.root), "context", "historical", "--imported"], sys.stdout) == 0
     result = json.loads(capsys.readouterr().out)
-    assert FieldCodec.decode(tuple[CodexRolloutProvenance, ...], result["sources"]) == refs
+    assert FieldCodec.decode(tuple[HistoricalInstructionProvenance, ...], result["sources"]) == refs
     assert result["scope"].startswith("historical-imported-instructions")
     # Native configuration records can precede the same original import metadata;
     # conversation remains outside this prefix-only metadata read.

@@ -19,7 +19,7 @@ from agent_comms.execution.native_entries import (
     SessionEntry,
     TranscriptProjection,
 )
-from agent_comms.importing import KeptPiSession
+from agent_comms.execution.imported_conversation import KeptPiSession
 from agent_comms.nominal.field_codec import StoredSessionId
 
 
