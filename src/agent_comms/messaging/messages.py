@@ -548,7 +548,8 @@ class MessageRoutes(ProjectionOutputs):
         from agent_comms.messaging.bus_tables import AwaitingAnswerSource
         return (BusRouteCounts, BusRouteKeys, AwaitingAnswerSource)
 
-    conversation_message: ClassVar[bool] = True
+    def is_conversation_message(self) -> bool:
+        return True
 
     @classmethod
     def route_rows(cls, message):
@@ -594,7 +595,8 @@ class SendableMessageKind(MessageKind, declared_name=None):
 class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     """A claim-owner record, not a delivery to a reader."""
 
-    conversation_message = False
+    def is_conversation_message(self) -> bool:
+        return False
 
     @classmethod
     def route_rows(cls, message):
@@ -826,10 +828,10 @@ class ConversationRole(ConversationActivity, SendableRole):
 
     def response_policy(self, message: MessageInput) -> ResponsePolicy:
         return (CommandTarget.named(message.target).response_policy(message)
-                if message.type.conversation_message else InformationalPolicy.instance())
+                if message.type.is_conversation_message() else InformationalPolicy.instance())
 
     def notification_references(self, message):
-        return (message.reference,) if message.type.conversation_message else ()
+        return (message.reference,) if message.type.is_conversation_message() else ()
 
     def wake_mode(self, target, recipient, mentions, control):
         return control.wake_mode(target, recipient, mentions)

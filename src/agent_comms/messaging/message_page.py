@@ -192,7 +192,7 @@ class ConversationMessagePageRequest(MessagePageRequest):
     """A presented conversation excludes declaration-owned state records."""
 
     def kinds(self):
-        return tuple(kind for kind in super().kinds() if kind.conversation_message)
+        return tuple(kind for kind in super().kinds() if kind.is_conversation_message())
 
 
 @dataclass(frozen=True, slots=True)

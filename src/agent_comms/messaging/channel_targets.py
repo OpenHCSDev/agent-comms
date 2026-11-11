@@ -443,7 +443,7 @@ class ThreadTarget(NamedTarget):
         return snapshot.resolve_thread(self.selected_name(snapshot))
 
     def validate(self, message: Message) -> None:
-        if message.sender == self.name and message.type.conversation_message:
+        if message.sender == self.name and message.type.is_conversation_message():
             raise RelationViolationError(f"Thread {message.sender!r} cannot message itself.")
         allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
         if not set(self.name) <= allowed:
@@ -461,7 +461,7 @@ class ThreadTarget(NamedTarget):
         target = self.selected_name(snapshot)
         if target not in snapshot.threads:
             raise UnregisteredThreadError(f"Target {self.name!r} is not a registered thread.")
-        if target == snapshot.canonical_name(message.sender) and message.type.conversation_message:
+        if target == snapshot.canonical_name(message.sender) and message.type.is_conversation_message():
             raise RelationViolationError(f"Thread {target!r} cannot message itself.")
 
     def initial_delivery(
