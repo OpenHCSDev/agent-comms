@@ -69,6 +69,23 @@ def test_a_public_browser_is_never_shown_the_link() -> None:
     assert sent == [("claude.ai", LINK)]
 
 
+def test_the_connector_speaks_as_itself_not_as_an_agent() -> None:
+    """A sign-in on this bus answered 500 with `UnregisteredThreadError: Sender 'claude-ai'`,
+    because the connector borrowed a granted token's authority to speak as itself. The suite
+    stayed green because tests/test_connector.py declares a claude-ai thread of their own;
+    the one case that deletes it exercises reads, never the approval notice.
+
+    `CALLER` is still right for what a granted token acts as. The connector is a service and
+    declares its own identity before publishing, as `installer (service)` already does.
+    """
+    from agent_comms.registry.service_sender import ServiceSender
+    from agent_comms.transport.connector import ApprovalSender
+    from agent_comms.transport.connector_caller import CALLER
+
+    assert issubclass(ApprovalSender, ServiceSender)
+    assert ApprovalSender.sender == "connector" != CALLER.name
+
+
 def test_every_authorize_issues_the_secret_it_minted() -> None:
     """A second call used to keep the first record and drop the secret it had just minted, so
     the browser held one this store had never kept and require_approval could only refuse it:

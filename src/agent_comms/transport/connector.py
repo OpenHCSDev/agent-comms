@@ -82,6 +82,7 @@ from agent_comms.planning.owner_requests import NewestOpenRequest, RequestSelect
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.closed_pull_requests import ClosedPullRequestWatch
 from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.registry.service_sender import ServiceSender
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.team.standing import UnownedOrderWatch
 from agent_comms.team.team_heartbeat import TeamHeartbeat
@@ -457,6 +458,18 @@ class RunningRequest(RequestWait):
         return f"{overdue} {elapsed:.3f}s into {self.method} {self.template},"
 
 
+class ApprovalSender(ServiceSender):
+    """Who the connector is when it speaks for itself, the way `installer (service)` does.
+
+    `CALLER` stays the authority a granted token acts as, which is a real agent on this bus.
+    Borrowing it to send the owner's sign-in link meant any bus without an agent of that name
+    answered with a 500. Kept off `Connector` because its OAuth client-registration route is
+    already named `register`, and one class cannot own two facts under one name.
+    """
+
+    sender: ClassVar[str] = "connector"
+
+
 @dataclass(frozen=True)
 class Connector(ConnectorService, McpServer):
     """The MCP endpoint and the OAuth authorization server in front of it."""
@@ -826,12 +839,14 @@ class Connector(ConnectorService, McpServer):
         """Only the durable human identity receives the bearer approval link."""
         with self.opened_wire() as comms:
             owner = comms.messaging.user_identity(Checkout(self.root))
+            ApprovalSender.register(comms.registry)
             comms.messaging.send(
-                CALLER.name, owner.name,
+                ApprovalSender.sender, owner.name,
                 f"Connector sign-in requested by {json.dumps(client)}. "
                 f"Open the link and confirm only if you started this connection; it expires in "
                 f"{CODE_SECONDS} seconds and remembers this browser.\n{link}",
                 QuestionKind,
+                origin=ApprovalSender.origin,
             )
 
     async def approve(self, request: web.Request) -> web.Response:
