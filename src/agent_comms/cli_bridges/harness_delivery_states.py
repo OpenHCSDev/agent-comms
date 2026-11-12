@@ -11,6 +11,7 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
+from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_evidence import ConsumptionEvidence
 from agent_comms.messaging.notification_progress import HarnessConsumedProgress
@@ -62,7 +63,7 @@ class DeliveredOutcome(FilteredOutcome):
     """
 
 
-class AcceptedOutcome(DeliveredOutcome):
+class AcceptedOutcome(Outcome):
     pass
 
 
@@ -166,10 +167,8 @@ class MismatchedMonitor(MonitorEvidence):
     reason: str
 
 
-@dataclass(frozen=True)
-class ObservedMonitor(MonitorEvidence, Timestamped):
-    record_id: TranscriptRecordId
-    timestamp: float
+class ObservedInputEvidence(MonitorEvidence, Timestamped, declared_name=None):
+    """A complete original input observed in its harness, with its source retained."""
 
     def evidence(self, recorded: type[Outcome]) -> tuple[type[Outcome], MonitorEvidence]:
         """Only a complete, matching confirmation stores this, so the message entered context."""
@@ -183,3 +182,15 @@ class ObservedMonitor(MonitorEvidence, Timestamped):
 
     def finished_with(self, export: MonitorReadFile) -> None:
         export.retire()
+
+@dataclass(frozen=True)
+class ObservedMonitor(ObservedInputEvidence):
+    record_id: TranscriptRecordId
+    timestamp: float
+
+
+@dataclass(frozen=True)
+class ObservedBridgeInput(ObservedInputEvidence):
+    turn_id: NativeTurnId
+    item_id: NativeItemId
+    timestamp: float

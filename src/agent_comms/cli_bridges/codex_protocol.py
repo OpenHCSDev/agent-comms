@@ -6,6 +6,7 @@ consumers neither inspect JSON fields nor rediscover what kind of item it is.
 from __future__ import annotations
 
 import json
+import time
 from abc import ABC, abstractmethod
 from asyncio import Future
 from collections import deque
@@ -21,10 +22,12 @@ from pydantic import (
 )
 
 from agent_comms.cli_bridges.cli_protocol import Declared, TaggedWire, TextWire
+from agent_comms.cli_bridges.harness_delivery_states import ObservedBridgeInput
 from agent_comms.cli_bridges.runtime_updates import (
     AppendDraftItem,
     CompletedItem,
     DraftAccumulator,
+    FailedTurn,
     FinishedTurn,
     HiddenItem,
     PageItem,
@@ -42,6 +45,7 @@ from agent_comms.cli_bridges.shared import BridgeInputObserved
 from agent_comms.cli_bridges.tool_calls import DecodedToolCall, ToolCall
 from agent_comms.cli_bridges.usage_reading import RateLimits
 from agent_comms.cli_bridges.wire_models import DeclaredWireFamily, WireModel
+from agent_comms.execution.provider_records import CodelessProviderDiagnosticError
 from agent_comms.execution.tool_results import NoToolDiff, ToolDiff
 from agent_comms.execution.turn_item import NamedSourceTurn, NativeItemId, NativeTurnId
 from agent_comms.execution.turn_phase import (
@@ -201,8 +205,11 @@ class BusClientId(ClientId):
 
     def completed(self, item: UserItem, turn_id: NativeTurnId,
                   events: tuple[TranscriptEvent, ...]) -> RuntimeUpdate:
-        return BridgeInputObserved(events, self.message_id, item.input_text,
-                                   source_turn=NamedSourceTurn(turn_id))
+        return BridgeInputObserved(
+            events, self.message_id, item.input_text,
+            ObservedBridgeInput(turn_id, item.id, events[0].timestamp),
+            source_turn=NamedSourceTurn(turn_id),
+        )
 
 
 class BusInput(MessageInput):
@@ -902,6 +909,19 @@ class TurnHeader(WireModel):
         return FieldCodec.decode(NativeTurnId, self.id)
 
 
+class TurnError(WireModel):
+    message: str
+
+
+class CompletedTurnHeader(TurnHeader):
+    error: TurnError | None = None
+
+    def finished(self) -> RuntimeUpdate:
+        if self.error is None:
+            return FinishedTurn(self.turn_id)
+        return FailedTurn(self.turn_id, CodelessProviderDiagnosticError(self.error.message), time.time())
+
+
 class TurnBegan(TranscriptNotification, declared_name='turn/started'):
     turn: TurnHeader
 
@@ -910,10 +930,10 @@ class TurnBegan(TranscriptNotification, declared_name='turn/started'):
 
 
 class TurnFinished(TranscriptNotification, declared_name='turn/completed'):
-    turn: TurnHeader
+    turn: CompletedTurnHeader
 
     def apply(self, stream: ItemStream) -> RuntimeUpdate:
-        return FinishedTurn(self.turn.turn_id)
+        return self.turn.finished()
 
 
 class ItemNotification(TranscriptNotification, ABC):

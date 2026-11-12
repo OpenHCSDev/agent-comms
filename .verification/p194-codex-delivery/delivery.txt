@@ -1,0 +1,15 @@
+Codex input and failure reporting
+
+The bus handed the original messages to Codex. codex-parallel's turns on 2026-11-12 at 18:35, 18:36 and 18:46 ended with the server's error: "Error running remote compact task: This request was blocked by our safety systems. Reason: Potentially unintended activity." The bridge discarded that error and showed Ready. No rejected input was retried or replayed.
+
+The received input label also stayed Sent. AcceptedOutcome inherited the terminal DeliveredOutcome behavior, so the later original transcript echo could not improve it. The echo also threw away its source proof. AcceptedOutcome now inherits the open Outcome owner. The actual matching transcript input supplies its turn, item and timestamp through ObservedBridgeInput, sharing the existing proven-input behavior with ObservedMonitor. An already delivered observation still refuses a later weaker update. Native attempt identity still prevents resending.
+
+Completed Codex turns now decode their error at the wire boundary. FailedTurn inherits the existing turn-retirement procedure, stores the original error as a system notice under the original turn, and publishes FailedPhase. It does not create an assistant answer, resend input or bypass the provider rejection.
+
+Focused controls: 3 passed in 1.77 seconds, exit 0. Both input/acceptance orderings run through the actual attempt and observation owners and read the resulting message notification. The failure control publishes the actual Codex event into the retained transcript, checks foreign-thread filtering and duplicate idempotence, and preserves normal completion. First attempt failed only because the new control called the old consumed attribute instead of the existing is_consumed() method; corrected at that caller, with the original requirements intact.
+
+The long "yo" reply was inside Codex: its recorded turn lasted 306251ms, time to first token 305702ms. This patch does not claim a model-speed improvement.
+
+Remaining: install and a new live answered message. Pi authentication recovery is separate and must not be overwritten or restarted by guessing an account. The stale comms-peformance connection and a real running-tool background control are separate unfinished obligations. This change does not claim to recover a provider-blocked session.
+
+Assumed: a matching user item in the harness's ordered transcript is the existing harness input-consumption proof; this is the same declared proof boundary used by monitor observations. The failure timestamp is the bridge's observation time because turn/completed supplies no source clock in the modeled wire shape.
