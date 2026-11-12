@@ -138,7 +138,7 @@ class TaskAttachment(
         return ()
 
     def user_task_facts(self, message: messages.Message):
-        return ()
+        return (message.default_user_source_fact(),)
 
 
 @dataclass(frozen=True)
