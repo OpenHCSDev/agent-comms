@@ -273,7 +273,7 @@ class NativeRuntimeInput(
         """
         entry = record.entry
         originals, publications = (), ()
-        if user and user.message.input_id.reported and db:
+        if user and user.message.input_id.is_reported() and db:
             originals = cls.for_native_user(db, reader, user, session_id=session_id)
             if entry.final_reply:
                 for original in originals:

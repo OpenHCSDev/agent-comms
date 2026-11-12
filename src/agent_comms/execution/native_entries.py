@@ -729,7 +729,7 @@ class MessageEntry(NativeEntry):
 
     def require_tracked_user(self) -> MessageEntry:
         self.require_input_id()
-        if not self.message.is_user_message() or not self.message.input_digest.reported:
+        if not self.message.is_user_message() or not self.message.input_digest.is_reported():
             raise MalformedRecord("Native Pi session has ambiguous tracked user input")
         self.id.require_present()
         Sha256Text.from_text(self.message.input_digest.require())
