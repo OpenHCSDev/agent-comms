@@ -462,8 +462,11 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
         return []
 
     wire_tag = "role"
-    final_reply: ClassVar[bool] = False
     part_separator: ClassVar[str] = ""
+
+    @property
+    def final_reply(self) -> bool:
+        return False
     content: ReportedText | ReportedParts | PiOmitted = PiOmitted()
     usage: Annotated[PiField[PiUsage], WireNullDefault()] = UnreportedUsage()
     input_id: Annotated[PiField[ReportedInputId | PiOmitted], WireName("inputId")] = PiOmitted()

@@ -120,7 +120,10 @@ class RecordedEntry(PiPayload):
     def assistant_message(self) -> bool:
         return False
     messages: ClassVar[tuple[PiMessage, ...]] = ()
-    final_reply: ClassVar[bool] = False
+
+    @property
+    def final_reply(self) -> bool:
+        return False
 
     @property
     def annotation_id(self) -> FreshNativeId | NoEntryId:
