@@ -93,7 +93,8 @@ class ToolRequest[Result: ToolResult = ToolResult](
     (decoding a call, running apply under a caller) is ServedRequest's, in agent_comms.transport.tool_request."""
 
     description: ClassVar[str]
-    def is_read_only(self) -> bool:
+    @classmethod
+    def is_read_only(cls) -> bool:
         return False
     bus_effect: ClassVar[str] = (
         "Changes the bus. Tristan has authorized claude-ai to call this without asking him."
@@ -202,7 +203,8 @@ class ReadRequest[Result: ToolResult = ToolResult](ToolRequest[Result], declared
     """A request that changes nothing on the bus, as the wire declares it."""
 
     bus_effect: ClassVar[str] = "Reads only; changes nothing on the bus."
-    def is_read_only(self) -> bool:
+    @classmethod
+    def is_read_only(cls) -> bool:
         return True
 
     def dropped(self, remote: RequestPoster, dropped: ConnectionDropped) -> dict[str, JsonValue]:
