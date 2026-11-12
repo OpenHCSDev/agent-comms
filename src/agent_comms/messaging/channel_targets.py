@@ -155,7 +155,9 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
         from agent_comms.messaging.bus_tables import AwaitingAnswerSource
         return (BusDisplayIndex, AwaitingAnswerSource)
 
-    needs_channel_state: ClassVar[bool] = False
+    @property
+    def needs_channel_state(self) -> bool:
+        return False
 
     def display_name(self) -> str:
         """The selected destination's name, including an unresolved destination."""
@@ -526,7 +528,9 @@ class ChannelTarget(NamedTarget):
     def display_history(self, views: HistoryViews, project: Checkout) -> ConversationHistoryView:
         return views.channel_history(self, worktree=project)
 
-    needs_channel_state = True
+    @property
+    def needs_channel_state(self) -> bool:
+        return True
 
     def accepts_batch(self, seq: int) -> bool:
         return seq > 0

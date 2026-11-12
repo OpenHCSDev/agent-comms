@@ -3838,7 +3838,9 @@ class HeadVerdict(HeadReview, declared_name=None):
 
     preparation_field: ClassVar[str] = '--head'
     preparation_fix: ClassVar[str] = 'supply the current PR head SHA with --head'
-    accepted_for_order_review: ClassVar[bool] = False
+    @classmethod
+    def accepted_for_order_review(cls) -> bool:
+        return False
 
     def current_head(self, request: PullRequestHead) -> ReadPullRequestHead:
         """The read this decision stands on: an open PR at the reviewed head."""
@@ -3940,7 +3942,9 @@ class QualifiedHeadVerdict(DecidedHeadVerdict):
 
     state = "pending"
     verb = "Qualified"
-    accepted_for_order_review = True
+    @classmethod
+    def accepted_for_order_review(cls) -> bool:
+        return True
 
 
 @dataclass(frozen=True)
@@ -3949,7 +3953,9 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
 
     state = "success"
     verb = "Accepted"
-    accepted_for_order_review = True
+    @classmethod
+    def accepted_for_order_review(cls) -> bool:
+        return True
     preparation_field = GrowthReason.option
     preparation_fix = (f"repeat {GrowthReason.option} 'PATH REASON' for each growing source file; "
                        f'each reason names its file in {GrowthReason.least_words}+ words')
@@ -4033,7 +4039,9 @@ class RejectedHeadVerdict(DecidedHeadVerdict):
     reason: StrikeReason
     state = "failure"
     verb = "Sent back"
-    accepted_for_order_review = True
+    @classmethod
+    def accepted_for_order_review(cls) -> bool:
+        return True
 
     def after_record(self, goals: ProblemGoals, record: HeadReviewRecord) -> None:
         record.order.rejected(goals, record)
@@ -4089,7 +4097,9 @@ class UnrecordedHeadVerdict(HeadVerdict, declared_name=None):
 
 class UnderReviewHeadVerdict(HeadVerdict):
     state = "pending"
-    accepted_for_order_review = True
+    @classmethod
+    def accepted_for_order_review(cls) -> bool:
+        return True
 
     def description(self, reviewer: str, subject: str) -> str:
         return f"Under review by {reviewer} on {subject}"
@@ -4422,7 +4432,7 @@ class RecordOrderHeadVerdict(TodoCommand):
         self.review.order.require_current(current)
         if not current.order.checked().holds_head(self.review.request):
             raise TodoError("The reviewed pull request is not linked to this order.")
-        if not type(self.review.verdict).accepted_for_order_review:
+        if not type(self.review.verdict).accepted_for_order_review():
             allowed = current.order.checked().review_verdicts()
             raise TodoError("This order takes head verdicts: " + ", ".join(
                 member.declared_name for member in allowed))
