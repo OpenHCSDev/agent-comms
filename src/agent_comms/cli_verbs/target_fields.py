@@ -109,7 +109,11 @@ class ChoiceTargetField(TargetField):
 class CatalogTargetField(ChoiceTargetField):
     @property
     def catalog(self) -> type[CatalogConfigOption]:
-        return self.plan.setting(field_codec.Catalog, CatalogConfigOption)
+        return CatalogConfigOption.implementing(self.plan.setting(field_codec.Catalog, CatalogConfigOption))
+
+    @property
+    def description(self) -> str:
+        return self.catalog.declared_field().label
 
     @property
     def editor_declarations(self) -> tuple[object, ...]:

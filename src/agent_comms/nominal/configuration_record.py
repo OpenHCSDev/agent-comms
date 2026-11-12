@@ -11,9 +11,12 @@ class ConfigurationRecord:
     """Project and apply exactly the fields this configuration declares."""
 
     @classmethod
+    def field_values(cls, record: object) -> dict[str, object]:
+        return {plan.name: plan.current(record) for plan in FieldCodec.field_plans(cls)}
+
+    @classmethod
     def capture(cls, record: object) -> Self:
-        return cls(**{plan.name: plan.current(record) for plan in FieldCodec.field_plans(cls)})
+        return cls(**cls.field_values(record))
 
     def applied_to[Record: ConfigurationRecord](self, record: Record) -> Record:
-        return replace(record, **{plan.name: plan.current(self)
-                                  for plan in FieldCodec.field_plans(type(self))})
+        return replace(record, **type(self).field_values(self))
