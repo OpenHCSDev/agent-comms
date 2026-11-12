@@ -1377,6 +1377,9 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
     def decode_editor(self, value):
         return None if value is None else json.loads(value)
 
+    def select_editor[Editor](self, unrestricted: Editor, choices: Editor) -> Editor:
+        return unrestricted
+
     def editor_choices(self) -> tuple[tuple[str, object], ...]:
         raise TypeError("The declared decoder does not offer finite choices")
 
@@ -3177,7 +3180,14 @@ class _ContextDecoder[T](ValueDecoder[T]):
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T: ...
 
 
-class _ChoiceDecoder[T](ValueDecoder[T]):
+class ChoiceEditors:
+    """Finite editor choices shared by scalar and record-family decoders."""
+
+    def select_editor[Editor](self, unrestricted: Editor, choices: Editor) -> Editor:
+        return choices
+
+
+class _ChoiceDecoder[T](ChoiceEditors, ValueDecoder[T]):
     """A finite domain: its command line offers exactly the editor's choices."""
 
     __slots__ = ()
@@ -3836,7 +3846,7 @@ class _PairKeyDictDecoder[K, V](_DictDecoder[K, V]):
 
 
 @dataclass(frozen=True, slots=True)
-class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
+class _FamilyRecordDecoder[Member: DeclaredFamily](ChoiceEditors, _ContextDecoder[Member]):
     """The encoded object carries its member's name under the family tag."""
 
     target: type[Member]

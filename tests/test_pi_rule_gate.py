@@ -210,6 +210,22 @@ def test_the_rules_come_back_once_at_each_declared_share_of_context_left(peer_de
     assert refused(peer_deal)
 
 
+def test_policy_fields_preserve_evidence_and_survive_redealing(peer_deal):
+    peer_deal.start()
+    answer_deal(peer_deal)
+    audit, reads = peer_deal.audit.read_bytes(), peer_deal.dealt_read.read_bytes()
+    settings = RuleGateSettings(read_batch=2, owner_prompts=3, refresh_remaining=(0.5,))
+    peer_deal.configure(settings)
+    assert RuleGateSettings.capture(peer_deal.current()) == settings
+    assert (peer_deal.audit.read_bytes(), peer_deal.dealt_read.read_bytes()) == (audit, reads)
+    assert tuple(point.remaining for point in peer_deal.refreshes) == settings.refresh_remaining
+    peer_deal.renew(StartedDeal())
+    assert RuleGateSettings.capture(peer_deal.current()) == settings
+    with pytest.raises(ValueError):
+        peer_deal.configure(replace(settings, read_batch=0))
+    assert RuleGateSettings.capture(peer_deal.current()) == settings
+
+
 @pytest.mark.parametrize("mode", (StartupDealMode, OffDealMode))
 def test_automatic_redeals_preserve_the_configured_session(peer_deal, mode):
     peer_deal.start()

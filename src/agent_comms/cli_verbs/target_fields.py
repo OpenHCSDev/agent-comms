@@ -24,7 +24,7 @@ class TargetField:
         editor: type[TargetField] = (
             CatalogTargetField
             if field_codec.Catalog.single(plan.annotation)
-            else plan.setting(field_codec.Editor, cls)
+            else plan.setting(field_codec.Editor, plan.value.select_editor(cls, ChoiceTargetField))
         )
         return editor(plan, value)
 
@@ -41,8 +41,12 @@ class TargetField:
         return self.plan.setting(field_codec.Multiline, False)
 
     @property
+    def label(self) -> str:
+        return self.plan.label
+
+    @property
     def description(self) -> str:
-        return self.plan.description
+        return self.plan.setting(field_codec.Description, self.plan.description)
 
     @property
     def editor_default(self) -> JsonValue:
@@ -72,7 +76,7 @@ class TargetField:
 
     def json_schema(self) -> dict[str, JsonValue]:
         return {**self.value_schema(), 'multiline': self.multiline,
-                'description': self.description, 'editor_default': self.editor_default}
+                'label': self.label, 'description': self.description, 'editor_default': self.editor_default}
 
 
 @dataclass(frozen=True)
@@ -112,8 +116,12 @@ class CatalogTargetField(ChoiceTargetField):
         return CatalogConfigOption.implementing(self.plan.setting(field_codec.Catalog, CatalogConfigOption))
 
     @property
-    def description(self) -> str:
+    def label(self) -> str:
         return self.catalog.declared_field().label
+
+    @property
+    def description(self) -> str:
+        return self.catalog.declared_field().setting(field_codec.Description, "")
 
     @property
     def editor_declarations(self) -> tuple[object, ...]:

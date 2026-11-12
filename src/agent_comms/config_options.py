@@ -72,6 +72,7 @@ class CatalogChoice:
     """A catalog value; only the ACP view needs a string for an unset value."""
     name: str
     value: str | None
+    description: str | None = None
 
     @property
     def editor_value(self) -> str:

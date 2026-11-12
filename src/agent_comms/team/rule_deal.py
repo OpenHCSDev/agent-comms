@@ -29,6 +29,7 @@ from typing import Annotated, ClassVar, Self
 
 from annotated_types import Ge, Gt, Lt
 from python_introspect.jsonable import RegisteredClassChoices
+from python_introspect.validation import validate_annotated_dataclass
 
 from agent_comms.execution.context_reading import ContextUsage
 from agent_comms.nominal.configuration_record import ConfigurationRecord
@@ -1132,6 +1133,7 @@ class RuleDeal(State, DealtCalls):
 
     def configure(self, settings: RuleGateSettings) -> None:
         """Change policy without discarding read evidence, the audit, or the current deal."""
+        validate_annotated_dataclass(settings)
         with self.write_guard(self.record):
             self.record.stat()  # Configuration targets an existing session, never fabricates a deal.
             self.publish(settings.applied_to(self.current()))
