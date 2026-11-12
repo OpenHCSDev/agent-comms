@@ -59,7 +59,8 @@ class RuntimeLocation(DeclaredFamily, TranscriptRuntime, affix='Runtime'):
 
     path: str
     _backend: ClassVar[type[AgentBackend]]
-    resumable: ClassVar[bool] = True
+    def is_resumable(self) -> bool:
+        return True
 
     @property
     def backend(self):

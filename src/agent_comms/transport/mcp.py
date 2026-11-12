@@ -208,7 +208,7 @@ class ToolDescription:
     ) -> ToolDescription:
         """The name is the key tools/call dispatches on, so listing and calling share it."""
         return cls(name, tool.label, f"{tool.description} {tool.bus_effect}",
-                   caller.input_schema(tool), ToolAnnotations(tool.read_only_hint))
+                   caller.input_schema(tool), ToolAnnotations(tool.is_read_only()))
 
 
 @dataclass(frozen=True)

@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
 from itertools import dropwhile
-from typing import ClassVar, Self
+from typing import Self
 
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.cli_verbs.context import ContextCliCommand
@@ -26,8 +26,11 @@ class ContextOptionCliCommand(ContextCliCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class SelectedContextCliCommand(ContextOptionCliCommand):
-    context_turn: ClassVar[bool] = True
     turn: int
+
+    @classmethod
+    def context_turn(cls) -> bool:
+        return True
 
     @classmethod
     def selected_arguments(cls, args: argparse.Namespace) -> Self:
