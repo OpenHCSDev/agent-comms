@@ -103,8 +103,10 @@ class NoThreadText(AbsentText, ThreadText):
 class ThreadParent(SubclassUnion, TextChoice, affix="Parent"):
     """The thread this one was forked from, or none."""
 
-    forked: ClassVar[bool]
     own_history: ClassVar[HistoryView]
+
+    @abstractmethod
+    def is_forked(self) -> bool: ...
     """How this thread shows its own history."""
 
     @abstractmethod
@@ -121,8 +123,10 @@ class ThreadParent(SubclassUnion, TextChoice, affix="Parent"):
 @dataclass(frozen=True, slots=True)
 class ForkedParent(GivenText, ThreadParent):
     text: str
-    forked = True
     own_history = ForkOwnHistory()
+
+    def is_forked(self) -> bool:
+        return True
 
     def names(self) -> tuple[str, ...]:
         return (self.text,)
@@ -135,8 +139,10 @@ class ForkedParent(GivenText, ThreadParent):
 class NoParent(AbsentText, ThreadParent):
     """A thread that was registered or created, not forked."""
 
-    forked = False
     own_history = OwnHistory()
+
+    def is_forked(self) -> bool:
+        return False
 
     def names(self) -> tuple[str, ...]:
         return ()
