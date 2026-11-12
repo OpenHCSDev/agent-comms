@@ -209,7 +209,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
         # A recipient has read it whether a person displayed it or a model took it into
         # context; the sender asked who read it, not which of the two paths got there.
         read = sum(1 for item in ordered
-                   if item.displayed_to or item.state.consumed)
+                   if item.displayed_to or item.state.is_consumed())
         counted = ((read, "read"),
                    (sum(item.state.answering for item in ordered), "answering"))
         leading = ordered[0]
@@ -356,7 +356,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
                 state = evidence[source.message.reference].consumed_progress(
                     recipient.recipient_lookup, notification.state)
                 notification = replace(notification, state=state,
-                                       changed=notification.changed or state.consumed)
+                                       changed=notification.changed or state.is_consumed())
                 notification = evidence[source.message.reference].answered(
                     recipient.recipient_lookup, notification
                 )
