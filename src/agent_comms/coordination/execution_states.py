@@ -61,6 +61,9 @@ class ExecutionState(CoordinatorVocabulary, LifecycleState, affix="Execution"):
     def is_retry(self) -> bool:
         return False
 
+    def prepare_start(self, store, snapshot):
+        return snapshot
+
     def require_queued(self) -> None:
         raise IdentityConflict("only queued executions can become pending")
 
@@ -134,6 +137,12 @@ class UnstartedExecution(EngagedExecution, ExecutionState):
 
 
 class QueuedExecution(UnstartedExecution):
+    def prepare_start(self, store, snapshot):
+        return store.mark_pending(
+            snapshot.execution.execution_id,
+            expected_revision=snapshot.execution.revision,
+        ).value
+
     def require_queued(self) -> None:
         pass
 

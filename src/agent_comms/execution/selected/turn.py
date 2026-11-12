@@ -142,11 +142,7 @@ class SelectedAttempt:
         execution_id = participant.batch.execution_id
         if snapshot.execution.execution_id != execution_id:
             raise IdentityConflict("selected attempt differs from its created batch execution")
-        if snapshot.execution.lifecycle.queued:
-            snapshot = store.mark_pending(
-                execution_id,
-                expected_revision=snapshot.execution.revision,
-            ).value
+        snapshot = snapshot.execution.lifecycle.prepare_start(store, snapshot)
         token = prepare_fence_token()
         attempt_ordinal = (snapshot.execution.lifecycle.current_attempt_ordinal or 0) + 1
         started = store.start(
