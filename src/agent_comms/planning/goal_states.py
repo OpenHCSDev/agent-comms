@@ -15,7 +15,9 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 
 @dataclass(frozen=True)
 class PauseSource(DeclaredFamily, affix="Pause"):
-    lifts_on_compliance: ClassVar[bool] = False
+
+    def lifts_on_compliance(self) -> bool:
+        return False
 
     def instruction(self) -> str | None:
         return None
@@ -48,7 +50,8 @@ class ChokeholdPause(PauseSource):
     """The heartbeat held this goal because its owner ignored a vibe check; Core resumes it
     when that owner complies, and nothing else may."""
 
-    lifts_on_compliance = True
+    def lifts_on_compliance(self) -> bool:
+        return True
 
     def instruction(self) -> str:
         return (
@@ -172,7 +175,7 @@ class PausedGoal(OpenGoal, FromOpenGoal):
 
     @property
     def lifts_on_compliance(self) -> bool:
-        return self.source.lifts_on_compliance
+        return self.source.lifts_on_compliance()
 
     @property
     def protected(self) -> bool:
