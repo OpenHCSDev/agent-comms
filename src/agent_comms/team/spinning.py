@@ -25,7 +25,7 @@ class SpinningTeammate(HeldBranchRule, declared_name="spinning_unit"):
         found = []
         for held in branches:
             source = held.source
-            if not source.presence.may_be_active or held.difference.changes_source:
+            if not source.presence.may_be_active() or held.difference.changes_source:
                 continue
             count = OrderToolCallCountRead(
                 source.comms.root, source.thread,
