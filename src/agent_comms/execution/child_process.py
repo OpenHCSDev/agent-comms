@@ -1400,7 +1400,8 @@ class SystemdUserManager(ResidentManager):
 class ChildLifetime(DeclaredFamily, affix="Lifetime"):
     """Whether a launched child may outlive the process that launched it."""
 
-    def is_handoff(self) -> bool:
+    @classmethod
+    def is_handoff(cls) -> bool:
         return False
 
     @classmethod
@@ -1441,7 +1442,8 @@ class DiesWithLauncherLifetime(ChildLifetime):
 class OutlivesLauncherLifetime(ChildLifetime):
     """A resident the launcher hands off, such as a worker, a watcher or a bridge."""
 
-    def is_handoff(self) -> bool:
+    @classmethod
+    def is_handoff(cls) -> bool:
         return True
 
     @classmethod
