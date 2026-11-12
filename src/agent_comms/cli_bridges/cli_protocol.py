@@ -155,7 +155,8 @@ class CoreError(WatchLine, declared_name=None):
     """One-line Core failure; each member owns its source and watch behavior."""
 
     exception_type: ClassVar[builtins.type[BaseException]]
-    retryable: ClassVar[bool] = False
+    def is_retryable(self) -> bool:
+        return False
     error: str
 
     @classmethod
@@ -183,7 +184,9 @@ class CoreError(WatchLine, declared_name=None):
 
 class UnavailableCoreError(CoreError, declared_name="unavailable"):
     exception_type = CoordinationReadUnavailable
-    retryable = True
+
+    def is_retryable(self) -> bool:
+        return True
 
 
 class HeldCoreError(CoreError, declared_name="held"):
