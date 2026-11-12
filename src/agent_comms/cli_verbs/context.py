@@ -3,20 +3,28 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-from typing import ClassVar, Self
+from typing import Self
 
 from agent_comms.cli_verbs.cli_context import ContextSelection, CurrentContextCliCommand
 
 
 @dataclass(frozen=True, kw_only=True)
 class ContextCliCommand(CurrentContextCliCommand):
-    context_imported: ClassVar[bool] = False
-    context_diff: ClassVar[bool] = False
-    context_turn: ClassVar[bool] = False
+    @classmethod
+    def context_imported(cls) -> bool:
+        return False
+
+    @classmethod
+    def context_diff(cls) -> bool:
+        return False
+
+    @classmethod
+    def context_turn(cls) -> bool:
+        return False
 
     @classmethod
     def selection_key(cls) -> ContextSelection:
-        return ContextSelection(cls.context_imported, cls.context_diff, cls.context_turn)
+        return ContextSelection(cls.context_imported(), cls.context_diff(), cls.context_turn())
 
     @classmethod
     def selected_arguments(cls, args: argparse.Namespace) -> Self:

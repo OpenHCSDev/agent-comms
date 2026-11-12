@@ -418,7 +418,7 @@ class ThreadView(ThreadRecord):
 
     @projected(view=PresenceExclude)
     def resumable(self) -> bool:
-        return self.thread.runtime.resumable
+        return self.thread.runtime.is_resumable()
 
     @projected(view=PresenceExclude)
     def last_activity(self) -> float:

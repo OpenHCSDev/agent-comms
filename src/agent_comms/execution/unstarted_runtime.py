@@ -12,7 +12,8 @@ from agent_comms.execution.transcript_sources import ExternalTranscript
 @dataclass(frozen=True)
 class UnstartedRuntime(RuntimeLocation):
     owner: type[AgentBackend]
-    resumable = False
+    def is_resumable(self) -> bool:
+        return False
 
     @property
     def backend(self):
