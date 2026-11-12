@@ -194,8 +194,7 @@ class ContextualProgress(WaitingDelivery, DeliveryProgress):
     """A lifecycle label surrounds the original proof without copying its facts."""
     proof: DeliveryProgress
 
-    @property
-    def consumed(self) -> bool:
+    def is_consumed(self) -> bool:
         return self.proof.is_consumed()
 
     @property
