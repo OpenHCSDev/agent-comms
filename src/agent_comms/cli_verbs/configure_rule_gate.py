@@ -26,10 +26,7 @@ class ThreadRuleGateCliCommand(NamedCliCommand, RuleGateCommand,
         deal = PiThreadGate.of(comms, thread)
         if not deal.record.exists():
             return ()
-        return (cls(name=thread.name, **{
-            plan.name: plan.current(deal.current())
-            for plan in FieldCodec.field_plans(RuleGateSettings)
-        }),)
+        return (cls(name=thread.name, **RuleGateSettings.field_values(deal.current())),)
 
     def deal(self, ctx: Comms) -> RuleDeal:
         return PiThreadGate.of(ctx, ctx.registry.require(self.name))
