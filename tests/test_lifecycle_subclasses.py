@@ -7,6 +7,8 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.agent_events import PromptAccepted
+from agent_comms.coordination.durable_turn import DurableTurn
 from agent_comms.coordination.attempt_states import (
     AbortingAttempt,
     AttemptFailedAttempt,
@@ -36,6 +38,7 @@ from agent_comms.coordination.tables.executions import (
     ReplayAssessments,
 )
 from agent_comms.execution.pi_vocabulary import PendingStopReason
+from agent_comms.nominal.field_codec import InputId
 from test_coordination_store import final_evidence, ready, started
 
 FAILED_SUCCESSOR_SOURCES = (
@@ -56,6 +59,22 @@ FAILED_SUCCESSOR_SOURCES = (
 def test_attempt_failure_successor_accepts_declared_unknown_subclass(source):
     assert source(1).may_become(UnknownOutcomeAttempt())
     assert source.successors().count(UnsuccessfulTerminal) == 1
+
+
+def test_native_prompt_acceptance_and_tool_permission_follow_the_stored_attempt(tmp_path):
+    with ready(tmp_path / "coordination.sqlite3", origin=AcpOrigin) as store:
+        _, fence = started(store)
+        turn = DurableTurn(store, fence, 1, InputId("accepted-input"))
+        assert not turn.model_started
+        assert store.get("exec").require_attempt().lifecycle.tool_claim_open
+        turn.accepted(PromptAccepted())
+        assert turn.current is PromptAcceptedAttempt
+        assert store.get("exec").require_attempt().lifecycle.tool_claim_open
+        turn.advance(ModelRunningAttempt)
+        assert turn.model_started
+        assert store.get("exec").require_attempt().lifecycle.tool_claim_open
+        turn.advance(ToolRunningAttempt)
+        assert store.get("exec").require_attempt().lifecycle.tool_claim_open
 
 
 def test_attempt_transition_table_expands_declared_failure_subclasses():
