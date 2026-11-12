@@ -818,7 +818,7 @@ class Thread(
 
     @property
     def is_fork(self) -> bool:
-        return self.parent.forked
+        return self.parent.is_forked()
 
     def turn_started_by(self, updated_at_ms: int) -> bool:
         """Read the original start only when this decision needs it."""
