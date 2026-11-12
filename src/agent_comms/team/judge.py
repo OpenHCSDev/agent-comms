@@ -459,7 +459,7 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
 
     @classmethod
     def review_allowed(cls, verdicts: tuple[type[HeadVerdict], ...]) -> bool:
-        return cls.verdict.accepted_for_order_review
+        return cls.verdict.accepted_for_order_review()
 
     pr: Annotated[int, Argument(options={"help": "review this PR instead of individual edits"})] = 0
     head: Annotated[str, Argument(options={"help": "the exact reviewed SHA; required with --pr"})] = ""
