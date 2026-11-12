@@ -187,15 +187,19 @@ class UnclaimedWatch(WatchState):
         raise SessionCommandError('Enroll this session before starting its Monitor')
 
 
-class ClaimingWatch(WatchState):
-    """A bridge holds the claim and is publishing its first record: it is serving, so it is
-    neither relaunched nor announced as down, and it has no binding to report yet."""
+class ServingWatch:
+    """A watch that is currently serving: neither relaunched nor announced as down."""
+    __slots__ = ()
 
     def rearm(self, launch: Callable[[], None]) -> bool:
         return False
 
     def announce_absence(self, announce: Callable[[], None]) -> bool:
         return False
+
+
+class ClaimingWatch(ServingWatch, WatchState):
+    """A bridge holds the claim and is publishing its first record."""
 
 
 @dataclass(frozen=True)
@@ -227,10 +231,7 @@ class RecordedWatch(WatchState):
         serve.launch_record(self.claim, self.record, request)
 
 
-class LiveWatch(RecordedWatch, HeldSocketWatch):
-    def rearm(self, launch: Callable[[], None]) -> bool:
-        """The kernel-held bridge is already serving; do not launch another."""
-        return False
+class LiveWatch(ServingWatch, RecordedWatch, HeldSocketWatch):
 
     def reconnect(self, serve: agent_comms.cli_bridges.shared.Serve, request: agent_comms.cli_bridges.monitor.SessionRequest) -> None:
         raise SessionCommandError(
@@ -246,10 +247,6 @@ class LiveWatch(RecordedWatch, HeldSocketWatch):
                 f'This session is already bound to `{" ".join(self.record.command)}`, which still '
                 'holds its claim: a live watch never hands it to a second command. Stop that '
                 'Monitor or process first, then run the command you want.')
-
-    def announce_absence(self, announce: Callable[[], None]) -> bool:
-        """A held claim's absent socket is an install's swap, not an outage."""
-        return False
 
     def name_wait(self, announce: Callable[[], None]) -> bool:
         """Name a held claim's replacement once through the reader's protocol."""
