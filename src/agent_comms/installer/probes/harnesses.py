@@ -16,7 +16,7 @@ from agent_comms.installer.harness_install import Harness
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 from agent_comms.nominal.field_codec import AbsolutePathText, Argument, PathText
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.registry_document import NoTeamProject, RegisteredTeamProject, TeamProject
+from agent_comms.registry.registry_document import TeamProject
 from agent_comms.registry.threads import ExternalThread
 from agent_comms.team.config import GivenRepos, KeptRepos, RepoChoice
 
@@ -58,9 +58,8 @@ class HarnessInstallation:
         runtime (HarnessesProbe)."""
         home = Path.home()
         snapshot = ctx.registry.snapshot()
-        project = snapshot.team_project.reconfigured(self.repos)
-        if isinstance(project, NoTeamProject):
-            project = GivenRepos((self.project,)).founded(project, RegisteredTeamProject)
+        repos = self.repos if snapshot.team_project.repository_names() else GivenRepos((self.project,))
+        project = snapshot.team_project.reconfigured(repos)
         if project != snapshot.team_project:
             ctx.registry.set_team_project(project)
         return InstallResult(
