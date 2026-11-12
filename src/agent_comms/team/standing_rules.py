@@ -246,14 +246,22 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
     @cache
     def compiled_comparison(cls) -> None:
         FieldCodec.compile_comparison(cls)
-    team_disposes: ClassVar[bool] = True
-    urgent: ClassVar[bool] = False
-    owner_flagged: ClassVar[bool] = False
+    @classmethod
+    def team_disposes(cls) -> bool:
+        return True
+
+    @classmethod
+    def is_urgent(cls) -> bool:
+        return False
+
+    @classmethod
+    def is_owner_flagged(cls) -> bool:
+        return False
 
     @classmethod
     def disposes_subjects(cls, subjects: tuple[HeartbeatSubject, ...]) -> bool:
         """A teammate verb can dispose of this rule only through its declared subjects."""
-        return cls.team_disposes and bool(subjects)
+        return cls.team_disposes() and bool(subjects)
 
     @classmethod
     def cleared_by(cls, verb: type[ClearingVerb]) -> None:
@@ -390,7 +398,9 @@ class RetiredStandingRule(DefaultExternalName, StandingRule):
     is history: it scans nothing, is never urgent, and no verb disposes of it, so it is never
     on the board. Deleting a rule therefore never makes a stored notice undecodable."""
 
-    team_disposes = False
+    @classmethod
+    def team_disposes(cls) -> bool:
+        return False
 
     @classmethod
     def scan_observed(cls, comms: Comms,
@@ -412,7 +422,9 @@ class FamilyScan(StandingRule, declared_name=None):
 class CoreActsStandingRule(StandingRule, declared_name=None):
     """Core's own enforce acts on this line, so no teammate verb disposes of it and it locks none."""
 
-    team_disposes = False
+    @classmethod
+    def team_disposes(cls) -> bool:
+        return False
 
 
 class IndependentStandingRule(StandingRule, declared_name=None):
@@ -1487,7 +1499,9 @@ class LocatedHuntDue(HuntDue):
 class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     """An owner directive recorded on an open request, past its deadline with no order since."""
 
-    owner_flagged: ClassVar[bool] = True
+    @classmethod
+    def is_owner_flagged(cls) -> bool:
+        return True
 
     request: OwnerRequestId
     directive: RequestDirective

@@ -153,11 +153,11 @@ class RulePing(Ping):
 
     @property
     def urgent(self) -> bool:
-        return self.rule.urgent
+        return self.rule.is_urgent()
 
     @property
     def owner_flagged(self) -> bool:
-        return self.rule.owner_flagged
+        return self.rule.is_owner_flagged()
 
     @property
     def alarm_kind(self) -> type[StandingRule]:
