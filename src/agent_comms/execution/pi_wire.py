@@ -137,8 +137,10 @@ class PiReported[T](SingleFieldValue):
     """A value Pi sent in one of its optional fields; PiOmitted answers the same questions."""
 
     __slots__ = ()
-    reported: ClassVar[bool] = True
     value: T
+
+    def is_reported(self) -> bool:
+        return True
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
@@ -166,7 +168,8 @@ class PiReported[T](SingleFieldValue):
 class PiOmitted(NullMember, NativeResponseErrorRead):
     """Pi left an optional field out or sent null; it goes back out the same way."""
 
-    reported: ClassVar[bool] = False
+    def is_reported(self) -> bool:
+        return False
 
     @property
     def message_parts(self) -> tuple[PiContent, ...]:

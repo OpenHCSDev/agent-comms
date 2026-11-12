@@ -627,7 +627,7 @@ class UserMessage(PiMessage):
         return "\n".join(text for part in self.parts for text in part.text_parts())
 
     def matches_display(self, digest: SentTextDigest) -> bool:
-        return self.content.reported and digest.matches(self.original_text)
+        return self.content.is_reported() and digest.matches(self.original_text)
 
     def display_parts(self, text: str) -> tuple[PiContent, ...]:
         return (

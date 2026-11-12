@@ -207,7 +207,9 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
 class NativeRequestTools(GlobalCommsExtension, ToolDeclaration, declared_name=None):
     """Schema-bearing request declarations form the native catalog."""
 
-    loads_tools: ClassVar[bool] = False
+    @classmethod
+    def loads_tools(cls) -> bool:
+        return False
 
     @classmethod
     @abstractmethod

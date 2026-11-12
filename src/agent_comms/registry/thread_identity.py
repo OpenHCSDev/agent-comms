@@ -178,8 +178,9 @@ class UnreportedTools(ObservedTools):
 @dataclass(frozen=True, slots=True)
 class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     value_flag: ClassVar[str] = "--thread-incarnation"
-    hands_out_released_work: ClassVar[bool] = False
-    """Whether work this actor released goes to an idle unit without a teammate turn."""
+    def hands_out_released_work(self) -> bool:
+        """Whether work this actor released goes to an idle unit without a teammate turn."""
+        return False
     name: Annotated[str, DisclosureIdentity()]
 
     @property
@@ -437,7 +438,9 @@ class CoreWatcherIncarnation(BirthlessIncarnation):
     """
 
     WIRE_BIRTH: ClassVar[float] = -2.0
-    hands_out_released_work: ClassVar[bool] = True
+
+    def hands_out_released_work(self) -> bool:
+        return True
 
     def acts_for(self, creator: ThreadIncarnation) -> bool:
         """Core maintains shared work, but owns no colleague's assignment or receipts."""
