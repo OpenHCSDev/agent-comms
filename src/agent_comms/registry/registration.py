@@ -193,7 +193,7 @@ class Registration(
         with self.store.editing() as edit:
             parent = edit.document.require(parent_name)
             name = next(slot for slot in role.slot_names(parent.name)
-                        if not edit.document.taken(slot) or edit.document.status(slot).vacant)
+                        if not edit.document.taken(slot) or edit.document.status(slot).is_vacant())
             return self._child_in(edit, name, parent, SubagentThread, goals)
 
     def _child_in(

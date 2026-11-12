@@ -31,7 +31,8 @@ from agent_comms.transport.tool_result import ToolResult
 class WireExportFormat(DeclaredFamily, affix="Format"):
     """A representation owns both header and row rendering."""
 
-    importable: ClassVar[bool] = False
+    def is_importable(self) -> bool:
+        return False
 
     def __str__(self) -> str:
         return FieldCodec.encode(type(self))
@@ -63,7 +64,8 @@ class SelectableWireExportFormat(WireExportFormat):
 
 @dataclass(frozen=True)
 class JsonlFormat(SelectableWireExportFormat):
-    importable: ClassVar[bool] = True
+    def is_importable(self) -> bool:
+        return True
     row_prefix: ClassVar[bytes] = b'{"record":"message","message":'
     row_suffix: ClassVar[bytes] = b'}\n'
 
@@ -583,7 +585,7 @@ class WireTranscriptExporter:
     def _header(self) -> bytes:
         return self.format.header(WireExportHeader(
             schema=self.SCHEMA, version=self.VERSION, format=type(self.format),
-            importable=self.format.importable, scope=self.scope, limit=self.limit,
+            importable=self.format.is_importable(), scope=self.scope, limit=self.limit,
             boundary=self.boundary,
         ))
 

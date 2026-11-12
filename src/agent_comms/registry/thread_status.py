@@ -99,12 +99,14 @@ class ThreadStatus(
     def is_receiving(self) -> bool:
         return False
 
-    # Whether the thread has left every new audience and presence; only an archive has.
-    archived: ClassVar[bool] = False
-    # Whether a role slot in this lifecycle may take a new occupant: no one holds it now.
-    vacant: ClassVar[bool] = False
-    # Whether this row's session still runs in its recorded process, keeping that host alive.
-    holds_process: ClassVar[bool] = False
+    def is_archived(self) -> bool:
+        return False
+
+    def is_vacant(self) -> bool:
+        return False
+
+    def holds_process(self) -> bool:
+        return False
 
     def require_hold_consent(self, require_consent: Callable[[], None]) -> None:
         """A thread that can still act owns the work it holds: changing it needs its consent."""
@@ -250,7 +252,8 @@ class HostBoundPresence:
     """A session still running in the recorded process: it keeps that host alive, and a
     restart retires and relaunches it while the process lives."""
 
-    holds_process: ClassVar[bool] = True
+    def holds_process(self) -> bool:
+        return True
 
     def restart_candidates(self, thread: PresenceThread) -> tuple[PresenceThread, ...]:
         return thread.role.executor(thread) if thread.process_alive else ()
@@ -379,7 +382,9 @@ class OrphansHolds:
 class StoppedPresence(Visible, ThreadStatus, declared_name=None):
     def is_stopped(self) -> bool:
         return True
-    vacant = True
+
+    def is_vacant(self) -> bool:
+        return True
 
     def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
         """Stopped never keeps a process binding, so a stored stop still bound is a fence
@@ -499,8 +504,12 @@ class ServiceThreadStatus(PublishingPresence, ThreadStatus):
 
 
 class ArchivedThreadStatus(OrphansHolds, ThreadStatus):
-    archived = True
-    vacant = True
+
+    def is_archived(self) -> bool:
+        return True
+
+    def is_vacant(self) -> bool:
+        return True
 
     def in_view(self, visibility: RosterVisibility) -> bool:
         return visibility.archived

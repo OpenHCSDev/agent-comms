@@ -257,7 +257,7 @@ class OwnerLifecycle:
                 refusal = RelationViolationError("Only visible agent threads can be started.")
                 thread.role.require_executable(refusal)
                 status.require_visible(str(refusal))
-                if status.holds_process and thread.process_alive:
+                if status.holds_process() and thread.process_alive:
                     status.require_active("Stopped owner session has not retired yet.")
                     results.append(OwnerStartResult(thread.name, thread.require_process().pid, False))
                     continue

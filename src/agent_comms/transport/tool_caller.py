@@ -194,7 +194,7 @@ class SubagentCaller(ThreadCaller):
         """A child that has stopped is archived, so no ended child stays subscribed; the next
         declaration of the same name redeclares onto it and keeps its history, and a child
         already archived has already ended."""
-        if comms.registry.status(self.name).archived:
+        if comms.registry.status(self.name).is_archived():
             return
         comms.registry.require_member(self.name, SubagentThread)
         self.leaving(comms)

@@ -430,7 +430,7 @@ class HistoryViews(RelationshipSource):
                 except UnknownChannelError:
                     retired.add(name)
                 else:
-                    if channel.archived:
+                    if channel.is_archived():
                         retired.add(name)
         return RetiredViews(
             frozenset(thread for thread in threads if not thread.current(snapshot)),
