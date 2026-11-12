@@ -1,0 +1,26 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "keep-live-external-activity",
+      "operations": [
+        {
+          "operation": "insert_after_target",
+          "file_path": "/home/ts/wt/codex-parallel--P182/src/agent_comms/registry/threads.py",
+          "target_qualname": "ExternalThread.presentation",
+          "source": "    def holds_activity(self, status: ThreadStatus) -> bool:\n        \"\"\"A reading bridge reports when work ends; elapsed time cannot declare it idle.\"\"\"\n        return status.is_receiving()\n"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-parallel--P182/src/agent_comms/registry/threads.py",
+          "target_qualname": "SubagentThread",
+          "replacements": [
+            {
+              "old_source": "    def holds_activity(self, status: ThreadStatus) -> bool:\n        \"\"\"The occupied registration lasts until SubagentStop or SessionEnd retires it.\"\"\"\n        return status.is_receiving()\n\n",
+              "new_source": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -895,6 +895,10 @@ class ExternalThread(Thread):
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
         return status.external_presentation(self.process_identity, ordinary)
 
+    def holds_activity(self, status: ThreadStatus) -> bool:
+        """A reading bridge reports when work ends; elapsed time cannot declare it idle."""
+        return status.is_receiving()
+
 
 class ServiceThread(NoChannelInbox, Thread):
     """A platform publisher has neither a prompt executor nor a CLI bridge."""
@@ -911,10 +915,6 @@ class SubagentThread(ExternalThread, declared_name="subagent_execution"):
 
     __slots__ = ()
     required_refusal = "This thread is not a declared subagent."
-
-    def holds_activity(self, status: ThreadStatus) -> bool:
-        """The occupied registration lasts until SubagentStop or SessionEnd retires it."""
-        return status.is_receiving()
 
     def serving_its_own_session(self) -> ExternalThread:
         """A child works inside its parent's turn and never binds a process of its own, so one
