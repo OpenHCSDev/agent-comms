@@ -537,7 +537,9 @@ class AwaitingApplicationRun(ReadyForApplication, NeedsTeamAttention, TeammateSt
 
     question = "installed. did its holder actually run it yet?"
     action = "its holder runs the application proof on the installed build; close it on its evidence"
-    team_disposes = False
+    @classmethod
+    def team_disposes(cls) -> bool:
+        return False
 
     @classmethod
     def derive(cls, source: TeammateObservation) -> Iterator[Self]:

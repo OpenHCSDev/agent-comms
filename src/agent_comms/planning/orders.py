@@ -3257,7 +3257,8 @@ class OpenTodo:
 
 class TodoState(DeclaredFamily, affix="TodoState"):
 
-    def is_open(self) -> bool:
+    @classmethod
+    def is_open(cls) -> bool:
         return False
 
     @classmethod
@@ -3297,7 +3298,8 @@ class TodoState(DeclaredFamily, affix="TodoState"):
 
 class OpenTodoState(OpenTodo, TodoState):
 
-    def is_open(self) -> bool:
+    @classmethod
+    def is_open(cls) -> bool:
         return True
 
     @classmethod
@@ -3307,7 +3309,8 @@ class OpenTodoState(OpenTodo, TodoState):
 
 class BlockedTodoState(OpenTodo, TodoState):
 
-    def is_open(self) -> bool:
+    @classmethod
+    def is_open(cls) -> bool:
         return True
 
 
