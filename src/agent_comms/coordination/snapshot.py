@@ -312,7 +312,7 @@ class RecoverySnapshot:
         """Release this one native attempt only when every original route settled."""
         from agent_comms.coordination.tables.executions import CurrentExecutions
 
-        if not all(row.lifecycle.published for row in self.require_wire_responses()):
+        if not all(row.lifecycle.is_published() for row in self.require_wire_responses()):
             return
         attempt = self.require_current_attempt()
         outcome = SucceededAttempt()

@@ -546,7 +546,7 @@ class DeliveredInput(QueuedInput):
         """
         turn = await inputs.effects.turns.active_backend_turn(session_id)
         # Only the started member owns both the inbox and its original input.
-        if not turn.has_source:
+        if not turn.has_source():
             return
         inbox = turn.require_inbox()
         store_path = CoordinationStore.path_in(inputs.comms.root)

@@ -40,28 +40,28 @@ from agent_comms.projects.change_report import FileLine, NoSourceReference
 
 def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
     state = DrainedSession(identifier=AcpSessionId("drain"))
-    assert not state.turn_open() and not state.turn.has_source
+    assert not state.turn_open() and not state.turn.has_source()
     with pytest.raises(KeyError):
         state.require_inbox()
     state.to_turn(SendNow((InputId.mint(),)))
     inbox = state.open_inbox()
     assert state.open_inbox() is inbox and inbox.empty()
-    assert state.turn_open() and not state.turn.has_source
+    assert state.turn_open() and not state.turn.has_source()
     with pytest.raises(KeyError):
         state.require_first_source()
     original = SelectedOriginalInput.answering(
         "original input", TurnGoalPermission(InactiveGoalPermission()))
     state.capture_first_source(original)
-    assert state.turn.has_source and state.require_first_source() is original
+    assert state.turn.has_source() and state.require_first_source() is original
     item = SendNow((InputId.mint(),))
     state.to_turn(item)
     assert inbox.get_nowait() is item
     # A duplicate/stale cleanup cannot retire the next turn's inbox or source.
-    assert not state.retire_turn(TurnInbox()).is_open
+    assert not state.retire_turn(TurnInbox()).is_open()
     assert state.require_inbox() is inbox and state.require_first_source() is original
     retired = state.retire_turn(inbox)
     assert retired.require_source() is original
-    assert not state.turn_open() and not state.turn.has_source
+    assert not state.turn_open() and not state.turn.has_source()
     assert state.open_inbox() is not inbox
 
 

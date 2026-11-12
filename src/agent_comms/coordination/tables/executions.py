@@ -124,7 +124,7 @@ class WireOrigin(ExecutionProvenance):
 
     @classmethod
     def retry_authorized(cls, obligations: tuple[ResponseObligation, ...]) -> bool:
-        return bool(obligations) and all(row.lifecycle.retryable for row in obligations)
+        return bool(obligations) and all(row.lifecycle.is_retryable() for row in obligations)
 
     @classmethod
     def require_obligation(cls) -> None:

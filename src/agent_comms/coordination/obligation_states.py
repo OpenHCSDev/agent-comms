@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from agent_comms.coordination.errors import IdentityConflict, CoordinationError
 from agent_comms.coordination.reason_codes import NoReasonCode
@@ -23,29 +23,40 @@ class Unpublished(NullMember):
     """An obligation has no publication acknowledgement until it is published."""
 
 
+class Retryable:
+    __slots__ = ()
+
+    def is_retryable(self) -> bool:
+        return True
+
+
+class AllowsIntent:
+    __slots__ = ()
+
+
+class RequiresIntent(AllowsIntent):
+    __slots__ = ()
+
+
+class Published:
+    __slots__ = ()
+
+
+class Publishing(RequiresIntent):
+    __slots__ = ()
+
+
 @dataclass(frozen=True)
 class ResponseState(CoordinatorVocabulary, LifecycleState, affix="Response"):
-    retryable: ClassVar[bool] = False
-    allows_intent: ClassVar[bool] = False
-    requires_intent: ClassVar[bool] = False
-    published: ClassVar[bool] = False
-    publishing: ClassVar[bool] = False
 
     @classmethod
     def sql_vocabulary(cls) -> dict[str, str]:
-        members = cls.members_with(cls)
         return dict(
             response_names=cls.sql_values(cls.names()),
             successful_response_names=cls.sql_members(cls.members_with(Successful)),
-            retryable_response_names=cls.sql_members(
-                member for member in members if member.retryable
-            ),
-            intent_response_names=cls.sql_members(
-                member for member in members if member.allows_intent
-            ),
-            required_intent_response_names=cls.sql_members(
-                member for member in members if member.requires_intent
-            ),
+            retryable_response_names=cls.sql_members(cls.members_with(Retryable)),
+            intent_response_names=cls.sql_members(cls.members_with(AllowsIntent)),
+            required_intent_response_names=cls.sql_members(cls.members_with(RequiresIntent)),
         )
 
     @property
@@ -74,15 +85,21 @@ class ResponseState(CoordinatorVocabulary, LifecycleState, affix="Response"):
     ) -> None:
         """Only a deferred response needs to reengage."""
 
+    def is_retryable(self) -> bool:
+        return False
+
+    def is_published(self) -> bool:
+        return False
+
     def require_nonpublication(self) -> None:
-        if not self.retryable:
-            raise IdentityConflict("wire completion requires nonpublication obligation")
+        raise IdentityConflict("wire completion requires nonpublication obligation")
+
+    def validate_intent(self, intent) -> None:
+        if intent is not None:
+            raise CoordinationError("publication intent is invalid for obligation state")
 
     def validate_publication(self, intent, acknowledgement) -> None:
-        if intent is not None and not self.allows_intent:
-            raise CoordinationError("publication intent is invalid for obligation state")
-        if intent is None and self.requires_intent:
-            raise CoordinationError("publishing and published obligations require intent")
+        self.validate_intent(intent)
         self.validate_acknowledgement(acknowledgement)
         if acknowledgement is not None:
             intent.validate_acknowledgement(acknowledgement)
@@ -92,8 +109,10 @@ class ResponseState(CoordinatorVocabulary, LifecycleState, affix="Response"):
             raise CoordinationError("publication acknowledgement exists iff published")
 
 
-class PendingResponse(Pending, ResponseState):
-    retryable = True
+class PendingResponse(Retryable, Pending, ResponseState):
+
+    def require_nonpublication(self) -> None:
+        pass
 
     def require_preparation(self) -> None:
         pass
@@ -103,10 +122,11 @@ class PendingResponse(Pending, ResponseState):
         return PublishingResponse, DeferredResponse, SilentResponse, FailedResponse
 
 
-class PublishingResponse(ResponseState):
-    publishing = True
-    allows_intent = True
-    requires_intent = True
+class PublishingResponse(Publishing, ResponseState):
+
+    def validate_intent(self, intent) -> None:
+        if intent is None:
+            raise CoordinationError("publishing and published obligations require intent")
 
     def require_publishing(self) -> None:
         pass
@@ -119,8 +139,10 @@ class PublishingResponse(ResponseState):
         return PublishedResponse, FailedResponse
 
 
-class DeferredResponse(Deferred, ResponseState):
-    retryable = True
+class DeferredResponse(Retryable, Deferred, ResponseState):
+
+    def require_nonpublication(self) -> None:
+        pass
 
     @classmethod
     def resume_response(
@@ -142,16 +164,16 @@ class DeferredResponse(Deferred, ResponseState):
 
 
 @dataclass(frozen=True)
-class PublishedResponse(Successful, ResponseState):
+class PublishedResponse(Published, RequiresIntent, Successful, ResponseState):
     message_id: MessageId
     seq: int
-    allows_intent = True
-    requires_intent = True
-    published = True
 
     def __post_init__(self):
         if self.seq <= 0:
             raise ValueError("receipt_seq must be positive")
+
+    def is_published(self) -> bool:
+        return True
 
     @property
     def published_message_id(self):
@@ -160,6 +182,10 @@ class PublishedResponse(Successful, ResponseState):
     @property
     def publication_seq(self):
         return self.seq
+
+    def validate_intent(self, intent) -> None:
+        if intent is None:
+            raise CoordinationError("publishing and published obligations require intent")
 
     def published_reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
@@ -175,5 +201,7 @@ class SilentResponse(Successful, ResponseState):
     pass
 
 
-class FailedResponse(Failed, Terminal, ResponseState):
-    allows_intent = True
+class FailedResponse(AllowsIntent, Failed, Terminal, ResponseState):
+
+    def validate_intent(self, intent) -> None:
+        pass
