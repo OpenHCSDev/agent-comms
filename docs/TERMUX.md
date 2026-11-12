@@ -1,5 +1,7 @@
 # Toad Comms in Termux
 
+For Android's built-in Debian VM, use the [native Terminal installer](ANDROID-TERMINAL.md).
+
 Paste into Termux:
 
 ```sh
@@ -13,7 +15,8 @@ toad-comms
 ```
 
 Toad runs locally on Android. The installer upgrades Termux, installs the
-dependencies, and creates the `toad-comms` command. Your existing Tailscale app
+dependencies, and creates the `toad-comms` command. It shares its source update,
+checks and launcher with the native Terminal installer. Your existing Tailscale app
 handles the network.
 
 With Termux:Widget installed, open the **Toad Comms** shortcut in `~/.shortcuts`.

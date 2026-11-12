@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installed under toad-comms/bin; the installer supplies Termux's actual shebang.
+# Installed under toad-comms/bin; the installer supplies the host's actual shebang.
 set -euo pipefail
 installation="$(dirname "$(dirname "$(readlink -f "$0")")")"
 if (( $# == 0 )); then
