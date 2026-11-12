@@ -40,7 +40,6 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     Argument,
     Catalog,
-    Description,
     FieldCodec,
     NullMember,
     RegistrationPolicy,
@@ -86,14 +85,12 @@ from agent_comms.registry.thread_identity import (
     TurnIdentity,
     UnobservedTools,
 )
-from agent_comms.registry.thread_incarnation_read import ReadsThreadIncarnation
 from agent_comms.registry.thread_model import (
     CatalogSelection,
     DeclaredModel,
     ModelSelection,
     NamedModel,
     ThreadModel,
-    UndeclaredModel,
     UnselectedModel,
 )
 from agent_comms.registry.thread_presentation import (
@@ -993,9 +990,7 @@ def current_thread(registry) -> Thread:
 # Thread's backend field is the lookup boundary. Declare both implementations
 # after the record graph, then reject incomplete declarations before any lookup.
 # noqa: E402, F401
-from agent_comms import pi_native_backend
 
 # noqa: E402, F401
-from agent_comms.execution import pi_durable_backend
 
 AgentBackend.seal()

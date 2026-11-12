@@ -21,7 +21,6 @@ from collections.abc import (
     Iterator,
     Mapping,
     MutableMapping,
-    Sequence,
 )
 from contextvars import ContextVar
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
@@ -60,7 +59,7 @@ from pydantic_core import core_schema
 from python_introspect import declared_field_label
 from typing_extensions import TypeAliasType, TypeForm
 
-from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMeta
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.json_schema import JsonScalar, JsonSchemaOwner
 from agent_comms.nominal.sealed import Sealed
 

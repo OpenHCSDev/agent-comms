@@ -8,7 +8,6 @@ from agent_comms.cli_verbs.cli_command import TargetActionCommand
 from agent_comms.cli_verbs.rule_gate import RuleGateCommand, RuleGateConfiguredResult
 from agent_comms.comms import Comms
 from agent_comms.messaging.channel_targets import SurroundingChannel
-from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.catalog_document import CatalogAccess
 from agent_comms.registry.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread

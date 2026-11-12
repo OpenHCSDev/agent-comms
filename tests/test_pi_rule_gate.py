@@ -43,7 +43,6 @@ from agent_comms.team.rule_deal import (
     StartupDealMode,
     Unaudited,
     Unmeant,
-    Unread,
 )
 from agent_comms.transport.native_tool_call import CodingCall
 from agent_comms.transport.native_tools import McpToolCall, NativeToolDeclaration, ReadTool

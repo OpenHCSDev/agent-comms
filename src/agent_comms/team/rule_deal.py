@@ -35,7 +35,6 @@ from agent_comms.execution.context_reading import ContextUsage
 from agent_comms.nominal.configuration_record import ConfigurationRecord
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
-    Argument,
     Description,
     FieldCodec,
     MalformedRecord,

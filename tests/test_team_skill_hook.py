@@ -61,7 +61,6 @@ from agent_comms.team.rule_deal import (
     SessionAudit,
     StartedDeal,
     StartupDealMode,
-    Unread,
     UnstampedCompactionDeal,
 )
 from agent_comms.team.rule_file import RuleFile

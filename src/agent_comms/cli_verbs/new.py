@@ -8,7 +8,7 @@ from typing import Annotated, ClassVar, Self
 from agent_comms.cli_verbs.cli_command import CreatesThread, TargetActionCommand
 from agent_comms.cli_verbs.cli_commands import NameArgument, ThreadCreatedResult, _tag_choice_text
 from agent_comms.comms import Comms
-from agent_comms.config_options import ConfigOptions, ModelConfigOption, ThinkingLevelConfigOption
+from agent_comms.config_options import ConfigOptions
 from agent_comms.execution.pi_vocabulary import ThinkingLevelField
 from agent_comms.nominal.field_codec import (
     Argument,

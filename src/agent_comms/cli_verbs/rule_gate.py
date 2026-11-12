@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import Annotated
 
 from agent_comms.cli_verbs.cli_command import CliCommand
-from agent_comms.cli_verbs.cli_result import CliResult, TargetEditResult
+from agent_comms.cli_verbs.cli_result import TargetEditResult
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, PathText, RecordMember
-from agent_comms.team.rule_deal import DealMode, RuleDeal, RuleGateSettings, SessionRuleDeal
+from agent_comms.team.rule_deal import RuleDeal, RuleGateSettings, SessionRuleDeal
 
 
 @dataclass(frozen=True)
