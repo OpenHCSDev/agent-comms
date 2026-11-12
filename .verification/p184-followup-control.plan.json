@@ -1,0 +1,24 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "followup-control-use-original-current-answer",
+      "operations": [
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-parallel--P182/tests/test_current_input_origin.py",
+          "target_qualname": "test_original_human_followup_survives_forwarding_reservation_and_native_disposition",
+          "replacements": [
+            {
+              "old_source": "assert inputs.settle_unbound((key,)).lookup(key).has_started",
+              "new_source": "assert inputs.settle_unbound((key,)).lookup(key).counts_as_started()"
+            },
+            {
+              "old_source": "assert terminal.has_started and terminal.source_text == command.user_text",
+              "new_source": "assert terminal.counts_as_started() and terminal.source_text == command.user_text"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

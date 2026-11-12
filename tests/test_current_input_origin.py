@@ -155,10 +155,10 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     )
     # Existing terminal settlement never rewrites a started original as
     # unsent or grants a replay; the native completion owns that.
-    assert inputs.settle_unbound((key,)).lookup(key).has_started
+    assert inputs.settle_unbound((key,)).lookup(key).counts_as_started()
     terminal = stored_inputs(inputs.root).lookup(key)
     assert terminal.origin == origin
-    assert terminal.has_started and terminal.source_text == command.user_text
+    assert terminal.counts_as_started() and terminal.source_text == command.user_text
     assert terminal.origin.retained_fact(terminal).for_owner(
         comms.registry.require("beta"), comms.registry.snapshot()
     ) == CurrentHumanInputTaskFact(terminal)
