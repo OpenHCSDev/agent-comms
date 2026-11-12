@@ -8,7 +8,7 @@ from typing import Annotated, ClassVar, Self
 from agent_comms.cli_verbs.cli_command import CreatesThread, TargetActionCommand
 from agent_comms.cli_verbs.cli_commands import NameArgument, ThreadCreatedResult, _tag_choice_text
 from agent_comms.comms import Comms
-from agent_comms.config_options import ConfigOptions, ModelConfigOption, ThinkingLevelConfigOption
+from agent_comms.config_options import ConfigOptions
 from agent_comms.execution.pi_vocabulary import ThinkingLevelField
 from agent_comms.nominal.field_codec import (
     Argument,
@@ -22,6 +22,7 @@ from agent_comms.projects.checkouts import Checkout, LaunchCheckout
 from agent_comms.registry.native_settings import NativeThreadDefaults
 from agent_comms.registry.thread_management import InheritedTags, NewThreadSpec, TagChoice
 from agent_comms.registry.thread_model import CatalogSelection, ThreadModel
+from agent_comms.registry.thread_settings import ModelSetting, ThinkingSetting
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -45,11 +46,11 @@ class NewThreadCliCommand(
         Argument(flags=("--project",)),
     ]
     model: Annotated[
-        ThreadModel, Catalog(ModelConfigOption), Argument(flags=("--model",)),
+        ThreadModel, Catalog(ModelSetting), Argument(flags=("--model",)),
     ] = NativeThreadDefaults.model
     thinking_level: Annotated[
         ThinkingLevelField,
-        Catalog(ThinkingLevelConfigOption),
+        Catalog(ThinkingSetting),
         Argument(flags=("--thinking-level",)),
     ] = NativeThreadDefaults.thinking_level
 

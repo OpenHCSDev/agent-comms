@@ -29,9 +29,16 @@ from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.watched import FileSource
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
+from agent_comms.nominal.field_codec import AcpSessionId, Description, FieldCodec, FieldPlan
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_model import CatalogSelection, ThreadModel
+from agent_comms.registry.thread_settings import (
+    ConfigurationSlot,
+    ModelSetting,
+    ServiceTierSetting,
+    ThinkingSetting,
+    ThreadSettings,
+)
 from agent_comms.registry.threads import ChosenServiceTier, NextTurnConfiguration, Thread
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.transport.project_request import ProjectRuntimeRequest
@@ -65,6 +72,7 @@ class CatalogChoice:
     """A catalog value; only the ACP view needs a string for an unset value."""
     name: str
     value: str | None
+    description: str | None = None
 
     @property
     def editor_value(self) -> str:
@@ -86,12 +94,26 @@ class ConfigurationChanges[Configuration](ABC):
 
 
 class ConfigOption(DeclaredFamily, affix="ConfigOption"):
-    title: ClassVar[str]
-    description: ClassVar[str]
     category: ClassVar[str]
 
-    @abstractmethod
-    def current_value(self, thread: CatalogSelection) -> str | None: ...
+    @classmethod
+    def declared_field(cls) -> FieldPlan:
+        selected, = (plan for plan in FieldCodec.field_plans(ThreadSettings)
+                     if any(issubclass(cls, slot.value)
+                            for slot in ConfigurationSlot.single(plan.annotation)))
+        return selected
+
+    @property
+    def title(self) -> str:
+        return self.declared_field().label
+
+    @property
+    def description(self) -> str:
+        return self.declared_field().setting(Description, "")
+
+    def current_value(self, thread: CatalogSelection) -> str | None:
+        plan = self.declared_field()
+        return FieldCodec.decode(str | None, plan.value.encode(plan.current(thread)))
 
     @abstractmethod
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]: ...
@@ -105,6 +127,11 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
 
 class CatalogConfigOption(ConfigOption):
     """A selected option owns its catalog, auth revision and acquisition lock."""
+
+    @classmethod
+    def implementing(cls, role: type) -> type[CatalogConfigOption]:
+        member, = (member for member in cls.members_with(cls) if issubclass(member, role))
+        return member
 
     def __init__(self, owner: ConfigOptions):
         self.owner = owner
@@ -184,13 +211,12 @@ class CatalogConfigOption(ConfigOption):
         self.require_value(value, await self.choices(thread))
 
 
-class ModelConfigOption(CatalogConfigOption):
-    title = "Model"
-    description = "Model for this thread; a running turn switches at its next model call"
-    category = "model"
+class ModelConfigOption(ModelSetting, CatalogConfigOption):
 
-    def current_value(self, thread: CatalogSelection) -> str | None:
-        return thread.model.otherwise(None)
+
+
+
+
 
     def cache_key(self, thread: CatalogSelection) -> tuple[Path, tuple[str, ...]]:
         return (thread.project_path, self.owner.agent_args.argv)
@@ -207,13 +233,12 @@ class ModelConfigOption(CatalogConfigOption):
         )
 
 
-class ThinkingLevelConfigOption(CatalogConfigOption):
-    title = "Thinking level"
-    description = "Thinking level for this thread; a running turn switches at its next model call"
-    category = "thought_level"
+class ThinkingLevelConfigOption(ThinkingSetting, CatalogConfigOption):
 
-    def current_value(self, thread: CatalogSelection) -> str | None:
-        return thread.thinking_level.wire_value()
+
+
+
+
 
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
         data = await GetAvailableThinkingLevels().discover(
@@ -234,14 +259,13 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         )
 
 
-class ServiceTierConfigOption(CatalogConfigOption):
-    title = "Service tier"
-    description = "Provider request service tier, applied from this thread's next turn"
-    # ACP carries only its declared categories and salvages any other to None.
-    category = "model_config"
+class ServiceTierConfigOption(ServiceTierSetting, CatalogConfigOption):
 
-    def current_value(self, thread: CatalogSelection) -> str:
-        return thread.service_tier.value
+
+    # ACP carries only its declared categories and salvages any other to None.
+
+
+
 
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
         return [CatalogChoice(name=tier.value.title(), value=tier.value) for tier in ServiceTier]
@@ -345,6 +369,7 @@ class ConfigOptions:
         }
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
+        member = CatalogConfigOption.implementing(member)
         if member not in self.catalogs:
             self.catalogs[member] = member(self)
         return self.catalogs[member]

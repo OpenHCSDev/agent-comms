@@ -39,7 +39,7 @@ from agent_comms.messaging.channel_targets import DeclaredTag, Tag
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     Argument,
-    Description,
+    Catalog,
     FieldCodec,
     NullMember,
     RegistrationPolicy,
@@ -85,14 +85,12 @@ from agent_comms.registry.thread_identity import (
     TurnIdentity,
     UnobservedTools,
 )
-from agent_comms.registry.thread_incarnation_read import ReadsThreadIncarnation
 from agent_comms.registry.thread_model import (
     CatalogSelection,
     DeclaredModel,
     ModelSelection,
     NamedModel,
     ThreadModel,
-    UndeclaredModel,
     UnselectedModel,
 )
 from agent_comms.registry.thread_presentation import (
@@ -101,6 +99,12 @@ from agent_comms.registry.thread_presentation import (
     UnavailableThreadOwnerBinding,
 )
 from agent_comms.registry.thread_reads import ThreadCheckoutSource, ThreadOwnerSource
+from agent_comms.registry.thread_settings import (
+    ModelSetting,
+    ServiceTierSetting,
+    ThinkingSetting,
+    ThreadSettings,
+)
 from agent_comms.registry.thread_status import ServiceThreadStatus, ThreadStatus
 from agent_comms.registry.thread_storage import (
     AssignedStorageRoots,
@@ -257,14 +261,14 @@ class NextTurnConfiguration:
     """The model, thinking level and service tier one request sets or keeps for the next turn."""
 
     model: Annotated[
-        ModelChoice, Description("Provider/model identifier"), Argument(flags=("--model",))
+        ModelChoice, Catalog(ModelSetting), Argument(flags=("--model",))
     ] = KeptModel()
     thinking_level: Annotated[
-        ThinkingLevelField, Description("Optional Pi thinking level"),
+        ThinkingLevelField, Catalog(ThinkingSetting),
         Argument(flags=("--thinking",)),
     ] = NoThinkingOverride
     service_tier: Annotated[
-        ServiceTierChoice, Description("Optional provider request service tier"),
+        ServiceTierChoice, Catalog(ServiceTierSetting),
         Argument(flags=("--service-tier",)),
     ] = KeptServiceTier()
 
@@ -349,6 +353,7 @@ class ThreadCatalogFile(DurableFile, PatternFile):
 
 @dataclass(frozen=True, slots=True)
 class Thread(
+    ThreadSettings,
     ThreadProvenance,
     CatalogSelection,
     DeclaredFamily,
@@ -387,15 +392,6 @@ class Thread(
     task: ThreadText = field(default_factory=NoThreadText)
     process_identity: Annotated[ProcessState, RegistrationPolicy(InheritApplied)] = field(
         default_factory=NoProcess
-    )
-    model: Annotated[ThreadModel, RegistrationPolicy(InheritApplied)] = field(
-        default_factory=UndeclaredModel
-    )
-    thinking_level: Annotated[
-        ThinkingLevelField, RegistrationPolicy(InheritApplied)
-    ] = NoThinkingOverride
-    service_tier: Annotated[ServiceTier, RegistrationPolicy(InheritPrevious)] = (
-        field(default_factory=ServiceTier.default, kw_only=True)
     )
     goal: Annotated[GoalDeclaration, RegistrationPolicy(GoalDeclaration)] = (
         field(default_factory=NoGoal)
@@ -994,9 +990,7 @@ def current_thread(registry) -> Thread:
 # Thread's backend field is the lookup boundary. Declare both implementations
 # after the record graph, then reject incomplete declarations before any lookup.
 # noqa: E402, F401
-from agent_comms import pi_native_backend
 
 # noqa: E402, F401
-from agent_comms.execution import pi_durable_backend
 
 AgentBackend.seal()

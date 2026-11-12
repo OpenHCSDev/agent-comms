@@ -21,7 +21,6 @@ from collections.abc import (
     Iterator,
     Mapping,
     MutableMapping,
-    Sequence,
 )
 from contextvars import ContextVar
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
@@ -60,7 +59,7 @@ from pydantic_core import core_schema
 from python_introspect import declared_field_label
 from typing_extensions import TypeAliasType, TypeForm
 
-from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMeta
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.json_schema import JsonScalar, JsonSchemaOwner
 from agent_comms.nominal.sealed import Sealed
 
@@ -1376,6 +1375,9 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
     @boundary_decoder
     def decode_editor(self, value):
         return None if value is None else json.loads(value)
+
+    def select_editor[Editor](self, unrestricted: Editor, choices: Editor) -> Editor:
+        return unrestricted
 
     def editor_choices(self) -> tuple[tuple[str, object], ...]:
         raise TypeError("The declared decoder does not offer finite choices")
@@ -3177,7 +3179,14 @@ class _ContextDecoder[T](ValueDecoder[T]):
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T: ...
 
 
-class _ChoiceDecoder[T](ValueDecoder[T]):
+class ChoiceEditors:
+    """Finite editor choices shared by scalar and record-family decoders."""
+
+    def select_editor[Editor](self, unrestricted: Editor, choices: Editor) -> Editor:
+        return choices
+
+
+class _ChoiceDecoder[T](ChoiceEditors, ValueDecoder[T]):
     """A finite domain: its command line offers exactly the editor's choices."""
 
     __slots__ = ()
@@ -4057,6 +4066,9 @@ class _IntFlagDecoder(_EnumDecoder):
 
     __slots__ = ()
     origins = (IntFlag,)
+
+    def select_editor[Editor](self, unrestricted: Editor, choices: Editor) -> Editor:
+        return unrestricted
 
     def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
         return ()
