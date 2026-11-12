@@ -39,6 +39,49 @@ def test_keep_request_preserves_the_existing_model_and_chosen_request_replaces_i
     assert thread.model == DeclaredModel('test/one')
 
 
+def test_serving_root_reuses_catalog_across_read_loops_and_authentication_invalidates_it(tmp_path, monkeypatch):
+    import asyncio
+    from agent_comms.cli_verbs.new import NewThreadCliCommand
+    from agent_comms.config_options import CatalogChoice
+
+    comms = installed_comms(tmp_path / "wire")
+    project = Checkout(tmp_path)
+    selection, = NewThreadCliCommand.project_bindings(comms, project)
+    discoveries = []
+    fail_next = False
+
+    async def discovered(option, asked):
+        nonlocal fail_next
+        discoveries.append(asked.project_path)
+        if fail_next:
+            fail_next = False
+            raise RuntimeError("Discovery interrupted")
+        return [CatalogChoice(name="One", value="test/one")]
+
+    monkeypatch.setattr(ModelConfigOption, "discover", discovered)
+
+    def read_catalog():
+        return comms.configuration_catalogs.catalog_for(ModelConfigOption)
+
+    first = read_catalog()
+    assert asyncio.run(first.choices(selection)) == [CatalogChoice(name="One", value="test/one")]
+    assert read_catalog() is first
+    assert asyncio.run(read_catalog().choices(selection)) == [CatalogChoice(name="One", value="test/one")]
+    assert discoveries == [project.path]
+    auth_file = first.owner.launch.configuration.auth_file
+    assert auth_file.is_relative_to(tmp_path), "The control may only change its private credentials file"
+    auth_file.parent.mkdir(parents=True, exist_ok=True)
+    auth_file.write_text("{}")
+    assert asyncio.run(read_catalog().choices(selection)) == [CatalogChoice(name="One", value="test/one")]
+    assert discoveries == [project.path, project.path]
+    fail_next = True
+    auth_file.write_text('{"providers": {}}')
+    with pytest.raises(RuntimeError, match="Discovery interrupted"):
+        asyncio.run(read_catalog().choices(selection))
+    assert asyncio.run(read_catalog().choices(selection)) == [CatalogChoice(name="One", value="test/one")]
+    assert discoveries == [project.path] * 4
+
+
 @pytest.mark.asyncio
 async def test_menu_reports_the_model_the_runtime_runs(tmp_path, monkeypatch):
     # This declared model catalogue avoids SDK/model discovery; no model runs.

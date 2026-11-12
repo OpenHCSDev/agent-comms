@@ -31,7 +31,7 @@ import goal_owner_fixture
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import Comms, wire
 from agent_comms.execution.cursor_publication import CursorDelivery
-from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.execution.native_entries import NativeEvidenceScope, SessionEntry
 from agent_comms.execution.pi_durable_backend import PiDurableBackend
 from agent_comms.installer.native_package import (
@@ -405,13 +405,19 @@ def _test_worker_hosts_stop_with_the_test(request: pytest.FixtureRequest) -> Ite
 
 
 @pytest.fixture(autouse=True)
-def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """A developer's live managed process is not a test wire or native child."""
+def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
+    """A test borrows neither a live owner nor the developer's credential directories."""
     from agent_comms.execution.launch_root import LaunchRoot
 
     with LaunchRoot.unstarted().selected():
         for name in _MANAGED_RUNTIME_ENVIRONMENT:
             monkeypatch.delenv(name, raising=False)
+        configuration = RestartEnvironment(
+            native_config=tmp_path / "native-source",
+            agent_directory=tmp_path / "native-agent",
+        )
+        for name, value in configuration.encode_native().items():
+            monkeypatch.setenv(name, value)
         yield
 
 
