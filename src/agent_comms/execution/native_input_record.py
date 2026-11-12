@@ -374,7 +374,7 @@ class FullNativeExecution(NativeInputExecution):
         obligations = ResponseObligation.select(
             db, where="execution_id=?", parameters=(self.execution_id,)
         )
-        if not obligations or not all(row.lifecycle.published for row in obligations):
+        if not obligations or not all(row.lifecycle.is_published() for row in obligations):
             return ()
         return tuple(
             sorted(
