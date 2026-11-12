@@ -252,7 +252,8 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
 class TriageDecisionRecord(DeclaredFamily, JsonShapeFamily, affix="TriageDecisionRecord"):
     """Decode the original nullable SQL scalar once, without inventing a verdict."""
 
-    decided: ClassVar[bool] = True
+    def is_decided(self) -> bool:
+        return True
 
     @abstractmethod
     def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> HistoricalNativeInput: ...
@@ -289,7 +290,9 @@ class DecidedTriageRecord(TriageDecisionRecord):
 @dataclass(frozen=True)
 class AbsentTriageDecisionRecord(TriageDecisionRecord, JsonShapeMember):
     value: None = None
-    decided = False
+
+    def is_decided(self) -> bool:
+        return False
 
     def require_undecided(self) -> None:
         pass
