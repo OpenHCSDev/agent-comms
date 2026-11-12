@@ -57,6 +57,7 @@ from agent_comms.team.rule_deal import (
     Owed,
     OwnerWordsAnswer,
     ReadSpan,
+    RuleGateSettings,
     SessionAudit,
     StartedDeal,
     StartupDealMode,
@@ -201,7 +202,7 @@ def test_configured_claude_compaction_keeps_the_deal_and_emits_no_read_order(
     start = DeckStart.decode(hook_record(transcript, "SessionStart"))
     assert start.take(team_bus, team_binding)
     start.audit.write_text("retained audit")
-    start.configure(mode)
+    start.configure(RuleGateSettings(mode=mode))
     before = start.current()
 
     compacted = replace(start, source=SessionSource("compact"))

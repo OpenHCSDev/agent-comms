@@ -37,6 +37,7 @@ from agent_comms.team.rule_deal import (
     OffDealMode,
     Owed,
     OwnerWordsAnswer,
+    RuleGateSettings,
     SessionAudit,
     StartedDeal,
     StartupDealMode,
@@ -176,11 +177,11 @@ def test_a_refresh_deal_opens_in_order_and_pi_may_edit_the_audit(peer_deal):
     peer_deal.observe_context(ContextUsage(35, 100))
     dealt = peer_deal.current().dealt
     with pytest.raises(RulesUnread, match="Next batch"):
-        call("read", {"path": str(dealt[2 * Unread.batch])}).judge_under(peer_deal)
-    for source in dealt[:Unread.batch]:
+        call("read", {"path": str(dealt[2 * peer_deal.current().read_batch])}).judge_under(peer_deal)
+    for source in dealt[:peer_deal.current().read_batch]:
         call("read", {"path": str(source)}).judge_under(peer_deal)
         peer_deal.record_read(source, ReadInput(source).span())
-    call("read", {"path": str(dealt[Unread.batch])}).judge_under(peer_deal)
+    call("read", {"path": str(dealt[peer_deal.current().read_batch])}).judge_under(peer_deal)
     edit = {"edits": [{"oldText": "a", "newText": "b"}]}
     call("edit", {"path": str(peer_deal.audit), **edit}).judge_under(peer_deal)
     with pytest.raises(RulesUnread):
@@ -213,7 +214,7 @@ def test_the_rules_come_back_once_at_each_declared_share_of_context_left(peer_de
 def test_automatic_redeals_preserve_the_configured_session(peer_deal, mode):
     peer_deal.start()
     answer_deal(peer_deal)
-    peer_deal.configure(mode)
+    peer_deal.configure(RuleGateSettings(mode=mode))
     before = peer_deal.current()
     audit = peer_deal.audit.read_bytes()
     reads = peer_deal.dealt_read.read_bytes()
@@ -234,7 +235,7 @@ def test_compaction_mode_redeals_lost_context_but_never_periodic_refreshes(team_
     deal = PiRedeal.of(team_bus, team_bus.registry.require(name))
     deal.start()
     answer_deal(deal)
-    deal.configure(CompactionDealMode)
+    deal.configure(RuleGateSettings(mode=CompactionDealMode))
     before = deal.current()
     for used in (35, 70, 95):
         deal.observe_context(ContextUsage(used, 100))
@@ -256,11 +257,11 @@ def test_gate_can_be_disabled_and_reenabled_without_forging_a_read(peer_deal):
     before = peer_deal.current().dealt
     assert refused(peer_deal)
 
-    peer_deal.configure(OffDealMode)
+    peer_deal.configure(RuleGateSettings(mode=OffDealMode))
     assert not refused(peer_deal)
     assert peer_deal.current().read_by(peer_deal) == ()
 
-    peer_deal.configure(FullDealMode)
+    peer_deal.configure(RuleGateSettings(mode=FullDealMode))
     assert refused(peer_deal)
     assert peer_deal.current().dealt == before
 

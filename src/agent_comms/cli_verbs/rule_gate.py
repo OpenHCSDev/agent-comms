@@ -2,30 +2,40 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
 from agent_comms.cli_verbs.cli_command import CliCommand
-from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.cli_verbs.cli_result import CliResult, TargetEditResult
 from agent_comms.comms import Comms
-from agent_comms.nominal.field_codec import Argument, PathText
-from agent_comms.team.rule_deal import DealMode, SessionRuleDeal
+from agent_comms.nominal.field_codec import Argument, PathText, RecordMember
+from agent_comms.team.rule_deal import DealMode, RuleDeal, RuleGateSettings, SessionRuleDeal
 
 
 @dataclass(frozen=True)
-class RuleGateConfiguredResult(CliResult):
+class RuleGateConfiguredResult(RecordMember, TargetEditResult):
     stem: Annotated[Path, PathText]
-    mode: type[DealMode]
+    settings: RuleGateSettings
 
 
 @dataclass(frozen=True, kw_only=True)
-class RuleGateCliCommand(CliCommand, declared_name="rule-gate"):
-    help = "Configure rule reads: full, compaction (no periodic refresh), startup, or off"
-    stem: Annotated[Path, PathText, Argument(flags=("stem",))]
-    mode: Annotated[type[DealMode], Argument(flags=("mode",))]
+class RuleGateCommand(RuleGateSettings, CliCommand, declared_name=None):
+    help = "Configure this session's rule reads and refreshes"
 
-    def apply(self, ctx: Comms) -> CliResult:
-        deal = SessionRuleDeal(self.stem.resolve())
-        deal.configure(self.mode)
-        return RuleGateConfiguredResult(deal.stem, deal.current().mode)
+    @abstractmethod
+    def deal(self, ctx: Comms) -> RuleDeal: ...
+
+    def apply(self, ctx: Comms) -> RuleGateConfiguredResult:
+        deal = self.deal(ctx)
+        deal.configure(RuleGateSettings.capture(self))
+        return RuleGateConfiguredResult(deal.stem, RuleGateSettings.capture(deal.current()))
+
+
+@dataclass(frozen=True, kw_only=True)
+class RuleGateCliCommand(RuleGateCommand, declared_name="rule-gate"):
+    stem: Annotated[Path, PathText, Argument(flags=("stem",))]
+
+    def deal(self, ctx: Comms) -> RuleDeal:
+        return SessionRuleDeal(self.stem.resolve())

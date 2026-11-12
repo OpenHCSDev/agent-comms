@@ -25,11 +25,21 @@ from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import Annotated, ClassVar, Self
+
+from annotated_types import Ge, Gt, Lt
+from python_introspect.jsonable import RegisteredClassChoices
 
 from agent_comms.execution.context_reading import ContextUsage
+from agent_comms.nominal.configuration_record import ConfigurationRecord
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, MessageId
+from agent_comms.nominal.field_codec import (
+    Argument,
+    Description,
+    FieldCodec,
+    MalformedRecord,
+    MessageId,
+)
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.rule_probes import Probe, ProbeContext
 from agent_comms.storage.locked_store import DocumentChange, LockedStore
@@ -239,13 +249,14 @@ class DealDelivery:
         """What the session already holds when its deal starts: nothing."""
         return ()
 
-    def told(self, sources: tuple[Path, ...], audit: Path) -> str:
+    def told(self, record: DealRecord, audit: Path) -> str:
         """The order a hook gives with the deal: read every file, then answer it."""
+        sources = record.paths
         return (
             f"Read each of these {len(sources)} files in full with the Read tool before any other"
             " action: they are every rule you follow and the sources they come from. A summary"
             " or memory of them does not count as reading them. Read them in order, in batches"
-            f" of {Unread.batch}, then answer the audit at {audit}: reading alone is passive."
+            f" of {record.read_batch}, then answer the audit at {audit}: reading alone is passive."
             f" {self.open_meanwhile} This order is given once"
             " per session start or compaction; a short slice of them comes back inline every few"
             " tool calls.\n" + "\n".join(str(source) for source in sources)
@@ -262,7 +273,8 @@ class SystemPromptDelivery(PreparedPrompt, DealDelivery):
     def reads(self) -> tuple[DealtRead, ...]:
         return FieldCodec.decode(PromptReads, FieldCodec.parse(self.manifest.read_bytes())).reads
 
-    def told(self, sources: tuple[Path, ...], audit: Path) -> str:
+    def told(self, record: DealRecord, audit: Path) -> str:
+        sources = record.paths
         return (
             f"These {len(sources)} files are in your system prompt, in this order, and count as"
             " read: they are every rule you follow and the sources they come from. Before any"
@@ -690,8 +702,22 @@ class RefreshDeal(DealTrigger):
                 " window, and the rules come back before a summary replaces them. Nothing broke.")
 
 
+@dataclass(frozen=True, kw_only=True)
+class RuleGateSettings(ConfigurationRecord):
+    """One session's editable rule policy; read and audit evidence is not configuration."""
+
+    mode: Annotated[type[DealMode], RegisteredClassChoices(DealMode),
+                    Description("When this session must read and answer its rules")] = FullDealMode
+    read_batch: Annotated[int, Ge(1),
+                          Description("Files opened together before answering the audit")] = 5
+    owner_prompts: Annotated[int, Ge(1),
+                             Description("Recent owner prompts included in each deal")] = 6
+    refresh_remaining: Annotated[tuple[Annotated[float, Gt(0), Lt(1)], ...],
+                                 Description("Context remaining at each periodic refresh")] = (0.66, 0.33)
+
+
 @dataclass(frozen=True)
-class DealRecord:
+class DealRecord(RuleGateSettings):
     """One deal, as persisted: the files dealt and what the audit must answer. The read log and
     the audit hang off it; a deal that follows lost context empties the read log and deletes
     the audit, so every rule is answered again by the instance that just read it."""
@@ -699,7 +725,6 @@ class DealRecord:
     dealt: tuple[Path, ...]
     due: AuditDue
     trigger: DealTrigger = StartedDeal()
-    mode: type[DealMode] = FullDealMode
 
     def sources(self) -> tuple[DealtSource, ...]:
         return tuple(DealtSource.of(path) for path in self.dealt)
@@ -730,12 +755,9 @@ class DealRecord:
                     full: Callable[[], Said], kept: Said) -> Said:
         """A session whose role now follows more sources is dealt only those: what it read and
         wrote stays, since its context was never lost."""
-        deal.publish(DealRecord(
-            tuple(dict.fromkeys((*self.paths, *(source.resolve() for source in dealt.sources())))),
-            self.due,
-            self.trigger,
-            self.mode,
-        ))
+        deal.publish(replace(self, dealt=tuple(dict.fromkeys(
+            (*self.paths, *(source.resolve() for source in dealt.sources()))
+        ))))
         return kept
 
     def resume[Said](self, deal: Callable[[], Said], kept: Said) -> Said:
@@ -900,8 +922,9 @@ class Unread(Owed):
 
     before: ClassVar[str] = "reading"
 
-    batch: ClassVar[int] = 5
-    """The one declaration of the batch: every refusal and the order read it from here."""
+    @property
+    def batch(self) -> int:
+        return self.record.read_batch
 
     def permits_read(self, path: Path) -> bool:
         """Any file already opened, since re-reading is how a rule gets answered, or one of the
@@ -994,8 +1017,9 @@ class RuleDeal(State, DealtCalls):
     """One session's deal: the files beside its `stem` that record what it was dealt, what it
     has read in full and the audit it wrote."""
 
-    owner_prompts: ClassVar[int] = 6
-    """How many of the person's own last prompts a deal puts back in front of the session."""
+    @property
+    def owner_prompts(self) -> int:
+        return self.current().owner_prompts
 
     declared_owed: ClassVar[dict[type, tuple[type[Owed], ...]]] = {}
     """What each class itself declares the deal can owe; a requirement parent names its case."""
@@ -1106,11 +1130,11 @@ class RuleDeal(State, DealtCalls):
     def state(self) -> ToolGateState:
         return self.current().answer(self, self.dealt_opened.read())
 
-    def configure(self, mode: type[DealMode]) -> None:
+    def configure(self, settings: RuleGateSettings) -> None:
         """Change policy without discarding read evidence, the audit, or the current deal."""
         with self.write_guard(self.record):
             self.record.stat()  # Configuration targets an existing session, never fabricates a deal.
-            self.publish(replace(self.current(), mode=mode))
+            self.publish(settings.applied_to(self.current()))
 
     def deal(self, dealt: type[DealtSources], due: AuditDue, trigger: DealTrigger) -> None:
         with self.write_guard(self.record):
@@ -1124,7 +1148,7 @@ class RuleDeal(State, DealtCalls):
         half-written deal. The audit's answers go with the reads, replaced by the blank skeleton:
         a fresh instance owes a fresh confession, never one carried over from the context it
         lost (plans/GATE-ENGAGEMENT-PLAN.md). A resume deals nothing and keeps both."""
-        mode = self.current().mode
+        settings = RuleGateSettings.capture(self.current())
         paths = tuple(source.resolve() for source in dealt.sources())
         held = frozenset(DealtSource.of(path) for path in paths)
         self.stem.parent.mkdir(parents=True, exist_ok=True)
@@ -1138,7 +1162,7 @@ class RuleDeal(State, DealtCalls):
             FieldCodec.encode(due.skeleton()), ensure_ascii=False, indent=2).encode())
         self.meant.replace(MeantRecord())
         self.template_shown.unlink(missing_ok=True)
-        self.publish(DealRecord(paths, due, trigger, mode))
+        self.publish(settings.applied_to(DealRecord(paths, due, trigger)))
 
     def publish(self, record: DealRecord) -> None:
         AtomicFile(self.record).write_bytes(
@@ -1255,7 +1279,9 @@ class Redeals(RuleDeal):
     """A deal its backend renews itself: at the first start, after each compaction, and at
     each declared share of context left, read from the backend's own context-use report."""
 
-    refreshes: ClassVar[tuple[RefreshAt, ...]] = (RefreshAt(0.66), RefreshAt(0.33))
+    @property
+    def refreshes(self) -> tuple[RefreshAt, ...]:
+        return tuple(RefreshAt(remaining) for remaining in self.current().refresh_remaining)
 
     @property
     def refreshed(self) -> Path:
