@@ -57,7 +57,8 @@ class AttemptState(CoordinatorVocabulary, LifecycleState, affix="Attempt"):
     def allows_tool_claim(self) -> bool:
         return False
 
-    def advance_on_accepted(self, advance: Callable[[type[AttemptState]], None]) -> None:
+    @classmethod
+    def advance_on_accepted(cls, advance: Callable[[type[AttemptState]], None]) -> None:
         pass
 
     def require_starting(self) -> None:
@@ -167,12 +168,17 @@ class TerminalAttempt(Terminal, AttemptState):
         return cls()
 
 
-class PromptStartingAttempt(LiveAttempt):
+class ToolClaimAttempt:
+    """A phase that admits tools while its backend is still live."""
 
     def allows_tool_claim(self) -> bool:
         return True
 
-    def advance_on_accepted(self, advance: Callable[[type[AttemptState]], None]) -> None:
+
+class PromptStartingAttempt(ToolClaimAttempt, LiveAttempt):
+
+    @classmethod
+    def advance_on_accepted(cls, advance: Callable[[type[AttemptState]], None]) -> None:
         advance(PromptAcceptedAttempt)
 
     def require_starting(self) -> None:
@@ -202,8 +208,8 @@ class BeforeModelRun:
         )
 
 
-class PromptAcceptedAttempt(BeforeModelRun, LiveAttempt):
-    allows_tool_claim = True
+class PromptAcceptedAttempt(ToolClaimAttempt, BeforeModelRun, LiveAttempt):
+    """The prompt is accepted and tools may be claimed before model context arrives."""
 
 
 
@@ -215,8 +221,7 @@ class ContextualAttempt(LiveAttempt):
         return True
 
 
-class ModelRunningAttempt(ContextualAttempt):
-    allows_tool_claim = True
+class ModelRunningAttempt(ToolClaimAttempt, ContextualAttempt):
 
     @classmethod
     def successors(cls):
@@ -231,8 +236,7 @@ class ModelRunningAttempt(ContextualAttempt):
         )
 
 
-class ToolRunningAttempt(ContextualAttempt):
-    allows_tool_claim = True
+class ToolRunningAttempt(ToolClaimAttempt, ContextualAttempt):
 
     @classmethod
     def successors(cls):
@@ -347,7 +351,8 @@ class AttemptFailedAttempt(RetryPredecessor, UnsuccessfulTerminal):
 
 
 class UnknownOutcomeAttempt(UnsuccessfulTerminal):
-    preserve_check = True
+    def preserves_check(self) -> bool:
+        return True
 
     @property
     def release_wording(self) -> str:
