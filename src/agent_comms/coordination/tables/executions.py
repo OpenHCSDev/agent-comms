@@ -226,7 +226,7 @@ class CurrentExecutions(
 
     @property
     def unresolved(self) -> bool:
-        return self.execution_id.pointed
+        return self.execution_id.is_pointed()
 
     def require_idle(self) -> None:
         if self.unresolved:
@@ -240,7 +240,7 @@ class CurrentExecutions(
     pointer_revision: Annotated[int, Column(check="pointer_revision >= 0")]
 
     def __post_init__(self) -> None:
-        if self.execution_id.pointed != self.attempt_ordinal.pointed:
+        if self.execution_id.is_pointed() != self.attempt_ordinal.is_pointed():
             raise CoordinationError("pointer execution and ordinal must pair")
         if self.pointer_revision < 0:
             raise ValueError("pointer_revision cannot be negative")
