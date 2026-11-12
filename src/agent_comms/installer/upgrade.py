@@ -659,7 +659,7 @@ class Stack(RuntimeStack):
             except CliUndecodableError as undecodable:
                 raise UpgradeRefused(f"{verb}: undecodable answer: {undecodable}") from undecodable
             except CliRefusedError as refused:
-                if not refused.failure.retryable:
+                if not refused.failure.is_retryable():
                     raise UpgradeRefused(f"{verb}: {refused}") from refused
                 waited = refused
             time.sleep(5)

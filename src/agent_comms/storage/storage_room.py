@@ -78,7 +78,9 @@ class RoomNeed:
 
 @dataclass(frozen=True)
 class RoomPhase(DeclaredFamily, affix="RoomPhase"):
-    waiting: ClassVar[bool] = False
+
+    def is_waiting(self) -> bool:
+        return False
     held: ClassVar[RoomNeed] = RoomNeed()
 
     def project(self, activity, work):
@@ -86,7 +88,9 @@ class RoomPhase(DeclaredFamily, affix="RoomPhase"):
 
 
 class WaitingRoomPhase(RoomPhase):
-    waiting = True
+
+    def is_waiting(self) -> bool:
+        return True
 
     def project(self, activity, work):
         return activity.with_status(ActivityState.WAITING_FOR_ROOM,
@@ -183,7 +187,7 @@ class RoomLedger(TypedStore, DurableTables, RuntimeWriter):
         with self.snapshot() as db:
             claims = RoomClaim.select(db, root=str(root))
         # A waiting sibling call must stay visible beside a running one.
-        return {claim.unit.name: claim for claim in sorted(claims, key=lambda row: row.phase.waiting)
+        return {claim.unit.name: claim for claim in sorted(claims, key=lambda row: row.phase.is_waiting())
                 if claim.unit in wanted and claim.process.alive()}
 
 

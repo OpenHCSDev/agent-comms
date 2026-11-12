@@ -460,7 +460,6 @@ class DeclaredFile(FileResource):
 
     owner: type[RootFile]
     path: Path
-    declared: ClassVar[bool] = True
 
 
 @dataclass(frozen=True)
@@ -469,8 +468,6 @@ class UndeclaredFile(FileResource):
 
     owner: type[RootFile] = field(default=RootFile, init=False)
     path: Path
-    declared: ClassVar[bool] = False
-    """No declaration answers whether its writers take a lock, so a lock beside it is unknown."""
 
 
 @dataclass(frozen=True)
