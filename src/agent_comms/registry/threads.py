@@ -987,6 +987,11 @@ def current_thread(registry) -> Thread:
         process_identity=ProcessIdentity.capture(os.getpid()))
 
 
+# These imports register both runtime declarations before AgentBackend.seal().
+from agent_comms import pi_native_backend  # noqa: E402, F401
+from agent_comms.execution import pi_durable_backend  # noqa: E402, F401
+
+
 # Thread's backend field is the lookup boundary. Declare both implementations
 # after the record graph, then reject incomplete declarations before any lookup.
 # noqa: E402, F401
