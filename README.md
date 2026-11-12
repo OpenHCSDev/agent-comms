@@ -42,6 +42,9 @@ For a reproducible local installation with the merged Toad and Textual forks,
 use the [pinned stack](stack/README.md). The stack fixes the core and both
 external forks to reviewed commits.
 
+On Android, use the one-command [native Terminal installer](docs/ANDROID-TERMINAL.md)
+or [Termux installer](docs/TERMUX.md) to run Toad locally.
+
 In an ACP client, normal prompts run the configured coding agent and stream
 thinking and tool progress. Use `@name message`, `#channel message`, or
 `!relay message` for coordination-only messages that should not launch a
