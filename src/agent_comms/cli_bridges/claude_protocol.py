@@ -581,16 +581,16 @@ class ClaudeUserHeader(WireHeader):
     is_meta: bool = Field(default=False, alias='isMeta')
     turn_origin: str = Field(default='', alias='turnOrigin')
 
-    def record_type(self) -> str:
+    def record_type(self) -> type:
         if self.origin.type == TaskNotification.declared_name:
-            return TaskUserRecord.declared_name
+            return TaskUserRecord
         if 'prompt_id' not in self.model_fields_set:
-            return LocalCommandOutput.declared_name
+            return LocalCommandOutput
         if self.is_compact_summary:
-            return CompactSummary.declared_name
+            return CompactSummary
         if self.is_meta and not {'origin', 'turn_origin'} & self.model_fields_set:
-            return HarnessNote.declared_name
-        return UserRecord.declared_name
+            return HarnessNote
+        return UserRecord
 
 
 class ClaudeHeader(WireHeader):
@@ -599,7 +599,7 @@ class ClaudeHeader(WireHeader):
     def local_command(cls, value: object, handler: ModelWrapValidatorHandler[Self]) -> Self:
         header = handler(value)
         if header.type == UserRecord.declared_name:
-            header.type = ClaudeUserHeader.model_validate(value).record_type()
+            header.type = ClaudeUserHeader.model_validate(value).record_type().declared_name
         return header
 
 
