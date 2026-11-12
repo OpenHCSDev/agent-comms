@@ -382,3 +382,13 @@ class ConfigOptions:
             value = option.current_value(thread)
             if value is not None:
                 await option.validate(thread, value)
+
+
+class ConfigurationCatalogs:
+    """A serving root retains the catalogs and their existing authentication invalidation."""
+
+    route: CommsRoute
+
+    @cached_property
+    def configuration_catalogs(self) -> ConfigOptions:
+        return ConfigOptions.for_route(self.route)

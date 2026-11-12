@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.config_options import ConfigurationCatalogs
 from agent_comms.execution.context_assembly import ContextAssembly
 from agent_comms.execution.input_ingress import InputIngressContext
 from agent_comms.execution.input_lookup import InputLookup
@@ -79,6 +80,7 @@ class InboxActivity(AgentActivity):
 
 
 class Comms(
+    ConfigurationCatalogs,
     ActivityClient,
     ContextAssembly,
     InputIngressContext[Thread],
