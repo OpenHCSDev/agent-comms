@@ -318,7 +318,7 @@ class DeckStart(DealtDeck):
         # cited file:line from the audit on every later tool call, with no snapshot in hand.
         self.prepare(reader, AuditDue(prompts, snapshot.team_project.unique_repositories()), trigger)
         return (
-            trigger.reason() + " " + self.delivery().told(reader.sources(), self.audit),
+            trigger.reason() + " " + self.delivery().told(self.current(), self.audit),
             self.template_once(self.current().due),
             self.owner_words(prompts),
             reader.header(self, trigger, comms, snapshot),
