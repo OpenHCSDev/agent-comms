@@ -212,11 +212,11 @@ class CatalogConfigOption(ConfigOption):
 
 
 class ModelConfigOption(ModelSetting, CatalogConfigOption):
-    
-    
-    
 
-    
+
+
+
+
 
     def cache_key(self, thread: CatalogSelection) -> tuple[Path, tuple[str, ...]]:
         return (thread.project_path, self.owner.agent_args.argv)
@@ -234,11 +234,11 @@ class ModelConfigOption(ModelSetting, CatalogConfigOption):
 
 
 class ThinkingLevelConfigOption(ThinkingSetting, CatalogConfigOption):
-    
-    
-    
 
-    
+
+
+
+
 
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
         data = await GetAvailableThinkingLevels().discover(
@@ -260,12 +260,12 @@ class ThinkingLevelConfigOption(ThinkingSetting, CatalogConfigOption):
 
 
 class ServiceTierConfigOption(ServiceTierSetting, CatalogConfigOption):
-    
-    
-    # ACP carries only its declared categories and salvages any other to None.
-    
 
-    
+
+    # ACP carries only its declared categories and salvages any other to None.
+
+
+
 
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
         return [CatalogChoice(name=tier.value.title(), value=tier.value) for tier in ServiceTier]
