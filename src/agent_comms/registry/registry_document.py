@@ -221,7 +221,7 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](
 
     def active_candidates(self) -> Iterator[Thread]:
         return (self.threads[name] for name, status in self.statuses.items()
-                if status.may_be_active)
+                if status.may_be_active())
 
     def set_status(self: RegistryPresence[dict[str, ThreadStatus]], name: str, status: ThreadStatus) -> None:
         self.statuses[name] = status.declaration()

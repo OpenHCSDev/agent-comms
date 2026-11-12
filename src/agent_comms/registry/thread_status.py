@@ -90,7 +90,9 @@ class ThreadStatus(
     ThreadOwnerStatus[PresenceSnapshot, PresenceThread],
     affix='ThreadStatus',
 ):
-    may_be_active: ClassVar[bool] = False
+    def may_be_active(self) -> bool:
+        return False
+
     def is_stopped(self) -> bool:
         return False
 
@@ -260,7 +262,8 @@ class ActiveThreadPresence(
 ):
     """Shared semantics of running and idle owners; not a second state family."""
 
-    may_be_active = True
+    def may_be_active(self) -> bool:
+        return True
 
     def is_receiving(self) -> bool:
         return True
@@ -412,7 +415,8 @@ class StoppingThreadStatus(HostBoundPresence, StoppedPresence):
 class CliInboxPresence(AlwaysListed):
     """The declared inbox resolves its bridge process at every read."""
 
-    may_be_active: ClassVar[bool] = True
+    def may_be_active(self) -> bool:
+        return True
 
     def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
         return (ConnectedThreadStatus() if thread.process_identity.alive()

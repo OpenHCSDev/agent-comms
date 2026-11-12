@@ -104,7 +104,8 @@ class DeliveryProgress(ThreadPresentationStatus):
     label: ClassVar[str] = "Sent"
     detail: ClassVar[str] = ""
     ignored_label: ClassVar[str] = "Not answering"
-    consumed: ClassVar[bool] = False
+    def is_consumed(self) -> bool:
+        return False
 
     @property
     def answer(self) -> AssignmentResponse:
@@ -162,7 +163,8 @@ class ConsumedDelivery(SettledDelivery):
     # what they sent.
     label: ClassVar[str] = "Read"
     ignored_label: ClassVar[str] = "Not answering"
-    consumed: ClassVar[bool] = True
+    def is_consumed(self) -> bool:
+        return True
 
     def model_consumed(self, proof: ShownToModelProgress) -> Self:
         """An earlier proof already timed the entry; a later one adds nothing."""
@@ -194,7 +196,7 @@ class ContextualProgress(WaitingDelivery, DeliveryProgress):
 
     @property
     def consumed(self) -> bool:
-        return self.proof.consumed
+        return self.proof.is_consumed()
 
     @property
     def answer(self) -> AssignmentResponse:
@@ -222,7 +224,7 @@ class IgnoredProgress(SettledDelivery, ContextualProgress):
 
     @property
     def seen_not_answering(self) -> bool:
-        return self.proof.consumed
+        return self.proof.is_consumed()
 
     def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return self.proof.ignored_notification_label(notification)
@@ -245,7 +247,7 @@ class WorkingTakenProgress(ActiveDelivery, TakenProgress, WorkingThreadPresentat
 
     @property
     def seen_working(self) -> bool:
-        return self.proof.consumed
+        return self.proof.is_consumed()
 
     def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return self.proof.working_notification_label(notification)
