@@ -216,7 +216,7 @@ class NativeAlreadyDecidedRule(ReservationRule):
     explanation = "The native triage input already has a verdict."
 
     def violated(self, check: NativeReservationCheck) -> bool:
-        return check.row.verdict.decided
+        return check.row.verdict.is_decided()
 
 
 @dataclass(frozen=True, kw_only=True)

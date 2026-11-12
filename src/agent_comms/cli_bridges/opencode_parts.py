@@ -181,7 +181,8 @@ class StatusHeader(WireHeader):
 class ToolState(TaggedWire, ABC, affix=""):
     header = StatusHeader
     input: ToolArguments
-    finished: ClassVar[bool] = False
+    def is_finished(self) -> bool:
+        return False
 
     @abstractmethod
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]: ...
@@ -219,7 +220,8 @@ class EndedPartTime(PartTime):
 class EndedTool(ToolState, ABC):
     time: EndedPartTime
     ok: ClassVar[bool]
-    finished = True
+    def is_finished(self) -> bool:
+        return True
 
     @property
     @abstractmethod
@@ -257,7 +259,7 @@ class ToolPart(Part, declared_name='tool'):
     state: Declared[ToolState]
 
     def finished(self, message: MessageInfo) -> bool:
-        return self.state.finished
+        return self.state.is_finished()
 
     def present(self, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
         return self.state.present(self, message)

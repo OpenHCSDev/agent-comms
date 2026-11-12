@@ -1400,7 +1400,8 @@ class SystemdUserManager(ResidentManager):
 class ChildLifetime(DeclaredFamily, affix="Lifetime"):
     """Whether a launched child may outlive the process that launched it."""
 
-    handoff: ClassVar[bool] = False
+    def is_handoff(self) -> bool:
+        return False
 
     @classmethod
     def environment(cls, environment: Mapping[str, str]) -> Mapping[str, str]:
@@ -1440,7 +1441,8 @@ class DiesWithLauncherLifetime(ChildLifetime):
 class OutlivesLauncherLifetime(ChildLifetime):
     """A resident the launcher hands off, such as a worker, a watcher or a bridge."""
 
-    handoff: ClassVar[bool] = True
+    def is_handoff(self) -> bool:
+        return True
 
     @classmethod
     def environment(cls, environment: Mapping[str, str]) -> Mapping[str, str]:
@@ -1509,7 +1511,7 @@ class ChildLaunch:
             str(self.read_fd),
             str(self.error_writer.fileno()),
             str(self.lifetime.launcher(self.platform)),
-            str(int(self.lifetime.handoff)),
+            str(int(self.lifetime.is_handoff())),
             str(self.identity_writer.fileno()),
             *self.lifetime.command(self.command),
         )
