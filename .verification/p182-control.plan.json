@@ -1,0 +1,14 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "compaction-activity-control",
+      "operations": [
+        {
+          "operation": "create_file",
+          "file_path": "/home/ts/wt/codex-parallel--P182/tests/test_external_compaction_activity.py",
+          "source": "import os\nimport time\nfrom types import SimpleNamespace\n\nfrom agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification\nfrom agent_comms.cli_bridges.runtime_updates import ThreadOutput\nfrom agent_comms.comms import client_wire\nfrom agent_comms.execution.child_process import ProcessIdentity\nfrom agent_comms.projects.checkouts import Checkout\nfrom agent_comms.registry import activity\nfrom agent_comms.registry.activity import ActivityState\nfrom agent_comms.registry.thread_status import PausedBridgeThreadStatus\nfrom agent_comms.registry.threads import ExternalThread\n\n\ndef test_connected_compaction_stays_current_until_source_ends_or_reader_pauses(tmp_path, monkeypatch):\n    clock = [time.time()]\n    monkeypatch.setattr(activity, 'time', SimpleNamespace(time=lambda: clock[0]))\n    with client_wire(tmp_path) as comms:\n        comms.registry.declare(ExternalThread('cli', frozenset(), Checkout(tmp_path)))\n        output = ThreadOutput(comms.transcripts.external('cli'), comms.agents)\n        stream = ItemStream('session')\n\n        def receive(method, **params):\n            update = stream.receive(RpcNotification(\n                method=method, params={'threadId': 'session', **params}))\n            assert update is not None\n            output.publish_batch([update])\n\n        def observed():\n            return comms.views.observed_activity(comms.views.revision(), ('cli',))['cli']\n\n        with comms.registry.external_process('cli', ProcessIdentity.capture(os.getpid())):\n            receive('item/started', turnId='turn', startedAtMs=int(clock[0] * 1000),\n                    item={'type': 'contextCompaction', 'id': 'compact'})\n            revision = comms.views.revision()\n            clock[0] += 181\n            assert comms.views.revision() == revision\n            current = observed()\n            assert current.state is ActivityState.WORKING\n            assert current.detail == 'Compacting context'\n            assert current.presentation('cli').summary == 'Working \u00b7 Compacting context'\n\n            receive('turn/completed', turn={'id': 'turn'})\n            assert observed().state is ActivityState.IDLE\n\n            receive('item/started', turnId='next', startedAtMs=int(clock[0] * 1000),\n                    item={'type': 'contextCompaction', 'id': 'next-compact'})\n            comms.registry.register(comms.registry.require('cli'), PausedBridgeThreadStatus())\n            clock[0] += 181\n            assert observed().state is ActivityState.IDLE\n"
+        }
+      ]
+    }
+  ]
+}
