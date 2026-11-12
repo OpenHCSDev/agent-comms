@@ -334,7 +334,9 @@ class CommsDiscoverTool(ReadTool, NativeToolRequest):
         "Tools stay active for this turn, not for the session's lifetime. "
         "Use this for messages, inbox, goals, orders, reviews, threads, channels and configuration."
     )
-    loads_tools = True
+    @classmethod
+    def loads_tools(cls) -> bool:
+        return True
     native_call = CommunicationCall
     selection: Annotated[ToolLookup, *tool_field("Search words or select exact tool names")]
 

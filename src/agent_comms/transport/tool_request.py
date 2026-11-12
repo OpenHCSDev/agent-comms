@@ -165,7 +165,7 @@ class NativeToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = To
 
     @classmethod
     def schema(cls) -> dict[str, object]:
-        return {**super().schema(), "loads_tools": cls.loads_tools}
+        return {**super().schema(), "loads_tools": cls.loads_tools()}
 
     @classmethod
     def create_call(

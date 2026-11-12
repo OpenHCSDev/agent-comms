@@ -5357,7 +5357,7 @@ class Todo(TodoStoreRows, TypedTable, GoalAssignment):
     @property
     def handed_out_on_release(self) -> bool:
         """Whoever released this row last says whether an idle unit gets it unasked."""
-        return any(actor.hands_out_released_work
+        return any(actor.hands_out_released_work()
                    for actor in self.history.facts_for(self.id).release_actors)
 
     def reissued_review(self, at: float) -> EventTime:
