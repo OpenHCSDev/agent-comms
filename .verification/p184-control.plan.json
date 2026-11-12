@@ -1,0 +1,15 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "idle-prompt-control",
+      "operations": [
+        {
+          "operation": "insert_after_target",
+          "file_path": "/home/ts/wt/codex-parallel--P182/tests/test_acp_queue_contract.py",
+          "target_qualname": "_owner",
+          "source": "async def test_idle_prompt_reaches_initial_path_without_a_following_inbox(tmp_path):\n    \"\"\"An idle owner's method object must not masquerade as a running turn.\"\"\"\n    _comms, agent, _owner_identity, _generation = _owner(tmp_path)\n    try:\n        assert not (await agent.turns.active_backend_turn(BETA)).is_open()\n        # Empty input exercises the real initial-prompt path without asking a provider.\n        reply = await agent.prompt('beta', [TextContentBlock(type='text', text='')])\n        assert reply.stop_reason == 'end_turn'\n        assert not agent.inputs.state(BETA).turn_open()\n        assert not stored_inputs(agent.inputs.dispositions.root).rows\n    finally:\n        await agent.shutdown()\n"
+        }
+      ]
+    }
+  ]
+}

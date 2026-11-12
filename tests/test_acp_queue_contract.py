@@ -54,6 +54,20 @@ def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, RecordedThreadIncarnation
     return comms, agent, owner.incarnation.require_recorded(), claimed_generation
 
 
+async def test_idle_prompt_reaches_initial_path_without_a_following_inbox(tmp_path):
+    """An idle owner's method object must not masquerade as a running turn."""
+    _comms, agent, _owner_identity, _generation = _owner(tmp_path)
+    try:
+        assert not (await agent.turns.active_backend_turn(BETA)).is_open()
+        # Empty input exercises the real initial-prompt path without asking a provider.
+        reply = await agent.prompt('beta', [TextContentBlock(type='text', text='')])
+        assert reply.stop_reason == 'end_turn'
+        assert not agent.inputs.state(BETA).turn_open()
+        assert not stored_inputs(agent.inputs.dispositions.root).rows
+    finally:
+        await agent.shutdown()
+
+
 def held_owner(tmp_path: Path):
     """The owner's agent in a held native turn, with the inbox its inputs reach."""
     comms, agent, _, _ = _owner(tmp_path)

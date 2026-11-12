@@ -1,0 +1,31 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "ask-running-turn-not-method-truthiness",
+      "operations": [
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-parallel--P182/src/agent_comms/execution/acp.py",
+          "target_qualname": "CommsAgent._prompt_request",
+          "replacements": [
+            {
+              "old_source": "(await self.turns.active_backend_turn(session_id)).is_open\n",
+              "new_source": "(await self.turns.active_backend_turn(session_id)).is_open()\n"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-parallel--P182/src/agent_comms/execution/session_config_options.py",
+          "target_qualname": "SessionConfigOptions.use_stored_settings",
+          "replacements": [
+            {
+              "old_source": "if turn.is_open:\n",
+              "new_source": "if turn.is_open():\n"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

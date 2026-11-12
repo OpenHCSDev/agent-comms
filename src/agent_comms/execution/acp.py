@@ -417,7 +417,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 {"reason": "Send images to an agent thread, not as a coordination relay."}
             )
         if (
-            (await self.turns.active_backend_turn(session_id)).is_open
+            (await self.turns.active_backend_turn(session_id)).is_open()
             and not text.lstrip().startswith((*NamedTarget.sigils(), RELAY_PREFIX))
         ):
             return await self.inputs.accept_followup(

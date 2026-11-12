@@ -161,7 +161,7 @@ class SessionConfigOptions(ConfigurationChanges[ConfigOptions]):
         if self.settings_in_use.get(session_id, settings) == settings:
             return
         turn = await self.effects.turns.active_backend_turn(session_id)
-        if turn.is_open:
+        if turn.is_open():
             self.settings_in_use[session_id] = settings
             turn.send(settings)
 
