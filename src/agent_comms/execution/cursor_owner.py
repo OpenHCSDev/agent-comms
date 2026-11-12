@@ -255,8 +255,16 @@ class CursorState(ABC):
     def require_coverage(self, owner: CursorOwner, db: Connection, coverage: ProvenSourceCoverage, proof: CoverageInput) -> None: ...
 
 
+class EmptyObservationCursor:
+    """A cursor state that has no observation to report."""
+    __slots__ = ()
+
+    def observation(self) -> CursorObservation:
+        return EmptyCursorObservation()
+
+
 @dataclass(frozen=True)
-class UnstartedCursor(CursorState):
+class UnstartedCursor(EmptyObservationCursor, CursorState):
     @property
     def covered_seq(self) -> int:
         return 0
@@ -276,9 +284,6 @@ class UnstartedCursor(CursorState):
 
     def without_input(self, proof: NoInjectedInput, owner: CursorOwner, coverage: ProvenSourceCoverage) -> CurrentNativeCursor:
         return proof.build(owner, coverage.covered_seq)
-
-    def observation(self) -> CursorObservation:
-        return EmptyCursorObservation()
 
     def publish(self, db: Connection, owner: CursorOwner, coverage: ProvenSourceCoverage, proof: CoverageInput) -> CursorState:
         if coverage.covered_seq <= self.covered_seq:
@@ -352,9 +357,5 @@ class RecordedCursor(CursorState):
 
 
 @dataclass(frozen=True)
-class InheritedCursor(RecordedCursor):
+class InheritedCursor(EmptyObservationCursor, RecordedCursor):
     """The thread's row under an earlier fence; this owner's first publish stamps its own."""
-
-    def observation(self) -> CursorObservation:
-        # ACP scopes a cursor to the live claim (acp_extension.py validate_scope): none until it publishes.
-        return EmptyCursorObservation()
