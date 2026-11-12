@@ -80,8 +80,13 @@ class GoalActor:
     each actor owns whether it is the goal's owner, whether it reports a turn, what a pause it
     takes records, and whose consent its change needs."""
 
-    actor_is_owner: ClassVar[bool] = False
-    actor_reports_turn: ClassVar[bool] = False
+    @classmethod
+    def actor_is_owner(cls) -> bool:
+        return False
+
+    @classmethod
+    def actor_reports_turn(cls) -> bool:
+        return False
 
     @classmethod
     def require_owner_control(cls) -> None:
@@ -97,11 +102,17 @@ class GoalActor:
 
 
 class ModelInvocable(GoalActor):
-    actor_reports_turn = True
+
+    @classmethod
+    def actor_reports_turn(cls) -> bool:
+        return True
 
 
 class OwnerInvocable(GoalActor):
-    actor_is_owner = True
+
+    @classmethod
+    def actor_is_owner(cls) -> bool:
+        return True
 
     @classmethod
     def actor_pause_source(cls) -> PauseSource:
@@ -171,7 +182,7 @@ class GoalActionContext:
 
     @property
     def model_report(self) -> bool:
-        return self.actor.actor_reports_turn
+        return self.actor.actor_reports_turn()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -280,7 +291,7 @@ class TransitionGoalAction(GoalAction[Goal]):
 
     def require_transition(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
         """The goal's own state machine allows this transition."""
-        goal.state.check_transition(state, owner=ctx.actor.actor_is_owner)
+        goal.state.check_transition(state, owner=ctx.actor.actor_is_owner())
 
     @classmethod
     def require_claims(cls, claims: tuple[ProgressClaim, ...]) -> None:

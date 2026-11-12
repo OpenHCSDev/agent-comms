@@ -77,7 +77,8 @@ from agent_comms_hooks.shell_commands import ShellCommand
 class GoalUnavailable(GoalDisplay["GoalDeclaration", "Goal"]):
     last_confirmed: GoalDeclaration
 
-    can_control: ClassVar[bool] = False
+    def can_control(self) -> bool:
+        return False
 
     @property
     def snapshot(self) -> GoalDeclaration:
@@ -774,7 +775,9 @@ class NoGoal(NullMember, GoalDeclaration):
     def peer_change_values(self) -> GoalPeerChange:
         return GoalPeerChange(goal=self, state=self, progress="")
 
-    can_control: ClassVar[bool] = False
+    def can_control(self) -> bool:
+        return False
+
     visible: ClassVar[bool] = False
     objective: ClassVar[str] = ""
     progress: ClassVar[str] = ""
@@ -877,7 +880,9 @@ class Goal(RecordMember, GoalDeclaration):
     def details_heading(self, execution: GoalExecutionDisplay[Goal]) -> str:
         return execution.details_heading(self.heading(execution))
 
-    can_control: ClassVar[bool] = True
+    def can_control(self) -> bool:
+        return True
+
     visible: ClassVar[bool] = True
 
     def standby(self, execution: GoalExecutionDisplay[Goal]) -> bool:

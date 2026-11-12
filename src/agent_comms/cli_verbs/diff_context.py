@@ -11,7 +11,10 @@ from agent_comms.execution.turn_context import ContextManifestChange
 
 
 class DiffContextCliCommand(ContextOptionCliCommand):
-    context_diff: ClassVar[bool] = True
+
+    @classmethod
+    def context_diff(cls) -> bool:
+        return True
 
     def apply(self, ctx: Comms) -> ContextManifestChange:
         manifests = iter(self.manifests(ctx))
