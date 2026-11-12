@@ -203,7 +203,7 @@ class RecoverySnapshot:
         execution = self.execution
         execution_id = execution.execution_id
         attempt = self.attempt
-        if self.current_execution_id.pointed != self.current_attempt_ordinal.pointed:
+        if self.current_execution_id.is_pointed() != self.current_attempt_ordinal.is_pointed():
             raise CoordinationError("snapshot pointer tuple is incomplete")
         if self.is_current != (
             self.current_execution_id.otherwise(None) == execution_id

@@ -159,13 +159,16 @@ class SystemOrigin(ClaimlessOrigin):
 class PointerExecution(SubclassUnion, TextChoice, affix="Execution"):
     """The execution an owner's pointer names: its id, or SQL NULL while the owner is idle."""
 
-    pointed: ClassVar[bool]
+    @abstractmethod
+    def is_pointed(self) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
 class PointedExecution(GivenText, PointerExecution):
-    pointed: ClassVar[bool] = True
     text: str
+
+    def is_pointed(self) -> bool:
+        return True
 
     def __post_init__(self) -> None:
         validate_execution_id(self.text)
@@ -173,13 +176,16 @@ class PointedExecution(GivenText, PointerExecution):
 
 @dataclass(frozen=True, slots=True)
 class NoPointedExecution(AbsentText, PointerExecution):
-    pointed: ClassVar[bool] = False
+
+    def is_pointed(self) -> bool:
+        return False
 
 
 class PointerAttempt(SubclassUnion, affix="Attempt"):
     """The attempt an owner's pointer names: its ordinal, or SQL NULL while the owner is idle."""
 
-    pointed: ClassVar[bool]
+    @abstractmethod
+    def is_pointed(self) -> bool: ...
 
     @abstractmethod
     def otherwise[Default](self, default: Default) -> int | Default: ...
@@ -187,8 +193,10 @@ class PointerAttempt(SubclassUnion, affix="Attempt"):
 
 @dataclass(frozen=True, slots=True)
 class PointedAttempt(SingleFieldValue, PointerAttempt):
-    pointed: ClassVar[bool] = True
     ordinal: int
+
+    def is_pointed(self) -> bool:
+        return True
 
     def __post_init__(self) -> None:
         if self.ordinal <= 0:
@@ -200,7 +208,9 @@ class PointedAttempt(SingleFieldValue, PointerAttempt):
 
 @dataclass(frozen=True, slots=True)
 class NoPointedAttempt(NullMember, PointerAttempt):
-    pointed: ClassVar[bool] = False
+
+    def is_pointed(self) -> bool:
+        return False
 
     def otherwise[Default](self, default: Default) -> Default:
         return default
