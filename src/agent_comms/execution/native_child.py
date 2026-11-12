@@ -208,7 +208,7 @@ class PiChild:
 
     @property
     def retired(self) -> bool:
-        return self.retirement_result.retired
+        return self.retirement_result.is_retired()
 
     @property
     def release_failure(self) -> BaseException | None:

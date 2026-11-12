@@ -264,7 +264,7 @@ class PrivateSendClaim(FollowingPromptBoundary):
                 registry = cut.snapshot
             with self.measurements.operation("prompt_binding"):
                 authority.enter_context(self.stage.bound_prompt(
-                    store, self.input_id, self.selected.identity, self.wire_root_id,
+                    store, self.input_id, self.selected.identity, self.selected.root_id,
                     self.prompt.text,
                 ))
             with self.measurements.operation("coordinator_exclusive"):
