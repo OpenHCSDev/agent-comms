@@ -27,11 +27,18 @@ class CodexInboxService(SystemdUserService):
 
     @classmethod
     def unit_text(cls, arguments: tuple[str, ...]) -> str:
-        command = cls.command_line(("watch", *arguments)) + ' --session "%i"'
+        command = cls.command_line(("resume", *arguments)) + ' --session "%i"'
         return cls.render_unit(command)
 
     def unit_name(self) -> str:
         return self.unit.replace("@.", f"@{self.session}.")
+
+    def connect(self) -> None:
+        """Publish the shared launcher and start this saved connection at login too."""
+        ResidentManager.current().install(type(self), home=Path.home())
+        self.enable()
+        self.start()
+        self.running_on(LaunchRuntime.installed().interpreter)
 
     @classmethod
     def running(cls) -> tuple[Self, ...]:

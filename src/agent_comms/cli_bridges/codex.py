@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import socket
 import sqlite3
 import struct
@@ -36,14 +37,21 @@ from agent_comms.cli_bridges.runtime_updates import (
     SessionFacts,
     ThreadOutput,
 )
+from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
 from agent_comms.cli_bridges.shared import (
+    CliBridge,
     IncomingFrame,
+    Operation,
     Options,
     SessionBinding,
+    SuppliedSession,
     TranscriptBridge,
+    Watch,
     run_bridge,
 )
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.host_services.codex_inbox import CodexInboxService
 from agent_comms.messaging.messages import Message
 from agent_comms.messaging.send_result import SendResult
 from agent_comms.projects.checkouts import Checkout
@@ -159,6 +167,57 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
             await codex.call(DisplayOutput(
                 threadId=self.thread, clientUserMessageId=f'comms-out:{result.message.message_id}',
                 toolOutput=ToolOutput(output=self.sent_text(result))))
+
+
+@dataclass(frozen=True)
+class Connect(Watch):
+    help = "Connect this Codex conversation and start its live inbox, replies and status"
+
+    @classmethod
+    def serves(cls, bridge: type[CliBridge]) -> bool:
+        return issubclass(bridge, CodexBridge)
+
+    async def register(self, bridge: CodexBridge) -> None:
+        await super().register(bridge)
+        # A saved native transcript is not a live harness endpoint. Refuse before launch.
+        await bridge.comms.bus.when_open(partial(
+            bridge.comms.transcripts.external, bridge.address.bus))
+        await bridge.session_worktree()
+
+    async def execute(self, bridge: CodexBridge) -> None:
+        command = (
+            CodexInboxService.program,
+            Watch.command_name(),
+            '--state', str(bridge.options.base_state.absolute()),
+            '--socket', str(Path(bridge.options.socket).absolute()),
+            '--root', str(bridge.comms.root),
+            '--bus-thread', bridge.binding.bus,
+            '--session', bridge.binding.thread,
+        )
+        record = WatchRecord(bridge.binding.bus, str(bridge.comms.root), command,
+                             bridge.options.base_state.absolute())
+        await asyncio.to_thread(WatchClaim(bridge.binding.thread).enrol, record)
+        service = CodexInboxService(bridge.binding.thread)
+        await asyncio.to_thread(service.connect)
+        print(f'Connected {bridge.binding.bus}; live inbox, replies and status started.',
+              flush=True)
+
+
+@dataclass(frozen=True)
+class Resume(Operation[CodexBridge]):
+    help = "Start the exact live Codex connection saved by connect"
+    binding_session = SuppliedSession
+
+    @classmethod
+    def serves(cls, bridge: type[CliBridge]) -> bool:
+        return issubclass(bridge, CodexBridge)
+
+    async def execute(self, bridge: CodexBridge) -> None:
+        record = WatchClaim(bridge.binding.thread).recorded()
+        if Path(record.command[0]).name != CodexInboxService.program:
+            raise ValueError('This session is enrolled with a different harness')
+        executable = LaunchRuntime.installed().interpreter.with_name(CodexInboxService.program)
+        os.execv(executable, (str(executable), *record.command[1:]))
 
 
 def main() -> None:
