@@ -54,7 +54,8 @@ class AttemptState(CoordinatorVocabulary, LifecycleState, affix="Attempt"):
         """Only a live attempt can support the execution's current pointer."""
         return False
 
-    allows_tool_claim: ClassVar[bool] = False
+    def allows_tool_claim(self) -> bool:
+        return False
 
     def advance_on_accepted(self, advance: Callable[[type[AttemptState]], None]) -> None:
         pass
@@ -96,7 +97,7 @@ class AttemptState(CoordinatorVocabulary, LifecycleState, affix="Attempt"):
 
     @property
     def tool_claim_open(self) -> bool:
-        return self.allows_tool_claim and not (self.backend_done or self.process_dead)
+        return self.allows_tool_claim() and not (self.backend_done or self.process_dead)
 
     def require_final_response(self) -> None:
         raise ResponseClaimBlocked()
@@ -167,7 +168,9 @@ class TerminalAttempt(Terminal, AttemptState):
 
 
 class PromptStartingAttempt(LiveAttempt):
-    allows_tool_claim = True
+
+    def allows_tool_claim(self) -> bool:
+        return True
 
     def advance_on_accepted(self, advance: Callable[[type[AttemptState]], None]) -> None:
         advance(PromptAcceptedAttempt)
