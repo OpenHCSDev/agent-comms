@@ -87,8 +87,8 @@ class ActivityState(Enum):
 class DrainObservation(ABC):
     """What an activity event recorded about its owner's drain: a failure, or none."""
 
-    # A recorded failure keeps its event current instead of aging it to idle.
-    holds_event_current: ClassVar[bool]
+    @abstractmethod
+    def holds_event_current(self) -> bool: ...
 
     @abstractmethod
     def readiness(self) -> DrainReadiness: ...
@@ -140,7 +140,8 @@ class DrainDiagnostic(DeclaredFamily, DrainObservation, affix="Diagnostic"):
     def readiness(self) -> DrainReadiness:
         return UnavailableDrainReadiness(self)
 
-    holds_event_current = True
+    def holds_event_current(self) -> bool:
+        return True
 
     def recorded_by(self, owner: OwnerIdentity) -> bool:
         return self.owner == owner
@@ -159,7 +160,8 @@ class DrainDiagnostic(DeclaredFamily, DrainObservation, affix="Diagnostic"):
 class NoDrainDiagnostic(NullMember, DrainObservation):
     """The owner has recorded no drain failure for this activity."""
 
-    holds_event_current = False
+    def holds_event_current(self) -> bool:
+        return False
 
     def readiness(self) -> DrainReadiness:
         return ReadyDrainReadiness()
@@ -451,7 +453,7 @@ class ActivityStore(ThreadOwnedState, DerivedStore):
 
     def stale_at(self, event: Activity, *, active: bool) -> float:
         """When the clock alone turns this event idle; never for a held or executing one."""
-        if event.diagnostic.holds_event_current or active:
+        if event.diagnostic.holds_event_current() or active:
             return math.inf
         return event.timestamp + self._stale_after
 
