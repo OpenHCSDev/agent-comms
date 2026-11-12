@@ -433,7 +433,7 @@ class DeliveredInput(QueuedInput):
                 for source, assignment in accepted:
                     message = source.message
                     key = message.bus_key(owner)
-                    if document.lookup(key).exists:
+                    if document.lookup(key).is_stored():
                         continue
                     rendered = TurnContext.render_segments(
                         (MessageDelivery(source, assignment, owner).segment(),)
