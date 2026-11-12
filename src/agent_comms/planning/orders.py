@@ -3251,12 +3251,18 @@ class Assignment(TodoHolder):
         return replace(proposed, previous_owners=previous)
 
 
+class OpenTodo:
+    __slots__ = ()
+
+
 class TodoState(DeclaredFamily, affix="TodoState"):
-    open: ClassVar[bool] = True  # on the board until closed with installed evidence
+
+    def is_open(self) -> bool:
+        return False
 
     @classmethod
     def open_names(cls) -> tuple[str, ...]:
-        return tuple(member.declared_name for member in cls.members_with(cls) if member.open)
+        return tuple(member.declared_name for member in cls.members_with(OpenTodo))
 
     @classmethod
     def require_open(cls, current: Todo) -> None:
@@ -3289,18 +3295,23 @@ class TodoState(DeclaredFamily, affix="TodoState"):
         )
 
 
-class OpenTodoState(TodoState):
+class OpenTodoState(OpenTodo, TodoState):
+
+    def is_open(self) -> bool:
+        return True
+
     @classmethod
     def assign(cls, current, proposed, traced, actor):
         return current.assigned(proposed, traced, actor)
 
 
-class BlockedTodoState(TodoState):
-    pass
+class BlockedTodoState(OpenTodo, TodoState):
+
+    def is_open(self) -> bool:
+        return True
 
 
 class DoneTodoState(TodoState):
-    open: ClassVar[bool] = False
 
     @classmethod
     def require_open(cls, current: Todo) -> None:
