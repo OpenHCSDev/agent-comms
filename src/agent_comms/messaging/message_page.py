@@ -62,7 +62,7 @@ class MessagePage(ToolResult):
         holders = {row.view_key: page for page in (self.source_pages or (self,))
                    for row in page.messages}
         return tuple(
-            (message, holder if (holder := holders[message.view_key]).selection.has_evidence else None)
+            (message, holder if (holder := holders[message.view_key]).selection.has_evidence() else None)
             for message in self.messages)
 
     @property

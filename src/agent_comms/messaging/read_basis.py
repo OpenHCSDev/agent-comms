@@ -260,7 +260,8 @@ class SelectedDisplay(TaggedUnion, affix="Selection"):
 
 
     history_revision: FileObservation = MissingFile()
-    has_evidence: ClassVar[bool] = True
+    def has_evidence(self) -> bool:
+        return True
 
     @property
     @abstractmethod
@@ -288,7 +289,8 @@ class SelectedDisplay(TaggedUnion, affix="Selection"):
 
 @dataclass(frozen=True, slots=True)
 class NoDisplaySelection(TaggedRecordMember, SelectedDisplay, DisplayCut):
-    has_evidence: ClassVar[bool] = False
+    def has_evidence(self) -> bool:
+        return False
 
     @property
     def identity(self):
