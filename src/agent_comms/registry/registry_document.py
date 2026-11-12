@@ -1474,7 +1474,7 @@ class RegistrySnapshot(
 
     def process_owners(self, process: ProcessIdentity) -> tuple[str, ...]:
         return tuple(thread.name for thread in self.threads.values()
-                     if thread.process_identity == process and self.status(thread.name).holds_process)
+                     if thread.process_identity == process and self.status(thread.name).holds_process())
 
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.canonical_name(name)
