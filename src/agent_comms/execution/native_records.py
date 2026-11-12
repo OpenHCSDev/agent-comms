@@ -57,7 +57,7 @@ class NativeRecord(TranscriptRecord):
 
     @property
     def input_reported(self) -> bool:
-        return any(message.input_id.reported
+        return any(message.input_id.is_reported()
                    for message in self.project(lambda original: original.entry.messages))
 
     def require_entry(self) -> RecordedEntry:

@@ -66,6 +66,6 @@ class PendingRequests(Sealed):
 
     def take_anonymous(self, result_type: type[PiCommand], value: Response) -> PiCommand | None:
         for (owner, identity), pending in self._pending.items():
-            if owner is result_type and not pending.request.id.reported:
+            if owner is result_type and not pending.request.id.is_reported():
                 return self.take(owner, identity, value)
         return None
