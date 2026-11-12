@@ -14,9 +14,8 @@ The command sends once through Core, prints its result, then displays that resul
 as Codex `comms_send` tool output. A display failure never repeats the send.
 Sends made outside this command do not automatically get that display.
 
-Assistant, tool, and public reasoning-summary activity flowing back into Toad is
-being implemented. It is not live yet. That stream feeds typed transcript
-presentation, not a bus message per update. Private reasoning is not exported.
+Assistant, tool, and public reasoning-summary activity flow back into Toad through
+typed transcript updates, not a bus message per update. Private reasoning is not exported.
 
 ## Ownership
 
@@ -43,10 +42,7 @@ presentation, not a bus message per update. Private reasoning is not exported.
 ## Operations
 
 ```sh
-agent-comms-codex-bridge watch --root ROOT --bus-thread NAME --session ID
-# After the first bind, end the foreground watcher and start that session's service:
-systemctl --user daemon-reload
-systemctl --user enable --now codex-comms-inbox@ID
+agent-comms-codex-bridge connect --root ROOT --bus-thread NAME --session ID
 systemctl --user status codex-comms-inbox@ID
 journalctl --user -u codex-comms-inbox@ID -n 30 --no-pager
 ```
@@ -57,7 +53,11 @@ uses its session ID to select
 binding and message attempts.
 
 For another existing conversation, supply its own `--bus-thread` and `--session`.
-Watch registers the Core thread if missing; it never creates a Codex conversation.
+Connect registers the external Core endpoint if missing; it never creates a Codex conversation.
+It checks that the endpoint accepts external transcript updates before starting the service.
+An imported native/Pi history is not overwritten: give the live endpoint its own name.
+Connect saves the actual watch command, including custom state and socket arguments.
+The service resumes that command through the installed runtime after a restart or upgrade.
 Later starts read that session's saved binding. Conflicting bindings are rejected.
 The shared session lock prevents concurrent watchers even with different state directories.
 
@@ -97,8 +97,8 @@ Harnesses with line monitors compose `LineMonitorBridge` with `TranscriptBridge`
 as Claude does. Its decoded session notifications must confirm the fresh startup
 challenge and the complete numbered body parts; a pipe write alone stays pending.
 
-Transcript export is a separate capability still being implemented, represented
-by `TranscriptBridge`. The running service explicitly selects `inbox`. Its shared
+Transcript export is supplied by `TranscriptBridge`. The running service resumes
+the full `watch` connection recorded by `connect`. Its shared
 destination is Core's typed transcript API; each CLI must decode its own event
 protocol into those existing event types. This bridge does not expose private
 reasoning or assume that another CLI has Codex's subscription protocol.

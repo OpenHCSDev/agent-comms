@@ -283,7 +283,7 @@ def test_codex_inbox_template_publication_reloads_each_launcher_home_change(tmp_
     assert not CodexInboxService.unit_file(Path.home()).exists()
     assert len(loaded) == 1
     assert str(runtime / "bin/agent-comms-codex-bridge") in loaded[0]
-    assert '"watch" --session "%i"' in loaded[0]
+    assert '"resume" --session "%i"' in loaded[0]
     assert "Type=simple" in loaded[0]
     assert "NotifyAccess=main" not in loaded[0]
 
