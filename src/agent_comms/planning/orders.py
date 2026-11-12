@@ -2425,7 +2425,10 @@ class MergedProblemOrder(CommittedCheckSource, AwaitingInstallationProblemOrder)
         self.run.require_merge_close()
 
     def awaits_holder_run(self) -> bool:
-        return self.installation().awaits_holder(self.run)
+        # This is current installation state, not validation of an older proof.
+        return InstalledBuild.read().containing(
+            self.installation_commits, self.check.directory,
+        ).awaits_holder(self.run)
 
     @property
     def installation_commits(self) -> tuple[str, ...]:

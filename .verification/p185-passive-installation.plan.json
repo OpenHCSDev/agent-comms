@@ -1,0 +1,20 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "board-asks-current-installed-owner",
+      "operations": [
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-parallel--P182/src/agent_comms/planning/orders.py",
+          "target_qualname": "MergedProblemOrder.awaits_holder_run",
+          "replacements": [
+            {
+              "old_source": "return self.installation().awaits_holder(self.run)",
+              "new_source": "# This is current installation state, not validation of an older proof.\n        return InstalledBuild.read().containing(\n            self.installation_commits, self.check.directory,\n        ).awaits_holder(self.run)"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
