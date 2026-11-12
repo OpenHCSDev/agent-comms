@@ -3846,7 +3846,7 @@ class _PairKeyDictDecoder[K, V](_DictDecoder[K, V]):
 
 
 @dataclass(frozen=True, slots=True)
-class _FamilyRecordDecoder[Member: DeclaredFamily](ChoiceEditors, _ContextDecoder[Member]):
+class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
     """The encoded object carries its member's name under the family tag."""
 
     target: type[Member]
@@ -4067,6 +4067,9 @@ class _IntFlagDecoder(_EnumDecoder):
 
     __slots__ = ()
     origins = (IntFlag,)
+
+    def select_editor[Editor](self, unrestricted: Editor, choices: Editor) -> Editor:
+        return unrestricted
 
     def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
         return ()

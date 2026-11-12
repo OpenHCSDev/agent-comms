@@ -786,9 +786,9 @@ def test_a_read_batch_opens_the_next_with_no_answer_owed(capsys, dealt_session, 
     for paper in TeamPackage.paper():
         read_whole(transcript, paper.resolve(), comms=team_bus, binding=team_binding)
     rules = DeckReader.rules()
-    for rule in rules[:Unread.batch]:
+    for rule in rules[:start.current().read_batch]:
         read_whole(transcript, rule.path.resolve(), comms=team_bus, binding=team_binding)
-    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[Unread.batch].path)}, comms=team_bus, binding=team_binding))
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[start.current().read_batch].path)}, comms=team_bus, binding=team_binding))
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}, comms=team_bus, binding=team_binding))  # the rest stay unread
 
 
@@ -800,44 +800,44 @@ def test_a_parallel_batch_opens_whichever_order_its_hooks_reach_the_lock(capsys,
     for paper in TeamPackage.paper():
         read_whole(transcript, paper.resolve(), comms=team_bus, binding=team_binding)
     after = DeckReader.sources()[len(TeamPackage.paper()):]
-    for source in reversed(after[:Unread.batch]):
+    for source in reversed(after[:start.current().read_batch]):
         assert not refused(capsys, gated(transcript, "Read", {"file_path": str(source.resolve())}, comms=team_bus, binding=team_binding))
     # Reads in flight count as opened: the batch after them opens, one further does not.
-    assert refused(capsys, gated(transcript, "Read", {"file_path": str(after[Unread.batch * 2].resolve())}, comms=team_bus, binding=team_binding))
-    for source in reversed(after[Unread.batch:Unread.batch * 2]):
+    assert refused(capsys, gated(transcript, "Read", {"file_path": str(after[start.current().read_batch * 2].resolve())}, comms=team_bus, binding=team_binding))
+    for source in reversed(after[start.current().read_batch:start.current().read_batch * 2]):
         assert not refused(capsys, gated(transcript, "Read", {"file_path": str(source.resolve())}, comms=team_bus, binding=team_binding))
 
 
 def test_a_whole_paper_opens_in_one_parallel_batch(capsys, dealt_session, team_bus, team_binding):
     """Every part of a paper is judged before any read of it completes, so the whole paper and
     the first rules read in one call."""
-    transcript, _ = dealt_session
+    transcript, start = dealt_session
     papers = TeamPackage.paper()
     for part in papers:
         assert not refused(capsys, gated(transcript, "Read", {"file_path": str(part.resolve())}, comms=team_bus, binding=team_binding))
     rules = DeckReader.rules()
-    for rule in rules[:Unread.batch]:
+    for rule in rules[:start.current().read_batch]:
         assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rule.path)}, comms=team_bus, binding=team_binding))
-    beyond = DeckReader.sources()[len(papers) + Unread.batch * 2]
+    beyond = DeckReader.sources()[len(papers) + start.current().read_batch * 2]
     assert refused(capsys, gated(transcript, "Read", {"file_path": str(beyond.resolve())}, comms=team_bus, binding=team_binding))
 
 
 def test_dealt_files_open_in_order_with_the_patterns_last(capsys, dealt_session, team_bus, team_binding):
     """On 2026-10-30 a session opened the closing file and two rules first and never read the
     papers: the next batch of dealt files opens, any later one is refused and named the next."""
-    transcript, _ = dealt_session
+    transcript, start = dealt_session
     dealt = DeckReader.sources()
     assert dealt[-1].stem == "patterns"
     papers = TeamPackage.paper()
-    past_batch = papers[Unread.batch]
+    past_batch = papers[start.current().read_batch]
     for later in (TeamPackage.patterns(), DeckReader.rules()[0].path, past_batch):
         call = gated(transcript, "Read", {"file_path": str(later.resolve())}, comms=team_bus, binding=team_binding)
         call.judge()
         reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
         assert reason["permissionDecision"] == "deny"
-        assert f"batches of {Unread.batch}" in reason["permissionDecisionReason"]
+        assert f"batches of {start.current().read_batch}" in reason["permissionDecisionReason"]
         assert "Next batch: " + ", ".join(
-            str(paper.resolve()) for paper in papers[:Unread.batch]
+            str(paper.resolve()) for paper in papers[:start.current().read_batch]
         ) in reason["permissionDecisionReason"]
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(papers[0].resolve())}, comms=team_bus, binding=team_binding))
     read_whole(transcript, papers[0].resolve(), comms=team_bus, binding=team_binding)
