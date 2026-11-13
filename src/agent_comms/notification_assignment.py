@@ -40,8 +40,10 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, boundary_decoder
 from agent_comms.registry.notification_selection_read import NotificationSelectionRead
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.storage.private_path import FileObservation, FileRevision
 from agent_comms.storage.typed_table import BooleanStorage, TypedRow
 from agent_comms.waking.wake_policy import RecipientDecision
 
@@ -589,7 +591,29 @@ class AssignmentSource:
     def input_dispositions(self) -> InputDispositions:
         return InputDispositions(self.root)
 
+    _held: ClassVar[dict[Path, HeldAssignmentReads]] = {}
+
     def read_assignments(self, selection: NotificationSelection) -> NotificationAssignmentRead:
-        with self.coordinator.observing(NotificationAssignment, selection, self.privacy) as result:
-            captured = result
-        return NotificationAssignment.capture_detached(self, captured)
+        """This selection's evidence at the sources' current commit. A window's change check
+        reads its selection and the read that follows a change asked for the same rows again;
+        both now share one read until the coordinator, bus, stored inputs or registry move."""
+        cut = tuple(FileRevision.capture(path)
+                    for path in NotificationAssignment.source_paths(self.root))
+        held = AssignmentSource._held.get(self.root)
+        if held is None or held.cut != cut or held.registry is not self.registry:
+            held = AssignmentSource._held[self.root] = HeldAssignmentReads(cut, self.registry)
+        if selection not in held.reads:
+            with self.coordinator.observing(
+                    NotificationAssignment, selection, self.privacy) as result:
+                captured = result
+            held.reads[selection] = NotificationAssignment.capture_detached(self, captured)
+        return held.reads[selection]
+
+
+@dataclass
+class HeldAssignmentReads:
+    """The reads taken at one commit of every assignment source, under one registry cut."""
+
+    cut: tuple[FileObservation, ...]
+    registry: RegistrySnapshot
+    reads: dict[NotificationSelection, NotificationAssignmentRead] = field(default_factory=dict)

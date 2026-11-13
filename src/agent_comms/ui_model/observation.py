@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import itertools
+import math
 import os
 import signal
 import socket
@@ -1868,6 +1869,14 @@ class ObservationService:
         self.busy = asyncio.Event()
         self.revision: ReadState = NoRevision()
         self.observe_due = True
+        # Stores commit in storms while agents take turns. A pass adopts a new revision only
+        # once the previous revision's readings have finished and observe_gap has passed, so
+        # a storm costs a few passes a second instead of one after another.
+        self.stepping = False
+        self.unsettled = False
+        self.settled_at = -math.inf
+        self.adoption_owed = False
+        self.adoption: asyncio.TimerHandle | None = None
         # Store reads the UI awaits, in arrival order, until served or cancelled.
         self.pending: dict[int, ReadRequest] = {}
         # Owner reads being asked, until answered or cancelled.
@@ -1933,12 +1942,36 @@ class ObservationService:
             answer.retire_request(self, request)
             await asyncio.sleep(0)
 
-    async def observe(self, attempted: set[int]) -> None:
+    observe_gap: ClassVar[float] = 0.25
+
+    def adopt_revision(self) -> None:
+        """Read the stores' revision once the previous one's readings have finished and the
+        gap has passed; until then keep presenting the held revision."""
+        if self.stepping or asyncio.get_running_loop().time() < self.settled_at + self.observe_gap:
+            self.adoption_owed = True
+            return
+        self.adoption_owed, self.unsettled = False, True
         revision = self.comms.views.revision()
         if self.revision.changed_since(StoresView(), revision):
             self.send(RevisionObserved(revision))
         self.revision = revision
-        await self.interest.observe(self, revision, attempted)
+
+    def adopt_later(self) -> None:
+        self.adoption = None
+        self.observe_again()
+
+    async def observe(self, attempted: set[int]) -> None:
+        self.adopt_revision()
+        await self.interest.observe(self, self.revision, attempted)
+        self.stepping = self.observe_due
+        if self.stepping:
+            return
+        loop = asyncio.get_running_loop()
+        if self.unsettled:
+            self.settled_at, self.unsettled = loop.time(), False
+        if self.adoption_owed and self.adoption is None:
+            self.adoption = loop.call_later(
+                max(0.0, self.settled_at + self.observe_gap - loop.time()), self.adopt_later)
 
     async def expire(self) -> None:
         """Time-based sidebar state belongs to the sidebar observer, not file watching."""
@@ -1967,11 +2000,6 @@ class ObservationService:
             try:
                 while not self.closed:
                     await self.changed.wait()
-                    self.changed.clear()
-                    # Coalesce rapid changes: a short yield lets queued writes
-                    # set the event again before we observe, so one cycle handles
-                    # several messages instead of one cycle per message.
-                    await asyncio.sleep(0.05)
                     self.changed.clear()
                     attempted: set[int] = set()
                     await self.answer_pending(attempted)
