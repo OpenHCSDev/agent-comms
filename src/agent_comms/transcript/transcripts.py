@@ -86,7 +86,7 @@ from agent_comms.nominal.field_codec import (
     projected,
 )
 from agent_comms.notification_assignment import (
-    NotificationAssignment,
+    AssignmentSource,
     NotificationSelection,
 )
 from agent_comms.registry.private_registry_guard import RegistryPrivacy
@@ -444,13 +444,13 @@ class TranscriptSourceWindow:
     sources: tuple[Delivered, ...]
     sent_sources: tuple[Delivered, ...]
 
-    def presentation(self, ordinary: ThreadPresentation) -> AcquiredThreadPresentation:
+    def presentation(self, ordinary: ThreadPresentation, assignments: AssignmentSource) -> AcquiredThreadPresentation:
         """Project incoming and sent outcomes from this one acquired source window."""
         transcripts = self.read.owner
         sources = tuple({source.message.reference: source
                          for source in (*self.sources, *self.sent_sources)}.values())
         viewer = OwnerOutcomes.of(self.read.identity.thread.incarnation)
-        notification_read = NotificationAssignment.read(transcripts.root, NotificationSelection.of(viewer, sources))
+        notification_read = assignments.read_assignments(NotificationSelection.of(viewer, sources))
         projected = MessageNotification.delivery_window(
             transcripts.root, transcripts.registry, notification_read)
         incoming = tuple(
