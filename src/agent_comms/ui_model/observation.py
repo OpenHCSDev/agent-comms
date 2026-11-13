@@ -1968,6 +1968,11 @@ class ObservationService:
                 while not self.closed:
                     await self.changed.wait()
                     self.changed.clear()
+                    # Coalesce rapid changes: a short yield lets queued writes
+                    # set the event again before we observe, so one cycle handles
+                    # several messages instead of one cycle per message.
+                    await asyncio.sleep(0.05)
+                    self.changed.clear()
                     attempted: set[int] = set()
                     await self.answer_pending(attempted)
                     if self.observe_due and not self.closed:
