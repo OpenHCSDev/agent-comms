@@ -25,7 +25,7 @@ def test_captured_refresh_uses_changed_rows_and_cold_admission_uses_the_same_pol
         registry.declare(NativeThread(f"worker-{index}", frozenset(), Checkout(tmp_path)))
     before = registry.store.read_revision()
     registry.declare(NativeThread("new-worker", frozenset(), Checkout(tmp_path)))
-    following = registry.store.rows.captured(before.source)
+    following = registry.store.rows.captured(before.source, registry.store.rows.revision())
     roots = tuple(family.mapping_in(capture.raw)
                   for capture in (before.source, following)
                   for family in RegistryNamedRow.families())
@@ -61,7 +61,7 @@ def test_lowered_generation_ceiling_rechecks_unchanged_generation_rows(tmp_path)
     registry.store.rewrite_stored(lambda raw: {
         **raw, owners: {**raw[owners], counter: 0},
     })
-    following = registry.store.rows.captured(before.source)
+    following = registry.store.rows.captured(before.source, registry.store.rows.revision())
     with pytest.raises(InvalidRegistryDocument):
         before.decoded(registry.store, following)
 
@@ -74,7 +74,7 @@ def test_warm_membership_validation_does_not_enumerate_rows_or_unchanged_aliases
         registry.rename(f"worker-{index}", f"renamed-{index}")
     before = registry.store.read_revision()
     registry.declare(NativeThread("new-worker", frozenset(), Checkout(tmp_path)))
-    following = registry.store.rows.captured(before.source)
+    following = registry.store.rows.captured(before.source, registry.store.rows.revision())
     original = RowMapping.__iter__
 
     def no_complete_mapping(rows):

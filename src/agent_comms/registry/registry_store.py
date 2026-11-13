@@ -66,6 +66,14 @@ from agent_comms.storage.store_files import RegistryLocking
 from agent_comms.storage.typed_table import TableSchema
 
 
+@dataclass(frozen=True)
+class AuthorizedCapture:
+    """One guarded read of the registry: its committed rows and the authority that allowed it."""
+
+    privacy: RegistryPrivacy
+    source: RegistryCapture
+
+
 class CachedRegistry(ABC):
     """The registry revision this process last decoded, or none yet."""
 
@@ -81,8 +89,8 @@ class CachedRegistry(ABC):
         """Decode ``raw``, reusing the threads this revision already decoded."""
 
     @abstractmethod
-    def captured(self, store: RegistryStore) -> RegistryCapture:
-        """The committed revision, read as the rows changed since this one."""
+    def captured(self, store: RegistryStore, current: RegistryRowRevision) -> RegistryCapture:
+        """The committed revision ``current``, read as the rows changed since this one."""
 
     @abstractmethod
     def holds(self, capture: RegistryCapture) -> bool:
@@ -100,8 +108,8 @@ class UncachedRegistry(NullMember, CachedRegistry):
     def decoded(self, store: RegistryStore, source: RegistryCapture) -> RegistryDocument:
         return store._decode(source.raw, (RegistryCapture.empty().raw, RegistryDocument()))
 
-    def captured(self, store: RegistryStore) -> RegistryCapture:
-        return store.rows.captured(RegistryCapture.empty())
+    def captured(self, store: RegistryStore, current: RegistryRowRevision) -> RegistryCapture:
+        return store.rows.captured(RegistryCapture.empty(), current)
 
     def holds(self, capture: RegistryCapture) -> bool:
         return False
@@ -148,8 +156,8 @@ class RegistryRevision(CachedRegistry):
         document = store._decode(source.raw, (self.source.raw, self.document))
         return replace(document, last_seen=self.document.last_seen)
 
-    def captured(self, store: RegistryStore) -> RegistryCapture:
-        return store.rows.captured(self.source)
+    def captured(self, store: RegistryStore, current: RegistryRowRevision) -> RegistryCapture:
+        return store.rows.captured(self.source, current)
 
     def holds(self, capture: RegistryCapture) -> bool:
         return capture is self.source
@@ -419,16 +427,24 @@ class RegistryStore(
         return self.read_revision_unlocked().document
 
     def _capture_unlocked(self) -> RegistryCapture:
-        """The committed revision: the cached one's own capture while nothing committed since,
-        otherwise the cached revision with only the rows changed since it applied."""
-        self.private_guard_unlocked()  # before even a cache hit
+        return self._authorized_capture_unlocked().source
+
+    def _authorized_capture_unlocked(self) -> AuthorizedCapture:
+        """The committed revision and the authority it was read under: the cached revision's
+        own capture while nothing committed since, otherwise the cached revision with only the
+        rows changed since it applied.
+
+        The guard held here excludes every commit, so the row revision is asked once and both
+        the authority check and the capture answer from it."""
+        revision = self.rows.revision()
+        privacy = self._guard_at(revision)  # before even a cache hit
         entry = self.cache.entry
-        source = entry.captured(self)
+        source = entry.captured(self, revision)
         with self.cache.measurement:
             self.cache.counts.requests += 1
             if not entry.holds(source):
                 self.cache.counts.captures += 1
-        return source
+        return AuthorizedCapture(privacy, source)
 
     def _decode_capture(self, source: RegistryCapture) -> RegistryDocument:
         return self._decode_revision(source).document
@@ -504,10 +520,10 @@ class RegistryStore(
 
     def snapshot_with_authority(self) -> RegistryCut:
         with self.guarded_read():
-            privacy = self.private_guard_unlocked()
-            source = self._capture_unlocked()
-            revision = source.revision, FileRevision.capture(self.guard_path)
-        return RegistryCut(self, revision, self._decode_snapshot(source), privacy)
+            captured = self._authorized_capture_unlocked()
+            revision = captured.source.revision, FileRevision.capture(self.guard_path)
+        return RegistryCut(
+            self, revision, self._decode_snapshot(captured.source), captured.privacy)
 
     def entries_cut(self, names: frozenset[str]) -> RegistryEntriesCut:
         cut = self.snapshot_with_authority()
@@ -701,7 +717,11 @@ class RegistryStore(
         return RegistryCapture(self.rows.revision(), raw)
 
     def private_guard_unlocked(self) -> RegistryPrivacy:
-        """Validate registry authority before even a cached document read.
+        return self._guard_at(self.rows.revision())
+
+    def _guard_at(self, revision: RegistryRowRevision) -> RegistryPrivacy:
+        """Validate registry authority at the committed row revision its caller read, before
+        even a cached document read.
 
         The guard owns its native namespace. Native runtime tables without
         that guard are incomplete state, never a new namespace to initialize.
@@ -713,7 +733,6 @@ class RegistryStore(
         # Each answer keys on the files it was decided from: the coordinator commits on every
         # coordination write, and a private root never reads it, so keying a private answer
         # on it re-hashed the whole registry on every coordination write.
-        revision = self.rows.revision()
         root = (_link_revision(self.path.parent).file_identity(), revision.identity)
         observed = (
             _link_revision(self.guard_path),
