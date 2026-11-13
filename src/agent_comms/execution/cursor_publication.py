@@ -37,6 +37,7 @@ from agent_comms.transport.runtime_server import RuntimeServer
 
 if TYPE_CHECKING:
     from agent_comms.execution.selected.participant import SelectedParticipant
+    from agent_comms.registry.registry_store import RegistryCut
 
 
 class CursorRetry(ABC):
@@ -149,10 +150,18 @@ class CursorPublication(CursorMetadataRead[CursorAdvancedUpdate]):
     def delivery(self, session_id: AcpSessionId) -> CursorDelivery:
         return self.deliveries.setdefault(session_id, CursorDelivery())
 
-    def scope(self, thread_name: str, session_id: AcpSessionId) -> CursorScope:
-        registry = self.comms.registry.store
-        cut = registry.snapshot_with_authority()
-        return cut.privacy.cursor_scope(cut.snapshot, thread_name, session_id)
+    def scope(self, thread_name: str, session_id: AcpSessionId) -> tuple[RegistryCut, CursorScope]:
+        cut = self.comms.registry.store.snapshot_with_authority()
+        return cut, cut.privacy.cursor_scope(cut.snapshot, thread_name, session_id)
+
+    def scope_after(
+        self, cut: RegistryCut, scope: CursorScope, thread_name: str, session_id: AcpSessionId,
+    ) -> CursorScope:
+        """The scope now. It is a function of its registry cut, so a cut that is still the
+        store's answers without reading the registry again."""
+        if cut.matches_current():
+            return scope
+        return self.scope(thread_name, session_id)[1]
 
     async def observe(
         self, thread_name: str, session_id: AcpSessionId, *, defer_busy: bool = False,
@@ -171,7 +180,8 @@ class CursorPublication(CursorMetadataRead[CursorAdvancedUpdate]):
         source_reads: NativeEvidenceScope, defer_busy: bool, advance: bool,
     ) -> CursorEnvelope:
         revision = delivery.next_revision()
-        scope = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
+        cut, scope = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
+        current_scope = partial(self.scope_after, cut, scope, thread_name, session_id)
         unavailable = CursorEnvelope(scope, revision, UnavailableCursorObservation())
         if not scope.matches_session(session_id):
             return unavailable
@@ -186,11 +196,11 @@ class CursorPublication(CursorMetadataRead[CursorAdvancedUpdate]):
                 source_reads=source_reads,
             )
         except DeferredRead:
-            current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
+            current = await Coordination.run_worker(current_scope)
             if defer_busy and current == scope:
                 raise
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
-        current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
+        current = await Coordination.run_worker(current_scope)
         if current != scope:
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
         return CursorEnvelope(
