@@ -867,7 +867,7 @@ class RosterSidebarRead(SidebarReadStage):
         stage = SidebarReadStage()
         stage._cached_snapshot = self._cached_snapshot
         stage._cached_revision = self._cached_revision
-        stage._cached_model = self._cached_model
+        stage._cached_derived = self._cached_derived
         reading.stage = stage
         reading.invalidate()
 
