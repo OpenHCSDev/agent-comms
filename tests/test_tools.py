@@ -30,16 +30,23 @@ class TestToolCatalog:
             name="catalog-owner", tags=frozenset(), worktree=Checkout(Path("/wt")), service_tier=ServiceTier.STANDARD)
         comms.registry.declare(thread)
         launch_thread = thread
-        flag, path = comms.threads.native_launch_arguments(
+        flag, path, tools_flag, tools_path = comms.threads.native_launch_arguments(
             launch_thread, NativeArguments(()), tmp_path / "package",
         )
-        assert flag == "--comms-catalog"
+        assert (flag, tools_flag) == ("--comms-catalog", "--comms-tools")
         payload = json.loads(Path(path).read_text())
-        assert payload == ToolsCliCommand(name=ThreadCaller(thread.name)).apply(comms).to_wire()
-        assert payload["service_tier"] == "standard"
-        assert {tool["name"] for tool in payload["tools"]} == {
+        tools = json.loads(Path(tools_path).read_text())
+        assert {**tools, **payload} == ToolsCliCommand(
+            name=ThreadCaller(thread.name)).apply(comms).to_wire()
+        assert payload == {"service_tier": "standard", "launch_arguments": payload["launch_arguments"]}
+        assert {tool["name"] for tool in tools["tools"]} == {
             tool["name"] for tool in NativeRequestTools.catalog
         }
+        written = Path(tools_path).stat().st_mtime_ns
+        assert comms.threads.native_launch_arguments(
+            launch_thread, NativeArguments(()), tmp_path / "package",
+        ) == (flag, path, tools_flag, tools_path)
+        assert Path(tools_path).stat().st_mtime_ns == written
         for tier in (ServiceTier.PRIORITY, ServiceTier.STANDARD):
             thread = comms.threads.set_thread_configuration(
                 comms.registry.require(thread.name),
@@ -53,7 +60,7 @@ class TestToolCatalog:
             # catalog must still project the current registry tier, not the snapshot.
             assert comms.threads.native_launch_arguments(
                 launch_thread, NativeArguments(()), tmp_path / "package",
-            ) == (flag, path)
+            ) == (flag, path, tools_flag, tools_path)
             ThreadCatalog.publish(launch_thread, comms.root)
             assert json.loads(Path(path).read_text())["service_tier"] == tier.value
             repeated = Path(path).stat()
