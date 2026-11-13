@@ -6,7 +6,7 @@ from agent_comms.transport.tool_declaration import NativeRequestTools
 
 
 def test_the_native_tool_catalog_builds_every_tool_schema():
-    catalog = NativeRequestTools.catalog()
+    catalog = NativeRequestTools.catalog
     assert len(catalog) == len(NativeRequestTools.members_with(NativeRequestTools))
 
 

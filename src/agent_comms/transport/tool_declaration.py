@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
 from agent_comms.execution.tool_results import NoToolDiff
+from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -216,9 +217,11 @@ class NativeRequestTools(GlobalCommsExtension, ToolDeclaration, declared_name=No
     def schema(cls) -> dict[str, object]:
         """The declaration supplies the schema exposed to native clients."""
 
-    @classmethod
-    def catalog(cls) -> list[dict[str, object]]:
-        return [tool.schema() for tool in cls.members_with(cls)]
+    @ClassFact
+    def catalog(cls) -> tuple[dict[str, object], ...]:
+        """Every member's schema. A schema says only what its declaration says, so the catalog
+        is derived once for the declarations that exist, never again for each launch."""
+        return tuple(tool.schema() for tool in cls.members_with(cls))
 
 
 @dataclass(frozen=True)

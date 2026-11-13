@@ -23,7 +23,7 @@ class ThreadCatalog(ThreadCatalogFile):
             path = declared.catalog_path(launch.path)
             path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             catalog = ThreadToolCatalogResult(
-                tuple(NativeRequestTools.catalog()), declared.service_tier, launch.arguments(),
+                NativeRequestTools.catalog, declared.service_tier, launch.arguments(),
             )
             body = FieldCodec.compact(catalog.to_wire())
             if not path.exists() or path.read_text() != body:

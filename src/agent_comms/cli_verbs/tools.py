@@ -21,4 +21,4 @@ class ToolsCliCommand(CliCommand):
     ] = NoThreadCaller()
 
     def apply(self, ctx: Comms) -> ToolCatalogResult:
-        return self.name.catalog(ctx, tuple(NativeRequestTools.catalog()))
+        return self.name.catalog(ctx, NativeRequestTools.catalog)

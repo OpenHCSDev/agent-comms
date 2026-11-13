@@ -257,7 +257,7 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
     edited = action.edited({'disposition': editor_value})
     assert edited.bound[0].disposition == disposition
     assert 'only inactive' in edited.confirmation
-    tag_tool = next(tool for tool in NativeRequestTools.catalog() if tool['name'] == CommsTagsTool.declared_name)
+    tag_tool = next(tool for tool in NativeRequestTools.catalog if tool['name'] == CommsTagsTool.declared_name)
     delete_edit = next(case for case in tag_tool['parameters']['properties']['edit']['oneOf']
                        if case['properties']['kind']['const'] == 'delete')
     schema = delete_edit['properties']['disposition']
