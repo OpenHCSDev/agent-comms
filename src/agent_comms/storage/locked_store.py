@@ -1034,8 +1034,10 @@ class SQLiteReader(SQLiteStorage):
         A new file retires the handles of files that no longer exist."""
         idle = SQLiteReader._idle_handles.get(self.path)
         if idle is None:
-            for gone in [path for path in SQLiteReader._idle_handles if not path.exists()]:
-                SQLiteReader._idle_handles.pop(gone).retire()
+            # Every thread shares this map, and exists() lets another one add its file
+            # meanwhile: walk a copy of the names, and let two threads retire the same one.
+            for gone in [path for path in tuple(SQLiteReader._idle_handles) if not path.exists()]:
+                SQLiteReader._idle_handles.pop(gone, IdleReadHandles()).retire()
             idle = SQLiteReader._idle_handles.setdefault(self.path, IdleReadHandles())
         return idle
 
