@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from functools import cache
 from typing import ClassVar
 
+from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.storage.typed_table import sql_literal
 
@@ -30,15 +31,20 @@ class CoordinatorVocabulary(DeclaredFamily, declared_name=None):
     def sql_vocabulary(cls) -> dict[str, str]:
         """The named SQL fragments this family's current members imply."""
 
+    @ClassFact
     @staticmethod
-    def schema_context() -> dict[str, str]:
-        """Every vocabulary's SQL, rebuilt only when a family gains a member."""
+    def _rendered(cls: type[CoordinatorVocabulary]) -> dict[str, str]:
         return _merged(
             *(
                 vocabulary.members_with(vocabulary)
                 for vocabulary in CoordinatorVocabulary._vocabularies
             )
         )
+
+    @staticmethod
+    def schema_context() -> dict[str, str]:
+        """Every vocabulary's SQL, rebuilt only when a family gains a member."""
+        return CoordinatorVocabulary._rendered
 
     @staticmethod
     def sql_values(names: Iterable[str]) -> str:

@@ -674,16 +674,34 @@ class TypedRow(SqlProjection):
         """Columns a query may return that no record of this declaration carries."""
         return frozenset()
 
+    shapes_remembered: ClassVar[int] = 256
+    """How many distinct query shapes one declaration keeps text and positions for. A shape
+    is fixed by its call site; only an IN list's length varies, and past this many the rest
+    are built each time as before."""
+
+    @ClassFact
+    @staticmethod
+    def _result_positions(cls: type[TypedRow]) -> dict[tuple[str, ...], dict[str, int]]:
+        """Where each field sits in a result with these columns: a function of the declaration
+        and the column names alone, kept per declaration and dropped with it."""
+        return {}
+
     @classmethod
     def _positions(cls, names: tuple[str, ...],
-                   extra: Mapping[str, str] = types.MappingProxyType({})) -> dict[str, int]:
+                   extra: Mapping[str, str] = types.MappingProxyType({})) -> Mapping[str, int]:
+        known = cls._result_positions
+        if not extra and names in known:
+            return known[names]
         if not names:
             raise ValueError("Typed read requires a result set")
         projection = {**cls.column_projection(), **extra}
         carried = set(names).difference(cls._computed_columns())
         if len(set(names)) != len(names) or carried != set(projection.values()):
             raise MalformedRecord(f"Query columns do not match {cls.__name__}: {names!r}")
-        return {key: names.index(column) for key, column in projection.items()}
+        positions = {key: names.index(column) for key, column in projection.items()}
+        if not extra and len(known) < cls.shapes_remembered:
+            known[names] = positions
+        return positions
 
     @classmethod
     def _decode_row(
@@ -2673,13 +2691,33 @@ class TypedTable(
         db.execute(f"ALTER TABLE {_identifier(cls.declared_name)} RENAME COLUMN "
                    f"{_identifier(stored)} TO {_identifier(declared.wire_name)}")
 
+    @ClassFact
+    @staticmethod
+    def _key_columns(cls: type[TypedTable]) -> dict[tuple[str, ...], tuple[_Field, ...]]:
+        """The declared columns each set of key names selects, resolved once per declaration."""
+        return {}
+
     @classmethod
     def _bound(cls, inputs: Mapping[str, object]) -> tuple[tuple[_Field, ...], tuple[object, ...]]:
         """Named query inputs resolved to their declared columns, in the declaration's own
         field order whatever order the caller named them, with each value encoded."""
-        cls._fields_named(tuple(inputs))
-        selected = tuple(item for item in cls._columns if item.name in inputs)
+        names, known = tuple(inputs), cls._key_columns
+        if names not in known:
+            cls._fields_named(names)
+            selected = tuple(item for item in cls._columns if item.name in inputs)
+            if len(known) >= cls.shapes_remembered:
+                return selected, tuple(item.encode(inputs[item.name]) for item in selected)
+            known[names] = selected
+        selected = known[names]
         return selected, tuple(item.encode(inputs[item.name]) for item in selected)
+
+    @classmethod
+    def _condition_sql(cls, where: str, selected: tuple[_Field, ...]) -> str:
+        """The predicate with each selected key column compared null-safely."""
+        if selected:
+            where = "(" + where + ") AND " + " AND ".join(
+                f"{_identifier(item.wire_name)} IS ?" for item in selected)
+        return cls._sql(where)
 
     @classmethod
     def _condition(
@@ -2687,11 +2725,17 @@ class TypedTable(
     ) -> tuple[str, tuple]:
         """Compile predicate field names and declared key values once."""
         selected, values = cls._bound(key)
-        if selected:
-            where = "(" + where + ") AND " + " AND ".join(
-                f"{_identifier(item.wire_name)} IS ?" for item in selected)
-            parameters = (*parameters, *values)
-        return cls._sql(where), parameters
+        return cls._condition_sql(where, selected), (
+            (*parameters, *values) if selected else parameters)
+
+    @ClassFact
+    @staticmethod
+    def _select_statements(cls: type[TypedTable]) -> dict[tuple, str]:
+        """This table's SELECT text per query shape. The text is a function of the declaration
+        and the shape (projection, predicate, key names, order, limit, source), so it is built
+        once per shape and dropped with the declarations it was rendered from; rendering it per
+        query cost more than SQLite spent running it (2026-11-13)."""
+        return {}
 
     @classmethod
     def select_keys(cls, db: sqlite3.Connection,
@@ -2746,15 +2790,23 @@ class TypedTable(
         row_type: type[RelatedRow] | None, limit: int | None,
         table_source: TableSource,
     ) -> Generator[Self | RelatedRow]:
-        condition, parameters = cls._condition(where, parameters, key)
-        direction, selected = " DESC" if descending else "", row_type or cls
+        columns, values = cls._bound(key)
+        selected, source = row_type or cls, table_source.qualified(cls.declared_name)
+        shape = (selected, where, tuple(key), tuple(order_by), descending, limit is not None, source)
+        statements = cls._select_statements
+        if shape not in statements:
+            direction = " DESC" if descending else ""
+            statement = (
+                f"SELECT {selected._select_list(cls)} FROM {source} "
+                f"WHERE {cls._condition_sql(where, columns)}"
+                + (" ORDER BY " + ", ".join(cls._column_list((name,)) + direction for name in order_by)
+                   if order_by else "") + (" LIMIT ?" if limit is not None else ""))
+            if len(statements) >= cls.shapes_remembered:
+                return selected.iterate(db.execute(
+                    statement, (*parameters, *values, *((limit,) if limit is not None else ()))))
+            statements[shape] = statement
         return selected.iterate(db.execute(
-            f"SELECT {selected._select_list(cls)} FROM {table_source.qualified(cls.declared_name)} "
-            f"WHERE {condition}"
-            + (" ORDER BY " + ", ".join(cls._column_list((name,)) + direction for name in order_by)
-               if order_by else "") + (" LIMIT ?" if limit is not None else ""),
-            parameters + ((limit,) if limit is not None else ()),
-        ))
+            statements[shape], (*parameters, *values, *((limit,) if limit is not None else ()))))
 
     @overload
     @classmethod
