@@ -90,7 +90,15 @@ class ChoiceTargetField(TargetField):
 
     @property
     def choices(self) -> tuple[tuple[str, str], ...]:
-        return tuple((choice.name, choice.editor_value) for choice in self.options)
+        return tuple((choice.name, self.editor_value(choice.value)) for choice in self.options)
+
+    def editor_value(self, value: str | None) -> str:
+        """Finite annotation choices already carry their editor text."""
+        return FieldCodec.decode(str, value)
+
+    def choice_value(self, value: object) -> str | None:
+        """Read the selection represented by the form's editor value."""
+        return FieldCodec.decode(str | None, value)
 
     def offered(self) -> tuple[CatalogChoice, ...]:
         return self.options
@@ -127,13 +135,17 @@ class CatalogTargetField(ChoiceTargetField):
     def editor_declarations(self) -> tuple[object, ...]:
         return (self.catalog,)
 
+    def editor_value(self, value: str | None) -> str:
+        return self.plan.value.encode_editor(self.plan.value.decode(value))
+
+    def choice_value(self, value: object) -> str | None:
+        return FieldCodec.decode(str | None, self.plan.value.decode_editor(value))
+
     async def prepare(self, catalogs: ConfigOptions,
                       selection: object) -> CatalogTargetField:
         catalog = catalogs.catalog_for(self.catalog)
         options = await catalog.display_choices(cast(CatalogSelection, selection))
-        decoder = field_codec.compile_decoder(self.annotation)
-        return replace(self, options=tuple(CatalogChoice(name=item.name,
-            value=decoder.encode_editor(decoder.decode(item.value))) for item in options))
+        return replace(self, options=tuple(options))
 
     def value_schema(self) -> dict[str, JsonValue]:
         return {**FieldCodec.value_schema(self.annotation),
