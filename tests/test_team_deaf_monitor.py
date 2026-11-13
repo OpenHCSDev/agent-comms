@@ -115,7 +115,7 @@ async def test_unconfirmed_monitor_reports_team_deaf_once(
                 update, = held_bus.bus.bus.latest_addressed(
                     frozenset({owner_thread}), frozenset({"colleague"}),
                 )
-                # The board's open lines wake every beat (TeamUpdate.derive); reconnecting
+                # The board's open lines wake every beat (TeamPings); reconnecting
                 # must add no line of its own.
                 assert isinstance(update.task, TeamUpdate)
                 assert update.task.new_pings() == ()

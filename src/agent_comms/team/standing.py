@@ -78,9 +78,11 @@ from agent_comms.team.standing_rules import (
     IndependentStandingRule,
     OrderHeadReviewCommands,
     OwedAnswer,
+    OwnerFlaggedStandingRule,
     ReasonedStandingRule,
     StandingRule,
     UndatedStandingRule,
+    UrgentStandingRule,
 )
 from agent_comms.team.team_service import TeamService
 from agent_comms.ui_model.teammate_state import AwaitingTeam, TeammateState
@@ -266,12 +268,10 @@ class DiedInstallDue(RunInstallDue):
 
 
 @dataclass(frozen=True)
-class RequestStalled(IndependentStandingRule, UndatedStandingRule):
+class RequestStalled(UrgentStandingRule, OwnerFlaggedStandingRule, IndependentStandingRule, UndatedStandingRule):
     """Tristan's own request with nothing serving it: his lines lead the board and wake the
     teammate every beat until an order serves it, never sit under WATCHING."""
 
-    owner_flagged: ClassVar[bool] = True
-    urgent: ClassVar[bool] = True
 
     request: OwnerRequest
 
@@ -480,13 +480,12 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
 
 
 @dataclass(frozen=True)
-class GoalBlocked(IndependentStandingRule, UndatedStandingRule):
+class GoalBlocked(UrgentStandingRule, IndependentStandingRule, UndatedStandingRule):
     """A visible thread's own goal is blocked, with or without a teammate order."""
 
     thread: ThreadIncarnation
     goal: GoalId
     reason: str
-    urgent: ClassVar[bool] = True
 
     @classmethod
     def violations(cls, comms: Comms) -> tuple[Self, ...]:

@@ -392,6 +392,22 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
                      if rule.attention() and rule.broke_after(after))
 
 
+class UrgentStandingRule(StandingRule, declared_name=None):
+    """Alarm lines that lead the board."""
+
+    @classmethod
+    def is_urgent(cls) -> bool:
+        return True
+
+
+class OwnerFlaggedStandingRule(StandingRule, declared_name=None):
+    """Alarm lines carrying Tristan's own unanswered request."""
+
+    @classmethod
+    def is_owner_flagged(cls) -> bool:
+        return True
+
+
 @dataclass(frozen=True)
 class RetiredStandingRule(DefaultExternalName, StandingRule):
     """The rule a delivered heartbeat notice names after its declaration was deleted. Its line
@@ -1496,12 +1512,8 @@ class LocatedHuntDue(HuntDue):
 
 
 @dataclass(frozen=True)
-class DirectiveUnacted(OwedAnswer, DatedStandingRule):
+class DirectiveUnacted(OwnerFlaggedStandingRule, OwedAnswer, DatedStandingRule):
     """An owner directive recorded on an open request, past its deadline with no order since."""
-
-    @classmethod
-    def is_owner_flagged(cls) -> bool:
-        return True
 
     request: OwnerRequestId
     directive: RequestDirective
