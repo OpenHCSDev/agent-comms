@@ -29,7 +29,8 @@ from agent_comms.messaging.notification_reads import (
 from agent_comms.messaging.page_traversal import HistorySourceKey
 from agent_comms.messaging.revision_views import (
     ActivityView,
-    NotificationEvidenceView,
+    AssignmentEvidenceView,
+    HumanReadEvidenceView,
     NotificationsView,
     RegistrationsView,
     SidebarView,
@@ -37,6 +38,7 @@ from agent_comms.messaging.revision_views import (
     StoresView,
 )
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, OrderId
+from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
 from agent_comms.presentation import NoRevision, WireRevision
 from agent_comms.projects.checkouts import Checkout
@@ -297,7 +299,38 @@ def test_activity_views_receive_expiry_without_expiring_store_or_evidence_views(
     for view in (ActivityView(), SidebarView(), StatusView(), NotificationsView()):
         assert later.changed_since(view, original)
     assert not later.changed_since(StoresView(), original)
-    assert not later.changed_since(NotificationEvidenceView(), original)
+    for view in (HumanReadEvidenceView(), AssignmentEvidenceView()):
+        assert not later.changed_since(view, original)
+
+
+@pytest.mark.parametrize(
+    ("source_field", "expected"),
+    (("notifications", {"human": 0, "assignment": 1}),
+     ("reads", {"human": 1, "assignment": 0})),
+)
+def test_notification_sources_read_only_their_own_evidence(comms, tmp_path, source_field, expected):
+    reference = declare_team(comms, tmp_path)
+    original, settled = settled_read(comms, reference)
+    marker = tmp_path / "changed-evidence"
+    marker.write_text(source_field)
+    source = FileRevision.capture(marker).revisions()
+    later = replace(original, **{source_field: source})
+    calls = {"human": 0, "assignment": 0}
+
+    def count_reads(frame, event, argument):
+        if event == "call":
+            if frame.f_code is Comms.notification_evidence.__code__:
+                calls["human"] += 1
+            elif frame.f_code is NotificationAssignment.changed.__code__:
+                calls["assignment"] += 1
+
+    previous = sys.getprofile()
+    sys.setprofile(count_reads)
+    try:
+        assert not settled.live_changed(comms, NotificationPass(comms, later))
+    finally:
+        sys.setprofile(previous)
+    assert calls == expected
 
 
 def test_first_revision_requires_reads_even_for_unchanged_empty_stores():

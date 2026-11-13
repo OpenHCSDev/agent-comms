@@ -42,7 +42,8 @@ from agent_comms.messaging.revision_views import (
     ActivityView,
     BusSourceView,
     ExternalTranscriptsView,
-    NotificationEvidenceView,
+    AssignmentEvidenceView,
+    HumanReadEvidenceView,
     NotificationsView,
     RegistrationsView,
     RevisionView,
@@ -587,7 +588,7 @@ class WireRevision(ReadState, ToolResult):
         tuple[FileRevision, ...],
         *revision_source(
             lambda views: (views.bus.reads.path,), *StatusSourced.views(),
-            NotificationsView, NotificationEvidenceView,
+            NotificationsView, HumanReadEvidenceView,
         ),
     ]
     native_unread: Annotated[
@@ -607,7 +608,7 @@ class WireRevision(ReadState, ToolResult):
     notifications: Annotated[
         tuple[FileRevision, ...],
         *revision_source(lambda views: NotificationAssignment.source_paths(views.root), *StatusSourced.views(), NotificationsView,
-                         NotificationEvidenceView),
+                         AssignmentEvidenceView),
     ]
     external_transcripts: Annotated[
         tuple[FileRevision, ...],

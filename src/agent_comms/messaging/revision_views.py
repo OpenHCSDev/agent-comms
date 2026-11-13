@@ -56,8 +56,12 @@ class NotificationsView(ActivityView):
     """Whole-window changes; activity is attributed to its message participants."""
 
 
-class NotificationEvidenceView(RevisionView):
-    """Assignment and human read evidence, independent of timed status refreshes."""
+class HumanReadEvidenceView(RevisionView):
+    """Human display marks, independent of assignment and activity updates."""
+
+
+class AssignmentEvidenceView(RevisionView):
+    """Assignment evidence, independent of human display and activity updates."""
 
 
 class TeamBoardView(StatusSourced, RevisionView):

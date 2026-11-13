@@ -34,7 +34,7 @@ from agent_comms.messaging.notification_progress import (
     HumanReadProgress,
 )
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
-from agent_comms.messaging.revision_views import NotificationEvidenceView
+from agent_comms.messaging.revision_views import AssignmentEvidenceView, HumanReadEvidenceView
 from agent_comms.messaging.routing import Routing
 from agent_comms.nominal.field_codec import MessageId, TaggedRecordMember, TaggedUnion, ThreadLookup
 from agent_comms.notification_assignment import (
@@ -86,7 +86,7 @@ class NotificationWindow(TaggedUnion, affix=""):
                          for item in items for name in item.activity_names())
 
     @abstractmethod
-    def changed(self, notifications: NotificationPass) -> bool: ...
+    def changed(self, notifications: NotificationPass, earlier: RevisionChanges) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -94,17 +94,20 @@ class NoNotificationWindow(TaggedRecordMember, NotificationWindow):
     outcomes: Mapping[tuple[int, MessageId], tuple[MessageNotification, ...]] = field(default_factory=dict)
     reads: tuple[NotificationAssignmentRead, ...] = ()
 
-    def changed(self, notifications: NotificationPass) -> bool:
+    def changed(self, notifications: NotificationPass, earlier: RevisionChanges) -> bool:
         return False
 
 
 @dataclass(frozen=True)
 class CapturedNotificationWindow(TaggedRecordMember, NotificationWindow):
-    def changed(self, notifications: NotificationPass) -> bool:
-        evidence = notifications.evidence
+    def changed(self, notifications: NotificationPass, earlier: RevisionChanges) -> bool:
         return bool(
-            (self.read_marks and evidence.changed_marks(self.read_marks))
-            or NotificationAssignment.changed(self.reads, notifications.assignments)
+            (self.read_marks
+             and notifications.revision.changed_since(HumanReadEvidenceView(), earlier)
+             and notifications.evidence.changed_marks(self.read_marks))
+            or (self.reads
+                and notifications.revision.changed_since(AssignmentEvidenceView(), earlier)
+                and NotificationAssignment.changed(self.reads, notifications.assignments))
         )
 
 
@@ -127,8 +130,7 @@ class NotificationPass:
         return self.comms.notification_evidence()
 
     def changed(self, window: NotificationWindow, earlier: RevisionChanges) -> bool:
-        return (self.revision.changed_since(NotificationEvidenceView(), earlier)
-                and window.changed(self))
+        return window.changed(self, earlier)
 
 
 @dataclass(frozen=True)
