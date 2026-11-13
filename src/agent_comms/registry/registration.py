@@ -214,7 +214,7 @@ class Registration(
             prepare_goal=execution.child_goal(goals, parent))
 
     def register_bound_thread(
-        self, name: str, channel_source: str, worktree: Checkout, process: ProcessIdentity,
+        self, name: str, channel_source: str, worktree: Checkout,
     ) -> Thread:
         """Bind a new independent endpoint with inherited channels, not delegated authority."""
         with self.store.editing() as edit:
@@ -222,8 +222,7 @@ class Registration(
                 return self._declare_in(edit, edit.document.require(name), _DEFAULT_PRESENCE)
             source = edit.document.require(channel_source)
             thread = ExternalThread(
-                name, DeclaredTag.for_child(source.tags), worktree,
-                process_identity=process)
+                name, DeclaredTag.for_child(source.tags), worktree)
             return self._declare_in(edit, thread, _DEFAULT_PRESENCE)
 
     def reserve_owner(self, edit: RegistryEdit, original: Thread, process: ProcessIdentity) -> RegistryOwner:
