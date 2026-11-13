@@ -66,11 +66,14 @@ class SourcePrefix(PresentPath):
         if covered_seq > self.through_seq:
             raise IdentityConflict("current source coverage exceeds the bus")
 
-    def require_current(self, bus: Bus) -> None:
+    def require_current(self, bus: Bus) -> int:
+        """The bus revision this prefix is still a prefix of."""
         if not ObservedPath.at(bus.path).same_file(self.identity):
             raise IdentityConflict("native source database changed")
-        if bus.revision() < self.through_seq:
+        revision = bus.revision()
+        if revision < self.through_seq:
             raise IdentityConflict("native source prefix regressed")
+        return revision
 
 
 class CoverageInput(ABC):
