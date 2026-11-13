@@ -392,6 +392,7 @@ class InputObservation(BusSessionsRuntime, ABC):
             FileLifetimeSource(bus.path),
             FileLifetimeSource(CoordinationStore.path_in(self.comms.root)),
         )
+        bus_paths = frozenset((*bus.source_paths(self.comms.root), bus.path))
         sources = (
             *inbox_sources,
             *(FileSource(path) for path in GoalWakeFile.watched_paths_in(self.comms.root)),
@@ -421,6 +422,9 @@ class InputObservation(BusSessionsRuntime, ABC):
                         )
                     self.observed_registry = read
                     inbox_changed = any(source.path in watcher.observed_paths for source in inbox_sources)
+                    if not bus_paths.isdisjoint(watcher.observed_paths):
+                        for state in self.drained.values():
+                            state.bus_moved = True
                     for state in targets.values():
                         if state.observing():
                             # Pending producers have their own completion wake;
@@ -460,9 +464,14 @@ class InputObservation(BusSessionsRuntime, ABC):
             state.observation_ready.clear()
             read = self.observed_registry
             if not state.owes_tick(self.effects.cursors.delivery(session_id).needs_refresh):
+                observation = state.idle_revision
+                if state.bus_asked is observation and not state.bus_moved:
+                    continue
+                state.bus_moved = False
                 changed = await Coordination.run_worker(partial(
-                    state.idle_revision.has_unobserved_inputs, bus, lookup))
+                    observation.has_unobserved_inputs, bus, lookup))
                 if not changed:
+                    state.bus_asked = observation
                     continue
             try:
                 document = await asyncio.shield(read)
@@ -700,6 +709,11 @@ class DrainedSession(SessionTaskOwner, InputEventState):
     # A changed read or process-local wake needs a full observation.
     # A completed stable drain consumes this pending work.
     repeat_observation: bool = False
+    # The bus committed since this session last asked it for unobserved inputs, and the
+    # observation that asked. A coordinator commit wakes every session; only a bus commit
+    # or a new observation can change the bus's answer.
+    bus_moved: bool = True
+    bus_asked: PrivateObservationState = field(default_factory=NoPrivateObservation)
 
     def owned(self) -> OwnerSession:
         raise RelationViolationError("This session has not acquired local execution")
