@@ -101,6 +101,11 @@ class CliCommand(
         batch.outcomes.append((batch.position, result))
 
     @classmethod
+    def configuration_actions(cls, action: TargetAction) -> tuple[TargetAction, ...]:
+        """Ordinary operations do not edit the selected object's configuration."""
+        return ()
+
+    @classmethod
     def catalog_declaration(cls) -> type[CliCommand]:
         """Concrete thread/channel variants declare their shared menu operation."""
         return cls
@@ -290,6 +295,14 @@ class CliCommand(
         return target.run(cls, comms, arguments, confirmed=confirmed, channel=channel,
                              project=project,
                              snapshot=snapshot, catalog=catalog)
+
+
+class ConfigurationCommand(CliCommand, declared_name=None):
+    """A command whose original parameters are the selected object's settings."""
+
+    @classmethod
+    def configuration_actions(cls, action: TargetAction) -> tuple[TargetAction, ...]:
+        return (action,)
 
 
 @dataclass(frozen=True)

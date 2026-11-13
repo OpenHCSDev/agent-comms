@@ -182,7 +182,7 @@ class UserMessageSentResult(CliResult):
 
 
 @dataclass(frozen=True)
-class ThreadConfiguredResult(CliResult):
+class ThreadConfiguredResult(RecordMember, TargetEditResult):
     configured: str
     model: ThreadModel
     thinking_level: ThinkingLevelField

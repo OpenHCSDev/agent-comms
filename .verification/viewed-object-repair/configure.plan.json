@@ -1,0 +1,58 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "offer-the-original-thread-configuration-writer",
+      "operations": [
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/configure.py",
+          "import_source": "from agent_comms.cli_support.named import NamedCliCommand"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/configure.py",
+          "import_source": "from agent_comms.cli_verbs.cli_command import TargetActionCommand"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/configure.py",
+          "target_qualname": "ConfigureCliCommand",
+          "replacements": [
+            {
+              "old_source": "NameArgument, NextTurnConfiguration, ConfigurationCommand, declared_name=\"configure\"",
+              "new_source": "NamedCliCommand, NextTurnConfiguration, ConfigurationCommand, TargetActionCommand[ThreadConfiguredResult], declared_name=\"configure\""
+            }
+          ]
+        },
+        {
+          "operation": "insert_before_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/configure.py",
+          "target_qualname": "ConfigureCliCommand.apply",
+          "source": "    @classmethod\n    def thread_bindings(cls, comms, thread, status, channel, *, catalog):\n        return (cls(name=thread.name),)\n\n"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/configure.py",
+          "target_qualname": "ConfigureCliCommand.apply",
+          "replacements": [
+            {
+              "old_source": "def apply(self, ctx: Comms) -> CliResult:",
+              "new_source": "def apply(self, ctx: Comms) -> ThreadConfiguredResult:"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/cli_commands.py",
+          "target_qualname": "ThreadConfiguredResult",
+          "replacements": [
+            {
+              "old_source": "class ThreadConfiguredResult(CliResult):",
+              "new_source": "class ThreadConfiguredResult(RecordMember, TargetEditResult):"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
