@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from contextlib import asynccontextmanager
 from dataclasses import (
     dataclass,
@@ -15,6 +15,7 @@ from metaclass_registry.mro_dispatch import (
 
 from agent_comms.agent_events import CompactionEvent
 from agent_comms.comms import Comms
+from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.context_store import (
     UNREAD_CONTEXT,
     ContextPrior,
@@ -60,6 +61,7 @@ from agent_comms.execution.turn_phase import (
     PreparingPhase,
     TurnPhase,
 )
+from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_notification import (
     MessageNotification,
@@ -252,6 +254,15 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
             await Coordination.run_worker(lease.close)
 
     @staticmethod
+    def sent_pages(sources: tuple[Delivered, ...]) -> Iterator[tuple[Delivered, ...]]:
+        """Newest sent messages first, in pages that double: a thread with no outcome to show
+        reads its whole window in a few pages, not one page per prompt slot."""
+        start, size = 0, SelectedWakeSegment.sent_limit
+        while start < len(sources):
+            yield sources[start:start + size]
+            start, size = start + size, size * 2
+
+    @staticmethod
     def capture_sent_outcomes(
         comms: Comms, assignment_read: NotificationAssignmentRead,
     ) -> tuple[SentMessageOutcome, ...]:
@@ -300,18 +311,25 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
             pending = pending_sealed_assignments(
                 store, lookup, after_seq=after_seq
             )
+            # The prompt shows sent_limit outcomes and only a turn with pending work has a
+            # prompt. Reading all 120 sent messages' assignments (about 1,500 rows) to fill
+            # five slots cost every turn a quarter second; newest pages stop when they are full.
+            viewer = OwnerOutcomes.of(sent_owner.incarnation)
+            pages = SelectedParticipant.sent_pages(sent_sources if pending else ())
             sent_read = NotificationAssignment.capture(
                 store.session._connection,
-                NotificationSelection.of(OwnerOutcomes.of(sent_owner.incarnation), sent_sources),
-                privacy,
+                NotificationSelection.of(viewer, next(pages, ())), privacy,
             )
-        sent_read = NotificationAssignment.capture_detached(
-            AssignmentSource(comms.root), sent_read)
         if pending:
             participant.pointer.require_idle()
+        assignments = AssignmentSource(comms.root)
         sent_outcomes = SelectedParticipant.capture_sent_outcomes(
-            comms, sent_read
-        )
+            comms, NotificationAssignment.capture_detached(assignments, sent_read))
+        for page in pages:
+            if len(sent_outcomes) >= SelectedWakeSegment.sent_limit:
+                break
+            sent_outcomes += SelectedParticipant.capture_sent_outcomes(
+                comms, assignments.read_assignments(NotificationSelection.of(viewer, page)))
         return owner, participant, pending, sent_outcomes
 
     @staticmethod
