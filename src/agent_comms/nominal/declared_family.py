@@ -232,6 +232,12 @@ class DeclaredFamily(FamilyMember, ABC, metaclass=FamilyMeta):
         return cls.__registry__[cast(Hashable, name)]
 
     @classmethod
+    def acquire_declarations(cls) -> None:
+        """Import every module that may declare a member, as the first lookup by name does.
+        That first lookup costs the whole package tree, so a store asks before it locks."""
+        len(cls.__registry__)
+
+    @classmethod
     def recorded_member(cls, name: object) -> type[Self]:
         """The member a stored or wire name selects; only a declared name selects one."""
         return cls.member_named(name)
