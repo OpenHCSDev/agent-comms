@@ -57,17 +57,15 @@ class PiPayload(ExternalField):
     def decode_fields(
         cls, value: dict[str, JsonValue], decoded: dict[str, object],
     ) -> dict[str, object]:
-        hints = FieldCodec._types(cls)
         problems: dict[str, str] = {}
-        for f, key in FieldCodec.record_fields(cls):
-            if f.name in decoded:
-                decoded[f.name] = FieldCodec.decode_resolved(hints[f.name], decoded[f.name])
+        for plan in FieldCodec.argument_fields(cls):
+            if plan.name in decoded:
+                decoded[plan.name] = plan.value.decode_resolved(decoded[plan.name])
                 continue
-            plan = FieldCodec.field_plan(cls, f.name)
             try:
                 captured = plan.decoded_external(value)
-                if f.name not in captured and (plan.constructor_required or plan.required):
-                    raise MalformedRecord(f"Missing required field {key}")
+                if plan.name not in captured and (plan.constructor_required or plan.required):
+                    raise MalformedRecord(f"Missing required field {plan.key}")
                 decoded.update(captured)
             except MalformedRecord as refused:
                 plan.locate_all(problems, refused)
