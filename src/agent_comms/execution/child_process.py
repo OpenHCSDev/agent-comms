@@ -836,28 +836,21 @@ class LinuxPlatform(PidfdHandles, Platform):
         """The exec gate arms PR_SET_PDEATHSIG and binds to this launcher's PID."""
         return os.getpid()
 
-    _stat_cache: ClassVar[dict[int, tuple[float, LinuxProcessRecord]]] = {}
-    _stat_cache_ttl: ClassVar[float] = 0.5
-
-    @classmethod
-    def _stat(cls, pid: int) -> LinuxProcessRecord:
-        now = time.monotonic()
-        cached = cls._stat_cache.get(pid)
-        if cached is not None and now - cached[0] < cls._stat_cache_ttl:
-            return cached[1]
+    @staticmethod
+    def _stat(pid: int) -> LinuxProcessRecord:
+        """One process as the kernel has it now. A process changes group at exec and its PID
+        is reused after it dies, so no earlier read answers for a later one."""
         try:
+            # comm can contain whitespace and ')'; fields after its final ')'
+            # start at field 3. Kernel starttime is field 22, pgrp is field 5.
             fields = Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1].split()
         except FileNotFoundError:
-            cls._stat_cache.pop(pid, None)
             raise ProcessLookupError(pid) from None
         if fields[0] in {"Z", "X"}:
-            cls._stat_cache.pop(pid, None)
             raise ProcessLookupError(pid)
         group = int(fields[2])
-        record = LinuxProcessRecord(
+        return LinuxProcessRecord(
             ProcessIdentity.in_group(pid, int(fields[19]), group), group, int(fields[1]))
-        cls._stat_cache[pid] = (now, record)
-        return record
 
     def identity(self, pid: int) -> ProcessIdentity:
         return self._stat(pid).identity
