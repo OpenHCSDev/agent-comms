@@ -368,7 +368,7 @@ class NotificationAssignment(NotificationSource):
         their equality."""
         # A retained read owns its recipient cut. Re-reading a different viewer's
         # superset would both decode it and report a permanent false change.
-        return tuple(read for read in reads if read.differs_from(source.read(read.selection).evidence))
+        return tuple(read for read in reads if read.differs_from(source.read_assignments(read.selection).evidence))
 
     @classmethod
     def resolve(cls, read: NotificationAssignmentRead) -> tuple[NotificationAssignment, ...]:
@@ -526,7 +526,7 @@ class NotificationAssignment(NotificationSource):
     def read(cls, root: Path, selection: NotificationSelection) -> NotificationAssignmentRead:
         """Capture this viewer's assignment evidence through the single observing
         connection owner."""
-        return AssignmentSource(root).read(selection)
+        return AssignmentSource(root).read_assignments(selection)
 
     @classmethod
     def missing_store(
@@ -578,7 +578,7 @@ class AssignmentSource:
     def privacy(self) -> RegistryPrivacy:
         return RegistryStore.at(self.root).privacy()
 
-    def read(self, selection: NotificationSelection) -> NotificationAssignmentRead:
+    def read_assignments(self, selection: NotificationSelection) -> NotificationAssignmentRead:
         with self.coordinator.observing(NotificationAssignment, selection, self.privacy) as result:
             captured = result
         return NotificationAssignment.capture_detached(self.root, captured)

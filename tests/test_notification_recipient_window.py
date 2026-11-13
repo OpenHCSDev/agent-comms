@@ -154,7 +154,7 @@ def test_independent_reply_changes_retained_evidence_without_claiming_context(
     window = MessageNotification.delivery_window(comms.root, comms.registry, after)
     row, = window.outcomes[source.message.seq, source.message.message_id]
     assert row.answer == AnsweredResponse(response.reference, response.at_ms)
-    assert not row.state.consumed
+    assert not row.state.is_consumed()
     assert after.rows == before.rows and after.consumption == before.consumption
     assert ReadLedger.at(comms.root).read() == reads
     later = comms.messaging.send(recipient.canonical_thread, source.message.sender,
@@ -184,5 +184,5 @@ def test_independent_reply_without_any_claim_is_retained_without_context_or_read
     window = MessageNotification.delivery_window(comms.root, comms.registry, after)
     row, = window.outcomes[message.seq, message.message_id]
     assert row.answer == AnsweredResponse(response.reference, response.at_ms) and row.changed
-    assert not row.state.consumed and not row.displayed_to
+    assert not row.state.is_consumed() and not row.displayed_to
     assert ReadLedger.at(comms.root).read() == reads

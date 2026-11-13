@@ -165,7 +165,7 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
     assert type(notice.state) is SentProgress
     assert notice.state.detail == ''
     assert notice.message.reference==initial.message.reference
-    assert not notice.state.working
+    assert not notice.state.is_working()
     # A diagnostic from another owner generation cannot block a current
     # participant; neither its text nor a running PID grants that relation.
     foreign = replace(diagnostic,owner=replace(owner,generation=owner.generation+1))

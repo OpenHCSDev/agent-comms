@@ -19,7 +19,6 @@ from typing import (
 )
 
 import agent_comms.registry.thread_presentation as thread_presentation
-from agent_comms.coordination.errors import StaleRevision
 from agent_comms.coordination.work import CoordinationWork
 from agent_comms.errors import RelationViolationError, RouteChangedError, UnregisteredThreadError
 from agent_comms.execution.child_process import NativeBinding, ProcessIdentity
@@ -27,18 +26,17 @@ from agent_comms.execution.native_arguments import GivenArguments
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.registry.notification_selection_read import ThreadSourceReader
 from agent_comms.registry.thread_identity import OwnerIdentity
 from agent_comms.transport.tool_result import ToolResult
 
 if TYPE_CHECKING:
     from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle
     from agent_comms.presentation import MessageNotification
-    from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.registry.threads import Thread
     from agent_comms.transcript.transcripts import (
         AcquiredThreadPresentation,
         TranscriptReadIdentity,
-        Transcripts,
     )
 
 
@@ -392,14 +390,9 @@ class ThreadPresentation(ThreadStatusDisplay, ToolResult):
                                readable: dict[str, AcquiredThreadPresentation]) -> None:
         """Only acquired evidence can say whether a later revision changed it."""
 
-    def read_sources(self, transcripts: Transcripts, snapshot: RegistrySnapshot,
-                     name: str, sent_source_limit: int) -> ThreadPresentation:
-        captured = transcripts.capture_page_window(
-            name, source_limit=5, sent_source_limit=sent_source_limit,
-        )
-        if not captured.read.identity.thread.incarnation.current(snapshot):
-            raise StaleRevision("Thread source incarnation changed during presentation")
-        return captured.presentation(self)
+    def read_sources(self, reader: ThreadSourceReader[ThreadPresentation],
+                     name: str) -> ThreadPresentation:
+        return reader.read_source(name, self)
 
     def same_observation(self, other: ThreadPresentation) -> bool:
         """Without acquired evidence, the same observation is the same presentation."""
@@ -424,6 +417,6 @@ class NoThreadPresentation(ThreadPresentation):
     def for_status(self, name: str) -> ThreadPresentation:
         return self.with_paint(ThreadRetired().presentation(name))
 
-    def read_sources(self, transcripts: Transcripts, snapshot: RegistrySnapshot,
-                     name: str, sent_source_limit: int) -> ThreadPresentation:
+    def read_sources(self, reader: ThreadSourceReader[ThreadPresentation],
+                     name: str) -> ThreadPresentation:
         return self

@@ -1,10 +1,13 @@
 """Thread read answers own comparison, retry and status projection."""
+import sys
 from dataclasses import replace
+from types import CodeType, FrameType
 from itertools import product
 
 import pytest
 
 from agent_comms.messaging.message_notification import NotificationPass
+from agent_comms.notification_assignment import AssignmentSource
 from agent_comms.presentation import WireRevision
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_presentation import NoThreadPresentation
@@ -98,8 +101,21 @@ def test_assignment_row_changes_attribute_only_their_view(
         if changed_name == 'read':
             notification_source = read_source
     names = frozenset(('alpha', 'beta', 'gamma'))
-    batch = comms.views.thread_presentations(names)
-    results = {name: ThreadPresented(batch.require(name)) for name in names}
+    getters = (AssignmentSource.coordinator.func.__code__, AssignmentSource.privacy.func.__code__)
+    calls: dict[CodeType, int] = dict.fromkeys(getters, 0)
+
+    def count_acquisition(frame: FrameType, event: str, argument: object) -> None:
+        if event == "call" and frame.f_code in calls:
+            calls[frame.f_code] += 1
+
+    prior = sys.getprofile()
+    sys.setprofile(count_acquisition)
+    try:
+        batch = comms.views.thread_presentations(names)
+        results = {name: ThreadPresented(batch.require(name)) for name in names}
+    finally:
+        sys.setprofile(prior)
+    assert tuple(calls.values()) == (1, 1)
     revision = comms.views.revision()
     earlier_registry = comms.registry.snapshot()
     activity = comms.views.observed_activity(revision, names)

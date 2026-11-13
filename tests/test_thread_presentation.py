@@ -77,7 +77,7 @@ def test_attention_preserves_the_original_member_and_fields(original):
     status = original.with_attention("Inbox unavailable").with_attention("Original failure")
     assert type(status) is type(original)
     assert status == replace(original, details=("Inbox unavailable", "Original failure"))
-    assert status.working == original.working
+    assert status.is_working() == original.is_working()
     assert FieldCodec.decode(ThreadPresentationStatus, FieldCodec.encode(status)) == status
     assert status.without_work() == IdleThreadPresentationStatus(details=status.details)
     assert not original.details
@@ -89,11 +89,11 @@ def test_attention_preserves_the_original_member_and_fields(original):
 def test_status_renders_attention_without_hiding_work(status):
     status = status.with_attention("Inbox unavailable", "Original failure")
     shown = status.activity_presentation("worker", "working", "Running tool")
-    assert shown.label == ("worker" if status.working else "! worker")
-    assert shown.summary == ("Working · Running tool" if status.working else "Inbox unavailable")
+    assert shown.label == ("worker" if status.is_working() else "! worker")
+    assert shown.summary == ("Working · Running tool" if status.is_working() else "Inbox unavailable")
     row = ThreadStatusModel.known("worker", shown)
     assert row.lines == (("Working · Running tool", "Inbox unavailable", "Original failure")
-                         if status.working else ("Inbox unavailable", "Original failure"))
+                         if status.is_working() else ("Inbox unavailable", "Original failure"))
     assert row.status is status
 
 

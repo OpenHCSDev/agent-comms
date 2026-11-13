@@ -12,6 +12,7 @@ from typing import Annotated
 
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.context_segments.retained import RetainedSegment
+from agent_comms.coordination.errors import StaleRevision
 from agent_comms.errors import UnknownChannelError
 from agent_comms.execution.transcript_sources import TranscriptCursor
 from agent_comms.input_disposition import InputDispositions
@@ -56,7 +57,9 @@ from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
 from agent_comms.messaging.sent_message import AssignedSourceIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, PresenceExclude, WireForm
+from agent_comms.notification_assignment import AssignmentSource
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.notification_selection_read import ThreadSourceReader
 from agent_comms.registry.activity import ActivityCapture, ObservedActivity
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.catalog_store import ChannelCatalog
@@ -179,11 +182,11 @@ class RetiredViews(ToolResult):
 
 
 @dataclass(frozen=True)
-class ThreadPresentations:
+class ThreadPresentations(AssignmentSource, ThreadSourceReader[ThreadPresentation]):
     """One status acquisition shared by a reader's thread presentations.
 
-    These rows belong to this registry cut, not a cache. Source acquisition
-    remains per thread, so one busy or damaged source cannot hide its peers.
+    These rows and their shared assignment acquisition belong to this cut,
+    not a persistent cache. Transcript windows and failures remain per thread.
     """
 
     snapshot: RegistrySnapshot
@@ -198,10 +201,15 @@ class ThreadPresentations:
         return self.views[canonical].presentation
 
     def read(self, name: str) -> ThreadPresentation:
-        return self.view(name).read_sources(
-            self.transcripts, self.snapshot, self.snapshot.canonical_name(name),
-            self.sent_source_limit,
+        return self.view(name).read_sources(self, self.snapshot.canonical_name(name))
+
+    def read_source(self, name: str, ordinary: ThreadPresentation) -> ThreadPresentation:
+        captured = self.transcripts.capture_page_window(
+            name, source_limit=5, sent_source_limit=self.sent_source_limit,
         )
+        if not captured.read.identity.thread.incarnation.current(self.snapshot):
+            raise StaleRevision("Thread source incarnation changed during presentation")
+        return captured.presentation(ordinary, self)
 
     def require(self, name: str) -> ThreadPresentation:
         """A bound caller must name an available thread, not an anonymous view."""
@@ -447,7 +455,8 @@ class HistoryViews(RelationshipSource):
             RosterVisibility(archived=True), names=names,
         )
         return ThreadPresentations(
-            snapshot, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit
+            self.root, snapshot, {view.thread.name: view for view in views},
+            self.transcripts, sent_source_limit,
         )
 
     def viewer_snapshot(
