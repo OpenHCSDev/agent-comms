@@ -176,6 +176,9 @@ class ThreadStatus(
     def require_inactive(self, message: str) -> None:
         """Inactive declarations may be changed without an active owner's session."""
 
+    def require_checkout_adoption(self) -> None:
+        raise RelationViolationError("Checkout adoption requires an archived source owner")
+
     def require_stopped(self) -> None:
         raise ThreadNotStoppedError("Retired owner is no longer stopped")
 
@@ -504,6 +507,9 @@ class ServiceThreadStatus(PublishingPresence, ThreadStatus):
 
 
 class ArchivedThreadStatus(OrphansHolds, ThreadStatus):
+
+    def require_checkout_adoption(self) -> None:
+        """Only retired declarations can surrender their checkout grants."""
 
     def is_archived(self) -> bool:
         return True

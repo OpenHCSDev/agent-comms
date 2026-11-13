@@ -546,6 +546,25 @@ class AddCheckoutOperation(CheckoutOperation):
         return CheckoutResult(destination)
 
 
+class AdoptCheckoutOperation(CheckoutOperation):
+    """Take over one archived owner's retained tree, keeping both session paths intact."""
+
+    @classmethod
+    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread) -> CheckoutResult:
+        source, = command.source_checkout
+        source = source.expanduser().absolute()
+        grant = command.grant(ctx, thread)
+        requested = command.source(ctx, thread)
+        repositories = ctx.registry.snapshot().team_project.require().repos
+        matching = tuple(repo for repo in repositories if repo.github == requested.github)
+        if len(matching) != 1:
+            raise ValueError(f'{requested.github} is not one unambiguous registered repository')
+        repository, = matching
+        grant.require_transfer(ctx, repository)
+        return CheckoutResult(ctx.registry.adopt_checkout(
+            thread, source, repository, lambda: grant.require_transfer(ctx, repository)))
+
+
 class TransferCheckoutOperation(CheckoutOperation):
     """Relocate the caller's retained work into its current held allocation."""
 

@@ -1,0 +1,89 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "adopt-retired-allocation-in-place",
+      "operations": [
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/thread_storage.py",
+          "target_qualname": "StorageRoots",
+          "replacements": [
+            {
+              "old_source": "    def __post_init__(self) -> None:",
+              "new_source": "    adopted_checkouts: Annotated[tuple[SelectedCheckout, ...], WireOmitDefault()] = ()\n    released_checkouts: Annotated[tuple[StoragePath, ...], WireOmitDefault()] = ()\n\n    def __post_init__(self) -> None:"
+            }
+          ]
+        },
+        {
+          "operation": "insert_before_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/thread_storage.py",
+          "target_qualname": "StorageRoots.relocated",
+          "source": "    def adopting(self, repository: RepositoryName, path: Path) -> StorageRoots:\n        return replace(self.choosing(repository, path), adopted_checkouts=(\n            *(claim for claim in self.adopted_checkouts if claim.path != path),\n            SelectedCheckout(repository, path)),\n            released_checkouts=tuple(old for old in self.released_checkouts if old != path))\n\n    def releasing(self, path: Path) -> StorageRoots:\n        return replace(self,\n            selected_checkouts=tuple(choice for choice in self.selected_checkouts if choice.path != path),\n            adopted_checkouts=tuple(claim for claim in self.adopted_checkouts if claim.path != path),\n            released_checkouts=tuple(dict.fromkeys((*self.released_checkouts, path))))"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/thread_storage.py",
+          "target_qualname": "StorageRoots.relocated",
+          "replacements": [
+            {
+              "old_source": "            for choice in self.selected_checkouts))",
+              "new_source": "            for choice in self.selected_checkouts), adopted_checkouts=tuple(\n            replace(claim, path=destination) if claim.path == source else claim\n            for claim in self.adopted_checkouts))"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/projects/storage_rules.py",
+          "target_qualname": "CheckoutAllocation.for_path",
+          "replacements": [
+            {
+              "old_source": "        allocated = rule.roots_of(owner).allocation_name",
+              "new_source": "        roots = rule.roots_of(owner)\n        if path in roots.released_checkouts:\n            return\n        allocated = roots.allocation_name"
+            }
+          ]
+        },
+        {
+          "operation": "insert_before_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/projects/storage_rules.py",
+          "target_qualname": "ProblemCheckoutAllocation",
+          "source": "@dataclass(frozen=True)\nclass AdoptedCheckoutAllocation(EditableCheckoutAllocation):\n    \"\"\"An existing tree whose retired owner handed this incarnation its grant.\"\"\"\n\n    repository: RepositoryName\n\n    @classmethod\n    def read(cls, owner: Thread, path: Path, problem: str,\n             suffix: str) -> Iterator[CheckoutAllocation]:\n        for claim in owner.storage_roots.stored().adopted_checkouts:\n            if claim.path == path:\n                yield cls(claim.repository)\n\n    def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,\n                      repository: RepositoryName, reads: RepositoryReads) -> bool:\n        return self.repository == repository\n\n    def owns_present(self, rule: StorageRule, owner: Thread, path: Path,\n                     reads: RepositoryReads) -> bool:\n        return reads.repository(path).github == self.repository\n\n\n"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/projects/storage_rules.py",
+          "target_qualname": "StorageRule.checkout_paths",
+          "replacements": [
+            {
+              "old_source": "        return tuple(path for path in (owner.project_path,\n                                       *sorted(ordered.parent.glob(ordered.name)))",
+              "new_source": "        return tuple(path for path in dict.fromkeys((owner.project_path,\n                                       *sorted(ordered.parent.glob(ordered.name)),\n                                       *(claim.path for claim in self.roots_of(owner).adopted_checkouts)))"
+            }
+          ]
+        },
+        {
+          "operation": "insert_before_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/thread_status.py",
+          "target_qualname": "ThreadStatus.require_stopped",
+          "source": "    def require_checkout_adoption(self) -> None:\n        raise RelationViolationError(\"Checkout adoption requires an archived source owner\")\n"
+        },
+        {
+          "operation": "insert_before_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/thread_status.py",
+          "target_qualname": "ArchivedThreadStatus.is_archived",
+          "source": "    def require_checkout_adoption(self) -> None:\n        \"\"\"Only retired declarations can surrender their checkout grants.\"\"\"\n"
+        },
+        {
+          "operation": "insert_before_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/registration.py",
+          "target_qualname": "Registration.transfer_checkout",
+          "source": "    def adopt_checkout(\n        self, original: Thread, source: Path, repository: Repo,\n        require_target: Callable[[], None],\n    ) -> Path:\n        \"\"\"Hand a retired owner's exact allocation to a live holder without moving either.\"\"\"\n        with self.store.editing() as edit:\n            current = edit.document.require(original.name)\n            if current.incarnation != original.incarnation:\n                raise RelationViolationError(\"Checkout recipient changed before adoption\")\n            require_target()\n            if repository not in edit.document.team_project.require().repos:\n                raise RelationViolationError(\"Registered repository changed before adoption\")\n            rule, reads = self.storage_rule, RepositoryReads()\n            rule.require_physical_allocation(source)\n            if source == repository.checkout.resolve() or not (source / '.git').is_file():\n                raise RelationViolationError(\"Only an isolated linked checkout can be adopted\")\n            owners = tuple(thread for thread in edit.document.threads.values()\n                           if rule.owns_present_checkout(thread, source, reads))\n            if len(owners) != 1:\n                raise RelationViolationError(\"Checkout needs exactly one current allocation owner\")\n            previous, = owners\n            if previous.incarnation == current.incarnation:\n                raise RelationViolationError(\"Recipient already owns this checkout\")\n            edit.document.status(previous.name).require_checkout_adoption()\n            if previous.process_alive:\n                raise RelationViolationError(\"Checkout source owner still has a live process\")\n            rule.require_transfer_source(previous, source, edit.document.threads.values(), repository)\n            require_target()\n            # Both declarations commit together. Neither session nor project path changes.\n            edit.document.threads[previous.name] = replace(previous,\n                storage_roots=rule.roots_of(previous).releasing(source))\n            edit.document.threads[current.name] = replace(current,\n                storage_roots=rule.roots_of(current).adopting(repository.github, source))\n            edit.commit()\n        return source\n"
+        },
+        {
+          "operation": "insert_before_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/cli_commands.py",
+          "target_qualname": "TransferCheckoutOperation",
+          "source": "class AdoptCheckoutOperation(CheckoutOperation):\n    \"\"\"Take over one archived owner's retained tree, keeping both session paths intact.\"\"\"\n\n    @classmethod\n    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread) -> CheckoutResult:\n        source, = command.source_checkout\n        source = source.expanduser().absolute()\n        grant = command.grant(ctx, thread)\n        requested = command.source(ctx, thread)\n        repositories = ctx.registry.snapshot().team_project.require().repos\n        matching = tuple(repo for repo in repositories if repo.github == requested.github)\n        if len(matching) != 1:\n            raise ValueError(f'{requested.github} is not one unambiguous registered repository')\n        repository, = matching\n        grant.require_transfer(ctx, repository)\n        return CheckoutResult(ctx.registry.adopt_checkout(\n            thread, source, repository, lambda: grant.require_transfer(ctx, repository)))\n\n\n"
+        }
+      ]
+    }
+  ]
+}

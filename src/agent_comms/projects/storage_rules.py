@@ -88,7 +88,10 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
     @classmethod
     def for_path(cls, rule: StorageRule, owner: Thread,
                  path: Path) -> Iterator[CheckoutAllocation]:
-        allocated = rule.roots_of(owner).allocation_name
+        roots = rule.roots_of(owner)
+        if path in roots.released_checkouts:
+            return
+        allocated = roots.allocation_name
         prefix = f'{allocated}{rule.checkout_separator}'
         name = (path.name.removeprefix(prefix)
                 if path.parent == rule.checkout_base and path.name.startswith(prefix) else '')
@@ -199,6 +202,28 @@ class EditableCheckoutAllocation(CheckoutAllocation):
                              if root == path)
         except (GitCommandError, TodoError) as error:
             raise StorageDenied(f'Cannot authorize source write in {path}: {error}') from error
+
+
+@dataclass(frozen=True)
+class AdoptedCheckoutAllocation(EditableCheckoutAllocation):
+    """An existing tree whose retired owner handed this incarnation its grant."""
+
+    repository: RepositoryName
+
+    @classmethod
+    def read(cls, owner: Thread, path: Path, problem: str,
+             suffix: str) -> Iterator[CheckoutAllocation]:
+        for claim in owner.storage_roots.stored().adopted_checkouts:
+            if claim.path == path:
+                yield cls(claim.repository)
+
+    def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
+                      repository: RepositoryName, reads: RepositoryReads) -> bool:
+        return self.repository == repository
+
+    def owns_present(self, rule: StorageRule, owner: Thread, path: Path,
+                     reads: RepositoryReads) -> bool:
+        return reads.repository(path).github == self.repository
 
 
 class ProblemCheckoutAllocation(EditableCheckoutAllocation):
@@ -602,8 +627,9 @@ class StorageRule(RoomAllocation, DurableFile, ThreadCheckoutSource[Thread], Rep
     def checkout_paths(self, owner: Thread, reads: RepositoryReads) -> tuple[Path, ...]:
         """Declared home and work allocations; Git metadata supplies their branches."""
         ordered = self.order_checkout(self.roots_of(owner), '*')
-        return tuple(path for path in (owner.project_path,
-                                       *sorted(ordered.parent.glob(ordered.name)))
+        return tuple(path for path in dict.fromkeys((owner.project_path,
+                                       *sorted(ordered.parent.glob(ordered.name)),
+                                       *(claim.path for claim in self.roots_of(owner).adopted_checkouts)))
                      if Checkout.git_roots(path) and not path.is_symlink()
                      and self.owns_present_checkout(owner, path, reads))
 
