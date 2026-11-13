@@ -432,6 +432,12 @@ class RegistryStore(
     def _decode_capture(self, source: RegistryCapture) -> RegistryDocument:
         return self._decode_revision(source).document
 
+    def read(self) -> RegistryDocument:
+        """The registry commits rows inside its SQLite file, which leaves the file's stat as it
+        was, so the stat that tells a JSON document it is unchanged says nothing here. The
+        revision this store already decodes by is the answer."""
+        return self.read_revision().document
+
     def read_revision(self) -> RegistryRevision:
         """Retain the captured document and its source without imposing live snapshot rules."""
         source, = self._copy_sources(self)
