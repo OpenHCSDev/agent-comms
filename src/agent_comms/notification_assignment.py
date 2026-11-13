@@ -439,7 +439,7 @@ class NotificationAssignment(NotificationSource):
             for key, recipient in page.entries
             for thread in registry.recipient(recipient, page.source).input_owners()
         }
-        rows = InputDispositions(source.root).read(tuple(keys)).rows
+        rows = source.input_dispositions.read(tuple(keys)).rows
         consumption = dict(read.consumption)
         for key, row in rows.items():
             selected = keys[key]
@@ -584,6 +584,10 @@ class AssignmentSource:
     @cached_property
     def registry(self) -> RegistrySnapshot:
         return self._registry_store.snapshot()
+
+    @cached_property
+    def input_dispositions(self) -> InputDispositions:
+        return InputDispositions(self.root)
 
     def read_assignments(self, selection: NotificationSelection) -> NotificationAssignmentRead:
         with self.coordinator.observing(NotificationAssignment, selection, self.privacy) as result:

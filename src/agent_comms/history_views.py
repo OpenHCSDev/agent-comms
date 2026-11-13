@@ -5,8 +5,10 @@ from __future__ import annotations
 import logging
 import time
 from abc import abstractmethod
-from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import ExitStack, contextmanager
+from dataclasses import dataclass, field, fields, replace
+from functools import cached_property, partial
 from pathlib import Path
 from typing import Annotated
 
@@ -15,7 +17,7 @@ from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.coordination.errors import StaleRevision
 from agent_comms.errors import UnknownChannelError
 from agent_comms.execution.transcript_sources import TranscriptCursor
-from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_disposition import InputDispositions, ScopedInputDispositions
 from agent_comms.messaging.activity_clocks import ChannelActivity
 from agent_comms.messaging.channel_management import ChannelManagement
 from agent_comms.messaging.channel_targets import (
@@ -194,6 +196,19 @@ class ThreadPresentations(AssignmentSource, ThreadSourceReader[ThreadPresentatio
     transcripts: Transcripts
     sent_source_limit: int
 
+    @property
+    def registry(self) -> RegistrySnapshot:
+        return self.snapshot
+
+    @contextmanager
+    def readings(self, names: Iterable[str]) -> Iterator[Mapping[str, Callable[[], ThreadPresentation]]]:
+        with ExitStack() as scope:
+            batch = OpenThreadPresentations(
+                **{declared.name: getattr(self, declared.name) for declared in fields(self)},
+                scope=scope,
+            )
+            yield {name: partial(batch.read, name) for name in names}
+
     def view(self, name: str) -> ThreadPresentation:
         canonical = self.snapshot.canonical_name(name)
         if canonical not in self.views:
@@ -214,6 +229,17 @@ class ThreadPresentations(AssignmentSource, ThreadSourceReader[ThreadPresentatio
     def require(self, name: str) -> ThreadPresentation:
         """A bound caller must name an available thread, not an anonymous view."""
         return self.read(name).require(name)
+
+
+@dataclass(frozen=True)
+class OpenThreadPresentations(ThreadPresentations):
+    """A presentation pass owns its input snapshot until all readers finish."""
+
+    scope: ExitStack = field(kw_only=True, repr=False, compare=False)
+
+    @cached_property
+    def input_dispositions(self) -> ScopedInputDispositions:
+        return ScopedInputDispositions(self.root, self.scope)
 
 
 class HistoryViews(RelationshipSource):

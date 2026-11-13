@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Callable
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
+from functools import cached_property
 from pathlib import Path
 from typing import Annotated, ClassVar
 
@@ -553,6 +554,21 @@ class InputDispositions(DurableStore, CompleteInputReader, InputLookup[InputAtte
 
         return self._update(*self._owned_or_attempted(owners, attempted), dismiss).record(
             *attempted).delivery_overview(owners, scope=scope)
+
+
+@dataclass(frozen=True)
+class ScopedInputDispositions(InputDispositions, declared_name=None):
+    """One lazy input snapshot, closed by the original presentation batch."""
+
+    scope: ExitStack
+
+    @cached_property
+    def connection(self) -> sqlite3.Connection:
+        return self.scope.enter_context(super().snapshot())
+
+    @contextmanager
+    def snapshot(self):
+        yield self.connection
 
 
 @dataclass(frozen=True, slots=True)

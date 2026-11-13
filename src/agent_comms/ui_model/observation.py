@@ -28,7 +28,7 @@ import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterator, Mapping
 from concurrent.futures import Future
-from contextlib import AbstractAsyncContextManager, AsyncExitStack, ExitStack, aclosing
+from contextlib import AbstractAsyncContextManager, AbstractContextManager, AsyncExitStack, ExitStack, aclosing, nullcontext
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from multiprocessing.connection import Connection
@@ -1173,7 +1173,7 @@ class NotificationReading(ReadingObservation[ObserveNotifications]):
 class LocatedThreads:
     activity: Mapping[str, ObservedActivity | DeletedThread]
     names: frozenset[str]
-    reads: Mapping[str, Callable[[], ThreadPresentation]]
+    reads: AbstractContextManager[Mapping[str, Callable[[], ThreadPresentation]]]
 
 
 class ThreadReading(ReadingObservation[ObserveThreads]):
@@ -1183,7 +1183,7 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         super().__init__(request)
         self.observed = ThreadsObserved(WireRevision.empty(), {}, frozenset(), {})
         self.initial = request.threads
-        self.located_threads = LocatedThreads({}, request.threads, {})
+        self.located_threads = LocatedThreads({}, request.threads, nullcontext({}))
         self.registry_read: RegistrySnapshot | UnreadRegistry = UnreadRegistry()
         # Each open thread's goal state at the last goal-store change: a goal write
         # re-reads the status of the threads whose goal it changed, not every open thread.
@@ -1223,7 +1223,7 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
     def located(self, comms: Comms, revision: WireRevision, previous: ThreadsObserved) -> LocatedThreads:
         # Keep each completed stage when a later stored read fails, exactly as
         # the original read did before its activity/names became declared state.
-        self.located_threads = LocatedThreads({}, self.request.threads, {})
+        self.located_threads = LocatedThreads({}, self.request.threads, nullcontext({}))
         readable, _ = previous.revision_inputs()
         names = self.located_threads.names
         watched = names | frozenset(actor for view in readable.values()
@@ -1241,7 +1241,7 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         if names:
             batch = comms.views.thread_presentations(names)
             self.located_threads = replace(
-                self.located_threads, reads={name: partial(batch.read, name) for name in names})
+                self.located_threads, reads=batch.readings(names))
         return self.located_threads
 
     def goals_changed(self, comms: Comms, revision: WireRevision,
@@ -1265,13 +1265,14 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         return iter(())
 
     @staticmethod
-    def presented(reads: Mapping[str, Callable[[], ThreadPresentation]],
+    def presented(reads: AbstractContextManager[Mapping[str, Callable[[], ThreadPresentation]]],
                   results: dict[str, ThreadReadResult]) -> Iterator[ObservationStep]:
-        for name, read in reads.items():
-            results[name] = UnreadableHistory.outcome(read).answer(
-                ThreadPresented,
-                lambda error: ThreadBusy(), ThreadUnavailable, lambda error: ThreadBusy())
-            yield ObservationStep()
+        with reads as captured:
+            for name, read in captured.items():
+                results[name] = UnreadableHistory.outcome(read).answer(
+                    ThreadPresented,
+                    lambda error: ThreadBusy(), ThreadUnavailable, lambda error: ThreadBusy())
+                yield ObservationStep()
 
 
 class ViewReading(Observation[ObserveViews]):
