@@ -1149,8 +1149,9 @@ class IncomingFrame(ABC):
 
     @property
     def text(self) -> str:
-        return (f'Comms in · {self.message.sender_label}\n'
-                f'{self.message.body}\nMessage ID: {self.message.message_id}')
+        return (f'Comms in · {self.message.target} · {self.message.sender_label}\n'
+                f'{self.message.body}\nMessage ID: {self.message.message_id}\n'
+                f'Reply to: {self.message.exact_reply_target}')
 
 class BridgeLog(io.TextIOBase):
     """The bridge process's stderr, including tracebacks and partial print writes."""

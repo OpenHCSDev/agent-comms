@@ -1,0 +1,20 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "retain-original-conversation-route",
+      "operations": [
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/shared.py",
+          "target_qualname": "IncomingFrame.text",
+          "replacements": [
+            {
+              "old_source": "return (f'Comms in \u00b7 {self.message.sender_label}\\n'\n                f'{self.message.body}\\nMessage ID: {self.message.message_id}')",
+              "new_source": "return (f'Comms in \u00b7 {self.message.target} \u00b7 {self.message.sender_label}\\n'\n                f'{self.message.body}\\nMessage ID: {self.message.message_id}\\n'\n                f'Reply to: {self.message.exact_reply_target}')"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
