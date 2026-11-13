@@ -34,7 +34,11 @@ from agent_comms.execution.selected.actions import (
     SelectedAction,
     SelectedWriteAuthority,
 )
-from agent_comms.execution.selected.participant import NoLivePublication, SelectedParticipant
+from agent_comms.execution.selected.participant import (
+    ConsidersSelectedWork,
+    NoLivePublication,
+    SelectedParticipant,
+)
 from agent_comms.execution.selected.result import CoordinatedTurn
 from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.execution.selected.turn import SelectedAttempt, SelectedConsideration
@@ -54,7 +58,7 @@ class IndependentExecution(NativeExecution):
 
 
 @dataclass(kw_only=True)
-class SelectedExecution(PackagedNativeExecution):
+class SelectedExecution(PackagedNativeExecution, ConsidersSelectedWork):
     max_attempts: ClassVar[int] = RetryableProviderFailure.max_retries + 1
 
     root: Path
@@ -136,22 +140,24 @@ class SelectedExecution(PackagedNativeExecution):
                     self.after_seq,
                     cursor_delivery=self.cursor_delivery,
                     publication=publication,
-                ) as participant:
-                    if participant is None:
-                        return None
+                ) as work:
                     try:
-                        session = await SelectedSession.prepare(
-                            participant,
-                            self.session_file,
-                            self,
-                        )
-                    except NativePiUnavailable as error:
-                        await participant.fail_before_send(self.max_attempts)
-                        raise SessionSetupFailed(f"Native session acquisition failed: {error}") from error
-                    try:
-                        async with session.files(self.root).accept_input():
-                            return await SelectedConsideration(participant).run(self, session)
+                        return await work.considered_by(self)
                     except RetryScheduled:
                         # Leaving the selection closes this turn lease. The next
                         # iteration acquires the newer generation required by retry.
                         continue
+
+    async def consider(self, participant: SelectedParticipant) -> CoordinatedTurn:
+        """The turn of a participant this execution selected."""
+        try:
+            session = await SelectedSession.prepare(
+                participant,
+                self.session_file,
+                self,
+            )
+        except NativePiUnavailable as error:
+            await participant.fail_before_send(self.max_attempts)
+            raise SessionSetupFailed(f"Native session acquisition failed: {error}") from error
+        async with session.files(self.root).accept_input():
+            return await SelectedConsideration(participant).run(self, session)

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Generator, Iterator
-from contextlib import asynccontextmanager
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator, Generator, Iterator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import (
     dataclass,
     field,
@@ -44,6 +45,7 @@ from agent_comms.execution.native_input_owner import (
 from agent_comms.execution.native_runtime_input import NativeRuntimeTable
 from agent_comms.execution.native_turn_context import ContextObserved
 from agent_comms.execution.selected.owner_source import RegistryOwnerSource
+from agent_comms.execution.selected.result import CoordinatedTurn
 from agent_comms.execution.selected.source_batch import (
     SelectedSource,
     SelectedSourceBatch,
@@ -94,8 +96,30 @@ class TriagePublication(MroDispatch):
         await self.publication.dispatch(event)
 
 
+class ConsidersSelectedWork(ABC):
+    """The execution a selection answers. It owns what a selected participant's turn does."""
+
+    @abstractmethod
+    async def consider(self, participant: SelectedParticipant) -> CoordinatedTurn: ...
+
+
+class SelectedWork(ABC):
+    """What a selection found for its participant: nothing pending, or the participant whose
+    turn begins. Each answers the execution that selected it, so nothing asks which it is."""
+
+    @abstractmethod
+    async def considered_by(self, execution: ConsidersSelectedWork) -> CoordinatedTurn | None: ...
+
+
+class NoSelectedWork(SelectedWork):
+    """Nothing is pending for this participant, so there is no turn."""
+
+    async def considered_by(self, execution: ConsidersSelectedWork) -> None:
+        return None
+
+
 @dataclass
-class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
+class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner], SelectedWork):
     comms: Comms
     bus: MessageBus
     store: Coordination
@@ -204,46 +228,17 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
     ):
         bus = MessageBus(comms.root, comms.registry, ParticipantPublisher)
         with cursor_delivery.measurements.operation("claim_prepare"):
-            owner, participant, pending, sent_outcomes = await Coordination.run_async(
+            prepared = await Coordination.run_async(
                 store.session.path,
                 lambda resource: cls.prepare(comms, bus, resource, root_id, name, after_seq),
             )
-        if not pending:
-            yield None
-            return
-        identity = ParticipantOwner(owner.thread, participant.owner_identity.generation)
-        with cursor_delivery.measurements.operation("model_selection"):
-            model = await Coordination.run_worker(lambda: cls.configured_model(comms, name))
-        lease = cls.lease(comms, owner)
-        try:
-            with cursor_delivery.measurements.operation("claim_lease"):
-                leased = await Coordination.run_worker(lambda: next(lease))
-            with cursor_delivery.measurements.operation("claim_sources"):
-                sources = await cls.sources(bus, store, root_id, pending, identity)
-            batch = SelectedSourceBatch.first_route(sources)
-            selected = cls(
-                comms,
-                bus,
-                store,
-                root_id,
-                leased,
-                ParticipantOwner(leased.thread, identity.generation),
-                participant.lookup,
-                batch,
-                sent_outcomes,
-                model,
-                cursor_delivery,
-                publication=publication,
-            )
-            await selected.require_current()
-            await selected.transition(
-                PreparingPhase(f"Preparing {len(batch.sources)} messages in {batch.target}")
-            )
-            yield selected
-        finally:
-            # The blocking call may acquire the lease even if its result is not delivered.
-            # The original generator owns retirement even in that case.
-            await Coordination.run_worker(lease.close)
+        async with prepared.selected(
+            comms, bus, store, root_id, name, cursor_delivery, publication,
+        ) as work:
+            yield work
+
+    async def considered_by(self, execution: ConsidersSelectedWork) -> CoordinatedTurn:
+        return await execution.consider(self)
 
     @staticmethod
     def sent_pages(
@@ -282,10 +277,7 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
     def prepare(
         comms: Comms, bus: MessageBus, store: Coordination,
         root_id: RootId, name: str, after_seq: int,
-    ) -> tuple[
-        RegistryOwner, ParticipantSnapshot, tuple[WakeAssignment, ...],
-        tuple[MessageNotification, ...],
-    ]:
+    ) -> PreparedSelection:
         """Capture detached registry, participant and optional context in one worker."""
         privacy = comms.registry.store.privacy()
         privacy.require_root(root_id, IdentityConflict("Selected claim namespace changed"))
@@ -313,17 +305,18 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
             pending = pending_sealed_assignments(
                 store, lookup, after_seq=after_seq
             )
+            if not pending:
+                return NothingPending()
             # The prompt shows sent_limit outcomes and only a turn with pending work has a
             # prompt. Reading all 120 sent messages' assignments (about 1,500 rows) to fill
             # five slots cost every turn a quarter second; newest pages stop when they are full.
             viewer = OwnerOutcomes.of(sent_owner.incarnation)
-            pages = SelectedParticipant.sent_pages(viewer, sent_sources if pending else ())
+            pages = SelectedParticipant.sent_pages(viewer, sent_sources)
             sent_read = NotificationAssignment.capture(
                 store.session._connection,
                 NotificationSelection.of(viewer, next(pages, ())), privacy,
             )
-        if pending:
-            participant.pointer.require_idle()
+        participant.pointer.require_idle()
         assignments = AssignmentSource(comms.root)
         sent_outcomes = SelectedParticipant.capture_sent_outcomes(
             comms, assignments, NotificationAssignment.capture_detached(assignments, sent_read))
@@ -333,7 +326,7 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
             sent_outcomes += SelectedParticipant.capture_sent_outcomes(
                 comms, assignments,
                 assignments.read_assignments(NotificationSelection.of(viewer, page)))
-        return owner, participant, pending, sent_outcomes
+        return PendingSelection(owner, participant, pending, sent_outcomes)
 
     @staticmethod
     def configured_model(comms: Comms, name: str) -> SelectedModel:
@@ -401,3 +394,77 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
             SelectedSource(assignment.assignment_id, store.assignments, initial)
             for assignment, initial in zip(assignments, originals, strict=True)
         )
+
+
+class PreparedSelection(ABC):
+    """What preparing a selection read for its participant. The pending rows get their type
+    once, where they are read, and each member opens the selection it stands for."""
+
+    @abstractmethod
+    def selected(
+        self, comms: Comms, bus: MessageBus, store: Coordination, root_id: RootId, name: str,
+        cursor_delivery: CursorDelivery, publication: MroDispatch,
+    ) -> AbstractAsyncContextManager[SelectedWork]: ...
+
+
+class NothingPending(PreparedSelection):
+    """No sealed assignment waits for this participant."""
+
+    @asynccontextmanager
+    async def selected(
+        self, comms: Comms, bus: MessageBus, store: Coordination, root_id: RootId, name: str,
+        cursor_delivery: CursorDelivery, publication: MroDispatch,
+    ) -> AsyncIterator[SelectedWork]:
+        yield NoSelectedWork()
+
+
+@dataclass(frozen=True)
+class PendingSelection(PreparedSelection):
+    """The participant's pending assignments and the sent outcomes its prompt shows; only a
+    selection with work has a prompt, so only this member carries them."""
+
+    owner: RegistryOwner
+    participant: ParticipantSnapshot
+    pending: tuple[WakeAssignment, ...]
+    sent_outcomes: tuple[SentMessageOutcome, ...]
+
+    @asynccontextmanager
+    async def selected(
+        self, comms: Comms, bus: MessageBus, store: Coordination, root_id: RootId, name: str,
+        cursor_delivery: CursorDelivery, publication: MroDispatch,
+    ) -> AsyncIterator[SelectedWork]:
+        identity = ParticipantOwner(self.owner.thread, self.participant.owner_identity.generation)
+        with cursor_delivery.measurements.operation("model_selection"):
+            model = await Coordination.run_worker(
+                lambda: SelectedParticipant.configured_model(comms, name))
+        lease = SelectedParticipant.lease(comms, self.owner)
+        try:
+            with cursor_delivery.measurements.operation("claim_lease"):
+                leased = await Coordination.run_worker(lambda: next(lease))
+            with cursor_delivery.measurements.operation("claim_sources"):
+                sources = await SelectedParticipant.sources(
+                    bus, store, root_id, self.pending, identity)
+            batch = SelectedSourceBatch.first_route(sources)
+            selected = SelectedParticipant(
+                comms,
+                bus,
+                store,
+                root_id,
+                leased,
+                ParticipantOwner(leased.thread, identity.generation),
+                self.participant.lookup,
+                batch,
+                self.sent_outcomes,
+                model,
+                cursor_delivery,
+                publication=publication,
+            )
+            await selected.require_current()
+            await selected.transition(
+                PreparingPhase(f"Preparing {len(batch.sources)} messages in {batch.target}")
+            )
+            yield selected
+        finally:
+            # The blocking call may acquire the lease even if its result is not delivered.
+            # The original generator owns retirement even in that case.
+            await Coordination.run_worker(lease.close)
