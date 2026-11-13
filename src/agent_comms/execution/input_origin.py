@@ -1,20 +1,14 @@
 """Record where input came from without granting permission to run or replay it."""
 
-from __future__ import annotations
-
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Annotated
 
-import agent_comms.input_attempt as input_attempt
-import agent_comms.messaging.retained_task_facts as task_facts
 from agent_comms.errors import RelationViolationError
 from agent_comms.messaging import initial_origin
 from agent_comms.execution.controller import NO_CONTROLLER
 from agent_comms.execution.input_ingress import InputIngressContext, InputRegistry
 from agent_comms.execution.input_key import InputKey, InputKeyText
-from agent_comms.execution.input_lookup import InputLookup
-from agent_comms.execution.input_text_context import InputTextContext
 from agent_comms.execution.turn_context import Provenance
 from agent_comms.installer.harness_install import HarnessSession
 from agent_comms.messaging.message_reference import MessageReference
@@ -57,10 +51,7 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
     ) -> None:
         pass
 
-    def retained_fact(self, source: input_attempt.StoredInput):
-        return task_facts.InputTaskFact(source)
-
-    def require_human(self) -> HumanInputOrigin:
+    def require_human(self) -> 'HumanInputOrigin':
         raise RelationViolationError("Input lacks an original human author witness")
 
     def harness_sources(self) -> tuple[HarnessAttemptOrigin, ...]:
@@ -88,16 +79,13 @@ class InputProvenance(Provenance):
     def public_description(self) -> str:
         return f"Original input {self.key} · {self.origin.declared_name}"
 
-    def public_text(self, comms: InputTextContext[input_attempt.InputAttempt]) -> str:
-        return self.require_original(comms.input_dispositions(comms.root)).source_text
+    def public_text(self, comms) -> str:
+        inputs = comms.input_dispositions(comms.root)
+        return inputs.lookup(self.key).require_original_provenance(self).source_text
 
     def require_human_input(self):
         self.origin.require_human()
         return self
-
-    def require_original(self, inputs: InputLookup[input_attempt.InputAttempt]) -> input_attempt.StoredInput:
-        """Look up the input by key and check its recorded author."""
-        return inputs.lookup(self.key).require_original_provenance(self)
 
 
 @dataclass(frozen=True)
@@ -188,9 +176,6 @@ class HumanInputOrigin(InputOrigin, ClaimScoped, ToolResult):
         owner = self._require_owner(snapshot, claim_scope)
         if (self.project, self.goal) != (owner.worktree, owner.goal.captured):
             raise RelationViolationError("User input scope changed before reservation")
-
-    def retained_fact(self, source: input_attempt.StoredInput):
-        return task_facts.HumanInputTaskFact(source)
 
     def require_human(self) -> HumanInputOrigin:
         return self

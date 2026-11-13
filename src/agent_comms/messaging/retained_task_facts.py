@@ -218,7 +218,7 @@ class RetainedTaskFacts:
         originals = {original.key: original for fact in self.facts
                      for message in fact.wire_sources()
                      for original in message.task.original_input_sources(inputs)}
-        return tuple(original.origin.retained_fact(original) for original in originals.values())
+        return tuple(_retained_fact(original) for original in originals.values())
 
     @staticmethod
     def canonical_bytes(record: object) -> bytes:
@@ -272,3 +272,11 @@ class RetainedTaskFacts:
             + json.dumps(FieldCodec.encode(self), ensure_ascii=False, sort_keys=True)
             + "\n</exact-task-source>"
         )
+
+
+def _retained_fact(original: input_attempt.StoredInput) -> ExactTaskFact:
+    try:
+        original.origin.require_human()
+    except RelationViolationError:
+        return InputTaskFact(original)
+    return HumanInputTaskFact(original)

@@ -389,7 +389,8 @@ class NativeInputConstraintPin(HumanConstraintPin):
         return original.context_provenance()
 
     def original_input_sources(self, inputs: InputLookup[input_attempt.InputAttempt]) -> tuple[input_attempt.StoredInput, ...]:
-        return (self.subject.require_human_input().require_original(inputs),)
+        provenance = self.subject.require_human_input()
+        return (inputs.lookup(provenance.key).require_original_provenance(provenance),)
 
     def original_wording_provenance(self, original: input_attempt.StoredInput) -> dict[str, object]:
         origin = original.origin.require_human()
