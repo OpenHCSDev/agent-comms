@@ -444,7 +444,10 @@ class TranscriptSourceWindow:
     sources: tuple[Delivered, ...]
     sent_sources: tuple[Delivered, ...]
 
-    def presentation(self, ordinary: ThreadPresentation, assignments: AssignmentSource) -> AcquiredThreadPresentation:
+    def presentation(
+        self, ordinary: ThreadPresentation, assignments: AssignmentSource,
+        *, snapshot: RegistrySnapshot | None = None,
+    ) -> AcquiredThreadPresentation:
         """Project incoming and sent outcomes from this one acquired source window."""
         transcripts = self.read.owner
         sources = tuple({source.message.reference: source
@@ -452,7 +455,7 @@ class TranscriptSourceWindow:
         viewer = OwnerOutcomes.of(self.read.identity.thread.incarnation)
         notification_read = assignments.read_assignments(NotificationSelection.of(viewer, sources))
         projected = MessageNotification.delivery_window(
-            transcripts.root, transcripts.registry, notification_read)
+            transcripts.root, transcripts.registry, notification_read, snapshot=snapshot)
         incoming = tuple(
             replace(notification, message=source.envelope)
             for source in self.sources

@@ -245,6 +245,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
         viewer: OutcomeViewer,
         after: RecipientCursor = FirstRecipient(),
         limit: RecipientLimit = RecipientLimit(),
+        snapshot: RegistrySnapshot | None = None,
     ) -> NotificationWindow:
         """Borrow mounted references in the original bounded delivery windows, as this
         viewer may see them."""
@@ -252,7 +253,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
             read = NotificationAssignment.read(
                 root, NotificationSelection.of(viewer, sources, after=after, limit=limit)
             )
-            return cls.delivery_window(root, registry, read)
+            return cls.delivery_window(root, registry, read, snapshot=snapshot)
 
         return cls.read_references(log, references, project)
 
@@ -279,12 +280,15 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
         root: Path,
         registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],
         assignment_read: NotificationAssignmentRead,
+        *,
+        snapshot: RegistrySnapshot | None = None,
     ) -> NotificationWindow:
         """The captured selection owns original membership and viewer visibility."""
         sources = assignment_read.sources
         if not sources:
             return CapturedNotificationWindow({}, (assignment_read,))
-        snapshot = registry.snapshot()
+        if snapshot is None:
+            snapshot = registry.snapshot()
         observations = AgentActivity(root, registry).observe_recipients(
             (
                 (page.source, recipient)
@@ -433,6 +437,8 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
         root: Path,
         registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],
         assignment_read: NotificationAssignmentRead,
+        *,
+        snapshot: RegistrySnapshot | None = None,
     ) -> tuple[MessageNotification, ...]:
         """Attach notification outcomes, as the read's viewer sees them, to the public
         envelopes of the messages the caller already checked."""
@@ -440,6 +446,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
             root,
             registry,
             assignment_read,
+            snapshot=snapshot,
         )
         return tuple(
             replace(notification, message=source.envelope)
