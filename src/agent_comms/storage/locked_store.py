@@ -785,6 +785,7 @@ class OpenSQLiteReadConnection(SQLiteReadConnection):
         # Queries remain thread-local. Finalization may run in the store owner's
         # retirement thread, so closing the handle is not thread-affine.
         self.db = source._open_reader(source.path, contention, check_same_thread=False)
+        self.timeout = contention.timeout
         self.retire = finalize(self, self.db.close)
         if FileRevision.capture(source.path).file_identity() != self.identity:
             self.retire()
@@ -795,6 +796,12 @@ class OpenSQLiteReadConnection(SQLiteReadConnection):
 
     def serves(self, revision: FileObservation) -> bool:
         return self.pid == os.getpid() and self.identity == revision.file_identity()
+
+    def configure(self, contention: StoreContention) -> None:
+        """The handle keeps its last wait budget; only a different one is sent again."""
+        if contention.timeout != self.timeout:
+            contention.configure(self.db)
+            self.timeout = contention.timeout
 
 
 class SQLiteReaders(local):
@@ -1046,7 +1053,7 @@ class SQLiteReader(SQLiteStorage):
                 self.readers.connection = held
                 db = held.db
                 try:
-                    contention.configure(db)
+                    held.configure(contention)
                     self.begin_snapshot(db)
                     yield db
                 finally:
