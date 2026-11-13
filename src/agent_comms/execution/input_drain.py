@@ -243,10 +243,6 @@ class PrivateObservationState(ABC):
     @abstractmethod
     def has_unobserved_inputs(self, bus: Bus, lookup: ThreadLookup) -> bool: ...
 
-    def describes(self, entry: RegistryEntry) -> bool:
-        """Whether this observation was made of this registry entry."""
-        return False
-
 
 class NoPrivateObservation(PrivateObservationState):
     def has_unobserved_inputs(self, bus: Bus, lookup: ThreadLookup) -> bool:
@@ -267,9 +263,6 @@ class PrivateObservation(PrivateObservationState):
         through = self.source_prefix.through_seq
         return (self.source_prefix.require_current(bus) > through
                 and bus.received_after(lookup, through))
-
-    def describes(self, entry: RegistryEntry) -> bool:
-        return self.entry == entry
 
     async def drain(self, inputs, session_id: AcpSessionId, root_id: RootId) -> int:
         return await inputs.effects._drain_private_nk(session_id, root_id)
@@ -404,6 +397,7 @@ class InputObservation(BusSessionsRuntime, ABC):
             *inbox_sources,
             *(FileSource(path) for path in GoalWakeFile.watched_paths_in(self.comms.root)),
         )
+        entries: dict[AcpSessionId, RegistryEntry | None] = {}
         try:
             async with aclosing(bus.watch_sources(*sources)) as observations:
                 async for watcher in observations:
@@ -420,13 +414,23 @@ class InputObservation(BusSessionsRuntime, ABC):
                         document = await read
                     except UNAVAILABLE_DRAIN_ERRORS:
                         # Each consumer records failure against its own original owner.
+                        entries = {}
                         for state in targets.values():
+                            state.entry_moved = True
                             state.observation_ready.set()
                     else:
                         self.effects.turns.goals.observe_root(
                             document, (owner for state in targets.values()
                                        for owner in state.executors()), watcher.observed_paths,
                         )
+                        read_entries = {
+                            session_id: document.entry_if_present(name)
+                            for session_id, name in zip(targets, names, strict=True)
+                        }
+                        for session_id, entry in read_entries.items():
+                            if entries.get(session_id) != entry:
+                                targets[session_id].entry_moved = True
+                        entries = read_entries
                     self.observed_registry = read
                     inbox_changed = any(source.path in watcher.observed_paths for source in inbox_sources)
                     if not bus_paths.isdisjoint(watcher.observed_paths):
@@ -486,11 +490,12 @@ class InputObservation(BusSessionsRuntime, ABC):
                 )
             else:
                 # A running wake wakes this observer when it finishes. Until then only this
-                # owner's registry entry or a new message can change what the settled
+                # owner's registry entry or a new message can change what the standing
                 # observation proved; every other session's commit cannot.
-                if (waking and not consumes and state.idle_revision.describes(entry)
+                if (waking and not consumes and not state.entry_moved
                         and not await state.bus_has_inputs(bus, lookup)):
                     continue
+                state.entry_moved = False
                 await self._observe_entry(session_id, entry)
 
     async def _observe_entry(
@@ -721,6 +726,9 @@ class DrainedSession(SessionTaskOwner, InputEventState):
     # or a new observation can change the bus's answer.
     bus_moved: bool = True
     bus_asked: PrivateObservationState = field(default_factory=NoPrivateObservation)
+    # This owner's registry entry differs from the one the root observer read before it.
+    # A tick clears it; it is what the observer of a running wake still watches.
+    entry_moved: bool = True
 
     def owned(self) -> OwnerSession:
         raise RelationViolationError("This session has not acquired local execution")

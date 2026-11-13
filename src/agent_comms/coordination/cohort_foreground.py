@@ -64,6 +64,10 @@ async def _accept_visible_deliveries(
                 if any(r.canonical_thread == owner_name for r in recipients):
                     unaccepted.append(initial)
         visited_after = addressed[-1] if addressed else after_seq
+        if not unaccepted and visited_after == after_seq:
+            # Nothing to record and the frontier stays where this cut read it: the write
+            # below would take the coordinator's exclusive lock to change no row.
+            return
         if unaccepted and acquire_package is not None:
             # An ACP observation with new originals must still validate the package
             # before SQL acceptance. Sealed evidences require no repeated preflight.
