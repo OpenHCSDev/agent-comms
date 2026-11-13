@@ -464,8 +464,7 @@ class TeamUpdateStore(PatternFile, SingleFileStore, DurableFile,
         store = cls.for_team(root, packet.teammate)
         if store.read() == (packet,):
             return
-        store.update(lambda previous: DocumentChange.to(previous)
-                     if previous == (packet,) else DocumentChange.to((packet,)))
+        store.update(lambda previous: DocumentChange.to((packet,)))
 
 
 class AlarmGroup(ViewHeading, affix="Alarms"):
