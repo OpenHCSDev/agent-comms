@@ -505,7 +505,6 @@ class TranscriptReadState(
         self._resources.callback(self._cancelled.set)
         self._cached_counts: TranscriptUnread | None = None
         self._counts_cache_key: tuple | None = None
-        self._keys_generation: int = 0
         # Capture the resource stack, not this state: dead roots must remain collectible.
         self._cleanup = finalize(self, self._resources.close)
 
@@ -620,7 +619,6 @@ class TranscriptReadState(
         changed = self._source_watch.changed_paths()
         # Visibility selects counts, not the lifetime of a registered source.
         rebuild = False
-        keys_changed = False
         if snapshot is not self._key_snapshot:
             current = {}
             for thread in snapshot.visible_threads(RosterVisibility(stopped=True, archived=True)):
@@ -630,7 +628,6 @@ class TranscriptReadState(
                 rebuild |= prior is None or prior.revisions.keys() != keys.revisions.keys()
                 current[thread.name] = keys
             rebuild |= bool(self._thread_keys.keys() - current.keys())
-            keys_changed = self._thread_keys != current or self._key_snapshot is None
             self._thread_keys = current
             self._key_snapshot = snapshot
         names = {name for path in changed for name in self._path_threads.get(path, ())}
@@ -642,9 +639,6 @@ class TranscriptReadState(
                 current_keys = keys.refresh(observed)
                 rebuild |= keys.revisions.keys() != current_keys.revisions.keys()
                 self._thread_keys[name] = current_keys
-                keys_changed = True
-        if keys_changed or changed:
-            self._keys_generation += 1
         if rebuild:
             self._path_threads = {}
             for name, keys in self._thread_keys.items():
@@ -676,11 +670,14 @@ class TranscriptReadState(
             if not self._cleanup.alive:
                 raise RuntimeError("Transcript reader is closed")
             self._refresh_keys(registry)
-            cache_key = (viewer, visibility, self._keys_generation, document.notice)
-            if cache_key == self._counts_cache_key and self._cached_counts is not None:
-                return self._cached_counts
             keys = {name: keys for name, keys in self._thread_keys.items()
                     if registry.status(name).in_view(visibility)}
+            cache_key = (
+                viewer, visibility, document.notice,
+                tuple((name, tuple(sorted(k.revisions.items()))) for name, k in sorted(keys.items())),
+            )
+            if cache_key == self._counts_cache_key and self._cached_counts is not None:
+                return self._cached_counts
             try:
                 result = self._counts_locked(viewer, document, keys)
             except sqlite3.DatabaseError as error:
