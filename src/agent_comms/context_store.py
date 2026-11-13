@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from collections.abc import Collection, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -334,6 +335,10 @@ class RecordedContextState(ContextPrior, ContextRecording):
     ) -> tuple[RecordedContextManifest, tuple[ContextEntryManifest, ...]]:
         return RecordedContextManifest.capture(manifest, self)
 
+    def is_request(self, source: ContextStoreIdentity, request: int) -> bool:
+        """Whether this state is that store's stored request."""
+        return False
+
 
 class AbsentContext(RecordedContextState):
     def next_recording_turn(self) -> int:
@@ -360,6 +365,9 @@ class CapturedContext(RecordedContextState):
 
     def next_recording_turn(self) -> int:
         return self.recorded.recording_turn + 1
+
+    def is_request(self, source: ContextStoreIdentity, request: int) -> bool:
+        return source == self.source and request == self.record_id
 
     def require_newest(
         self, db: sqlite3.Connection, source: ContextStoreIdentity, owner: ThreadIncarnation
@@ -521,9 +529,26 @@ class ContextStore(ReadsContextEntries, DurableStore, InputCaptureFile):
         owner: ThreadIncarnation,
     ) -> RecordedContextState:
         rows = ContextRequest.newest(db, owner)
-        if rows:
-            return next(self.resolve(db, source, rows))
-        return AbsentContext()
+        if not rows:
+            return AbsentContext()
+        recorded = self._recorded.get((self.path, owner.require_recorded().created_at), AbsentContext())
+        if recorded.is_request(source, rows[0].id):
+            return recorded
+        return next(self.resolve(db, source, rows))
+
+    _recorded: ClassVar[OrderedDict[tuple[Path, float], RecordedContextState]] = OrderedDict()
+    """Each thread's request this process recorded last. A turn's first request follows the
+    previous turn's last one, which this store built a moment ago; resolving it again decoded
+    every entry of the thread's context (16% of the worker's CPU per channel message)."""
+    _recorded_limit: ClassVar[int] = 128
+
+    def _remember(self, owner: ThreadIncarnation, recorded: CapturedContext) -> CapturedContext:
+        key = (self.path, owner.require_recorded().created_at)
+        self._recorded[key] = recorded
+        self._recorded.move_to_end(key)
+        while len(self._recorded) > self._recorded_limit:
+            self._recorded.popitem(last=False)
+        return recorded
 
     def entries(
         self, identity: NativeSessionIdentity, entry_ids: Iterable[NativeItemId],
@@ -637,7 +662,8 @@ class ContextStore(ReadsContextEntries, DurableStore, InputCaptureFile):
             for entry in entries:
                 # A journal identity owns the first entry value across requests.
                 ContextEntry.capture(entry).insert_if_absent(db)
-            return CapturedContext(source, ContextRequest.append(db, record), record, manifest)
+            captured = CapturedContext(source, ContextRequest.append(db, record), record, manifest)
+        return self._remember(manifest.thread, captured)
 
     def resolve(
         self,
