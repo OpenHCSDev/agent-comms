@@ -262,7 +262,7 @@ class PrivateObservation(PrivateObservationState):
         """Every root commit wakes every session here; most commits append no message."""
         through = self.source_prefix.through_seq
         return (self.source_prefix.require_current(bus) > through
-                and bus.receives_after(lookup, through))
+                and bus.received_after(lookup, through))
 
     async def drain(self, inputs, session_id: AcpSessionId, root_id: RootId) -> int:
         return await inputs.effects._drain_private_nk(session_id, root_id)

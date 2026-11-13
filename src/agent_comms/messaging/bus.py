@@ -472,13 +472,6 @@ class BusReader(
         )) as positions:
             return source.deliveries_at(positions)
 
-    def receives_after(self, lookup: ThreadLookup, after: int) -> bool:
-        """Whether any delivery to ``lookup`` follows ``after``: an index probe, no decode."""
-        with self.reading() as source, closing(source._source_sequences(
-            *ReceivedSource.query(lookup, ()), after=after, limit=1, descending=False,
-        )) as positions:
-            return next(positions, None) is not None
-
     def direct_replies(
         self, lookup: ThreadLookup, *, after: int = 0, limit: int = 100,
         sender_lookups: tuple[ThreadLookup, ...] = (), descending: bool = True,
@@ -587,6 +580,14 @@ class StoredBusReader(BusReader, SQLiteReader):
     def observing(self) -> Iterator[sqlite3.Connection]:
         with self.reader_snapshot() as db:
             yield db
+
+    @contextmanager
+    def reading(self) -> Iterator[BusSnapshot]:
+        """A file-backed reader knows the file its handle was opened and verified against;
+        asking SQLite for it cost a pragma and a row decode on every read."""
+        with self.observing() as db:
+            yield BusSnapshot(
+                identity=FileIdentity.from_stat(self.path.stat()), path=self.path, _connection=db)
 
 
 class Bus(
