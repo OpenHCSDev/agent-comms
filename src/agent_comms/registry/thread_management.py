@@ -74,6 +74,7 @@ from agent_comms.registry.thread_model import (
     UndeclaredModel,
 )
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
+from agent_comms.registry.thread_settings import ThreadSettings
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.thread_text import ForkedParent, GivenThreadText, ThreadText
 from agent_comms.registry.threads import (
@@ -188,13 +189,13 @@ class SourceDirectory(NullMember, ImportDirectory):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class NewThreadSpec:
+class NewThreadSpec(ThreadSettings):
     """Prepare the session, then register the thread under its registry lock."""
 
     name: str
     project: LaunchCheckout
-    model: ThreadModel
-    thinking_level: ThinkingLevelField
+    model: ThreadModel = field()
+    thinking_level: ThinkingLevelField = field()
     task: LaunchInput = field(default_factory=LaunchInput)
     tags: TagChoice = InheritedTags()
 
@@ -204,7 +205,7 @@ class NewThreadSpec:
 
     def declaration(self) -> Thread:
         return NativeThread(name=self.name, task=self.task.thread_text(), tags=self.tags.for_new(),
-                      worktree=self.project, model=self.model, thinking_level=self.thinking_level)
+                      worktree=self.project, **ThreadSettings.field_values(self))
 
     def declare(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Thread:
         project = self.project.path

@@ -6,12 +6,12 @@ from python_introspect import FieldLabel
 
 from agent_comms.execution.pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevelField
 from agent_comms.nominal.configuration_record import ConfigurationRecord
-from agent_comms.nominal.field_codec import Description, RegistrationPolicy, ValueDirective
+from agent_comms.nominal.field_codec import Catalog, Description, RegistrationPolicy
 from agent_comms.nominal.registration_inheritance import InheritApplied, InheritPrevious
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 
 
-class ConfigurationSlot(ValueDirective[type]):
+class ConfigurationSlot(Catalog):
     """The role whose catalog and writer compose this stored field."""
 
 

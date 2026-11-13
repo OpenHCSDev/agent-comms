@@ -54,6 +54,9 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_p
     for tier in ServiceTier:
         configured = parse(["configure", "--name", "a", "--service-tier", tier.value])
         assert configured.service_tier.tier is tier
+        created = parse(["new", "--name", "a", "--project", str(tmp_path),
+                         "--service-tier", tier.value])
+        assert created.service_tier is tier
     with pytest.raises(ValueError) as refused:
         parser.parse_args(["configure", "--name", "a", "--service-tier", "fast"])
     assert "fast" in str(refused.value)

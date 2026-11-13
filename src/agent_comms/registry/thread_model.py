@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.execution.native_arguments import NativeArguments, SelectedModel
 from agent_comms.execution.native_failures import NativePiUnavailable
-from agent_comms.execution.pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingChoice
+from agent_comms.execution.pi_vocabulary import ServiceTier, ThinkingChoice
 from agent_comms.nominal.field_codec import SubclassUnion, boundary_decoder
 from agent_comms.registry.thread_text import AbsentText, GivenText, TextChoice
 
@@ -110,7 +110,7 @@ class UndeclaredModel(UnselectedModel, ThreadModel):
 
 
 class CatalogSelection(ABC):
-    """The model and thinking inputs a catalog reads; absent inputs select no override."""
+    """The settings and project supplied by the selection's actual owner."""
 
     __slots__ = ()
 
@@ -118,14 +118,6 @@ class CatalogSelection(ABC):
     @abstractmethod
     def project_path(self) -> Path: ...
 
-    @property
-    def model(self) -> ModelSelection:
-        return UndeclaredModel()
-
-    @property
-    def thinking_level(self) -> type[ThinkingChoice]:
-        return NoThinkingOverride
-
-    @property
-    def service_tier(self) -> ServiceTier:
-        return ServiceTier.default()
+    model: ThreadModel
+    thinking_level: type[ThinkingChoice]
+    service_tier: ServiceTier

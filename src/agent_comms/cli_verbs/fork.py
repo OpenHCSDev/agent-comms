@@ -10,6 +10,7 @@ from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, TargetBound
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_management import ForkSpec, GivenTags
+from agent_comms.registry.thread_settings import ThreadSettings
 from agent_comms.registry.threads import NativeOwnerCommand, Thread
 
 
@@ -28,4 +29,4 @@ class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliComm
     @classmethod
     def thread_binding(cls, thread: Thread) -> Self:
         return cls(name='', parent=thread.name, tags=GivenTags(DeclaredTag.for_child(thread.tags)), project=thread.worktree,
-                   model=thread.model, thinking_level=thread.thinking_level)
+                   **ThreadSettings.field_values(thread))

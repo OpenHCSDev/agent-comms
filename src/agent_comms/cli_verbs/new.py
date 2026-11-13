@@ -9,10 +9,8 @@ from agent_comms.cli_verbs.cli_command import CreatesThread, TargetActionCommand
 from agent_comms.cli_verbs.cli_commands import NameArgument, ThreadCreatedResult, _tag_choice_text
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
-from agent_comms.execution.pi_vocabulary import ThinkingLevelField
 from agent_comms.nominal.field_codec import (
     Argument,
-    Catalog,
     EditorFormat,
     FieldCodec,
     Multiline,
@@ -21,13 +19,13 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.projects.checkouts import Checkout, LaunchCheckout
 from agent_comms.registry.native_settings import NativeThreadDefaults
 from agent_comms.registry.thread_management import InheritedTags, NewThreadSpec, TagChoice
-from agent_comms.registry.thread_model import CatalogSelection, ThreadModel
-from agent_comms.registry.thread_settings import ModelSetting, ThinkingSetting
+from agent_comms.registry.thread_model import CatalogSelection
+from agent_comms.registry.thread_settings import ThreadSettings
 
 
 @dataclass(frozen=True, kw_only=True)
 class NewThreadCliCommand(
-    CreatesThread, NameArgument, CatalogSelection, TargetActionCommand[ThreadCreatedResult],
+    ThreadSettings, CreatesThread, NameArgument, CatalogSelection, TargetActionCommand[ThreadCreatedResult],
     declared_name="new",
 ):
     help = "Create a new pi thread"
@@ -45,20 +43,13 @@ class NewThreadCliCommand(
         Checkout,
         Argument(flags=("--project",)),
     ]
-    model: Annotated[
-        ThreadModel, Catalog(ModelSetting), Argument(flags=("--model",)),
-    ] = NativeThreadDefaults.model
-    thinking_level: Annotated[
-        ThinkingLevelField,
-        Catalog(ThinkingSetting),
-        Argument(flags=("--thinking-level",)),
-    ] = NativeThreadDefaults.thinking_level
+    model: FieldCodec.field_annotation(ThreadSettings, "model") = NativeThreadDefaults.model
+    thinking_level: FieldCodec.field_annotation(ThreadSettings, "thinking_level") = NativeThreadDefaults.thinking_level
 
     @classmethod
     def project_bindings(cls, comms: Comms, project: Checkout) -> tuple[Self, ...]:
         defaults = NativeThreadDefaults()
-        return (cls(name='', project=project, model=defaults.model,
-                    thinking_level=defaults.thinking_level),)
+        return (cls(name='', project=project, **NativeThreadDefaults.field_values(defaults)),)
 
     @property
     def project_path(self) -> Path:
