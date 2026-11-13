@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import Self
 
 from agent_comms.coordination.errors import CoordinationReadUnavailable, CoordinationError
 from agent_comms.coordination.schema import CoordinatorTable
@@ -59,15 +59,7 @@ class InvalidStore(StoreFile):
 
 @dataclass(frozen=True)
 class ReadableStore(FileStore, StoreFile, SQLiteReader):
-    """Read-only coordinator view; its lifetime owns the thread-local handles. One view per
-    path per process: a view built per read opened a fresh connection and re-parsed the
-    coordinator schema on every read, twice per notification pass."""
-
-    held: ClassVar[dict[Path, ReadableStore]] = {}
-
-    @classmethod
-    def at(cls, path: Path) -> ReadableStore:
-        return cls.held.setdefault(path, cls(path))
+    """Read-only coordinator view; SQLiteReader shares its file's handles across views."""
 
     def _capture(self, consumer, *arguments):
         with self.reader_snapshot() as connection:
@@ -103,7 +95,7 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile, InputCaptureFi
                 return InvalidStore("Coordinator is not a regular file")
             if not info.st_size:
                 return InvalidStore("Coordinator is empty")
-            store = ReadableStore.at(path)
+            store = ReadableStore(path)
             with CoordinationReadUnavailable.checking(), store.reader_snapshot():
                 pass
         except FileNotFoundError:

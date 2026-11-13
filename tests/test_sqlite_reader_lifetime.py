@@ -103,12 +103,23 @@ def test_threads_and_store_instances_do_not_share_physical_handles(tmp_path):
         assert value(main) == value(other) == 1
 
 
-def test_store_lifetime_retires_the_physical_resource(tmp_path):
+def test_new_store_object_reuses_its_files_idle_handle(tmp_path):
+    store = database(tmp_path / "read.sqlite3", 1)
+    with store.reader_snapshot() as first:
+        assert value(first) == 1
+    del store
+    gc.collect()
+    with ReaderFile(tmp_path / "read.sqlite3").reader_snapshot() as again:
+        assert again is first and value(again) == 1
+
+
+def test_removed_files_idle_handles_retire(tmp_path):
     store = database(tmp_path / "read.sqlite3", 1)
     with store.reader_snapshot() as db:
         assert value(db) == 1
-    del store
-    gc.collect()
+    store.path.unlink()
+    with database(tmp_path / "other.sqlite3", 2).reader_snapshot() as other:
+        assert value(other) == 2
     with pytest.raises(sqlite3.ProgrammingError):
         value(db)
 

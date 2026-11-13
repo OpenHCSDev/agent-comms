@@ -764,7 +764,8 @@ class GoalWakeFile(WireWakeFile):
 
 
 class SQLiteReadConnection:
-    """A thread's read handle, retired with its store or when the file is replaced."""
+    """A store's absent read handle: its next outer read checks one out of its file's idle
+    handles."""
 
     def borrowed(self) -> tuple[sqlite3.Connection, ...]:
         return ()
@@ -772,7 +773,7 @@ class SQLiteReadConnection:
     def acquire(
         self, source: SQLiteReader, revision: FileObservation, contention: StoreContention,
     ) -> OpenSQLiteReadConnection:
-        return OpenSQLiteReadConnection(source, revision, contention)
+        return source.idle_handles.take(source, revision, contention)
 
 
 class OpenSQLiteReadConnection(SQLiteReadConnection):
@@ -792,18 +793,39 @@ class OpenSQLiteReadConnection(SQLiteReadConnection):
     def borrowed(self) -> tuple[sqlite3.Connection, ...]:
         return (self.db,) if self.pid == os.getpid() and self.db.in_transaction else ()
 
-    def acquire(
-        self, source: SQLiteReader, revision: FileObservation, contention: StoreContention,
-    ) -> OpenSQLiteReadConnection:
-        if self.pid == os.getpid() and self.identity == revision.file_identity():
-            return self
-        self.retire()
-        return super().acquire(source, revision, contention)
+    def serves(self, revision: FileObservation) -> bool:
+        return self.pid == os.getpid() and self.identity == revision.file_identity()
 
 
 class SQLiteReaders(local):
     def __init__(self) -> None:
         self.connection: SQLiteReadConnection = SQLiteReadConnection()
+
+
+class IdleReadHandles(local):
+    """One physical file's read handles that no store holds, in this thread. Stores are
+    rebuilt per read; checking a handle out per outer read keeps two live stores on
+    separate cuts without opening a connection for each new store object."""
+
+    def __init__(self) -> None:
+        self.idle: list[OpenSQLiteReadConnection] = []
+
+    def take(
+        self, source: SQLiteReader, revision: FileObservation, contention: StoreContention,
+    ) -> OpenSQLiteReadConnection:
+        while self.idle:
+            handle = self.idle.pop()
+            if handle.serves(revision):
+                return handle
+            handle.retire()
+        return OpenSQLiteReadConnection(source, revision, contention)
+
+    def give(self, handle: OpenSQLiteReadConnection) -> None:
+        self.idle.append(handle)
+
+    def retire(self) -> None:
+        while self.idle:
+            self.idle.pop().retire()
 
 
 class SQLiteStorage(RootFile, SqliteStore):
@@ -979,20 +1001,34 @@ class PublishedProperty[Value](cached_property[Value]):
 
 
 class SQLiteReader(SQLiteStorage):
-    """A physical instance owns readers; class-only file policies do not."""
+    """A store holds a read handle for its outer read; its physical file owns the idle ones."""
+
+    _idle_handles: ClassVar[dict[Path, IdleReadHandles]] = {}
 
     @property
     @abstractmethod
     def path(self) -> Path:
-        """The physical file whose connection lifetime this instance owns."""
+        """The physical file whose read handles this store checks out."""
 
     def require_path(self) -> None:
         """Physical stores can require their existing path/privacy contract."""
 
     @PublishedProperty
     def readers(self) -> SQLiteReaders:
-        """One lazy resource owner per store, with distinct handles in each thread."""
+        """The handle this store's current outer read holds, per thread."""
         return SQLiteReaders()
+
+    @property
+    def idle_handles(self) -> IdleReadHandles:
+        """This file's idle handles. A presentation pass builds a fresh Bus, ActivityStore or
+        transcript store per thread; per-store handles opened 26 connections per warm pass.
+        A new file retires the handles of files that no longer exist."""
+        idle = SQLiteReader._idle_handles.get(self.path)
+        if idle is None:
+            for gone in [path for path in SQLiteReader._idle_handles if not path.exists()]:
+                SQLiteReader._idle_handles.pop(gone).retire()
+            idle = SQLiteReader._idle_handles.setdefault(self.path, IdleReadHandles())
+        return idle
 
     @contextmanager
     def reader_snapshot(
@@ -1016,6 +1052,8 @@ class SQLiteReader(SQLiteStorage):
                 finally:
                     if db.in_transaction:
                         db.execute("ROLLBACK")
+                    self.readers.connection = SQLiteReadConnection()
+                    self.idle_handles.give(held)
             except sqlite3.OperationalError as error:
                 error.add_note(
                     f"SQLite observation store: {self.path}; "
