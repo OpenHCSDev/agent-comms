@@ -1,0 +1,43 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "all-bridges-inherit-existing-message-header",
+      "operations": [
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/shared.py",
+          "target_qualname": "IncomingFrame",
+          "replacements": [
+            {
+              "old_source": "    @property\n    def text(self) -> str:\n        return (f'Comms in \u00b7 {self.message.target} \u00b7 {self.message.sender_label}\\n'\n                f'{self.message.body}\\nMessage ID: {self.message.message_id}\\n'\n                f'Reply to: {self.message.exact_reply_target}')\n",
+              "new_source": "    HEADER = 'Comms in'\n    HEADER_PREFIX = HEADER + ' \u00b7 '\n    \"\"\"How a shown message's first line starts; no body line shown inline may start so.\"\"\"\n    @property\n    def header(self) -> str:\n        \"\"\"Where it was posted (a channel, or the thread a direct message went to), who sent\n        it as the reader sees them, then the reference a reply cites and decode_header reads\n        back. Tristan, 2026-11-06: \"theres chcannel messags and dm messages\".\"\"\"\n        return (f'{self.HEADER_PREFIX}{self.message.target} \u00b7 {self.message.sender_label} \u00b7 '\n                f'reply to {self.message.exact_reply_target} \u00b7 {self.message.reference.name}\\n')\n\n    @property\n    def text(self) -> str:\n        return self.header + self.message.body\n"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/claude_protocol.py",
+          "target_qualname": "ClaudeMonitorFrame",
+          "replacements": [
+            {
+              "old_source": "    HEADER = 'Comms in'\n    HEADER_PREFIX = HEADER + ' \u00b7 '\n    \"\"\"How a shown message's first line starts; no body line shown inline may start so.\"\"\"\n",
+              "new_source": ""
+            },
+            {
+              "old_source": "    @property\n    def header(self) -> str:\n        \"\"\"Where it was posted (a channel, or the thread a direct message went to), who sent\n        it as the reader sees them, then the reference a reply cites and decode_header reads\n        back. Tristan, 2026-11-06: \"theres chcannel messags and dm messages\".\"\"\"\n        return (f'{self.HEADER_PREFIX}{self.message.target} \u00b7 {self.message.sender_label} \u00b7 '\n                f'{self.message.reference.name}\\n')\n\n    @cached_property\n    def inline(self) -> str:\n        return self.header + self.message.body\n\n",
+              "new_source": ""
+            },
+            {
+              "old_source": "self.inline.split('\\n')",
+              "new_source": "self.text.split('\\n')"
+            },
+            {
+              "old_source": "return (self.inline,) if self.fits_one_event else self.slices",
+              "new_source": "return (self.text,) if self.fits_one_event else self.slices"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
