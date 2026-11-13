@@ -9,6 +9,7 @@ from agent_comms.execution.provider_records import ProviderDiagnosticError
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import ToolCallId
 from agent_comms.registry.activity import Activity, ActivityState, ObservedActivity
+from agent_comms.registry.thread_identity import OwnerIdentity
 
 if TYPE_CHECKING:
     from agent_comms.execution.turn_lease import TurnLeaseFence
@@ -103,7 +104,7 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
 
     def activity_event(self, thread: str) -> Activity:
         """Record this phase's declared activity, without observation-only readiness."""
-        return Activity.create(thread, self.activity_state, self.activity_detail)
+        return Activity.create(thread, self.activity_state, " ".join(self.activity_detail.split()))
 
     def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
         """Display this phase while preserving the acquired drain readiness."""
@@ -140,8 +141,10 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def stall_message(self, budget: float) -> str:
         return f"Model produced no RPC progress for {budget:g} seconds."
 
-    def phase_effects(self, agents: AgentActivity, lease: TurnLeaseFence) -> None:
-        agents.enter_phase(lease.identity.incarnation.name, self)
+    def phase_effects(
+        self, agents: AgentActivity, lease: TurnLeaseFence, owner: OwnerIdentity,
+    ) -> None:
+        agents.publish_phase(owner, self)
 
 
 class Excursion(TurnPhase, declared_name=None):
@@ -174,7 +177,9 @@ class IdlePhase(ActivityWord, TurnPhase):
     activity_state = ActivityState.IDLE
     label = "Ready"
 
-    def phase_effects(self, agents: AgentActivity, lease: TurnLeaseFence) -> None:
+    def phase_effects(
+        self, agents: AgentActivity, lease: TurnLeaseFence, owner: OwnerIdentity,
+    ) -> None:
         agents.finish_turn(lease)
 
 

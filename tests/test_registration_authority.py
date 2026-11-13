@@ -98,8 +98,8 @@ def test_a_superseded_generation_is_deleted_and_its_late_transition_changes_noth
     second, _ = registry.lease_local_turn('owner', TurnId('16367aacb67a4a017c8da8ab95682ccb'))
     assert not stale.record.path.exists() and second.turn_record.path.exists()
     assert not store_lock_path(stale.record.path).exists()
-    assert stale.record.transition(stale, PreparingPhase()) == ()
-    assert stale.record.observe_native_phase(stale, PreparingPhase()) == ()
+    assert stale.record.transition(stale, PreparingPhase()).states == ()
+    assert stale.record.observe_native_phase(stale, PreparingPhase()).states == ()
     assert second.turn_record.read().id == '16367aacb67a4a017c8da8ab95682ccb'
 
 
@@ -134,7 +134,7 @@ def test_a_phase_change_completes_while_another_process_reads_the_registry(tmp_p
         try:
             assert ready.wait(5)
             effects = lease.record.transition(lease, PreparingPhase('reading'))
-            assert [state.active.phase for state in effects] == [PreparingPhase('reading')]
+            assert [state.active.phase for state in effects.states] == [PreparingPhase('reading')]
             assert lease.record.read().phase == PreparingPhase('reading')
         finally:
             release.set()

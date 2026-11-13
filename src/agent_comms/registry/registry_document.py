@@ -41,7 +41,10 @@ from agent_comms.execution.restart_refusals import (
 from agent_comms.execution.turn_lease import (
     FinishedTurn,
     FinishedTurnFence,
+    LockedTurn,
+    NamedTurn,
     NoFinishedTurn,
+    RetiredTurn,
     StoredTurnRecord,
     TurnCompletion,
     TurnLeaseFence,
@@ -106,7 +109,6 @@ from agent_comms.registry.thread_identity import (
     ThreadAuthority,
     ThreadIncarnation,
     ThreadIncarnationRecord,
-    TurnIdentity,
 )
 from agent_comms.registry.thread_presentation import ThreadOwnerBinding
 from agent_comms.registry.thread_reads import ThreadOwnerSource
@@ -1386,10 +1388,12 @@ class RegistrySnapshot(
             if incarnation.current(self) else ()
         )
 
-    def holds_turn(self, identity: TurnIdentity) -> bool:
-        """Whether its thread still names this turn generation; a superseded lease does not."""
-        return any(thread.turn_identity == identity
-                   for thread in self.threads_for(identity.incarnation.require_recorded()))
+    def locked_turn(self, record: StoredTurnRecord) -> LockedTurn:
+        """The held turn with the owner this cut names, while its thread still names that turn
+        generation; a superseded lease finds a retired turn."""
+        return next((NamedTurn(record, self.owner_identity(thread.name))
+                     for thread in self.threads_for(record.identity.incarnation.require_recorded())
+                     if thread.turn_identity == record.identity), RetiredTurn())
 
     def current_turn(self, held: StoredTurnRecord) -> TurnRecord:
         """What the held record's thread names now: the record itself, or its successor once a
