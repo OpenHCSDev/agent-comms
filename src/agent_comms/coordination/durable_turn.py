@@ -40,12 +40,41 @@ from agent_comms.execution.turn_phase import (
 from agent_comms.nominal.field_codec import InputId
 
 
+class ReplayEvidence(MroDispatch):
+    """The replay fact one native observation proves, read from the observation alone."""
+
+    @handles(object)
+    @classmethod
+    def nothing(cls, event) -> ReplayFact:
+        return ReplayFact.NONE
+
+    @handles(pi.MessageUpdate)
+    @classmethod
+    def reply_text(cls, event) -> ReplayFact:
+        delta = event.assistant_message_event
+        proved = delta.response_progress and delta.progress
+        return ReplayFact.ASSISTANT_OUTPUT if proved else ReplayFact.NONE
+
+    @handles(pi.ToolExecutionStart)
+    @classmethod
+    def tool_call(cls, event) -> ReplayFact:
+        return ReplayFact.TOOL_CALL_STARTED
+
+    @classmethod
+    def of(cls, event) -> ReplayFact:
+        return cls.handler_for(type(event))(event)
+
+
 @dataclass(eq=False, repr=False)
 class DurableTurn(MroDispatch):
     attempts: AttemptStore
     fence: OwnerFence
     pointer_revision: int
     input_id: InputId
+    joined: ReplayFact = ReplayFact.NONE
+    """Replay facts this turn has joined to its execution. The assessment row only
+    accumulates them and is never deleted (ReplayAssessments), so more evidence of a joined
+    fact has nothing left to record: a streamed reply proves its output once, not per token."""
 
     @contextmanager
     def using_attempts(self, attempts):
@@ -56,6 +85,20 @@ class DurableTurn(MroDispatch):
             yield
         finally:
             self.attempts = previous
+
+    async def dispatch(self, event: Value, *args, **kwargs) -> Value | None:
+        proved = ReplayEvidence.of(event) & ~self.joined
+        if proved:
+            await Coordination.run_async(
+                self.attempts.session.path, partial(self.join_owned, proved))
+        return await super().dispatch(event, *args, **kwargs)
+
+    def join_owned(self, proved: ReplayFact, resource) -> None:
+        """Retain output evidence with the attempt facts that already own replay safety."""
+        with self.using_attempts(resource):
+            ReplayAssessments.accumulate(
+                self.attempts.session._connection, self.fence.execution_id, proved)
+        self.joined |= proved
 
     async def consume_handlers(
         self, event: Value, handlers: Iterable[Handler], *args, **kwargs,
@@ -101,22 +144,6 @@ class DurableTurn(MroDispatch):
             return
         self.current.advance_on_accepted(self.advance)
         self.advance(ModelRunningAttempt)
-
-    def record_response_fact(self, fact: ReplayFact) -> None:
-        """Retain output evidence with the attempt facts that already own replay safety."""
-        ReplayAssessments.accumulate(
-            self.attempts.session._connection, self.fence.execution_id, fact
-        )
-
-    @handles(pi.MessageUpdate)
-    def response_output(self, event):
-        delta = event.assistant_message_event
-        if delta.response_progress and delta.progress:
-            self.record_response_fact(ReplayFact.ASSISTANT_OUTPUT)
-
-    @handles(pi.ToolExecutionStart)
-    def tool_output(self, event):
-        self.record_response_fact(ReplayFact.TOOL_CALL_STARTED)
 
     @handles(NativePhaseChanged)
     def excursion(self, event):
