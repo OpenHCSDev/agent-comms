@@ -1,0 +1,53 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "configuration-membership-on-the-original-command",
+      "operations": [
+        {
+          "operation": "insert_before_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/cli_command.py",
+          "target_qualname": "CliCommand.catalog_declaration",
+          "source": "    @classmethod\n    def configuration_actions(cls, action: TargetAction) -> tuple[TargetAction, ...]:\n        \"\"\"Ordinary operations do not edit the selected object's configuration.\"\"\"\n        return ()\n\n"
+        },
+        {
+          "operation": "insert_before_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/cli_command.py",
+          "target_qualname": "TargetAction",
+          "source": "class ConfigurationCommand(CliCommand, declared_name=None):\n    \"\"\"A command whose original parameters are the selected object's settings.\"\"\"\n\n    @classmethod\n    def configuration_actions(cls, action: TargetAction) -> tuple[TargetAction, ...]:\n        return (action,)\n\n\n"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/configure.py",
+          "import_source": "from agent_comms.cli_verbs.cli_command import ConfigurationCommand"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/configure.py",
+          "target_qualname": "ConfigureCliCommand",
+          "replacements": [
+            {
+              "old_source": "NameArgument, NextTurnConfiguration, CliCommand,",
+              "new_source": "NameArgument, NextTurnConfiguration, ConfigurationCommand,"
+            }
+          ]
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/rule_gate.py",
+          "import_source": "from agent_comms.cli_verbs.cli_command import ConfigurationCommand"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/rule_gate.py",
+          "target_qualname": "RuleGateCommand",
+          "replacements": [
+            {
+              "old_source": "RuleGateSettings, CliCommand,",
+              "new_source": "RuleGateSettings, ConfigurationCommand,"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

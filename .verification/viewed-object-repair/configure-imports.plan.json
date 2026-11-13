@@ -1,0 +1,23 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "remove-superseded-command-contract-imports",
+      "operations": [
+        {
+          "operation": "remove_import_bindings",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/configure.py",
+          "bound_names": [
+            "NameArgument"
+          ]
+        },
+        {
+          "operation": "remove_import_bindings",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/configure.py",
+          "bound_names": [
+            "CliResult"
+          ]
+        }
+      ]
+    }
+  ]
+}

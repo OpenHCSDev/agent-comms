@@ -1,0 +1,23 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "remove-the-replaced-command-import",
+      "operations": [
+        {
+          "operation": "remove_import_bindings",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/configure.py",
+          "bound_names": [
+            "CliCommand"
+          ]
+        },
+        {
+          "operation": "remove_import_bindings",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/rule_gate.py",
+          "bound_names": [
+            "CliCommand"
+          ]
+        }
+      ]
+    }
+  ]
+}
