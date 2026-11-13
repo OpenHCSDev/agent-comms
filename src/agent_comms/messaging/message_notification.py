@@ -449,8 +449,10 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
             snapshot=snapshot,
         )
         return tuple(
-            replace(notification, message=source.envelope)
+            replace(notification, message=envelope)
             for source in assignment_read.sources
+            # One public envelope per message, shared by its recipients' outcomes.
+            for envelope in (source.envelope,)
             for notification in projected.outcomes[source.message.seq, source.message.message_id]
         )
 

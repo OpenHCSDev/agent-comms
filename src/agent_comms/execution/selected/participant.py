@@ -246,21 +246,31 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
             await Coordination.run_worker(lease.close)
 
     @staticmethod
-    def sent_pages(sources: tuple[Delivered, ...]) -> Iterator[tuple[Delivered, ...]]:
-        """Newest sent messages first, in pages that double: a thread with no outcome to show
-        reads its whole window in a few pages, not one page per prompt slot."""
-        start, size = 0, SelectedWakeSegment.sent_limit
+    def sent_pages(
+        viewer: OwnerOutcomes, sources: tuple[Delivered, ...],
+    ) -> Iterator[tuple[Delivered, ...]]:
+        """Newest sent messages first, in pages that double. The prompt's limit counts outcomes,
+        and a message has one for each recipient its viewer sees, so a page holds as many
+        messages as name that many recipients: one channel message fills the prompt where five
+        direct ones do. A page of five channel messages built sixty outcomes for five lines.
+        A thread with no outcome to show still reads its whole window in a few pages."""
+        start, wanted = 0, SelectedWakeSegment.sent_limit
         while start < len(sources):
-            yield sources[start:start + size]
-            start, size = start + size, size * 2
+            end, named = start, 0
+            while end < len(sources) and named < wanted:
+                named += len(viewer.positions(sources[end]))
+                end += 1
+            yield sources[start:end]
+            start, wanted = end, wanted * 2
 
     @staticmethod
     def capture_sent_outcomes(
-        comms: Comms, assignment_read: NotificationAssignmentRead,
+        comms: Comms, assignments: AssignmentSource, assignment_read: NotificationAssignmentRead,
     ) -> tuple[SentMessageOutcome, ...]:
-        """Project optional prompt context from the drain's captured source and SQL cuts."""
+        """Project optional prompt context from the drain's captured source and SQL cuts, in
+        the registry the assignments were read under."""
         notifications = MessageNotification.for_sources(
-            comms.root, comms.registry, assignment_read,
+            comms.root, comms.registry, assignment_read, snapshot=assignments.registry,
         )
         return tuple(
             outcome
@@ -307,7 +317,7 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
             # prompt. Reading all 120 sent messages' assignments (about 1,500 rows) to fill
             # five slots cost every turn a quarter second; newest pages stop when they are full.
             viewer = OwnerOutcomes.of(sent_owner.incarnation)
-            pages = SelectedParticipant.sent_pages(sent_sources if pending else ())
+            pages = SelectedParticipant.sent_pages(viewer, sent_sources if pending else ())
             sent_read = NotificationAssignment.capture(
                 store.session._connection,
                 NotificationSelection.of(viewer, next(pages, ())), privacy,
@@ -316,12 +326,13 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
             participant.pointer.require_idle()
         assignments = AssignmentSource(comms.root)
         sent_outcomes = SelectedParticipant.capture_sent_outcomes(
-            comms, NotificationAssignment.capture_detached(assignments, sent_read))
+            comms, assignments, NotificationAssignment.capture_detached(assignments, sent_read))
         for page in pages:
             if len(sent_outcomes) >= SelectedWakeSegment.sent_limit:
                 break
             sent_outcomes += SelectedParticipant.capture_sent_outcomes(
-                comms, assignments.read_assignments(NotificationSelection.of(viewer, page)))
+                comms, assignments,
+                assignments.read_assignments(NotificationSelection.of(viewer, page)))
         return owner, participant, pending, sent_outcomes
 
     @staticmethod
