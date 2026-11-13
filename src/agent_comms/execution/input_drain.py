@@ -243,6 +243,10 @@ class PrivateObservationState(ABC):
     @abstractmethod
     def has_unobserved_inputs(self, bus: Bus, lookup: ThreadLookup) -> bool: ...
 
+    def describes(self, entry: RegistryEntry) -> bool:
+        """Whether this observation was made of this registry entry."""
+        return False
+
 
 class NoPrivateObservation(PrivateObservationState):
     def has_unobserved_inputs(self, bus: Bus, lookup: ThreadLookup) -> bool:
@@ -263,6 +267,9 @@ class PrivateObservation(PrivateObservationState):
         through = self.source_prefix.through_seq
         return (self.source_prefix.require_current(bus) > through
                 and bus.received_after(lookup, through))
+
+    def describes(self, entry: RegistryEntry) -> bool:
+        return self.entry == entry
 
     async def drain(self, inputs, session_id: AcpSessionId, root_id: RootId) -> int:
         return await inputs.effects._drain_private_nk(session_id, root_id)
@@ -463,16 +470,10 @@ class InputObservation(BusSessionsRuntime, ABC):
             await state.observation_ready.wait()
             state.observation_ready.clear()
             read = self.observed_registry
-            if not state.owes_tick(self.effects.cursors.delivery(session_id).needs_refresh):
-                observation = state.idle_revision
-                if state.bus_asked is observation and not state.bus_moved:
-                    continue
-                state.bus_moved = False
-                changed = await Coordination.run_worker(partial(
-                    observation.has_unobserved_inputs, bus, lookup))
-                if not changed:
-                    state.bus_asked = observation
-                    continue
+            consumes = state.tick_consumes(self.effects.cursors.delivery(session_id).needs_refresh)
+            waking = state.wake_pending()
+            if not (consumes or waking or await state.bus_has_inputs(bus, lookup)):
+                continue
             try:
                 document = await asyncio.shield(read)
                 entry = document.entry(self.sessions.require(session_id))
@@ -484,6 +485,12 @@ class InputObservation(BusSessionsRuntime, ABC):
                     FailedWakeDiagnostic, error,
                 )
             else:
+                # A running wake wakes this observer when it finishes. Until then only this
+                # owner's registry entry or a new message can change what the settled
+                # observation proved; every other session's commit cannot.
+                if (waking and not consumes and state.idle_revision.describes(entry)
+                        and not await state.bus_has_inputs(bus, lookup)):
+                    continue
                 await self._observe_entry(session_id, entry)
 
     async def _observe_entry(
@@ -758,19 +765,35 @@ class DrainedSession(SessionTaskOwner, InputEventState):
         self.repeat_observation = True
         self.notify_observer()
 
+    def tick_consumes(self, needs_refresh: bool) -> bool:
+        """The owed work an observation can consume now.
+
+        The next observation consumes repeat_observation; scheduling consumes
+        pending_turns; cursor refresh consumes needs_refresh.
+        """
+        return bool(self.repeat_observation or self.pending_turns or needs_refresh)
+
     def owes_tick(self, needs_refresh: bool) -> bool:
         """Keep work owed until its producer or another observation consumes it.
 
-        The next observation consumes repeat_observation; scheduling consumes
-        pending_turns; cursor refresh consumes needs_refresh; completion of the
-        wake task consumes its pending wake.
+        Completion of the wake task consumes its pending wake: no observation can.
         """
-        return bool(
-            self.repeat_observation
-            or self.pending_turns
-            or needs_refresh
-            or self.wake_pending()
-        )
+        return self.tick_consumes(needs_refresh) or self.wake_pending()
+
+    async def bus_has_inputs(self, bus: Bus, lookup: ThreadLookup) -> bool:
+        """Ask the bus once per bus commit and observation.
+
+        A coordinator commit wakes every session; only a bus commit or a new observation
+        can change the bus's answer.
+        """
+        observation = self.idle_revision
+        if self.bus_asked is observation and not self.bus_moved:
+            return False
+        self.bus_moved = False
+        if await Coordination.run_worker(partial(observation.has_unobserved_inputs, bus, lookup)):
+            return True
+        self.bus_asked = observation
+        return False
 
     def self_tick_owed(self, drained: int, needs_refresh: bool, turn_live: bool) -> bool:
         """Notify only when this observer can consume the work on its next tick.
