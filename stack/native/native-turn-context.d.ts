@@ -35,6 +35,9 @@ export interface OwnerToolConnection {
             maxResponse: number): Promise<{ok?: boolean; error?: string}>;
 }
 export interface OwnerToolEndpoint { path: string; token: string; }
+export declare class AllowedTools {
+    static capture(value?: readonly string[]): {allow(session: {allowTools(names: readonly string[]): void}): void};
+}
 export declare class NativeInputClaim {
     readonly digest: string;
     readonly ownerTools: OwnerToolConnection;

@@ -26,7 +26,6 @@ from agent_comms.execution.launch_runtime import RestartEnvironment
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.execution.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
 from agent_comms.execution.queued_input import InitialInput
-from agent_comms.execution.selected.actions import NoSelectedTools
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.nominal.lifecycle_capability import Unresolved
 from agent_comms.execution.persistent_pi_session import PersistentPiSession
@@ -233,7 +232,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(
                         cursor_delivery=cursor_delivery,
                         persistent_session=pi_session,
                         package=native_runtime_package,
-                        tool_mode=NoSelectedTools(),
+                        tool_mode=NativeBackendFixture.toolless(project, project),
                         session_directory=root,
                     ):
                         events.append(event)

@@ -37,7 +37,8 @@ from agent_comms.execution.pi_events import (
     PiEvent,
     Response,
 )
-from agent_comms.execution.selected.actions import NoSelectedTools
+from agent_comms.comms import wire
+from agent_comms.execution.coding_child import CodingChild, ToollessMode
 from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.execution.tracked_turn import TrackedTurnSession
 from agent_comms.execution.turn_failure import (
@@ -50,7 +51,9 @@ from agent_comms.execution.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatc
 from agent_comms.execution.pi_events import ContextCommitted, InputCommitted
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, InputId
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.threads import NativeThread
 
 INPUT_ID = InputId('a' * 32)
 DIGEST = 'b' * 64
@@ -220,7 +223,8 @@ def test_missing_native_model_fails_before_any_session_side_effect(tmp_path, pro
     with pytest.raises(IdentityConflict):
         NativePiRpcLaunch.tracked(native_runtime_package, root=tmp_path, worktree=tmp_path,
             session=SelectedSession(tmp_path/'sessions'), model=SelectedModel(provider,model),
-            selected_tool_mode=NoSelectedTools())
+            selected_tool_mode=ToollessMode(CodingChild(
+                comms=wire(tmp_path), thread=NativeThread('modelless', frozenset(), Checkout(tmp_path)))))
     assert not (tmp_path/'sessions').exists()
 
 

@@ -28,6 +28,7 @@ from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import WireOrigin
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.execution.channel_coding_tools import SelectedCodingToolOwner
+from agent_comms.execution.coding_child import CodingChild, ToollessMode
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_pi import NativeTurnResult
 from agent_comms.execution.private_send_stage import (
@@ -36,7 +37,6 @@ from agent_comms.execution.private_send_stage import (
 )
 from agent_comms.execution.selected.actions import (
     BatchSelectedAction,
-    NoSelectedTools,
     SelectedAction,
 )
 from agent_comms.execution.selected.participant import SelectedParticipant
@@ -318,7 +318,9 @@ class SelectedConsideration:
             result = await request.claim_scope.execute(
                 execution,
                 model=participant.model,
-                selected_tool_mode=NoSelectedTools(),
+                # The ask runs on the child its answer will use, allowing it nothing.
+                selected_tool_mode=ToollessMode(
+                    CodingChild(comms=participant.comms, thread=participant.owner.thread)),
                 observe_event=participant.observe_triage,
             )
             await participant.transition(PublishingPhase())
