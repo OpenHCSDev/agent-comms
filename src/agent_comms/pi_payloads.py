@@ -75,6 +75,7 @@ from agent_comms.execution.turn_item import CompactionChargeId, ProviderResponse
 from agent_comms.messaging.send_result import CorrectionResult, CorrectionUnreported
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
+    ExternalField,
     ExternalNull,
     ExternalNullMember,
     FieldCodec,
@@ -430,8 +431,18 @@ class UnknownDiagnostic(UnknownPayload, PiDiagnostic):
     pass
 
 
+class MeasuredTokens:
+    """A message's token count, read as far as its stop reason lets it be read."""
+
+    __slots__ = ()
+
+    @property
+    def measured_tokens(self) -> PiCount:
+        return self.stop_reason.measured(self.reported_total)
+
+
 @dataclass(frozen=True)
-class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message"):
+class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, MeasuredTokens, affix="Message"):
     @property
     def parts(self) -> tuple[PiContent, ...]:
         return self.content.message_parts
@@ -483,8 +494,8 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
     timestamp: Annotated[PiField[EventTime], EventMilliseconds] = UnrecordedEventTime()
 
     @property
-    def measured_tokens(self) -> PiCount:
-        return self.stop_reason.measured(self.usage.total_tokens)
+    def reported_total(self) -> PiCount:
+        return self.usage.total_tokens
 
     def require_failed_terminal(self):
         raise ValueError("Native recovery requires an unambiguous failed terminal")
@@ -502,9 +513,8 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
     def invalidates_start(self):
         return False
 
-    @property
-    def update_context(self):
-        return False
+    update_context: ClassVar[bool] = False
+    """Whether updates of this member move the session's provisional context count."""
 
     def is_user_message(self) -> bool:
         return False
@@ -543,9 +553,7 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
     def invalidates_start(self):
         return True
 
-    @property
-    def update_context(self):
-        return True
+    update_context = True
 
     def committed_outputs(self) -> tuple[NativeOutputScope, ...]:
         return (AssistantOutput(),)
@@ -688,6 +696,55 @@ class ToolResultMessage(PiMessage, declared_name="toolResult"):
 @dataclass(frozen=True, kw_only=True)
 class UnknownMessage(UnknownPayload, PiMessage):
     pass
+
+
+@dataclass(frozen=True)
+class StreamedMessage(ExternalField, WireValue, MeasuredTokens):
+    """The message a stream is still writing: which member Pi is writing, whether it has
+    stopped, and the token total it reports so far.
+
+    Nothing else of the message is here. Its parts arrive as the deltas of the updates that
+    carry this, and an update reads one number of its usage: decoding the whole message for
+    every token spent more on the ten usage numbers it ignored than on the update itself.
+    Each value is read through the declaration that owns it, PiMessage's or PiUsage's, so
+    no wire name or default is stated here."""
+
+    member: type[PiMessage] = AbsentMessage
+    stop_reason: type[PiStopReason] = UnreportedStopReason
+    reported_total: PiCount = UnreportedCount()
+
+    @property
+    def update_context(self) -> bool:
+        return self.member.update_context
+
+    @classmethod
+    def decode_external_value(cls, value: object, record: Mapping[str, object]) -> Self:
+        return cls.from_wire(value)
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        if data is None:
+            return cls()
+        if not isinstance(data, dict):
+            raise MalformedRecord("Expected a streamed message object")
+        member = PiMessage.wire_member(data)
+        stopped = FieldCodec.field_plan(member, "stop_reason").decoded_external(data)
+        usage = data.get(FieldCodec.record_key(member, "usage"))
+        total = (FieldCodec.field_plan(PiUsage, "total_tokens").decoded_external(usage)
+                 if isinstance(usage, dict) else {})
+        return cls(member, stopped.get("stop_reason", cls.stop_reason),
+                   total.get("total_tokens", cls.reported_total))
+
+    def to_wire(self) -> JsonValue:
+        """What this holds, under the member's own keys: decoding it gives this value back."""
+        if self == type(self)():
+            return None
+        return {
+            self.member.wire_tag: FieldCodec.encode(self.member),
+            FieldCodec.record_key(self.member, "stop_reason"): FieldCodec.encode(self.stop_reason),
+            FieldCodec.record_key(self.member, "usage"): {
+                FieldCodec.record_key(PiUsage, "total_tokens"): FieldCodec.encode(self.reported_total)},
+        }
 
 
 @dataclass(frozen=True)

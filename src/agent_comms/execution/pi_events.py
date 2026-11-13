@@ -73,6 +73,7 @@ from agent_comms.pi_payloads import (
     ProviderRetryOutcome,
     ReportedCompaction,
     ReportedFlag,
+    StreamedMessage,
     UnreportedUsage,
 )
 from agent_comms.transport.tool_declaration import ToolDeclaration
@@ -740,9 +741,7 @@ class MessageUpdate(AcceptsPrompt, NativePiEvent, DurablePiEvent):
     assistant_message_event: Annotated[
         NoDelta | PiDelta, WireName("assistantMessageEvent")
     ] = NoDelta()
-    message: PiMessage = field(
-        default_factory=AbsentMessage
-    )
+    message: StreamedMessage = field(default_factory=StreamedMessage)
     usage: Annotated[PiUsage, WireOmitDefault(), WireNullDefault()] = UnreportedUsage()
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:

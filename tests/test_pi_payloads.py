@@ -22,6 +22,7 @@ from agent_comms.pi_payloads import (
     AssistantMessage,
     MissingData,
     MissingToolResult,
+    PiMessage,
     ProvidedToolResult,
     ReportedModel,
     StateData,
@@ -242,6 +243,7 @@ def test_image_forwarding_reuses_image_owner_and_preserves_native_shape():
         "inputId": "1" * 32,
         "message": "see",
         "ownerTools": {"path": "/unused/test-tool-socket", "token": "test-token"},
+        "tools": ["comms_send"],
         "images": [{"type": "image", "data": "YWJj", "mimeType": "image/png"}],
     }
     command = PiCommand.from_wire(record)
@@ -328,16 +330,18 @@ def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
         assert isinstance(event, MessageUpdate) and isinstance(event.usage, UnreportedUsage)
         account = UsageAccount()
         event.message.measured_tokens.confirm(account)
-        charged = ProviderUsage.charges(event.message.usage, event.message.response_id)
+        ended = PiMessage.from_wire(json.loads(json.dumps(message)))
+        charged = ProviderUsage.charges(ended.usage, ended.response_id)
         if usage is None:
-            assert isinstance(event.message.usage, UnreportedUsage) and charged == ()
+            assert isinstance(ended.usage, UnreportedUsage) and charged == ()
         else:
-            assert [charge.usage for charge in charged] == [event.message.usage]
+            assert [charge.usage for charge in charged] == [ended.usage]
         if usage == {"totalTokens": 7}:
             assert event.message.measured_tokens == ReportedCount(7) and account.confirmed == PiCount.from_wire(7)
         else:
             assert event.message.measured_tokens == UnreportedCount() and account.confirmed == PiCount.from_wire(None)
-        assert "usage" not in event.to_wire() and decode(event.to_wire()).usage == event.usage
+        assert event.message.measured_tokens == ended.measured_tokens
+        assert "usage" not in event.to_wire() and decode(event.to_wire()) == event
 
 
 def test_raw_tool_arguments_reach_the_declared_call_refusal():
