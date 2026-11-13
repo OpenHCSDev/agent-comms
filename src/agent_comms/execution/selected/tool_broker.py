@@ -118,11 +118,14 @@ class SelectedToolMode(NativeToolMode):
         if not callable(self.action):
             raise TypeError("Selected tool mode requires an owner callback")
 
+    def allowed_tools(self) -> tuple[str, ...]:
+        return (SelectedToolRequest.declared_name,)
+
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
         return (
             "--no-builtin-tools",
             "--tools",
-            SelectedToolRequest.declared_name,
+            *self.allowed_tools(),
             "-e",
             str(selected_extension(package)),
         )

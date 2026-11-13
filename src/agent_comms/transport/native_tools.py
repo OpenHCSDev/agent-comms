@@ -82,6 +82,11 @@ class NativeToolDeclaration(ToolDeclaration):
     def native_extension(cls, package: Path) -> Path: ...
 
     @classmethod
+    def names(cls) -> tuple[str, ...]:
+        """Every declared tool's name: what a coding child loads and a coding prompt allows."""
+        return tuple(tool.declared_name for tool in cls.members_with(cls))
+
+    @classmethod
     def extension_arguments(cls, package: Path) -> tuple[str, ...]:
         """Load the declared extensions independently of input/tool authority."""
         declarations = cls.members_with(cls)

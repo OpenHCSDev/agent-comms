@@ -218,6 +218,7 @@ class InputForwarding(MroDispatch, SessionInputsCallbacks):
             images=item.content.images,
             context_contributions=item.content.contributions,
             owner_tools=session.tool_socket.listener.connection,
+            tools=session.command.tools,
             streaming_behavior=item.when_busy.streaming(),
         )
         def write():

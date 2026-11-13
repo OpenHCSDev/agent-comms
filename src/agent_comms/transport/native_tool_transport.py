@@ -281,6 +281,11 @@ class NativeToolMode(ABC):
         """Return the native tool selection and reviewed extension."""
 
     @abstractmethod
+    def allowed_tools(self) -> tuple[str, ...]:
+        """The tools this mode's prompt allows the model, out of those its child loaded. It
+        travels on the prompt, so modes that differ only here share one child."""
+
+    @abstractmethod
     async def open_transport(self, turn, ownership) -> UnboundToolTransport:
         """Open the transport implementing this declared permission."""
 

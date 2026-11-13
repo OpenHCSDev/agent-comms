@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.execution.coding_child import ToollessMode
 from agent_comms.execution.selected.claim import (
     publish_selected_resource_claim,
     write_selected_claimed_file,
@@ -22,10 +23,7 @@ from agent_comms.execution.turn_context import InstructionFile
 from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.nominal.field_codec import ClaimId
 from agent_comms.registry.threads import Thread
-from agent_comms.transport.native_tool_transport import (
-    NativeToolMode,
-    ToolTransport,
-)
+from agent_comms.transport.native_tool_transport import NativeToolMode
 
 if TYPE_CHECKING:
     from agent_comms.execution.channel_coding_tools import CodingToolOwner
@@ -84,20 +82,11 @@ class BoundSelectedWriteAuthority(SelectedWriteAuthority):
         """The write's whole span: current on entry, applied on success, unbound on every end."""
 
 
-class NoSelectedTools(SelectedAction, NativeToolMode):
-    """This action explicitly declares no model tools; it still opens an endpoint."""
+class NoSelectedTools(SelectedAction):
+    """This action explicitly declares no model tools; its prompt still opens an endpoint."""
 
-    def mode(self, owner):
-        return self
-
-    def launch_arguments(self, package):
-        return ("--no-tools",)
-
-    async def open_transport(self, turn, ownership):
-        return await ToolTransport.open(turn, ownership)
-
-    def or_else(self, factory):
-        return factory()
+    def mode(self, owner: CodingToolOwner) -> NativeToolMode:
+        return ToollessMode(owner)
 
     @property
     def instruction_files(self):

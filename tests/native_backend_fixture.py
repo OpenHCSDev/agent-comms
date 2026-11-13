@@ -23,7 +23,7 @@ from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.execution.fresh_private_session import create_fresh_private_session
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary, NativeArguments
 from agent_comms.execution.native_child import PiSessionChild
-from agent_comms.execution.selected.actions import NoSelectedTools
+from agent_comms.execution.coding_child import CodingChild, ToollessMode
 from agent_comms.execution.turn_inbox import (
     InputContent,
     InputRequest,
@@ -57,6 +57,12 @@ class NativeBackendFixture(AnnouncedInputStart):
         """The real thread incarnation used by a direct native turn on this bus."""
         return NativeThread(
             'direct-native', frozenset(), Checkout(project)).incarnation.require_recorded()
+
+    @staticmethod
+    def toolless(root: Path, project: Path) -> ToollessMode:
+        """A direct native turn on this bus that allows the model no tools."""
+        return ToollessMode(CodingChild(
+            comms=wire(root), thread=NativeThread('direct-native', frozenset(), Checkout(project))))
 
     def __init__(self, root, project, session, provider, config, package: VerifiedNativePackage):
         self.root, self.project, self.session, self.provider = root, project, session, provider
@@ -169,7 +175,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 root=self.root, owner=self.participant, session_file=str(self.session),
                 persistent_session=self.persistent,
                 package=self.package,
-                tool_mode=NoSelectedTools(),
+                tool_mode=self.toolless(self.root, self.project),
                 steering_queue=queue,
                 input_start=self,
                 cursor_delivery=self.cursor_delivery,

@@ -41,7 +41,8 @@ def extend_input_claim(session, rpc, core):
         replace_once(rpc,f'await session.{method}(command.message, command.images, command.inputId);',
                      f'await session.{method}(command.message, command.images, command.inputId, command.contextContributions, command.ownerTools);')
     replace_once(rpc,'                    inputId: command.inputId,',
-                 '                    inputId: command.inputId,\n                    contextContributions: command.contextContributions,\n                    ownerTools: command.ownerTools,')
+                 '                    inputId: command.inputId,\n                    contextContributions: command.contextContributions,\n                    ownerTools: command.ownerTools,\n                    tools: command.tools,')
+    allow_tools(session, core)
     replace_once(session,'        for (const record of records) {\n            const { inputId, sessionEntryId } = record;\n',
         '''        const contributors=[];
         for (const record of records) {
@@ -57,7 +58,7 @@ def extend_input_claim(session, rpc, core):
                  'return {request_generation:generation, context_digest:digest, contributors};')
     types=core/'agent-session.d.ts'
     replace_once(types,'export interface PromptOptions {',
-                 'export interface PromptOptions {\n    ownerTools?: import("./turn-context.js").OwnerToolEndpoint;\n    contextContributions?: readonly import("./turn-context.js").InputContributionCoordinates[];')
+                 'export interface PromptOptions {\n    tools?: readonly string[];\n    ownerTools?: import("./turn-context.js").OwnerToolEndpoint;\n    contextContributions?: readonly import("./turn-context.js").InputContributionCoordinates[];')
     for method in ('steer','followUp'):
         replace_once(types,f'{method}(text: string, images?: ImageContent[], inputId?: string): Promise<void>;',
             f'{method}(text: string, images?: ImageContent[], inputId?: string, contextContributions?: readonly import("./turn-context.js").InputContributionCoordinates[], ownerTools?: import("./turn-context.js").OwnerToolEndpoint): Promise<void>;')
@@ -82,6 +83,31 @@ def extend_input_claim(session, rpc, core):
                  '    readonly ownerTools: import("../turn-context.js").OwnerToolConnection;\n    getSystemPrompt(): string;')
     replace_once(types, '    getSystemPrompt: () => string;',
                  '    getOwnerTools: () => import("../turn-context.js").OwnerToolConnection;\n    getSystemPrompt: () => string;')
+
+
+def allow_tools(session, core):
+    """A prompt's allowed tools narrow the child's through the launch's own registry rebuild,
+    before any extension sees the run start, and never beyond what the child was launched with."""
+    before = '        this._allowedToolNames = config.allowedToolNames ? new Set(config.allowedToolNames) : undefined;'
+    replace_once(session, before, before + '\n        this._launchToolNames = this._allowedToolNames;')
+    replace_once(session, '    getToolDefinition(name) {', '''    allowTools(names) {
+        const launched = this._launchToolNames;
+        const named = launched ? names.filter(name => launched.has(name)) : names;
+        const allowed = this._allowedToolNames;
+        if (allowed && allowed.size === named.length && named.every(name => allowed.has(name))) return;
+        this._allowedToolNames = new Set(named);
+        this._refreshToolRegistry();
+    }
+    getToolDefinition(name) {''')
+    before = '            // Flush any pending bash and custom messages before the new prompt\n'
+    replace_once(session, before, '            AllowedTools.capture(options?.tools).allow(this);\n' + before)
+    types = core/'agent-session.d.ts'
+    replace_once(types, '    private _allowedToolNames?;', '    private _allowedToolNames?;\n    private _launchToolNames?;')
+    replace_once(types, '    getToolDefinition(name: string): ToolDefinition | undefined;',
+                 '    allowTools(names: readonly string[]): void;\n    getToolDefinition(name: string): ToolDefinition | undefined;')
+    types = core.parent/'modes/rpc/rpc-types.d.ts'
+    before = '    type: "prompt";\n'
+    replace_once(types, before, before + '    tools?: readonly string[];\n')
 
 
 def extend_system_sources(core):
@@ -336,7 +362,7 @@ def main(package):
             this._publishedContext = observed.published;
         };''')
     source=session.read_text()
-    session.write_text('import { TurnContext, NativeInputClaim, SystemLayerSegment } from "./turn-context.js";\n'+source)
+    session.write_text('import { TurnContext, NativeInputClaim, AllowedTools, SystemLayerSegment } from "./turn-context.js";\n'+source)
     replace_once(session, '''            this._emit(record);
         }
     }

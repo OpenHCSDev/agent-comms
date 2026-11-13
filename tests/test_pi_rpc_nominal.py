@@ -122,13 +122,14 @@ def test_external_formats_are_derived_and_pin_wire_spellings():
     input_id = InputId.mint()
     assert commands.Prompt(
         id=RequestId(PiRequestKey("p")), input_id=input_id, message="hello",
-        owner_tools=OwnerToolConnection("/unused", "a" * 64),
+        owner_tools=OwnerToolConnection("/unused", "a" * 64), tools=("read", "bash"),
     ).to_rpc() == {
         "type": "prompt",
         "id": "p",
         "inputId": FieldCodec.encode(input_id),
         "message": "hello",
         "ownerTools": {"path": "/unused", "token": "a" * 64},
+        "tools": ["read", "bash"],
     }
     assert commands.SetModel(
         id=RequestId(PiRequestKey("s")), provider="configured", model_id="kept"

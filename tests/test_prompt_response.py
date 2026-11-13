@@ -42,7 +42,7 @@ from native_response_fixture import native_response_session
 
 def prompt(**options):
     return Prompt(message="hello", input_id=InputId.mint(),
-                  owner_tools=OwnerToolConnection("/unused", "a" * 64), **options)
+                  owner_tools=OwnerToolConnection("/unused", "a" * 64), tools=(), **options)
 
 
 def test_images_use_the_declared_pi_tag_for_encoding_and_decoding():
@@ -90,7 +90,7 @@ def following() -> FollowingPrompt:
     item = InputRequest(input_id=InputId.mint(), content=InputContent(text="following"),
                         when_busy=FollowUpInputPolicy)
     command = FollowingPrompt(input=item, message=item.content.text, input_id=InputId.mint(),
-                              owner_tools=OwnerToolConnection("/unused", "a" * 64),
+                              owner_tools=OwnerToolConnection("/unused", "a" * 64), tools=(),
                               streaming_behavior=item.when_busy)
     return command
 

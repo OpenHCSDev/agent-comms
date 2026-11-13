@@ -103,6 +103,26 @@ export class NativeInputClaim {
     }
 }
 
+/** An input that names no tools runs with the tools its child already has. */
+class LaunchedTools {
+    allow() {}
+}
+
+/** The tools one input allows the model: what --tools states for a whole process, stated
+ * for one prompt, so a child serves a tool-less ask and a coding answer without restarting. */
+export class AllowedTools {
+    static launched = Object.freeze(new LaunchedTools());
+    static capture(value) {
+        if (value === undefined) return this.launched;
+        if (!Array.isArray(value) || value.length > 512 || new Set(value).size !== value.length ||
+            value.some(name => typeof name !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(name)))
+            throw new TypeError('Invalid per-input tool allowance');
+        return new this(value);
+    }
+    constructor(names) { this.names = names; }
+    allow(session) { session.allowTools(this.names); }
+}
+
 class ContextSegment {
     constructor(provenance, value, contributors=[]) {
         if (!provenance.length) throw new TypeError('Context requires its original source');

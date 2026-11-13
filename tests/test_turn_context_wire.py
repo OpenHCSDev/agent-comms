@@ -99,7 +99,7 @@ def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp
     assert next(source for source in rendered.contributions if source.kind is UserInputSegment).images == (0,)
     command = Prompt(input_id=InputId('a'*32), message=rendered.text, images=images,
                      context_contributions=rendered.contributions,
-                     owner_tools=OwnerToolConnection('/unused', 'a' * 64))
+                     owner_tools=OwnerToolConnection('/unused', 'a' * 64), tools=('read',))
     decoded = Prompt.from_wire(command.to_rpc())
     assert decoded == command
     assert decoded.message.encode() == raw and decoded.images == images

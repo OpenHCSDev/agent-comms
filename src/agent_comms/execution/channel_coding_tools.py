@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.execution.native_arguments import NativeArguments
+from agent_comms.execution.coding_child import CodingChild, CodingChildMode
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.reservation_rules import ReservationRule, RuleCheck
 from agent_comms.execution.selected.claim import (
@@ -40,7 +40,6 @@ from agent_comms.team.pi_rule_gate import PiRuleGate
 from agent_comms.transport.native_tool_call import CodingCall, ToolNotExecuting
 from agent_comms.transport.native_tool_transport import (
     GatedToolTransport,
-    NativeToolMode,
     ToolListener,
     UnboundToolTransport,
 )
@@ -115,9 +114,7 @@ class OrdinaryGoalInputRule(ReservationRule):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CodingToolOwner(ABC):
-    comms: Comms
-    thread: Thread
+class CodingToolOwner(CodingChild, ABC):
     claims: dict[str, ClaimOwner] = field(default_factory=dict)
     check_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
 
@@ -218,16 +215,11 @@ class SelectedCodingToolOwner(CodingToolOwner):
 
 
 @dataclass(frozen=True)
-class CodingToolMode(NativeToolMode):
+class CodingToolMode(CodingChildMode):
     owner: CodingToolOwner
 
-    def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        declarations = NativeToolDeclaration.members_with(NativeToolDeclaration)
-        arguments = ("--tools", ",".join(tool.declared_name for tool in declarations),
-                     *NativeToolDeclaration.extension_arguments(package))
-        return self.owner.comms.threads.native_launch_arguments(
-            self.owner.thread, NativeArguments.parse(arguments), package,
-        )
+    def allowed_tools(self) -> tuple[str, ...]:
+        return NativeToolDeclaration.names()
 
     async def open_transport(self, turn, ownership) -> UnboundToolTransport:
         return await CodingToolSocket.open(

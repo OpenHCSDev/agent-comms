@@ -202,6 +202,8 @@ class Prompt(PiCommand):
         WireName("contextContributions"),
     ] = ()
     owner_tools: Annotated[OwnerToolConnection, WireName("ownerTools")]
+    tools: tuple[str, ...]
+    """The tools this prompt allows the model; Pi narrows its loaded tools to them."""
     streaming_behavior: Annotated[
         type[StreamingInputPolicy] | None,
         WireOmitDefault(),

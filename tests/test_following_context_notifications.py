@@ -68,7 +68,7 @@ class FollowingContext:
 
     @property
     def lease(self) -> TurnLeaseFence:
-        return self.claim.owner.thread.require_turn_lease()
+        return self.claim.selected.owner.thread.require_turn_lease()
 
     def notification_states(self) -> tuple[DeliveryProgress, ...]:
         """The projected state of each exact original for its one frozen recipient."""
@@ -90,6 +90,7 @@ class FollowingContext:
             streaming_behavior=SteerInputPolicy,
             # This command-data control never starts a tool transport or connects here.
             owner_tools=OwnerToolConnection(str(self.claim.session.identity.path) + '.unused', 'unused'),
+            tools=(),
         )
 
     async def verify(self, event: ContextCommitted | None = None) -> NativeContextProof:
@@ -131,7 +132,7 @@ def notification_states(
     claim: PrivateSendClaim, references: tuple[MessageReference, ...],
 ) -> tuple[DeliveryProgress, ...]:
     window = claim.selected.comms.views.message_notifications_for_references(AllOutcomes(), references)
-    owner = claim.owner.thread.incarnation.require_recorded().lookup
+    owner = claim.selected.owner.thread.incarnation.require_recorded().lookup
     rows = tuple(row for reference in references
                  for row in window.outcomes[(reference.seq, reference.message_id)])
     assert [row.recipient_identity.recipient_lookup for row in rows] == [owner] * len(references)
@@ -143,7 +144,7 @@ def following_input(claim: PrivateSendClaim, *, generation: int, count: int = 1)
 
     No message/start/context event is inferred from another input or a reply.
     """
-    comms, owner = claim.selected.comms, claim.owner.thread
+    comms, owner = claim.selected.comms, claim.selected.owner.thread
     lease = owner.require_turn_lease()
     messages = tuple(publish_initial(comms, 'sender', owner.name,
                                      f'Following original {generation}/{index}')

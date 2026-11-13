@@ -715,7 +715,8 @@ class TurnSession(NativeSession, PromptSessionCallbacks):
     async def open_transport(self, resources: AsyncExitStack) -> UnboundToolTransport:
         resources.callback(self.contexts.clear)
         unbound = await self.tool_mode.open_transport(self, resources)
-        self.command = self.make_command(owner_tools=unbound.listener.connection)
+        self.command = self.make_command(
+            owner_tools=unbound.listener.connection, tools=self.tool_mode.allowed_tools())
         del self.make_command
         self.contexts[self.command.input_id] = TrackedInputContext(self.command)
         self.output.sensitive = bool(self.command.images)
