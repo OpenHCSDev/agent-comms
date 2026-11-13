@@ -16,8 +16,20 @@ from agent_comms.planning.order_words import DirectiveText
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.recorded_time import RecordedEventTime
-from agent_comms.task_attachments.team_pings import RulePing, TeamDecisions, TeamUpdate
+from agent_comms.task_attachments.team_pings import RulePing, TeamDecisions, TeamPings
 from agent_comms.team.standing import GoalBlocked, RequestStalled
+from agent_comms.team.standing_rules import DirectiveUnacted, StandingRule
+
+
+@pytest.mark.parametrize("rule, urgent, owner_flagged", (
+    (StandingRule, False, False),
+    (GoalBlocked, True, False),
+    (DirectiveUnacted, False, True),
+    (RequestStalled, True, True),
+))
+def test_alarm_capabilities_keep_their_independent_meanings(rule, urgent, owner_flagged):
+    assert rule.is_urgent() is urgent
+    assert rule.is_owner_flagged() is owner_flagged
 
 
 def test_plain_messages_need_no_order_labels():
@@ -47,8 +59,8 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
                    text="IDLE housekeeping", since=RecordedEventTime(now - 600))
     previous = TeamDecisions(thread.incarnation, (old,), (old,), ())
     history = TeamHistory.read(comms, frozenset({thread.name}))
-    delivery = TeamUpdate.derive(thread.incarnation, (), (rule,), (previous,),
-                                       published=(previous,), now=now, history=history)
+    delivery = TeamPings((), (rule,), (previous,), now=now, history=history).delivery(
+        thread.incarnation, published=(previous,))
     update = delivery.packet
     assert update.handled[0].urgent
     current = comms.registry.require("paper")
@@ -57,6 +69,6 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
         comms.registry.status("paper"),
     )
     assert GoalBlocked.violations(comms) == ()
-    cleared = TeamUpdate.derive(thread.incarnation, (), (), (update,),
-                                     published=(update,), now=now + 60, history=history)
+    cleared = TeamPings((), (), (update,), now=now + 60, history=history).delivery(
+        thread.incarnation, published=(update,))
     assert cleared.packet.handled == ()

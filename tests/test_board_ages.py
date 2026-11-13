@@ -1,5 +1,6 @@
 """One team board owns each line's age: every teammate's retained packet dates it."""
 
+import sys
 from dataclasses import replace
 
 from agent_comms.comms import wire
@@ -7,7 +8,7 @@ from agent_comms.heartbeat_subjects import TeamHistory
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.recorded_time import RecordedEventTime
-from agent_comms.task_attachments.team_pings import RulePing, TeamUpdate, TeamUpdateNotice
+from agent_comms.task_attachments.team_pings import RulePing, TeamPings, TeamUpdateNotice
 from agent_comms.team.standing import TeamDeaf
 
 
@@ -21,7 +22,26 @@ def test_a_teammate_with_no_packet_inherits_the_boards_earliest_start(tmp_path):
     line = RulePing.capture(rule)
     retained = (TeamUpdateNotice(colleague, (replace(line, since=RecordedEventTime(100.0)),)),
                 TeamUpdateNotice(peer, (replace(line, since=RecordedEventTime(500.0)),)))
-    delivery = TeamUpdate.derive(newcomer, (), (rule,), retained, published=(), now=1000.0,
-                                 history=TeamHistory.read(comms, frozenset()))
+    captures = 0
+
+    def count_captures(frame, event, argument):
+        nonlocal captures
+        if event == "call" and frame.f_code is RulePing.capture.__func__.__code__:
+            captures += 1
+
+    prior = sys.getprofile()
+    sys.setprofile(count_captures)
+    try:
+        pings = TeamPings((), (rule,), retained, now=1000.0,
+                          history=TeamHistory.read(comms, frozenset()),
+                          not_applied=("An unapplied rule still needs a visible decision.",))
+        delivery = pings.delivery(newcomer, published=())
+        announced = pings.delivery(colleague, published=(retained[0],))
+    finally:
+        sys.setprofile(prior)
+    assert captures == 1
+    assert delivery.packet.handled is announced.packet.handled
+    assert delivery.packet.new_pings()
+    assert announced.packet.new_pings() == ()
     handled, = delivery.packet.handled
     assert handled.since == RecordedEventTime(100.0)

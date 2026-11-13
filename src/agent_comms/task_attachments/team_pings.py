@@ -247,8 +247,64 @@ class PublishedFacts(PublicationFacts):
         return cls(TextDigest(FieldCodec.comparison_digest(facts)))
 
 
+class PingLines:
+    """Alarm lines share their disposal and stopped-thread rules."""
+
+    handled: tuple[Ping, ...]
+
+    def stopped(self, snapshot: RegistrySnapshot) -> frozenset[str]:
+        """The threads its lines name that read nothing now."""
+        return snapshot.stopped(name for ping in self.handled for name in ping.threads)
+
+    def open_pings(self, history: TeamHistory) -> tuple[Ping, ...]:
+        return tuple(ping for ping in self.handled if ping.on_board(history))
+
+
+class TeamPings(PingLines):
+    """Prepare one board's alarm ages and captures for all its recipients."""
+
+    def __init__(self, states: tuple[TeammateState, ...], rules: tuple[StandingRule, ...],
+                 previous: tuple[TeamUpdate, ...], *, now: float, history: TeamHistory,
+                 not_applied: tuple[str, ...] = ()) -> None:
+        began: dict[Ping, EventTime] = {}
+        for packet in previous:
+            for ping in packet.handled:
+                # On equal clocks the later occurrence wins, as in the old stable sort.
+                began[ping] = min(ping.since, began.get(ping, ping.since),
+                                  key=lambda since: since.chronology())
+        captures = (
+            *(TeammatePing.capture(state) for state in states if state.attention()),
+            *(RulePing.capture(rule) for rule in rules),
+        )
+        self.handled = tuple(sorted(
+            (replace(ping, since=began.get(ping, ping.since).continued_from(now))
+             for ping in captures),
+            key=lambda ping: not ping.urgent,
+        ))
+        self.opened = self.open_pings(history)
+        open_members = frozenset(self.opened)
+        self.stopped_threads = self.stopped(history.snapshot)
+        self.open_wakes = any(not ping.parked(self.stopped_threads) for ping in self.opened)
+        self.waiting = tuple(ping for ping in self.handled
+                             if ping in began and ping in open_members
+                             and ping.waits_on_team(now - AwaitingTeam.seconds))
+        self.not_applied = not_applied
+
+    def delivery(self, recipient: ThreadIncarnation, *,
+                 published: tuple[TeamUpdate, ...]) -> TeamDelivery:
+        """Only the recipient's actual publications decide which lines are new."""
+        announced = {ping.key: ping for packet in published for ping in packet.handled}
+        new = tuple(ping for ping in self.handled if announced.get(ping.key) != ping)
+        wakes = self.open_wakes or any(not ping.parked(self.stopped_threads) for ping in new)
+        packet = (TeamDecisions(recipient, self.handled, new, self.waiting,
+                                not_applied=self.not_applied)
+                  if wakes or self.not_applied
+                  else TeamUpdateNotice(recipient, self.handled, not_applied=self.not_applied))
+        return TeamDelivery(packet, self.opened)
+
+
 @dataclass(frozen=True)
-class TeamUpdate(OwnerNotice, TeamObservation, declared_name=None):
+class TeamUpdate(OwnerNotice, TeamObservation, PingLines, declared_name=None):
     teammate: ThreadIncarnation
     handled: tuple[Ping, ...]
     not_applied: tuple[str, ...] = field(default=(), kw_only=True)
@@ -295,13 +351,6 @@ class TeamUpdate(OwnerNotice, TeamObservation, declared_name=None):
         return tuple(ping.board_entry() for ping in self.open_pings(history)
                      if ping.addresses(reader) and not ping.parked(stopped))
 
-    def stopped(self, snapshot: RegistrySnapshot) -> frozenset[str]:
-        """The threads its lines name that read nothing now."""
-        return snapshot.stopped(name for ping in self.handled for name in ping.threads)
-
-    def open_pings(self, history: TeamHistory) -> tuple[Ping, ...]:
-        return tuple(ping for ping in self.handled if ping.on_board(history))
-
     async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
         return await bridge.deliver_board(self, message)
 
@@ -332,49 +381,6 @@ class TeamUpdate(OwnerNotice, TeamObservation, declared_name=None):
         """The retained observation's rows for ``reader``'s tool calls, derived when asked."""
         return tuple(entry for latest in cls.latest(comms, reader)
                      for entry in latest.reader_board(comms, reader.name))
-
-    @classmethod
-    def derive(cls, recipient: ThreadIncarnation, states: tuple[TeammateState, ...],
-               rules: tuple[StandingRule, ...],
-               previous: tuple[TeamUpdate, ...], *,
-               published: tuple[TeamUpdate, ...], now: float,
-               history: TeamHistory,
-               not_applied: tuple[str, ...] = ()) -> TeamDelivery:
-        """The board owns ages; actual publication owns which lines were announced.
-        Publication never disposes of a ping; open requests still wake on every beat.
-
-        ``previous`` is every teammate's retained packet: one board, so a line keeps the
-        earliest start any teammate retained, and a teammate who joins later inherits it."""
-        # Equality ignores the start, so an unchanged observation keeps the start it had;
-        # written latest-first, the earliest recorded start is the one kept.
-        began = {ping: ping.since for ping in sorted(
-            (ping for packet in previous for ping in packet.handled),
-            key=lambda ping: ping.since.chronology(), reverse=True)}
-        captures: tuple[Ping, ...] = (
-            *(TeammatePing.capture(state) for state in states if state.attention()),
-            *(RulePing.capture(rule) for rule in rules),
-        )
-        handled = tuple(sorted(
-            (replace(ping, since=began.get(ping, ping.since).continued_from(now))
-             for ping in captures),
-            key=lambda ping: not ping.urgent,
-        ))
-        announced = {ping.key: ping for packet in published for ping in packet.handled}
-        new = tuple(ping for ping in handled if announced.get(ping.key) != ping)
-        notice = TeamUpdateNotice(recipient, handled, not_applied=not_applied)
-        opened = notice.open_pings(history)
-        open_members = frozenset(opened)
-        # A line waiting on a stopped thread is parked: it is kept and shown, never woken for.
-        stopped = notice.stopped(history.snapshot)
-        wakes = any(not ping.parked(stopped) for ping in (*new, *opened))
-        packet = TeamDecisions(
-            recipient, handled, new,
-            tuple(ping for ping in handled
-                  if ping in began and ping in open_members
-                  and ping.waits_on_team(now - AwaitingTeam.seconds)),
-            not_applied=not_applied,
-        ) if wakes or not_applied else notice
-        return TeamDelivery(packet, opened)
 
     @classmethod
     def report_failure(cls, recipient: ThreadIncarnation, failure: ServicePassFailing,

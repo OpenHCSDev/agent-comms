@@ -24,6 +24,7 @@ from agent_comms.task_attachments.team_pings import (
     PublishedFacts,
     RulePing,
     TeammatePing,
+    TeamPings,
     TeamUpdate,
     TeamUpdateStore,
 )
@@ -211,13 +212,12 @@ class TeamBoardRead(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                 not_applied = tuple(rule.rejected_line(error) for rule, error in rejected.items())
                 # One board: every teammate's retained packet dates its lines.
                 retained = tuple(packet for packets in held.values() for packet in packets)
-                deliveries = tuple(TeamUpdate.derive(
-                    recipient, states, rules, retained, published=announced[recipient],
-                    now=now, history=history,
-                    not_applied=not_applied,
-                ) for recipient in held)
-                if not deliveries:
+                if not held:
                     continue  # No live teammate: enforced, and nobody to write a board for.
+                pings = TeamPings(states, rules, retained, now=now, history=history,
+                                  not_applied=not_applied)
+                deliveries = tuple(pings.delivery(recipient, published=announced[recipient])
+                                   for recipient in held)
                 board = TeamHud.of(comms, observed.frame, observed.states,
                                    delivery=deliveries[0], usage=usage)
                 plan = TeamPlan(board.phases)
