@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.comms import Comms
@@ -45,7 +45,7 @@ from agent_comms.ui_model.teammate_state import TeammateState
 class TeamObservation:
     """One beat's single team board: every teammate reads the same frame, rules and cards."""
 
-    frame: HeartbeatFrame
+    frame: HeartbeatFrame = field(compare=False)
     rules: tuple[StandingRule, ...]
     states: tuple[TeammateState, ...]
 
