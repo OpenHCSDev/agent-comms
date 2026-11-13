@@ -57,12 +57,13 @@ function run(args: string[], launchArguments: string[], timeout = 30_000): Recor
 
 export default function (pi: ExtensionAPI) {
 	const currentThread = process.env.AGENT_COMMS_THREAD;
-	pi.registerFlag("comms-catalog", { type: "string", description: "Core native launch catalog" });
+	pi.registerFlag("comms-catalog", { type: "string", description: "Core launch settings of this thread" });
+	pi.registerFlag("comms-tools", { type: "string", description: "Core native tool catalog" });
 	let catalogRevision: string | undefined;
 	let catalog: Record<string, unknown>;
 	const readCatalog = (): Record<string, unknown> => {
 		const path = pi.getFlag("comms-catalog");
-		if (typeof path !== "string") throw new Error("Native launch did not supply its tool catalog");
+		if (typeof path !== "string") throw new Error("Native launch did not supply its thread settings");
 		const revision = statSync(path, { bigint: true });
 		const key = `${revision.mtimeNs}:${revision.size}`;
 		if (key !== catalogRevision) {
@@ -93,11 +94,13 @@ export default function (pi: ExtensionAPI) {
 	});
 	// Managed lifetimes belong to Core's attested session/turn owners. Only
 	// standalone forks attach themselves, checkpoint, publish activity and release.
-	// Decode the one launch catalog before any standalone session hook uses it.
+	// Decode the launch settings and the tools before any standalone session hook uses them.
+	// The tools file is named by its content, so it is read once and never read again.
 	pi.on("session_start", () => {
-		const startup = readCatalog();
-		launchArguments = startup.launch_arguments as string[];
-		const catalog = startup.tools as ToolDeclaration[];
+		launchArguments = readCatalog().launch_arguments as string[];
+		const tools = pi.getFlag("comms-tools");
+		if (typeof tools !== "string") throw new Error("Native launch did not supply its tool catalog");
+		const catalog = (JSON.parse(readFileSync(tools, "utf8")) as { tools: ToolDeclaration[] }).tools;
 		for (const declaration of catalog) {
 			pi.registerTool({
 				name: declaration.name,

@@ -537,8 +537,7 @@ class ThreadManagement:
         """Publish the current catalog before launching an extension that consumes it."""
         if not arguments.loads(NativeRequestTools.native_extension(package)):
             return arguments.argv
-        path = ThreadCatalog.publish(thread, self.root)
-        return (*arguments.argv, "--comms-catalog", str(path))
+        return (*arguments.argv, *ThreadCatalog.launch_flags(thread, self.root))
 
     def initialize_native_configuration(
         self, name: str, *, model: ThreadModel, thinking_level: type[ThinkingChoice],

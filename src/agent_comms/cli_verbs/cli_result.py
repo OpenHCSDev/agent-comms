@@ -59,9 +59,16 @@ class ToolCatalogResult(CliResult):
 
 
 @dataclass(frozen=True)
-class ThreadToolCatalogResult(ToolCatalogResult):
+class ThreadLaunchSettings(CliResult):
+    """What one thread's native launch needs beyond the tools every thread shares."""
+
     service_tier: ServiceTier
     launch_arguments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ThreadToolCatalogResult(ThreadLaunchSettings, ToolCatalogResult):
+    """The tools and one thread's launch settings together, for a caller that asks once."""
 
 
 class TargetEditResult(CliResult, ToolResult, SubclassUnion, affix="TargetEditResult"):
