@@ -1,6 +1,7 @@
 """Target families never disguise a broken binding as an unavailable command."""
 
-from dataclasses import dataclass, field
+import asyncio
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import pytest
@@ -17,18 +18,22 @@ from agent_comms.cli_verbs.cli_command import (
 )
 from agent_comms.cli_verbs.cli_commands import ThreadStoppedResult
 from agent_comms.cli_verbs.cli_result import ResultShower
+from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.cli_verbs.new import NewThreadCliCommand
 from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
 from agent_comms.cli_verbs.restart import RestartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
+from agent_comms.config_options import ServiceTierConfigOption
+from agent_comms.execution.pi_vocabulary import ServiceTier
 from agent_comms.messaging.channel_targets import (
     CommandTarget,
     IncarnationThreadTarget,
     ProjectTarget,
 )
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.checkouts import Checkout, LaunchCheckout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_settings import ThreadSettings
 from agent_comms.registry.thread_status import (
     ArchivedThreadStatus,
     RunningThreadStatus,
@@ -145,3 +150,20 @@ def test_a_project_menu_offers_a_new_thread(comms, tmp_path):
     actions = TargetActionCommand.target_catalog(
         comms, TargetActionCommand.selected_targets((ProjectTarget(project),)), project=project)
     assert [action.declaration for action in actions] == [NewThreadCliCommand]
+    action, = actions
+    command, = action.bound
+    tier_field, = (entry for entry in action.editable_fields
+                   if entry.name == ServiceTierConfigOption.declared_field().name)
+    assert tier_field.catalog is ServiceTierConfigOption
+    prepared = asyncio.run(tier_field.prepare(comms.configuration_catalogs, command))
+    assert tuple(choice.value for choice in prepared.offered()) == tuple(tier.value for tier in ServiceTier)
+    for tier in ServiceTier:
+        selected = replace(command, name=f"new-{tier.value}", service_tier=tier)
+        spec = selected.spec_type.from_task(
+            name=selected.name, project=LaunchCheckout(tmp_path),
+            **ThreadSettings.field_values(selected))
+        stored = comms.registry.declare(spec.declaration())
+        read_back = comms.registry.require(stored.name)
+        assert ThreadSettings.capture(read_back) == ThreadSettings.capture(selected)
+        fork = ForkCliCommand.thread_binding(read_back)
+        assert ThreadSettings.capture(fork) == ThreadSettings.capture(read_back)

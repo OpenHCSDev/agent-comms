@@ -5,14 +5,16 @@ import json
 
 import pytest
 
+from agent_comms.execution.pi_vocabulary import ServiceTier
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.native_settings import NativeThreadDefaults
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_settings import ThreadSettings
 
 
 @pytest.fixture(params=[
-    (NativeThreadDefaults, NativeThreadDefaults(model=DeclaredModel('selected/model')),
+    (NativeThreadDefaults, NativeThreadDefaults(model=DeclaredModel('selected/model'), service_tier=ServiceTier.PRIORITY),
      NativeThreadDefaults(model=DeclaredModel('default/model'))),
     (RecordedThreadIncarnation, RecordedThreadIncarnation("selected-owner", 1.0),
      RecordedThreadIncarnation("default-owner", 2.0)),
@@ -55,6 +57,5 @@ def test_required_parser_attachment_uses_the_declared_flag_and_destination(selec
 
 
 def test_settings_schema_still_comes_only_from_its_declared_data_fields():
-    assert set(FieldCodec.record_schema(NativeThreadDefaults)["properties"]) == {
-        "model", "thinking_level",
-    }
+    assert FieldCodec.record_schema(NativeThreadDefaults)["properties"].keys() == (
+        FieldCodec.record_schema(ThreadSettings)["properties"].keys())
