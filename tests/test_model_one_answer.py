@@ -1,10 +1,16 @@
 """The model menu and the coordination footer give one answer for a running thread."""
 
+import asyncio
+from dataclasses import dataclass
+from typing import Literal
+
 import pytest
 
+from agent_comms.cli_verbs.new import NewThreadCliCommand
+from agent_comms.cli_verbs.target_fields import TargetField
 from agent_comms.execution.acp import CommsAgent
 from agent_comms.agent_events import NativeMetadataObservation
-from agent_comms.config_options import ModelConfigOption
+from agent_comms.config_options import CatalogChoice, ModelConfigOption
 from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
@@ -21,13 +27,46 @@ from conftest import installed_comms
     ('test/one', ('--provider', 'test', '--model', 'one')),
     (None, ()),
 ])
-def test_saved_models_and_requests_share_catalog_arguments_without_changing_wire(wire, arguments):
+def test_saved_models_and_requests_share_catalog_arguments_without_changing_wire(wire, arguments, tmp_path, monkeypatch):
 
     for family in (ThreadModel, ModelChoice):
         model = FieldCodec.decode(family, wire)
         assert model.otherwise(None) == wire
         assert model.native(NativeArguments(())).argv == arguments
         assert FieldCodec.encode(model) == wire
+
+    offered = CatalogChoice(name='One', value='test/one')
+
+    async def discovered(option, selection):
+        return [offered]
+
+    monkeypatch.setattr(ModelConfigOption, 'discover', discovered)
+    comms = installed_comms(tmp_path / 'wire')
+    command = NewThreadCliCommand(name='', project=Checkout(tmp_path),
+                                model=FieldCodec.decode(ThreadModel, wire))
+    parameter = next(item for item in command.editable_fields if item.name == 'model')
+    prepared = asyncio.run(parameter.prepare(comms.configuration_catalogs, command))
+    assert offered in prepared.options
+    assert prepared.choice_value(prepared.editor_default) == wire
+    editor_value = prepared.editor_value(offered.value)
+    assert (offered.name, editor_value) in prepared.choices
+    assert prepared.plan.editor_payload(editor_value) == offered.value
+    assert FieldCodec.decode(ThreadModel, prepared.plan.editor_payload(editor_value)) == DeclaredModel(offered.value)
+    transported = FieldCodec.decode(tuple[CatalogChoice, ...], FieldCodec.encode(prepared.offered()))
+    assert prepared.with_offered(transported).options == prepared.options
+    assert prepared.with_offered(transported).choices == prepared.choices
+
+    @dataclass
+    class FiniteChoice:
+        value: Literal['one', 'two'] = 'one'
+
+    plan, = FieldCodec.field_plans(FiniteChoice)
+    finite = asyncio.run(TargetField.of(plan, 'one').prepare(comms.configuration_catalogs, command))
+    assert tuple(label for label, value in finite.choices) == ('one', 'two')
+    for choice in finite.options:
+        encoded = finite.editor_value(choice.value)
+        assert finite.choice_value(encoded) == choice.value
+        assert finite.plan.editor_payload(encoded) in ('one', 'two')
 
 
 def test_keep_request_preserves_the_existing_model_and_chosen_request_replaces_it(tmp_path):
