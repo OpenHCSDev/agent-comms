@@ -604,6 +604,18 @@ class PidfdHandles:
 
 class Platform(DeclaredFamily, affix="Platform"):
     store_lock_interval = 0.025
+    store_lock_first_wait = 0.0002
+
+    @classmethod
+    def store_lock_waits(cls) -> Iterator[float]:
+        """How long each refused attempt at a store lock waits before the next: short at first,
+        doubling up to the interval. A commit holds a store lock for about a millisecond, so a
+        reader that slept the whole interval after one refusal waited 25 ms for a lock that was
+        free in one: 0.59 s of a channel message's wall time in the worker alone."""
+        wait = cls.store_lock_first_wait
+        while True:
+            yield wait
+            wait = min(wait * 2, cls.store_lock_interval)
 
     @classmethod
     def current(cls) -> Platform:

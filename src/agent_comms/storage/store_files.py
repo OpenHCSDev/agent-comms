@@ -111,6 +111,7 @@ class StoreLockContention:
     def waits(self, descriptor: int, platform: Platform, *, mode: LockMode) -> Iterator[float]:
         """One physical acquisition algorithm; drivers own sync/async waiting."""
         remaining = self.seconds
+        refused = platform.store_lock_waits()
         while True:
             begun = time.monotonic()
             try:
@@ -121,7 +122,7 @@ class StoreLockContention:
                     raise StoreLockBusyError(platform.lock_holders(descriptor)) from error
                 begun = time.monotonic()
                 try:
-                    yield min(remaining, platform.store_lock_interval)
+                    yield min(remaining, next(refused))
                 finally:
                     remaining -= time.monotonic() - begun
             else:

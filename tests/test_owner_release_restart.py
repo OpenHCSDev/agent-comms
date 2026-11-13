@@ -68,7 +68,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     generation = comms.registry.snapshot().claim_generation(declared.name)
     comms.owners.stop(declared.name)
     snapshot = comms.registry.snapshot()
-    assert snapshot.statuses[declared.name].stopped
+    assert snapshot.statuses[declared.name].is_stopped()
     assert snapshot.threads[declared.name].process_identity == NoProcess()
     release = comms.owners.releases.read_many((declared.name,))[declared.name]
     assert isinstance(release, NoRelease)
@@ -96,7 +96,7 @@ def test_stop_of_crashed_owner_records_exact_release(hosted_owner):
     snapshot = comms.registry.snapshot()
     acknowledgement = comms.owners.releases.read_many(("worker",))["worker"]
     assert acknowledgement.current(snapshot, original, acknowledgement.before)
-    assert snapshot.statuses["worker"].stopped
+    assert snapshot.statuses["worker"].is_stopped()
 
 
 @pytest.mark.parametrize("mode", ["restart", "guarded", "stop"])
