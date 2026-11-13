@@ -13,7 +13,6 @@ import pytest
 
 from agent_comms.context_segments.native_messages import TranscriptSegment
 from agent_comms.context_store import (
-    UNREAD_CONTEXT,
     CapturedContext,
     ContextEntry,
     ContextManifestReference,
@@ -21,9 +20,9 @@ from agent_comms.context_store import (
     ContextRequest,
     ContextSegmentVersion,
     ContextStore,
-    ContextStoreIdentity,
     ContextStoreInfo,
 )
+from agent_comms.execution.context_prior import UNREAD_CONTEXT, ContextStoreIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
 from agent_comms.execution.turn_context import (
@@ -121,6 +120,21 @@ def test_context_deltas_restore_original_text_and_incremental_membership(tmp_pat
     assert comms.contexts.page(owner.name, comms.registry,
                                previous=page.resources).resources == page.resources
     assert FieldCodec.decode(type(decoded[1]), FieldCodec.encode(decoded[1])) == decoded[1]
+
+
+def test_a_sent_once_kind_named_by_hash_takes_the_text_its_process_sent(tmp_path):
+    owner = context_comms(tmp_path).registry.require('Alice')
+    system, tools, transcript = context(owner, tmp_path, 1, 1).segments
+    named = replace(system, captured_text=())
+    texts = {}
+    with pytest.raises(ValueError):
+        system.kind.sent_once(texts, named)
+    assert system.kind.sent_once(texts, system) == system
+    assert system.kind.sent_once(texts, named) == system
+    with pytest.raises(ValueError):
+        tools.kind.sent_once(texts, replace(tools, captured_text=()))
+    whole = replace(transcript, captured_text=())
+    assert transcript.kind.sent_once(texts, whole) == whole
 
 
 def test_changed_text_and_replaced_transcript_do_not_reuse_old_values(tmp_path):
@@ -224,8 +238,8 @@ def test_context_batch_decodes_shared_entries_once(tmp_path: Path) -> None:
         rows = ContextRequest.select(db, order_by=('id',))
         previous_profile = sys.getprofile()
         def observe(frame, event, argument):
-            if event == 'call' and frame.f_code is ContextEntry.original.__func__.__code__:
-                decoded.append(frame.f_locals['reference'])
+            if event == 'call' and frame.f_code is ContextEntry.originals.__func__.__code__:
+                decoded.extend(frame.f_locals['references'])
         try:
             sys.setprofile(observe)
             actual = tuple(comms.contexts.resolve(db, source, rows))

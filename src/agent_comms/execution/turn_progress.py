@@ -12,7 +12,6 @@ from agent_comms import agent_events as events
 from agent_comms.acp_extension import LiveQueueScope, TranscriptChangedUpdate, encode_updates
 from agent_comms.agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
 from agent_comms.comms import Comms
-from agent_comms.context_store import UNREAD_CONTEXT, ContextPrior
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.acp_failure import FailedNativeTurnOutcome, NativeTurnOutcome
 from agent_comms.execution.diagnostics import record_request_progress, record_terminal_failure
@@ -64,8 +63,6 @@ class TurnProgress(events.AgentEventConsumer[Comms]):
         self.terminal_error: events.Error | None = None
         self.terminal_failure: TurnFailure = NoTurnFailure()
         self.publication_measurements = PublicationMeasurements()
-        # The turn keeps its last context record, so recording never re-reads it.
-        self.context_prior: ContextPrior = UNREAD_CONTEXT
         route = self.routing.reply
         self.consumer = (
             RoutedTurnEventConsumer(effects, session_id, runtime, self.turn_lease.turn_id, route)
@@ -106,12 +103,8 @@ class TurnProgress(events.AgentEventConsumer[Comms]):
             self.comms.registry.observe_offered_tools,
             self.thread.incarnation, event.context.offered_tools,
         ))
-        self.context_prior = await event.context.record(
-            self.comms.contexts, self.context_prior, self.thread, self.turn_lease
-        )
-        self.runtime.agent.annotations.observe(
-            self.session_id, self.context_prior.value, event.context.values
-        )
+        manifest = await event.record(self.comms.contexts, self.thread, self.turn_lease)
+        self.runtime.agent.annotations.observe(self.session_id, manifest, event.context.values)
 
     @property
     def thread_name(self) -> str:

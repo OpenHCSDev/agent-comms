@@ -16,10 +16,6 @@ from metaclass_registry.mro_dispatch import (
 from agent_comms.agent_events import CompactionEvent
 from agent_comms.comms import Comms
 from agent_comms.context_segments.wake import SelectedWakeSegment
-from agent_comms.context_store import (
-    UNREAD_CONTEXT,
-    ContextPrior,
-)
 from agent_comms.coordination.cohort import (
     _claim_record,
     pending_sealed_assignments,
@@ -46,7 +42,7 @@ from agent_comms.execution.native_input_owner import (
     RegistryOwner,
 )
 from agent_comms.execution.native_runtime_input import NativeRuntimeTable
-from agent_comms.execution.pi_events import TurnContextObserved
+from agent_comms.execution.native_turn_context import ContextObserved
 from agent_comms.execution.selected.owner_source import RegistryOwnerSource
 from agent_comms.execution.selected.source_batch import (
     SelectedSource,
@@ -112,8 +108,6 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
     model: SelectedModel
     cursor_delivery: CursorDelivery
     goal_permission: TurnGoalPermission = field(init=False, repr=False)
-    # The turn keeps its last context record, so recording never re-reads it.
-    context_prior: ContextPrior = field(default=UNREAD_CONTEXT, init=False, repr=False)
     # The runtime's live publication: viewers attached to this session see the turn as it runs.
     publication: MroDispatch = field(default_factory=NoLivePublication, kw_only=True, repr=False, compare=False)
 
@@ -188,13 +182,11 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
         for source in self.batch.sources:
             self.comms.goals.consume_reply_wait(self.owner, source.delivery.message.reference)
 
-    @handles(TurnContextObserved)
-    async def observe_context(self, event: TurnContextObserved) -> None:
+    @handles(ContextObserved)
+    async def observe_context(self, event: ContextObserved) -> None:
         self.owner.require_active_turn()
-        lease = self.owner.thread.require_turn_lease()
-        self.context_prior = await event.context.record(
-            self.comms.contexts, self.context_prior, self.owner.thread, lease
-        )
+        await event.record(
+            self.comms.contexts, self.owner.thread, self.owner.thread.require_turn_lease())
 
     @handles(NativePhaseChanged)
     async def native_phase(self, event: NativePhaseChanged) -> None:

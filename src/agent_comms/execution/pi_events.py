@@ -23,7 +23,7 @@ from agent_comms.execution.native_input_proof import (
 from agent_comms.execution.native_output import NativeOutputLocation, NativeRecordLocation
 from agent_comms.execution.native_pi import NativePiOperationFailed
 from agent_comms.execution.native_session_reopen import PiSessionId
-from agent_comms.execution.native_turn_context import ContextObserved, NativeContextManifestData
+from agent_comms.execution.native_turn_context import NativeContextManifestData
 from agent_comms.execution.pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from agent_comms.execution.pi_vocabulary import CompactionReason, UnknownCompactionReason
 from agent_comms.execution.pi_wire import (
@@ -489,7 +489,7 @@ class TurnContextObserved(NativePiEvent):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         for segment in self.context.segments:
             segment.remember_received(session.native)
-        yield ContextObserved(self.context)
+        yield session.native.published.observed(self.context)
 
 
 class ExtensionUiChoice(ABC):

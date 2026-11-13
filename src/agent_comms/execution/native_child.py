@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Coro
 from contextlib import AbstractContextManager, AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, NoReturn, Self
+from typing import TYPE_CHECKING, NoReturn, Self
 
 from agent_comms.execution.child_process import AttachedChild, ChildOutcome, join_retirement
 from agent_comms.execution.launch_runtime import INHERITED_ENVIRONMENT
@@ -17,6 +17,7 @@ from agent_comms.execution.native_failures import NativePiUnavailable, NativeReq
 from agent_comms.execution.native_pi import NativePiRpcLaunch
 from agent_comms.execution.native_prompt_send import send_fenced_prompt
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
+from agent_comms.execution.native_turn_context import PublishedContext
 from agent_comms.execution.participant_identity import ParticipantIdentity
 from agent_comms.execution.pending_requests import PendingRequest
 from agent_comms.execution.pi_events import PiEvent
@@ -293,6 +294,7 @@ class PiSessionChild(PiChild):
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
     coordination_revision: tuple[Provenance, ...] = ()
+    published: PublishedContext = field(default_factory=PublishedContext, repr=False)
 
     def remember_coordination(self, provenance: tuple[Provenance, ...]) -> None:
         self.coordination_revision = provenance

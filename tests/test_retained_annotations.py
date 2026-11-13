@@ -8,11 +8,11 @@ from cutover.carry_annotation_failure_kinds import AnnotationFailureKinds
 
 from agent_comms.comms import wire
 from agent_comms.context_store import (
-    UNREAD_CONTEXT,
     CapturedContext,
     ContextManifestReference,
     ContextStore,
 )
+from agent_comms.execution.context_prior import UNREAD_CONTEXT
 from agent_comms.coordination.coordinator import StandaloneCoordination
 from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
