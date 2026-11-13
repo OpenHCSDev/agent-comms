@@ -59,7 +59,6 @@ async def release_starting_attempt(directory):
         async with SelectedParticipant.select(
             comms, store, root_id, "beta", 0, cursor_delivery=delivery,
         ) as participant:
-            assert participant is not None
             created = store.create(
                 participant.batch.execution_id, WireOrigin,
                 participant.lookup, 1,
@@ -107,7 +106,7 @@ def recover_starting_owner(released_starting):
         pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
         execution_id = pointer.execution_id.require("fixture must hold a starting attempt")
         before = store.get(execution_id)
-        assert before.attempt.lifecycle.starting
+        before.attempt.lifecycle.require_starting()
         assert NativeRuntimeInput.count(store.session._connection) == 0
         inputs = input_evidence(store)
     bus = Bus(Bus.path_in(released_starting)).revision()
@@ -175,7 +174,7 @@ def test_undispatched_owner_loss_refuses_a_live_native_child(released_starting, 
         with Coordination(released_starting / "coordination.sqlite3") as store:
             pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
             execution_id = pointer.execution_id.require("the live child must keep its attempt unresolved")
-            assert store.get(execution_id).attempt.lifecycle.starting
+            store.get(execution_id).attempt.lifecycle.require_starting()
             assert NativeRuntimeInput.count(store.session._connection) == 0
     finally:
         child.terminate()

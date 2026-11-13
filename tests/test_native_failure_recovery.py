@@ -133,7 +133,6 @@ async def prepared_native_participant(
             async with SelectedParticipant.select(
                 comms, store, root_id, "beta", 0, cursor_delivery=cursor_delivery,
             ) as participant:
-                assert participant is not None
                 yield participant
 
 
