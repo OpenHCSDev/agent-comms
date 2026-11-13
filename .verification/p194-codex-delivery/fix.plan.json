@@ -1,0 +1,143 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "preserve-harness-observations-and-turn-errors",
+      "operations": [
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/harness_delivery_states.py",
+          "target_qualname": "AcceptedOutcome",
+          "replacements": [
+            {
+              "old_source": "class AcceptedOutcome(DeliveredOutcome):",
+              "new_source": "class AcceptedOutcome(Outcome):"
+            }
+          ]
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/harness_delivery_states.py",
+          "import_source": "from agent_comms.execution.turn_item import NativeItemId, NativeTurnId"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/harness_delivery_states.py",
+          "target_qualname": "agent_comms.cli_bridges.harness_delivery_states",
+          "replacements": [
+            {
+              "old_source": "@dataclass(frozen=True)\nclass ObservedMonitor(MonitorEvidence, Timestamped):\n    record_id: TranscriptRecordId\n    timestamp: float\n\n    def evidence(self, recorded: type[Outcome]) -> tuple[type[Outcome], MonitorEvidence]:\n        \"\"\"Only a complete, matching confirmation stores this, so the message entered context.\"\"\"\n        return DeliveredOutcome, self\n\n    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:\n        return progress.model_consumed(HarnessConsumedProgress(self.at_ms))\n\n    def claim_steps(self, state: AssignmentState) -> tuple[type[AssignmentState], ...]:\n        return state.harness_delivery()\n\n    def finished_with(self, export: MonitorReadFile) -> None:\n        export.retire()",
+              "new_source": "class ObservedInputEvidence(MonitorEvidence, Timestamped, declared_name=None):\n    \"\"\"A complete original input observed in its harness, with its source retained.\"\"\"\n\n    def evidence(self, recorded: type[Outcome]) -> tuple[type[Outcome], MonitorEvidence]:\n        \"\"\"Only a complete, matching confirmation stores this, so the message entered context.\"\"\"\n        return DeliveredOutcome, self\n\n    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:\n        return progress.model_consumed(HarnessConsumedProgress(self.at_ms))\n\n    def claim_steps(self, state: AssignmentState) -> tuple[type[AssignmentState], ...]:\n        return state.harness_delivery()\n\n    def finished_with(self, export: MonitorReadFile) -> None:\n        export.retire()\n\n@dataclass(frozen=True)\nclass ObservedMonitor(ObservedInputEvidence):\n    record_id: TranscriptRecordId\n    timestamp: float\n\n\n@dataclass(frozen=True)\nclass ObservedBridgeInput(ObservedInputEvidence):\n    turn_id: NativeTurnId\n    item_id: NativeItemId\n    timestamp: float"
+            }
+          ]
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/shared.py",
+          "import_source": "from agent_comms.cli_bridges.harness_delivery_states import ObservedBridgeInput"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/shared.py",
+          "target_qualname": "BridgeInputObserved",
+          "replacements": [
+            {
+              "old_source": "    text: str\n",
+              "new_source": "    text: str\n    record: ObservedBridgeInput\n"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/shared.py",
+          "target_qualname": "BridgeInputObserved.observed",
+          "replacements": [
+            {
+              "old_source": "partial(replace, outcome=DeliveredOutcome)",
+              "new_source": "partial(replace, outcome=DeliveredOutcome, monitor=self.record)"
+            }
+          ]
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/codex_protocol.py",
+          "import_source": "from agent_comms.cli_bridges.harness_delivery_states import ObservedBridgeInput"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/codex_protocol.py",
+          "import_source": "from agent_comms.cli_bridges.runtime_updates import FailedTurn"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/codex_protocol.py",
+          "import_source": "from agent_comms.execution.provider_records import CodelessProviderDiagnosticError"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/codex_protocol.py",
+          "import_source": "import time"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/codex_protocol.py",
+          "target_qualname": "BusClientId.completed",
+          "replacements": [
+            {
+              "old_source": "        return BridgeInputObserved(events, self.message_id, item.input_text,\n                                   source_turn=NamedSourceTurn(turn_id))",
+              "new_source": "        return BridgeInputObserved(\n            events, self.message_id, item.input_text,\n            ObservedBridgeInput(turn_id, item.id, events[0].timestamp),\n            source_turn=NamedSourceTurn(turn_id),\n        )"
+            }
+          ]
+        },
+        {
+          "operation": "insert_after_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/codex_protocol.py",
+          "target_qualname": "TurnHeader",
+          "source": "class TurnError(WireModel):\n    message: str\n\n\nclass CompletedTurnHeader(TurnHeader):\n    error: TurnError | None = None\n\n    def finished(self) -> RuntimeUpdate:\n        if self.error is None:\n            return FinishedTurn(self.turn_id)\n        return FailedTurn(self.turn_id, CodelessProviderDiagnosticError(self.error.message), time.time())"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/codex_protocol.py",
+          "target_qualname": "TurnFinished",
+          "replacements": [
+            {
+              "old_source": "    turn: TurnHeader",
+              "new_source": "    turn: CompletedTurnHeader"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/codex_protocol.py",
+          "target_qualname": "TurnFinished.apply",
+          "replacements": [
+            {
+              "old_source": "return FinishedTurn(self.turn.turn_id)",
+              "new_source": "return self.turn.finished()"
+            }
+          ]
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/runtime_updates.py",
+          "import_source": "from agent_comms.execution.provider_records import ProviderDiagnosticError"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/runtime_updates.py",
+          "import_source": "from agent_comms.execution.turn_phase import FailedPhase"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/runtime_updates.py",
+          "import_source": "from agent_comms.transcript.transcript_events import NoticeTranscript"
+        },
+        {
+          "operation": "insert_after_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/runtime_updates.py",
+          "target_qualname": "FinishedTurn",
+          "source": "@dataclass(frozen=True)\nclass FailedTurn(FinishedTurn):\n    \"\"\"Retire the original turn and keep its actual error visible without a reply or retry.\"\"\"\n\n    error: ProviderDiagnosticError\n    timestamp: float\n\n    def publish(self, output: ThreadOutput) -> None:\n        super().publish(output)\n        item_id = NativeItemId(f\"turn-error:{self.turn_id}\")\n        output.publish_item(FinishedItem(self.turn_id, item_id, (\n            NoticeTranscript(self.error.message, position=item_id, timestamp=self.timestamp),\n        )))\n        output.enter(FailedPhase(detail=self.error.message, error=self.error))"
+        }
+      ]
+    }
+  ]
+}

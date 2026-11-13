@@ -14,9 +14,10 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.agent_events import RuntimeInfoObservation
 from agent_comms.cli_bridges.cli_protocol import EarlierItems
+from agent_comms.execution.provider_records import ProviderDiagnosticError
 from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId, NoSourceTurn, TurnItem
-from agent_comms.execution.turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
+from agent_comms.execution.turn_phase import FailedPhase, IdlePhase, ModelWaitPhase, TurnPhase
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.sending import Messaging
 from agent_comms.registry import activity
@@ -27,6 +28,7 @@ from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.transcript.external_transcript_rows import ExternalPage
 from agent_comms.transcript.transcript_events import (
     LiveTextTranscript,
+    NoticeTranscript,
     ToolStartTranscript,
     TranscriptEvent,
 )
@@ -637,6 +639,22 @@ class FinishedTurn(TurnEnded):
 
     def retire(self, output: ThreadOutput) -> None:
         output.end_turn(self.turn_id)
+
+
+@dataclass(frozen=True)
+class FailedTurn(FinishedTurn):
+    """Retire the original turn and keep its actual error visible without a reply or retry."""
+
+    error: ProviderDiagnosticError
+    timestamp: float
+
+    def publish(self, output: ThreadOutput) -> None:
+        super().publish(output)
+        item_id = NativeItemId(f"turn-error:{self.turn_id}")
+        output.publish_item(FinishedItem(self.turn_id, item_id, (
+            NoticeTranscript(self.error.message, position=item_id, timestamp=self.timestamp),
+        )))
+        output.enter(FailedPhase(detail=self.error.message, error=self.error))
 
 
 @dataclass(frozen=True)

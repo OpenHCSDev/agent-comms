@@ -41,6 +41,7 @@ from agent_comms.cli_bridges.harness_delivery_states import (
     FilteredOutcome,
     MismatchedMonitor,
     MonitorEvidence,
+    ObservedBridgeInput,
     ObservedMonitor,
     Outcome,
     TakingLedger,
@@ -1758,6 +1759,7 @@ class BridgeInputObserved(DeliveredInput, HiddenItem):
 
     message_id: MessageId
     text: str
+    record: ObservedBridgeInput
 
     async def observed(self, bridge: TranscriptBridge) -> DeliveredInput:
         attempts = await bridge.attempts(self.message_id)
@@ -1770,7 +1772,7 @@ class BridgeInputObserved(DeliveredInput, HiddenItem):
                 continue
             if self.text != IncomingFrame(message).text:
                 raise RelationViolationError("Observed bus input differs from its original delivery")
-            await bridge.finish(delivery, partial(replace, outcome=DeliveredOutcome))
+            await bridge.finish(delivery, partial(replace, outcome=DeliveredOutcome, monitor=self.record))
             references.extend(message.opening_references(bridge.transcript_thread))
         return replace(self, references=tuple(references))
 
