@@ -161,6 +161,20 @@ class TeamBoardRead(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
     """The shared board derivation, independent of the heartbeat's scheduling and effects."""
 
     _previous_reads: RepositoryReads | None = None
+    _update_cache: dict[ThreadIncarnation, tuple[float, tuple[TeamUpdate, ...]]] = {}
+
+    def _cached_latest(self, comms: Comms, recipient: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
+        store = TeamUpdateStore.for_team(comms.root, recipient)
+        try:
+            mtime = store.path.stat().st_mtime
+        except FileNotFoundError:
+            return store.empty()
+        cached = self._update_cache.get(recipient)
+        if cached is not None and cached[0] == mtime:
+            return cached[1]
+        result = store.read()
+        self._update_cache[recipient] = (mtime, result)
+        return result
 
     def read_board(self, comms: Comms) -> tuple[TeamPlan, tuple[TeamHud, ...]]:
         """Prepare the shared board without service effects or retained-frame writes."""
@@ -203,7 +217,7 @@ class TeamBoardRead(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
         try:
             for observed in boards:
                 recipients = self.served(comms.registry, comms.goals)
-                held = {recipient.incarnation: TeamUpdate.latest(comms, recipient.incarnation)
+                held = {recipient.incarnation: self._cached_latest(comms, recipient.incarnation)
                         for recipient in recipients}
                 announced = {
                     recipient.incarnation: TeamUpdate.published(comms, recipient.incarnation)
