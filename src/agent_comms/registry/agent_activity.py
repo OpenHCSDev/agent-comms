@@ -23,6 +23,7 @@ from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.runtime_info import AgentRuntimeInfo, RuntimeInfo, RuntimeInfoStore
 from agent_comms.execution.turn_lease import (
     NoFinishedTurn,
+    PhaseEffects,
     StoredTurnRecord,
     TurnCompletion,
     TurnDeclaration,
@@ -124,8 +125,12 @@ class AgentActivity(ActivityAnswers, RuntimeInfoWrites[RuntimeInfoProjection[Age
         self._emit_activity(Activity.create(self.registry.require(thread).name, state, detail))
 
     def enter_phase(self, thread: str, phase: TurnPhase) -> None:
-        """Native turns, bridges and seated subagents publish the phase's own activity."""
-        self.set_activity(thread, phase.activity_state, " ".join(phase.activity_detail.split()))
+        """Bridges and seated subagents publish a phase's activity by thread name."""
+        self._emit_activity(phase.activity_event(self.registry.require(thread).name))
+
+    def publish_phase(self, owner: OwnerIdentity, phase: TurnPhase) -> None:
+        """A turn's phase change publishes under the owner its own registry cut named."""
+        self._publish(owner, phase.activity_event(owner.incarnation.name))
 
     def activity_of(self, thread: str, *, snapshot: ActivityRegistryRead) -> ObservedActivity:
         participant = snapshot.require(thread)
@@ -200,11 +205,14 @@ class AgentActivity(ActivityAnswers, RuntimeInfoWrites[RuntimeInfoProjection[Age
                 for lookup, recipient in selected.items()}
 
     def _emit_activity(self, activity: Activity) -> None:
-        snapshot = self.registry.snapshot()
-        owner = snapshot.owner_identity(activity.thread)
-        activity = replace(activity, thread=owner.incarnation.name)
-        self.activity.update(activity.thread, lambda current: replace(
-            activity, diagnostic=ObservedActivity.acquire(current, owner).readiness.source_diagnostic(),
+        self._publish(self.registry.snapshot().owner_identity(activity.thread), activity)
+
+    def _publish(self, owner: OwnerIdentity, activity: Activity) -> None:
+        """Write the owner's activity, keeping a drain failure that same owner recorded."""
+        thread = owner.incarnation.name
+        self.activity.update(thread, lambda current: replace(
+            activity, thread=thread,
+            diagnostic=ObservedActivity.acquire(current, owner).readiness.source_diagnostic(),
         ))
 
     def set_drain_diagnostic(
@@ -298,12 +306,10 @@ class AgentActivity(ActivityAnswers, RuntimeInfoWrites[RuntimeInfoProjection[Age
 
     def _turn_phase_effects(
         self, lease: TurnLeaseFence, phase: TurnPhase,
-        transition: Callable[[TurnLeaseFence, TurnPhase], tuple[TurnState, ...]],
+        transition: Callable[[TurnLeaseFence, TurnPhase], PhaseEffects],
     ) -> tuple[TurnState, ...]:
-        effects = transition(lease, phase)
-        for state in effects:
-            state.active.phase.phase_effects(self, lease)
-        return effects
+        return transition(lease, phase).published(
+            lambda state, owner: state.active.phase.phase_effects(self, lease, owner))
 
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         return self._turn_phase_effects(lease, phase, lease.record.transition)

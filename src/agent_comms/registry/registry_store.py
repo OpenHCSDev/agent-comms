@@ -24,9 +24,7 @@ from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_lease import (
     ActiveTurn,
     LockedTurn,
-    NamedTurn,
     RecordedGeneration,
-    RetiredTurn,
     StoredTurnRecord,
     TurnDeclaration,
     TurnRecord,
@@ -476,8 +474,7 @@ class RegistryStore(
     ) -> Result:
         """Keep retirement excluded while the named turn's own transaction changes it."""
         with self.current_snapshot() as cut:
-            named = NamedTurn(record) if cut.snapshot.holds_turn(record.identity) else RetiredTurn()
-            return change(named)
+            return change(cut.snapshot.locked_turn(record))
 
     def prepare_native_root(self) -> PrivateRegistryGuard:
         """Commit this store's namespace before preparing runtime tables outside its writer."""

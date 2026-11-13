@@ -29,6 +29,7 @@ from agent_comms.registry.activity import ObservedActivity
 from agent_comms.registry.thread_identity import (
     NoObservedTurn,
     ObservedTurn,
+    OwnerIdentity,
     ThreadIncarnation,
     TurnFence,
     TurnIdentity,
@@ -620,26 +621,53 @@ class LockedTurn(ABC):
     @abstractmethod
     def effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
-    ) -> tuple[TurnState, ...]: ...
+    ) -> PhaseEffects: ...
+
+
+@dataclass(frozen=True)
+class PhaseEffects:
+    """The states one phase change left on a turn. A retired turn leaves none to publish."""
+
+    states: tuple[TurnState, ...] = ()
+
+    def published(
+        self, publish: Callable[[TurnState, OwnerIdentity], None],
+    ) -> tuple[TurnState, ...]:
+        return self.states
+
+
+@dataclass(frozen=True)
+class OwnedPhaseEffects(PhaseEffects):
+    """The states a named turn entered, with the owner its registry cut named."""
+
+    owner: OwnerIdentity = field(kw_only=True)
+
+    def published(
+        self, publish: Callable[[TurnState, OwnerIdentity], None],
+    ) -> tuple[TurnState, ...]:
+        for state in self.states:
+            publish(state, self.owner)
+        return self.states
 
 
 @dataclass(frozen=True)
 class NamedTurn(LockedTurn):
     record: StoredTurnRecord
+    owner: OwnerIdentity
 
     def without_claim(self) -> None:
         self.record.writers.update(lambda active: DocumentChange.to(active.without_claim()))
 
     def effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
-    ) -> tuple[TurnState, ...]:
+    ) -> PhaseEffects:
         def change(active: ActiveTurn) -> Iterator[DocumentChange[ActiveTurn, TurnState]]:
             if not active.held_by(lease):
                 return
             effects = tuple(observe(TurnState(active)))
             for state in effects:
                 yield DocumentChange(state.active.require_active(), state)
-        return self.record.writers.update_each(change)
+        return OwnedPhaseEffects(self.record.writers.update_each(change), owner=self.owner)
 
 
 class RetiredTurn(LockedTurn):
@@ -650,8 +678,8 @@ class RetiredTurn(LockedTurn):
 
     def effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
-    ) -> tuple[TurnState, ...]:
-        return ()
+    ) -> PhaseEffects:
+        return PhaseEffects()
 
 
 class TurnReads(Mapping["StoredTurnRecord", TurnDeclaration]):
@@ -772,15 +800,13 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
 
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
-    ) -> tuple[TurnState, ...]:
+    ) -> PhaseEffects:
         return self.registry.change_turn(self, lambda named: named.effects(lease, observe))
 
-    def transition(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+    def transition(self, lease: TurnLeaseFence, phase: TurnPhase) -> PhaseEffects:
         return self._turn_effects(lease, lambda state: state.phase_effects(phase))
 
-    def observe_native_phase(
-        self, lease: TurnLeaseFence, phase: TurnPhase,
-    ) -> tuple[TurnState, ...]:
+    def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> PhaseEffects:
         return self._turn_effects(lease, lambda state: state.native_phase_effects(phase))
 
 
