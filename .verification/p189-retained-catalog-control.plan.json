@@ -1,0 +1,15 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "exercise-retained-catalog-and-original-auth-invalidation",
+      "operations": [
+        {
+          "operation": "insert_after_target",
+          "file_path": "/home/ts/wt/codex-parallel--P182/tests/test_model_one_answer.py",
+          "target_qualname": "test_keep_request_preserves_the_existing_model_and_chosen_request_replaces_it",
+          "source": "\n\ndef test_serving_root_reuses_catalog_across_read_loops_and_authentication_invalidates_it(tmp_path, monkeypatch):\n    import asyncio\n    from agent_comms.cli_verbs.new import NewThreadCliCommand\n    from agent_comms.config_options import CatalogChoice\n\n    comms = installed_comms(tmp_path / \"wire\")\n    project = Checkout(tmp_path)\n    selection, = NewThreadCliCommand.project_bindings(comms, project)\n    discoveries = []\n\n    async def discovered(option, asked):\n        discoveries.append(asked.project_path)\n        return [CatalogChoice(name=\"One\", value=\"test/one\")]\n\n    monkeypatch.setattr(ModelConfigOption, \"discover\", discovered)\n\n    def read_catalog():\n        return comms.configuration_catalogs.catalog_for(ModelConfigOption)\n\n    first = read_catalog()\n    assert asyncio.run(first.choices(selection)) == [CatalogChoice(name=\"One\", value=\"test/one\")]\n    assert read_catalog() is first\n    assert asyncio.run(read_catalog().choices(selection)) == [CatalogChoice(name=\"One\", value=\"test/one\")]\n    assert discoveries == [project.path]\n    auth_file = first.owner.launch.configuration.auth_file\n    auth_file.parent.mkdir(parents=True, exist_ok=True)\n    auth_file.write_text(\"{}\")\n    assert asyncio.run(read_catalog().choices(selection)) == [CatalogChoice(name=\"One\", value=\"test/one\")]\n    assert discoveries == [project.path, project.path]\n"
+        }
+      ]
+    }
+  ]
+}

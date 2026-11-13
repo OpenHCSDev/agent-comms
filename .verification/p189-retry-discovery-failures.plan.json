@@ -1,0 +1,35 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "keep-successful-catalogs-and-release-failed-discoveries",
+      "operations": [
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-parallel--P182/src/agent_comms/config_options.py",
+          "target_qualname": "CatalogConfigOption.choices",
+          "replacements": [
+            {
+              "old_source": "            raise\n        finally:\n            self.waiters.subtract((catalog,))",
+              "new_source": "            raise\n        except Exception:\n            # A failed discovery is not a catalog to keep for the next form.\n            if self.catalogs.get(key) is catalog:\n                del self.catalogs[key]\n            raise\n        finally:\n            self.waiters.subtract((catalog,))"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-parallel--P182/tests/test_model_one_answer.py",
+          "target_qualname": "test_serving_root_reuses_catalog_across_read_loops_and_authentication_invalidates_it",
+          "replacements": [
+            {
+              "old_source": "    discoveries = []\n\n    async def discovered(option, asked):\n        discoveries.append(asked.project_path)\n        return [CatalogChoice(name=\"One\", value=\"test/one\")]",
+              "new_source": "    discoveries = []\n    fail_next = False\n\n    async def discovered(option, asked):\n        nonlocal fail_next\n        discoveries.append(asked.project_path)\n        if fail_next:\n            fail_next = False\n            raise RuntimeError(\"Discovery interrupted\")\n        return [CatalogChoice(name=\"One\", value=\"test/one\")]"
+            },
+            {
+              "old_source": "    assert discoveries == [project.path, project.path]\n",
+              "new_source": "    assert discoveries == [project.path, project.path]\n    fail_next = True\n    auth_file.write_text('{\"providers\": {}}')\n    with pytest.raises(RuntimeError, match=\"Discovery interrupted\"):\n        asyncio.run(read_catalog().choices(selection))\n    assert asyncio.run(read_catalog().choices(selection)) == [CatalogChoice(name=\"One\", value=\"test/one\")]\n    assert discoveries == [project.path] * 4\n"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

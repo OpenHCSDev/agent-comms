@@ -536,7 +536,7 @@ class ServedCommsPrepareTargetActionTool(
     """Serving CommsPrepareTargetActionTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> PreparedTargetAction:
-        return self.run_awaited(self.action.prepared(ConfigOptions.for_route(comms.route)))
+        return self.run_awaited(self.action.prepared(comms.configuration_catalogs))
 
 
 class ServedCommsTargetEditTool(HumanToolRequest[TargetEditResult | Channel], CommsTargetEditTool):

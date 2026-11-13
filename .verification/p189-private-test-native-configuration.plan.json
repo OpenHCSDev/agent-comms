@@ -1,0 +1,44 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "derive-private-test-native-paths-from-the-runtime-declaration",
+      "operations": [
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-parallel--P182/tests/conftest.py",
+          "import_source": "from agent_comms.execution.launch_runtime import RestartEnvironment"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-parallel--P182/tests/conftest.py",
+          "target_qualname": "_managed_runtime_environment_is_explicit",
+          "replacements": [
+            {
+              "old_source": "def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:",
+              "new_source": "def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:"
+            },
+            {
+              "old_source": "    \"\"\"A developer's live managed process is not a test wire or native child.\"\"\"",
+              "new_source": "    \"\"\"A test borrows neither a live owner nor the developer's credential directories.\"\"\""
+            },
+            {
+              "old_source": "        for name in _MANAGED_RUNTIME_ENVIRONMENT:\n            monkeypatch.delenv(name, raising=False)\n        yield",
+              "new_source": "        for name in _MANAGED_RUNTIME_ENVIRONMENT:\n            monkeypatch.delenv(name, raising=False)\n        configuration = RestartEnvironment(\n            native_config=tmp_path / \"native-source\",\n            agent_directory=tmp_path / \"native-agent\",\n        )\n        for name, value in configuration.encode_native().items():\n            monkeypatch.setenv(name, value)\n        yield"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-parallel--P182/tests/test_model_one_answer.py",
+          "target_qualname": "test_serving_root_reuses_catalog_across_read_loops_and_authentication_invalidates_it",
+          "replacements": [
+            {
+              "old_source": "    auth_file = first.owner.launch.configuration.auth_file\n",
+              "new_source": "    auth_file = first.owner.launch.configuration.auth_file\n    assert auth_file.is_relative_to(tmp_path), \"The control may only change its private credentials file\"\n"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

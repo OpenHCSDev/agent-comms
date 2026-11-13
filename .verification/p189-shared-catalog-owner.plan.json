@@ -1,0 +1,42 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "retain-configuration-catalogs-on-serving-root",
+      "operations": [
+        {
+          "operation": "insert_after_target",
+          "file_path": "/home/ts/wt/codex-parallel--P182/src/agent_comms/config_options.py",
+          "target_qualname": "ConfigOptions",
+          "source": "\n\nclass ConfigurationCatalogs:\n    \"\"\"A serving root retains the catalogs and their existing authentication invalidation.\"\"\"\n\n    route: CommsRoute\n\n    @cached_property\n    def configuration_catalogs(self) -> ConfigOptions:\n        return ConfigOptions.for_route(self.route)\n"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-parallel--P182/src/agent_comms/comms.py",
+          "import_source": "from agent_comms.config_options import ConfigurationCatalogs"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-parallel--P182/src/agent_comms/comms.py",
+          "target_qualname": "Comms",
+          "replacements": [
+            {
+              "old_source": "class Comms(\n    ActivityClient,",
+              "new_source": "class Comms(\n    ConfigurationCatalogs,\n    ActivityClient,"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-parallel--P182/src/agent_comms/transport/tools/served.py",
+          "target_qualname": "ServedCommsPrepareTargetActionTool.apply",
+          "replacements": [
+            {
+              "old_source": "self.action.prepared(ConfigOptions.for_route(comms.route))",
+              "new_source": "self.action.prepared(comms.configuration_catalogs)"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

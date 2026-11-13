@@ -171,6 +171,11 @@ class CatalogConfigOption(ConfigOption):
                     del self.catalogs[key]
                 await asyncio.gather(catalog, return_exceptions=True)
             raise
+        except Exception:
+            # A failed discovery is not a catalog to keep for the next form.
+            if self.catalogs.get(key) is catalog:
+                del self.catalogs[key]
+            raise
         finally:
             self.waiters.subtract((catalog,))
             if not self.waiters[catalog]:
@@ -382,3 +387,13 @@ class ConfigOptions:
             value = option.current_value(thread)
             if value is not None:
                 await option.validate(thread, value)
+
+
+class ConfigurationCatalogs:
+    """A serving root retains the catalogs and their existing authentication invalidation."""
+
+    route: CommsRoute
+
+    @cached_property
+    def configuration_catalogs(self) -> ConfigOptions:
+        return ConfigOptions.for_route(self.route)
