@@ -460,23 +460,9 @@ class RegistryStore(
             self.cache.counts.decodes += 1
         return entry
 
-    _snapshot_cache: ClassVar[dict[Path, tuple[int, RegistrySnapshot]]] = {}
-
     def snapshot(self) -> RegistrySnapshot:
-        change_paths = self.source_paths(self.path.parent)
-        if change_paths:
-            try:
-                mtime = change_paths[0].stat().st_mtime_ns
-            except FileNotFoundError:
-                mtime = 0
-            cached = self._snapshot_cache.get(self.path)
-            if cached is not None and cached[0] == mtime:
-                return cached[1]
         source, = self._copy_sources(self)
-        result = self._decode_snapshot(source)
-        if change_paths:
-            self._snapshot_cache[self.path] = (mtime, result)
-        return result
+        return self._decode_snapshot(source)
 
     def read_turns(self, held: tuple[StoredTurnRecord, ...]) -> tuple[TurnDeclaration, ...]:
         """Keep named turns from retiring during capture, then decode after release."""
