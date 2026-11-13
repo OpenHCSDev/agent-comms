@@ -129,7 +129,12 @@ class ContextSegment {
     }
     manifest() { return this.projection().manifest; }
     full() { return this.projection().value; }
-    publicationValues(projection) { return [projection.value]; }
+    static published(manifest) { return `${manifest.kind}:${manifest.sha256}`; }
+    // The value this process published at this position in its previous observation is the
+    // one the reader holds: an unchanged system prompt is 500 KB sent again on every request.
+    publicationValues(projection, published) {
+        return published===ContextSegment.published(projection.manifest) ? [] : [projection.value];
+    }
     static matches(manifest,expected) {
         return manifest.kind===expected.kind && manifest.sha256===expected.sha256;
     }
@@ -334,11 +339,13 @@ export class TurnContext {
         const {values,...manifest}=this.observation(requestId);
         return manifest;
     }
-    observation(requestId) {
-        const observed=this.segments.map(segment=>{
+    observation(requestId, published=[]) {
+        const observed=this.segments.map((segment,index)=>{
             const projection=segment.projection();
-            return {manifest:projection.manifest,values:segment.publicationValues(projection)};
+            return {manifest:projection.manifest,
+                values:segment.publicationValues(projection,published[index])};
         });
+        this.published=observed.map(value=>ContextSegment.published(value.manifest));
         return {counter:'pi.estimateTokens',segments:observed.map(value=>value.manifest),
             offered_tools:this.offeredTools,
             ...(requestId===undefined ? {} : {requestId}),

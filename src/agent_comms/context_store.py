@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Collection, Iterable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
@@ -335,6 +335,14 @@ class RecordedContextState(ContextPrior, ContextRecording):
     ) -> tuple[RecordedContextManifest, tuple[ContextEntryManifest, ...]]:
         return RecordedContextManifest.capture(manifest, self)
 
+    def completed(self, manifest: ContextManifest) -> ContextManifest:
+        """``manifest`` with the text its producer did not send again. A native child
+        publishes an unchanged segment's value once per process; the segment arrives with its
+        hash and this predecessor holds the text."""
+        return replace(manifest, segments=tuple(
+            self.segment(position, segment).restore_text(segment)
+            for position, segment in enumerate(manifest.segments)))
+
     def is_request(self, source: ContextStoreIdentity, request: int) -> bool:
         """Whether this state is that store's stored request."""
         return False
@@ -654,6 +662,7 @@ class ContextStore(ReadsContextEntries, DurableStore, InputCaptureFile):
         """Append ``manifest`` after ``prior``; the result is the next request's prior,
         so a writer holding its last request never resolves it again."""
         recorded = prior.read(self, manifest.thread)
+        manifest = recorded.completed(manifest)
         record, entries = recorded.capture(manifest)
         record.turn.require_recorded()
         with self.writing() as db:

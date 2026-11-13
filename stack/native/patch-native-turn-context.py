@@ -331,7 +331,9 @@ def main(package):
     replace_once(session, '        this.agent.onContextReady = async (context) => await this._commitNativeContext(context);',
         '''        this.agent.onContextReady = async (context, requestId) => {
             const source = await this._commitNativeContext(context);
-            this._emit({type: "turn_context_observed", context:(await TurnContext.capture(this,context,source)).observation(requestId)});
+            const observed = await TurnContext.capture(this,context,source);
+            this._emit({type: "turn_context_observed", context:observed.observation(requestId,this._publishedContext)});
+            this._publishedContext = observed.published;
         };''')
     source=session.read_text()
     session.write_text('import { TurnContext, NativeInputClaim, SystemLayerSegment } from "./turn-context.js";\n'+source)
