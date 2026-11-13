@@ -489,7 +489,7 @@ class TurnContextObserved(NativePiEvent):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         for segment in self.context.segments:
             segment.remember_received(session.native)
-        yield ContextObserved(self.context)
+        yield ContextObserved(self.context, session.native.published)
 
 
 class ExtensionUiChoice(ABC):

@@ -689,6 +689,15 @@ class ContextSegment(
     def text(self) -> str: ...
 
     @classmethod
+    def sent_once(
+        cls, texts: dict[tuple[type[ContextSegment], str], tuple[str, ...]],
+        manifest: SegmentManifest,
+    ) -> SegmentManifest:
+        """``manifest`` as its request records it, given the ``texts`` its process sent
+        before. A kind arrives whole unless it says otherwise."""
+        return manifest
+
+    @classmethod
     def public_title(cls) -> str:
         return cls.display_label()
 
@@ -908,8 +917,26 @@ class MeasuredNativeSegment(ContextSegment):
         return self.contributors
 
 
+class SentOnce:
+    """A kind whose value a Pi process sends once and names by hash from then on
+    (``ContextSegment.publicationValues`` in stack/native): 500 KB of system prompt is
+    not sent again with every request. Its text is the one that process sent."""
+
+    @classmethod
+    def sent_once(
+        cls, texts: dict[tuple[type[ContextSegment], str], tuple[str, ...]],
+        manifest: SegmentManifest,
+    ) -> SegmentManifest:
+        key = (cls, manifest.sha256)
+        if manifest.captured_text:
+            texts[key] = manifest.captured_text
+        if key not in texts:
+            raise ValueError(f"{cls.__name__} {manifest.sha256} was named before its process sent it")
+        return replace(manifest, captured_text=texts[key])
+
+
 @dataclass(frozen=True, kw_only=True)
-class SystemLayerSegment(PublicInstructionAnnotations, MeasuredNativeSegment):
+class SystemLayerSegment(SentOnce, PublicInstructionAnnotations, MeasuredNativeSegment):
     content: str
     source_spans: Annotated[
         tuple[ContributionCoordinates, ...], WireOmitDefault()
@@ -957,7 +984,7 @@ class SystemLayerSegment(PublicInstructionAnnotations, MeasuredNativeSegment):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolCatalogSegment(MeasuredNativeSegment):
+class ToolCatalogSegment(SentOnce, MeasuredNativeSegment):
     tools: tuple[dict[str, JsonValue], ...]
 
     def provider_value(self):

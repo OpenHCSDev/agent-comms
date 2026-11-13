@@ -149,11 +149,14 @@ class ContextSegment {
     }
     manifest() { return this.projection().manifest; }
     full() { return this.projection().value; }
-    static published(manifest) { return `${manifest.kind}:${manifest.sha256}`; }
-    // The value this process published at this position in its previous observation is the
-    // one the reader holds: an unchanged system prompt is 500 KB sent again on every request.
+    // A process sends a value once and names it by hash from then on; the reader keeps what
+    // this process published (Core: SentOnce). A system prompt is 500 KB, and a child that
+    // serves a tool-less ask and a coding answer holds two of them in turn.
     publicationValues(projection, published) {
-        return published===ContextSegment.published(projection.manifest) ? [] : [projection.value];
+        const key=`${projection.manifest.kind}:${projection.manifest.sha256}`;
+        if (published.has(key)) return [];
+        published.add(key);
+        return [projection.value];
     }
     static matches(manifest,expected) {
         return manifest.kind===expected.kind && manifest.sha256===expected.sha256;
@@ -359,13 +362,12 @@ export class TurnContext {
         const {values,...manifest}=this.observation(requestId);
         return manifest;
     }
-    observation(requestId, published=[]) {
-        const observed=this.segments.map((segment,index)=>{
+    observation(requestId, published=new Set()) {
+        const observed=this.segments.map(segment=>{
             const projection=segment.projection();
             return {manifest:projection.manifest,
-                values:segment.publicationValues(projection,published[index])};
+                values:segment.publicationValues(projection,published)};
         });
-        this.published=observed.map(value=>ContextSegment.published(value.manifest));
         return {counter:'pi.estimateTokens',segments:observed.map(value=>value.manifest),
             offered_tools:this.offeredTools,
             ...(requestId===undefined ? {} : {requestId}),

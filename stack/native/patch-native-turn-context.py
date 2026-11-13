@@ -358,8 +358,7 @@ def main(package):
         '''        this.agent.onContextReady = async (context, requestId) => {
             const source = await this._commitNativeContext(context);
             const observed = await TurnContext.capture(this,context,source);
-            this._emit({type: "turn_context_observed", context:observed.observation(requestId,this._publishedContext)});
-            this._publishedContext = observed.published;
+            this._emit({type: "turn_context_observed", context:observed.observation(requestId,this._publishedContext ??= new Set())});
         };''')
     source=session.read_text()
     session.write_text('import { TurnContext, NativeInputClaim, AllowedTools, SystemLayerSegment } from "./turn-context.js";\n'+source)

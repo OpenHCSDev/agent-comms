@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import pytest
 
 from agent_comms.context_segments.response import SelectedResponseSegment
-from agent_comms.context_store import UNREAD_CONTEXT, ContextRequest
+from agent_comms.context_store import ContextRequest
 from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
     DeferredRead,
@@ -24,6 +24,7 @@ from agent_comms.errors import (
     RelationViolationError,
     StoredHistoryUnreadable,
 )
+from agent_comms.execution.context_prior import UNREAD_CONTEXT
 from agent_comms.execution.turn_context import RecordedContextManifest
 from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.nominal.field_codec import FieldCodec

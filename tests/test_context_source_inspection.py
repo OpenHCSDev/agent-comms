@@ -10,7 +10,7 @@ import pytest
 from agent_comms.cli_verbs.turn_context import TurnContextCliCommand
 from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.context_segments.native_messages import TranscriptSegment
-from agent_comms.context_store import UNREAD_CONTEXT
+from agent_comms.execution.context_prior import UNREAD_CONTEXT
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
 from agent_comms.execution.native_turn_context import NativeContextManifestData
 from agent_comms.execution.pi_commands import AgentCommsInspectContextSegment
