@@ -815,6 +815,8 @@ class SidebarReadStage:
         self._cached_revision: WireRevision | None = None
         self._cached_derived: tuple | None = None
 
+    _cached_thread_names: frozenset[str] | None = None
+
     def read(
         self, request: ObserveSidebar, comms: Comms, revision: WireRevision
     ) -> SidebarResult:
@@ -824,12 +826,23 @@ class SidebarReadStage:
                 result = self._refresh_counts_only(request, comms, revision)
                 if result is not None:
                     return result
+            elif self._roster_unchanged(comms):
+                result = self._refresh_counts_only(request, comms, revision)
+                if result is not None:
+                    self._cached_revision = revision
+                    return result
         result = request._answer(revision, comms.views.viewer_snapshot, request.worktree)
         if isinstance(result, SidebarObserved):
             self._cached_snapshot = result.snapshot
             self._cached_revision = revision
             self._cached_derived = result.derived
+            self._cached_thread_names = frozenset(result.snapshot.threads)
         return result
+
+    def _roster_unchanged(self, comms: Comms) -> bool:
+        if self._cached_thread_names is None:
+            return False
+        return frozenset(comms.registry.snapshot().threads) == self._cached_thread_names
 
     def _refresh_counts_only(
         self, request: ObserveSidebar, comms: Comms, revision: WireRevision,
