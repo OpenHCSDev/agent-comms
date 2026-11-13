@@ -1599,8 +1599,9 @@ class ThreadsObserved(Observed):
             catalog = comms.channels.catalog.read()
             with comms.bus.opened_activity() as channel_activity:
                 for actor in actors:
-                    changed.update(CommandTarget.named(actor).changed_threads(
-                        names, snapshot, catalog, channel_activity))
+                    for thread_change in CommandTarget.named(actor).changed_threads(
+                            names, snapshot, catalog, channel_activity):
+                        thread_change.contribute(changed)
             changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
         activity_changed = {name for name in activity
                             if activity[name] != self.activity.get(name)}

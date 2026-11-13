@@ -1,4 +1,10 @@
-"""Named destinations own route behavior; strings are decoded at the boundary."""
+"""Named destinations own route behavior; strings are decoded at the boundary.
+
+A bus event names routes that changed. Each route's target owns which of its
+open threads need a content decode and which need only the notification pass.
+ThreadChange carries that decision so the observation loop dispatches on it
+instead of treating every flagged thread the same way.
+"""
 
 from __future__ import annotations
 
@@ -58,6 +64,33 @@ if TYPE_CHECKING:
     )
     from agent_comms.registry.registry_provenance import RegistryProvenance
     from agent_comms.registry.threads import Thread
+
+
+@dataclass(frozen=True)
+class ThreadChange:
+    """What a bus event means for one open thread's observation.
+
+    ContentChange: the thread's own transcript or delivery state changed — the
+    observer must decode its presentation. MetadataChange: the thread's
+    notification context changed (a channel message arrived for other members) —
+    the existing notification pass detects and publishes the change without a
+    full transcript decode.
+    """
+    name: str
+
+    def contribute(self, content_changed: set[str]) -> None:
+        content_changed.add(self.name)
+
+
+@dataclass(frozen=True)
+class ContentChange(ThreadChange):
+    pass
+
+
+@dataclass(frozen=True)
+class MetadataChange(ThreadChange):
+    def contribute(self, content_changed: set[str]) -> None:
+        pass
 
 
 class ChannelSelection(SubclassUnion, affix="Channel"):
@@ -306,7 +339,7 @@ class NamedTarget(CommandTarget):
     def changed_threads(
         self, names: Iterable[str], snapshot: RegistryProvenance,
         catalog: CatalogDocument, activity: ActivityClocks,
-    ) -> tuple[str, ...]: ...
+    ) -> tuple[ThreadChange, ...]: ...
 
     @abstractmethod
     def mark_view_read(self, views: HistoryViews, worktree: Checkout) -> None: ...
@@ -492,8 +525,8 @@ class ThreadTarget(NamedTarget):
     def changed_threads(
         self, names: Iterable[str], snapshot: RegistryProvenance,
         catalog: CatalogDocument, activity: ActivityClocks,
-    ) -> tuple[str, ...]:
-        return (self.selected_name(snapshot),)
+    ) -> tuple[ThreadChange, ...]:
+        return (ContentChange(self.selected_name(snapshot)),)
 
     def mark_view_read(self, views: HistoryViews, worktree: Checkout) -> None:
         views.mark_thread_user_read(self.name, worktree=worktree)
@@ -652,9 +685,10 @@ class ChannelTarget(NamedTarget):
     def changed_threads(
         self, names: Iterable[str], snapshot: RegistryProvenance,
         catalog: CatalogDocument, activity: ActivityClocks,
-    ) -> tuple[str, ...]:
+    ) -> tuple[ThreadChange, ...]:
         channel = catalog.require_channel(self.name, activity)
-        return tuple(name for name in names if (thread := snapshot.threads.get(name)) is not None
+        return tuple(MetadataChange(name) for name in names
+                     if (thread := snapshot.threads.get(name)) is not None
                      and channel.matches(thread.tags))
 
     def mark_view_read(self, views: HistoryViews, worktree: Checkout) -> None:
