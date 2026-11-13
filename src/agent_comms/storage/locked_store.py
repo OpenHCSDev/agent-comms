@@ -398,6 +398,7 @@ class JsonDocument(RootFile, ABC, Generic[T]):
         return self._read_unlocked()
 
     def _publish_unlocked(self, value: T) -> None:
+        _read_cache.pop(self.path, None)
         self._write_unlocked(
             json.dumps(self._encode(value), indent=self.json_indent, sort_keys=self.json_sort_keys)
             + self.json_suffix
@@ -1230,12 +1231,32 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
             store_lock_path(self.path).unlink(missing_ok=True)
 
 
+_read_cache: dict[Path, tuple[FileRevision, object]] = {}
+
+
 @dataclass(frozen=True, slots=True)
 class LockedStore(FileStore, LockedFile, DocumentTransactions[T], declared_name=None):
     """Each copy ends before decoding; each change owns its complete write."""
 
     def read(self) -> T:
-        return self._read_captured(lambda: self._copy_sources(self)[0], self._decode_capture)
+        try:
+            stat = self.path.stat()
+        except FileNotFoundError:
+            _read_cache.pop(self.path, None)
+            return self.empty()
+        current = FileRevision.from_stat(stat)
+        cached = _read_cache.get(self.path)
+        if cached is not None and cached[0] == current:
+            return cached[1]  # type: ignore[return-value]
+        result = self._read_captured(lambda: self._copy_sources(self)[0], self._decode_capture)
+        try:
+            post_stat = self.path.stat()
+            post_rev = FileRevision.from_stat(post_stat)
+            if post_rev == current:
+                _read_cache[self.path] = (current, result)
+        except FileNotFoundError:
+            pass
+        return result
 
     def read_pair[U](self, other: LockedStore[U]) -> tuple[T, U]:
         first, second = self._copy_sources(self, other)
