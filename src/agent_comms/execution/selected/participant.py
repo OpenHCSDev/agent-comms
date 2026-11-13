@@ -74,6 +74,7 @@ from agent_comms.nominal.field_codec import (
     TurnId,
 )
 from agent_comms.notification_assignment import (
+    AssignmentSource,
     NotificationAssignment,
     NotificationAssignmentRead,
     NotificationSelection,
@@ -304,7 +305,8 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner]):
                 NotificationSelection.of(OwnerOutcomes.of(sent_owner.incarnation), sent_sources),
                 privacy,
             )
-        sent_read = NotificationAssignment.capture_detached(comms.root, sent_read)
+        sent_read = NotificationAssignment.capture_detached(
+            AssignmentSource(comms.root), sent_read)
         if pending:
             participant.pointer.require_idle()
         sent_outcomes = SelectedParticipant.capture_sent_outcomes(

@@ -426,21 +426,20 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def capture_inputs(
-        cls, root: Path, read: NotificationAssignmentRead
+        cls, source: AssignmentSource, read: NotificationAssignmentRead,
     ) -> NotificationAssignmentRead:
         """Capture the selected recipients' stored inputs after releasing the coordinator snapshot.
 
-        An ordinary or following turn that took the original into the model proves it by its
-        own input row, keyed as the delivery recorded it; one keyed read covers the window.
+        Uses the source's cached registry snapshot — never opens a fresh one.
         """
-        registry = RegistryStore.at(root).snapshot()
+        registry = source.registry
         keys = {
             page.source.message.bus_key(thread): key
             for page in read.selection.pages
             for key, recipient in page.entries
             for thread in registry.recipient(recipient, page.source).input_owners()
         }
-        rows = InputDispositions(root).read(tuple(keys)).rows
+        rows = InputDispositions(source.root).read(tuple(keys)).rows
         consumption = dict(read.consumption)
         for key, row in rows.items():
             selected = keys[key]
@@ -449,10 +448,10 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def capture_detached(
-        cls, root: Path, read: NotificationAssignmentRead
+        cls, source: AssignmentSource, read: NotificationAssignmentRead,
     ) -> NotificationAssignmentRead:
         """Every bus-side evidence read that follows the coordinator snapshot."""
-        return cls.capture_inputs(root, cls.capture_responses(root, read))
+        return cls.capture_inputs(source, cls.capture_responses(source.root, read))
 
     @classmethod
     def capture(
@@ -575,10 +574,18 @@ class AssignmentSource:
         return CoordinationStore.observed(CoordinationStore.path_in(self.root))
 
     @cached_property
+    def _registry_store(self) -> RegistryStore:
+        return RegistryStore.at(self.root)
+
+    @cached_property
     def privacy(self) -> RegistryPrivacy:
-        return RegistryStore.at(self.root).privacy()
+        return self._registry_store.privacy()
+
+    @cached_property
+    def registry(self) -> RegistrySnapshot:
+        return self._registry_store.snapshot()
 
     def read(self, selection: NotificationSelection) -> NotificationAssignmentRead:
         with self.coordinator.observing(NotificationAssignment, selection, self.privacy) as result:
             captured = result
-        return NotificationAssignment.capture_detached(self.root, captured)
+        return NotificationAssignment.capture_detached(self, captured)
