@@ -16,6 +16,7 @@ from agent_comms.heartbeat_subjects import TeamHistory
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.planning.nominal_census import NominalPlanReadings
 from agent_comms.planning.orders import ProgressRead, Todo
+from agent_comms.projects.checkouts import RepositoryReads
 from agent_comms.planning.plan_reading import PlanReadings, RetainedPlanReadings
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.watch_phase import WatchPhase
@@ -159,16 +160,27 @@ class ReadRetention(BoardRetention):
 class TeamBoardRead(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamService, WatchPhase):
     """The shared board derivation, independent of the heartbeat's scheduling and effects."""
 
+    _previous_reads: RepositoryReads | None = None
+
     def read_board(self, comms: Comms) -> tuple[TeamPlan, tuple[TeamHud, ...]]:
         """Prepare the shared board without service effects or retained-frame writes."""
         retention = ReadRetention()
         return self.pass_body(
             comms, self.observe(comms, self.prepare_board(comms, retention)), retention)
 
+    def _progress_read(self) -> ProgressRead:
+        progress = ProgressRead()
+        if self._previous_reads is not None:
+            retained = RepositoryReads.retaining(self._previous_reads)
+            progress._histories = retained._histories
+        self._previous_reads = progress
+        return progress
+
     def prepare_board(self, comms: Comms, retention: BoardRetention) -> tuple[TeamInputs, ...]:
         """Acquire one shared board; only the service carries its forge verdicts."""
         self.begin_pass()
-        inputs = tuple(TeamInputs.prepare(comms, project, ProgressRead(), self)
+        progress = self._progress_read()
+        inputs = tuple(TeamInputs.prepare(comms, project, progress, self)
                        for project in comms.registry.snapshot().team_project.boards())
         retention.prepare(comms, inputs)
         return inputs

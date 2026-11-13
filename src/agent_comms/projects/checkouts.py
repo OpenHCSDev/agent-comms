@@ -544,6 +544,29 @@ class RepositoryReads:
         self._worktree_histories: dict[Path, CheckoutHistory] = {}
         self._remote_cuts: dict[Path, dict[str, dict[str, str]]] = {}
 
+    @classmethod
+    def retaining(cls, previous: RepositoryReads) -> RepositoryReads:
+        """Carry forward commit histories whose ref snapshot hasn't changed.
+
+        One git-for-each-ref per repository (~1 ms) guards the graph walk
+        it protects (50+ ms per repo on every heartbeat tick).
+        """
+        retained: dict[Path, CheckoutHistory] = {}
+        for common_dir, history in previous._histories.items():
+            if 'graph' not in history.__dict__:
+                continue
+            try:
+                fresh = history.checkout.read()
+                if fresh.refs == history.refs:
+                    retained[common_dir] = history
+                else:
+                    retained[common_dir] = fresh
+            except Exception:
+                pass
+        reads = cls()
+        reads._histories = retained
+        return reads
+
     def remote_cuts(self, checkout: Checkout) -> dict[str, dict[str, str]]:
         """Each remote's published refs: worktrees of one repository share their remotes. The
         common directory is the one this pass's cut resolved, never asked of Git again."""
