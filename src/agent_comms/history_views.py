@@ -224,7 +224,7 @@ class ThreadPresentations(AssignmentSource, ThreadSourceReader[ThreadPresentatio
         )
         if not captured.read.identity.thread.incarnation.current(self.snapshot):
             raise StaleRevision("Thread source incarnation changed during presentation")
-        return captured.presentation(ordinary, self)
+        return captured.presentation(ordinary, self, snapshot=self.snapshot)
 
     def require(self, name: str) -> ThreadPresentation:
         """A bound caller must name an available thread, not an anonymous view."""
