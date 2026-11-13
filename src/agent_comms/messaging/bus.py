@@ -453,6 +453,13 @@ class BusReader(
         )) as positions:
             return source.deliveries_at(positions)
 
+    def receives_after(self, lookup: ThreadLookup, after: int) -> bool:
+        """Whether any delivery to ``lookup`` follows ``after``: an index probe, no decode."""
+        with self.reading() as source, closing(source._source_sequences(
+            *ReceivedSource.query(lookup, ()), after=after, limit=1, descending=False,
+        )) as positions:
+            return next(positions, None) is not None
+
     def direct_replies(
         self, lookup: ThreadLookup, *, after: int = 0, limit: int = 100,
         sender_lookups: tuple[ThreadLookup, ...] = (), descending: bool = True,
