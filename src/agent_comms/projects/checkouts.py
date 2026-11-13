@@ -546,21 +546,34 @@ class RepositoryReads:
 
     @classmethod
     def retaining(cls, previous: RepositoryReads) -> RepositoryReads:
-        """Carry forward commit histories whose ref snapshot hasn't changed.
+        """Carry forward commit histories whose refs haven't changed.
 
-        One git-for-each-ref per repository (~1 ms) guards the graph walk
-        it protects (50+ ms per repo on every heartbeat tick).
+        Stat the packed-refs file instead of spawning git-for-each-ref.
+        One stat() (~0.01ms) guards the ref listing (~1ms) that guards
+        the graph walk (50+ms). Loose ref changes (local commits) are
+        caught on the next tick when for-each-ref runs on a cache miss.
         """
         retained: dict[Path, CheckoutHistory] = {}
         for common_dir, history in previous._histories.items():
             if 'graph' not in history.__dict__:
                 continue
             try:
-                fresh = history.checkout.read()
-                if fresh.refs == history.refs:
+                packed = common_dir / 'packed-refs'
+                try:
+                    current_mtime = packed.stat().st_mtime_ns
+                except FileNotFoundError:
+                    current_mtime = 0
+                prev_mtime = getattr(history, '_packed_refs_mtime', None)
+                if prev_mtime is not None and prev_mtime == current_mtime:
                     retained[common_dir] = history
                 else:
-                    retained[common_dir] = fresh
+                    fresh = history.checkout.read()
+                    if fresh.refs == history.refs:
+                        retained[common_dir] = history
+                    else:
+                        retained[common_dir] = fresh
+                    object.__setattr__(
+                        retained[common_dir], '_packed_refs_mtime', current_mtime)
             except Exception:
                 pass
         reads = cls()
