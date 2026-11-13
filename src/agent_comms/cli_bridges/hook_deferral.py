@@ -241,6 +241,6 @@ class StopHook(ClaudeTranscriptHook):
         if MeantStore(self.stem.with_suffix(".meant")).read().open:
             return
         receipts = ClaudeJsonLines().receipts(self.tail())
-        if receipts.idle_turns() >= self.idle_turns_asked:
+        if receipts.idle_turns >= self.idle_turns_asked:
             audit = SessionAudit.read(RuleDeal.audit_beside(self.stem))
             yield audit.his_question(audit.answered_probes())

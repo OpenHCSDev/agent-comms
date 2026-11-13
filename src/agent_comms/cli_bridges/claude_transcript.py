@@ -52,6 +52,8 @@ class ClaudeJsonLines(JsonLines[ClaudeRecord]):
         receipts = SessionReceipts()
         for position, raw in enumerate(lines):
             record = self.decode_line(raw, position)
+            for _ in record.owner_words():
+                receipts.spoken_to()
             record.tally(receipts)
             if record.ends_turn():
                 receipts.turn_ended()
