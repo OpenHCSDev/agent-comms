@@ -252,13 +252,7 @@ def next_sealed_assignment(
     Filter pending states in SQL and read one row. Displaying work does not
     start a turn; execution still checks the process and stored message.
     """
-    pending = sealed_cohort_assignments(
-        store,
-        recipient_lookup,
-        after_seq=after_seq,
-        limit=1,
-        state_capability=PendingNotification,
-    )
+    pending = pending_sealed_page(store, recipient_lookup, after_seq=after_seq, limit=1)
     return next(iter(pending), None)
 
 
@@ -275,21 +269,37 @@ def pending_sealed_assignments(
     cursor = after_seq
     with store.session.read():
         while True:
-            selected = sealed_cohort_assignments(
-                store, recipient_lookup, after_seq=cursor, limit=100,
-                state_capability=PendingNotification,
-            )
+            selected = pending_sealed_page(store, recipient_lookup, after_seq=cursor, limit=100)
             pending.extend(selected)
             if len(selected) < 100:
                 return tuple(pending)
             cursor = selected[-1].wire_seq
 
 
+def pending_sealed_page(
+    store: Coordination, recipient_lookup: ThreadLookup, *, after_seq: int = 0, limit: int = 100,
+) -> tuple[WakeAssignment, ...]:
+    """One page of acknowledged pending work, read through the pending claims' own index."""
+    return _sealed_assignments(
+        store, recipient_lookup, WakeAssignment.pending_index.serving(WakeAssignment, "c"),
+        AssignmentState.selection(PendingNotification, "c."), after_seq, limit,
+    )
+
+
 def sealed_cohort_assignments(
     store: Coordination, recipient_lookup: ThreadLookup, *, after_seq: int = 0, limit: int = 100,
-    state_capability: type = AssignmentState,
 ) -> tuple[WakeAssignment, ...]:
     """Bounded acknowledgement-backed projection. Never pages unbound singleton claims."""
+    return _sealed_assignments(
+        store, recipient_lookup, f"{WakeAssignment.qualified_table()} AS c",
+        AssignmentState.selection(AssignmentState, "c."), after_seq, limit,
+    )
+
+
+def _sealed_assignments(
+    store: Coordination, recipient_lookup: ThreadLookup, claims: str, selected_states: str,
+    after_seq: int, limit: int,
+) -> tuple[WakeAssignment, ...]:
     if (
         type(after_seq) is not int
         or after_seq < 0
@@ -300,11 +310,10 @@ def sealed_cohort_assignments(
     with store.session.read():
         db = store.session._connection
         CohortTable.require_installed(db)
-        selected_states = AssignmentState.selection_predicate(state_capability, "c")
         return tuple(
             WakeAssignment.read(
                 db.execute(
-                    "SELECT c.* FROM wake_claims c "
+                    f"SELECT c.* FROM {claims} "
                     "JOIN claim_batch_members m ON m.claim_id=c.assignment_id "
                     "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
                     "AND r.wire_seq=m.wire_seq AND r.sealed=1 "
