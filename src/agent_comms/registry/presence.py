@@ -180,10 +180,15 @@ class PresenceStore(DurableStore, DependentStateTier):
                                 headers[0].revision if headers else 0)
 
     def revision(self) -> PresenceRevision:
+        return self.remembered("revision", self._read_revision)
+
+    def _read_revision(self) -> PresenceRevision:
         with self.snapshot() as db:
             return self.revision_in(db)
 
     def read(self, earlier: PresenceCapture = PresenceCapture.empty()) -> PresenceCapture:
+        if self.revision() == earlier.revision:
+            return earlier
         with self.snapshot() as db:
             revision = self.revision_in(db)
             if revision == earlier.revision:

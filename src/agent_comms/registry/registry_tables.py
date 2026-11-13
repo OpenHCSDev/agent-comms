@@ -368,6 +368,9 @@ class RegistryRowStore(DurableStore, RegistryFile):
             max((header.revision for header in RegistryHeader.select(db)), default=0))
 
     def revision(self) -> RegistryRowRevision:
+        return self.remembered("revision", self._read_revision)
+
+    def _read_revision(self) -> RegistryRowRevision:
         with self.snapshot() as db:
             return self.revision_in(db)
 
@@ -376,6 +379,8 @@ class RegistryRowStore(DurableStore, RegistryFile):
 
     def captured(self, earlier: RegistryCapture) -> RegistryCapture:
         """Refresh only changed rows from the same database; a replacement starts a new read."""
+        if self.revision() == earlier.revision:
+            return earlier
         with self.snapshot() as db:
             revision = self.revision_in(db)
             if revision == earlier.revision:

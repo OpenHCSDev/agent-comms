@@ -786,6 +786,8 @@ class OpenSQLiteReadConnection(SQLiteReadConnection):
         # retirement thread, so closing the handle is not thread-affine.
         self.db = source._open_reader(source.path, contention, check_same_thread=False)
         self.timeout = contention.timeout
+        # Answers read through this handle, each with the data_version it was read at.
+        self.remembered: dict[str, tuple[int, object]] = {}
         self.retire = finalize(self, self.db.close)
         if FileRevision.capture(source.path).file_identity() != self.identity:
             self.retire()
@@ -1036,6 +1038,27 @@ class SQLiteReader(SQLiteStorage):
                 SQLiteReader._idle_handles.pop(gone).retire()
             idle = SQLiteReader._idle_handles.setdefault(self.path, IdleReadHandles())
         return idle
+
+    def remembered[Answer](self, key: str, read: Callable[[], Answer]) -> Answer:
+        """``read()``'s answer about this file's committed rows, read again only after another
+        connection committed. A freshness check (a store's revision counter) opened a snapshot
+        per ask: 3,500 of the worker's 5,800 snapshot opens for one channel message. SQLite's
+        data_version changes exactly when another connection commits, and costs one pragma.
+        Inside an open cut the cut's own rows answer."""
+        revision = FileRevision.capture(self.path)
+        if self.readers.connection.borrowed() or not revision.revisions():
+            return read()
+        with CoordinationReadUnavailable.checking():
+            held = self.idle_handles.take(self, revision, DEFAULT_STORE_CONTENTION)
+            try:
+                version, = held.db.execute("PRAGMA data_version").fetchone()
+            finally:
+                self.idle_handles.give(held)
+        # The version is observed before the read, so a commit between them only makes the
+        # stored answer newer than its label and the next ask rereads.
+        if held.remembered.get(key, (None, None))[0] != version:
+            held.remembered[key] = (version, read())
+        return held.remembered[key][1]
 
     @contextmanager
     def reader_snapshot(
