@@ -1,5 +1,5 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
-d9c92b0d2ca46d726e93b73ec66e28cd6ee526108968ab7552c74e638c5a1be9  dist/core/agent-session.js
+72298906f70ee9f340cd3cad01e32aacf723eca911391f7142d159138c74d1ee  dist/core/agent-session.js
 9300b971ef2374711edfb95c45268e94a360424ee5360b3fcb5a509a65011952  dist/core/compaction/compaction.js
 0bcfbc31fab1a6216f81a4ae2313c7e884743795600816fbc36f1da552c44f84  dist/core/compaction/compaction.d.ts
 218e0f0450479f4e88f190ccb7596fd074019a3e11bcfee1317bea9647eeb26a  dist/core/session-manager.js
@@ -40,7 +40,7 @@ e747c952fa4d19e9dce98f54a6f3ae0ceafcaf07facb4adba733320e74f81dc3  node_modules/@
 5d41b9551078157d74b4104c37fb6040533575b4ce6a743528b681390fc36520  node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js
 ff7e1a14fcfd7f8dac4db5b52f4a316d6def16c90d46367d7c7d06bbdb28d6ff  node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
 36d8bd607a5219f0b10d4e7d0e434f77333407da94c5ce94fde3cb3c8f608d75  node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
-8c66bd7a05f4b5e286bc8a9b55ed7e538c4c5e4964fa8ace5f639b1fc18a24df  dist/core/turn-context.js
+1c1535fb1b718b60a75d1c44858f307d4d7dbe7c682e3550a896248359b77cf6  dist/core/turn-context.js
 335abb40be346b6c35645c2d1e89c48388540859b4b687330b7d17f36d47b500  dist/core/turn-context.d.ts
 176621c0f4bcfb7f3d53bca5eaf9c5b7c57d829c0e1529844e8e3ee2100d5ab9  dist/core/tools/agent-comms-file-artifact.js
 b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18  dist/core/tools/edit.js
@@ -56,5 +56,5 @@ d64e8c05c7932d377034820b1db0df45612afe64885c0765f8f348a12e1bc955  dist/core/skil
 8e8276bbabcd898136d431345611928626fad6b6f03ac572f1d8506e6ece326f  dist/core/system-prompt.d.ts
 0391543cf703a93a0163b37b3ccebe53e0f12bff6f6162b86d56fb017fe49011  dist/core/system-prompt.js
 # agent-comms-native-stock-v1 @earendil-works/pi-coding-agent@0.85.1
-# agent-comms-native-tree-v1 f46e1a50529dcacf98300ea55ea5c0ac6003e33cd7923c8cdb7fcfd2d2432cd7
-# agent-comms-native-inputs-v1 5dff240479fce44645a8138790ad5b3584d1ab60b085655ed8a9eaf24416f9cd
+# agent-comms-native-tree-v1 4af13d7472a15c8ee395ceef824ceff72a4cef7af104384c7600110d6a35368d
+# agent-comms-native-inputs-v1 5850ed66d6ae85d62049f6333855210348bb1c414fc4343cb5d3c8f9df30870a
