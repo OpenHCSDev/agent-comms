@@ -118,6 +118,7 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, UnengagedDefaults, 
             assignment_binding=case(
                 "disposition", ((member, f"({member.binding_expression()})") for member in members)
             ),
+            pending_assignments=cls.selection(PendingNotification),
         )
         for suffix, expression in (
             ("", "lifecycle"),
@@ -134,16 +135,15 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, UnengagedDefaults, 
         return vocabulary
 
     @classmethod
-    def selection_predicate(cls, capability: type, alias: str) -> str:
-        states = ",".join(
-            sql_literal(member) for member in cls.members_with(capability)
-        )
-        return capability.extend_selection(
-            f"{alias}.disposition IN ({states})", alias
-        )
+    def selection(cls, capability: type, qualifier: str = "") -> str:
+        """The claims whose state has ``capability``, their columns named after ``qualifier``
+        (a query's ``c.``, or nothing in the table's own index). The names are an SQL IN
+        domain, sorted, so an index's stored text does not depend on declaration order."""
+        states = cls.sql_members(cls.members_with(capability))
+        return capability.extend_selection(f"{qualifier}disposition IN ({states})", qualifier)
 
     @classmethod
-    def extend_selection(cls, predicate: str, alias: str) -> str:
+    def extend_selection(cls, predicate: str, qualifier: str) -> str:
         return predicate
 
     def rejected_triage_history(self, execution: TriageNativeExecution, **source) -> FailedTriageHistoricalNativeInput:
@@ -266,14 +266,14 @@ class PendingNotification(EngageableAssignment, Pending):
         return (DeferredAssignment, DeliveredAssignment)
 
     @classmethod
-    def extend_selection(cls, predicate: str, alias: str) -> str:
+    def extend_selection(cls, predicate: str, qualifier: str) -> str:
         # A deferred assignment already linked to an execution may be selected
         # for that execution's next attempt after replay was checked. UNKNOWN
         # input without an execution link is never selected.
         deferred = sql_literal(DeferredAssignment)
         return (
-            f"({predicate} OR ({alias}.disposition={deferred} "
-            f"AND {alias}.execution_id IS NOT NULL))"
+            f"({predicate} OR ({qualifier}disposition={deferred} "
+            f"AND {qualifier}execution_id IS NOT NULL))"
         )
 
     def notification(

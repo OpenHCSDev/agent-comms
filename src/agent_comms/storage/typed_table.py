@@ -455,6 +455,13 @@ class Index:
             parts.append("unique")
         return "_".join(_NAME_SEPARATORS.sub("_", part).strip("_").lower() for part in (*parts, "idx"))
 
+    def serving(self, owner: type[DeclaredSchemaFacts], alias: str) -> str:
+        """The owner's table, named ``alias``, read through this index: a partial index over a
+        predicate the planner cannot rank without statistics is named by the read it was
+        declared for."""
+        return (f"{_identifier(owner.declared_name)} AS {_identifier(alias)} "
+                f"INDEXED BY {_identifier(self.name(owner))}")
+
     def sql(self, owner: type[DeclaredSchemaFacts], *, if_not_exists: bool = False) -> str:
         existence = "IF NOT EXISTS " if if_not_exists else ""
         return (

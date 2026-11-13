@@ -268,7 +268,12 @@ class WakeAssignment(
     )
     checks = ("COALESCE(({assignment_binding}), 0)",)
     unique = (("recipient_lookup", "wire_seq"), ("assignment_id", "execution_id"))
-    indexes = (Index(("execution_id",), unique=False, where=None),)
+    pending_index: ClassVar[Index] = Index(
+        ("recipient_lookup", "wire_seq", "assignment_id"), where="{pending_assignments}")
+    """A recipient's pending claims in wire order. Every drain asks for the next one; scanned
+    through (recipient_lookup, wire_seq) the ask read each claim the recipient ever had after
+    its cursor, up to 3,700 rows and 5 ms, to find none or one (2026-11-13)."""
+    indexes = (Index(("execution_id",), unique=False, where=None), pending_index)
 
     @classmethod
     def references(cls):
