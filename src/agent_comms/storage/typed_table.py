@@ -72,6 +72,7 @@ from agent_comms.storage.locked_store import (
     DeclaredFile,
     ExternalFile,
     FilesRequest,
+    PublishedProperty,
     PublishedSQLiteFile,
     RegistryFile,
     RootFile,
@@ -3613,8 +3614,9 @@ class TypedStore(WalStore, TableSchema):
     tables: ClassVar[type[StoreRows]]
     root: Path
 
-    @property
+    @PublishedProperty
     def path(self) -> Path:
+        """This store's file: its root and its declared name, joined once for the store."""
         return self.path_in(self.root)
 
     @classmethod

@@ -365,7 +365,7 @@ def test_captures_and_row_commits_visit_only_changed_keys(tmp_path, monkeypatch)
         patch.setattr(RowMapping, "__iter__", bounded_rows)
         encoded = original.source.encoded(document, original.document)
         registry.store.rows.commit(encoded, original.source)
-        refreshed = registry.store.rows.captured(original.source)
+        refreshed = registry.store.rows.captured(original.source, registry.store.rows.revision())
     assert RegistryThreads.mapping_in(refreshed.raw)["second"] == FieldCodec.encode(changed)
     assert RegistryThreads.mapping_in(refreshed.raw)["first"] is RegistryThreads.mapping_in(original.source.raw)["first"]
 

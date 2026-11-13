@@ -383,9 +383,10 @@ class RegistryRowStore(DurableStore, RegistryFile):
     def revision_in(self, db) -> RegistryRowRevision:
         return RegistryRowRevision(FileRevision.capture(self.path).file_identity(), self.mark_in(db))
 
-    def captured(self, earlier: RegistryCapture) -> RegistryCapture:
-        """Refresh only changed rows from the same database; a replacement starts a new read."""
-        if self.revision() == earlier.revision:
+    def captured(self, earlier: RegistryCapture, current: RegistryRowRevision) -> RegistryCapture:
+        """Refresh only changed rows from the same database; a replacement starts a new read.
+        ``current`` is the committed revision the caller read under the guard it still holds."""
+        if current == earlier.revision:
             return earlier
         with self.snapshot() as db:
             revision = self.revision_in(db)
