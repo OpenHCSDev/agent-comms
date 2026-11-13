@@ -2678,9 +2678,11 @@ class FieldCodec(MroDispatch, Sealed):
         return cast(T, compile_decoder(annotation).decode_resolved(value))
 
     @classmethod
-    def external_decoders(cls, target: type) -> Iterator[ExternalDecoder]:
-        for name in cls.handler_names_for(target):
-            yield getattr(cls, name)(target)
+    @cache
+    def external_decoders(cls, target: type) -> tuple[ExternalDecoder, ...]:
+        """A declaration's external readers are a fact of the declaration: resolved once
+        for it, never again for each value it decodes."""
+        return tuple(getattr(cls, name)(target) for name in cls.handler_names_for(target))
 
     @handles(ExternalField)
     @classmethod
@@ -2740,7 +2742,7 @@ class FieldCodec(MroDispatch, Sealed):
 
     @classmethod
     def record_key(cls, record: type, name: str) -> str:
-        return next(key for item, key in cls.record_fields(record) if item.name == name)
+        return cls.field_plan(record, name).key
 
     @staticmethod
     @cache
@@ -2933,7 +2935,7 @@ class FieldCodec(MroDispatch, Sealed):
 
     @classmethod
     def field_plan(cls, record: type, name: str) -> FieldPlan:
-        return next(item for item in cls._record_plan(record).bindings if item.name == name)
+        return cls._record_plan(record).named[name]
 
     @staticmethod
     def parse(text: str | bytes) -> object:
@@ -3076,6 +3078,11 @@ class FieldCodec(MroDispatch, Sealed):
         @cached_property
         def record_fields(self) -> tuple[tuple[Field[object], str], ...]:
             return tuple((plan.declared, plan.key) for plan in self.bindings)
+
+        @cached_property
+        def named(self) -> Mapping[str, FieldPlan]:
+            """Each binding under the name its field declares."""
+            return {plan.name: plan for plan in self.bindings}
 
         def encoded(self, value, view, encode_value) -> dict[str, object]:
             result: dict[str, object] = {}
