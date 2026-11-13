@@ -44,7 +44,16 @@ class StatusView(StatusSourced, ActivityView):
     """
 
 
-class SidebarView(StatusSourced, ActivityView):
+class SidebarStructureView(StatusSourced, ActivityView):
+    """The stores whose change requires rebuilding the sidebar's thread and channel rosters.
+
+    Bus sequence, read marks and native transcript counts change unread badges
+    without changing roster membership, activity badges or goal states. A revision
+    that changed only those sources returns the cached roster and derived model.
+    """
+
+
+class SidebarView(SidebarStructureView):
     """Native unread progress updates counts without rebuilding thread presentations."""
 
 

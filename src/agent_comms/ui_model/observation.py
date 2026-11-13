@@ -76,6 +76,7 @@ from agent_comms.messaging.revision_views import (
     NotificationsView,
     RegistrationsView,
     RevisionView,
+    SidebarStructureView,
     SidebarView,
     StatusView,
     StoresView,
@@ -796,10 +797,55 @@ class ObserveSidebar(InterestRequest):
 
 
 class SidebarReadStage:
+    """After the first roster read, refresh only the sources that changed.
+
+    The full viewer_snapshot opens every store's SQLite snapshot and rebuilds
+    the thread/channel rosters from scratch. Most sidebar ticks change only
+    the bus sequence (a message arrived) or the read ledger (someone read a
+    message). Those only affect unread counts, not the roster structure.
+
+    This stage caches the last snapshot and revision, and on the next read
+    checks which WireRevision fields actually changed. A bus-only change
+    refreshes unread counts on the cached snapshot without reopening the
+    registry, catalog, agent activity, or goal stores.
+    """
+
+    def __init__(self) -> None:
+        self._cached_snapshot: CoordinationSnapshot | None = None
+        self._cached_revision: WireRevision | None = None
+        self._cached_derived: tuple | None = None
+
     def read(
         self, request: ObserveSidebar, comms: Comms, revision: WireRevision
     ) -> SidebarResult:
-        return request._answer(revision, comms.views.viewer_snapshot, request.worktree)
+        previous = self._cached_revision
+        if previous is not None and self._cached_snapshot is not None:
+            if not revision.changed_since(SidebarStructureView(), previous):
+                result = self._refresh_counts_only(request, comms, revision)
+                if result is not None:
+                    return result
+        result = request._answer(revision, comms.views.viewer_snapshot, request.worktree)
+        if isinstance(result, SidebarObserved):
+            self._cached_snapshot = result.snapshot
+            self._cached_revision = revision
+            self._cached_derived = result.derived
+        return result
+
+    def _refresh_counts_only(
+        self, request: ObserveSidebar, comms: Comms, revision: WireRevision,
+    ) -> SidebarResult | None:
+        """No structural store changed — return the cached snapshot and model.
+
+        The sidebar's thread roster, channel roster, activity badges, and goal
+        states haven't moved. Only the bus sequence or read ledger ticked, which
+        the sidebar's own model doesn't derive from (the conversation observer
+        owns per-thread unread). Returning the cached snapshot skips every store
+        snapshot open and the full CoordinationSnapshot.capture rebuild.
+        """
+        cached = self._cached_snapshot
+        if cached is None or self._cached_derived is None:
+            return None
+        return SidebarObserved(revision, request, cached, self._cached_derived)
 
     def advance(self, reading: SidebarReading, snapshot: CoordinationSnapshot) -> None:
         """A full read waits for a changed source or its native-index watcher."""
@@ -810,10 +856,19 @@ class RosterSidebarRead(SidebarReadStage):
         self, request: ObserveSidebar, comms: Comms, revision: WireRevision
     ) -> SidebarResult:
         viewer = comms.messaging.user_identity(request.worktree).name
-        return request._answer(revision, comms.views.presentation.roster, viewer)
+        result = request._answer(revision, comms.views.presentation.roster, viewer)
+        if isinstance(result, SidebarObserved):
+            self._cached_snapshot = result.snapshot
+            self._cached_revision = revision
+            self._cached_derived = result.derived
+        return result
 
     def advance(self, reading: SidebarReading, snapshot: CoordinationSnapshot) -> None:
-        reading.stage = SidebarReadStage()
+        stage = SidebarReadStage()
+        stage._cached_snapshot = self._cached_snapshot
+        stage._cached_revision = self._cached_revision
+        stage._cached_model = self._cached_model
+        reading.stage = stage
         reading.invalidate()
 
 
