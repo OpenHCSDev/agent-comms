@@ -357,6 +357,12 @@ class RegistryRowStore(DurableStore, RegistryFile):
     root: Path
     tables = RegistryRows
 
+    @classmethod
+    def acquire_declarations(cls) -> None:
+        """The family a registry row names, known before the registry's lock is taken: a
+        removal row records which named-row family it removed from."""
+        RegistryNamedRow.acquire_declarations()
+
     def mark(self) -> RegistryRevisionMark:
         with self.snapshot() as db:
             return self.mark_in(db)

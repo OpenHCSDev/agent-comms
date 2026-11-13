@@ -375,8 +375,11 @@ class RegistryStore(
         return type(self), (self.path,)
 
     def __post_init__(self) -> None:
-        # Guard-loss checks must know every private declaration before taking this store's lock.
+        # Guard-loss checks and row decoding must know every declaration before taking this
+        # store's lock: a family's first acquisition imports its whole package tree, and a
+        # reader doing that inside its first read held every writer out for seconds.
         PrivateCoordinatorTable.declarations()
+        RegistryRowStore.acquire_declarations()
         object.__setattr__(self, "cache", RegistryCache.for_path(self.path))
         object.__setattr__(self, "presence", PresenceStore(self.path.parent))
         object.__setattr__(self, "rows", RegistryRowStore(self.path.parent))
