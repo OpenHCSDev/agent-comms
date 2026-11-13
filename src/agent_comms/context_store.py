@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator
+from collections.abc import Collection, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -47,6 +47,7 @@ from agent_comms.storage.typed_table import (
     Generated,
     Index,
     RowidSequenced,
+    RowNotFoundError,
     SingletonRow,
     StoreRows,
     TableSchema,
@@ -182,17 +183,25 @@ class ContextEntry(ContextStoreRows, TypedTable):
         return cls(ref.identity.session_id, ref.identity.session_file, ref.entry_id, entry.manifest)
 
     @classmethod
-    def original(
-        cls,
-        db: sqlite3.Connection,
-        reference: ContextEntryReference,
-    ) -> SegmentManifest:
-        return cls.require(
-            db,
-            session_id=reference.identity.session_id,
-            session_file=reference.identity.session_file,
-            entry_id=reference.entry_id,
-        ).manifest
+    def originals(
+        cls, db: sqlite3.Connection, references: Collection[ContextEntryReference],
+    ) -> dict[ContextEntryReference, SegmentManifest]:
+        """Every referenced entry's first manifest from one keyed read; a missing row is
+        corruption. One select per entry was 902 statements for one channel message."""
+        stored = {(row.session_id, row.session_file, row.entry_id): row.manifest
+                  for row in cls.select_keys(db, tuple(
+                      {"session_id": reference.identity.session_id,
+                       "session_file": reference.identity.session_file,
+                       "entry_id": reference.entry_id}
+                      for reference in references))}
+        manifests = {}
+        for reference in references:
+            key = (reference.identity.session_id, reference.identity.session_file,
+                   reference.entry_id)
+            if key not in stored:
+                raise RowNotFoundError(f"Expected one {cls.declared_name} for {key}")
+            manifests[reference] = stored[key]
+        return manifests
 
 
 @dataclass(frozen=True)
@@ -287,8 +296,7 @@ class ContextRequest(ContextStoreRows, RowidSequenced):
                      "session_file": ref.identity.session_file, "entry_id": ref.entry_id}
                     for ref in part.entries
                 ))
-                for reference in part.entries:
-                    ContextEntry.original(db, reference)
+                ContextEntry.originals(db, part.entries)
         return changed
 
 
@@ -661,7 +669,7 @@ class ContextStore(ReadsContextEntries, DurableStore, InputCaptureFile):
                     # request's other segments and their unrelated dependencies.
                     prior_part = part.predecessor(records, position)
                     references.update(prior_part.entries)
-        entries = {ref: ContextEntry.original(db, ref) for ref in references}
+        entries = ContextEntry.originals(db, references)
         for row in selected:
             record = records[row.id]
             yield CapturedContext(source, row.id, record, record.restore(entries, records))
