@@ -22,6 +22,7 @@ class InputPublicationSource(
         self, subject: turn_context.Provenance,
     ) -> tuple[InputRootAuthority, input_attempt.StoredInput]:
         privacy = registry_store.RegistryStore.at(self.path.parent).privacy()
-        row = subject.require_human_input().require_original(
-            input_disposition.InputDispositions(self.path.parent))
+        provenance = subject.require_human_input()
+        inputs = input_disposition.InputDispositions(self.path.parent)
+        row = inputs.lookup(provenance.key).require_original_provenance(provenance)
         return privacy, row
