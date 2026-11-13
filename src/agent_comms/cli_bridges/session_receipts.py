@@ -27,6 +27,9 @@ class SessionReceipts:
     pending: list[str] = field(default_factory=list)
     running: dict[str, str] = field(default_factory=dict)
     acted: int = 0
+    idle_turns: int = 0
+    """How many turns in a row have ended with nothing having run but reads, since the session
+    last changed something or the owner last typed something."""
 
     reading_tool: ClassVar[str] = "Read"
 
@@ -40,20 +43,21 @@ class SessionReceipts:
     def resulted(self, call: str, refused: bool) -> None:
         if self.running.pop(call, self.reading_tool) != self.reading_tool and not refused:
             self.acted += 1
+            # A call that changed something is the newest thing the session did, whether or
+            # not the words that end its turn are written yet.
+            self.idle_turns = 0
 
     def turn_ended(self) -> None:
         """The turn stopped on whatever the session last said; a turn that said nothing after
         its last call stopped on no words, and its calls carry over to the next ending."""
         if self.pending:
             self.endings.append(TurnEnding(self.pending[-1], self.acted))
+            self.idle_turns = 0 if self.acted else self.idle_turns + 1
             self.pending.clear()
             self.acted = 0
 
-    def idle_turns(self) -> int:
-        """How many of the newest turns in a row ended with nothing having run but reads."""
-        idle = 0
-        for ending in reversed(self.endings):
-            if ending.acted:
-                break
-            idle += 1
-        return idle
+    def spoken_to(self) -> None:
+        """The owner typed something. He holds what the session did after his words against
+        what it said, so a turn that ended before them is not in a row with the ones after:
+        a session answering him turn after turn is talking with him, not idling."""
+        self.idle_turns = 0

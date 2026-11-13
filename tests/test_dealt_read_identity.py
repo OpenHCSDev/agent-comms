@@ -124,4 +124,16 @@ def test_the_receipts_read_what_a_transcript_shows_the_session_did():
     ])
     assert [ending.words for ending in receipts.endings] == [
         "did the work", "Skipped", "Yes, I meant it\nsecond line"]
-    assert receipts.idle_turns() == 2  # a refused call changed nothing, and neither did a read
+    assert receipts.idle_turns == 2  # a refused call changed nothing, and neither did a read
+    typed = json.dumps({**json.loads(transcript_line("user", "are you stalling?")),
+                        "origin": {"kind": "human"}}).encode()
+    fed_back = transcript_line("user", "Stop hook feedback: did you mean it?")
+    talking = [said("Skipped"), prompt, said("Skipped"), prompt, said("Skipped"), prompt]
+    assert ClaudeJsonLines().receipts(talking).idle_turns == 3
+    # He typed, so the turns before his words are behind him; a hook's own line is not his.
+    assert ClaudeJsonLines().receipts([*talking, typed, said("6")]).idle_turns == 1
+    assert ClaudeJsonLines().receipts([*talking, fed_back, said("Yes")]).idle_turns == 4
+    assert ClaudeJsonLines().receipts(
+        [*talking, typed, said("6"), prompt, said("Skipped"), prompt, said("Skipped")]).idle_turns == 3
+    # A call that changed something counts before the words that end its turn are written.
+    assert ClaudeJsonLines().receipts([*talking, called("toolu_4", "Bash"), result("toolu_4")]).idle_turns == 0
