@@ -107,9 +107,6 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     EVENT_CHARS = 500
     BATCH_CHARS = 3000
     READ_LINE_CHARS = 2000
-    HEADER = 'Comms in'
-    HEADER_PREFIX = HEADER + ' · '
-    """How a shown message's first line starts; no body line shown inline may start so."""
     GUARD = '\u200b'
     """A blank line would vanish; a zero-width space keeps it and reads as nothing. Nobody
     copies a blank line, so the guard goes nowhere else: an indent would carry it into whatever
@@ -122,23 +119,11 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     def units(line: str) -> int:
         return len(line.encode('utf-16-le')) // 2
 
-    @property
-    def header(self) -> str:
-        """Where it was posted (a channel, or the thread a direct message went to), who sent
-        it as the reader sees them, then the reference a reply cites and decode_header reads
-        back. Tristan, 2026-11-06: "theres chcannel messags and dm messages"."""
-        return (f'{self.HEADER_PREFIX}{self.message.target} · {self.message.sender_label} · '
-                f'{self.message.reference.name}\n')
-
-    @cached_property
-    def inline(self) -> str:
-        return self.header + self.message.body
-
     @cached_property
     def shown_lines(self) -> tuple[str, ...]:
         """The header and body lines, with any line Monitor would cut wrapped after its last
         space inside the cap, or at the cap when there is none, and blank lines guarded."""
-        return tuple(self.guarded(piece) for line in self.inline.split('\n')
+        return tuple(self.guarded(piece) for line in self.text.split('\n')
                      for piece in self.wrapped(line))
 
     @classmethod
@@ -200,7 +185,7 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
 
     @cached_property
     def parts(self) -> tuple[str, ...]:
-        return (self.inline,) if self.fits_one_event else self.slices
+        return (self.text,) if self.fits_one_event else self.slices
 
     @cached_property
     def export_lines(self) -> tuple[str, ...]:

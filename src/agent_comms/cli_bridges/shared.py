@@ -1147,11 +1147,20 @@ class Enrol(Operation):
 class IncomingFrame(ABC):
     message: Message
 
+    HEADER = 'Comms in'
+    HEADER_PREFIX = HEADER + ' · '
+    """How a shown message's first line starts; no body line shown inline may start so."""
+    @property
+    def header(self) -> str:
+        """Where it was posted (a channel, or the thread a direct message went to), who sent
+        it as the reader sees them, then the reference a reply cites and decode_header reads
+        back. Tristan, 2026-11-06: "theres chcannel messags and dm messages"."""
+        return (f'{self.HEADER_PREFIX}{self.message.target} · {self.message.sender_label} · '
+                f'reply to {self.message.exact_reply_target} · {self.message.reference.name}\n')
+
     @property
     def text(self) -> str:
-        return (f'Comms in · {self.message.target} · {self.message.sender_label}\n'
-                f'{self.message.body}\nMessage ID: {self.message.message_id}\n'
-                f'Reply to: {self.message.exact_reply_target}')
+        return self.header + self.message.body
 
 class BridgeLog(io.TextIOBase):
     """The bridge process's stderr, including tracebacks and partial print writes."""
