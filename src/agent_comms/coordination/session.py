@@ -16,6 +16,7 @@ from agent_comms.coordination.errors import (
     CoordinationError,
 )
 from agent_comms.execution.publication_measurements import PublicationMeasurements
+from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.messaging.bus import StoredBusReader
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.store_files import (
@@ -68,9 +69,17 @@ class NativeCapture(CoordinationCapture, ExitStack, StoredBusReader):
     def privacy(self) -> RegistryPrivacy:
         return self.registry_cut.privacy
 
+    @cached_property
+    def activity(self) -> ActivityClocks:
+        """The bus's channel clocks, read when a publication checks a channel against them.
+
+        Three publications ask; every other decision used to pay a bus snapshot for clocks
+        it never read (two per cursor read, 2026-11-13).
+        """
+        return self.activity_clocks()
+
     def __enter__(self) -> Self:
         try:
-            self.activity = self.activity_clocks()
             with self.measurements.operation("registry_snapshot"):
                 self.registry_cut = self.enter_context(self.registry_capture())
             return self

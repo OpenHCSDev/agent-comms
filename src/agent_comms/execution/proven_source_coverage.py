@@ -59,17 +59,23 @@ class SourcePrefix(PresentPath):
         identity = FileIdentity.from_stat(bus.path.stat())
         prefix = cls(identity, bus.revision())
         prefix.require_start(after_seq)
-        prefix.require_current(bus)
+        # The revision came from the file stat named: a replacement between the two is the
+        # only way this capture could be wrong, and every consumer asks require_current
+        # again before it trusts the prefix.
+        prefix.require_file(bus)
         return prefix
 
     def require_start(self, covered_seq: int) -> None:
         if covered_seq > self.through_seq:
             raise IdentityConflict("current source coverage exceeds the bus")
 
-    def require_current(self, bus: Bus) -> int:
-        """The bus revision this prefix is still a prefix of."""
+    def require_file(self, bus: Bus) -> None:
         if not ObservedPath.at(bus.path).same_file(self.identity):
             raise IdentityConflict("native source database changed")
+
+    def require_current(self, bus: Bus) -> int:
+        """The bus revision this prefix is still a prefix of."""
+        self.require_file(bus)
         revision = bus.revision()
         if revision < self.through_seq:
             raise IdentityConflict("native source prefix regressed")
