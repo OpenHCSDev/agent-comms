@@ -38,13 +38,13 @@ def test_live_turn_never_presents_ready_between_activity_events(tmp_path):  # no
     lease = comms.agents.begin_turn('beta', TurnId('3c5469ccca7ada4828e500d32e2025e7')).turn_lease
     comms.agents.set_activity('beta', ActivityState.IDLE)
     view = next(v for v in comms.views.thread_views() if v.thread.name == 'beta')
-    assert view.presentation.status.working
+    assert view.presentation.status.is_working()
     state = comms.registry.require('beta').turn_state
     assert state.active.id == lease.turn_id
     assert state.active.phase.summary in view.presentation.summary
     comms.agents.finish_turn(lease)
     view = next(v for v in comms.views.thread_views() if v.thread.name == 'beta')
-    assert not view.presentation.status.working
+    assert not view.presentation.status.is_working()
 
 
 def test_individual_view_keeps_alias_goal_and_active_owner_semantics(tmp_path):  # noqa: F811
@@ -64,12 +64,12 @@ def test_individual_view_keeps_alias_goal_and_active_owner_semantics(tmp_path): 
         'renamed', TurnId('6d520fcb678df3e43b0fa663d3e618be')
     ).turn_lease
     comms.agents.set_activity('renamed', ActivityState.IDLE)
-    assert comms.views.thread_presentations(('beta',)).require('beta').status.working
+    assert comms.views.thread_presentations(('beta',)).require('beta').status.is_working()
     state = comms.registry.require('renamed').turn_state
     assert state.active.id == lease.turn_id
     assert state.active.phase.summary in comms.views.thread_presentations(('beta',)).require('beta').summary
     comms.agents.finish_turn(lease)
-    assert not comms.views.thread_presentations(('beta',)).require('beta').status.working
+    assert not comms.views.thread_presentations(('beta',)).require('beta').status.is_working()
 
 
 def test_a_live_batch_beyond_one_window_chunk_keeps_every_message(tmp_path):  # noqa: F811

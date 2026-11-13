@@ -75,7 +75,7 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         diagnostic = failed.activity.readiness.source_diagnostic()
         assert isinstance(diagnostic, UnavailableDrainDiagnostic)
         assert failed.presentation.status.details == (diagnostic.summary,)
-        assert not failed.presentation.status.working
+        assert not failed.presentation.status.is_working()
         documents = list((comms.root / "diagnostics").glob("drain-*.json"))
         assert documents
         encoded_diagnostics = [
@@ -126,7 +126,7 @@ async def test_successful_drain_clears_failure_during_active_turn(tmp_path, owne
         current = owner_view(comms)
         assert not current.activity.readiness.source_diagnostic().holds_event_current
         assert current.thread.executing
-        assert current.presentation.status.working
+        assert current.presentation.status.is_working()
         assert not current.presentation.status.details
         activity = comms.agents.activity.current("beta", active=True)
         async with drain_failures(comms, "beta", owner):

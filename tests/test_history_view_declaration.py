@@ -55,7 +55,7 @@ def test_viewer_snapshot_exposes_actual_active_channel_participant(tmp_path):
     try:
         snapshot = comms.views.viewer_snapshot(Checkout(comms.root))
         assert [person.thread.name for person in snapshot.participants("#team")] == ["beta"]
-        assert snapshot.participants("#team")[0].presentation.status.working
+        assert snapshot.participants("#team")[0].presentation.status.is_working()
     finally:
         comms.agents.finish_turn(lease)
     assert comms.views.viewer_snapshot(Checkout(comms.root)).participants("#team") == ()

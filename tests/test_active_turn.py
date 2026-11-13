@@ -41,7 +41,7 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
         Activity("worker", ActivityState.WORKING, "Still working", time.time() - 1000)
     )
     view = comms.views.thread_views()[0]
-    assert view.thread.executing and view.presentation.status.working
+    assert view.thread.executing and view.presentation.status.is_working()
     current = comms.agents.activity_of("worker", snapshot=comms.registry.snapshot())
     assert current.state is ActivityState.STARTING
     assert current.detail == "Long-running work"
@@ -62,7 +62,7 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
 
     comms.agents.finish_turn(first)
     assert activity().presentation("Worker").summary == IdlePhase.label
-    assert not comms.views.thread_views()[0].presentation.status.working
+    assert not comms.views.thread_views()[0].presentation.status.is_working()
     comms.agents.begin_turn("worker", TurnId('16367aacb67a4a017c8da8ab95682ccb'))
     comms.agents.finish_turn(first)
     assert (
