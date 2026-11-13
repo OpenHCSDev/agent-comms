@@ -165,11 +165,11 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
     from agent_comms.transport.tool_request import NativeToolRequest
     from agent_comms.transport.tools.send import CommsSendTool
 
-    schemas = NativeRequestTools.catalog()
+    schemas = NativeRequestTools.catalog
     assert {schema["name"] for schema in schemas} == {
         request.declared_name for request in ToolRequest.members_with(NativeToolRequest)
     }
-    assert json.loads(json.dumps(schemas)) == schemas
+    assert json.loads(json.dumps(schemas)) == list(schemas)
     assert isinstance(ToolDeclaration.for_name("EXTERNAL_UNKNOWN"), UndeclaredTool)
     assert ToolDeclaration.for_name("EXTERNAL_UNKNOWN").label == "EXTERNAL_UNKNOWN"
     for request in ToolRequest.members_with(NativeToolRequest):

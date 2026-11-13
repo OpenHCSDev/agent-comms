@@ -38,7 +38,7 @@ class TestToolCatalog:
         assert payload == ToolsCliCommand(name=ThreadCaller(thread.name)).apply(comms).to_wire()
         assert payload["service_tier"] == "standard"
         assert {tool["name"] for tool in payload["tools"]} == {
-            tool["name"] for tool in NativeRequestTools.catalog()
+            tool["name"] for tool in NativeRequestTools.catalog
         }
         for tier in (ServiceTier.PRIORITY, ServiceTier.STANDARD):
             thread = comms.threads.set_thread_configuration(
@@ -97,7 +97,7 @@ class TestToolCatalog:
         assert not (comms.root / "relationships.json").exists()
 
     def test_catalog_exposes_adapter_json_schemas(self):
-        catalog = NativeRequestTools.catalog()
+        catalog = NativeRequestTools.catalog
         names = [tool["name"] for tool in catalog]
         assert {
             "comms_send",

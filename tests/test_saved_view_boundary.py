@@ -28,7 +28,7 @@ def test_predicate_relation_owns_matching(required, observed, any_of, all_of):
 
 
 def test_match_declarations_own_names_and_tool_choices():
-    declaration = next(tool for tool in NativeRequestTools.catalog() if tool["name"] == "comms_set_view")
+    declaration = next(tool for tool in NativeRequestTools.catalog if tool["name"] == "comms_set_view")
     assert declaration["parameters"]["properties"]["match"]["enum"] == list(ViewMatch.names()) == [
         "any_of", "all_of"]
 
