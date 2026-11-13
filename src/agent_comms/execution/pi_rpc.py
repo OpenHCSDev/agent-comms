@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.execution.pending_requests import PendingRequest, PendingRequests
 from agent_comms.execution.pi_events import PiEvent, Response
+from agent_comms.execution.publication_measurements import WorkCpu
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.nominal.sealed import Sealed
 from agent_comms.transport.jsonl_stream import JsonlStreamReader
@@ -105,6 +106,7 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
                 yield update
 
     @staticmethod
+    @WorkCpu.measured
     def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None, event_type: type[PiEvent] = PiEvent) -> PiEvent:
         if max_bytes is not None and len(raw) > max_bytes:
             raise MalformedRecord("Native RPC record exceeds transport limit")
