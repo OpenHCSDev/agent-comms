@@ -1,0 +1,20 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "real-retired-checkout-control",
+      "operations": [
+        {
+          "operation": "insert_before_target",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_checkout_submodules.py",
+          "target_qualname": "test_public_transfer_keeps_dirty_index_branch_modules_and_current_thread",
+          "source": "def test_adoption_keeps_retired_tree_and_live_recipient_in_place(checkout_command_bus, repository):\n    comms = checkout_command_bus\n    rule = comms.registry.storage_rule\n    recipient = comms.registry.require('worker')\n    path = rule.order_checkout(rule.initial_roots('departed'), 'P4')\n    path.parent.mkdir(parents=True, exist_ok=True)\n    source = Checkout.add(repository, path, NewBranchStart('retired-adoption', 'HEAD'))\n    departed = comms.registry.declare(ExternalThread('departed', frozenset(), source))\n    (path / 'owner.py').write_text('staged bytes\\n')\n    git(path, 'add', 'owner.py')\n    (path / 'owner.py').write_text('unstaged bytes\\n')\n    (path / 'untracked.bin').write_bytes(b'\\x00retained\\xff')\n    before = git(path, 'status', '--porcelain'), git(path, 'rev-parse', 'HEAD')\n    arguments = ('--root', str(comms.root), 'checkout', '--from', 'worker',\n                 'adopt', 'P1', '--source', str(path))\n    refused = core_process(*arguments)\n    assert refused.returncode != 0\n    comms.registry.register(departed, ArchivedThreadStatus())\n    adopted = core_process(*arguments)\n    assert adopted.returncode == 0, adopted.stdout + adopted.stderr\n    current = comms.registry.require('worker')\n    previous = comms.registry.require('departed')\n    assert current.worktree == recipient.worktree and current.goal == recipient.goal\n    assert previous.worktree == departed.worktree\n    assert rule.owns_editable_checkout(current, path, comms.goals.todos.get('P1').repo, RepositoryReads())\n    assert not rule.owns_present_checkout(previous, path, RepositoryReads())\n    assert path in rule.checkout_paths(current, RepositoryReads())\n    assert rule.reused_checkout(current, comms.goals.todos.get('P1').repo,\n                                rule.order_checkout(rule.roots_of(current), 'P1'), RepositoryReads()) == path\n    assert (git(path, 'status', '--porcelain'), git(path, 'rev-parse', 'HEAD')) == before\n    assert (path / 'untracked.bin').read_bytes() == b'\\x00retained\\xff'\n\n\n"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_checkout_submodules.py",
+          "import_source": "from agent_comms.registry.thread_status import ArchivedThreadStatus"
+        }
+      ]
+    }
+  ]
+}

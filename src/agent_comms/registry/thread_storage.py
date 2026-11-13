@@ -98,6 +98,9 @@ class StorageRoots(RecordMember, ThreadStorage):
     scratch: StoragePath
     selected_checkouts: Annotated[tuple[SelectedCheckout, ...], WireOmitDefault()] = ()
 
+    adopted_checkouts: Annotated[tuple[SelectedCheckout, ...], WireOmitDefault()] = ()
+    released_checkouts: Annotated[tuple[StoragePath, ...], WireOmitDefault()] = ()
+
     def __post_init__(self) -> None:
         if not self.scratch.is_absolute():
             raise ValueError("Storage scratch requires an absolute path.")
@@ -114,10 +117,24 @@ class StorageRoots(RecordMember, ThreadStorage):
             choice for choice in self.selected_checkouts if choice.repository != repository
         ), SelectedCheckout(repository, path)))
 
+    def adopting(self, repository: RepositoryName, path: Path) -> StorageRoots:
+        return replace(self.choosing(repository, path), adopted_checkouts=(
+            *(claim for claim in self.adopted_checkouts if claim.path != path),
+            SelectedCheckout(repository, path)),
+            released_checkouts=tuple(old for old in self.released_checkouts if old != path))
+
+    def releasing(self, path: Path) -> StorageRoots:
+        return replace(self,
+            selected_checkouts=tuple(choice for choice in self.selected_checkouts if choice.path != path),
+            adopted_checkouts=tuple(claim for claim in self.adopted_checkouts if claim.path != path),
+            released_checkouts=tuple(dict.fromkeys((*self.released_checkouts, path))))
+
     def relocated(self, source: Path, destination: Path) -> StorageRoots:
         return replace(self, selected_checkouts=tuple(
             replace(choice, path=destination) if choice.path == source else choice
-            for choice in self.selected_checkouts))
+            for choice in self.selected_checkouts), adopted_checkouts=tuple(
+            replace(claim, path=destination) if claim.path == source else claim
+            for claim in self.adopted_checkouts))
 
     def assigned(self, rule: StorageRule, name: str) -> StorageRoots:
         return self

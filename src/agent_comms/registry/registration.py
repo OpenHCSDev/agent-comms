@@ -101,6 +101,42 @@ class Registration(
             edit.commit()
         return path
 
+    def adopt_checkout(
+        self, original: Thread, source: Path, repository: Repo,
+        require_target: Callable[[], None],
+    ) -> Path:
+        """Hand a retired owner's exact allocation to a live holder without moving either."""
+        with self.store.editing() as edit:
+            current = edit.document.require(original.name)
+            if current.incarnation != original.incarnation:
+                raise RelationViolationError("Checkout recipient changed before adoption")
+            require_target()
+            if repository not in edit.document.team_project.require().repos:
+                raise RelationViolationError("Registered repository changed before adoption")
+            rule, reads = self.storage_rule, RepositoryReads()
+            rule.require_physical_allocation(source)
+            if source == repository.checkout.resolve() or not (source / '.git').is_file():
+                raise RelationViolationError("Only an isolated linked checkout can be adopted")
+            owners = tuple(thread for thread in edit.document.threads.values()
+                           if rule.owns_present_checkout(thread, source, reads))
+            if len(owners) != 1:
+                raise RelationViolationError("Checkout needs exactly one current allocation owner")
+            previous, = owners
+            if previous.incarnation == current.incarnation:
+                raise RelationViolationError("Recipient already owns this checkout")
+            edit.document.status(previous.name).require_checkout_adoption()
+            if previous.process_alive:
+                raise RelationViolationError("Checkout source owner still has a live process")
+            rule.require_transfer_source(previous, source, edit.document.threads.values(), repository)
+            require_target()
+            # Both declarations commit together. Neither session nor project path changes.
+            edit.document.threads[previous.name] = replace(previous,
+                storage_roots=rule.roots_of(previous).releasing(source))
+            edit.document.threads[current.name] = replace(current,
+                storage_roots=rule.roots_of(current).adopting(repository.github, source))
+            edit.commit()
+        return source
+
     def transfer_checkout(
         self, original: Thread, source: Checkout, destination: Path, repository: Repo,
         require_target: Callable[[], None],
