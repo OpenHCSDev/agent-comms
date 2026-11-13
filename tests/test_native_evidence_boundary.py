@@ -74,6 +74,23 @@ def test_non_user_tracked_identity_cannot_disappear_into_display_fallback(role):
             decode(raw)
 
 
+def test_every_entry_kind_contributes_its_input_evidence_in_one_shape():
+    stamp = "2026-10-01T00:00:00.000Z"
+    rows = (
+        {"type": "session", "timestamp": stamp, "id": "sid", "version": 3},
+        {"type": "message", "timestamp": stamp, "id": "first",
+         "message": {"role": "user", "inputId": "a" * 32, "inputDigest": "b" * 64}},
+        {"type": "message", "timestamp": stamp, "id": "second", "message": {"role": "user"}},
+        {"type": "model_change"}, {"type": "compaction"}, {"type": "thinking_level_change"},
+    )
+    evidence = [entry for raw in rows for entry in NativeEntry.wire_member(raw).input_evidence(raw)]
+    assert [type(entry).__name__ for entry in evidence] == ["SessionEntry", "MessageEntry"]
+    inputs = {}
+    for position, entry in enumerate(evidence):
+        entry.index_into(inputs, position)
+    assert list(inputs.values()) == [1]
+
+
 def test_duplicate_input_ids_are_not_silently_projected_away(tmp_path):
     sessions = tmp_path / "sessions"
     sessions.mkdir(mode=0o700)
