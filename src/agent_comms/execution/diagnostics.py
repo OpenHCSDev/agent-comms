@@ -17,7 +17,11 @@ from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms.execution.child_process import Platform, ProcessState
 from agent_comms.execution.native_failures import NativeRequestFailure
-from agent_comms.execution.publication_measurements import PublicationMeasurements
+from agent_comms.execution.publication_measurements import (
+    PublicationMeasurements,
+    ThreadCpuMeasurements,
+    WorkCpu,
+)
 from agent_comms.execution.request_progress import RequestProgress
 from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.execution.turn_lease import TurnLeaseFence
@@ -89,6 +93,8 @@ class AcquisitionObservation(RequestObservation):
 
     input_id: InputId
     acquisition: PublicationMeasurements
+    work_cpu_cumulative: ThreadCpuMeasurements = field(default_factory=WorkCpu.totals)
+    """Thread CPU this process has spent in each kind of joined work up to this turn's end."""
 
 
 def record_request_progress(root, lease, progress, native_process, *, publication=None):

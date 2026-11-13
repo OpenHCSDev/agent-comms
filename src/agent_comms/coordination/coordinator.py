@@ -26,6 +26,7 @@ from agent_comms.coordination.session import (
 from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.working_memory_annotations import WorkingMemoryAnnotations
 from agent_comms.execution.child_process import join_retirement
+from agent_comms.execution.publication_measurements import WorkCpu
 from agent_comms.storage.store_files import DEFAULT_STORE_CONTENTION, StoreContention
 
 if TYPE_CHECKING:
@@ -260,7 +261,7 @@ class CoordinationWorker(CoordinationRoute):
     @staticmethod
     def _apply(operation: Callable[..., Result], store: Coordination) -> Result:
         try:
-            return operation(store)
+            return WorkCpu.measured(operation)(store)
         finally:
             # Closing the old per-operation connection rolled back unfinished
             # transactions even on normal return. Retain that callback boundary.

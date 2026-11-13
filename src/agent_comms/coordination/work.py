@@ -5,6 +5,7 @@ from contextvars import Context
 from functools import partial
 
 from agent_comms.execution.child_process import AsyncWork
+from agent_comms.execution.publication_measurements import WorkCpu
 from agent_comms.installer.native_build_inputs import GitLaunch
 from agent_comms.storage.maintenance_barrier import MaintenanceHolder
 from agent_comms.storage.store_files import StoreLock
@@ -25,4 +26,5 @@ class CoordinationWork:
         scheduling seam also supports registry-only acquisition/retirement;
         those operations must not depend on opening a coordinator connection.
         """
-        return await AsyncWork.run_async(partial(CoordinationWork.worker_context().run, operation))
+        return await AsyncWork.run_async(
+            partial(CoordinationWork.worker_context().run, WorkCpu.measured(operation)))
