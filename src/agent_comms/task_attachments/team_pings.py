@@ -462,7 +462,10 @@ class TeamUpdateStore(PatternFile, SingleFileStore, DurableFile,
     @classmethod
     def record(cls, root: Path, packet: TeamUpdate) -> None:
         store = cls.for_team(root, packet.teammate)
-        store.update(lambda previous: DocumentChange.to((packet,)))
+        if store.read() == (packet,):
+            return
+        store.update(lambda previous: DocumentChange.to(previous)
+                     if previous == (packet,) else DocumentChange.to((packet,)))
 
 
 class AlarmGroup(ViewHeading, affix="Alarms"):
