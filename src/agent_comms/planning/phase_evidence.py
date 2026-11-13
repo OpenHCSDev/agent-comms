@@ -77,6 +77,10 @@ class MainTree:
     def __post_init__(self) -> None:
         self.history.include(self.commit)
 
+    def _refreshed_history(self) -> MainTree:
+        """Drop parsed sources; keep the immutable history and commit."""
+        return replace(self, bindings={}, facts={})
+
     @classmethod
     def of(cls, repo: Repo, census: Census) -> MainTree:
         return cls.from_history(repo, census, Checkout(repo.checkout).read())

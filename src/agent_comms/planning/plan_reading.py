@@ -143,10 +143,7 @@ class RetainedPlanReadings(PlanReadings):
         with self.lock:
             prepared, self.prepared = self.prepared, ()
         retained = tuple(
-            # Keep the pinned commit, compact blob facts and stable answers, not syntax or
-            # the graph.
-            reading.following(reading.todos, replace(
-                reading.main, history=Checkout(reading.main.repo.checkout).read()))
+            reading.following(reading.todos, reading.main._refreshed_history())
             for reading in prepared
         )
         repos = {reading.main.repo for reading in retained}
