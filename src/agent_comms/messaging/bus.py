@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import sqlite3
 from abc import ABC
+from collections import OrderedDict
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
 from itertools import islice
 from pathlib import Path
-from typing import Self
+from typing import ClassVar, Self
 
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
 from agent_comms.messaging.claim_registry_read import ClaimRegistryRead
@@ -236,10 +237,28 @@ class BusReader(
                 raise UnclaimedError(seq)
             return rows[0].claim_transition
 
+    _decoded: ClassVar[OrderedDict[tuple[FileIdentity, int], BusRecord]] = OrderedDict()
+    _decoded_limit: ClassVar[int] = 4096
+
     def records(self, sequences: Iterable[int]) -> tuple[BusRecord, ...]:
-        """These records in order from one joined read, never one query per table per row."""
+        """These records in order from one joined read, never one query per table per row.
+
+        Every capability row is keyed by the sequence it was appended with, so a stored record
+        never changes; each process decodes it once per bus file. A channel message reaches
+        every native session in the worker, and each decoded the same records again."""
+        wanted = tuple(sequences)
         with self.observing() as db:
-            return BusCapability.at_sequences(db, tuple(sequences))
+            source = FileIdentity.from_stat(self.path.stat())
+            decoded = BusReader._decoded
+            missing = tuple(seq for seq in wanted if (source, seq) not in decoded)
+            if missing:
+                header = BusRow.qualified("seq")
+                for row, record in BusCapability.stored_records(
+                        db, f"{header} IN ({','.join('?' for _ in missing)})", missing):
+                    decoded[source, row.seq] = record
+                while len(decoded) > BusReader._decoded_limit:
+                    decoded.popitem(last=False)
+            return tuple(decoded[source, seq] for seq in wanted if (source, seq) in decoded)
 
     def lookup(self, seq: int) -> BusRecord:
         return self.records((seq,))[0]
