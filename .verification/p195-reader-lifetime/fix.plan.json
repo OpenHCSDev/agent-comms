@@ -1,0 +1,75 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "reader-process-owns-inbox-lifetime",
+      "operations": [
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/shared.py",
+          "target_qualname": "Inbox.start",
+          "replacements": [
+            {
+              "old_source": "registry.external_process(bridge.binding.bus, bridge.session_process())",
+              "new_source": "registry.external_process(bridge.binding.bus, ProcessIdentity.capture(os.getpid()))"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/shared.py",
+          "target_qualname": "ChannelsFrom.register",
+          "replacements": [
+            {
+              "old_source": "bridge.address.bus, self.text, worktree, bridge.session_process(),",
+              "new_source": "bridge.address.bus, self.text, worktree,"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_bridges/shared.py",
+          "target_qualname": "NoChannelSource.register",
+          "replacements": [
+            {
+              "old_source": "            bridge.address.bus, frozenset(), await bridge.session_worktree(),\n            process_identity=bridge.session_process())",
+              "new_source": "            bridge.address.bus, frozenset(), await bridge.session_worktree())"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/registration.py",
+          "target_qualname": "Registration.register_bound_thread",
+          "replacements": [
+            {
+              "old_source": "self, name: str, channel_source: str, worktree: Checkout, process: ProcessIdentity,",
+              "new_source": "self, name: str, channel_source: str, worktree: Checkout,"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/registration.py",
+          "target_qualname": "Registration.register_bound_thread",
+          "replacements": [
+            {
+              "old_source": "                name, DeclaredTag.for_child(source.tags), worktree,\n                process_identity=process)",
+              "new_source": "                name, DeclaredTag.for_child(source.tags), worktree)"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_team_notifications.py",
+          "target_qualname": "test_enrollment_and_independent_execution_not_tags_determine_shared_participation",
+          "replacements": [
+            {
+              "old_source": "\"bound-unit\", \"worker\", worker.worktree, ProcessIdentity.capture(os.getpid()))",
+              "new_source": "\"bound-unit\", \"worker\", worker.worktree)"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

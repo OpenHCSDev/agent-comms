@@ -1230,7 +1230,7 @@ def test_enrollment_and_independent_execution_not_tags_determine_shared_particip
     comms.registry.register_child("copied-fork", "worker", ForkThread, comms.goals)
     worker = comms.registry.require("worker")
     bound = comms.registry.register_bound_thread(
-        "bound-unit", "worker", worker.worktree, ProcessIdentity.capture(os.getpid()))
+        "bound-unit", "worker", worker.worktree)
     assert tuple(bound.parent.names()) == ()
     assert bound.acting_identity == bound.incarnation
 

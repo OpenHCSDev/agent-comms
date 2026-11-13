@@ -673,10 +673,11 @@ class Inbox(Operation[OperationBridge]):
 
     async def start(self, bridge: OperationBridge, tasks: asyncio.TaskGroup,
                     endpoint: ExitStack) -> None:
+        bridge.session_process().require_alive()
         registry = await asyncio.to_thread(
             Registration, RegistryFile.path_in(Path(bridge.binding.root)))
         await bridge.comms.bus.when_open(lambda: endpoint.enter_context(
-            registry.external_process(bridge.binding.bus, bridge.session_process())))
+            registry.external_process(bridge.binding.bus, ProcessIdentity.capture(os.getpid()))))
         tasks.create_task(bridge.watch())
 
     def claimed(self, claim: WatchClaim,
@@ -705,7 +706,7 @@ class ChannelsFrom(GivenText, BindingChannels):
         worktree = await bridge.session_worktree()
         await bridge.comms.bus.when_open(partial(
             bridge.comms.registry.register_bound_thread,
-            bridge.address.bus, self.text, worktree, bridge.session_process(),
+            bridge.address.bus, self.text, worktree,
         ))
 
 
@@ -715,8 +716,7 @@ class NoChannelSource(AbsentText, BindingChannels):
 
     async def register(self, bridge: CliBridge) -> None:
         thread = ExternalThread(
-            bridge.address.bus, frozenset(), await bridge.session_worktree(),
-            process_identity=bridge.session_process())
+            bridge.address.bus, frozenset(), await bridge.session_worktree())
         await bridge.comms.bus.when_open(partial(bridge.comms.registry.declare, thread))
 
 

@@ -1,0 +1,9 @@
+Bridge lifetime follows the reader
+
+The inbox registered Codex's shared app-server PID as its reader. A bridge could disappear while that server stayed alive, leaving Connected and the last tool activity attached to a dead reader. comms-peformance's retained binding points to this codex-live session, but it had no watch process; its displayed command was an old rehome attempt. The native stop operation has released that stale endpoint without signalling the shared app-server.
+
+Inbox.start now verifies the harness process separately and registers its own actual reader process for delivery lifetime. New external declarations no longer claim a live reader before one starts. The unused process parameter on register_bound_thread and both production/test callers are migrated. The existing registry process fence, no-bridge state, and UI presentation own the rest; no second liveness flag, timer, registry or cache.
+
+Focused real process check: the actual CodexBridge/Inbox opens against a real Unix socket owned by a longer-lived server process. Its registered PID is the reader. Killing only that reader leaves the server alive and produces NoBridge plus a non-working visible thread. The final control passed. Two initial checks incorrectly asserted that the historical raw activity event is erased immediately, and copied the generic offline label rather than reading the actual no-bridge presentation. Those extra assertions are removed; the reader identity, actual exit, live server, NoBridge and no-working UI requirements remain.
+
+No provider calls, authentication changes, native-owner restart or broad suite. Installation is pending Pi account recovery. The source fixes stale liveness; it does not implement a user action to detach a real running Codex tool, and does not bypass Codex's compaction refusal.
