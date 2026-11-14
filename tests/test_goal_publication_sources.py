@@ -17,6 +17,7 @@ from agent_comms.cli_bridges.runtime_updates import ThreadOutput
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.input_drain import UnreadRegistry
 from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_phase import IdlePhase, ToolRunningPhase
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
@@ -160,6 +161,22 @@ async def test_external_mid_turn_goal_reaches_actual_consumer_without_inbox_wake
         assert comms.registry.require(session).turn_lease == lease
     finally:
         comms.agents.finish_turn(lease)
+
+
+async def test_a_wake_rereads_the_registry_only_when_it_committed_or_the_sessions_changed():
+    reads = []
+
+    def read(names):
+        reads.append(names)
+        return asyncio.ensure_future(asyncio.sleep(0))
+
+    first = UnreadRegistry().following(("a",), False, read)
+    assert first.following(("a",), False, read) is first
+    committed = first.following(("a",), True, read)
+    joined = committed.following(("a", "b"), False, read)
+    assert reads == [("a",), ("a",), ("a", "b")]
+    assert joined.following(("a", "b"), False, read) is joined
+    await asyncio.gather(first.read, committed.read, joined.read)
 
 
 async def test_attempt_signal_refreshes_complete_projection_but_does_not_publish_an_identical_one(publication):
