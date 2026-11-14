@@ -6,7 +6,7 @@ import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from agent_comms.acp_extension import (
     CursorObservation,
@@ -28,6 +28,7 @@ from agent_comms.execution.proven_source_coverage import SourceCoverage, SourceP
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import InputId, RootId, ThreadLookup
 from agent_comms.registry.thread_identity import GenerationCounter
+from agent_comms.registry.threads import NativeThread
 
 if TYPE_CHECKING:
     from sqlite3 import Connection
@@ -56,6 +57,17 @@ class CursorOwner(RegistryOwner):
         GenerationCounter.require_positive(self.claimed_generation)
 
     @classmethod
+    def recorded(cls, store: Coordination, thread: NativeThread, claimed_generation: int,
+                 root_id: RootId) -> Self:
+        """A live registry owner as its cursor's owner: the generation is the one its
+        committed participant row holds."""
+        person = store.participants.get(thread.incarnation.require_recorded().lookup)
+        if not person.committed:
+            raise StaleFence("Current cursor recipient is not committed")
+        return cls(thread=thread, claimed_generation=claimed_generation, wire_root_id=root_id,
+                   generation=person.owner_identity.generation)
+
+    @classmethod
     async def read_async(cls, bus: MessageBus, *, wire_root_id: RootId, owner_name: str,
                          source_reads: NativeEvidenceScope) -> CursorState:
         return await Coordination.run_read_async(
@@ -75,13 +87,7 @@ class CursorOwner(RegistryOwner):
             with store.session.read():
                 db = store.session._connection
                 NativeRuntimeTable.require_installed(db)
-                person = store.participants.get(
-                    captured.thread.incarnation.require_recorded().lookup
-                )
-                if not person.committed:
-                    raise StaleFence("Current cursor recipient is not committed")
-                owner = cls(thread=captured.thread, claimed_generation=captured.claimed_generation,
-                            wire_root_id=root_id, generation=person.owner_identity.generation)
+                owner = cls.recorded(store, captured.thread, captured.claimed_generation, root_id)
                 state = owner.state(db)
         with source_reads.borrow():
             prefix = SourcePrefix.capture(bus.bus, state.covered_seq)
@@ -119,10 +125,7 @@ class CursorOwner(RegistryOwner):
         cls, bus: MessageBus, root_id: RootId, owner_name: str,
         source_reads: NativeEvidenceScope, store: Coordination,
     ) -> CursorState:
-        thread, generation = bus._registry.live_owner_with_claim(owner_name)
-        person = store.participants.get(thread.incarnation.require_recorded().lookup)
-        owner = cls(thread=thread, claimed_generation=generation, wire_root_id=root_id,
-                    generation=person.owner_identity.generation)
+        owner = cls.recorded(store, *bus._registry.live_owner_with_claim(owner_name), root_id)
         return owner._advance_owned(bus, source_reads, store)
 
     def _advance_owned(self, bus: MessageBus, source_reads: NativeEvidenceScope, store: Coordination) -> CursorState:
