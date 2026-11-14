@@ -1320,6 +1320,16 @@ class RegistrySnapshot(
         fields.append(frozenset(names))
         return RegistrySlice(*fields)
 
+    def moved_turns_alone(self, earlier: RegistrySnapshot) -> bool:
+        """Whether only turns and presence moved since ``earlier``: what a turn's claim and
+        end and an owner's heartbeat write. Every other fact compares, so a field added later
+        counts as moved."""
+        return (self.threads.keys() == earlier.threads.keys()
+                and replace(earlier, threads=self.threads, last_seen=self.last_seen) == self
+                and all(self.threads[name].apart_from_turn()
+                        == earlier.threads[name].apart_from_turn()
+                        for name in self.changed_names(earlier) if name in self.threads))
+
     def changed_names(self, earlier: RegistrySnapshot) -> frozenset[str]:
         """The names whose registry facts differ from ``earlier``'s, by each field's declared
         slice: an own-row field answers its differing rows, a shared field answers every name.

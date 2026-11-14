@@ -45,9 +45,9 @@ class StatusView(StatusSourced, ActivityView):
 
 
 class SidebarBasisView(RevisionView):
-    """The stores one sidebar cut reads: the registry, the catalog, the bus, read marks and
-    native unread. While none of them moved, the sidebar re-derives its rows over the cut it
-    already holds."""
+    """The stores one sidebar cut counts over: the catalog, the bus, read marks and native
+    unread. The registry is read too, but a cut is kept across a registry commit that moved only
+    turns and presence (RegistrySnapshot.moved_turns_alone), which a store revision cannot say."""
 
 
 class SidebarView(ActivityView, SidebarBasisView):

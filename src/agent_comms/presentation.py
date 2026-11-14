@@ -542,7 +542,7 @@ class WireRevision(ReadState, ToolResult):
         tuple[FileRevision, ...],
         *revision_source(
             lambda views: views.registry.store.source_paths(views.root),
-            *StatusSourced.views(), SidebarBasisView,
+            *StatusSourced.views(),
             RegistrationsView,
             ActivityView,
         ),
