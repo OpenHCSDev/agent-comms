@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Collection, Iterable, Iterator
+from collections.abc import Collection, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
@@ -24,12 +25,16 @@ from agent_comms.execution.turn_context import (
     ContextEntryManifest,
     ContextEntryReference,
     ContextManifest,
+    ContextSegment,
+    NoContextPredecessor,
     PreviouslyRecordedSegment,
     RecordedContextIdentity,
     RecordedContextManifest,
+    RecordedContextPredecessor,
     RecordedSegmentManifest,
     SegmentManifest,
     SegmentRecording,
+    TextKeyframe,
     UnrecordedSegment,
 )
 from agent_comms.execution.turn_item import NativeItemId
@@ -327,6 +332,24 @@ class CapturedContext(RecordedContextState):
     def next_recording_turn(self) -> int:
         return self.recorded.recording_turn + 1
 
+    def text_keyframes(self) -> Iterator[
+        tuple[type[ContextSegment], Mapping[TextKeyframe, RecordedContextPredecessor]]
+    ]:
+        """Each segment's kind and the request that holds its text, when it has one."""
+        for position, (recorded, value) in enumerate(
+                zip(self.recorded.segments, self.value.segments, strict=True)):
+            yield value.kind, recorded.text_keyframe(position, value, self.record_id)
+
+    @property
+    def keyframes(self) -> Mapping[TextKeyframe, RecordedContextPredecessor]:
+        return {key: held for _, keyframe in self.text_keyframes()
+                for key, held in keyframe.items()}
+
+    @property
+    def lasting(self) -> Mapping[TextKeyframe, RecordedContextPredecessor]:
+        return {key: held for kind, keyframe in self.text_keyframes()
+                for key, held in kind.lasting(keyframe).items()}
+
     def require_newest(
         self, db: sqlite3.Connection, source: ContextStoreIdentity, owner: ThreadIncarnation
     ) -> None:
@@ -341,9 +364,26 @@ class CapturedContext(RecordedContextState):
             previous = self.value.segments[position]
             if previous.kind is original.kind:
                 return PreviouslyRecordedSegment(
-                    self.recorded.segments[position], previous, self.record_id
-                )
+                    self.recorded.segments[position], previous, self.record_id,
+                    self.keyframes.get((position, original.kind, original.sha256),
+                                       NoContextPredecessor()))
         return UnrecordedSegment()
+
+
+@dataclass(frozen=True)
+class WrittenContext(CapturedContext):
+    """A request its writer recorded, which also knows the lasting text keyframes of the
+    requests that writer recorded before it."""
+
+    earlier: Mapping[TextKeyframe, RecordedContextPredecessor] = field(compare=False)
+
+    @cached_property
+    def keyframes(self) -> Mapping[TextKeyframe, RecordedContextPredecessor]:
+        return {**self.earlier, **super().keyframes}
+
+    @cached_property
+    def lasting(self) -> Mapping[TextKeyframe, RecordedContextPredecessor]:
+        return {**self.earlier, **super().lasting}
 
 
 class ContextManifestCursor(TaggedUnion, affix="ContextManifest"):
@@ -604,7 +644,8 @@ class ContextStore(ReadsContextEntries, ReadsContextPrior, DurableStore, InputCa
             for entry in entries:
                 # A journal identity owns the first entry value across requests.
                 ContextEntry.capture(entry).insert_if_absent(db)
-            return CapturedContext(source, ContextRequest.append(db, record), record, manifest)
+            return WrittenContext(source, ContextRequest.append(db, record), record, manifest,
+                                  recorded.lasting)
 
     def resolve(
         self,

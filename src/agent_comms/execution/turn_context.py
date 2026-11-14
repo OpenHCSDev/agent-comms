@@ -483,6 +483,9 @@ class SentEntries(SentWhole):
 
 _NO_CONTEXT_RECORDS: Mapping[int, RecordedContextManifest] = MappingProxyType({})
 
+type TextKeyframe = tuple[int, type[ContextSegment], str]
+"""A text by where a request holds it: its segment's position, kind and digest."""
+
 
 class ContextPredecessor(SubclassUnion, affix="ContextPredecessor"):
     """An absent predecessor or the position that owns its lookup."""
@@ -500,7 +503,8 @@ class ContextPredecessor(SubclassUnion, affix="ContextPredecessor"):
     def at_keyframe(self, offset: int) -> RecordedContextPredecessor: ...
 
     @abstractmethod
-    def require_previous(self) -> RecordedContextPredecessor: ...
+    def record_text(self, original: SegmentManifest) -> RecordedSegmentManifest:
+        """``original`` as its request records it, given the request that holds its text."""
 
     @abstractmethod
     def keyframe_count(self, entries: int, inherited: int) -> int: ...
@@ -534,8 +538,8 @@ class NoContextPredecessor(NullMember, ContextPredecessor):
     def at_keyframe(self, offset: int) -> RecordedContextPredecessor:
         return RecordedContextPredecessor(offset)
 
-    def require_previous(self) -> RecordedContextPredecessor:
-        raise ValueError("Recorded text predecessor is missing")
+    def record_text(self, original: SegmentManifest) -> RecordedSegmentManifest:
+        return RecordedSegmentManifest(original)
 
     def keyframe_count(self, entries: int, inherited: int) -> int:
         return entries
@@ -566,8 +570,8 @@ class RecordedContextPredecessor(SingleFieldValue, ContextPredecessor):
     def at_keyframe(self, offset: int) -> RecordedContextPredecessor:
         return self
 
-    def require_previous(self) -> RecordedContextPredecessor:
-        return self
+    def record_text(self, original: SegmentManifest) -> RecordedSegmentManifest:
+        return RecordedSegmentManifest(replace(original, captured_text=()), previous=self)
 
     def keyframe_count(self, entries: int, inherited: int) -> int:
         return inherited
@@ -622,15 +626,13 @@ class RecordedSegmentManifest:
                            for child in original.contributors[:count])
         return references, self.previous.at_keyframe(offset)
 
-    def record_text(
-        self, original: SegmentManifest, previous_value: SegmentManifest, offset: int,
-    ) -> RecordedSegmentManifest:
-        if (original.sha256 == previous_value.sha256
-                and original.captured_text and previous_value.captured_text):
-            reference = (RecordedContextPredecessor(offset) if self.manifest.captured_text
-                         else self.previous.require_previous())
-            return RecordedSegmentManifest(replace(original, captured_text=()), previous=reference)
-        return RecordedSegmentManifest(original)
+    def text_keyframe(
+        self, position: int, value: SegmentManifest, offset: int,
+    ) -> dict[TextKeyframe, RecordedContextPredecessor]:
+        """The request that holds this segment's text, when it has one: this one at
+        ``offset``, or the one it was recorded after."""
+        return ({(position, value.kind, value.sha256): self.previous.at_keyframe(offset)}
+                if value.captured_text else {})
 
     def predecessor(
         self, predecessors: Mapping[int, RecordedContextManifest], position: int,
@@ -697,9 +699,11 @@ class PreviouslyRecordedSegment(SegmentRecording):
     recorded: RecordedSegmentManifest
     value: SegmentManifest
     record_id: int
+    held: ContextPredecessor = field(default_factory=NoContextPredecessor)
+    """The request its writer knows to hold the text of the segment being recorded."""
 
     def record_text(self, original: SegmentManifest) -> RecordedSegmentManifest:
-        return self.recorded.record_text(original, self.value, self.record_id)
+        return self.held.record_text(original)
 
     def record_entries(
         self, header: SegmentManifest, references: tuple[ContextEntryReference, ...],
@@ -749,6 +753,14 @@ class ContextSegment(
         """``manifest`` as its request records it, given the ``texts`` its process sent
         before. A kind arrives whole unless it says otherwise."""
         return manifest
+
+    @classmethod
+    def lasting(
+        cls, keyframe: Mapping[TextKeyframe, RecordedContextPredecessor],
+    ) -> Mapping[TextKeyframe, RecordedContextPredecessor]:
+        """The part of a request's text ``keyframe`` its writer keeps past the next
+        request: nothing, for a kind whose text is new with every request."""
+        return MappingProxyType({})
 
     @classmethod
     def public_title(cls) -> str:
@@ -986,6 +998,15 @@ class SentOnce:
         if key not in texts:
             raise ValueError(f"{cls.__name__} {manifest.sha256} was named before its process sent it")
         return replace(manifest, captured_text=texts[key])
+
+    @classmethod
+    def lasting(
+        cls, keyframe: Mapping[TextKeyframe, RecordedContextPredecessor],
+    ) -> Mapping[TextKeyframe, RecordedContextPredecessor]:
+        """A text sent once comes back: one Pi process alternates a tool-less ask and a
+        coding answer, two 500 KB system prompts. Its writer names the request that holds
+        it however many other texts came between."""
+        return keyframe
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1345,6 +1366,17 @@ class ContextRecording(ABC):
 
     @abstractmethod
     def segment(self, position: int, original: SegmentManifest) -> SegmentRecording: ...
+
+    @property
+    def keyframes(self) -> Mapping[TextKeyframe, RecordedContextPredecessor]:
+        """The request that holds each text this recording knows: none before the first
+        request. A text recorded again names that request instead of being written again."""
+        return MappingProxyType({})
+
+    @property
+    def lasting(self) -> Mapping[TextKeyframe, RecordedContextPredecessor]:
+        """The keyframes its writer still knows after the next request (``SentOnce``)."""
+        return MappingProxyType({})
 
 
 @dataclass(frozen=True)
