@@ -461,6 +461,15 @@ class TurnChange:
     begun: tuple[tuple[TurnIdentity, JsonValue], ...] = ()
     retired: tuple[TurnIdentity, ...] = ()
 
+    def leaving(self, original: RegistryDocument, document: RegistryDocument) -> TurnChange:
+        """This change, retiring too the turn of every thread the edit removes or recreates: a
+        turn row exists exactly while its thread's row names it."""
+        kept = document.threads.lookup_names()
+        gone = tuple(thread.turn_identity for thread in (
+            original.threads[name] for lookup, name in original.threads.lookup_names().items()
+            if lookup not in kept) if thread.turn_generation)
+        return replace(self, retired=(*self.retired, *gone)) if gone else self
+
     def write_in(self, db) -> None:
         for identity, active in self.begun:
             TurnRow.of(identity, active).upsert(db)
@@ -640,7 +649,7 @@ class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile, TurnRows):
             TurnSchema.require_schema(db)
             rows = TurnRow.select(db, **TurnRow.key(identity))
             if not rows:
-                raise RelationViolationError(f"Active turn record is missing: {identity}")
+                return ()  # Retired since the caller read its revision: nothing to change.
             original = written = rows[0].active.wire
             results = []
             for active, result in change(original):

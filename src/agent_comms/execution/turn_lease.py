@@ -665,7 +665,8 @@ class NamedTurn(LockedTurn):
     owner: OwnerIdentity
 
     def without_claim(self) -> None:
-        self.record.writers.update(lambda active: DocumentChange.to(active.without_claim()))
+        self.record.writers.update_each(
+            lambda active: (DocumentChange.to(active.without_claim()),))
 
     def effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
