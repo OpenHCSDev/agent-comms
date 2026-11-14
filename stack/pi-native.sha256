@@ -1,8 +1,8 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
-25aa43ed197b4d614eeba1222fc8c079fe0906a2831807e0565c28a44def53c6  dist/core/agent-session.js
+c05b69bbbd12993041c6addfd4532d5861315043ffe214d4ca7f71cae835a975  dist/core/agent-session.js
 9300b971ef2374711edfb95c45268e94a360424ee5360b3fcb5a509a65011952  dist/core/compaction/compaction.js
 0bcfbc31fab1a6216f81a4ae2313c7e884743795600816fbc36f1da552c44f84  dist/core/compaction/compaction.d.ts
-218e0f0450479f4e88f190ccb7596fd074019a3e11bcfee1317bea9647eeb26a  dist/core/session-manager.js
+16c879fe7832e250bc60840c9c8bf1b3362f1b0bf6881336a1dc75e62b5706db  dist/core/session-manager.js
 6502e8993d187da13dc2163a2031938498c8d1de1e6b6920c23e086051a851fc  dist/modes/rpc/rpc-mode.js
 3a872346be3ebea9dcc79ef815465d29ceed4b3a6b2d67cc3defcd4f26fa89c7  dist/core/agent-session.d.ts
 317463b70aaeb401056dd0711291fcabc7d77c53a79266f98d42ca834f1a2cfe  dist/core/session-manager.d.ts
@@ -17,7 +17,7 @@ e5e62ee12c9267ac10b6708fb62afdb4f4e32cf5d98aa07cd2631263c62ae799  node_modules/@
 103067298d031fcc2000962b15ec751746e93add4350befbd4cee91c9fafc42e  dist/core/package-manager.js
 a65f12cbbfcdc0326b024fb91d9c1e28ec2c11111e333b58da0f2e016233c264  dist/core/agent-session-services.js
 ee4f52d1dd4f1c18d5d814be4ba260ddf7fe40b7b70c2f0732a30a8b287111ad  dist/core/settings-manager.js
-fef47246f4ce18621bae844a940e7d009cefc7df7cdf00ccb98198d9c407a696  dist/core/session-entry-store.js
+aeef26ee03b5558712027e6f046dc273c0e58fc30406abdf218104bedd781e00  dist/core/session-entry-store.js
 1a1dcab01172e65dab4e0d2e8684e7ad123bb027abe66b4ac5daee748576a24d  dist/core/output-guard.js
 4fa4e9a0ba80f43b560eb827dbd0985ea56624170b51401b39398d76ffcbcefa  dist/core/export-html/index.js
 d7ad93bcb341424fa79014ce2fec4226326cfab1e8d5fee27c1859138e120161  dist/core/sdk.js
@@ -56,5 +56,5 @@ d64e8c05c7932d377034820b1db0df45612afe64885c0765f8f348a12e1bc955  dist/core/skil
 8e8276bbabcd898136d431345611928626fad6b6f03ac572f1d8506e6ece326f  dist/core/system-prompt.d.ts
 0391543cf703a93a0163b37b3ccebe53e0f12bff6f6162b86d56fb017fe49011  dist/core/system-prompt.js
 # agent-comms-native-stock-v1 @earendil-works/pi-coding-agent@0.85.1
-# agent-comms-native-tree-v1 e3ccded936e5ffe3b976d0bdb8323856198bbb714b0a0d74c21207fa7013c2d7
-# agent-comms-native-inputs-v1 c0c14776a494fceb94026c4af06a0a0f0366c921d7f9432ba59a604048a603a9
+# agent-comms-native-tree-v1 cdbc82e04071300dfd05348e2b64a21bf1016acb5ca64100739f03cb7f6e34e9
+# agent-comms-native-inputs-v1 180c13fdc4e6949e63d55351df9e043dc9967e4309513dd95bf8d9fad1491c06
