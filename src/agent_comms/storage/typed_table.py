@@ -1607,7 +1607,7 @@ class TableSchema(ABC):
         A file and schema version already found equal to the declaration has its schema, so
         only an opening that has not found that reads the catalog to ask whether one is there:
         that read decoded every stored object of every coordinator opening to answer yes
-        (0.6 of the 2.1 ms an opening costs, some forty openings a message, 2026-11-14)."""
+        (0.6 of the 2.1 ms an opening costs, 2026-11-14)."""
         if not SchemaRevision.read(db).verified(cls, ()) and not cls.stored_schema(db):
             with SQLiteFile.write_transaction(db):
                 if not cls.stored_schema(db):
