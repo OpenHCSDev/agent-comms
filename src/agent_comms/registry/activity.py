@@ -427,6 +427,10 @@ class ActivityStore(ThreadOwnedState, DerivedStore):
         with self.writing() as db:
             self._emit_in(db, activity)
 
+    def announce(self) -> None:
+        """Wake this store's readers for a fact they project from elsewhere (a turn's phase)."""
+        self.publish_change(self.path)
+
     def update(self, thread: str, transition: Callable[[Activity], Activity | None]) -> bool:
         """Apply the transition once, against the row in this write transaction."""
         with self.writing() as db:

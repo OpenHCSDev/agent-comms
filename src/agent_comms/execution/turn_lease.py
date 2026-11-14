@@ -23,6 +23,7 @@ from agent_comms.nominal.field_codec import (
     SingleFieldValue,
     SubclassUnion,
     TurnId,
+    WireOmitDefault,
     WireTransient,
     boundary_decoder,
 )
@@ -32,7 +33,6 @@ from agent_comms.registry.activity import ObservedActivity
 from agent_comms.registry.thread_identity import (
     NoObservedTurn,
     ObservedTurn,
-    OwnerIdentity,
     ThreadIncarnation,
     TurnFence,
     TurnIdentity,
@@ -235,6 +235,9 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
     claimed_generation: TurnGeneration = UnrecordedGeneration()
     turn_generation: TurnGeneration = UnrecordedGeneration()
     phase: TurnPhase = field(default_factory=PreparingPhase)
+    phase_at: Annotated[float, WireOmitDefault()] = 0.0
+    """When the phase last changed; a turn's activity is as recent as this or its start."""
+
     def execution[Execution](self, source: GoalTurnProjection[Execution, ActiveTurn]) -> Execution:
         return source.active_turn_execution(self)
 
@@ -305,11 +308,11 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
 
     def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
         return replace(super().project_activity(activity),
-                       timestamp=max(activity.timestamp, self.started_at))
+                       timestamp=max(activity.timestamp, self.started_at, self.phase_at))
 
     def phase_effects(self, phase: TurnPhase) -> Iterator[TurnDeclaration]:
         if phase != self.phase:
-            yield replace(self, phase=phase)
+            yield replace(self, phase=phase, phase_at=time.time())
 
     def owned_by(self, process: ProcessState, claimed_generation: int) -> bool:
         """Check that this turn's local process and registered input generation agree."""
@@ -444,7 +447,7 @@ class TurnRecord(LifecycleCapability, SubclassUnion, affix=""):
     @abstractmethod
     def bound_to(
         self, registry_path: Path, identity: TurnIdentity, *,
-        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]],
+        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration]],
     ) -> TurnRecord: ...
 
     @abstractmethod
@@ -500,7 +503,7 @@ class NoTurnRecord(NullMember, TurnRecord):
 
     def bound_to(
         self, registry_path: Path, identity: TurnIdentity, *,
-        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]],
+        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration]],
     ) -> NoTurnRecord:
         return self
 
@@ -527,7 +530,7 @@ class FinishedTurn(RecordMember, TurnRecord):
 
     def bound_to(
         self, registry_path: Path, identity: TurnIdentity, *,
-        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]],
+        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration]],
     ) -> FinishedTurn:
         return self
 
@@ -562,7 +565,7 @@ class StoredTurnReference(RecordMember, TurnRecord):
 
     def bound_to(
         self, registry_path: Path, identity: TurnIdentity, *,
-        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]],
+        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration]],
     ) -> StoredTurnRecord:
         return StoredTurnRecord.for_identity(registry_path, identity, registry_type=registry_type)
 
@@ -620,76 +623,17 @@ class TurnRowWriter:
                           for changed in change(self.decoded(wire))))
 
 
-class LockedTurn(ABC):
-    """What a turn's writer finds in a current registry cut: the generation its registry
-    still names, or one a registry edit superseded, whose row that edit deleted."""
-
-    @abstractmethod
-    def without_claim(self) -> None: ...
-
-    @abstractmethod
-    def effects(
-        self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
-    ) -> PhaseEffects: ...
-
-
 @dataclass(frozen=True)
 class PhaseEffects:
-    """The states one phase change left on a turn. A retired turn leaves none to publish."""
+    """The states one phase change left on a turn: none when the turn had been retired, whose
+    row went with it."""
 
     states: tuple[TurnState, ...] = ()
 
-    def published(
-        self, publish: Callable[[TurnState, OwnerIdentity], None],
-    ) -> tuple[TurnState, ...]:
-        return self.states
-
-
-@dataclass(frozen=True)
-class OwnedPhaseEffects(PhaseEffects):
-    """The states a named turn entered, with the owner its registry cut named."""
-
-    owner: OwnerIdentity = field(kw_only=True)
-
-    def published(
-        self, publish: Callable[[TurnState, OwnerIdentity], None],
-    ) -> tuple[TurnState, ...]:
+    def published(self, publish: Callable[[TurnState], None]) -> tuple[TurnState, ...]:
         for state in self.states:
-            publish(state, self.owner)
+            publish(state)
         return self.states
-
-
-@dataclass(frozen=True)
-class NamedTurn(LockedTurn):
-    record: StoredTurnRecord
-    owner: OwnerIdentity
-
-    def without_claim(self) -> None:
-        self.record.writers.update_each(
-            lambda active: (DocumentChange.to(active.without_claim()),))
-
-    def effects(
-        self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
-    ) -> PhaseEffects:
-        def change(active: ActiveTurn) -> Iterator[DocumentChange[ActiveTurn, TurnState]]:
-            if not active.held_by(lease):
-                return
-            effects = tuple(observe(TurnState(active)))
-            for state in effects:
-                yield DocumentChange(state.active.require_active(), state)
-        return OwnedPhaseEffects(self.record.writers.update_each(change), owner=self.owner)
-
-
-class RetiredTurn(LockedTurn):
-    """A superseded generation: its claim went with it and no phase change reaches it."""
-
-    def without_claim(self) -> None:
-        pass
-
-    def effects(
-        self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
-    ) -> PhaseEffects:
-        return PhaseEffects()
 
 
 class TurnReads(Mapping["StoredTurnRecord", TurnDeclaration]):
@@ -728,7 +672,7 @@ class StoredTurnRecord(Executing, StoredTurnReference, declared_name=None):
         repr=False, compare=False
     )
 
-    registry_type: Annotated[type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]], WireTransient()] = field(
+    registry_type: Annotated[type[TurnRegistry[StoredTurnRecord, TurnDeclaration]], WireTransient()] = field(
         repr=False, compare=False
     )
 
@@ -737,7 +681,7 @@ class StoredTurnRecord(Executing, StoredTurnReference, declared_name=None):
         return TurnRowWriter(self)
 
     @property
-    def registry(self) -> TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]:
+    def registry(self) -> TurnRegistry[StoredTurnRecord, TurnDeclaration]:
         """Construct the original registry provider bound by its declaration."""
         return self.registry_type(self.registry_path)
 
@@ -749,7 +693,7 @@ class StoredTurnRecord(Executing, StoredTurnReference, declared_name=None):
 
     def bound_to(
         self, registry_path: Path, identity: TurnIdentity, *,
-        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]],
+        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration]],
     ) -> StoredTurnRecord:
         record = super().bound_to(registry_path, identity, registry_type=registry_type)
         return (self if (self.registry_path, self.identity, self.registry_type) ==
@@ -774,7 +718,7 @@ class StoredTurnRecord(Executing, StoredTurnReference, declared_name=None):
     @classmethod
     def for_identity(
         cls, registry_path: Path, identity: TurnIdentity, *,
-        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]],
+        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration]],
     ) -> StoredTurnRecord:
         return cls(identity, registry_path.resolve(), registry_type)
 
@@ -785,12 +729,21 @@ class StoredTurnRecord(Executing, StoredTurnReference, declared_name=None):
         return active.lease(incarnation, self)
 
     def without_claim(self) -> None:
-        self.registry.change_turn(self, lambda named: named.without_claim())
+        """A retired turn's row is gone, and with it the claim: nothing to change."""
+        self.writers.update_each(lambda active: (DocumentChange.to(active.without_claim()),))
 
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> PhaseEffects:
-        return self.registry.change_turn(self, lambda named: named.effects(lease, observe))
+        """A phase change writes its turn's row and reads nothing else: the row exists exactly
+        while the registry names the turn (TurnChange.leaving), and its own write transaction
+        decides that."""
+        def change(active: ActiveTurn) -> Iterator[DocumentChange[ActiveTurn, TurnState]]:
+            if not active.held_by(lease):
+                return
+            for state in tuple(observe(TurnState(active))):
+                yield DocumentChange(state.active.require_active(), state)
+        return PhaseEffects(self.writers.update_each(change))
 
     def transition(self, lease: TurnLeaseFence, phase: TurnPhase) -> PhaseEffects:
         return self._turn_effects(lease, lambda state: state.phase_effects(phase))

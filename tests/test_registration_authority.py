@@ -143,30 +143,31 @@ def test_a_phase_change_completes_while_another_process_reads_the_registry(tmp_p
 
 
 
-def test_a_claim_drop_waiting_on_a_turn_retired_under_it_finds_the_retirement(tmp_path):
+def test_a_claim_drop_after_its_turn_retired_changes_nothing(tmp_path):
+    """A claim drop writes its own turn row and takes no registry lock: once a registry commit
+    retired the turn its row is gone, so the drop finds nothing and the next turn is untouched."""
     registry = registered(tmp_path)
     registry.live_owner_with_claim('owner')
     first, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
     record = first.turn_record
-    started, failures = threading.Event(), []
-
-    def drop_claim():
-        started.set()
-        try:
-            record.without_claim()
-        except Exception as error:
-            failures.append(error)
-
-    with registry.store.guarded_write():
-        waiter = threading.Thread(target=drop_claim)
-        waiter.start()
-        assert started.wait(5)
-        time.sleep(0.2)  # The waiter is parked on this thread's registry writer lock.
-        assert registry.release_turn(first.turn_lease)[0]
-        second, _ = registry.lease_local_turn('owner', TurnId('16367aacb67a4a017c8da8ab95682ccb'))
-        assert not registry.store.rows.turn_wires((record.identity,))
-    waiter.join(5)
-    assert not waiter.is_alive() and failures == []
+    assert registry.release_turn(first.turn_lease)[0]
+    second, _ = registry.lease_local_turn('owner', TurnId('16367aacb67a4a017c8da8ab95682ccb'))
+    assert not registry.store.rows.turn_wires((record.identity,))
+    record.without_claim()
     assert second.turn_record.read().id == '16367aacb67a4a017c8da8ab95682ccb'
+    assert second.turn_lease.is_leased()
+
+
+def test_a_claim_dropped_before_its_turn_retires_leaves_the_release_to_the_lease(tmp_path):
+    """Dropped first, the claim is gone from the row; the lease taken before the drop still
+    releases its turn, and the next lease supersedes it and deletes the row."""
+    registry = registered(tmp_path)
+    registry.live_owner_with_claim('owner')
+    first, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
+    lease = first.turn_lease
+    first.turn_record.without_claim()
+    assert registry.release_turn(lease)[0]
+    registry.lease_local_turn('owner', TurnId('16367aacb67a4a017c8da8ab95682ccb'))
+    assert not registry.store.rows.turn_wires((first.turn_record.identity,))
 
 

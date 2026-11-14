@@ -128,9 +128,12 @@ class AgentActivity(ActivityAnswers, RuntimeInfoWrites[RuntimeInfoProjection[Age
         """Bridges and seated subagents publish a phase's activity by thread name."""
         self._emit_activity(phase.activity_event(self.registry.require(thread).name))
 
-    def publish_phase(self, owner: OwnerIdentity, phase: TurnPhase) -> None:
-        """A turn's phase change publishes under the owner its own registry cut named."""
-        self._publish(owner, phase.activity_event(owner.incarnation.name))
+    def publish_phase(self) -> None:
+        """A turn's phase lives in its turn row, which every activity read projects
+        (NativeThread.project_activity); its readers learn the phase moved from the activity
+        store's change marker. Writing the phase to an activity row too was a second copy and a
+        second fsync on every phase change. A turn's start and end still write the row."""
+        self.activity.announce()
 
     def activity_of(self, thread: str, *, snapshot: ActivityRegistryRead) -> ObservedActivity:
         participant = snapshot.require(thread)
@@ -309,7 +312,7 @@ class AgentActivity(ActivityAnswers, RuntimeInfoWrites[RuntimeInfoProjection[Age
         transition: Callable[[TurnLeaseFence, TurnPhase], PhaseEffects],
     ) -> tuple[TurnState, ...]:
         return transition(lease, phase).published(
-            lambda state, owner: state.active.phase.phase_effects(self, lease, owner))
+            lambda state: state.active.phase.phase_effects(self, lease))
 
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         return self._turn_phase_effects(lease, phase, lease.record.transition)

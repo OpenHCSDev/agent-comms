@@ -25,7 +25,6 @@ from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_lease import (
     ActiveTurn,
-    LockedTurn,
     RecordedGeneration,
     StoredTurnRecord,
     TurnDeclaration,
@@ -400,7 +399,7 @@ class RegistryStore(
     RegistryLocking,
     RegistryFile,
     CarriedDocument[RegistryDocument],
-    TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn],
+    TurnRegistry[StoredTurnRecord, TurnDeclaration],
     InputRegistryStore[Thread],
     RegistryPathRead,
     declared_name=None,
@@ -518,19 +517,6 @@ class RegistryStore(
             turns = self.rows.turn_wires(tuple(record.identity for record in held))
         decoded = self._decode_snapshot(registry)
         return tuple(decoded.current_turn(record).read_held(record, turns) for record in held)
-
-    def change_turn[Result](
-        self, record: StoredTurnRecord, change: Callable[[LockedTurn], Result],
-    ) -> Result:
-        """A phase change decides in its turn row's own write transaction, which no registry
-        commit interleaves with: the row exists exactly while the registry names its turn, since
-        the commit that supersedes the turn or removes its thread deletes it. The owner comes from
-        the decoded revision, which a phase write leaves unchanged; a turn that revision no longer
-        names is retired, and one retired since finds no row and changes nothing."""
-        revision = self.read_revision()
-        with self.cache.decoding:
-            snapshot = revision.snapshot
-        return change(snapshot.locked_turn(record))
 
     def prepare_native_root(self) -> PrivateRegistry:
         """Commit this store's namespace before preparing runtime tables outside its writer."""
