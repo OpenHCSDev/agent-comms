@@ -6,6 +6,8 @@ import pickle
 from collections.abc import Mapping
 from dataclasses import fields, replace
 
+import pickle
+
 import pytest
 
 from agent_comms.errors import RelationViolationError
@@ -20,7 +22,7 @@ from agent_comms.messaging.display_references import (
     ThreadDisplayReference,
 )
 from agent_comms.messaging.historical_views import HistorySource
-from agent_comms.nominal.field_codec import MalformedRecord
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import HistoricalRootPurpose, ThreadRows
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
@@ -248,3 +250,44 @@ def test_a_dm_peer_unread_is_read_by_birth_from_the_sidebars_own_cut(comms, decl
     with pytest.raises(KeyError):
         model.observation.bus_unread(peer.name)
     assert model.observation.peer_unread(peer) == model.observation.bus_unread("renamed-peer")
+
+
+def test_a_changed_sidebar_crosses_as_its_changed_rows_and_rebuilds_whole(comms, declare_reference):
+    """After a whole sidebar, the next one for the same request sends only the thread rows that
+    changed; the receiving process rebuilds a sidebar equal to the whole one, in order."""
+    from collections import OrderedDict
+    from dataclasses import replace
+
+    from agent_comms.ui_model.observation import (
+        NoSidebarResult, ObserveSidebar, SidebarObserved, SidebarRowsChanged,
+    )
+
+    declare_reference("first", RunningThreadStatus())
+    declare_reference("second", RunningThreadStatus())
+    request = ObserveSidebar(Checkout(comms.root.parent), True, True)
+    revision = comms.views.revision()
+    snapshot = comms.views.viewer_snapshot(Checkout(comms.root.parent))
+    whole = SidebarObserved(revision, request, snapshot, SidebarModel.derive(snapshot))
+    assert NoSidebarResult().sent_as(whole) is whole
+
+    moved = replace(snapshot.threads["second"], last_seen=snapshot.threads["second"].last_seen + 1)
+    later_snapshot = replace(snapshot, threads=OrderedDict(
+        (name, moved if name == "second" else view) for name, view in snapshot.threads.items()))
+    later = SidebarObserved(revision, request, later_snapshot, SidebarModel.derive(later_snapshot))
+    sent = whole.sent_as(later)
+    assert isinstance(sent, SidebarRowsChanged)
+    assert list(sent.snapshot.threads) == ["second"]
+    assert sent.order == tuple(later_snapshot.threads)
+
+    rebuilt = whole.rebuilt(pickle.loads(pickle.dumps(sent)))
+    assert rebuilt == later and list(rebuilt.snapshot.threads) == list(later_snapshot.threads)
+    # Across the connector both forms cross the codec; a rebuild matches the whole form there.
+    def crossed(result, kind):
+        return FieldCodec.decode_document(kind, FieldCodec.encode_document(result, kind))
+    assert (crossed(whole, SidebarObserved).rebuilt(crossed(sent, SidebarRowsChanged))
+            == crossed(later, SidebarObserved))
+
+    other = ObserveSidebar(Checkout(comms.root.parent), False, False)
+    assert whole.sent_as(replace(later, request=other)) == replace(later, request=other)
+    with pytest.raises(RelationViolationError):
+        NoSidebarResult().rebuilt(sent)
