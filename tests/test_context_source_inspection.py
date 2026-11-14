@@ -12,7 +12,11 @@ from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.context_segments.native_messages import TranscriptSegment
 from agent_comms.execution.context_prior import UNREAD_CONTEXT
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
-from agent_comms.execution.native_turn_context import NativeContextManifestData
+from agent_comms.execution.native_turn_context import (
+    NativeContextManifestData,
+    PublishedContext,
+    SentSegment,
+)
 from agent_comms.execution.pi_commands import AgentCommsInspectContextSegment
 from agent_comms.execution.runtime import RuntimeConnection
 from agent_comms.execution.session_file import NoSessionFile
@@ -178,20 +182,22 @@ def test_captured_sdk_value_is_original_and_public_only(tmp_path):
                               sha256=hashlib.sha256(raw).hexdigest(), utf8_bytes=len(raw))
     observed = NativeContextManifestData(
         "pi.estimateTokens",
-        (value.measured_manifest(),),
+        (SentSegment(value.measured_manifest()),),
         offered_tools=ReportedTools("fixture-pi", frozenset()),
         request_id=ObservedDispatchRequest(PiRequestKey("request-one")),
         values=(value,),
     )
     original = recorded(())
-    captured = observed.for_turn(original.thread, original.turn)
+    def for_turn(sent):
+        return sent.manifest(original.thread, original.turn,
+                             PublishedContext().observed(sent).segments)
+    captured = for_turn(observed)
     assert captured.segments[0].captured_text == ("Public original answer",)
     assert "PRIVATE_REASONING" not in json.dumps(FieldCodec.encode(captured))
     with pytest.raises(ValueError):
-        replace(observed, values=(replace(value, utf8_bytes=value.utf8_bytes + 1),)).for_turn(
-            original.thread, original.turn)
+        for_turn(replace(observed, values=(replace(value, utf8_bytes=value.utf8_bytes + 1),)))
     # Missing historical values stay absent, never today's system preview.
-    old = replace(observed, values=()).for_turn(original.thread, original.turn)
+    old = for_turn(replace(observed, values=()))
     assert old.segments[0].captured_text == ()
     assert FieldCodec.decode(ContextManifest, FieldCodec.encode(old)) == old
 

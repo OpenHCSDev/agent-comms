@@ -24,7 +24,7 @@ if (process.argv.includes('--system-source-builder-child')) {
 }
 if (process.argv.includes('--system-source-spans')) process.env.PI_PACKAGE_DIR=resolve(pkg);
 const pi = await import(pathToFileURL(join(pkg,'dist/index.js')));
-const {TurnContext,NativeInputClaim} = await import(pathToFileURL(join(pkg,'dist/core/turn-context.js')));
+const {TurnContext,NativeInputClaim,PublishedContext} = await import(pathToFileURL(join(pkg,'dist/core/turn-context.js')));
 const {estimateTokens} = await import(pathToFileURL(join(pkg,'dist/core/compaction/compaction.js')));
 if (process.argv.includes('--system-source-spans')) {
     console.log(JSON.stringify(await systemSourceSpans(),null,2));
@@ -115,12 +115,11 @@ try {
         originalFull.segments[0].provenance[1]={...reference,path:currentReference.path};
         assert.deepEqual(currentFull,originalFull);
         assert.deepEqual(current.render,JSON.parse(JSON.stringify(context)));
-        const expected=original.observation;
+        const expected=original.manifest;
         expected.segments[0].provenance[1]={...reference,path:currentReference.path};
-        expected.values[0].provenance[1]={...reference,path:currentReference.path};
-        assert.deepEqual(current.observation,expected);
-        assert.deepEqual(current.manifest,
-            (({values,...manifest})=>manifest)(expected));
+        original.observation.values[0].provenance[1]={...reference,path:currentReference.path};
+        assert.deepEqual(current.manifest,expected);
+        assert.deepEqual(current.observation.values,original.observation.values);
         return {messages:context.messages.length,
             original_ms:original.elapsed_ms,current_ms:current.elapsed_ms,
             original_journal_encodings:original.journal_encodings,
@@ -170,6 +169,24 @@ try {
     assert(system.provenance.some(s=>s.path===join(cwd,'AGENTS.md')));
     assert(system.provenance.some(s=>s.path===join(cwd,'.pi','APPEND_SYSTEM.md')));
     assert(!JSON.stringify(captured.manifest()).includes('Original source summary'));
+    // One process sends a transcript entry once: its next observation names the entries
+    // it sent before and sends none of them again. Every other kind is sent whole.
+    const published=new PublishedContext(), whole=captured.manifest().segments;
+    const sentOnce=[captured.observation('first-request',published),
+        captured.observation('second-request',published)];
+    whole.forEach((segment,position)=>{
+        const entries=segment.kind==='transcript' ? segment.contributors : [];
+        const [first,second]=sentOnce.map(observation=>observation.segments[position]);
+        assert.deepEqual(first.manifest.contributors,segment.contributors);
+        assert.equal(first.after,undefined);
+        assert.equal(typeof second.after,entries.length ? 'string' : 'undefined');
+        assert.deepEqual(second.manifest.contributors,segment.contributors.slice(entries.length));
+        if (segment.kind==='transcript') {
+            assert(entries.length>0);
+            assert(first.manifest.provenance.every(source=>source.kind!=='journal'));
+        } else assert.deepEqual(second.manifest,segment);
+    });
+    assert.deepEqual(sentOnce[1].values,[]);
     assert.deepEqual((await TurnContext.next(session)).render(),provider);
     let mixedCapture;
     if (process.argv.includes('--recorded-readers')) {
@@ -247,6 +264,7 @@ try {
         original_contribution_tokens:measured.tokens,invalid_coordinates_refused:5,
         transformation_observed_without_input_rejection:true,preview_not_recorded:true,
         kinds:full.segments.map(s=>s.kind),session_file:manager.getSessionFile(),capture_comparison:captureComparison,
+        sent_once:{observations:sentOnce,whole},
         ...(!process.argv.includes('--summary-only') ? {full} : {}),
         ...(process.argv.includes('--recorded-readers') && !process.argv.includes('--summary-only') ? {
             recorded_observation:captured.observation('authored-sdk-source-request'),

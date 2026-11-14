@@ -20,6 +20,7 @@ from agent_comms.execution.turn_context import MeasuredNativeSegment
 from agent_comms.execution.turn_context import RecordedSegmentManifest
 from agent_comms.execution.turn_context import SegmentManifest
 from agent_comms.execution.turn_context import SegmentRecording
+from agent_comms.execution.turn_context import SentEntries
 from agent_comms.execution.turn_context import UnrecordedSegment
 
 
@@ -72,6 +73,8 @@ class NativeAnnotations(NativeMessages, declared_name=None):
 @dataclass(frozen=True, kw_only=True)
 class TranscriptSegment(NativeAnnotations):
     keyframe_interval: ClassVar[int] = 32
+
+    sending = SentEntries
 
     @classmethod
     def record_manifest(

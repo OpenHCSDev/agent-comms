@@ -2,6 +2,7 @@
 import hashlib
 import json
 import sqlite3
+import subprocess
 import sys
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -25,6 +26,12 @@ from agent_comms.context_store import (
 from agent_comms.execution.context_prior import UNREAD_CONTEXT, ContextStoreIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
+from agent_comms.execution.native_turn_context import (
+    NativeContextManifestData,
+    PublishedContext,
+    SentSegment,
+)
+from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.turn_context import (
     ContextManifest,
     ContextRecording,
@@ -42,7 +49,7 @@ from agent_comms.execution.turn_context import (
 from agent_comms.execution.turn_item import PiRequestKey
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.nominal.field_codec import ContextStoreId, FieldCodec, TurnId
-from agent_comms.registry.thread_identity import TurnIdentity
+from agent_comms.registry.thread_identity import ReportedTools, TurnIdentity
 from agent_comms.storage.typed_table import RowNotFoundError, SQLitePageSize
 from bus_record_fixture import context_comms
 
@@ -135,6 +142,56 @@ def test_a_sent_once_kind_named_by_hash_takes_the_text_its_process_sent(tmp_path
         tools.kind.sent_once(texts, replace(tools, captured_text=()))
     whole = replace(transcript, captured_text=())
     assert transcript.kind.sent_once(texts, whole) == whole
+
+
+def test_a_process_sends_a_transcript_entry_once(tmp_path):
+    owner = context_comms(tmp_path).registry.require('Alice')
+    system, tools, two = context(owner, tmp_path, 2, 1).segments
+    three = context(owner, tmp_path, 3, 2).segments[2]
+    published = PublishedContext()
+
+    def observed(*sent):
+        return published.observed(NativeContextManifestData(
+            'counter', sent, offered_tools=ReportedTools('fixture-pi', frozenset()))).segments
+
+    assert observed(SentSegment(system), SentSegment(tools), SentSegment(two)) == (
+        system, tools, two.with_entries(two.contributors))
+    sent = published.sent[2, TranscriptSegment]
+    rest = SentSegment(replace(three, contributors=three.contributors[2:]),
+                       after=next(mark for mark, entries in sent.runs.items() if entries == 2))
+    named = (SentSegment(replace(system, captured_text=())),
+             SentSegment(replace(tools, captured_text=())))
+    assert observed(*named, rest) == (system, tools, three.with_entries(three.contributors))
+    # A mark names entries only where its process sent them, and only those entries.
+    with pytest.raises(ValueError):
+        observed(*named, replace(rest, after='f' * 64))
+    with pytest.raises(ValueError):
+        observed(SentSegment(replace(system, captured_text=()), after=rest.after), named[1], rest)
+    with pytest.raises(ValueError):
+        observed(named[0], rest, named[1])
+    assert observed(*named, rest)[2] == three.with_entries(three.contributors)
+
+
+def test_core_holds_what_a_pi_process_sent_and_restores_its_next_observation(
+    pinned_native, tmp_path,
+):
+    result = subprocess.run(
+        ["node", str(Path(__file__).with_name("native_turn_context_contract.mjs")),
+         str(pinned_native), str(tmp_path / "contract"), "--summary-only"],
+        capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    sent = json.loads(result.stdout)["sent_once"]
+    whole = tuple(FieldCodec.decode(SegmentManifest, segment) for segment in sent["whole"])
+    assert any(segment.kind is TranscriptSegment and segment.contributors for segment in whole)
+    published = PublishedContext()
+    for observation in sent["observations"]:
+        event = PiRpcChannel.decode_record(
+            json.dumps({"type": "turn_context_observed", "context": observation}).encode() + b"\n",
+            strict=True)
+        observed = published.observed(event.context)
+        assert tuple(replace(segment, captured_text=())
+                     for segment in observed.segments) == whole
 
 
 def test_changed_text_and_replaced_transcript_do_not_reuse_old_values(tmp_path):
