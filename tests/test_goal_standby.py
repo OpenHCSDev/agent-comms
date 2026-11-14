@@ -22,6 +22,7 @@ from agent_comms.planning.goal_waits import GoalWaits, NoGoalWait, RecordedGoalW
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_status import PausedBridgeThreadStatus
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.locked_store import DocumentChange
 from goal_owner_fixture import canonical_goal_wire
 
 
@@ -102,9 +103,8 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
     carol_thread = comms.registry.require("carol")
     assert carol_thread.executing
     record = carol_thread.require_turn_lease().record
-    record.begin(record.registry_path, record.identity,
-                 replace(record.read().require_active(), owner=ProcessIdentity(999999999, 1)),
-                 registry_type=record.registry_type)
+    record.writers.update(lambda active: DocumentChange.to(
+        replace(active, owner=ProcessIdentity(999999999, 1))))
     comms.registry.register(
         replace(carol_thread, process_identity=ProcessIdentity(999999999, 1)),
         comms.registry.status("carol"),

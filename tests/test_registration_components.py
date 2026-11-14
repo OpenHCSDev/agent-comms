@@ -32,6 +32,7 @@ def test_edit_owns_turn_and_document_owns_later_changes(tmp_path, *, thread_regi
     before = thread_registration.snapshot().owner_identity("owner")
     with thread_registration.store.editing() as edit:
         leased, generation = edit.lease_turn(edit.document.threads["owner"], TurnId.mint(), NoTurnRouting())
+        edit.commit()
     assert generation == before.generation
     assert leased.turn_generation == 1
     thread_registration.release_turn(leased.turn_lease)
