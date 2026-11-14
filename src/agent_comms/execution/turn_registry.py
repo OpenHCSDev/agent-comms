@@ -25,7 +25,7 @@ class TurnRows(ABC):
         record it yields is written, and no registry reader is woken by it."""
 
 
-class TurnRegistry[Record, Declaration, Locked](ABC):
+class TurnRegistry[Record, Declaration](ABC):
     path: Path
     rows: TurnRows
 
@@ -40,7 +40,3 @@ class TurnRegistry[Record, Declaration, Locked](ABC):
     def read_turns(self, held: tuple[Record, ...]) -> tuple[Declaration, ...]:
         """Each held turn, in order, under one registry copy."""
 
-    @abstractmethod
-    def change_turn[Result](
-        self, record: Record, change: Callable[[Locked], Result],
-    ) -> Result: ...

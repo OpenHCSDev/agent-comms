@@ -9,7 +9,6 @@ from agent_comms.execution.provider_records import ProviderDiagnosticError
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import ToolCallId
 from agent_comms.registry.activity import Activity, ActivityState, ObservedActivity
-from agent_comms.registry.thread_identity import OwnerIdentity
 
 if TYPE_CHECKING:
     from agent_comms.execution.turn_lease import TurnLeaseFence
@@ -141,10 +140,8 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def stall_message(self, budget: float) -> str:
         return f"Model produced no RPC progress for {budget:g} seconds."
 
-    def phase_effects(
-        self, agents: AgentActivity, lease: TurnLeaseFence, owner: OwnerIdentity,
-    ) -> None:
-        agents.publish_phase(owner, self)
+    def phase_effects(self, agents: AgentActivity, lease: TurnLeaseFence) -> None:
+        agents.publish_phase()
 
 
 class Excursion(TurnPhase, declared_name=None):
@@ -177,9 +174,7 @@ class IdlePhase(ActivityWord, TurnPhase):
     activity_state = ActivityState.IDLE
     label = "Ready"
 
-    def phase_effects(
-        self, agents: AgentActivity, lease: TurnLeaseFence, owner: OwnerIdentity,
-    ) -> None:
+    def phase_effects(self, agents: AgentActivity, lease: TurnLeaseFence) -> None:
         agents.finish_turn(lease)
 
 
