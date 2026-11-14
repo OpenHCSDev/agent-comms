@@ -113,14 +113,6 @@ class CursorOwner(RegistryOwner):
         return True
 
     @classmethod
-    async def refresh_async(cls, bus: MessageBus, *, wire_root_id: RootId, owner_name: str,
-                            source_reads: NativeEvidenceScope) -> CursorState:
-        return await Coordination.run_async(
-            CoordinationStore.path_in(bus.bus.path.parent),
-            partial(cls._refresh_owned, bus, wire_root_id, owner_name, source_reads),
-        )
-
-    @classmethod
     def _refresh_owned(
         cls, bus: MessageBus, root_id: RootId, owner_name: str,
         source_reads: NativeEvidenceScope, store: Coordination,
