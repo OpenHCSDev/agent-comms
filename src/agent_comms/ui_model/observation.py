@@ -813,9 +813,10 @@ class NoSidebarCut(HeldSidebarCut):
 
 @dataclass(frozen=True)
 class SidebarCutAt(HeldSidebarCut):
-    """A cut and the revision it was read at. A revision that moved none of its stores moved
-    only activity, goals or relationships: the rows are derived again over the same cut, without
-    reopening the bus, recounting unread or reading native transcripts."""
+    """A cut and the revision it was read at. A revision that moved none of its counted stores,
+    and a registry that moved only turns and presence, moved what the rows read: activity, goals,
+    relationships and turns. The rows are derived again over the same counts, without reopening
+    the bus, recounting unread or reading native transcripts."""
 
     cut: SidebarCut
     revision: WireRevision
@@ -824,7 +825,11 @@ class SidebarCutAt(HeldSidebarCut):
              revision: WireRevision) -> SidebarResult:
         if revision.changed_since(SidebarBasisView(), self.revision):
             return stage.read_cut(request, comms, revision)
-        return request._answer(revision, partial(self.cut.snapshot, comms.views))
+        registry = comms.registry.snapshot()
+        if not registry.moved_turns_alone(self.cut.registry):
+            return stage.read_cut(request, comms, revision)
+        stage.held = held = SidebarCutAt(replace(self.cut, registry=registry), revision)
+        return request._answer(revision, partial(held.cut.snapshot, comms.views))
 
 
 class SidebarReadStage:
