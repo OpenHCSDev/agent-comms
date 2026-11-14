@@ -650,8 +650,8 @@ class RegistryObservation(ABC):
 
     The registry announces each commit through its change file, which the root watches. A
     wake that does not carry that file found the registry as the last read left it, so that
-    read still answers: the root woke 110 times for one channel message and read the
-    registry 110 times, for the 40 or so of them in which it had committed."""
+    read still answers. The root woke 110 times for one channel message and read the
+    registry on every one of them."""
 
     def following(
         self, names: tuple[str, ...], committed: bool, read: Callable[[tuple[str, ...]], RegistryRead],
