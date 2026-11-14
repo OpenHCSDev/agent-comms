@@ -77,6 +77,10 @@ export class EntryStore {
     append(entry) { throw new Error('EntryStore.append must be implemented'); }
     committedAppend(entry, file) { throw new Error('EntryStore.committedAppend must be implemented'); }
     storedAt(file) { throw new Error('EntryStore.storedAt must be implemented'); }
+    /** The store over ``file`` once its writer synced it: what it holds then stays on disk. */
+    syncedAt(file) { return this.storedAt(file).syncedAt(file); }
+    /** Whether a sync already covers this entry's bytes. Nothing held in memory is covered. */
+    durable(meta) { return false; }
     close() { throw new Error('EntryStore.close must be implemented'); }
     assertCurrent() { throw new Error('Persisted native session observation required'); }
     assertUsable() { this.#availability.requireOpen(); }
@@ -277,6 +281,7 @@ export class DiskEntryStore extends EntryStore {
     #last = null;
     #revision;
     #extent = 0;
+    #synced = 0;
     #metadata;
     #input;
     #label;
@@ -537,6 +542,16 @@ export class DiskEntryStore extends EntryStore {
         if (resolve(file) !== this.file) throw new Error('Native storage identity differs');
         this.assertCurrent(); return this;
     }
+    // The journal only grows, so the entries inside the extent one sync covered are durable
+    // for good. A request asked for a sync per input it held, 180 of them for one answer.
+    syncedAt(file) {
+        this.storedAt(file);
+        this.#synced = this.#extent;
+        return this;
+    }
+    // Asked of the file this store indexed: another writer's change refuses here, as the
+    // sync it replaces refused.
+    durable(meta) { this.assertCurrent(); return meta.offset + meta.length <= this.#synced; }
     close() {
         this.invalidate();
         this.#lines?.return();

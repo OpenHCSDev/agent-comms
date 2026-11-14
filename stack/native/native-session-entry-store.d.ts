@@ -43,6 +43,8 @@ export declare abstract class EntryStore {
     abstract append(entry: SessionEntry): void;
     abstract committedAppend(entry: SessionEntry, file?: string): EntryStore;
     abstract storedAt(file: string): EntryStore;
+    syncedAt(file: string): EntryStore;
+    durable(meta: EntryMetadata): boolean;
     abstract close(): void;
     assertCurrent(): void;
     assertUsable(): void;

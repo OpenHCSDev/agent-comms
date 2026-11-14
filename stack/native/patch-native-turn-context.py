@@ -85,6 +85,26 @@ def extend_input_claim(session, rpc, core):
                  '    getOwnerTools: () => import("../turn-context.js").OwnerToolConnection;\n    getSystemPrompt: () => string;')
 
 
+def flush_an_input_once(session, manager):
+    """An input is synced once, and its selectors already hold what a request checks."""
+    # The store knows which entries a sync covered; a covered input needs no lock and no sync.
+    replace_once(manager, """    flushInputDurably(inputId) {
+        return this.#acMutation(() => {
+""", """    flushInputDurably(inputId) {
+        return this.#acMutation(() => {
+        const held = inputId === undefined ? undefined : this.entryStore.trackedInputMetadata(inputId);
+        if (held && this.entryStore.durable(held)) return held.id;
+""")
+    replace_once(manager, '        this.entryStore = this.entryStore.storedAt(this.sessionFile);\n        this._pr48LoadedRevision = pr48DiskRevision(this.sessionFile);\n        return entry.id;',
+        '        this.entryStore = this.entryStore.syncedAt(this.sessionFile);\n        this._pr48LoadedRevision = pr48DiskRevision(this.sessionFile);\n        return entry.id;')
+    # The digest a request compares is a selector of the entry; reading the whole entry
+    # back for it read every input's body from the session file on every request.
+    replace_once(session, '            const entry = this.sessionManager.getTrackedInput(inputId);\n            const claimedDigest = this._nativeInputClaims.get(inputId)?.digest ?? entry?.message.inputDigest;',
+        '            const entry = this.sessionManager.entryStore.trackedInputMetadata(inputId);\n            const claimedDigest = this._nativeInputClaims.get(inputId)?.digest ?? entry?.inputDigest;')
+    replace_once(session, '                !entry || entry.message.inputDigest !== claimedDigest ||',
+        '                !entry || entry.inputDigest !== claimedDigest ||')
+
+
 def allow_tools(session, core):
     """A prompt's allowed tools narrow the child's through the launch's own registry rebuild,
     before any extension sees the run start, and never beyond what the child was launched with."""
@@ -408,6 +428,7 @@ def main(package):
     data: import("../../core/turn-context.js").NativeContextData;
 } | {''')
     extend_input_claim(session,rpc,core)
+    flush_an_input_once(session,core/'session-manager.js')
     extend_system_sources(core)
     extend_native_run(core)
 
