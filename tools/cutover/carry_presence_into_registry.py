@@ -18,12 +18,12 @@ from typing import ClassVar
 
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.registry.registry_tables import PresenceHeader, PresenceRow, RegistryRowStore
-from agent_comms.storage.locked_store import RootFile
+from agent_comms.storage.locked_store import RegistryFile, RootFile
 from agent_comms.storage.typed_table import SQLiteCatalogObject
 
 
 class PresenceIntoRegistry(Carry):
-    opened_files: ClassVar[tuple[type[RootFile], ...]] = (RegistryRowStore,)
+    opened_files: ClassVar[tuple[type[RootFile], ...]] = (RegistryFile,)
     previous: ClassVar[str] = "presence.sqlite3"
     beside: ClassVar[tuple[str, ...]] = (
         "{name}-wal", "{name}-shm", ".{name}.lock", ".presence.json.lock")
