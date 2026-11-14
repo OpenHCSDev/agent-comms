@@ -13,7 +13,6 @@ from pydantic import JsonValue
 from agent_comms.execution.annotation_disclosure import PublicInstructionAnnotations
 from agent_comms.pi_payloads import PiMessage
 from agent_comms.execution.turn_context import ContextEntryManifest, ProviderContext
-from agent_comms.execution.turn_context import ContextEntryReference
 from agent_comms.execution.turn_context import ContextSpan
 from agent_comms.execution.turn_context import ContributionCoordinates
 from agent_comms.execution.turn_context import MeasuredNativeSegment
@@ -86,13 +85,14 @@ class TranscriptSegment(NativeAnnotations):
         provenance = tuple(source for source in original.provenance
                            for source in source.turn_recording())
         header = replace(original, provenance=provenance, contributors=(), captured_text=())
-        references = tuple(ContextEntryReference.from_sources(child.sources)
-                           for child in original.contributors)
+        references = tuple(child.entry_reference for child in original.contributors)
+        # Asked of the request really recorded before this one: a keyframe turn records as
+        # if nothing came before, and its entries are in the store all the same.
+        held = previous.held_entries(references)
         if not recording_turn % cls.keyframe_interval:
             previous = UnrecordedSegment()
         recorded = previous.record_entries(header, references)
-        entries = tuple(ContextEntryManifest(child)
-                        for child in original.contributors[recorded.inherited_entries:])
+        entries = tuple(ContextEntryManifest(child) for child in original.contributors[held:])
         return recorded, entries
 
 

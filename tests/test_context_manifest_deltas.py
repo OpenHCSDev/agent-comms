@@ -302,6 +302,29 @@ def test_forty_turns_use_direct_sources_and_fixed_transcript_keyframes(tmp_path)
                 {}, {rows[32].id: delta}, position=2)
 
 
+def test_a_request_stores_only_the_entries_its_predecessor_lacks(tmp_path):
+    """A request lists every entry since its keyframe, and a keyframe lists them all, so that
+    two records restore it. Its predecessor already stored all but the newest: on 2026-11-14
+    a 500-entry thread encoded and offered 48 entries to the store per model request to add
+    two, and all 500 on every thirty-second."""
+    comms = context_comms(tmp_path)
+    owner = comms.registry.require('Alice')
+    prior, counts = UNREAD_CONTEXT, []
+    for turn in range(33):
+        manifest = context(owner, tmp_path, 328 + 2 * turn, turn + 1)
+        recorded, stored = prior.read(comms.contexts, owner.incarnation).capture(manifest)
+        counts.append((len(recorded.segments[2].entries), len(stored)))
+        prior = comms.contexts.record_after(prior, manifest)
+    assert counts[0] == (328, 328)
+    assert counts[1] == (2, 2)
+    assert counts[30] == (60, 2)
+    assert counts[31] == (390, 2)  # The keyframe.
+    assert counts[32] == (2, 2)
+    # Every entry is in the store: a reader that held none of them restores the last request.
+    restored = comms.contexts.prior(owner.incarnation)
+    assert restored.value.segments[2].contributors == manifest.segments[2].contributors
+
+
 def test_context_batch_decodes_shared_entries_once(tmp_path: Path) -> None:
     comms = context_comms(tmp_path)
     owner = comms.registry.require('Alice')

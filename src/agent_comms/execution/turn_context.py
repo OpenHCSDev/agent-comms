@@ -6,7 +6,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from functools import partial
+from functools import cached_property, partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import Annotated, ClassVar, Self
@@ -356,6 +356,13 @@ class SegmentManifest(ToolResult):
     def sources(self) -> ContextSources:
         return ContextSources(self.provenance)
 
+    @cached_property
+    def entry_reference(self) -> ContextEntryReference:
+        """The one journal entry this manifest records. A manifest never changes, and a
+        transcript keeps its entries' manifests from request to request, so each entry is
+        named once however many requests list it."""
+        return ContextEntryReference.from_sources(self.sources)
+
     def wire_sources(self) -> tuple[MessageReference, ...]:
         """Original bus messages declared by this segment, in contribution order."""
         return self.kind.wire_sources(self)
@@ -423,6 +430,18 @@ class ContextEntryReference:
             raise ValueError("A context entry manifest must name exactly one journal entry")
         return cls(sources.native_identity(), NativeItemId(entries[0]))
 
+    @staticmethod
+    def shared_prefix(
+        before: tuple[ContextEntryReference, ...], current: tuple[ContextEntryReference, ...],
+    ) -> int:
+        """How many leading entries two requests' transcripts have in common."""
+        shared = 0
+        for earlier, later in zip(before, current, strict=False):
+            if earlier != later:
+                break
+            shared += 1
+        return shared
+
 
 @dataclass(frozen=True)
 class ContextEntryManifest:
@@ -432,7 +451,7 @@ class ContextEntryManifest:
 
     @property
     def reference(self) -> ContextEntryReference:
-        return ContextEntryReference.from_sources(self.manifest.sources)
+        return self.manifest.entry_reference
 
 
 @dataclass(frozen=True)
@@ -471,7 +490,7 @@ class SentEntries(SentWhole):
         entries = [*self.named(mark)]
         runs = {name: length for name, length in self.runs.items() if length <= len(entries)}
         for entry in sent.contributors:
-            identity = ContextEntryReference.from_sources(entry.sources).entry_id
+            identity = entry.entry_reference.entry_id
             mark = hashlib.sha256(f"{mark}\n{identity}:{entry.sha256}".encode()).hexdigest()
             entries.append(entry)
             runs[mark] = len(entries)
@@ -618,13 +637,11 @@ class RecordedSegmentManifest:
     def predecessors(self, offset: int) -> tuple[int, ...]:
         return self.previous.predecessors(offset)
 
-    def keyframe(
-        self, original: SegmentManifest, offset: int,
-    ) -> tuple[tuple[ContextEntryReference, ...], RecordedContextPredecessor]:
+    def keyframe(self, offset: int) -> tuple[int, RecordedContextPredecessor]:
+        """How many of this request's leading entries its keyframe holds, and that keyframe:
+        this request at ``offset`` when it lists them all, else the one it was recorded after."""
         count = self.previous.keyframe_count(len(self.entries), self.inherited_entries)
-        references = tuple(ContextEntryReference.from_sources(child.sources)
-                           for child in original.contributors[:count])
-        return references, self.previous.at_keyframe(offset)
+        return count, self.previous.at_keyframe(offset)
 
     def text_keyframe(
         self, position: int, value: SegmentManifest, offset: int,
@@ -659,6 +676,12 @@ class SegmentRecording(ABC):
     ) -> RecordedSegmentManifest: ...
 
     @abstractmethod
+    def held_entries(self, references: tuple[ContextEntryReference, ...]) -> int:
+        """How many leading entries of ``references`` the previous request holds. Its entries
+        were stored when it was recorded, so only the ones after these are new to the store.
+        A keyframe lists every entry again and still stores only the new ones."""
+
+    @abstractmethod
     def restore_text(self, original: SegmentManifest) -> SegmentManifest: ...
 
     @abstractmethod
@@ -685,6 +708,9 @@ class UnrecordedSegment(SegmentRecording):
     ) -> RecordedSegmentManifest:
         return RecordedSegmentManifest(header, references)
 
+    def held_entries(self, references: tuple[ContextEntryReference, ...]) -> int:
+        return 0
+
     def restore_text(self, original: SegmentManifest) -> SegmentManifest:
         return original
 
@@ -705,18 +731,22 @@ class PreviouslyRecordedSegment(SegmentRecording):
     def record_text(self, original: SegmentManifest) -> RecordedSegmentManifest:
         return self.held.record_text(original)
 
+    @cached_property
+    def references(self) -> tuple[ContextEntryReference, ...]:
+        """The previous request's entries, named once for both questions asked of them."""
+        return tuple(child.entry_reference for child in self.value.contributors)
+
     def record_entries(
         self, header: SegmentManifest, references: tuple[ContextEntryReference, ...],
     ) -> RecordedSegmentManifest:
-        prior, keyframe = self.recorded.keyframe(self.value, self.record_id)
-        inherited = 0
-        for before, current in zip(prior, references, strict=False):
-            if before != current:
-                break
-            inherited += 1
+        count, keyframe = self.recorded.keyframe(self.record_id)
+        inherited = ContextEntryReference.shared_prefix(self.references[:count], references)
         if inherited:
             return RecordedSegmentManifest(header, references[inherited:], keyframe, inherited)
         return RecordedSegmentManifest(header, references)
+
+    def held_entries(self, references: tuple[ContextEntryReference, ...]) -> int:
+        return ContextEntryReference.shared_prefix(self.references, references)
 
     def restore_text(self, original: SegmentManifest) -> SegmentManifest:
         if self.value.sha256 == original.sha256 and not original.captured_text:
