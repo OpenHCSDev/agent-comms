@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.coordination.attempt_states import PromptStartingAttempt
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.errors import IdentityConflict, UnrecordedNativeContext
 from agent_comms.execution.native_input_proof import NativeContextJournal, NativeContextProof
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.native_prompt_binding import native_request_digest
@@ -175,4 +175,5 @@ async def test_uncorroborated_live_context_never_grants_consumption(
             await acknowledge_context(claim, corrupt(context))
         with Coordination(claim.store_path) as store:
             retained = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
-            assert not retained.reference.recorded
+            with pytest.raises(UnrecordedNativeContext):
+                retained.reference.require_recorded()

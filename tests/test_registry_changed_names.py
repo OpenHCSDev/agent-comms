@@ -143,7 +143,7 @@ def test_every_reader_of_one_registry_keeps_the_rows_another_decoded(tmp_path: P
     """A turn builds its own registry reader, and a row is bound to the registry file it came
     from. Bound to the reader that asked instead, a row another reader decoded was dropped by
     the next one: on 2026-11-14 the worker decoded every thread it touched again after each
-    registry write, about 1 ms a thread, several writes a turn."""
+    registry write, about half a millisecond a thread, several writes a turn."""
     path = written_by_another_process(tmp_path)
     before = Registration(path).snapshot()
     read = {name: before.threads[name] for name in before.threads}
