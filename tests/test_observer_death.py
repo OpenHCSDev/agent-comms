@@ -80,12 +80,13 @@ async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awai
         assert later.value is died.value
 
 
-async def test_an_invalid_notification_reference_does_not_kill_the_observer(comms, durable_home):
+async def test_a_mismatched_notification_reference_is_left_out_and_the_observer_lives(comms, durable_home):
     async with ObservationProcess.awaited(comms.route) as process:
-        with pytest.raises(RelationViolationError):
-            await process.read(ReadNotifications(str(comms.root), LiveNotificationRead(
-                (MessageReference(1, MessageId.mint("not-the-original")),)
-            )))
+        # A reference whose record is another message is left out of the read (376ef3457).
+        mismatched = await process.read(ReadNotifications(str(comms.root), LiveNotificationRead(
+            (MessageReference(1, MessageId.mint("not-the-original")),)
+        )))
+        assert mismatched.outcomes == {}
         assert (await process.read(empty_window(comms.root))).outcomes == {}
 
 
