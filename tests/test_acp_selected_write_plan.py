@@ -125,7 +125,8 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
                 assert alpha_before[0].lifecycle == TriagePendingAssignment()
             options = encode_request(
                 SelectedWriteRequest(
-                    message.seq, message.message_id, str(resource), "after second pid\n"
+                    source_seq=message.seq, source_message_id=message.message_id,
+                    resource=str(resource), contents="after second pid\n",
                 )
             )
             response = await attached.prompt("beta", [], field_meta=options)
@@ -134,7 +135,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
             assert resource.read_bytes() == b"before\n"
             (base / "dispatch").touch()
             result = await event("terminal")
-            assert result["pid"] == process.pid and result["drained"] == 1
+            assert result["pid"] == process.pid and result["woke"] is True
             assert native.provider.posts == 1 and resource.read_bytes() == b"after second pid\n"
             with wire(root).bus.bus.reading() as source:
                 assert source.claim_operation_used(acknowledgement.operation_id)
