@@ -356,6 +356,13 @@ class SegmentManifest(ToolResult):
     def sources(self) -> ContextSources:
         return ContextSources(self.provenance)
 
+    @cached_property
+    def entry_reference(self) -> ContextEntryReference:
+        """The one journal entry this manifest records. A manifest never changes, and a
+        transcript keeps its entries' manifests from request to request, so each entry is
+        named once however many requests list it."""
+        return ContextEntryReference.from_sources(self.sources)
+
     def wire_sources(self) -> tuple[MessageReference, ...]:
         """Original bus messages declared by this segment, in contribution order."""
         return self.kind.wire_sources(self)
@@ -444,7 +451,7 @@ class ContextEntryManifest:
 
     @property
     def reference(self) -> ContextEntryReference:
-        return ContextEntryReference.from_sources(self.manifest.sources)
+        return self.manifest.entry_reference
 
 
 @dataclass(frozen=True)
@@ -483,7 +490,7 @@ class SentEntries(SentWhole):
         entries = [*self.named(mark)]
         runs = {name: length for name, length in self.runs.items() if length <= len(entries)}
         for entry in sent.contributors:
-            identity = ContextEntryReference.from_sources(entry.sources).entry_id
+            identity = entry.entry_reference.entry_id
             mark = hashlib.sha256(f"{mark}\n{identity}:{entry.sha256}".encode()).hexdigest()
             entries.append(entry)
             runs[mark] = len(entries)
@@ -727,8 +734,7 @@ class PreviouslyRecordedSegment(SegmentRecording):
     @cached_property
     def references(self) -> tuple[ContextEntryReference, ...]:
         """The previous request's entries, named once for both questions asked of them."""
-        return tuple(ContextEntryReference.from_sources(child.sources)
-                     for child in self.value.contributors)
+        return tuple(child.entry_reference for child in self.value.contributors)
 
     def record_entries(
         self, header: SegmentManifest, references: tuple[ContextEntryReference, ...],
