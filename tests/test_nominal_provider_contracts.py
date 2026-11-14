@@ -122,6 +122,6 @@ def test_replay_stays_a_class_and_native_text_retains_omission():
     assert get_type_hints(TurnFailure.prepare_execution_retry)["replay"] == type[ReplayPreparation]
     assert PiOmitted().text_or("fallback") == "fallback"
     assert ReportedText("").text_or("fallback") == "fallback"
-    assert ReportedText("").reported
+    assert ReportedText("").is_reported()
     assert ReportedText("").value == ""
-    assert not PiOmitted().reported
+    assert not PiOmitted().is_reported()
