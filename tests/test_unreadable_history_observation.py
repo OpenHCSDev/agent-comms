@@ -193,7 +193,7 @@ class PreparingStage(SidebarReadStage):
         raise self.cause
 
     def read(self, request, comms, revision):
-        return request._answer(revision, self.unavailable, request.worktree)
+        return request._answer(revision, self.unavailable)
 
 
 @pytest.mark.parametrize("cause", [
