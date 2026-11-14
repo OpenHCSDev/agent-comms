@@ -194,9 +194,6 @@ class SelectedWakeCheck(SchedulesWake):
                 await effects.cursors.publish(session_id, self.thread, advance=True)
                 if before == await inputs._observe_private_revision(session_id, root_id):
                     inputs.state(session_id).receive(InboxUnchanged(before))
-            if result is not None:
-                # Messages this turn could not take are still pending.
-                await inputs.drain_inbox(session_id)
         return WakeDue()
 
 

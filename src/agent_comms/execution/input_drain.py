@@ -125,6 +125,10 @@ class WakeHeld(WakeOutcome):
 
 class WakeDue(WakeOutcome):
     def settle(self, inputs: InputObservation, session_id: AcpSessionId) -> None:
+        """The wake is over, so its observer looks at the inbox again: that drain starts the
+        next wake for whatever this one could not take. The wake used to drain once more
+        itself before ending, a request for the next wake made while it was still the
+        pending one, which the schedule refused every time."""
         inputs.wake_observer(session_id)
 
 
@@ -319,11 +323,13 @@ class WeighedNews(InboxNews):
     asks_a_store: ClassVar[bool] = False
 
     @abstractmethod
-    async def owes_drain(
+    async def owes_tick(
         self, session: DrainedSession, note: PrivateObservationState, bus: Bus,
         lookup: ThreadLookup,
     ) -> bool:
-        """Whether, having happened, this owes the settled session a drain now."""
+        """Whether, having happened, this owes the settled session a tick now. A tick looks
+        at the session's registry entry; it drains the inbox only when the debt itself owes
+        one, so news that means mail says so to the debt."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,14 +339,15 @@ class BusCommitted(WeighedNews):
 
     asks_a_store = True
 
-    async def owes_drain(
+    async def owes_tick(
         self, session: DrainedSession, note: PrivateObservationState, bus: Bus,
         lookup: ThreadLookup,
     ) -> bool:
         # Weighed from here: a commit that lands while the bus is being asked is heard anew.
         session.inbox = session.inbox.dismissing(self)
         if await Coordination.run_worker(partial(note.has_unobserved_inputs, bus, lookup)):
-            session.receive(self)
+            # Mail past the note's cut: the inbox owes a drain, whatever else it was doing.
+            session.inbox = session.inbox.changed()
             return True
         return False
 
@@ -349,9 +356,11 @@ class BusCommitted(WeighedNews):
 class RowMoved(WeighedNews):
     """This owner's registry entry differs from the one the root observer read before it, or
     could not be read. It is what the observer of a running wake still watches: that wake
-    wakes the observer itself when it finishes."""
+    wakes the observer itself when it finishes. It owes the entry a look (its settings, its
+    goals), and the inbox nothing: a wake moves its own row by starting its turn, and each
+    one used to cost a whole drain that found nothing."""
 
-    async def owes_drain(
+    async def owes_tick(
         self, session: DrainedSession, note: PrivateObservationState, bus: Bus,
         lookup: ThreadLookup,
     ) -> bool:
@@ -474,6 +483,10 @@ class InboxDebt(ABC):
     ) -> bool:
         return True
 
+    async def drain(self, inputs: InputDrain, session_id: AcpSessionId) -> None:
+        """A tick's share of this debt."""
+        await inputs.drain_inbox(session_id)
+
 
 @dataclass(frozen=True, slots=True)
 class DrainOwed(InboxDebt):
@@ -522,14 +535,20 @@ class InboxSettled(InboxDebt):
     async def owed(
         self, session: DrainedSession, needs_refresh: bool, bus: Bus, lookup: ThreadLookup,
     ) -> bool:
-        """Queued turns and a stale cursor are consumed by an observation; otherwise only
-        news it has yet to weigh can owe one, asked without a store read first."""
+        """Queued turns and a stale cursor are consumed by a drain, so they owe one;
+        otherwise only news it has yet to weigh can owe a tick, asked without a store read
+        first."""
         if session.pending_turns or needs_refresh:
+            session.inbox = self.changed()
             return True
         for news in sorted(self.unweighed, key=lambda heard: heard.asks_a_store):
-            if await news.owes_drain(session, self.held, bus, lookup):
+            if await news.owes_tick(session, self.held, bus, lookup):
                 return True
         return False
+
+    async def drain(self, inputs: InputDrain, session_id: AcpSessionId) -> None:
+        """Nothing: a settled inbox drains when news makes it owe one, and then it is no
+        longer this member."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -852,7 +871,7 @@ class InputObservation(BusSessionsRuntime, ABC):
             async with drain_failures(self.comms, thread, entry.owner_identity):
                 attachment = self.state(session_id).owned().identifier
                 await self.sessions.config.apply_stored_settings(attachment)
-                await self.drain_inbox(session_id)
+                await self.state(session_id).inbox.drain(self, session_id)
                 if self.effects.turns.goals.in_standby(attachment):
                     await Coordination.run_worker(partial(
                         self.comms.goals.recover_replied_goal_wait, session_id,
