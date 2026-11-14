@@ -53,6 +53,7 @@ from agent_comms.registry.registry_tables import (
     EditTables,
     RawDocument,
     RegistryCapture,
+    RegistryHeads,
     RegistryRowRevision,
     RegistryRowStore,
     TurnChange,
@@ -463,8 +464,9 @@ class RegistryStore(
 
         The guard held here excludes every commit, so the row revision is asked once and both
         the authority check and the capture answer from it."""
-        revision = self.rows.revision()
-        privacy = self._guard_at(revision)  # before even a cache hit
+        heads = self.rows.heads()
+        revision = heads.revision
+        privacy = self._guard_at(heads)  # before even a cache hit
         entry = self.cache.entry
         source = entry.captured(self, revision)
         with self.cache.measurement:
@@ -731,9 +733,9 @@ class RegistryStore(
         return RegistryCapture(self.rows.revision(), raw)
 
     def private_guard_unlocked(self) -> RegistryPrivacy:
-        return self._guard_at(self.rows.revision())
+        return self._guard_at(self.rows.heads())
 
-    def _guard_at(self, revision: RegistryRowRevision) -> RegistryPrivacy:
+    def _guard_at(self, heads: RegistryHeads) -> RegistryPrivacy:
         """Validate registry authority at the committed row revision its caller read, before
         even a cached document read.
 
@@ -746,11 +748,8 @@ class RegistryStore(
         # Observed before the check, so a change during it moves the key and forces a recheck.
         # Each answer keys on what it was decided from: the coordinator commits on every
         # coordination write, and a private root never reads it.
-        root = (_link_revision(self.path.parent).file_identity(), revision.identity)
-        observed = (
-            self.rows.namespace(),
-            _link_revision(CoordinationStore.path_in(self.path.parent)),
-        )
+        root = (_link_revision(self.path.parent).file_identity(), heads.revision.identity)
+        observed = (heads.namespace, _link_revision(CoordinationStore.path_in(self.path.parent)))
         if (checked := self.cache.guard) is not None:
             key, guard = checked
             if key == (root, *guard.evidence(*observed)):
