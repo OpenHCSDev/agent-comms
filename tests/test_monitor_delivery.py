@@ -157,7 +157,8 @@ def bridge(comms, tmp_path):
     declare_test_bus(comms, threads=(
         NativeThread('claude-code', frozenset(), Checkout(tmp_path)),
         # A production bridge's session is external: its answers live in the external store.
-        ExternalThread('viewer', frozenset(), Checkout(tmp_path)),
+        # It is in #monitor: a post naming a thread its channel never reaches is refused.
+        ExternalThread('viewer', frozenset({'monitor'}), Checkout(tmp_path)),
         NativeThread('peer', frozenset(), Checkout(tmp_path)),
     ))
     practice = PracticeCopy(comms.root, tmp_path / 'copied-bus')
