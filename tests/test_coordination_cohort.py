@@ -297,7 +297,7 @@ def test_keyed_response_replay_after_initial_row_and_receipt_backed_page(tmp_pat
         assert [m.seq for m in read_history(case.comms)] == [case.origin_seq, first.seq]
         delivery = case.bus.bus.delivery(first.seq)
         assert delivery.canonical_members == {"sender"}
-        assert delivery.decisions[0].wake_mode.triage
+        assert delivery.decisions[0].wake_mode == BoundedTriageWake()
     finally:
         case.close()
 
