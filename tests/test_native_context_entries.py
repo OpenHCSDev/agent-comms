@@ -1,4 +1,4 @@
-"""A Pi process reads a context's journal entries from its session file once."""
+"""The Pi session's disk store reads a context's journal entries from its file once."""
 import json
 import subprocess
 from pathlib import Path
@@ -15,5 +15,5 @@ def test_a_context_entry_is_read_once_and_a_new_one_is_read_when_it_arrives(pinn
         "first": ["a", "b", "c"], "first_reads": 3,
         "again": ["a", "b", "c"], "again_reads": 3,
         "after_append": ["a", "b", "c", "appended"], "after_append_reads": 4,
-        "same_as_the_store": True,
+        "same_as_the_journal": True,
     }

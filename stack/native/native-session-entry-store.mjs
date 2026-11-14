@@ -282,6 +282,7 @@ export class DiskEntryStore extends EntryStore {
     #revision;
     #extent = 0;
     #synced = 0;
+    #context = new Map();
     #metadata;
     #input;
     #label;
@@ -367,6 +368,20 @@ export class DiskEntryStore extends EntryStore {
             for (const row of this.#db.prepare('SELECT selectors FROM entries WHERE sequence >= ? ORDER BY sequence').iterate(start))
                 yield EntryMetadata.fromIndex(row);
         } finally { this.assertCurrent(); }
+    }
+    // A memory store hands out the entries it holds. This one read each from the journal on
+    // every ask: a model request, a usage estimate and the session's statistics each read
+    // the whole context back, 0.9 MB for 388 entries. An entry never changes, so the store
+    // keeps the ones of the context it last gave and lets go of what a compaction or another
+    // branch leaves out.
+    *contextEntries(leafId = this.lastId) {
+        const held = new Map();
+        for (const meta of this.contextMetadata(leafId)) {
+            const entry = this.#context.get(meta.id) ?? this.get(meta.id);
+            held.set(meta.id, entry);
+            yield entry;
+        }
+        this.#context = held;
     }
     *children(parentId) {
         this.assertCurrent();
@@ -554,6 +569,7 @@ export class DiskEntryStore extends EntryStore {
     durable(meta) { this.assertCurrent(); return meta.offset + meta.length <= this.#synced; }
     close() {
         this.invalidate();
+        this.#context.clear();
         this.#lines?.return();
         this.#lines = undefined;
         const database = this.#db, descriptor = this.#fd;
