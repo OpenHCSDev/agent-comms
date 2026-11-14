@@ -95,7 +95,7 @@ from agent_comms.registry.registry_document import RegistryDocument, RegistryEnt
 from agent_comms.registry.registry_store import RegistryEntryRevision
 from agent_comms.registry.thread_identity import ClaimedIdentity, OwnerIdentity
 from agent_comms.registry.threads import NativeThread, Thread
-from agent_comms.storage.locked_store import GoalWakeFile
+from agent_comms.storage.locked_store import GoalWakeFile, RegistryFile
 from agent_comms.storage.maintenance_barrier import (
     MaintenanceIngress,
     MaintenancePhase,
@@ -642,6 +642,42 @@ class InboxAwaitsWake(InboxSettled):
         return self
 
 
+type RegistryRead = asyncio.Task[RegistryDocument]
+
+
+class RegistryObservation(ABC):
+    """The registry as the root observer last read it.
+
+    The registry announces each commit through its change file, which the root watches. A
+    wake that does not carry that file found the registry as the last read left it, so that
+    read still answers. The root woke 110 times for one channel message and read the
+    registry on every one of them."""
+
+    def following(
+        self, names: tuple[str, ...], committed: bool, read: Callable[[tuple[str, ...]], RegistryRead],
+    ) -> ObservedRegistry:
+        """The read that answers this wake for ``names``: a new one unless a member keeps its own."""
+        return ObservedRegistry(names, read(names))
+
+
+class UnreadRegistry(RegistryObservation):
+    """Nothing read yet, or a read that failed and answers for nothing."""
+
+
+@dataclass(frozen=True)
+class ObservedRegistry(RegistryObservation):
+    names: tuple[str, ...]
+    """The sessions whose entries this read decoded off the loop."""
+    read: RegistryRead
+
+    def following(
+        self, names: tuple[str, ...], committed: bool, read: Callable[[tuple[str, ...]], RegistryRead],
+    ) -> ObservedRegistry:
+        if committed or names != self.names:
+            return super().following(names, committed, read)
+        return self
+
+
 class BusSessionsRuntime:
     """The bus, its sessions and the runtime an owner reads."""
 
@@ -748,6 +784,11 @@ class InputObservation(BusSessionsRuntime, ABC):
             document.entry_if_present(name)
         return document
 
+    def _reading_registry(self, names: tuple[str, ...]) -> RegistryRead:
+        return asyncio.create_task(Coordination.run_worker(partial(
+            self._read_observed_registry, names,
+        )))
+
     async def observe_root(self) -> None:
         """One kernel registration and captured registry read feed the root's drains."""
         bus = self.comms.bus.bus
@@ -759,6 +800,8 @@ class InputObservation(BusSessionsRuntime, ABC):
             FileLifetimeSource(CoordinationStore.path_in(self.comms.root)),
         )
         bus_paths = frozenset((*bus.source_paths(self.comms.root), bus.path))
+        registry_paths = frozenset(RegistryFile.source_paths(self.comms.root))
+        observed: RegistryObservation = UnreadRegistry()
         sources = (
             *inbox_sources,
             *(FileSource(path) for path in GoalWakeFile.watched_paths_in(self.comms.root)),
@@ -773,13 +816,16 @@ class InputObservation(BusSessionsRuntime, ABC):
                     targets = {session_id: state for session_id, state in self.drained.items()
                                if state.observing()}
                     names = tuple(self.sessions.require(session_id) for session_id in targets)
-                    read = asyncio.create_task(Coordination.run_worker(partial(
-                        self._read_observed_registry, names,
-                    )))
+                    observed = current = observed.following(
+                        names, not registry_paths.isdisjoint(watcher.observed_paths),
+                        self._reading_registry,
+                    )
+                    read = current.read
                     try:
                         document = await read
                     except UNAVAILABLE_DRAIN_ERRORS:
                         # Each consumer records failure against its own original owner.
+                        observed = UnreadRegistry()
                         entries = {}
                         for state in targets.values():
                             state.receive(RowMoved())
