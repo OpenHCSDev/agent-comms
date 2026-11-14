@@ -202,9 +202,10 @@ class GoalAction[Result: GoalDeclaration](
         """Clear the goal's wait after apply; members that preserve it override."""
         ctx.thread.goal.clear_wait(ctx.goals.waits.clear)
 
-    async def after_update(self, scheduler: object, session_id: object) -> None:
-        """Called after the goal update; members that schedule override."""
-        pass
+    @classmethod
+    async def after_update(cls, scheduler: object, session_id: object) -> None:
+        """Called after the goal update, on the action the scheduler chose and not on the
+        instance it applied; members that schedule override."""
 
 
     @classmethod
@@ -322,7 +323,8 @@ class ActiveGoalAction(
     GoalReportAction, ModelInvocable, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable,
     PeerInvocable,
 ):
-    async def after_update(self, scheduler: object, session_id: object) -> None:
+    @classmethod
+    async def after_update(cls, scheduler: object, session_id: object) -> None:
         await scheduler.schedule_goal(session_id)
 
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
