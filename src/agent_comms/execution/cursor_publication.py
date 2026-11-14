@@ -24,20 +24,20 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import DeferredRead
 from agent_comms.execution.cursor_owner import CommittedCursorOwner, CursorOwner, CursorState
 from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.publication_measurements import PublicationMeasurements
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.publisher import ResponseWrites
-from agent_comms.nominal.field_codec import AcpSessionId, InputId
+from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId
 from agent_comms.registry.privacy_reads import CursorMetadataRead
 from agent_comms.transport.attachment_scope import CursorScope
 from agent_comms.transport.runtime_server import RuntimeServer
 
 if TYPE_CHECKING:
     from agent_comms.execution.selected.participant import SelectedParticipant
-    from agent_comms.registry.registry_store import RegistryCut
 
 
 class CursorRetry(ABC):
@@ -140,6 +140,64 @@ class CursorDelivery:
         )
 
 
+@dataclass(frozen=True)
+class ObservedCursor(ABC):
+    """What one cursor observation found on the coordinator, under the scope it read first."""
+
+    scope: CursorScope
+
+    @abstractmethod
+    def envelope(self, revision: int, *, defer_busy: bool) -> CursorEnvelope: ...
+
+    def unavailable(self, scope: CursorScope, revision: int) -> CursorEnvelope:
+        return CursorEnvelope(scope, revision, UnavailableCursorObservation())
+
+
+@dataclass(frozen=True)
+class ForeignSessionCursor(ObservedCursor):
+    """The registry scopes this thread's cursor to another session: nothing is read."""
+
+    def envelope(self, revision: int, *, defer_busy: bool) -> CursorEnvelope:
+        return self.unavailable(self.scope, revision)
+
+
+@dataclass(frozen=True)
+class RescopedCursor(ObservedCursor):
+    """A read that took its scope again after it. A scope that moved meanwhile publishes as
+    unavailable under the new scope, whatever the read found."""
+
+    current: CursorScope
+
+    def envelope(self, revision: int, *, defer_busy: bool) -> CursorEnvelope:
+        if self.current != self.scope:
+            return self.unavailable(self.current, revision)
+        return self.unmoved(revision, defer_busy=defer_busy)
+
+    @abstractmethod
+    def unmoved(self, revision: int, *, defer_busy: bool) -> CursorEnvelope: ...
+
+
+@dataclass(frozen=True)
+class DeferredCursor(RescopedCursor):
+    """The read was deferred. A busy publisher retries it; any other reader learns that the
+    cursor is unavailable now."""
+
+    deferred: DeferredRead
+
+    def unmoved(self, revision: int, *, defer_busy: bool) -> CursorEnvelope:
+        if defer_busy:
+            raise self.deferred
+        return self.unavailable(self.current, revision)
+
+
+@dataclass(frozen=True)
+class ReadCursor(RescopedCursor):
+    state: CursorState
+
+    def unmoved(self, revision: int, *, defer_busy: bool) -> CursorEnvelope:
+        return CursorEnvelope(self.scope, revision, self.state.observation())
+
+
 class CursorPublication(CursorMetadataRead[CursorAdvancedUpdate]):
     """Connection-owned observer; durable proof and execution stay elsewhere."""
 
@@ -150,18 +208,29 @@ class CursorPublication(CursorMetadataRead[CursorAdvancedUpdate]):
     def delivery(self, session_id: AcpSessionId) -> CursorDelivery:
         return self.deliveries.setdefault(session_id, CursorDelivery())
 
-    def scope(self, thread_name: str, session_id: AcpSessionId) -> tuple[RegistryCut, CursorScope]:
-        cut = self.comms.registry.store.snapshot_with_authority()
-        return cut, cut.privacy.cursor_scope(cut.snapshot, thread_name, session_id)
-
-    def scope_after(
-        self, cut: RegistryCut, scope: CursorScope, thread_name: str, session_id: AcpSessionId,
+    @staticmethod
+    def scope(
+        bus: MessageBus, thread_name: str, session_id: AcpSessionId, store: Coordination,
     ) -> CursorScope:
-        """The scope now. It is a function of its registry cut, so a cut that is still the
-        store's answers without reading the registry again."""
-        if cut.matches_current():
-            return scope
-        return self.scope(thread_name, session_id)[1]
+        """The cursor scope in the registry now, read by the coordinator operation that reads
+        the cursor, so the scope and its cursor come from one operation."""
+        with store.session.capture(bus) as boundary:
+            return boundary.privacy.cursor_scope(boundary.registry, thread_name, session_id)
+
+    def _observed(
+        self, thread_name: str, session_id: AcpSessionId, source_reads: NativeEvidenceScope,
+        read: Callable[[MessageBus, RootId, str, NativeEvidenceScope, Coordination], CursorState],
+        store: Coordination,
+    ) -> ObservedCursor:
+        bus = MessageBus(self.comms.root, self.comms.registry, ResponseWrites)
+        scope = self.scope(bus, thread_name, session_id, store)
+        if not scope.matches_session(session_id):
+            return ForeignSessionCursor(scope)
+        try:
+            state = read(bus, scope.require_live().wire_root_id, thread_name, source_reads, store)
+        except DeferredRead as deferred:
+            return DeferredCursor(scope, self.scope(bus, thread_name, session_id, store), deferred)
+        return ReadCursor(scope, self.scope(bus, thread_name, session_id, store), state)
 
     async def observe(
         self, thread_name: str, session_id: AcpSessionId, *, defer_busy: bool = False,
@@ -185,43 +254,21 @@ class CursorPublication(CursorMetadataRead[CursorAdvancedUpdate]):
     ) -> CursorEnvelope:
         """``measured`` is this observation's own counter: the time it held the session's
         source reads, each part naming itself under it. What the observation spent waiting
-        for those reads is its total less this."""
-        revision = delivery.next_revision()
-        with measured.operation("scope"):
-            cut, scope = await Coordination.run_worker(
-                partial(self.scope, thread_name, session_id))
-        scope_after = partial(self.scope_after, cut, scope, thread_name, session_id)
+        for those reads is its total less this.
 
-        async def current_scope() -> CursorScope:
-            with measured.operation("scope_after"):
-                return await Coordination.run_worker(scope_after)
-        unavailable = CursorEnvelope(scope, revision, UnavailableCursorObservation())
-        if not scope.matches_session(session_id):
-            return unavailable
-        root_id = scope.require_live().wire_root_id
-        try:
-            bus = MessageBus(self.comms.root, self.comms.registry, ResponseWrites)
-            read_cursor = (
-                CursorOwner.refresh_async if advance else CursorOwner.read_async
-            )
-            with measured.operation("read"):
-                state = await read_cursor(
-                    bus, wire_root_id=root_id, owner_name=thread_name,
-                    source_reads=source_reads,
-                )
-        except DeferredRead:
-            current = await current_scope()
-            if defer_busy and current == scope:
-                raise
-            return CursorEnvelope(current, revision, UnavailableCursorObservation())
-        current = await current_scope()
-        if current != scope:
-            return CursorEnvelope(current, revision, UnavailableCursorObservation())
-        return CursorEnvelope(
-            scope,
-            revision,
-            state.observation(),
+        One coordinator operation reads the scope, the cursor and the scope again. Each scope
+        used to be its own thread-pool hop around the read: 9 of every 42 ms on 2026-11-14."""
+        revision = delivery.next_revision()
+        run, read = (
+            (Coordination.run_async, CursorOwner._refresh_owned) if advance
+            else (Coordination.run_read_async, CursorOwner._read_owned)
         )
+        with measured.operation("read"):
+            observed = await run(
+                CoordinationStore.path_in(self.comms.root),
+                partial(self._observed, thread_name, session_id, source_reads, read),
+            )
+        return observed.envelope(revision, defer_busy=defer_busy)
 
     async def trusted_metadata(
         self, thread_name: str, session_id: AcpSessionId,
