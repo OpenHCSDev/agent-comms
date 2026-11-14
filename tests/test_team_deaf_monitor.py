@@ -92,7 +92,7 @@ async def test_unconfirmed_monitor_reports_team_deaf_once(
                 snapshot = held_bus.registry.snapshot()
                 status = snapshot.status("colleague")
                 assert not status.is_receiving()
-                assert status.stopped
+                assert status.is_stopped()
                 paused = snapshot.seen_at("colleague")
                 assert status.paused_since(paused) == (paused,)
                 assert type(snapshot.statuses["colleague"]) is type(status)

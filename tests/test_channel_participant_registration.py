@@ -66,5 +66,5 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
         assert tuple(store.participants.get(r.recipient_lookup)
                      for r in initial.recipients) == before
         assert len(sealed_cohort_assignments(store, lookup)) == 2
-        assert comms.registry.snapshot().statuses[stopped.name].stopped
+        assert comms.registry.snapshot().statuses[stopped.name].is_stopped()
         assert all(not thread.process_alive for thread in comms.registry.snapshot().threads.values())
