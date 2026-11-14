@@ -27,10 +27,12 @@ from agent_comms.coordination.cohort import next_sealed_assignment
 from agent_comms.coordination.cohort_schema import AcceptanceFrontier
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.participant_store import ParticipantSnapshot
+from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import join_retirement
 from agent_comms.execution.controller import SessionUpdateSink
-from agent_comms.execution.cursor_owner import CursorOwner
+from agent_comms.execution.cursor_owner import CursorOwner, CursorState
 from agent_comms.execution.drain_failures import (
     DEFERRED_DRAIN_ERRORS,
     UNAVAILABLE_DRAIN_ERRORS,
@@ -51,7 +53,7 @@ from agent_comms.execution.reservation_rules import (
     ReservationViolationError,
     RuleCheck,
 )
-from agent_comms.execution.session_lifecycle import SessionLifecycle
+from agent_comms.execution.session_lifecycle import PublishedSession, SessionLifecycle
 from agent_comms.execution.session_owner_reads import OwnedSessionLifetime, SessionTaskOwner
 from agent_comms.execution.session_tasks import (
     BackgroundTask,
@@ -94,7 +96,11 @@ from agent_comms.registry.registry_store import RegistryEntryRevision
 from agent_comms.registry.thread_identity import ClaimedIdentity, OwnerIdentity
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.locked_store import GoalWakeFile
-from agent_comms.storage.maintenance_barrier import MaintenanceIngress, MaintenanceStatus
+from agent_comms.storage.maintenance_barrier import (
+    MaintenanceIngress,
+    MaintenancePhase,
+    MaintenanceStatus,
+)
 from agent_comms.transport.owner_requests import OwnerRetiredReply, StopOwnerRuntimeRequest
 from agent_comms.transport.runtime_server import RuntimeServer
 
@@ -249,12 +255,31 @@ class NoPrivateObservation(PrivateObservationState):
 
 
 @dataclass(frozen=True, slots=True)
+class InboxWork:
+    """What a drain reads beyond its message cut and registry entry. Two observations with
+    the same work would drain the same way."""
+
+    root_id: RootId
+    auto_wake: bool
+    published: PublishedSession | None
+    turn_open: bool
+    turn_running: bool
+    participant: ParticipantSnapshot
+    pending: WakeAssignment | None
+    cursor: CursorState
+    frontier: AcceptanceFrontier
+    store_inode: tuple[int, int]
+    maintenance_phase: type[MaintenancePhase]
+    maintenance_generation: int
+
+
+@dataclass(frozen=True, slots=True)
 class PrivateObservation(PrivateObservationState):
     """One drain's observation: its message cut, registry entry and own coordination work."""
 
     source_prefix: SourcePrefix
     entry: RegistryEntry
-    work: tuple
+    work: InboxWork
 
     def has_unobserved_inputs(self, bus: Bus, lookup: ThreadLookup) -> bool:
         """Every root commit wakes every session here; most commits append no message."""
@@ -814,18 +839,19 @@ class InputObservation(BusSessionsRuntime, ABC):
         ):
             observation = ExecutionWaitingObservation
         maintenance = self.comms.owners.maintenance._current_unlocked()
-        return observation(source_prefix, entry, (
-            root_id,
-            self.auto_wake,
-            self.sessions.published.get(session_id),
-            self.state(session_id).turn_open(),
-            self.state(session_id).turn_task.busy,
-            participant,
-            pending,
-            cursor,
-            frontier,
-            (original.st_dev, original.st_ino),
-            maintenance.phase, maintenance.generation,
+        return observation(source_prefix, entry, InboxWork(
+            root_id=root_id,
+            auto_wake=self.auto_wake,
+            published=self.sessions.published.get(session_id),
+            turn_open=self.state(session_id).turn_open(),
+            turn_running=self.state(session_id).turn_task.busy,
+            participant=participant,
+            pending=pending,
+            cursor=cursor,
+            frontier=frontier,
+            store_inode=(original.st_dev, original.st_ino),
+            maintenance_phase=maintenance.phase,
+            maintenance_generation=maintenance.generation,
         ))
 
     async def _observe_private_revision(

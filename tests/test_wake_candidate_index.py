@@ -107,7 +107,7 @@ def test_settled_observation_filters_committed_recipient_suffix(bus, peer):
     first = append_reply(bus, peer, recipient)
     entry = registry.store.read().entry(thread.name)
     prefix = SourcePrefix.capture(bus, 0)
-    observed = PrivateObservation(prefix, entry, ())
+    observed = PrivateObservation(prefix, entry, None)
     assert not observed.has_unobserved_inputs(bus, recipient.lookup)
     append_reply(bus, peer, RecordedThreadIncarnation("elsewhere", 9000.0))
     assert not observed.has_unobserved_inputs(bus, recipient.lookup)
