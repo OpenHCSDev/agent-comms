@@ -11,7 +11,7 @@ from agent_comms.registry.presence import PresenceChange, PresenceRows
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import InvalidRegistryDocument
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.registry.registry_tables import RegistryRowStore
+from agent_comms.registry.registry_tables import EditTables, RegistryRowStore
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.locked_store import RegistryFile
@@ -362,7 +362,7 @@ def test_captures_and_row_commits_visit_only_changed_keys(tmp_path, monkeypatch)
     with monkeypatch.context() as patch:
         patch.setattr(RowMapping, "__iter__", bounded_rows)
         encoded = original.source.encoded(document, original.document)
-        registry.store.rows.commit(encoded, original.source, PresenceChange.unchanged())
+        registry.store.rows.commit(encoded, original.source, EditTables.unchanged())
         refreshed = registry.store.rows.captured(original.source, registry.store.rows.revision())
     assert RegistryThreads.mapping_in(refreshed.raw)["second"] == FieldCodec.encode(changed)
     assert RegistryThreads.mapping_in(refreshed.raw)["first"] is RegistryThreads.mapping_in(original.source.raw)["first"]

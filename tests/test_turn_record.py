@@ -1,6 +1,5 @@
-"""Real registry/turn files and the public Comms phase entrypoint."""
+"""Real registry rows, turn rows included, and the public Comms phase entrypoint."""
 
-import json
 import os
 from shutil import copytree
 
@@ -34,8 +33,7 @@ def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
     moved = RegistryStore(RegistryFile.path_in(copied))
     entry = moved.read_entry('worker').entry.thread
     assert entry.turn_record.read().id == '0d8da7dc169a0c12f0a6f121b819ca38'
-    assert entry.turn_record.path == copied / 'turns' / original.path.name
-    assert moved.read().threads['worker'].turn_record.path == entry.turn_record.path
+    assert moved.read().threads['worker'].turn_record.identity == original.identity
     assert moved.read().threads['worker'].turn_record.registry_path == RegistryFile.path_in(copied)
 
     forged = RegistryStore(RegistryFile.path_in(copied)).stored()

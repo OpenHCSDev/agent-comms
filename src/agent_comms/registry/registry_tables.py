@@ -11,9 +11,9 @@ and a reader holding revision r reads only what changed after r.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import cache
 from pathlib import Path
 from typing import Annotated, ClassVar, Self, cast
@@ -21,9 +21,12 @@ from typing import Annotated, ClassVar, Self, cast
 from pydantic import JsonValue
 
 from agent_comms.coordination.errors import StaleFence
-from agent_comms.nominal.field_codec import FieldCodec, WireValue
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.turn_registry import TurnRows
+from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, WireValue
 from agent_comms.registry.presence import PresenceCapture, PresenceChange, PresenceRevision
 from agent_comms.registry.registry_document import RegistryDocument
+from agent_comms.registry.thread_identity import TurnIdentity
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.private_path import FileIdentity, FileRevision, MissingFile
 from agent_comms.storage.row_mapping import RowMapping
@@ -35,6 +38,7 @@ from agent_comms.storage.typed_table import (
     Index,
     SharedFileTables,
     StoreRows,
+    TableSchema,
     TypedTable,
 )
 
@@ -392,16 +396,78 @@ class PresenceSchema(SharedFileTables, DurableTables):
         return TypedTable.members_with(PresenceTables)
 
 
+class TurnTables(StoreRows):
+    """The turn family's rows: the record of each leased turn generation."""
+
+
+@dataclass(frozen=True)
+class TurnRow(TurnTables, TypedTable):
+    """One leased turn generation. The lease that names it writes it with the registry rows that
+    name it; a phase change rewrites it alone; the lease that supersedes it deletes it."""
+
+    lookup: Annotated[ThreadLookup, FrozenColumn(primary_key=True)]
+    generation: Annotated[int, FrozenColumn(primary_key=True)]
+    active: StoredWire
+
+    @staticmethod
+    def key(identity: TurnIdentity) -> dict[str, object]:
+        return {"lookup": identity.incarnation.require_recorded().lookup,
+                "generation": identity.generation}
+
+    @classmethod
+    def of(cls, identity: TurnIdentity, active: JsonValue) -> TurnRow:
+        return cls(active=StoredWire(active), **TurnRow.key(identity))
+
+
+class TurnSchema(SharedFileTables, DurableTables):
+    """The turn rows in the registry's file, judged apart from the registry's rows."""
+
+    @classmethod
+    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
+        return TypedTable.members_with(TurnTables)
+
+
+@dataclass(frozen=True)
+class TurnChange:
+    """The turns one edit's leases begin, in their wire form, and the generations they
+    supersede. A lease begun and superseded within one edit leaves no row."""
+
+    begun: tuple[tuple[TurnIdentity, JsonValue], ...] = ()
+    retired: tuple[TurnIdentity, ...] = ()
+
+    def write_in(self, db) -> None:
+        for identity, active in self.begun:
+            TurnRow.of(identity, active).upsert(db)
+        for identity in self.retired:
+            TurnRow.delete(db, **TurnRow.key(identity))
+
+
+@dataclass(frozen=True)
+class EditTables:
+    """What one registry edit writes beside its rows, on the transaction that commits them."""
+
+    presence: PresenceChange
+    turns: TurnChange = field(default_factory=TurnChange)
+
+    @classmethod
+    def unchanged(cls) -> Self:
+        return cls(PresenceChange.unchanged())
+
+    def write_in(self, db) -> None:
+        RegistryRowStore.presence_in(db, self.presence)
+        self.turns.write_in(db)
+
+
 @dataclass(frozen=True, slots=True)
-class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile):
+class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile, TurnRows):
     """The registry's rows: one owner-only SQLite file beside the bus, which every installation
     carries and nothing else can rebuild.
 
-    The file holds two table families: the registry's rows, which this store's snapshot judges,
-    and presence (PresenceSchema), with its own header, which a presence read judges. A commit
-    writes both on one transaction. A runtime copy retires its processes before any carry
-    reaches its presence (RegistryFile.copy_group), so neither family's schema change refuses a
-    reader of the other."""
+    The file holds three table families: the registry's rows, which this store's snapshot
+    judges; presence (PresenceSchema), with its own header; and the leased turns (TurnSchema).
+    Each read judges only its own family, and a commit writes all three on one transaction. A
+    runtime copy retires its processes before any carry reaches the newer families
+    (RegistryFile.copy_group), so no family's schema change refuses a reader of another."""
 
     root: Path
     tables = RegistryRows
@@ -410,8 +476,9 @@ class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile):
     def create_schema(cls, db) -> None:
         """A new registry file holds every family its commit writes."""
         super().create_schema(db)
-        if not PresenceSchema.stored_schema(db):
-            PresenceSchema.create_schema(db)
+        for family in (PresenceSchema, TurnSchema):
+            if not family.stored_schema(db):
+                family.create_schema(db)
 
     @classmethod
     def acquire_declarations(cls) -> None:
@@ -462,15 +529,15 @@ class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile):
             ))
 
     def commit(
-        self, raw: RawDocument, previous: RegistryCapture, presence: PresenceChange,
+        self, raw: RawDocument, previous: RegistryCapture, beside: EditTables,
     ) -> RegistryRevisionMark:
-        """Write the rows of ``raw`` that differ from ``previous`` as its successor, and the
-        presence the same edit changed, in one transaction; refused if another revision
-        committed since ``previous``."""
+        """Write the rows of ``raw`` that differ from ``previous`` as its successor, and what the
+        same edit wrote beside them, in one transaction; refused if another revision committed
+        since ``previous``."""
         with self.writing() as db:
             if not self.revision_in(db).accepts_write(previous.revision):
                 raise StaleFence("registry rows changed after this write read them")
-            self.presence_in(db, presence)
+            beside.write_in(db)
             mark = previous.mark.successor()
             scalars = raw
             for family in RegistryNamedRow.families():
@@ -490,11 +557,37 @@ class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile):
 
 
     @contextmanager
-    def presence_snapshot(self) -> Iterator[sqlite3.Connection]:
-        """A committed read judged against the presence family's declaration."""
+    def family_snapshot(self, family: type[TableSchema]) -> Iterator[sqlite3.Connection]:
+        """A committed read judged against one table family's declaration."""
         with self.committed_or_empty(type(self), self.reader_snapshot) as connection:
-            PresenceSchema.require_schema(connection)
+            family.require_schema(connection)
             yield connection
+
+    def turn_wires(self, identities: tuple[TurnIdentity, ...]) -> dict[TurnIdentity, JsonValue]:
+        with self.family_snapshot(TurnSchema) as db:
+            return {identity: rows[0].active.wire for identity in identities
+                    if (rows := TurnRow.select(db, **TurnRow.key(identity)))}
+
+    def change_turn_wire[Result](
+        self, identity: TurnIdentity,
+        change: Callable[[JsonValue], Iterable[tuple[JsonValue, Result]]],
+    ) -> tuple[Result, ...]:
+        """A phase change is no registry edit: it takes SQLite's write lock for its own row and
+        publishes nothing to the registry's readers."""
+        with self.writer_connection() as db, self.write_transaction(db):
+            self.require_maintenance_open()
+            TurnSchema.require_schema(db)
+            rows = TurnRow.select(db, **TurnRow.key(identity))
+            if not rows:
+                raise RelationViolationError(f"Active turn record is missing: {identity}")
+            original = written = rows[0].active.wire
+            results = []
+            for active, result in change(original):
+                written = active
+                results.append(result)
+            if written != original:
+                TurnRow.of(identity, written).upsert(db)
+            return tuple(results)
 
     def presence_revision_in(self, db) -> PresenceRevision:
         headers = PresenceHeader.select(db, header=1)
@@ -505,14 +598,14 @@ class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile):
         return self.remembered("presence_revision", self._read_presence_revision)
 
     def _read_presence_revision(self) -> PresenceRevision:
-        with self.presence_snapshot() as db:
+        with self.family_snapshot(PresenceSchema) as db:
             return self.presence_revision_in(db)
 
     def read_presence(self, earlier: PresenceCapture = PresenceCapture.empty()) -> PresenceCapture:
         """The presence committed now, read as the rows changed since ``earlier``."""
         if self.presence_revision() == earlier.revision:
             return earlier
-        with self.presence_snapshot() as db:
+        with self.family_snapshot(PresenceSchema) as db:
             revision = self.presence_revision_in(db)
             if revision == earlier.revision:
                 return earlier

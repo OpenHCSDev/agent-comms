@@ -13,6 +13,8 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar, Self
 
+from pydantic import JsonValue
+
 from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTable
@@ -28,6 +30,7 @@ from agent_comms.execution.turn_lease import (
     StoredTurnRecord,
     TurnDeclaration,
     TurnRecord,
+    TurnRowWriter,
 )
 from agent_comms.execution.turn_registry import TurnRegistry
 from agent_comms.messaging.routing import Routing
@@ -47,10 +50,12 @@ from agent_comms.registry.registry_document import (
     RegistrySnapshot,
 )
 from agent_comms.registry.registry_tables import (
+    EditTables,
     RawDocument,
     RegistryCapture,
     RegistryRowRevision,
     RegistryRowStore,
+    TurnChange,
 )
 from agent_comms.registry.thread_identity import TurnIdentity
 from agent_comms.registry.threads import Thread
@@ -286,8 +291,10 @@ class RegistryEdit:
     store: RegistryStore
     document: RegistryDocument
     original: RegistryRevision
-    superseded: list[StoredTurnRecord] = field(default_factory=list)
-    """Turn files a lease in this edit replaced; deleted once the registry stops naming them."""
+    begun: list[tuple[TurnIdentity, JsonValue]] = field(default_factory=list)
+    """Turns a lease in this edit began, written with the rows that name them."""
+    retired: list[TurnIdentity] = field(default_factory=list)
+    """Turns a lease in this edit superseded, deleted with the rows that stop naming them."""
     released: list[Callable[[], None]] = field(default_factory=list)
     """Other stores' writes this edit causes; they run after the registry lock is released, so
     no unit's registry read waits behind a second store's lock."""
@@ -343,27 +350,28 @@ class RegistryEdit:
             current,
             turn_generation=identity.generation,
             project_resume_due=False,
-            turn_record=StoredTurnRecord.begin(self.store.path, identity, turn, registry_type=RegistryStore),
+            turn_record=StoredTurnRecord.for_identity(self.store.path, identity, registry_type=RegistryStore),
         )
+        self.begun.append((identity, TurnRowWriter.encoded(turn)))
         if current.turn_generation:
-            self.superseded.append(StoredTurnRecord.for_identity(self.store.path, current.turn_identity, registry_type=RegistryStore))
+            self.retired.append(current.turn_identity)
         self.document.threads[current.name] = leased
         self.document.last_seen[current.name] = time.time()
         return leased, self.document.owners.generations[current.name]
 
     def commit(self) -> None:
-        # A declaration change commits its presence rows in its own transaction; a heartbeat
-        # commits presence alone. No row is dropped: any revision a reader captured names only
+        # A declaration change commits its presence rows in the transaction that commits its
+        # registry rows; a heartbeat commits presence alone. No row is dropped: any revision a reader captured names only
         # threads that have one.
         if self.document != self.original.document:
-            self.store.save_unlocked(self.document)
+            self.store.save_unlocked(
+                self.document, TurnChange(tuple(self.begun), tuple(self.retired)))
+            self.begun.clear()
+            self.retired.clear()
             self.original = self.store.read_revision_unlocked()
         else:
             self.store.rows.write_presence(
                 PresenceChange(self.document.last_seen, self.original.document.last_seen))
-        for record in self.superseded:
-            record.retire()
-        self.superseded.clear()
 
 
 @dataclass(frozen=True, slots=True)
@@ -500,11 +508,13 @@ class RegistryStore(
         return self._decode_snapshot(source)
 
     def read_turns(self, held: tuple[StoredTurnRecord, ...]) -> tuple[TurnDeclaration, ...]:
-        """Keep named turns from retiring during capture, then decode after release."""
-        registry, *turns = self._copy_sources(self, *(record.writers for record in held))
+        """Read the named turns' rows under the guard that excludes their retirement, then
+        decode after release."""
+        with self.guarded_read():
+            registry = self._capture_unlocked()
+            turns = self.rows.turn_wires(tuple(record.identity for record in held))
         decoded = self._decode_snapshot(registry)
-        return tuple(decoded.current_turn(record).read_copied(record, turn)
-                     for record, turn in zip(held, turns, strict=True))
+        return tuple(decoded.current_turn(record).read_held(record, turns) for record in held)
 
     def change_turn[Result](
         self, record: StoredTurnRecord, change: Callable[[LockedTurn], Result],
@@ -593,8 +603,8 @@ class RegistryStore(
     @property
     def cut_paths(self) -> tuple[Path, ...]:
         """The files one hold of the registry lock keeps consistent: every write replaces
-        ``written`` together, and a turn claim publishes its turn file in the same
-        transaction. Read under that lock, so a claim cannot fall between them."""
+        ``written`` together, its turn rows included. Read under that lock, so a claim cannot
+        fall between them."""
         return (self.path, *self.companion_paths)
 
     @property
@@ -604,8 +614,7 @@ class RegistryStore(
     @property
     def companion_files(self) -> dict[Path, type[RootFile]]:
         """Retain each companion with its owner's copying behavior."""
-        return {self.guard_path: PrivateRegistryGuard,
-                **dict.fromkeys(sorted(StoredTurnRecord.matching_in(self.path.parent)), StoredTurnRecord)}
+        return {self.guard_path: PrivateRegistryGuard}
 
     def revision_unlocked(self) -> tuple[RegistryRowRevision, FileObservation]:
         """The database instance, committed counter and guard that brackets every commit."""
@@ -691,7 +700,7 @@ class RegistryStore(
             stored = original.wire_document()
             raw = change(FieldCodec.parse(FieldCodec.compact(stored)))
             if raw != stored:
-                self._commit_unlocked(raw, original, PresenceChange.unchanged())
+                self._commit_unlocked(raw, original, EditTables.unchanged())
                 # The earlier revision stays cached: the next read applies only the rows this
                 # commit changed, and decodes them then, so a form the decoder refuses is refused
                 # by its reader, never here.
@@ -711,14 +720,15 @@ class RegistryStore(
             document = replace(original.document, purpose=HistoricalRootPurpose())
             RegistryEdit(self, document, original).commit()
 
-    def save_unlocked(self, document: RegistryDocument) -> None:
+    def save_unlocked(self, document: RegistryDocument, turns: TurnChange = TurnChange()) -> None:
         original = self.read_revision_unlocked()
         original.document.purpose.require_write()
         document.require_valid_rows(original.document)
         document.threads.bind(self.binding)
         raw = original.source.encoded(document, original.document)
         source = self._commit_unlocked(
-            raw, original.source, PresenceChange(document.last_seen, original.document.last_seen))
+            raw, original.source,
+            EditTables(PresenceChange(document.last_seen, original.document.last_seen), turns))
         # Still under the exclusive lock: the committed revision is this document.
         self.cache.entry = RegistryRevision.presented(self, source, document)
 
@@ -726,14 +736,14 @@ class RegistryStore(
         self.save_unlocked(document)
 
     def _commit_unlocked(
-        self, raw: RawDocument, previous: RegistryCapture, presence: PresenceChange,
+        self, raw: RawDocument, previous: RegistryCapture, beside: EditTables,
     ) -> RegistryCapture:
-        """Commit the rows of ``raw`` that differ from ``previous``, and the presence the same
-        edit changed, in one transaction bracketed by the guard."""
+        """Commit the rows of ``raw`` that differ from ``previous``, and what the same edit
+        wrote beside them, in one transaction bracketed by the guard."""
         mark = previous.mark.successor()
         self.cache.entry = UncachedRegistry()
         self.private_guard_unlocked().write(
-            self.path, mark, lambda: self.rows.commit(raw, previous, presence))
+            self.path, mark, lambda: self.rows.commit(raw, previous, beside))
         return RegistryCapture(self.rows.revision(), raw)
 
     def private_guard_unlocked(self) -> RegistryPrivacy:

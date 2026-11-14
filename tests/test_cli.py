@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 
@@ -36,7 +37,12 @@ from agent_comms.execution.owner_lifecycle import OwnerStartResult
 from agent_comms.execution.pi_vocabulary import ServiceTier
 from agent_comms.execution.restart_scope import OneOwner
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.execution.turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
+from agent_comms.execution.turn_lease import (
+    ActiveTurn,
+    RecordedGeneration,
+    StoredTurnRecord,
+    TurnRowWriter,
+)
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.channel_management import ArchiveThreadsTagDisposition, TagDisposition
 from agent_comms.messaging.channel_targets import (
@@ -53,6 +59,7 @@ from agent_comms.projects.checkouts import Checkout, LaunchCheckout
 from agent_comms.registry.activity import ActivityState
 from agent_comms.registry.catalog_document import NoCatalog
 from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.registry.registry_tables import RegistryRowStore, TurnChange
 from agent_comms.registry.thread_identity import TurnIdentity, UserThreadRole
 from agent_comms.registry.thread_model import UndeclaredModel
 from agent_comms.registry.thread_status import (
@@ -334,16 +341,15 @@ class TestSelectedTargetActions:
         assert parsed == explicit
         assert not QueueRestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus(), NoChannel(), catalog=NoCatalog())
         busy = TurnIdentity(owner.incarnation, owner.turn_generation + 1)
-        record = StoredTurnRecord.begin(
-            comms.registry.store.path,
-            busy,
-            ActiveTurn(
+        record = StoredTurnRecord.for_identity(
+            comms.registry.store.path, busy, registry_type=RegistryStore)
+        with (closing(RegistryRowStore.writer(comms.registry.store.path)) as db,
+              RegistryRowStore.write_transaction(db)):
+            TurnChange(((busy, TurnRowWriter.encoded(ActiveTurn(
                 TurnId('c9bc072f4fa8189466c2a8f2c36a56a4'),
                 owner.require_process(),
                 turn_generation=RecordedGeneration(busy.generation),
-            ),
-            registry_type=RegistryStore,
-        )
+            ))),)).write_in(db)
         assert QueueRestartCliCommand.thread_bindings(comms,
             replace(owner, turn_record=record, turn_generation=busy.generation), status, NoChannel(), catalog=NoCatalog())
         assert not QueueRestartCliCommand.thread_bindings(comms,
