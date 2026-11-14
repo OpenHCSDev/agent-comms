@@ -530,9 +530,6 @@ class Undealt(Open):
         """A session never dealt is dealt at its first start."""
         deal.redeal(StartedDeal())
 
-    def context_observed(self, deal: Redeals, usage: ContextUsage) -> None:
-        return
-
 
 @dataclass(frozen=True)
 class Blocked(ToolGateState):
@@ -717,6 +714,21 @@ class RuleGateSettings(ConfigurationRecord):
 
 
 @dataclass(frozen=True)
+class RefreshAt:
+    """Deal the rules again, once per compaction, when the context left falls to `remaining`
+    of the window the backend itself reports."""
+
+    remaining: float
+
+    def due(self, usage: ContextUsage) -> bool:
+        return usage.used >= (1 - self.remaining) * usage.size
+
+    @property
+    def key(self) -> str:
+        return f"{self.remaining}"
+
+
+@dataclass(frozen=True)
 class DealRecord(RuleGateSettings):
     """One deal, as persisted: the files dealt and what the audit must answer. The read log and
     the audit hang off it; a deal that follows lost context empties the read log and deletes
@@ -769,9 +781,36 @@ class DealRecord(RuleGateSettings):
         """The first requirement still owed holds the gate; with none owed it is open."""
         return self.mode.answer(deal, self, opened)
 
+    @property
+    def refreshes(self) -> tuple[RefreshAt, ...]:
+        return tuple(RefreshAt(remaining) for remaining in self.refresh_remaining)
 
+    def refreshes_passed(self, usage: ContextUsage) -> tuple[RefreshAt, ...]:
+        """The refreshes this deal declares that the context has reached."""
+        return tuple(refresh for refresh in self.refreshes if refresh.due(usage))
+
+    def while_supplied(self) -> DealRecord:
+        """This deal while every file it dealt is still installed.
+
+        Installation can move or remove packaged files without losing native context. The
+        old list then cannot be answered: startup must use the backend's current deck, not
+        crash while resolving the old list or silently waive the unread replacement.
+        """
+        if all(DealtSource.find(path) is not None for path in self.dealt):
+            return self
+        return UndealtRecord()
+
+
+@dataclass(frozen=True)
 class UndealtRecord(DealRecord):
     """The record of a session with no deal on disk: nothing dealt, nothing due."""
+
+    dealt: tuple[Path, ...] = ()
+    due: AuditDue = AuditDue(())
+
+    def refreshes_passed(self, usage: ContextUsage) -> tuple[RefreshAt, ...]:
+        """Nothing was dealt, so nothing comes back."""
+        return ()
 
     def resume[Said](self, deal: Callable[[], Said], kept: Said) -> Said:
         """A session never dealt is dealt at its first start, whatever started it."""
@@ -1110,22 +1149,19 @@ class RuleDeal(State, DealtCalls):
             return ""
         return "\n\n".join(part for part in (due.reminder(), due.template(self.audit)) if part)
 
-    def current(self) -> DealRecord:
-        """Keep a deal while its sources exist; a retired source requires a fresh deal.
-
-        Installation can move or remove packaged files without losing native context. The
-        old list then cannot be answered: startup must use the backend's current deck, not
-        crash while resolving the old list or silently waive the unread replacement.
-        """
+    def stored(self) -> DealRecord:
+        """The deal on disk as it was dealt, before asking whether its sources still exist."""
         try:
-            record = FieldCodec.decode(DealRecord, FieldCodec.parse(self.record.read_bytes()))
-            if all(DealtSource.find(path) is not None for path in record.dealt):
-                return record
+            return FieldCodec.decode(DealRecord, FieldCodec.parse(self.record.read_bytes()))
         except FileNotFoundError:
             pass
         except MalformedRecord:
             pass  # A record of another shape names no deal this gate can hold its session to.
-        return UndealtRecord((), AuditDue(()))
+        return UndealtRecord()
+
+    def current(self) -> DealRecord:
+        """Keep a deal while its sources exist; a retired source requires a fresh deal."""
+        return self.stored().while_supplied()
 
     def state(self) -> ToolGateState:
         return self.current().answer(self, self.dealt_opened.read())
@@ -1261,28 +1297,13 @@ class DealtRuleGate(ParsesItsAudit, AsksIfMeant, ReadsDealtSources, AuditsDealtR
     the gate every backend runs."""
 
 
-@dataclass(frozen=True)
-class RefreshAt:
-    """Deal the rules again, once per compaction, when the context left falls to `remaining`
-    of the window the backend itself reports."""
-
-    remaining: float
-
-    def due(self, usage: ContextUsage) -> bool:
-        return usage.used >= (1 - self.remaining) * usage.size
-
-    @property
-    def key(self) -> str:
-        return f"{self.remaining}"
-
-
 class Redeals(RuleDeal):
     """A deal its backend renews itself: at the first start, after each compaction, and at
     each declared share of context left, read from the backend's own context-use report."""
 
     @property
     def refreshes(self) -> tuple[RefreshAt, ...]:
-        return tuple(RefreshAt(remaining) for remaining in self.current().refresh_remaining)
+        return self.stored().refreshes
 
     @property
     def refreshed(self) -> Path:
@@ -1309,7 +1330,10 @@ class Redeals(RuleDeal):
         self.state().started(self)
 
     def observe_context(self, usage: ContextUsage) -> None:
-        self.state().context_observed(self, usage)
+        """Every model request reports its context. The gate's answer decides only what a
+        refresh still owed does, so a report that owes none never asks for it."""
+        if self.refreshes_owed(self.stored(), usage):
+            self.state().context_observed(self, usage)
 
     def refresh_due(self, usage: ContextUsage) -> None:
         """Every refresh the context passed that this compaction has not dealt yet deals once."""
@@ -1320,14 +1344,17 @@ class Redeals(RuleDeal):
         """Every refresh the context passed while the deal is read counts as dealt."""
         self.passed(usage)
 
+    def refreshes_owed(self, record: DealRecord, usage: ContextUsage) -> tuple[str, ...]:
+        """The refreshes of this deal the context reached that this compaction has not dealt."""
+        reached = record.refreshes_passed(usage)
+        if not reached:
+            return ()
+        done = frozenset(self.refreshed.read_text(encoding="utf-8").split())
+        return tuple(refresh.key for refresh in reached if refresh.key not in done)
+
     def passed(self, usage: ContextUsage) -> tuple[str, ...]:
         """The refreshes the context passed since the last compaction, each recorded once."""
-        done = frozenset(self.refreshed.read_text(encoding="utf-8").split())
-        due = tuple(
-            refresh.key
-            for refresh in self.refreshes
-            if refresh.due(usage) and refresh.key not in done
-        )
+        due = self.refreshes_owed(self.current(), usage)
         with self.refreshed.open("a", encoding="utf-8") as record:
             record.write("".join(f"{key}\n" for key in due))
         return due
