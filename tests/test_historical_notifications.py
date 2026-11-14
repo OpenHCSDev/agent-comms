@@ -88,7 +88,7 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
     assert painted.displayed_to == (source.provenance.require("reader").incarnation,)
     assert unpainted.displayed_to == ()
     # A human display is Read and nothing else: no context entry rides along with it.
-    assert painted.state == unpainted.state and not painted.state.consumed
+    assert painted.state == unpainted.state and not painted.state.is_consumed()
     assert live.bus.reads.cursor("reader", live.registry.snapshot()) == ReadCursor()
     ledger = ReadLedger.at(source.root)
     document = ledger.read()
@@ -139,7 +139,7 @@ def test_harness_consumption_survives_human_display(archived_notification):
             shown, human.incarnation, live.registry.snapshot(), document=None)
 
     consumed = notification()
-    assert consumed.state.consumed and not consumed.displayed_to
+    assert consumed.state.is_consumed() and not consumed.displayed_to
     assert consumed.label == consumed.timed_state(ConsumedDelivery.label, shown.at_ms)
     ledger = live.bus.reads.read()
     assert human_display() == ()
@@ -156,8 +156,8 @@ def test_native_context_commit_is_consumed():
 
     progress = AssignmentContextEvidence.from_columns(2_000).progress(pending_at_ms=1_000, queued=False)
     unshown = AssignmentContextEvidence.from_columns(None).progress(pending_at_ms=1_000, queued=False)
-    assert progress.consumed and progress.at_ms == 2_000
-    assert not unshown.consumed
+    assert progress.is_consumed() and progress.at_ms == 2_000
+    assert not unshown.is_consumed()
 
 
 def test_response_evidence_rejects_mixed_sql_columns():
@@ -316,7 +316,7 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
     # A delivered claim carries no consumed time of its own: without native or harness proof
     # its message is not consumed, whatever the claim's update time says. A running turn took
     # it; that is not a decision to ignore it.
-    assert delivered.state == TakenProgress(SentProgress(1_000)) and not delivered.state.consumed
+    assert delivered.state == TakenProgress(SentProgress(1_000)) and not delivered.state.is_consumed()
     assert delivered.label.startswith(f"{DeliveryProgress.label} ")
 
     # Only the captured live activity says whether the recipient is working now.
@@ -334,7 +334,7 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
     unconsumed = delivered_to(observed(ActivityState.WORKING), sent_activity)
     assert unconsumed.label.startswith(f"{DeliveryProgress.label} ") and not unconsumed.state.seen_working
     confirmed = replace(unconsumed, state=unconsumed.state.model_consumed(HarnessConsumedProgress(context_entry.at_ms)))
-    assert confirmed.state.seen_working and confirmed.state.consumed
+    assert confirmed.state.seen_working and confirmed.state.is_consumed()
     assert confirmed.label == confirmed.timed_state(WorkingTakenProgress.label, context_entry.at_ms)
     # An explicit ignore decision is the only Seen, not answering.
     ignored = IgnoredAssignment.build(FullWake(), None, None)
@@ -345,8 +345,8 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
                                        activity=sent_activity, updated_at_ms=2_000)
     assert unconfirmed.label == "Not answering" and not unconfirmed.state.seen_not_answering
     assert unconfirmed.state == IgnoredProgress(SentProgress(1_000))
-    assert sum(row.state.consumed for row in (working, declined, unconfirmed, idle)) == 3
-    assert not unconfirmed.state.consumed
+    assert sum(row.state.is_consumed() for row in (working, declined, unconfirmed, idle)) == 3
+    assert not unconfirmed.state.is_consumed()
     assert delivered_answer.label.startswith(f"{AnsweredProgress.label} ")
     assert delivered_answer.answer == AnsweredResponse(MessageReference(99, reply_id), 3_000)
     assert sent.recipient_identity == consumed.recipient_identity == answered.recipient_identity
@@ -378,7 +378,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
         (original.reference,)
     ).outcomes[original.seq, original.message_id]
     assert unrelated.answers == ()
-    assert not notification.state.consumed
+    assert not notification.state.is_consumed()
     assert notification.answer == UnansweredResponse()
 
     import os
@@ -494,7 +494,7 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
     current, = old.views.message_notifications_for_references(AllOutcomes(), (messages[0].reference,)).outcomes[
         messages[0].seq, messages[0].message_id
     ]
-    assert current.state.consumed and not current.displayed_to
+    assert current.state.is_consumed() and not current.displayed_to
     assert current.label == current.timed_state(ConsumedDelivery.label, messages[0].at_ms)
     with live.bus.history.read_sources() as sources:
         archived, = source.notification_references(sources, (messages[0].reference,), AllOutcomes()).outcomes[

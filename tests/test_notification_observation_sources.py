@@ -72,7 +72,7 @@ async def test_open_notification_interest_refreshes_after_input_only_context(tmp
             await service.observe(set())
             before = notification_reply(client)
             old, = before.outcomes[case.references[0].seq, case.references[0].message_id]
-            assert not old.state.consumed and old.answer == UnansweredResponse()
+            assert not old.state.is_consumed() and old.answer == UnansweredResponse()
             coordinator = coordinator_revision(comms)
 
             case.acknowledge(proof)
@@ -86,7 +86,7 @@ async def test_open_notification_interest_refreshes_after_input_only_context(tmp
             assert after.revision.activity == before.revision.activity
             assert after.revision.notifications != before.revision.notifications
             current, = after.outcomes[case.references[0].seq, case.references[0].message_id]
-            assert current.state.consumed and current.state.at_ms == proof.committed_at_ms
+            assert current.state.is_consumed() and current.state.at_ms == proof.committed_at_ms
             assert current.answer == UnansweredResponse()
             await service.observe(set())
             assert not client.poll()
@@ -101,7 +101,7 @@ async def test_open_notification_interest_refreshes_after_reply_only_commit(
         await service.observe(set())
         before = notification_reply(client)
         old, = before.outcomes[reference.seq, reference.message_id]
-        assert old.answer == UnansweredResponse() and not old.state.consumed
+        assert old.answer == UnansweredResponse() and not old.state.is_consumed()
         coordinator = coordinator_revision(comms)
 
         response = comms.messaging.send(
@@ -117,6 +117,6 @@ async def test_open_notification_interest_refreshes_after_reply_only_commit(
         assert after.revision.notifications != before.revision.notifications
         current, = after.outcomes[reference.seq, reference.message_id]
         assert current.answer == AnsweredResponse(response.reference, response.at_ms)
-        assert not current.state.consumed
+        assert not current.state.is_consumed()
         await service.observe(set())
         assert not client.poll()

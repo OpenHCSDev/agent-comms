@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
 from abc import ABC
 from collections import OrderedDict
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
@@ -71,10 +72,12 @@ from agent_comms.storage.locked_store import (
     BusFile,
     CompleteInputReader,
     FileStore,
+    OpenSQLiteReadConnection,
     SQLiteReader,
     StoreCommittedError,
 )
-from agent_comms.storage.private_path import FileIdentity, PresentPath
+from agent_comms.storage.private_path import FileIdentity, FileRevision, PresentPath
+from agent_comms.storage.store_files import DEFAULT_STORE_CONTENTION
 from agent_comms.storage.typed_table import (
     CarriedWriter,
     PracticeRebuild,
@@ -170,6 +173,36 @@ class DisplayUnread:
         return DisplayUnread(through, {query: counted[query] for query in queries})
 
 
+class DecodedRecords(OpenSQLiteReadConnection):
+    """One bus file's records as this process decoded them, on a handle that keeps the file.
+
+    A deleted file's inode goes to the next file created. Kept by device, inode and sequence
+    alone, a deleted bus's records answered for the bus that got its inode: the new root read
+    another root's message at the same sequence, with that root's recipients. While this
+    handle is open no other file has the inode, and a handle that no longer serves the path
+    is retired with its records.
+    """
+
+    limit: ClassVar[int] = 4096
+    held: ClassVar[dict[Path, DecodedRecords]] = {}
+    opening: ClassVar[threading.Lock] = threading.Lock()
+
+    def __init__(self, path: Path, revision: FileRevision) -> None:
+        super().__init__(Bus(path), revision, DEFAULT_STORE_CONTENTION)
+        self.records: OrderedDict[int, BusRecord] = OrderedDict()
+
+    @classmethod
+    def of(cls, path: Path) -> DecodedRecords:
+        revision = FileRevision.capture(path)
+        with cls.opening:
+            current = cls.held.get(path)
+            if current is None or not current.serves(revision):
+                for gone in [known for known in cls.held if known == path or not known.exists()]:
+                    cls.held.pop(gone).retire()
+                current = cls.held[path] = cls(path, revision)
+        return current
+
+
 class BusReader(
     RouteCounts,
     ConversationRead[Delivered],
@@ -237,9 +270,6 @@ class BusReader(
                 raise UnclaimedError(seq)
             return rows[0].claim_transition
 
-    _decoded: ClassVar[OrderedDict[tuple[FileIdentity, int], BusRecord]] = OrderedDict()
-    _decoded_limit: ClassVar[int] = 4096
-
     def records(self, sequences: Iterable[int]) -> tuple[BusRecord, ...]:
         """These records in order from one joined read, never one query per table per row.
 
@@ -248,17 +278,16 @@ class BusReader(
         every native session in the worker, and each decoded the same records again."""
         wanted = tuple(sequences)
         with self.observing() as db:
-            source = FileIdentity.from_stat(self.path.stat())
-            decoded = BusReader._decoded
-            missing = tuple(seq for seq in wanted if (source, seq) not in decoded)
+            decoded = DecodedRecords.of(self.path).records
+            missing = tuple(seq for seq in wanted if seq not in decoded)
             if missing:
                 header = BusRow.qualified("seq")
                 for row, record in BusCapability.stored_records(
                         db, f"{header} IN ({','.join('?' for _ in missing)})", missing):
-                    decoded[source, row.seq] = record
-                while len(decoded) > BusReader._decoded_limit:
+                    decoded[row.seq] = record
+                while len(decoded) > DecodedRecords.limit:
                     decoded.popitem(last=False)
-            return tuple(decoded[source, seq] for seq in wanted if (source, seq) in decoded)
+            return tuple(decoded[seq] for seq in wanted if seq in decoded)
 
     def lookup(self, seq: int) -> BusRecord:
         return self.records((seq,))[0]

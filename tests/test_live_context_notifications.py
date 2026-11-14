@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.coordination.attempt_states import PromptStartingAttempt
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.execution.native_input_proof import NativeContextJournal, NativeContextProof
@@ -68,16 +69,16 @@ async def test_reserved_context_notifies_before_any_assistant_reply(tmp_path: Pa
         assert len(originals) == source_count
         before = comms.views.message_notifications_for_references(AllOutcomes(), originals)
         before_rows = tuple(row for rows in before.outcomes.values() for row in rows)
-        assert before_rows and all(not row.state.consumed for row in before_rows)
+        assert before_rows and all(not row.state.is_consumed() for row in before_rows)
 
         await acknowledge_context(claim, context)
 
         after = comms.views.message_notifications_for_references(AllOutcomes(), originals)
         after_rows = tuple(row for rows in after.outcomes.values() for row in rows)
-        assert after_rows and all(row.state.consumed for row in after_rows)
+        assert after_rows and all(row.state.is_consumed() for row in after_rows)
         assert all(row.answer == UnansweredResponse() for row in after_rows)
         assert all(not row.displayed_to for row in after_rows)
-        assert claim.stage.progress.current.starting
+        assert claim.stage.progress.current is PromptStartingAttempt
         with Coordination(claim.store_path) as store:
             original = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
             assert original.require_context_proof() == context
@@ -92,10 +93,10 @@ async def test_triage_consumption_precedes_and_survives_later_verdict(tmp_path: 
         context = await recorded_input_context(claim)
         originals = tuple(row.source for row in claim.stage.assignments)
         before = claim.selected.comms.views.message_notifications_for_references(AllOutcomes(), originals)
-        assert all(not row.state.consumed for rows in before.outcomes.values() for row in rows)
+        assert all(not row.state.is_consumed() for rows in before.outcomes.values() for row in rows)
         await acknowledge_context(claim, context)
         active = claim.selected.comms.views.message_notifications_for_references(AllOutcomes(), originals)
-        assert sum(row.state.consumed for rows in active.outcomes.values() for row in rows) == 1
+        assert sum(row.state.is_consumed() for rows in active.outcomes.values() for row in rows) == 1
         assert all(row.answer == UnansweredResponse() and not row.displayed_to
                    for rows in active.outcomes.values() for row in rows)
         with Coordination(claim.store_path) as store:
