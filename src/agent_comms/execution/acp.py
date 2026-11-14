@@ -496,7 +496,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
-    async def _drain_private_nk(self, session_id: AcpSessionId, wire_root_id: RootId) -> int:
+    async def _drain_private_nk(self, session_id: AcpSessionId, wire_root_id: RootId) -> None:
         """Run a selected private wake for this ACP session.
 
         This explicitly configured path reuses the reviewed one-shot native
@@ -514,7 +514,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             # cannot run a wake. An eligible drain observes once after its
             # acceptance/selection, instead of verifying history before it too.
             await self.cursors.publish(session_id, thread_name)
-            return 0
+            return
         if not owner.process_identity.runs_here():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
         lookup = owner.incarnation.require_recorded().lookup
@@ -559,7 +559,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 self.inputs, session_id, owner, bus, wire_root_id, after_seq
             )
             await self.cursors.publish(session_id, thread_name)
-            return 0
+            return
         def select(store):
             with store.session.read():
                 participant = store.participants.get(lookup)
@@ -575,17 +575,16 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 return True
         if not await Coordination.run_read_async(store_path, select):
             await self.cursors.publish(session_id, thread_name, advance=True)
-            return 0
+            return
         # The accepted channel row stays in its durable assignment ledger.
         # During cutover, leave it unselected; the maintenance witness wakes
         # observation again on READY, without replaying this bus input.
         if (await Coordination.run_worker(self._comms.owners.maintenance.read)).turn_pending:
-            return 0
+            return
         SelectedWakeCheck(
             session_id=session_id, inputs=self.inputs, execution=execution,
             thread=thread_name, owner=snapshot.owner_identity(thread_name),
         ).schedule()
-        return 1
 
     def stop_all(self) -> None:
         """Request every executing session's own stop; attachments have no execution."""

@@ -135,7 +135,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
             assert resource.read_bytes() == b"before\n"
             (base / "dispatch").touch()
             result = await event("terminal")
-            assert result["pid"] == process.pid and result["drained"] == 1
+            assert result["pid"] == process.pid and result["woke"] is True
             assert native.provider.posts == 1 and resource.read_bytes() == b"after second pid\n"
             with wire(root).bus.bus.reading() as source:
                 assert source.claim_operation_used(acknowledgement.operation_id)

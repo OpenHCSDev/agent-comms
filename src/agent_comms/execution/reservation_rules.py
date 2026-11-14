@@ -39,5 +39,8 @@ class ReservationRule(DeclaredFamily, affix="Rule"):
         """The declared sentence, unless this rule reads the check to say what changed."""
         return self.explanation
 
+    def refusing(self, check: RuleCheck) -> None:
+        """Tell whoever the refused check was for. Most refusals leave it as it was."""
+
     @abstractmethod
     def violated(self, check: RuleCheck) -> bool: ...

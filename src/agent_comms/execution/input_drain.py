@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass, field, replace
-from functools import partial
+from functools import partial, reduce
 from typing import ClassVar, cast
 
 from acp.schema import PromptResponse
@@ -144,8 +144,9 @@ class SchedulesWake(SessionScheduleCheck, ABC):
     def schedule(self) -> None:
         try:
             self.require_valid()
-        except ReservationViolationError:
-            return  # The wake already running drains again when it ends.
+        except ReservationViolationError as refusal:
+            refusal.rule.refusing(self)
+            return
         self.inputs.register_wake(
             self.session_id, self.inputs.runtime.background(self.run())
         )
@@ -225,6 +226,9 @@ class PendingWakeScheduleRule(ReservationRule):
     def violated(self, check):
         return check.inputs.state(check.session_id).wake_pending()
 
+    def refusing(self, check):
+        check.inputs.state(check.session_id).receive(BehindWake())
+
 
 class DisabledWakeScheduleRule(ReservationRule):
     check_type = BackgroundWake
@@ -287,15 +291,15 @@ class PrivateObservation(PrivateObservationState):
         return (self.source_prefix.require_current(bus) > through
                 and bus.received_after(lookup, through))
 
-    async def drain(self, inputs, session_id: AcpSessionId, root_id: RootId) -> int:
-        return await inputs.effects._drain_private_nk(session_id, root_id)
+    async def drain(self, inputs, session_id: AcpSessionId, root_id: RootId) -> None:
+        await inputs.effects._drain_private_nk(session_id, root_id)
 
 
 class ExecutionWaitingObservation(PrivateObservation):
     """A previous execution blocks new input until its stored state changes."""
 
-    async def drain(self, inputs, session_id: AcpSessionId, root_id: RootId) -> int:
-        return 0
+    async def drain(self, inputs, session_id: AcpSessionId, root_id: RootId) -> None:
+        """Nothing to hand over until that execution's stored state changes."""
 
 
 class InboxNews(ABC):
@@ -354,6 +358,7 @@ class RowMoved(WeighedNews):
         return session.wake_pending()
 
 
+@dataclass(frozen=True, slots=True)
 class LocalChange(InboxNews):
     """Something in this process moved that need not add a new input file: a turn or a wake
     ended, a session attached."""
@@ -363,11 +368,18 @@ class LocalChange(InboxNews):
 
 
 class WakeStarted(InboxNews):
-    """A wake was registered for this session. A request for one that was refused, because
-    one is already running, registers nothing and is not this."""
+    """A wake was registered for this session."""
 
     def reaching(self, debt: InboxDebt) -> InboxDebt:
         return debt.wake_started()
+
+
+class BehindWake(InboxNews):
+    """A wake was asked for while an earlier one had not finished, so none was registered.
+    The earlier wake's end is news to this session."""
+
+    def reaching(self, debt: InboxDebt) -> InboxDebt:
+        return debt.behind_wake()
 
 
 class NoteVoided(InboxNews):
@@ -439,13 +451,19 @@ class InboxDebt(ABC):
     def wake_started(self) -> InboxDebt:
         return self
 
-    def finished(self, note: PrivateObservation) -> InboxDebt:
-        """The drain begun under this debt found nothing, and nothing moved while it looked."""
+    def behind_wake(self) -> InboxDebt:
         return self
 
-    def worked(self, note: PrivateObservation) -> InboxDebt:
-        """The drain begun under this debt did work at ``note`` and returned."""
+    def settled(self, note: PrivateObservation) -> InboxDebt:
+        """The drain begun at ``note`` left nothing more for this session to do there."""
         return self
+
+    async def conclude(
+        self, inputs: InputDrain, session_id: AcpSessionId, root_id: RootId,
+        note: PrivateObservation,
+    ) -> None:
+        """The drain begun at ``note`` returned under this debt. One told mid-drain that its
+        note is void still owes a drain, and has nothing to conclude."""
 
     def abandoned(self) -> InboxDebt:
         """The drain begun under this debt ended without settling."""
@@ -477,10 +495,6 @@ class DrainOwed(InboxDebt):
 
     def confirmed(self) -> InboxDebt:
         return InboxSettled(self.held)
-
-    def finished(self, note: PrivateObservation) -> InboxDebt:
-        """Something local changed while that drain ran: its note stands, and the debt too."""
-        return DrainOwed(note)
 
 
 @dataclass(frozen=True, slots=True)
@@ -520,36 +534,93 @@ class InboxSettled(InboxDebt):
 
 @dataclass(frozen=True, slots=True)
 class InboxDraining(InboxDebt):
-    """A drain is running. News it hears goes to the settlement it reaches; a local change
-    means its answer is already stale."""
+    """A drain is running, and has asked for no wake. What it hears reaches the debt it ends
+    on, a local change included: heard a moment after the drain or in the middle of it, that
+    leaves the note standing and a drain owed."""
 
-    heard: frozenset[WeighedNews] = frozenset()
+    heard: frozenset[InboxNews] = frozenset()
 
-    def hearing(self, news: WeighedNews) -> InboxDebt:
+    def hearing(self, news: InboxNews) -> InboxDebt:
         return replace(self, heard=self.heard | {news})
 
     def changed(self) -> InboxDebt:
-        return DrainOwed()
+        return self.hearing(LocalChange())
 
     def wake_started(self) -> InboxDebt:
         return WakeTookInbox(self.heard)
 
-    def finished(self, note: PrivateObservation) -> InboxDebt:
-        return InboxSettled(note, self.heard | {BusCommitted()})
+    def behind_wake(self) -> InboxDebt:
+        return DrainBehindWake(self.heard)
+
+    def resting(self, note: PrivateObservation) -> InboxDebt:
+        """What this drain leaves the session owing at ``note``, before what it heard."""
+        return InboxSettled(note)
+
+    def settled(self, note: PrivateObservation) -> InboxDebt:
+        return reduce(lambda debt, news: news.reaching(debt), self.heard, self.resting(note))
+
+    async def conclude(
+        self, inputs: InputDrain, session_id: AcpSessionId, root_id: RootId,
+        note: PrivateObservation,
+    ) -> None:
+        """It found nothing to start, which holds only if nothing moved while it read: never
+        absorb a message, owner or recovery change during a suspended read, or skip queued
+        independent work after a completed native turn. So it looks once more."""
+        if note != await inputs._observe_private_revision(session_id, root_id):
+            return
+        state = inputs.state(session_id)
+        state.inbox = state.inbox.settled(note)
+        await inputs.rest(session_id)
 
     def abandoned(self) -> InboxDebt:
         return DrainOwed()
 
 
 @dataclass(frozen=True, slots=True)
-class WakeTookInbox(InboxDraining):
-    """The running drain registered a wake. That wake empties this inbox, and its end, however
-    it ends, is news to this session; until then the one thing worth another drain is mail
-    past the cut this one drained from. Without this member the drain's work left no note at
-    all, and each commit of the wake it had just started ran a whole drain to look."""
+class DrainAskedWake(InboxDraining):
+    """The running drain found work and asked for a wake. A wake's end is news to this
+    session however it ends, so the drain settles at the cut it drained from without looking
+    again: the wake is already moving what a second look would compare."""
 
-    def worked(self, note: PrivateObservation) -> InboxDebt:
-        return self.finished(note)
+    async def conclude(
+        self, inputs: InputDrain, session_id: AcpSessionId, root_id: RootId,
+        note: PrivateObservation,
+    ) -> None:
+        inputs.state(session_id).inbox = self.settled(note)
+
+
+@dataclass(frozen=True, slots=True)
+class WakeTookInbox(DrainAskedWake):
+    """The running drain registered a wake. That wake empties this inbox; until it ends, the
+    one thing worth another drain is mail past the cut this one drained from. Without this
+    member the drain's work left no note at all, and each commit of the wake it had just
+    started ran a whole drain to look."""
+
+    def behind_wake(self) -> InboxDebt:
+        """A later request stands behind this drain's own wake."""
+        return self
+
+
+@dataclass(frozen=True, slots=True)
+class DrainBehindWake(DrainAskedWake):
+    """The running drain asked for a wake while an earlier one had not finished."""
+
+    def resting(self, note: PrivateObservation) -> InboxDebt:
+        return InboxAwaitsWake(note)
+
+
+@dataclass(frozen=True, slots=True)
+class InboxAwaitsWake(InboxSettled):
+    """Work is pending behind a wake this session could not join. That wake's end is news,
+    and it owes a drain whatever the inbox then looks like: the note here describes work
+    still to do, so finding it again settles nothing. The drain used to say this by returning
+    1, which left no note, and every tick until that wake ended drained to be refused again."""
+
+    def changed(self) -> InboxDebt:
+        return DrainOwed()
+
+    def witnessed(self, note: PrivateObservation) -> InboxDebt:
+        return self
 
 
 class BusSessionsRuntime:
@@ -781,7 +852,7 @@ class InputObservation(BusSessionsRuntime, ABC):
             async with drain_failures(self.comms, thread, entry.owner_identity):
                 attachment = self.state(session_id).owned().identifier
                 await self.sessions.config.apply_stored_settings(attachment)
-                drained = await self.drain_inbox(session_id)
+                await self.drain_inbox(session_id)
                 if self.effects.turns.goals.in_standby(attachment):
                     await Coordination.run_worker(partial(
                         self.comms.goals.recover_replied_goal_wait, session_id,
@@ -798,7 +869,7 @@ class InputObservation(BusSessionsRuntime, ABC):
                     return
                 state = self.state(session_id)
                 if state.self_tick_owed(
-                    drained, self.effects.cursors.delivery(session_id).needs_refresh,
+                    self.effects.cursors.delivery(session_id).needs_refresh,
                     self.turn_live(session_id),
                 ):
                     state.notify_observer()
@@ -1040,17 +1111,16 @@ class DrainedSession(SessionTaskOwner, InputEventState):
         self.receive(LocalChange())
         self.notify_observer()
 
-    def self_tick_owed(self, drained: int, needs_refresh: bool, turn_live: bool) -> bool:
+    def self_tick_owed(self, needs_refresh: bool, turn_live: bool) -> bool:
         """Notify only when this observer can consume the work on its next tick.
 
         A scheduled turn and a pending wake have their own completion, which
         wakes the observer; notifying for them now would spin on the same work.
-        A successful push already changed the wire, but cursor refresh still
-        needs its own tick.
+        Cursor refresh still needs its own tick.
         """
         if needs_refresh:
             return True
-        if drained or self.pending_turns or turn_live:
+        if self.pending_turns or turn_live:
             return False
         return self.inbox.asks_again
 
@@ -1330,45 +1400,40 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
         )
         return OwnerQueueInputDeliveryScope(frozenset(keys))
 
-    async def drain_inbox(self, session_id: AcpSessionId) -> int:
-        """Push undelivered messages to the client; returns count pushed."""
+    async def drain_inbox(self, session_id: AcpSessionId) -> None:
+        """Hand this session's undelivered messages to a turn. What it did reaches the
+        session's debt as news."""
         async with self.state(session_id).lock:
-            return await self.drain_owned_inbox(session_id)
+            await self.drain_owned_inbox(session_id)
 
-    async def _drain_private_if_changed(self, session_id: AcpSessionId, root_id: RootId) -> int:
+    async def _drain_private_if_changed(self, session_id: AcpSessionId, root_id: RootId) -> None:
         # The caller still validates the current private marker each time. The
         # ordinary loop still synchronizes configuration and schedules goals.
         state = self.state(session_id)
-        before = await self._observe_private_revision(session_id, root_id)
-        if state.inbox.holds(before):
+        seen = await self._observe_private_revision(session_id, root_id)
+        if state.inbox.holds(seen):
             state.inbox = state.inbox.confirmed()
-        else:
-            state.inbox = InboxDraining()
-            try:
-                result = await before.drain(self, session_id, root_id)
-                if result:
-                    state.inbox = state.inbox.worked(before)
-                    return result
-                # Never absorb a message/owner/recovery change during a suspended read,
-                # or skip queued independent work after a completed native turn.
-                if before != await self._observe_private_revision(session_id, root_id):
-                    return 0
-                state.inbox = state.inbox.finished(before)
-            finally:
-                state.inbox = state.inbox.abandoned()
-        # Idle is where the cursor refresh is owed, on the drain that reaches it as on
-        # every drain that finds it.
-        await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
-        return 0
+            await self.rest(session_id)
+            return
+        state.inbox = InboxDraining()
+        try:
+            await seen.drain(self, session_id, root_id)
+            await state.inbox.conclude(self, session_id, root_id, seen)
+        finally:
+            state.inbox = state.inbox.abandoned()
 
-    async def drain_owned_inbox(self, session_id: AcpSessionId) -> int:
+    async def rest(self, session_id: AcpSessionId) -> None:
+        """Idle is where the cursor refresh is owed, on the drain that reaches it as on
+        every drain that finds it."""
+        await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
+
+    async def drain_owned_inbox(self, session_id: AcpSessionId) -> None:
         # The revision read below checks this root against the bus marker and
         # the checkpoint, so no separate exclusive bus read is needed here.
         await self.state(session_id).turn.resume(self.comms.owners.maintenance)
         private_root = self.comms.owners.require_private_launch().wire_root_id
-        pushed = await self._drain_private_if_changed(session_id, private_root)
+        await self._drain_private_if_changed(session_id, private_root)
         WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
-        return pushed
 
     @property
     def background_wakes_disabled(self) -> bool:

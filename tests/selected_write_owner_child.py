@@ -45,11 +45,12 @@ async def main(base: Path) -> None:
             agent.inputs.auto_wake = True
             # The session start_owner published: the drain types it, and its cursor scope encodes it.
             session = AcpSessionId("beta")
-            count = await agent._drain_private_nk(
+            await agent._drain_private_nk(
                 session, comms.owners.require_private_launch().wire_root_id,
             )
+            woke = agent.inputs.state(session).wake_pending()
             await reply_turn_finished(agent, session)
-            print(json.dumps({"event": "terminal", "pid": os.getpid(), "drained": count}), flush=True)
+            print(json.dumps({"event": "terminal", "pid": os.getpid(), "woke": woke}), flush=True)
             await stopped.wait()
         finally:
             await agent.shutdown()
