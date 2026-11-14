@@ -521,19 +521,6 @@ class LendingConnection(sqlite3.Connection):
         super().close()
 
 
-class RetainedConnection(LendingConnection):
-    """A read connection kept alive across uses. close() releases the snapshot
-    without closing the connection; the next read reacquires a fresh snapshot."""
-
-    def close(self) -> None:
-        for lent in tuple(self._lent):
-            lent.retire()
-        self.rollback()
-
-    def actually_close(self) -> None:
-        super().close()
-
-
 class StoreContention(ABC):
     """Typed SQLite busy behavior shared by snapshots and writers."""
 
@@ -545,11 +532,10 @@ class StoreContention(ABC):
         """Apply this acquisition's wait budget to a retained SQLite handle."""
         connection.execute(f"PRAGMA busy_timeout={round(self.timeout * 1000)}")
 
-    def reader(self, uri: str, *, check_same_thread: bool = True,
-               factory: type = LendingConnection) -> sqlite3.Connection:
+    def reader(self, uri: str, *, check_same_thread: bool = True) -> sqlite3.Connection:
         return sqlite3.connect(
             uri, uri=True, isolation_level=None, timeout=self.timeout,
-            check_same_thread=check_same_thread, factory=factory)
+            check_same_thread=check_same_thread, factory=LendingConnection)
 
     def writer(
         self, path: str | os.PathLike[str], *,

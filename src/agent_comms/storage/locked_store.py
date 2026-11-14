@@ -46,9 +46,7 @@ from agent_comms.storage.store_files import (
     AtomicFile,
     DrainedWriters,
     FileTransactions,
-    LendingConnection,
     RankedStoreLock,
-    RetainedConnection,
     SqliteStore,
     StoreContention,
     StoreLock,
@@ -889,12 +887,11 @@ class SQLiteStorage(RootFile, SqliteStore):
 
     @classmethod
     def _open_reader(
-        cls, path: Path, contention: StoreContention, *,
-        check_same_thread: bool = True, factory: type = LendingConnection,
+        cls, path: Path, contention: StoreContention, *, check_same_thread: bool = True,
     ) -> sqlite3.Connection:
         return cls._configure_reader(
             contention.reader(path.resolve().as_uri() + "?mode=ro",
-                              check_same_thread=check_same_thread, factory=factory)
+                              check_same_thread=check_same_thread)
         )
 
     @classmethod
@@ -906,31 +903,19 @@ class SQLiteStorage(RootFile, SqliteStore):
             db.close()
             raise
 
-    _retained_readers: ClassVar[dict[Path, sqlite3.Connection]] = {}
-
     @classmethod
     def read_snapshot(
         cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
     ) -> sqlite3.Connection:
         """Open and acquire one consistent read-only snapshot with SQLite's busy handler.
 
-        Retains read connections as RetainedConnection instances. Callers that wrap in
-        closing() release the snapshot (rollback) without closing the connection; the
-        next read reacquires a fresh snapshot on the same connection."""
-        resolved = path.resolve()
-        retained = cls._retained_readers.get(resolved)
-        if retained is not None:
-            try:
-                cls.begin_snapshot(retained)
-                return retained
-            except Exception:
-                retained.actually_close()
-                cls._retained_readers.pop(resolved, None)
+        A refusal names the store and SQLite's own error, so a reader of the reported
+        traceback knows which database was busy and why without reproducing it. The caller
+        closes it. One kept per path was never closed: the file's WAL never checkpointed on
+        its writer's close, and after a restore replaced the file the kept one still read
+        the old file, so a restored store compared unequal to its own backup."""
         try:
-            db = cls._acquire_snapshot(cls._open_reader(
-                path, contention, factory=RetainedConnection))
-            cls._retained_readers[resolved] = db
-            return db
+            return cls._acquire_snapshot(cls._open_reader(path, contention))
         except sqlite3.OperationalError as error:
             error.add_note(f"SQLite store: {path}; SQLite error: "
                            f"{error.sqlite_errorname} ({error.sqlite_errorcode})")
