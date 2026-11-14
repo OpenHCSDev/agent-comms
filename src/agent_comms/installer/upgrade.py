@@ -1125,8 +1125,10 @@ class PreparedMigration(Extendable):
             resources = bus_resources(files, writer_stores)
             with pinned_bus_files(files, resources) as pins:
                 before = saved_bus_files(files, resources)
-                return cls(hold, before, outgoing.verify(files.root), files, pins.pop_all(),
-                           writer_stores)
+                # The outgoing runtime reads the root it owns: a practice copy is already the
+                # target's (its copy retired processes), so its baseline is read at its source.
+                return cls(hold, before, outgoing.verify(files.source_root()), files,
+                           pins.pop_all(), writer_stores)
 
     def carry(
         self, pending: tuple[Carry, ...], staged: TargetStack,
