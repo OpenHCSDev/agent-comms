@@ -102,3 +102,16 @@ def test_any_teammate_can_pull_the_emergency_release(comms, monkeypatch):
     assert [identity["name"] for identity in released["release"]["released"]] == ["choked"]
     assert type(comms.registry.require("choked").goal.require().state) is ActiveGoal
     assert type(comms.registry.require("owner-paused").goal.require().state.pause_source) is OwnerPause
+
+
+def test_a_chokehold_older_than_any_horizon_is_still_answerable(comms, monkeypatch):
+    """The pause outlives every burst horizon; its question must too, or the quoting answer
+    that releases it can never match a line."""
+    _teammate(comms, monkeypatch, "ignored")
+    Chokehold(comms.registry.require("ignored").incarnation,
+              SimpleNamespace(seq=1, message_id="check")).enforce(comms)
+    sent = time.time()
+    monkeypatch.setattr(time, "time", lambda: sent + 30 * 24 * 60 * 60)
+
+    assert ChokeholdAnswer.held(comms, "ignored")
+    assert _burst(comms, "ignored")
