@@ -13,7 +13,11 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.execution.launch_root import LaunchRoot, started
 from agent_comms.execution.root_runtime import RootRuntimeStore
-from agent_comms.execution.worker import lower_priority, open_every_file_this_host_may_need
+from agent_comms.execution.worker import (
+    hand_the_gil_back_quickly,
+    lower_priority,
+    open_every_file_this_host_may_need,
+)
 from agent_comms.installer.active_route import ActiveRoute
 from agent_comms.transport.owner_connection import socket_path
 
@@ -32,6 +36,7 @@ async def run_host(comms: Comms, listener_fd: int) -> None:
     try:
         lower_priority()
         open_every_file_this_host_may_need()
+        hand_the_gil_back_quickly()
         comms.owners.require_private_launch()
         comms.owners.launch_authority.check()
         host = RootRuntimeStore.at(comms.root).read().host.observed(comms.root)
