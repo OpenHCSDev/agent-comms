@@ -64,6 +64,56 @@ to its determining behavior owner. Break a cycle by factoring shared behavior
 into that existing lower owner; do not replace it with local imports, reexports,
 a service locator or a newly named helper package.
 
+## Flat modules drafted from the import graph
+
+Drafted on 2026-11-09 from main's absolute imports: each flat module's import edges to every
+package, counted both ways, except that a module's own use of `nominal` or `storage` casts no
+vote (they are foundations everything imports). A row below holds the modules with at least
+60% of their package edges in that package. Rows are destinations NRA moves by; review each
+before its batch runs. Every batch passes the applied-tree, import-walk, guard and named-test
+gate that P3 passed.
+
+| Package | Flat modules the import graph sends here | Review |
+|---|---|---|
+| `execution` | `acp_failure.py`, `agent_backend.py`, `agent_event_updates.py`, `agent_events.py`, `annotation_disclosure.py`, `backend.py`, `context_reading.py`, `controller.py`, `coordinated_runtime.py`, `diagnostics.py`, `extension_ui.py`, `following_inputs.py`, `fresh_private_session.py`, `historical_native_inputs.py`, `image_input.py`, `input_effects.py`, `ordinary_turn_rules.py`, `participant_identity.py`, `pending_requests.py`, `pi_commands.py`, `pi_durable_backend.py`, `pi_events.py`, `pi_helper.py`, `pi_native_backend.py`, `pi_payloads.py`, `pi_rpc.py`, `pi_wire.py`, `private_send_claim.py`, `private_send_rules.py`, `private_send_stage.py`, `private_sidecar.py`, `prompt_state.py`, `publication_measurements.py`, `request_progress.py`, `reservation_rules.py`, `send_outcome.py`, `session_config_options.py`, `session_effects.py`, `session_revision.py`, `started_input.py`, `test_lease.py`, `tracked_turn.py`, `transcript_routes.py`, `transcript_sources.py`, `triage_native_sources.py`, `working_memory_disclosure.py` | draft: 46 modules, >= 60% import share |
+| `coordination` | `acp_request_consumer.py`, `assignment_store.py`, `attempt_start.py`, `attempt_states.py`, `attempt_store.py`, `cohort_foreground.py`, `durable_turn.py`, `execution_states.py`, `execution_store.py`, `notification_assignment.py`, `obligation_states.py`, `owner_fence.py`, `participant_store.py`, `reason_codes.py`, `recovery_reader.py`, `recovery_states.py`, `response_acknowledgement.py`, `working_memory_annotations.py`, `working_memory_worker.py` | draft: 19 modules, >= 60% import share |
+| `messaging` | `activity_clocks.py`, `audience_manifest.py`, `bus_activity_index.py`, `bus_tables.py`, `history_result.py`, `mentions.py`, `notification_reads.py`, `page_traversal.py`, `producer_stamp.py`, `projection_source.py`, `response_policy.py`, `sent_message.py`, `wake.py`, `working_memory_policy.py` | draft: 14 modules, >= 60% import share |
+| `registry` | `cli_options.py`, `collaboration_ledger.py`, `heartbeat_delivery.py`, `history_view.py`, `owner_release.py`, `presence.py`, `registration_change.py`, `route_client.py`, `runtime_info.py`, `service_sender.py`, `session_file.py`, `shared_ledger.py`, `snapshot_slices.py` | draft: 13 modules, >= 60% import share |
+| `cli_bridges` | `agent_runtime.py`, `cli_arguments.py`, `cli_protocol.py`, `harness_delivery_states.py`, `runtime_updates.py`, `session_receipts.py`, `tool_results.py`, `usage_reading.py`, `wire_models.py` | draft: 9 modules, >= 60% import share |
+| `transport` | `connector_profile.py`, `core_access.py`, `host_logs.py`, `remote_core.py`, `tailnet_buses.py`, `tailnet_profiles.py`, `tailnet_tools.py`, `tool_request.py` | draft: 8 modules, >= 60% import share |
+| `planning` | `attempt_resolution.py`, `command.py`, `order_runs.py`, `order_story.py`, `phase_evidence.py`, `phase_tasks.py` | draft: 6 modules, >= 60% import share |
+| `installer` | `build_artifact.py`, `deal_prompt.py`, `install_choices.py`, `runtime_preparation.py`, `runtime_processes.py` | draft: 5 modules, >= 60% import share |
+| `cli_verbs` | `cli_command.py`, `cli_commands.py`, `cli_result.py`, `schema_report.py`, `target_fields.py` | draft: 5 modules, >= 60% import share |
+| `projects` | `rule_probes.py`, `storage_admission.py` | draft: 2 modules, >= 60% import share |
+| `ui_model` | `notification_read.py`, `revision_views.py` | draft: 2 modules, >= 60% import share |
+| `team` | `slop.py` | draft: 1 modules, >= 60% import share |
+| `context_segments` | `retained_context.py` | draft: 1 modules, >= 60% import share |
+
+### Mixed: two or three packages share their edges
+
+Decide each from its declarations and consumers (Destination ownership above); the leading
+package is listed first.
+
+- leaning `execution`: acp, acp_extension, active_route, assignment_states, channel_coding_tools, check_root, config_options, context_store, cursor_owner, cursor_publication, drain_failures, errors, external_transcript, importing, input_attempt, input_disposition, input_key, input_origin, launch_root, nk_foreground, owned_send, owner_cutover, peer_relevance, pi_counts, pi_vocabulary, queued_input, remote_core_process, reported_turn, restart_queue, restart_refusals, routing, runtime_server, storage_room, systemd_unit, team_heartbeat, text_digest, transcript_events, transcript_updates, transcripts, working_memory_requests
+- leaning `messaging`: agent_inbox, bus, bus_publication, channel_input_batch, class_fact, compaction_notices, display_references, envelope_claim_transitions, exporting, historical_views, history_views, meant_voice, message_notification, notification_evidence, notification_progress, presentation, recorded_bus, registry_provenance, retained_task_facts, send_request, served_bus, task_sources, wake_candidate_index
+- leaning `coordination`: annotation_correction, attempt_recovery, cli_context, cli_failures, cohort_schema, manual_compaction_bridge, optional_awareness_projection, owner_protocol, private_registry_guard, private_runtime_schema, proven_source_coverage, publisher, response_conversation, runtime, service_passes, transcript_publication, wake_policy
+- leaning `registry`: activity, agent_activity, catalog_store, channel_management, frozen_recipient, held_orders, order_work, owner_launch, owner_restart, private_nk_entrypoint, relationships, restart_scope, team_service, view_unread
+- leaning `transport`: connector, connector_caller, display_order, owner_connection, pi_rule_gate, send_result, tool_caller, tool_declaration, tool_denial, tool_result, working_memory_labels, working_memory_questions
+- leaning `planning`: change_report, heartbeat_subjects, lifecycle, lifecycle_capability, owner_requests, progress_claims, runtime_requests, team_hud_records
+- leaning `installer`: build_identity, cli_native_package, connector_store, launch_runtime, package_stamp, root_runtime, watch_phase
+- leaning `projects`: closed_pull_requests, integration, plan_reading, problem_number, shell_effects, work_branches, work_dispatch
+- leaning `cli_bridges`: declared_verb, fd_readiness, inbox_watch, rule_deal, tool_calls, watched
+- leaning `team`: behaviour_patterns, head_review, recorded_time, team_hud
+- leaning `cli_verbs`: catalog_document, cli
+- leaning `task_attachments`: disclosure_text
+- leaning `host_services`: harness_install
+- leaning `nominal`: registration_inheritance
+
+### Only flat-to-flat edges
+
+They move with the neighbours they import: code_lines, core_stamp, declared_choice, delivery_failure, delivery_policy, delivery_presentation, image_inputs, instruction_deck, jsonl_stream, login, nominal_census, open_viewer, pattern_sources, probed_command, route_selection, sent_reports, served_endpoints, source_proof_requirement, team_frame_file, transcript_merge, unstarted_runtime
+
+
 ## Ordered migration
 
 The existing shared fleet must first have its measured memory budget and the
