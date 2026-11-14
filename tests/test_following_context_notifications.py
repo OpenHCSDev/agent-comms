@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.coordination.attempt_states import PromptStartingAttempt
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.errors import RelationViolationError
@@ -201,18 +202,18 @@ async def test_two_following_ids_and_grouped_keys_keep_their_own_first_proof(tmp
         second.start()
         assert first.input_event.input_id != second.input_event.input_id != claim.input_id
         originals = tuple(row.source for row in claim.stage.assignments)
-        assert all(state.consumed for state in notification_states(claim, originals))
+        assert all(state.is_consumed() for state in notification_states(claim, originals))
         assert all(not row.model_contexts() for row in first.dispositions.read(
             first.keys + second.keys).rows.values())
-        assert not any(state.consumed for state in first.notification_states() + second.notification_states())
+        assert not any(state.is_consumed() for state in first.notification_states() + second.notification_states())
         proof = await first.verify()
         first.acknowledge(proof)
         for row in first.dispositions.read(first.keys).rows.values():
-            assert row.has_started and not row.items_with(Unresolved, row)
+            assert row.counts_as_started() and not row.items_with(Unresolved, row)
             assert row.model_contexts() == (proof,)
         assert first.notification_states() == (ShownToModelProgress(proof.committed_at_ms),) * 2
         assert all(not row.model_contexts() for row in second.dispositions.read(second.keys).rows.values())
-        assert not any(state.consumed for state in second.notification_states())
+        assert not any(state.is_consumed() for state in second.notification_states())
         second_proof = await second.verify()
         second.acknowledge(second_proof)
         assert all(row.model_contexts() == (second_proof,)
@@ -223,7 +224,7 @@ async def test_two_following_ids_and_grouped_keys_keep_their_own_first_proof(tmp
             original = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
             assert original.require_context_proof().input_id == claim.input_id
             assert len(NativeRuntimeInput.select(store.session._connection)) == 1
-        assert claim.stage.progress.current.starting  # No terminal answer was supplied.
+        assert claim.stage.progress.current is PromptStartingAttempt  # No terminal answer was supplied.
 
 
 async def test_one_emitted_event_alone_cannot_prove_context(tmp_path: Path):

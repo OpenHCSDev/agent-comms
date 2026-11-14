@@ -66,7 +66,7 @@ def test_only_retained_complete_body_proof_promotes_consumption(
     current, = comms.views.message_notifications_for_references(
         AllOutcomes(), (source.reference,),
     ).outcomes[source.seq, source.message_id]
-    assert current.state.consumed is consumed
+    assert current.state.is_consumed() is consumed
     assert current.answer == UnansweredResponse()
     assert not current.displayed_to
     assert recorded.monitor == monitor
