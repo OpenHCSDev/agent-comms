@@ -5,8 +5,6 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass
 
 from agent_comms.coordination.assignment_states import (
@@ -14,6 +12,7 @@ from agent_comms.coordination.assignment_states import (
     FailedAssignment,
     TriagePendingAssignment,
 )
+from agent_comms.coordination.cohort_schema import CohortTable
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.durable_turn import DurableTurn
 from agent_comms.coordination.errors import IdentityConflict, RetryScheduled, StaleFence
@@ -28,9 +27,8 @@ from agent_comms.execution.native_input_record import (
     TriageNativeExecution,
 )
 from agent_comms.execution.native_prompt_binding import (
-    PromptBinding,
-    expected_prompt_bindings,
     expected_prompt_matches_journal,
+    native_request_digest,
 )
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.execution.native_session_files import NativeSessionFiles
@@ -39,34 +37,42 @@ from agent_comms.execution.private_send_rules import (
     NativeIdentityCheck,
     NativeReservationCheck,
 )
-from agent_comms.execution.private_sidecar import native_request_digest
 from agent_comms.execution.reservation_rules import ReservationRule, ReservationViolationError
 from agent_comms.execution.selected.triage import DecidedTriageRecord, SelectedTriage
 from agent_comms.execution.turn_failure import TurnFailure
-from agent_comms.nominal.field_codec import InputId, RootId, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, InputId, RootId, ThreadLookup
 from agent_comms.nominal.lifecycle_capability import Active
 from agent_comms.nominal.text_digest import TextDigest
-from agent_comms.storage.typed_table import SqlValue
+from agent_comms.storage.typed_table import SqlValue, TypedRow
+
+
+@dataclass(frozen=True)
+class _SourceRoot(TypedRow):
+    wire_root_id: RootId
 
 
 @dataclass(frozen=True, kw_only=True)
 class NativeBindingCheck(NativeIdentityCheck):
-    row: PromptBinding
+    """A reserved input against the root and the prompt a send names for it."""
+
+    row: NativeRuntimeInput
+    source_root: RootId
+    """The wire root of the sealed claims the input answers."""
     wire_root_id: RootId
     prompt_digest: TextDigest
 
 
 class NativeBindingRootRule(ReservationRule):
     check_type = NativeBindingCheck
-    explanation = "The prelaunch binding belongs to a different wire root."
+    explanation = "The reserved input's claims belong to a different wire root."
 
     def violated(self, check: NativeBindingCheck) -> bool:
-        return check.row.wire_root_id != check.wire_root_id
+        return check.source_root != check.wire_root_id
 
 
 class NativeBindingContentRule(ReservationRule):
     check_type = NativeBindingCheck
-    explanation = "The native request digest differs from its durable prelaunch binding."
+    explanation = "The native request digest differs from the one its reservation expects."
 
     def violated(self, check: NativeBindingCheck) -> bool:
         return TextDigest(check.row.expected_prompt_digest) != check.prompt_digest
@@ -119,10 +125,21 @@ class NativeSendStage(ABC):
         await Coordination.run_worker(lambda: owner.require_registry(bus._registry))
 
     def reserve(self, store: Coordination, owner: ParticipantOwner, token_digest: str,
-                *, attempt: int = 0) -> str:
+                prompt: str, *, attempt: int = 0) -> str:
+        """Reserve one input for ``prompt``, before any native process starts.
+
+        The row is written with the digest of the request its prompt becomes (the pinned
+        native ``pi-input-request-v1`` envelope, as ``AgentSession._claimNativeInput``
+        computes it, not the bare prompt bytes), so no input is reserved without the prompt
+        it stands for and no owner-generation advance fits between the two.
+
+        A reservation whose prompt or claims are then refused stays: it is never rolled
+        back, and no other input becomes eligible for automatic replay.
+        """
         input_id = InputId.mint()
         with store.session.writing() as db:
             NativeRuntimeTable.require_installed(db)
+            CohortTable.require_installed(db)
             owner.require(store, self.recipient_lookup)
             self.reserve_claim(store, db, attempt=attempt)
             NativeRuntimeInput(
@@ -132,9 +149,33 @@ class NativeSendStage(ABC):
                 owner_lookup=self.recipient_lookup,
                 owner_generation=owner.generation,
                 owner_token_digest=token_digest,
+                expected_prompt_digest=native_request_digest(prompt),
             ).insert(db)
             self.execution.record_sources(db, input_id, self.assignments, attempt=attempt)
+        if not FieldCodec.decode(str, prompt):
+            raise ValueError("a reserved input requires nonempty original text")
+        self.source_root(store)
         return input_id
+
+    def source_root(self, store: Coordination) -> RootId:
+        """The one wire root the sealed claims of this stage were accepted under."""
+        with store.session.read():
+            roots = {
+                root.wire_root_id
+                for assignment in self.assignments
+                for root in _SourceRoot.read(store.session._connection.execute(
+                    "SELECT r.wire_root_id FROM claim_batch_members m "
+                    "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
+                    "AND r.wire_seq=m.wire_seq AND r.message_id=? AND r.sealed=1 "
+                    "WHERE m.claim_id=? AND m.recipient_lookup=?",
+                    (assignment.message_id, assignment.assignment_id,
+                     assignment.recipient_lookup),
+                ))
+            }
+        if len(roots) != 1:
+            raise IdentityConflict(
+                "a reserved input's claims require one sealed canonical wire root")
+        return next(iter(roots))
 
     def identity(self, input_id: InputId, owner) -> NativeInputIdentity:
         return NativeInputIdentity(
@@ -201,14 +242,14 @@ class NativeSendStage(ABC):
                 raise IdentityConflict(
                     "Pi live assembled context differs from its reserved input proof"
                 )
-            # Binding writers acquire sidecar before SQL. Keep that order here,
-            # and finish journal I/O before acquiring the coordinator snapshot.
-            with self.bound_prompt(store, input_id, owner, wire_root_id, prompt) as binding:
-                if not expected_prompt_matches_journal(context.session_file, binding, evidence=evidence):
-                    raise IdentityConflict("live native input lacks exact bound source prompt equality")
-                with store.session.read():
-                    original = self.pending_input(store, input_id, owner, token_digest)
-                    original.require_session_identity().require_context(context)
+            with store.session.read():
+                original = self.pending_input(store, input_id, owner, token_digest)
+                self.require_bound_prompt(store, original, owner, wire_root_id, prompt)
+            # The reserved row never changes its digest: the journal is read after the
+            # coordinator snapshot is released, never under it.
+            if not expected_prompt_matches_journal(context.session_file, original, evidence=evidence):
+                raise IdentityConflict("live native input lacks exact bound source prompt equality")
+            original.require_session_identity().require_context(context)
 
     def require_claim(self, store: Coordination) -> None:
         for captured in self.assignments:
@@ -246,34 +287,35 @@ class NativeSendStage(ABC):
         ):
             raise IdentityConflict("Native input changed its original source membership")
 
-    @contextmanager
-    def bound_prompt(
+    def bound_input(
         self, store: Coordination, input_id: InputId, owner: ParticipantOwner,
         wire_root_id: RootId, prompt: str,
-    ) -> Iterator[PromptBinding]:
-        with expected_prompt_bindings(store, (input_id,)) as bindings:
-            binding = bindings.get(input_id)
-            self.require_bound_prompt(binding, owner, wire_root_id, prompt)
-            yield binding
+    ) -> NativeRuntimeInput:
+        """The reserved input, once it is the one ``prompt`` was reserved for; read inside
+        the caller's read or write transaction."""
+        reserved = NativeRuntimeInput.one(store.session._connection, input_id=input_id)
+        if reserved is None:
+            raise IdentityConflict("native send has no reserved input for its prompt")
+        self.require_bound_prompt(store, reserved, owner, wire_root_id, prompt)
+        return reserved
 
     def require_bound_prompt(
-        self, binding: PromptBinding | None, owner: ParticipantOwner,
+        self, store: Coordination, reserved: NativeRuntimeInput, owner: ParticipantOwner,
         wire_root_id: RootId, prompt: str,
     ) -> None:
-        if binding is None:
-            raise IdentityConflict("native send has no durable prompt binding")
         try:
             NativeBindingCheck(
-                row=binding,
+                row=reserved,
                 expected=self.identity(
-                    binding.input_id, owner.coordinator_identity(self.recipient_lookup),
+                    reserved.input_id, owner.coordinator_identity(self.recipient_lookup),
                 ),
+                source_root=self.source_root(store),
                 wire_root_id=wire_root_id,
                 prompt_digest=TextDigest(native_request_digest(prompt)),
             ).require_valid()
         except ReservationViolationError as error:
             raise IdentityConflict(
-                f"native send differs from its durable prompt binding: {error}"
+                f"native send differs from the prompt its input was reserved for: {error}"
             ) from error
 
 

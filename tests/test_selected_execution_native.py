@@ -17,6 +17,7 @@ from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.execution.cursor_owner import CursorOwner
 from agent_comms.execution.historical_native_inputs import read_historical_native_inputs
 from agent_comms.execution.native_input_record import FullNativeExecution, TriageNativeExecution
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.native_pi import CommittedInput, read_tracked_input_commitment
 from agent_comms.execution.pi_vocabulary import LowThinkingLevel
 from agent_comms.execution.selected.actions import CodingSelectedAction
@@ -30,7 +31,6 @@ from agent_comms.nominal.lifecycle_capability import Complete
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.transport.native_tools import NativeToolDeclaration
-from binding_reads import binding_rows
 from bus_history import read_history
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
@@ -264,11 +264,11 @@ async def test_native_full_four_tools_publish_and_release(
             )
             for proof in proofs:
                 assert proof.expected_prompt_equality_established
-                binding = binding_rows(store, (proof.input_id,)).get(proof.input_id)
-                assert binding is not None
+                reserved = NativeRuntimeInput.require(
+                    store.session._connection, input_id=proof.input_id)
                 assert (
                     read_tracked_input_commitment(proof.context.session_file, proof.input_id)
-                    == CommittedInput(binding.expected_prompt_digest)
+                    == CommittedInput(reserved.expected_prompt_digest)
                 )
             if triage:
                 assert len({proof.context.session_file for proof in proofs}) == 1

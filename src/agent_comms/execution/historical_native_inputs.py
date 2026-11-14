@@ -27,10 +27,7 @@ from agent_comms.execution.native_input_record import (
     NativeInputReference,
     TriageNativeExecution,
 )
-from agent_comms.execution.native_prompt_binding import (
-    expected_prompt_bindings,
-    expected_prompt_matches_journal,
-)
+from agent_comms.execution.native_prompt_binding import expected_prompt_matches_journal
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.selected.triage import SelectedTriage
@@ -202,8 +199,7 @@ def read_historical_native_inputs(
         if len(rows) > 2 or len({type(row.execution) for _source, row in rows}) != len(rows):
             raise IdentityConflict("historical source has ambiguous native input evidence")
         source_reads.observe_inputs(tuple(row.require_context_proof() for _source, row in rows))
-        with expected_prompt_bindings(store, (row.input_id for _source, row in rows)) as bindings:
-            rows.sort(key=lambda item: type(item[1].execution).declared_position())
+        rows.sort(key=lambda item: type(item[1].execution).declared_position())
         evidence: list[HistoricalNativeInput] = []
         for source, row in rows:
             original_session = row.require_session_identity()
@@ -223,16 +219,8 @@ def read_historical_native_inputs(
             if not corroborated:
                 raise IdentityConflict("historical native context differs from live-recorded proof")
             original_session.require_context(recorded)
-            binding = bindings.get(row.input_id)
-            if binding is not None:
-                # A binding must name exactly this reserved input; anything else is
-                # corruption, not a failed equality join.
-                if binding.identity != row.identity:
-                    raise IdentityConflict("prelaunch binding does not match this live proof")
-                if binding.wire_root_id != wire_root_id:
-                    raise IdentityConflict("Prelaunch binding names another canonical wire root")
-            equality = binding is not None and expected_prompt_matches_journal(
-                session_file, binding, evidence=source_reads.for_source(session_file)
+            equality = expected_prompt_matches_journal(
+                session_file, row, evidence=source_reads.for_source(session_file)
             )
             evidence.append(
                 row.execution.historical_proof(
@@ -247,7 +235,7 @@ def read_historical_native_inputs(
                     owner_generation=row.owner_generation,
                     context=recorded,
                     native_reference=row.reference,
-                    expected_prompt_digest=binding.expected_prompt_digest if binding is not None else None,
+                    expected_prompt_digest=row.expected_prompt_digest,
                     expected_prompt_equality_established=equality,
                 )
             )

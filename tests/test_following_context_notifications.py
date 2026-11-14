@@ -22,7 +22,7 @@ from agent_comms.execution.native_input_proof import NativeContextJournal, Nativ
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.pi_commands import FollowingPrompt
 from agent_comms.execution.pi_events import ContextCommitted, InputCommitted
-from agent_comms.execution.private_sidecar import native_request_digest
+from agent_comms.execution.native_prompt_binding import native_request_digest
 from agent_comms.execution.turn_inbox import (
     InputContent,
     InputRequest,

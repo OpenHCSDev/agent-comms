@@ -212,7 +212,7 @@ def native_group_source(tmp_path: Path) -> Iterator[NativeGroupSource]:
         native = tuple(NativeRuntimeInput(
             input_id=input_id, stage=type(stage), **stage.binding_fields(),
             owner_lookup=RECIPIENT_LOOKUP, owner_generation=1,
-            owner_token_digest='e' * 64,
+            owner_token_digest='e' * 64, expected_prompt_digest='d' * 64,
         ) for input_id, stage in zip(
             (FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID), stages, strict=True,
         ))

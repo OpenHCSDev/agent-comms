@@ -70,7 +70,8 @@ class ClaimedHistory(NativeSendHistory):
                 pytest.fail("The original native send token was reused")
         with Coordination(participant.comms.root / "coordination.sqlite3") as writer:
             with pytest.raises(IdentityConflict):
-                claim.stage.reserve(writer, participant.identity, claim.token_digest)
+                claim.stage.reserve(writer, participant.identity, claim.token_digest,
+                                    claim.prompt.text)
             assert len(NativeRuntimeInput.select(writer.session._connection)) == 1
         cls.record(claim, session, participant)
 

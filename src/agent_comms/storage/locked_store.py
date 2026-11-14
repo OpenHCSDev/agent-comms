@@ -953,9 +953,8 @@ class SQLiteStorage(RootFile, SqliteStore):
 
     @classmethod
     def transient_paths(cls, path: Path) -> frozenset[Path]:
-        return super().transient_paths(path) | frozenset((
-            *(set(cls.files(path)) - {path, cls.wal_path(path)}), StoreOwner.snapshot_lock(path),
-        ))
+        return super().transient_paths(path) | frozenset(
+            set(cls.files(path)) - {path, cls.wal_path(path)})
 
     @classmethod
     def snapshot_members(
@@ -969,9 +968,7 @@ class SQLiteStorage(RootFile, SqliteStore):
 
     @classmethod
     def member_paths(cls, path: Path) -> frozenset[Path]:
-        return super().member_paths(path) | frozenset((
-            *cls.files(path), StoreOwner.snapshot_lock(path), StoreOwner.snapshot_intent(path),
-        ))
+        return super().member_paths(path) | frozenset(cls.files(path))
 
     @classmethod
     def _begin_transaction(cls, connection: sqlite3.Connection) -> None:

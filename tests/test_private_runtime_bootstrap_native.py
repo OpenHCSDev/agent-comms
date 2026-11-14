@@ -114,8 +114,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
     first = comms.messaging.send("sender", "recipient", "BOOTSTRAP_FIRST").message
     if base_only_owner:
         # Model the reported partial install on this disposable root only.
-        for name in ("coordination.sqlite3", "native_prompt_bindings.sqlite3"):
-            (comms.root / name).unlink()
+        (comms.root / "coordination.sqlite3").unlink()
         with Coordination(str(comms.root / "coordination.sqlite3")):
             pass
 

@@ -11,7 +11,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.execution.native_input_proof import NativeContextJournal, NativeContextProof
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
-from agent_comms.execution.private_sidecar import native_request_digest
+from agent_comms.execution.native_prompt_binding import native_request_digest
 from agent_comms.execution.selected.triage import (
     AbsentTriageDecisionRecord,
     DecidedTriageRecord,
@@ -125,7 +125,8 @@ async def test_triage_failure_keeps_previously_acknowledged_context_and_no_retry
             assert retained.require_context_proof() == context
             assert retained.verdict == AbsentTriageDecisionRecord()
             with pytest.raises(IdentityConflict):
-                claim.stage.reserve(store, claim.selected.identity, claim.token_digest)
+                claim.stage.reserve(store, claim.selected.identity, claim.token_digest,
+                                    claim.prompt.text)
             assert len(NativeRuntimeInput.select(store.session._connection)) == 1
 
 
