@@ -31,9 +31,6 @@ from agent_comms.planning.goal_mutation import (
 
 @dataclass(frozen=True)
 class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
-    def require_ready(self) -> None:
-        raise GoalRefused("Goal generation is not ready or already reserved.")
-
     def has_ready_grant(self, matching: bool) -> bool:
         return False
 
@@ -96,9 +93,6 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
 
 @dataclass(frozen=True)
 class ReadyGeneration(GenerationState):
-    def require_ready(self) -> None:
-        pass
-
     def has_ready_grant(self, matching: bool) -> bool:
         return matching
 
