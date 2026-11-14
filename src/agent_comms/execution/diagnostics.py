@@ -93,6 +93,11 @@ class AcquisitionObservation(RequestObservation):
 
     input_id: InputId
     acquisition: PublicationMeasurements
+    delivery_cumulative: PublicationMeasurements
+    """What the recipient's cursor delivery has timed since its session began: observing the
+    cursor, accepting deliveries and the claim that precedes this input's reservation. They
+    come before the input exists, so its own counters cannot hold them; the difference
+    between two of a session's rows is the work between them."""
     work_cpu_cumulative: ThreadCpuMeasurements = field(default_factory=WorkCpu.totals)
     """Thread CPU this process has spent in each kind of joined work up to this turn's end."""
 
@@ -116,6 +121,7 @@ def record_acquisition_progress(
     input_id: InputId,
     measurements: PublicationMeasurements,
     native_process: ProcessState,
+    delivery: PublicationMeasurements,
 ) -> None:
     """Report the parent's acquisition timings after its resources close.
 
@@ -125,7 +131,7 @@ def record_acquisition_progress(
     """
     RequestObservations.record(root, AcquisitionObservation(
         turn=lease, input_id=input_id, acquisition=measurements,
-        native_process=native_process,
+        native_process=native_process, delivery_cumulative=delivery,
     ))
 
 

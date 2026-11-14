@@ -7,6 +7,7 @@ or commit never becomes a fresh send attempt.
 from __future__ import annotations
 
 import asyncio
+import copy
 import threading
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
@@ -203,6 +204,8 @@ class PrivateSendClaim(FollowingPromptBoundary):
             await Coordination.run_worker(partial(
                 record_acquisition_progress, self.selected.bus.bus.path.parent, lease,
                 self.input_id, self.measurements, startup.native_process,
+                # Copied here, on the loop that changes them, before a worker encodes them.
+                copy.deepcopy(self.selected.cursor_delivery.measurements),
             ))
         async with self.selected.cursor_delivery.reading() as source_reads:
             await Coordination.run_read_async(
