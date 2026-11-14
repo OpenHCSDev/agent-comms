@@ -57,7 +57,6 @@ from agent_comms.execution.turn_goal_permission import (
 )
 from agent_comms.execution.turn_phase import (
     NativePhaseChanged,
-    PreparingPhase,
     TurnPhase,
 )
 from agent_comms.messaging.bus_publication import Delivered
@@ -476,9 +475,8 @@ class PendingSelection(PreparedSelection):
             )
             with cursor_delivery.measurements.operation("claim_current"):
                 await selected.require_current()
-                await selected.transition(
-                    PreparingPhase(f"Preparing {len(batch.sources)} messages in {batch.target}")
-                )
+            # The consideration that takes this claim states what it prepares: a triage or
+            # a response. A phase published here was replaced by that one a moment later.
             yield selected
         finally:
             # The blocking call may acquire the lease even if its result is not delivered.
