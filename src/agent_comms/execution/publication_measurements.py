@@ -72,16 +72,13 @@ class ThreadCpuMeasurements(PublicationMeasurements):
     clock: ClassVar[Callable[[], int]] = time.thread_time_ns
 
 
-class WorkCpu:
-    """Thread CPU this process spent in each kind of joined work, since it started.
+class WorkLedger:
+    """What this process spent in each kind of joined work since it started, by the name of
+    the function a caller handed over. Each member measures one quantity at one door; a
+    turn's diagnostics carry the running totals, so the difference between two turns' rows
+    is the work between them."""
 
-    Every blocking operation a turn hands to a worker thread or to the coordinator thread
-    passes one of two doors, so measuring there names where a turn's CPU went without
-    attaching anything to the running process. A turn's diagnostics carry the running
-    totals; the difference between two turns' rows is the work between them.
-    """
-
-    ledger: ClassVar[ThreadCpuMeasurements] = ThreadCpuMeasurements()
+    ledger: ClassVar[PublicationMeasurements]
     changing: ClassVar[threading.Lock] = threading.Lock()
 
     @staticmethod
@@ -92,22 +89,49 @@ class WorkCpu:
         return getattr(operation, "__qualname__", type(operation).__qualname__)
 
     @classmethod
+    def observed(cls, name: str, started: int, finished: int) -> None:
+        with cls.changing:
+            cls.ledger.named(name).observed(started, finished)
+
+    @classmethod
+    def totals(cls) -> PublicationMeasurements:
+        with cls.changing:
+            return copy.deepcopy(cls.ledger)
+
+
+class WorkCpu(WorkLedger):
+    """Thread CPU of each joined operation. Every blocking operation a turn hands to a worker
+    thread or to the coordinator thread passes one of two doors, so measuring there names
+    where a turn's CPU went without attaching anything to the running process."""
+
+    ledger: ClassVar[ThreadCpuMeasurements] = ThreadCpuMeasurements()
+
+    @classmethod
     def measured[**P, Result](cls, operation: Callable[P, Result]) -> Callable[P, Result]:
         name = cls.name_of(operation)
+        clock = cls.ledger.clock
 
         @wraps(operation)
         def run(*args: P.args, **kwargs: P.kwargs) -> Result:
-            started = time.thread_time_ns()
+            started = clock()
             try:
                 return operation(*args, **kwargs)
             finally:
-                finished = time.thread_time_ns()
-                with cls.changing:
-                    cls.ledger.named(name).observed(started, finished)
+                cls.observed(name, started, clock())
 
         return run
 
-    @classmethod
-    def totals(cls) -> ThreadCpuMeasurements:
-        with cls.changing:
-            return copy.deepcopy(cls.ledger)
+
+class CoordinatorWait(WorkLedger):
+    """Elapsed time each coordinator operation waited for the coordinator thread after its
+    caller handed it over: one thread runs every agent's store work in turn, so this is the
+    queue behind everything handed over before it."""
+
+    ledger: ClassVar[PublicationMeasurements] = PublicationMeasurements()
+
+
+class CoordinatorRun(WorkLedger):
+    """Elapsed time each coordinator operation ran on the coordinator thread. Less its
+    WorkCpu, it is what the operation waited on there: locks, the disk, the GIL."""
+
+    ledger: ClassVar[PublicationMeasurements] = PublicationMeasurements()

@@ -18,6 +18,8 @@ from metaclass_registry.mro_dispatch import MroDispatch, handles
 from agent_comms.execution.child_process import Platform, ProcessState
 from agent_comms.execution.native_failures import NativeRequestFailure
 from agent_comms.execution.publication_measurements import (
+    CoordinatorRun,
+    CoordinatorWait,
     PublicationMeasurements,
     ThreadCpuMeasurements,
     WorkCpu,
@@ -100,6 +102,12 @@ class AcquisitionObservation(RequestObservation):
     between two of a session's rows is the work between them."""
     work_cpu_cumulative: ThreadCpuMeasurements = field(default_factory=WorkCpu.totals)
     """Thread CPU this process has spent in each kind of joined work up to this turn's end."""
+    coordinator_wait_cumulative: PublicationMeasurements = field(
+        default_factory=CoordinatorWait.totals)
+    """How long each kind of coordinator operation has waited for the coordinator thread."""
+    coordinator_run_cumulative: PublicationMeasurements = field(
+        default_factory=CoordinatorRun.totals)
+    """How long each kind of coordinator operation has run on the coordinator thread."""
 
 
 def record_request_progress(root, lease, progress, native_process, *, publication=None):

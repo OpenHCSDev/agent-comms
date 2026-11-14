@@ -26,7 +26,11 @@ from agent_comms.coordination.session import (
 from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.working_memory_annotations import WorkingMemoryAnnotations
 from agent_comms.execution.child_process import join_retirement
-from agent_comms.execution.publication_measurements import WorkCpu
+from agent_comms.execution.publication_measurements import (
+    CoordinatorRun,
+    CoordinatorWait,
+    WorkCpu,
+)
 from agent_comms.storage.store_files import DEFAULT_STORE_CONTENTION, StoreContention
 
 if TYPE_CHECKING:
@@ -259,7 +263,10 @@ class CoordinationWorker(CoordinationRoute):
             self._resources = resources.pop_all()
 
     @staticmethod
-    def _apply(operation: Callable[..., Result], store: Coordination) -> Result:
+    def _apply(operation: Callable[..., Result], store: Coordination, submitted: int) -> Result:
+        name = WorkCpu.name_of(operation)
+        started = CoordinatorRun.ledger.clock()
+        CoordinatorWait.observed(name, submitted, started)
         try:
             return WorkCpu.measured(operation)(store)
         finally:
@@ -268,12 +275,13 @@ class CoordinationWorker(CoordinationRoute):
             db = store.session._connection
             if db.in_transaction:
                 db.execute("ROLLBACK")
+            CoordinatorRun.observed(name, started, CoordinatorRun.ledger.clock())
 
-    def _write(self, operation: Callable[..., Result]) -> Result:
-        return self._apply(operation, self._writer)
+    def _write(self, operation: Callable[..., Result], submitted: int) -> Result:
+        return self._apply(operation, self._writer, submitted)
 
-    def _read(self, operation: Callable[..., Result]) -> Result:
-        return self._apply(operation, self._reader)
+    def _read(self, operation: Callable[..., Result], submitted: int) -> Result:
+        return self._apply(operation, self._reader, submitted)
 
     async def _submit(self, operation: Callable[[], Result]) -> Result:
         pending = self._executor.submit(self.store_type.worker_context().run, operation)
@@ -289,7 +297,7 @@ class CoordinationWorker(CoordinationRoute):
         contention: StoreContention,
     ) -> Result:
         self.require(store_type, path, clock_ms, contention)
-        return await self._submit(partial(self._write, operation))
+        return await self._submit(partial(self._write, operation, CoordinatorWait.ledger.clock()))
 
     async def run_read(
         self,
@@ -300,7 +308,7 @@ class CoordinationWorker(CoordinationRoute):
         contention: StoreContention,
     ) -> Result:
         self.require(store_type, path, clock_ms, contention)
-        return await self._submit(partial(self._read, operation))
+        return await self._submit(partial(self._read, operation, CoordinatorWait.ledger.clock()))
 
     def _close(self) -> None:
         self._resources.close()
