@@ -44,6 +44,7 @@ from agent_comms.execution.native_input_owner import (
 )
 from agent_comms.execution.native_runtime_input import NativeRuntimeTable
 from agent_comms.execution.native_turn_context import ContextObserved
+from agent_comms.execution.publication_measurements import PublicationMeasurements
 from agent_comms.execution.selected.owner_source import RegistryOwnerSource
 from agent_comms.execution.selected.result import CoordinatedTurn
 from agent_comms.execution.selected.source_batch import (
@@ -227,10 +228,12 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner], Selec
         publication: MroDispatch = NoLivePublication(),
     ):
         bus = MessageBus(comms.root, comms.registry, ParticipantPublisher)
-        with cursor_delivery.measurements.operation("claim_prepare"):
+        measured = cursor_delivery.measurements.named("claim_prepare")
+        with measured.measuring():
             prepared = await Coordination.run_async(
                 store.session.path,
-                lambda resource: cls.prepare(comms, bus, resource, root_id, name, after_seq),
+                lambda resource: cls.prepare(
+                    comms, bus, resource, root_id, name, after_seq, measured),
             )
         async with prepared.selected(
             comms, bus, store, root_id, name, cursor_delivery, publication,
@@ -276,35 +279,42 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner], Selec
     @staticmethod
     def prepare(
         comms: Comms, bus: MessageBus, store: Coordination,
-        root_id: RootId, name: str, after_seq: int,
+        root_id: RootId, name: str, after_seq: int, measured: PublicationMeasurements,
     ) -> PreparedSelection:
-        """Capture detached registry, participant and optional context in one worker."""
-        privacy = comms.registry.store.privacy()
-        privacy.require_root(root_id, IdentityConflict("Selected claim namespace changed"))
-        try:
-            thread, generation = comms.registry.live_owner_with_claim(name)
-        except (RelationViolationError, ValueError) as error:
-            raise StaleFence("recipient registry identity stopped or changed") from error
-        owner = RegistryOwner(thread=thread, claimed_generation=generation)
-        owner.require_registry(comms.registry)
-        lookup = thread.incarnation.lookup
-        sent_owner, sent_sources = MessageNotification.sent_sources(
-            comms.root, comms.registry, comms.bus.bus, name,
-            limit=NotificationSelection.window_limit,
-        )
-        LiveResponseOwner(
-            thread=thread, claimed_generation=generation
-        ).resolve_retained(store, bus)
-        with store.session.read():
-            CohortTable.require_installed(store.session._connection)
-            ResponseTable.require_installed(store.session._connection)
-            NativeRuntimeTable.require_installed(store.session._connection)
-            participant = store.participants.get(lookup)
-            identity = ParticipantOwner(thread, participant.owner_identity.generation)
-            identity.require(store, lookup)
-            pending = pending_sealed_assignments(
-                store, lookup, after_seq=after_seq
+        """Capture detached registry, participant and optional context in one worker.
+
+        ``measured`` is this claim's own counter. Each part of the capture names itself under
+        it, as the prompt's send does, so a turn's diagnostics say where its claim went."""
+        with measured.operation("registry_owner"):
+            privacy = comms.registry.store.privacy()
+            privacy.require_root(root_id, IdentityConflict("Selected claim namespace changed"))
+            try:
+                thread, generation = comms.registry.live_owner_with_claim(name)
+            except (RelationViolationError, ValueError) as error:
+                raise StaleFence("recipient registry identity stopped or changed") from error
+            owner = RegistryOwner(thread=thread, claimed_generation=generation)
+            owner.require_registry(comms.registry)
+            lookup = thread.incarnation.lookup
+        with measured.operation("sent_sources"):
+            sent_owner, sent_sources = MessageNotification.sent_sources(
+                comms.root, comms.registry, comms.bus.bus, name,
+                limit=NotificationSelection.window_limit,
             )
+        with measured.operation("retained_response"):
+            LiveResponseOwner(
+                thread=thread, claimed_generation=generation
+            ).resolve_retained(store, bus)
+        with store.session.read():
+            with measured.operation("participant_and_pending"):
+                CohortTable.require_installed(store.session._connection)
+                ResponseTable.require_installed(store.session._connection)
+                NativeRuntimeTable.require_installed(store.session._connection)
+                participant = store.participants.get(lookup)
+                identity = ParticipantOwner(thread, participant.owner_identity.generation)
+                identity.require(store, lookup)
+                pending = pending_sealed_assignments(
+                    store, lookup, after_seq=after_seq
+                )
             if not pending:
                 return NothingPending()
             # The prompt shows sent_limit outcomes and only a turn with pending work has a
@@ -312,20 +322,25 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner], Selec
             # five slots cost every turn a quarter second; newest pages stop when they are full.
             viewer = OwnerOutcomes.of(sent_owner.incarnation)
             pages = SelectedParticipant.sent_pages(viewer, sent_sources)
-            sent_read = NotificationAssignment.capture(
-                store.session._connection,
-                NotificationSelection.of(viewer, next(pages, ())), privacy,
-            )
+            with measured.operation("sent_assignments"):
+                sent_read = NotificationAssignment.capture(
+                    store.session._connection,
+                    NotificationSelection.of(viewer, next(pages, ())), privacy,
+                )
         participant.pointer.require_idle()
         assignments = AssignmentSource(comms.root)
-        sent_outcomes = SelectedParticipant.capture_sent_outcomes(
-            comms, assignments, NotificationAssignment.capture_detached(assignments, sent_read))
-        for page in pages:
-            if len(sent_outcomes) >= SelectedWakeSegment.sent_limit:
-                break
-            sent_outcomes += SelectedParticipant.capture_sent_outcomes(
-                comms, assignments,
-                assignments.read_assignments(NotificationSelection.of(viewer, page)))
+        with measured.operation("sent_evidence"):
+            sent_evidence = NotificationAssignment.capture_detached(assignments, sent_read)
+        with measured.operation("sent_outcomes"):
+            sent_outcomes = SelectedParticipant.capture_sent_outcomes(
+                comms, assignments, sent_evidence)
+        with measured.operation("sent_further_pages"):
+            for page in pages:
+                if len(sent_outcomes) >= SelectedWakeSegment.sent_limit:
+                    break
+                sent_outcomes += SelectedParticipant.capture_sent_outcomes(
+                    comms, assignments,
+                    assignments.read_assignments(NotificationSelection.of(viewer, page)))
         return PendingSelection(owner, participant, pending, sent_outcomes)
 
     @staticmethod
@@ -459,10 +474,11 @@ class PendingSelection(PreparedSelection):
                 cursor_delivery,
                 publication=publication,
             )
-            await selected.require_current()
-            await selected.transition(
-                PreparingPhase(f"Preparing {len(batch.sources)} messages in {batch.target}")
-            )
+            with cursor_delivery.measurements.operation("claim_current"):
+                await selected.require_current()
+                await selected.transition(
+                    PreparingPhase(f"Preparing {len(batch.sources)} messages in {batch.target}")
+                )
             yield selected
         finally:
             # The blocking call may acquire the lease even if its result is not delivered.

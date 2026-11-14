@@ -302,16 +302,18 @@ class SelectedConsideration:
                 sources=participant.batch.sources,
             ).value
             return await execution.full(participant, session, created)
-        await participant.transition(
-            PreparingPhase(f"Preparing triage for {len(participant.batch.sources)} messages in {participant.batch.target}")
-        )
-        stage = TriageNativeSend(participant.batch.assignments)
+        with participant.cursor_delivery.measurements.operation("triage_prompt"):
+            await participant.transition(
+                PreparingPhase(f"Preparing triage for {len(participant.batch.sources)} messages in {participant.batch.target}")
+            )
+            stage = TriageNativeSend(participant.batch.assignments)
+            prompt = SelectedPrompt(participant).triage()
         request = await SelectedRequest.reserve(
             participant,
             session,
             stage,
             prepare_fence_token(),
-            SelectedPrompt(participant).triage(),
+            prompt,
         )
         async def asked(request: SelectedRequest) -> tuple[NativeTurnResult, SelectedTriageOutcome]:
             await participant.transition(PromptAcceptancePhase())
