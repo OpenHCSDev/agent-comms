@@ -45,7 +45,7 @@ def carry_bus(comms: Comms, tmp_path: Path) -> Comms:
     ),))
     failure = ServicePassFailing(watch="carry-source", since=now - 120,
                                 failed_at=now - 60, error="later failure")
-    latest, = TeamUpdate.report_failure(
+    latest = TeamUpdate.report_failure(
         colleague, failure, (original,), published=(original,), now=now,
     )
     latest.send(comms, ("failure after the older HUD was saved",))
