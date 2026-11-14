@@ -474,10 +474,11 @@ class PendingSelection(PreparedSelection):
                 cursor_delivery,
                 publication=publication,
             )
-            await selected.require_current()
-            await selected.transition(
-                PreparingPhase(f"Preparing {len(batch.sources)} messages in {batch.target}")
-            )
+            with cursor_delivery.measurements.operation("claim_current"):
+                await selected.require_current()
+                await selected.transition(
+                    PreparingPhase(f"Preparing {len(batch.sources)} messages in {batch.target}")
+                )
             yield selected
         finally:
             # The blocking call may acquire the lease even if its result is not delivered.
