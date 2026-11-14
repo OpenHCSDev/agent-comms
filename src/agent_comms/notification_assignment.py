@@ -39,7 +39,7 @@ from agent_comms.messaging.notification_progress import (
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, boundary_decoder
 from agent_comms.registry.notification_selection_read import NotificationSelectionRead
-from agent_comms.registry.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_identity import ThreadIncarnation
@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     from agent_comms.coordination.database import InvalidStore, MissingStore
     from agent_comms.messaging.message_notification import MessageNotification
     from agent_comms.messaging.notification_progress import DeliveryProgress
-    from agent_comms.registry.private_registry_guard import RegistryPrivacy
+    from agent_comms.registry.registry_privacy import RegistryPrivacy
     from agent_comms.registry.recipient_activity import RecipientActivity
 
 

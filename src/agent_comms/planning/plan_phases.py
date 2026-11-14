@@ -44,7 +44,7 @@ from agent_comms.planning.phase_evidence import (
     QualifiedName,
     RestatedMembersAbsent,
 )
-from agent_comms.registry.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.thread_identity import BirthlessIncarnation
 from agent_comms.execution.turn_item import TurnItem
 from agent_comms.planning.todo_refusals import SharedWorktreeRefusal

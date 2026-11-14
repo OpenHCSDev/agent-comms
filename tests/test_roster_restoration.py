@@ -195,4 +195,4 @@ def test_public_restoration_declares_participant_without_native_authority(tmp_pa
     from agent_comms.coordination.coordinator import Coordination
     with Coordination(str(current.root / "coordination.sqlite3")) as store:
         assert store.participants.get(current.registry.require("missing").incarnation.lookup).committed
-    assert not current.registry.store.guard_path.exists()
+    assert not current.registry.store.rows.namespace()

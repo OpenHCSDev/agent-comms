@@ -36,11 +36,6 @@ from agent_comms.execution.turn_registry import TurnRegistry
 from agent_comms.messaging.routing import Routing
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, TurnId
 from agent_comms.registry.presence import PresenceCapture, PresenceChange, PresenceRevision
-from agent_comms.registry.private_registry_guard import (
-    PrivateRegistryGuard,
-    PublicRegistry,
-    RegistryPrivacy,
-)
 from agent_comms.registry.registration_change import InitialRegistration, NativeSourcePublication
 from agent_comms.registry.registration_reads import RegistryPathRead
 from agent_comms.registry.registry_document import (
@@ -48,6 +43,11 @@ from agent_comms.registry.registry_document import (
     RegistryDocument,
     RegistryEntry,
     RegistrySnapshot,
+)
+from agent_comms.registry.registry_privacy import (
+    PrivateRegistry,
+    PublicRegistry,
+    RegistryPrivacy,
 )
 from agent_comms.registry.registry_tables import (
     EditTables,
@@ -63,7 +63,6 @@ from agent_comms.storage.locked_store import (
     LockedStore,
     PublishedProperty,
     RegistryFile,
-    RootFile,
 )
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.private_path import FileObservation, FileRevision, MissingFile
@@ -177,7 +176,7 @@ class RegistrySelection:
     """A decoded registry selection whose source stays current during dependent writes."""
 
     store: RegistryStore = field(repr=False, compare=False)
-    revision: tuple[RegistryRowRevision, FileObservation]
+    revision: RegistryRowRevision
 
     def matches_current(self) -> bool:
         return self.store.revision_unlocked() == self.revision
@@ -431,13 +430,15 @@ class RegistryStore(
         """Retain a consistent registry for history, then seal the copy against live writes.
 
         SQLite backup includes committed WAL rows, presence among them; it neither retires the
-        source's participants nor copies live execution grants.
+        source's participants nor copies live execution grants: the native namespace is
+        withdrawn from the copy, which holds no coordinator to scope.
         """
         copied = type(self).at(destination)
         destination.mkdir(mode=0o700, parents=True, exist_ok=True)
         with self.guarded_read():
             self.copy_file(self.path, copied.path)
             Platform.current().sync_file(copied.path)
+        copied.rows.withdraw_namespace()
         copied.mark_historical()
         return copied.read_revision()
 
@@ -523,7 +524,7 @@ class RegistryStore(
         with self.current_snapshot() as cut:
             return change(cut.snapshot.locked_turn(record))
 
-    def prepare_native_root(self) -> PrivateRegistryGuard:
+    def prepare_native_root(self) -> PrivateRegistry:
         """Commit this store's namespace before preparing runtime tables outside its writer."""
         with self.guarded_write():
             self.read_revision_unlocked().document.purpose.require_write()
@@ -549,7 +550,7 @@ class RegistryStore(
     def snapshot_with_authority(self) -> RegistryCut:
         with self.guarded_read():
             captured = self._authorized_capture_unlocked()
-            revision = captured.source.revision, FileRevision.capture(self.guard_path)
+            revision = captured.source.revision
         return RegistryCut(
             self, revision, self._decode_snapshot(captured.source), captured.privacy)
 
@@ -569,7 +570,7 @@ class RegistryStore(
         """One registry authority and related document, decoded after their capture."""
         with self._capturing_sources(self, other) as (registry, peer):
             privacy = self.private_guard_unlocked()
-            revision = registry.revision, FileRevision.capture(self.guard_path)
+            revision = registry.revision
         return RegistryPairCut(
             self, revision, self._decode_snapshot(registry), privacy,
             other.read_copied(peer),
@@ -592,33 +593,18 @@ class RegistryStore(
             return revision.snapshot
 
     @property
-    def guard_path(self) -> Path:
-        return PrivateRegistryGuard.path_in(self.path.parent)
-
-    @property
-    def written(self) -> tuple[Path, Path]:
-        """The files every commit writes together, as ``revision_unlocked`` reads them."""
-        return self.path, self.guard_path
+    def written(self) -> tuple[Path, ...]:
+        """The file every commit writes: its rows, presence, turns and namespace."""
+        return (self.path,)
 
     @property
     def cut_paths(self) -> tuple[Path, ...]:
-        """The files one hold of the registry lock keeps consistent: every write replaces
-        ``written`` together, its turn rows included. Read under that lock, so a claim cannot
-        fall between them."""
-        return (self.path, *self.companion_paths)
+        """The files one hold of the registry lock keeps consistent."""
+        return self.written
 
-    @property
-    def companion_paths(self) -> tuple[Path, ...]:
-        return tuple(self.companion_files)
-
-    @property
-    def companion_files(self) -> dict[Path, type[RootFile]]:
-        """Retain each companion with its owner's copying behavior."""
-        return {self.guard_path: PrivateRegistryGuard}
-
-    def revision_unlocked(self) -> tuple[RegistryRowRevision, FileObservation]:
-        """The database instance, committed counter and guard that brackets every commit."""
-        return self.rows.revision(), FileRevision.capture(self.guard_path)
+    def revision_unlocked(self) -> RegistryRowRevision:
+        """The database instance and its committed counter."""
+        return self.rows.revision()
 
     def read_entry(self, name: str) -> RegistryEntryRevision:
         """Read an entry from the same retained revision as snapshots and edits.
@@ -628,7 +614,7 @@ class RegistryStore(
         """
         with self.guarded_read():
             source = self._capture_unlocked()
-            revision = source.revision, FileRevision.capture(self.guard_path)
+            revision = source.revision
         return RegistryEntryRevision(self, revision, self._decode_revision(source).document.entry(name))
 
     def entry_unlocked(self, name: str) -> RegistryEntry:
@@ -648,7 +634,7 @@ class RegistryStore(
         """
         revision = self.revision_unlocked()
         source = self._capture_unlocked()
-        if source.revision != revision[0] or self.revision_unlocked() != revision:
+        if source.revision != revision or self.revision_unlocked() != revision:
             raise StaleFence("Registry changed during history observation; read history again")
         return self.read_copied(source).entry(name)
 
@@ -739,11 +725,9 @@ class RegistryStore(
         self, raw: RawDocument, previous: RegistryCapture, beside: EditTables,
     ) -> RegistryCapture:
         """Commit the rows of ``raw`` that differ from ``previous``, and what the same edit
-        wrote beside them, in one transaction bracketed by the guard."""
-        mark = previous.mark.successor()
+        wrote beside them, in one transaction."""
         self.cache.entry = UncachedRegistry()
-        self.private_guard_unlocked().write(
-            self.path, mark, lambda: self.rows.commit(raw, previous, beside))
+        self.rows.commit(raw, previous, beside)
         return RegistryCapture(self.rows.revision(), raw)
 
     def private_guard_unlocked(self) -> RegistryPrivacy:
@@ -753,30 +737,26 @@ class RegistryStore(
         """Validate registry authority at the committed row revision its caller read, before
         even a cached document read.
 
-        The guard owns its native namespace. Native runtime tables without
-        that guard are incomplete state, never a new namespace to initialize.
+        The namespace row owns the root's privacy. Native runtime tables without it are
+        incomplete state, never a new namespace to initialize.
         """
         # The root is keyed by which directory it is, never by its mtime: every entry created or
         # removed under it, such as a coordinator transaction's journal, moves the mtime, and the
         # entries this guard reads are keyed by their own revisions below.
         # Observed before the check, so a change during it moves the key and forces a recheck.
-        # Each answer keys on the files it was decided from: the coordinator commits on every
-        # coordination write, and a private root never reads it, so keying a private answer
-        # on it re-hashed the whole registry on every coordination write.
+        # Each answer keys on what it was decided from: the coordinator commits on every
+        # coordination write, and a private root never reads it.
         root = (_link_revision(self.path.parent).file_identity(), revision.identity)
         observed = (
-            _link_revision(self.guard_path),
+            self.rows.namespace(),
             _link_revision(CoordinationStore.path_in(self.path.parent)),
-            # The committed row revision, never the database's stat: a WAL commit leaves the
-            # file untouched, so a stat key would keep a verdict across a commit.
-            revision.mark,
         )
         if (checked := self.cache.guard) is not None:
             key, guard = checked
-            if key == (root, *guard.guard_evidence(*observed)):
+            if key == (root, *guard.evidence(*observed)):
                 return guard
         guard = self._check_guard_unlocked()
-        self.cache.guard = (root, *guard.guard_evidence(*observed)), guard
+        self.cache.guard = (root, *guard.evidence(*observed)), guard
         return guard
 
     @PublishedProperty
@@ -793,8 +773,8 @@ class RegistryStore(
             return self._privacy_declaration_unlocked().declared_schema_at(self.path)
 
     def _privacy_declaration_unlocked(self) -> type[RegistryPrivacy]:
-        if self.guard_path.exists() or self.guard_path.is_symlink():
-            return PrivateRegistryGuard
+        if self.rows.namespace():
+            return PrivateRegistry
         coordinator = CoordinationStore.path_in(self.path.parent)
         if coordinator.exists() or coordinator.is_symlink():
             with self.coordinator_reader.reader_snapshot() as db:

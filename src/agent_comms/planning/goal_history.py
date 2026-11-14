@@ -21,7 +21,7 @@ from agent_comms.planning.goal_ledger import FailedTurnEvidence
 from agent_comms.planning.goal_scope import GoalScope
 from agent_comms.planning.goals import GoalDeclaration, NoGoal
 from agent_comms.planning.owner_requests import NoRequestRevision, RequestRevision
-from agent_comms.registry.private_registry_guard import PrivateRegistryGuard
+from agent_comms.registry.registry_privacy import PrivateRegistry
 from agent_comms.storage.locked_store import DurableFile
 from agent_comms.storage.store_files import AtomicFile
 from agent_comms.storage.typed_table import (
@@ -254,7 +254,7 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
     def _sync_visible_registry(self) -> None:
         """Adopt a visible post-crash registry value before attesting an intent."""
         targets = [self.registry_path]
-        guard = PrivateRegistryGuard.path_in(self.registry_path.parent)
+        guard = PrivateRegistry.path_in(self.registry_path.parent)
         if guard.exists():
             targets.append(guard)
         try:

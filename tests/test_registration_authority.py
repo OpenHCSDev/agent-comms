@@ -16,7 +16,6 @@ from agent_comms.execution.turn_phase import PreparingPhase
 from agent_comms.nominal.field_codec import GoalId, TurnId
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.registry_tables import EditTables
 from agent_comms.registry.thread_identity import UserThreadRole
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
@@ -171,95 +170,3 @@ def test_a_claim_drop_waiting_on_a_turn_retired_under_it_finds_the_retirement(tm
     assert second.turn_record.read().id == '16367aacb67a4a017c8da8ab95682ccb'
 
 
-@pytest.mark.parametrize('operation', ['read', 'phase', 'claim', 'sidebar'])
-def test_turn_access_waits_for_private_registry_commit(tmp_path, operation):
-    from concurrent.futures import ThreadPoolExecutor
-
-    from agent_comms.registry.private_registry_guard import revision_digest
-
-    registry = registered(tmp_path)
-    registry.store.prepare_native_root()
-    leased, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
-    record, lease = leased.turn_record, leased.require_turn_lease()
-    if operation == 'sidebar':
-        wire(tmp_path).goals.open_goal_store().create_goal(leased.goal.id)
-    entered = threading.Event()
-
-    def access():
-        entered.set()
-        if operation == 'sidebar':
-            return wire(tmp_path).views.presentation.roster('owner')
-        if operation == 'read':
-            return record.read()
-        if operation == 'phase':
-            return record.transition(lease, PreparingPhase('after commit'))
-        return record.without_claim()
-
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        with registry.store.guarded_write():
-            guard = registry.store.private_guard_unlocked()
-            # Execute the real guard protocol and row commit, pausing only at the exact
-            # window in which an unlocked reader sees pending state.
-            original = registry.store.read_revision_unlocked().source
-            digest = revision_digest(original.mark.successor())
-            sequence, slot = guard.prepare(digest)
-            registry.store.rows.commit(original.raw, original, EditTables.unchanged())
-            future = pool.submit(access)
-            try:
-                assert entered.wait(5)
-                time.sleep(0.1)
-                assert not future.done(), 'turn access read an uncommitted registry'
-            finally:
-                guard.commit(sequence, slot, digest)
-        result = future.result(timeout=5)
-    if operation == 'sidebar':
-        assert 'owner' in result.threads
-    elif operation == 'read':
-        assert result.id == leased.turn_lease.turn_id
-    elif operation == 'phase':
-        assert record.read().phase == PreparingPhase('after commit')
-    else:
-        assert not record.read().has_claim(lease.claimed_generation)
-
-
-def test_turn_read_still_rejects_abandoned_post_replacement_guard(tmp_path):
-    from agent_comms.registry.private_registry_guard import revision_digest
-
-    registry = registered(tmp_path)
-    registry.store.prepare_native_root()
-    leased, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
-    with registry.store.guarded_write():
-        guard = registry.store.private_guard_unlocked()
-        original = registry.store.read_revision_unlocked().source
-        guard.prepare(revision_digest(original.mark.successor()))
-        registry.store.rows.commit(original.raw, original, EditTables.unchanged())
-        # Deliberately abandon the real write before committing its authority.
-    with pytest.raises(RelationViolationError, match='pending, not committed'):
-        leased.turn_record.read()
-
-
-def test_private_guard_check_survives_coordination_writes(tmp_path, monkeypatch):
-    from agent_comms.coordination.database import CoordinationStore
-    from agent_comms.registry import private_registry_guard
-
-    registry = registered(tmp_path)
-    registry.store.prepare_native_root()
-    registry.store.private_guard_unlocked()
-    hashed = []
-    real = private_registry_guard.registry_digest
-    monkeypatch.setattr(private_registry_guard, 'registry_digest',
-                        lambda path: hashed.append(path) or real(path))
-    coordinator = CoordinationStore.path_in(registry.store.path.parent)
-    stat = coordinator.stat()
-    os.utime(coordinator, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
-    registry.store.private_guard_unlocked()
-    assert hashed == [], 'a coordination write re-hashed the registry'
-    with registry.store.editing() as edit:
-        edit.document.set_status('owner', edit.document.status('owner'))
-        edit.commit()
-    hashed.clear()
-    original = registry.store.read_revision_unlocked().source
-    registry.store.rows.commit(original.raw, original, EditTables.unchanged())
-    with pytest.raises(RelationViolationError):
-        registry.store.private_guard_unlocked()
-    assert hashed == [registry.store.path], 'a row commit outside the guard must re-verify it'

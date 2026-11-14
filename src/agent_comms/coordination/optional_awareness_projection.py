@@ -57,7 +57,7 @@ from agent_comms.execution.turn_context import (
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup
-from agent_comms.registry.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.store_files import StoreBusy

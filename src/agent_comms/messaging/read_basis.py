@@ -59,7 +59,7 @@ if TYPE_CHECKING:
     from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
     from agent_comms.messaging.read_selection import CapturedSelection
     from agent_comms.presentation import BusPresentation
-    from agent_comms.registry.private_registry_guard import RegistryPrivacy
+    from agent_comms.registry.registry_privacy import RegistryPrivacy
     from agent_comms.registry.registration import Registration
     from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.registry.registry_provenance import RegistryProvenance

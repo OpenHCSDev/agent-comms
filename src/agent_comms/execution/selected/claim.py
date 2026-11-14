@@ -42,7 +42,7 @@ from agent_comms.messaging.envelope_claim_transitions import (
     FileClaimPath,
     WakeClaim,
 )
-from agent_comms.registry.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import (
     NativeThread,

@@ -45,7 +45,7 @@ from agent_comms.waking.wake_policy import RecipientDecision
 if TYPE_CHECKING:
     from agent_comms.execution.cursor_owner import CursorOwner, CursorState
     from agent_comms.execution.native_entries import NativeEvidenceScope
-    from agent_comms.registry.private_registry_guard import RegistryPrivacy
+    from agent_comms.registry.registry_privacy import RegistryPrivacy
 
 
 @dataclass(frozen=True)

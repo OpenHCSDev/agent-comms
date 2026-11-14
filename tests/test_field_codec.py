@@ -1037,13 +1037,13 @@ def test_declaration_bug_passes_through_a_data_boundary_as_type_error() -> None:
 def test_identity_and_digest_text_is_one_rule_at_every_reader(tmp_path: Path) -> None:
     from agent_comms.messaging.bus_source_page import AddressedPage
     from agent_comms.nominal.text_digest import TextDigest
-    from agent_comms.registry.private_registry_guard import PrivateRegistryGuard
+    from agent_comms.registry.registry_privacy import PrivateRegistry
 
     minted = ThreadLookup.mint()
     root_id = RootId.mint()
     # The field decodes at its boundary; the guard receives the namespace's declared kind.
     assert AddressedPage.capture(lookup=minted).lookup == minted
-    assert PrivateRegistryGuard(RegistryFile.path_in(tmp_path), root_id).root_id.hex() == root_id
+    assert PrivateRegistry(RegistryFile.path_in(tmp_path), root_id).namespace == root_id
     for invalid in (minted.upper(), minted[:31], int(minted, 16)):
         with pytest.raises(MalformedRecord):
             AddressedPage.capture(lookup=invalid)

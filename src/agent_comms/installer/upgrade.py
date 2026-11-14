@@ -1125,8 +1125,10 @@ class PreparedMigration(Extendable):
             resources = bus_resources(files, writer_stores)
             with pinned_bus_files(files, resources) as pins:
                 before = saved_bus_files(files, resources)
-                return cls(hold, before, outgoing.verify(files.root), files, pins.pop_all(),
-                           writer_stores)
+                # The outgoing runtime reads the root it owns: a practice copy is already the
+                # target's (its copy retired processes), so its baseline is read at its source.
+                return cls(hold, before, outgoing.verify(files.source_root()), files,
+                           pins.pop_all(), writer_stores)
 
     def carry(
         self, pending: tuple[Carry, ...], staged: TargetStack,
@@ -1162,7 +1164,10 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         pending = tuple(replace(step, files=files, spill_dir=practice.spill_dir)
                         for step in self.pending)
         inputs = practice.select(self.pending, reconciled)
-        self.installed.running_owners(copied)
+        # The live install's stop reads the root with the outgoing runtime before the target
+        # writes anything (OwnersStopped.stop); the copy is already the target's (its copy
+        # retired processes), so the rehearsal rehearses that read on the same untouched root.
+        self.installed.running_owners(self.root)
         maintenance = MaintenanceBarrier(RegistryStore.at(copied).path)
         hold = maintenance.retarget(maintenance.begin(MaintenanceOperator.current()), stack.runtime)
         with hold.holding(), stack.borrowing(

@@ -1,7 +1,8 @@
 
 
 import os
-import sys
+import sqlite3
+from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 
@@ -24,9 +25,9 @@ from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.pi_counts import PiCount
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistryDocument
+from agent_comms.registry.registry_privacy import PrivateRegistry
 from agent_comms.registry.registry_tables import EditTables
 from agent_comms.registry.shared_ledger import SharedLedger
 from agent_comms.registry.thread_model import DeclaredModel
@@ -56,10 +57,10 @@ def test_native_root_checks_relative_and_absolute_ancestor_permissions(
         candidate = wire(root)
         with pytest.raises(RelationViolationError):
             prepare_native_comms(candidate)
-        assert not candidate.registry.store.guard_path.exists()
+        assert not candidate.registry.store.rows.namespace()
     monkeypatch.chdir(tmp_path)
     safe = prepare_native_comms(wire(Path("safe-relative")))
-    assert safe.registry.store.prepare_native_root().namespace == PrivateRegistryGuard.load(safe.registry.store.path).namespace
+    assert safe.registry.store.prepare_native_root().namespace == PrivateRegistry.load(safe.registry.store.path).namespace
 
 
 @pytest.mark.skipif(os.name == "posix", reason="Windows private-bus fail-closed contract")
@@ -295,38 +296,9 @@ class TestRegistration:
         with pytest.raises(RelationViolationError):
             comms.registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="fault injection uses Linux /proc/self/fd")
-    @pytest.mark.parametrize("stage", ["pending", "commit"])
-    def test_torn_guard_slot_never_falls_back_to_older_commit(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage: str
-    ) -> None:
-        root = tmp_path / "private"
-        comms = wire(root)
-        comms.registry.declare(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
-        prepare_native_comms(comms)
-        original_pwrite = os.pwrite
-        guard_calls = 0
-
-        def pwrite(fd: int, data: bytes, offset: int) -> int:
-            nonlocal guard_calls
-            if os.readlink(f"/proc/self/fd/{fd}").endswith(".registry-owner-guard"):
-                guard_calls += 1
-                if (stage == "pending" and guard_calls == 1) or (
-                    stage == "commit" and guard_calls == 2
-                ):
-                    return original_pwrite(fd, data[: len(data) // 2], offset)
-            return original_pwrite(fd, data, offset)
-
-        monkeypatch.setattr(os, "pwrite", pwrite)
-        with pytest.raises(RelationViolationError):
-            comms.registry.register(NativeThread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt'))))
-        monkeypatch.undo()
-        with pytest.raises(RelationViolationError):
-            Registration(RegistryFile.path_in(root)).require("a")
-
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
-    @pytest.mark.parametrize("damage", ["missing", "corrupt", "truncated", "strip_epochs"])
-    def test_private_guard_rejects_disk_downgrade_even_with_cached_revision(
+    @pytest.mark.parametrize("damage", ["missing", "strip_epochs"])
+    def test_private_registry_rejects_disk_downgrade_even_with_cached_revision(
         self, tmp_path: Path, damage: str
     ) -> None:
 
@@ -334,24 +306,19 @@ class TestRegistration:
         comms = wire(root)
         comms.registry.declare(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt')), process_identity=ProcessIdentity.capture(os.getpid())))
         prepare_native_comms(comms)
-        # A native coordinator is retained evidence of private mode even if its guard vanishes.
+        # A native coordinator is retained evidence of private mode even if its namespace vanishes.
         cold = Registration(RegistryFile.path_in(root))
         assert cold.require("a").name == "a"
-        guard = root / ".registry-owner-guard"
         if damage == "missing":
-            guard.unlink()
-        elif damage == "corrupt":
-            raw = bytearray(guard.read_bytes())
-            raw[0] ^= 1
-            guard.write_bytes(raw)
-        elif damage == "truncated":
-            guard.write_bytes(guard.read_bytes()[:-1])
+            with closing(sqlite3.connect(RegistryFile.path_in(root))) as db:
+                db.execute('DELETE FROM "registry_namespace"')
+                db.commit()
         else:
             source = comms.registry.store.read_revision().source
             data = comms.registry.store.stored()
             for field in ("owners", "claims"):
                 data[FieldCodec.record_key(RegistryDocument, field)]["generations"].clear()
-            # A writer outside the guard removes required generation rows.
+            # A writer outside the registry's edit removes required generation rows.
             comms.registry.store.rows.commit(data, source, EditTables.unchanged())
         with pytest.raises(RelationViolationError):
             cold.require("a")

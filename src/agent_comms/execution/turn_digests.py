@@ -40,7 +40,7 @@ from agent_comms.planning.orders import (
 )
 from agent_comms.planning.problem_number import ProblemNumber
 from agent_comms.projects.work_branches import WorkBranchError
-from agent_comms.registry.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import ConversationPreparation, Thread
 from agent_comms.transcript.transcript_events import IncomingTranscript, TurnDigest

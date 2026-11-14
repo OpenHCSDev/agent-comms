@@ -590,7 +590,11 @@ class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile, TurnRows):
             yield connection
 
     def namespace(self) -> tuple[RegistryNamespace, ...]:
-        """This root's native namespace, or none for a public root."""
+        """This root's native namespace, or none for a public root; read again only after a
+        commit, since every privacy decision asks it."""
+        return self.remembered("namespace", self._read_namespace)
+
+    def _read_namespace(self) -> tuple[RegistryNamespace, ...]:
         with self.family_snapshot(NamespaceSchema) as db:
             return tuple(RegistryNamespace.select(db))
 
@@ -601,6 +605,12 @@ class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile, TurnRows):
             if any(row.root_id != root_id for row in RegistryNamespace.select(db)):
                 raise RelationViolationError("Registry already belongs to another native namespace")
             RegistryNamespace(header=1, root_id=root_id).insert_if_absent(db)
+
+    def withdraw_namespace(self) -> None:
+        """A copy kept for history scopes no native inputs: it has no namespace."""
+        with self.writing() as db:
+            NamespaceSchema.require_schema(db)
+            RegistryNamespace.delete(db)
 
     def turn_wires(self, identities: tuple[TurnIdentity, ...]) -> dict[TurnIdentity, JsonValue]:
         with self.family_snapshot(TurnSchema) as db:

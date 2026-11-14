@@ -1196,17 +1196,11 @@ class RegistryFile(RollbackRetained, PublishedSQLiteFile, GoalWakeFile):
 
         registry = RegistryStore(source)
         with registry.guarded_read():
-            # The rows copy as a SQLite backup, which carries their WAL; the guard and turn files
-            # beside them are plain root files.
+            # The rows copy as a SQLite backup, which carries their WAL.
             copied = frozenset(path for path in registry.cut_paths if path.exists())
             target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             if source in copied:
                 cls.copy_file(source, target)
-            for path, owner in registry.companion_files.items():
-                if path in copied:
-                    destination = target.parent / path.relative_to(source.parent)
-                    destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-                    owner.copy_file(path, destination)
         RegistryStore(target).retire_processes()
         return copied
 

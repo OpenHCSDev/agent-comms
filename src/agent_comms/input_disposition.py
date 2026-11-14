@@ -43,7 +43,7 @@ from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.field_codec import GoalId, InputId, RootId, ThreadLookup, TurnId
 from agent_comms.nominal.lifecycle_capability import Unresolved
-from agent_comms.registry.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.registry_document import RegistryEntry, RegistrySnapshot
 from agent_comms.storage.locked_store import CompleteInputReader, DocumentChange, PublishedProperty
 from agent_comms.storage.typed_table import (

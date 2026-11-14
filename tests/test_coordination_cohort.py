@@ -360,7 +360,7 @@ def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path)
             candidate.registry.store.prepare_native_root()
         # Root adoption owns the empty bus (root_runtime.py adopt); the refusal is that
         # no private authority exists for the untrusted root.
-        assert not candidate.registry.store.guard_path.exists()
+        assert not candidate.registry.store.rows.namespace()
     finally:
         open_parent.chmod(0o700)
 
