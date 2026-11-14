@@ -8,7 +8,7 @@ from typing import Self
 
 from agent_comms.execution.child_process import ResidentManager
 from agent_comms.execution.launch_runtime import LaunchRuntime
-from agent_comms.host_services import ServiceNotServingError, SystemdUserService
+from agent_comms.host_services import SystemdUserService
 
 
 @dataclass(frozen=True)
@@ -52,14 +52,10 @@ class CodexInboxService(SystemdUserService):
         return tuple(instance for instance in instances if instance.pid() != 0)
 
     def serves(self) -> None:
-        if not ResidentManager.current().activity(self.unit_name()).serving():
-            raise ServiceNotServingError(f"{self.described()} is not active")
-        runtime = self.runtime()
-        installed = LaunchRuntime.installed().interpreter
-        if runtime != installed:
-            raise ServiceNotServingError(
-                f"{self.described()} runs {runtime}, not the installed {installed}"
-            )
+        """The install's serving proof asks what its restart already asked, with the same
+        patience: this unit is active from its fork, and its ``resume`` re-executes itself
+        about as long after starting as the proof's own interpreter takes to start."""
+        self.running_on(LaunchRuntime.installed().interpreter)
 
     def described(self) -> str:
         return f"Codex inbox for {self.session}"
