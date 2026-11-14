@@ -17,7 +17,7 @@ e5e62ee12c9267ac10b6708fb62afdb4f4e32cf5d98aa07cd2631263c62ae799  node_modules/@
 103067298d031fcc2000962b15ec751746e93add4350befbd4cee91c9fafc42e  dist/core/package-manager.js
 a65f12cbbfcdc0326b024fb91d9c1e28ec2c11111e333b58da0f2e016233c264  dist/core/agent-session-services.js
 ee4f52d1dd4f1c18d5d814be4ba260ddf7fe40b7b70c2f0732a30a8b287111ad  dist/core/settings-manager.js
-aeef26ee03b5558712027e6f046dc273c0e58fc30406abdf218104bedd781e00  dist/core/session-entry-store.js
+cb989a259e25ad8add6ff515d66b11ca392028ba4cb009ceb94c68e638e60459  dist/core/session-entry-store.js
 1a1dcab01172e65dab4e0d2e8684e7ad123bb027abe66b4ac5daee748576a24d  dist/core/output-guard.js
 4fa4e9a0ba80f43b560eb827dbd0985ea56624170b51401b39398d76ffcbcefa  dist/core/export-html/index.js
 d7ad93bcb341424fa79014ce2fec4226326cfab1e8d5fee27c1859138e120161  dist/core/sdk.js
@@ -40,8 +40,8 @@ e747c952fa4d19e9dce98f54a6f3ae0ceafcaf07facb4adba733320e74f81dc3  node_modules/@
 5d41b9551078157d74b4104c37fb6040533575b4ce6a743528b681390fc36520  node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js
 ff7e1a14fcfd7f8dac4db5b52f4a316d6def16c90d46367d7c7d06bbdb28d6ff  node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
 36d8bd607a5219f0b10d4e7d0e434f77333407da94c5ce94fde3cb3c8f608d75  node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
-08b2f288cd9fa07da91dc1681597ca42e38029a6c7afe1f2b493175321926e52  dist/core/turn-context.js
-7a0914c5ff30262f73af4f6527992878aefae7fdb19ed178f9e7ab4bacf6e2e6  dist/core/turn-context.d.ts
+b364247f5ea6d64b469d3b43e9619c511db88cfc211471098697d6be4626b4d1  dist/core/turn-context.js
+591840edded0edcb6d6156c19f5bf262a9a3e3eb601c97a2ddc4b563c06ac39e  dist/core/turn-context.d.ts
 176621c0f4bcfb7f3d53bca5eaf9c5b7c57d829c0e1529844e8e3ee2100d5ab9  dist/core/tools/agent-comms-file-artifact.js
 b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18  dist/core/tools/edit.js
 233ab990ddbb3f54f19baa02ab11620da01588a664fd8da639ffe5fa268f3f0f  dist/core/tools/native-file-artifact-schema.mjs
@@ -56,5 +56,5 @@ d64e8c05c7932d377034820b1db0df45612afe64885c0765f8f348a12e1bc955  dist/core/skil
 8e8276bbabcd898136d431345611928626fad6b6f03ac572f1d8506e6ece326f  dist/core/system-prompt.d.ts
 0391543cf703a93a0163b37b3ccebe53e0f12bff6f6162b86d56fb017fe49011  dist/core/system-prompt.js
 # agent-comms-native-stock-v1 @earendil-works/pi-coding-agent@0.85.1
-# agent-comms-native-tree-v1 796a69f249d416fb1325c6cd397151f9ee38b94a48f1b03eeac4474ed2fba2ec
-# agent-comms-native-inputs-v1 e653dac6559a9b105c2a14685f9aacb8a3c891978a9cd5a578a6932794c78dbd
+# agent-comms-native-tree-v1 cf9439bd5dcebd37eae6b6c6836b102a4b8acbbbec6e575b3a0642da181e1990
+# agent-comms-native-inputs-v1 a40ab20cb80ddc253fc96c33cd00e898b7324c0669e06b6dc23ed9d9742ace7a

@@ -59,9 +59,6 @@ export interface NativeContextObservation extends Omit<NativeContextManifest, 's
     values: NativeContextData['segments'];
 }
 export declare class PublishedContext {}
-export declare class ContextEntries {
-    static of(manager: import("./session-manager.js").SessionManager): import("./session-manager.js").SessionEntry[];
-}
 export interface NativeContextData {
     identity: {sessionId: string; sessionFile: string};
     counter: string;
