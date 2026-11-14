@@ -88,11 +88,13 @@ class TranscriptSegment(NativeAnnotations):
         header = replace(original, provenance=provenance, contributors=(), captured_text=())
         references = tuple(ContextEntryReference.from_sources(child.sources)
                            for child in original.contributors)
+        # Asked of the request really recorded before this one: a keyframe turn records as
+        # if nothing came before, and its entries are in the store all the same.
+        held = previous.held_entries(references)
         if not recording_turn % cls.keyframe_interval:
             previous = UnrecordedSegment()
         recorded = previous.record_entries(header, references)
-        entries = tuple(ContextEntryManifest(child)
-                        for child in original.contributors[recorded.inherited_entries:])
+        entries = tuple(ContextEntryManifest(child) for child in original.contributors[held:])
         return recorded, entries
 
 
