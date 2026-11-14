@@ -154,7 +154,7 @@ def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry
         ("src/remaining.py", "class Backend:\n    serves_threads = True\n"),
         ("src/remaining.py", "class Backend:\n    serves_new_threads: ClassVar[bool] = True\n"),
         ("src/agent_comms/installer/probes/carry.py", "class Carry:\n    declared: ClassVar[dict] = {}\n"),
-        ("src/agent_comms/registry/private_registry_guard.py", "class RegistryPrivacy:\n    kinds = {}\n"),
+        ("src/agent_comms/registry/registry_privacy.py", "class RegistryPrivacy:\n    kinds = {}\n"),
         ("src/agent_comms/registry/thread_identity.py", "class BirthlessIncarnation:\n    members = {}\n"),
         ("src/agent_comms/cli_bridges/tool_calls.py", "class CliToolArguments:\n    types = {}\n"),
         ("src/agent_comms/execution/pi_events.py", "class PiEvent:\n    _start_phases = {}\n"),

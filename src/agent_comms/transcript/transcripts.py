@@ -89,7 +89,7 @@ from agent_comms.notification_assignment import (
     AssignmentSource,
     NotificationSelection,
 )
-from agent_comms.registry.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_provenance import RegistryProvenance

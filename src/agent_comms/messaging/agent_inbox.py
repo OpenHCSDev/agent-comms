@@ -34,7 +34,7 @@ from agent_comms.nominal.field_codec import (
     SingleFieldValue,
     SubclassUnion,
 )
-from agent_comms.registry.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.storage.private_path import FileObservation, FileRevision
 
 if TYPE_CHECKING:

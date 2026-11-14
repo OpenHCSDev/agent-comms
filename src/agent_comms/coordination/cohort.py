@@ -34,7 +34,7 @@ from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordination.tables.participants import OwnerGenerations, Participants
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.nominal.field_codec import AssignmentId, MessageId, RootId, ThreadLookup, WireName
-from agent_comms.registry.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registry_privacy import RegistryPrivacy
 
 _LOG = logging.getLogger(__name__)
 

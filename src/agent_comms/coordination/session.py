@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from agent_comms.coordination.attempt_states import TerminalAttempt
     from agent_comms.coordination.snapshot import RecoverySnapshot
     from agent_comms.messaging.message_bus import MessageBus
-    from agent_comms.registry.private_registry_guard import RegistryPrivacy
+    from agent_comms.registry.registry_privacy import RegistryPrivacy
     from agent_comms.registry.registry_document import RegistrySnapshot
     from agent_comms.registry.registry_store import RegistryCut
 

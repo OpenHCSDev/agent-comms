@@ -590,7 +590,11 @@ class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile, TurnRows):
             yield connection
 
     def namespace(self) -> tuple[RegistryNamespace, ...]:
-        """This root's native namespace, or none for a public root."""
+        """This root's native namespace, or none for a public root; read again only after a
+        commit, since every privacy decision asks it."""
+        return self.remembered("namespace", self._read_namespace)
+
+    def _read_namespace(self) -> tuple[RegistryNamespace, ...]:
         with self.family_snapshot(NamespaceSchema) as db:
             return tuple(RegistryNamespace.select(db))
 

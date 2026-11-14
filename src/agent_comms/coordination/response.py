@@ -53,7 +53,7 @@ from agent_comms.messaging.messages import (
 from agent_comms.messaging.publisher import ResponseWrites
 from agent_comms.messaging.response_conversation import ResponseConversation
 from agent_comms.nominal.field_codec import MessageId, RootId, ThreadLookup
-from agent_comms.registry.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.typed_table import (

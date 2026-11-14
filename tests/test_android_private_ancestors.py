@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import RootId
-from agent_comms.registry.private_registry_guard import PrivateRegistryGuard
+from agent_comms.registry.registry_privacy import PrivateRegistry
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.private_path import TrustedAncestorRole
 
@@ -36,7 +36,7 @@ def test_android_registry_accepts_the_actual_termux_app_data_ancestors(android, 
         root: directory(0o700, 10257, 10257),
     }
     monkeypatch.setattr(Path, 'lstat', lambda path: observed[path])
-    guard = PrivateRegistryGuard(RegistryFile.path_in(root), RootId('00' * 16))
+    guard = PrivateRegistry(RegistryFile.path_in(root), RootId('00' * 16))
     guard._trusted_root()
     TrustedAncestorRole.require_path(root, ValueError('Untrusted Android ancestor'))
 
@@ -54,7 +54,7 @@ def test_android_ancestors_still_reject_foreign_writers_and_links(android, obser
 
 def test_android_registry_root_still_requires_owner_only_mode(android, monkeypatch):
     monkeypatch.setattr(Path, 'lstat', lambda path: directory(0o755, 10257, 10257))
-    guard = PrivateRegistryGuard(Path('/wire/registry.json'), RootId('00' * 16))
+    guard = PrivateRegistry(Path('/wire/registry.json'), RootId('00' * 16))
     with pytest.raises(RelationViolationError, match='root must be owner-only'):
         guard._trusted_root()
 

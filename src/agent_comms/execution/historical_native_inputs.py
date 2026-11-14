@@ -43,7 +43,7 @@ from agent_comms.nominal.field_codec import (
     WireName,
 )
 from agent_comms.registry.privacy_reads import NativeAnswerRead
-from agent_comms.registry.private_registry_guard import RegistryPrivacy
+from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.typed_table import TypedRow
 
