@@ -131,7 +131,7 @@ async def test_native_absence_does_not_admit_a_wait_or_a_forwarding_job():
 
 async def test_unobserved_private_state_and_unmeasured_session_have_no_authority(tmp_path):
     state = DrainedSession(identifier=AcpSessionId("unobserved"))
-    assert not state.settled()
+    assert not state.inbox.quiet
     await state.turn.finish_original(None)
     state.open_inbox()
     await state.turn.finish_original(None)

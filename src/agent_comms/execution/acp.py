@@ -81,6 +81,7 @@ from agent_comms.execution.cursor_publication import CursorPublication
 from agent_comms.execution.drain_failures import drain_failures
 from agent_comms.execution.image_inputs import prompt_images
 from agent_comms.execution.input_drain import (
+    InboxUnchanged,
     InputDrain,
     SchedulesWake,
     WakeDue,
@@ -192,7 +193,7 @@ class SelectedWakeCheck(SchedulesWake):
                 # old-generation Pi evidence cannot initialize this cursor on reconnect.
                 await effects.cursors.publish(session_id, self.thread, advance=True)
                 if before == await inputs._observe_private_revision(session_id, root_id):
-                    inputs.state(session_id).idle_revision = before
+                    inputs.state(session_id).receive(InboxUnchanged(before))
             if result is not None:
                 # Messages this turn could not take are still pending.
                 await inputs.drain_inbox(session_id)

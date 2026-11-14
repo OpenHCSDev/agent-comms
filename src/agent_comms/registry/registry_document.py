@@ -1248,6 +1248,11 @@ class RegistryEntry(PresenceEntry):
     def matches_name(self, name: str) -> bool:
         return name in self.names
 
+    def apart_from_turn(self) -> RegistryEntry:
+        """This entry without its thread's turn or the time it was last seen: what an owner's
+        own turn claim and heartbeat leave alone."""
+        return replace(self, thread=self.thread.apart_from_turn(), last_seen=0.0)
+
     def owned_by(self, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
         return self.status.owns_entry(self, owner, process)
 

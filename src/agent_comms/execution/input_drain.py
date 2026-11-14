@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import cast
+from typing import ClassVar, cast
 
 from acp.schema import PromptResponse
 
@@ -102,23 +102,24 @@ AGENT_PREFIX = "!agent "
 
 
 class WakeOutcome(DeclaredFamily, TurnOutcome):
-    """A completed wake owns whether observation should run again."""
+    """A completed wake owns what its session hears of it."""
 
     @abstractmethod
-    def settle(self, observer: Callable[[AcpSessionId], None], session_id: AcpSessionId) -> None: ...
+    def settle(self, inputs: InputObservation, session_id: AcpSessionId) -> None: ...
 
 
 @dataclass(frozen=True)
 class WakeHeld(WakeOutcome):
     hold: MaintenanceStatus
 
-    def settle(self, observer: Callable[[AcpSessionId], None], session_id: AcpSessionId) -> None:
+    def settle(self, inputs: InputObservation, session_id: AcpSessionId) -> None:
         """Maintenance reopening supplies the next wake."""
+        inputs.state(session_id).receive(WakeUnfinished())
 
 
 class WakeDue(WakeOutcome):
-    def settle(self, observer: Callable[[AcpSessionId], None], session_id: AcpSessionId) -> None:
-        observer(session_id)
+    def settle(self, inputs: InputObservation, session_id: AcpSessionId) -> None:
+        inputs.wake_observer(session_id)
 
 
 class BackgroundWake(RuleCheck):
@@ -236,9 +237,7 @@ class EmptyWakeScheduleRule(ReservationRule):
 
 
 class PrivateObservationState(ABC):
-    """Only a settled private observation can suppress coordination work."""
-
-    settled = False
+    """What the last settled drain saw of this owner's inbox, or that none has settled."""
 
     @abstractmethod
     def has_unobserved_inputs(self, bus: Bus, lookup: ThreadLookup) -> bool: ...
@@ -256,7 +255,6 @@ class PrivateObservation(PrivateObservationState):
     source_prefix: SourcePrefix
     entry: RegistryEntry
     work: tuple
-    settled = True
 
     def has_unobserved_inputs(self, bus: Bus, lookup: ThreadLookup) -> bool:
         """Every root commit wakes every session here; most commits append no message."""
@@ -273,6 +271,260 @@ class ExecutionWaitingObservation(PrivateObservation):
 
     async def drain(self, inputs, session_id: AcpSessionId, root_id: RootId) -> int:
         return 0
+
+
+class InboxNews(ABC):
+    """Something that happened which bears on whether a session owes its inbox a drain.
+
+    Whoever sees it happen hands it to the session, and the session's debt answers it. The
+    watcher and the turn used to leave a boolean each for seven separate tests to combine."""
+
+    def reaching(self, debt: InboxDebt) -> InboxDebt:
+        """The debt after this: by default, kept for a settled inbox to weigh at its next tick."""
+        return debt.hearing(self)
+
+
+class WeighedNews(InboxNews):
+    """News a settled inbox keeps until a tick has weighed it."""
+
+    asks_a_store: ClassVar[bool] = False
+
+    @abstractmethod
+    async def owes_drain(
+        self, session: DrainedSession, note: PrivateObservationState, bus: Bus,
+        lookup: ThreadLookup,
+    ) -> bool:
+        """Whether, having happened, this owes the settled session a drain now."""
+
+
+@dataclass(frozen=True, slots=True)
+class BusCommitted(WeighedNews):
+    """The bus committed. Every root commit reaches every session; the bus says whether this
+    one appended a message for this owner past the cut its note was taken at."""
+
+    asks_a_store = True
+
+    async def owes_drain(
+        self, session: DrainedSession, note: PrivateObservationState, bus: Bus,
+        lookup: ThreadLookup,
+    ) -> bool:
+        # Weighed from here: a commit that lands while the bus is being asked is heard anew.
+        session.inbox = session.inbox.dismissing(self)
+        if await Coordination.run_worker(partial(note.has_unobserved_inputs, bus, lookup)):
+            session.receive(self)
+            return True
+        return False
+
+
+@dataclass(frozen=True, slots=True)
+class RowMoved(WeighedNews):
+    """This owner's registry entry differs from the one the root observer read before it, or
+    could not be read. It is what the observer of a running wake still watches: that wake
+    wakes the observer itself when it finishes."""
+
+    async def owes_drain(
+        self, session: DrainedSession, note: PrivateObservationState, bus: Bus,
+        lookup: ThreadLookup,
+    ) -> bool:
+        return session.wake_pending()
+
+
+class LocalChange(InboxNews):
+    """Something in this process moved that need not add a new input file: a turn or a wake
+    ended, a session attached."""
+
+    def reaching(self, debt: InboxDebt) -> InboxDebt:
+        return debt.changed()
+
+
+class WakeStarted(InboxNews):
+    """A wake was registered for this session. A request for one that was refused, because
+    one is already running, registers nothing and is not this."""
+
+    def reaching(self, debt: InboxDebt) -> InboxDebt:
+        return debt.wake_started()
+
+
+class NoteVoided(InboxNews):
+    """Whatever note the session held no longer describes its inbox: a drain is owed."""
+
+    def reaching(self, debt: InboxDebt) -> InboxDebt:
+        return DrainOwed()
+
+
+class PendingTaken(NoteVoided):
+    """A running turn took accepted work from the inbox."""
+
+
+class WakeUnfinished(NoteVoided):
+    """A wake ended without doing its work: it failed, was cancelled, or maintenance held it.
+    The inbox it was handed is as the drain left it, so the next tick drains again. Nothing
+    wakes the observer for it: maintenance reopening and the next commit both tick, and
+    waking now would spin on the same closed phase."""
+
+
+@dataclass(frozen=True, slots=True)
+class InboxUnchanged(InboxNews):
+    """A wake that found nothing to run saw the inbox the same before and after its own
+    cursor publication."""
+
+    note: PrivateObservation
+
+    def reaching(self, debt: InboxDebt) -> InboxDebt:
+        return debt.witnessed(self.note)
+
+
+class InboxDebt(ABC):
+    """What a session owes its inbox. A session holds exactly one member.
+
+    Five fields used to hold this between them (a note, a repeat flag, two bus flags and an
+    entry flag), so a session could be settled and owing at once, and each of seven tests
+    resolved that its own way."""
+
+    quiet: ClassVar[bool] = False
+    """Nothing is owed until news arrives."""
+    asks_again: ClassVar[bool] = False
+    """Owed whatever the stores say: any tick observes, and an observation that leaves it so
+    asks for another."""
+
+    @property
+    def note(self) -> PrivateObservationState:
+        return NoPrivateObservation()
+
+    def holds(self, observation: PrivateObservation) -> bool:
+        return self.note == observation
+
+    def hearing(self, news: WeighedNews) -> InboxDebt:
+        """A debt that drains at its next tick anyway has nothing to keep."""
+        return self
+
+    def dismissing(self, news: WeighedNews) -> InboxDebt:
+        return self
+
+    def changed(self) -> InboxDebt:
+        return DrainOwed(self.note)
+
+    def witnessed(self, note: PrivateObservation) -> InboxDebt:
+        return self
+
+    def confirmed(self) -> InboxDebt:
+        """An observation found the inbox exactly as this debt's note describes it."""
+        return self
+
+    def wake_started(self) -> InboxDebt:
+        return self
+
+    def finished(self, note: PrivateObservation) -> InboxDebt:
+        """The drain begun under this debt found nothing, and nothing moved while it looked."""
+        return self
+
+    def worked(self, note: PrivateObservation) -> InboxDebt:
+        """The drain begun under this debt did work at ``note`` and returned."""
+        return self
+
+    def abandoned(self) -> InboxDebt:
+        """The drain begun under this debt ended without settling."""
+        return self
+
+    async def owed(
+        self, session: DrainedSession, needs_refresh: bool, bus: Bus, lookup: ThreadLookup,
+    ) -> bool:
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class DrainOwed(InboxDebt):
+    """A drain is owed. ``held`` is what the last settled one saw: an observation that finds
+    exactly that again settles without draining."""
+
+    held: PrivateObservationState = field(default_factory=NoPrivateObservation)
+    asks_again = True
+
+    @property
+    def note(self) -> PrivateObservationState:
+        return self.held
+
+    def changed(self) -> InboxDebt:
+        return self
+
+    def witnessed(self, note: PrivateObservation) -> InboxDebt:
+        return DrainOwed(note)
+
+    def confirmed(self) -> InboxDebt:
+        return InboxSettled(self.held)
+
+    def finished(self, note: PrivateObservation) -> InboxDebt:
+        """Something local changed while that drain ran: its note stands, and the debt too."""
+        return DrainOwed(note)
+
+
+@dataclass(frozen=True, slots=True)
+class InboxSettled(InboxDebt):
+    """A drain left nothing owed at ``held``. Only news can change that; what has been heard
+    and not yet weighed is ``unweighed``. A new note has never asked the bus."""
+
+    held: PrivateObservationState
+    unweighed: frozenset[WeighedNews] = frozenset({BusCommitted()})
+    quiet = True
+
+    @property
+    def note(self) -> PrivateObservationState:
+        return self.held
+
+    def hearing(self, news: WeighedNews) -> InboxDebt:
+        return replace(self, unweighed=self.unweighed | {news})
+
+    def dismissing(self, news: WeighedNews) -> InboxDebt:
+        return replace(self, unweighed=self.unweighed - {news})
+
+    def witnessed(self, note: PrivateObservation) -> InboxDebt:
+        return InboxSettled(note, self.unweighed | {BusCommitted()})
+
+    async def owed(
+        self, session: DrainedSession, needs_refresh: bool, bus: Bus, lookup: ThreadLookup,
+    ) -> bool:
+        """Queued turns and a stale cursor are consumed by an observation; otherwise only
+        news it has yet to weigh can owe one, asked without a store read first."""
+        if session.pending_turns or needs_refresh:
+            return True
+        for news in sorted(self.unweighed, key=lambda heard: heard.asks_a_store):
+            if await news.owes_drain(session, self.held, bus, lookup):
+                return True
+        return False
+
+
+@dataclass(frozen=True, slots=True)
+class InboxDraining(InboxDebt):
+    """A drain is running. News it hears goes to the settlement it reaches; a local change
+    means its answer is already stale."""
+
+    heard: frozenset[WeighedNews] = frozenset()
+
+    def hearing(self, news: WeighedNews) -> InboxDebt:
+        return replace(self, heard=self.heard | {news})
+
+    def changed(self) -> InboxDebt:
+        return DrainOwed()
+
+    def wake_started(self) -> InboxDebt:
+        return WakeTookInbox(self.heard)
+
+    def finished(self, note: PrivateObservation) -> InboxDebt:
+        return InboxSettled(note, self.heard | {BusCommitted()})
+
+    def abandoned(self) -> InboxDebt:
+        return DrainOwed()
+
+
+@dataclass(frozen=True, slots=True)
+class WakeTookInbox(InboxDraining):
+    """The running drain registered a wake. That wake empties this inbox, and its end, however
+    it ends, is news to this session; until then the one thing worth another drain is mail
+    past the cut this one drained from. Without this member the drain's work left no note at
+    all, and each commit of the wake it had just started ran a whole drain to look."""
+
+    def worked(self, note: PrivateObservation) -> InboxDebt:
+        return self.finished(note)
 
 
 class BusSessionsRuntime:
@@ -324,17 +576,16 @@ class InputObservation(BusSessionsRuntime, ABC):
     def register_wake(self, session_id: AcpSessionId, task: asyncio.Task[WakeOutcome]) -> None:
         state = self.state(session_id)
         state.wake_task = task
+        state.receive(WakeStarted())
 
         def finished(completed: asyncio.Task[WakeOutcome]) -> None:
             if state.wake_task is not completed:
                 return
             state.wake_task = None
-            # A deferred wake has not consumed its queue or assignment. The
-            # maintenance witness itself wakes the observer on READY; waking
-            # again now would spin on the same closed phase.
             if completed.cancelled() or completed.exception() is not None:
+                state.receive(WakeUnfinished())
                 return
-            completed.result().settle(self.wake_observer, session_id)
+            completed.result().settle(self, session_id)
 
         task.add_done_callback(finished)
 
@@ -364,10 +615,10 @@ class InputObservation(BusSessionsRuntime, ABC):
         state = self.state(session_id)
         turn_live = self.turn_live(session_id)
         return (
-            state.settled()
-            and not state.owes_tick(
-                self.effects.cursors.delivery(session_id).needs_refresh,
-            )
+            state.inbox.quiet
+            and not state.pending_turns
+            and not self.effects.cursors.delivery(session_id).needs_refresh
+            and not state.wake_pending()
             and not turn_live
         )
 
@@ -397,7 +648,7 @@ class InputObservation(BusSessionsRuntime, ABC):
             *inbox_sources,
             *(FileSource(path) for path in GoalWakeFile.watched_paths_in(self.comms.root)),
         )
-        entries: dict[AcpSessionId, RegistryEntry | None] = {}
+        entries: dict[AcpSessionId, RegistryEntry] = {}
         try:
             async with aclosing(bus.watch_sources(*sources)) as observations:
                 async for watcher in observations:
@@ -416,31 +667,35 @@ class InputObservation(BusSessionsRuntime, ABC):
                         # Each consumer records failure against its own original owner.
                         entries = {}
                         for state in targets.values():
-                            state.entry_moved = True
+                            state.receive(RowMoved())
                             state.observation_ready.set()
                     else:
                         self.effects.turns.goals.observe_root(
                             document, (owner for state in targets.values()
                                        for owner in state.executors()), watcher.observed_paths,
                         )
+                        # An owner's own turn claims itself and is seen again in its entry;
+                        # its end reaches the session as a local change.
                         read_entries = {
-                            session_id: document.entry_if_present(name)
+                            session_id: entry.apart_from_turn()
                             for session_id, name in zip(targets, names, strict=True)
+                            for entry in (document.entry_if_present(name),)
+                            if entry is not None
                         }
-                        for session_id, entry in read_entries.items():
-                            if entries.get(session_id) != entry:
-                                targets[session_id].entry_moved = True
+                        for session_id, state in targets.items():
+                            if entries.get(session_id) != read_entries.get(session_id):
+                                state.receive(RowMoved())
                         entries = read_entries
                     self.observed_registry = read
                     inbox_changed = any(source.path in watcher.observed_paths for source in inbox_sources)
                     if not bus_paths.isdisjoint(watcher.observed_paths):
                         for state in self.drained.values():
-                            state.bus_moved = True
+                            state.receive(BusCommitted())
                     for state in targets.values():
                         if state.observing():
                             # Pending producers have their own completion wake;
                             # only an explicit local request owes another tick.
-                            if inbox_changed or state.repeat_observation:
+                            if inbox_changed or state.inbox.asks_again:
                                 state.observation_ready.set()
                             state.observation_watcher = watcher
         finally:
@@ -469,14 +724,14 @@ class InputObservation(BusSessionsRuntime, ABC):
         entry = await self.begin_observation(state, initial.entry)
         bus = self.comms.bus.bus
         lookup = entry.thread.incarnation.require_recorded().lookup
-        state.forget_observation()
+        state.inbox = DrainOwed()
         while True:
             await state.observation_ready.wait()
             state.observation_ready.clear()
             read = self.observed_registry
-            consumes = state.tick_consumes(self.effects.cursors.delivery(session_id).needs_refresh)
-            waking = state.wake_pending()
-            if not (consumes or waking or await state.bus_has_inputs(bus, lookup)):
+            if not await state.inbox.owed(
+                state, self.effects.cursors.delivery(session_id).needs_refresh, bus, lookup,
+            ):
                 continue
             try:
                 document = await asyncio.shield(read)
@@ -489,13 +744,8 @@ class InputObservation(BusSessionsRuntime, ABC):
                     FailedWakeDiagnostic, error,
                 )
             else:
-                # A running wake wakes this observer when it finishes. Until then only this
-                # owner's registry entry or a new message can change what the standing
-                # observation proved; every other session's commit cannot.
-                if (waking and not consumes and not state.entry_moved
-                        and not await state.bus_has_inputs(bus, lookup)):
-                    continue
-                state.entry_moved = False
+                # This observation reads the entry the root observer just read.
+                state.inbox = state.inbox.dismissing(RowMoved())
                 await self._observe_entry(session_id, entry)
 
     async def _observe_entry(
@@ -715,20 +965,9 @@ class DrainedSession(SessionTaskOwner, InputEventState):
     following: dict[InputId, AcceptedFollowingInput] = field(default_factory=dict)
     queue_revision: int = 0
     pending_turns: list[ScheduledTurn] = field(default_factory=list)
-    # Only a completed, quiescent observation can suppress another scan.
-    # This revision never authorizes delivery, acceptance or a native send.
-    idle_revision: PrivateObservationState = field(default_factory=NoPrivateObservation)
-    # A changed read or process-local wake needs a full observation.
-    # A completed stable drain consumes this pending work.
-    repeat_observation: bool = False
-    # The bus committed since this session last asked it for unobserved inputs, and the
-    # observation that asked. A coordinator commit wakes every session; only a bus commit
-    # or a new observation can change the bus's answer.
-    bus_moved: bool = True
-    bus_asked: PrivateObservationState = field(default_factory=NoPrivateObservation)
-    # This owner's registry entry differs from the one the root observer read before it.
-    # A tick clears it; it is what the observer of a running wake still watches.
-    entry_moved: bool = True
+    # What this session owes its inbox. It never authorizes delivery, acceptance or a
+    # native send.
+    inbox: InboxDebt = field(default_factory=DrainOwed)
 
     def owned(self) -> OwnerSession:
         raise RelationViolationError("This session has not acquired local execution")
@@ -768,40 +1007,12 @@ class DrainedSession(SessionTaskOwner, InputEventState):
         previous, self.turn_task = self.turn_task, TurnTask()
         return previous
 
+    def receive(self, news: InboxNews) -> None:
+        self.inbox = news.reaching(self.inbox)
+
     def wake_observer(self) -> None:
-        # A process-local change need not add a new input file.
-        self.repeat_observation = True
+        self.receive(LocalChange())
         self.notify_observer()
-
-    def tick_consumes(self, needs_refresh: bool) -> bool:
-        """The owed work an observation can consume now.
-
-        The next observation consumes repeat_observation; scheduling consumes
-        pending_turns; cursor refresh consumes needs_refresh.
-        """
-        return bool(self.repeat_observation or self.pending_turns or needs_refresh)
-
-    def owes_tick(self, needs_refresh: bool) -> bool:
-        """Keep work owed until its producer or another observation consumes it.
-
-        Completion of the wake task consumes its pending wake: no observation can.
-        """
-        return self.tick_consumes(needs_refresh) or self.wake_pending()
-
-    async def bus_has_inputs(self, bus: Bus, lookup: ThreadLookup) -> bool:
-        """Ask the bus once per bus commit and observation.
-
-        A coordinator commit wakes every session; only a bus commit or a new observation
-        can change the bus's answer.
-        """
-        observation = self.idle_revision
-        if self.bus_asked is observation and not self.bus_moved:
-            return False
-        self.bus_moved = False
-        if await Coordination.run_worker(partial(observation.has_unobserved_inputs, bus, lookup)):
-            return True
-        self.bus_asked = observation
-        return False
 
     def self_tick_owed(self, drained: int, needs_refresh: bool, turn_live: bool) -> bool:
         """Notify only when this observer can consume the work on its next tick.
@@ -815,7 +1026,7 @@ class DrainedSession(SessionTaskOwner, InputEventState):
             return True
         if drained or self.pending_turns or turn_live:
             return False
-        return self.repeat_observation
+        return self.inbox.asks_again
 
     def producers(self) -> tuple[asyncio.Task[object], ...]:
         return (*self.observer.producers(),
@@ -825,8 +1036,7 @@ class DrainedSession(SessionTaskOwner, InputEventState):
         self.observer = BackgroundTask()
         self.wake_task = self.observation_watcher = None
         self.observation_ready.clear()
-        self.forget_observation()
-        self.repeat_observation = False
+        self.inbox = DrainOwed()
 
     def turn_open(self) -> bool:
         return self.turn.is_open()
@@ -836,12 +1046,6 @@ class DrainedSession(SessionTaskOwner, InputEventState):
 
     def wake_pending(self) -> bool:
         return self.wake_task is not None and not self.wake_task.done()
-
-    def forget_observation(self) -> None:
-        self.idle_revision = NoPrivateObservation()
-
-    def settled(self) -> bool:
-        return self.idle_revision.settled
 
     def notify_observer(self) -> None:
         if self.observation_watcher is not None:
@@ -1110,21 +1314,24 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
         # ordinary loop still synchronizes configuration and schedules goals.
         state = self.state(session_id)
         before = await self._observe_private_revision(session_id, root_id)
-        if state.idle_revision != before:
-            state.forget_observation()
-            result = await before.drain(self, session_id, root_id)
-            # Never absorb a message/owner/recovery change during a suspended read,
-            # or skip queued independent work after a completed native turn.
-            if result:
-                state.repeat_observation = False
-                return result
-            if before != await self._observe_private_revision(session_id, root_id):
-                state.repeat_observation = True
-                return 0
-            state.idle_revision = before
+        if state.inbox.holds(before):
+            state.inbox = state.inbox.confirmed()
+        else:
+            state.inbox = InboxDraining()
+            try:
+                result = await before.drain(self, session_id, root_id)
+                if result:
+                    state.inbox = state.inbox.worked(before)
+                    return result
+                # Never absorb a message/owner/recovery change during a suspended read,
+                # or skip queued independent work after a completed native turn.
+                if before != await self._observe_private_revision(session_id, root_id):
+                    return 0
+                state.inbox = state.inbox.finished(before)
+            finally:
+                state.inbox = state.inbox.abandoned()
         # Idle is where the cursor refresh is owed, on the drain that reaches it as on
         # every drain that finds it.
-        state.repeat_observation = False
         await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
         return 0
 
