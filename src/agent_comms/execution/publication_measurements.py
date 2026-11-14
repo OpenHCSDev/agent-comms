@@ -94,6 +94,15 @@ class WorkLedger:
             cls.ledger.named(name).observed(started, finished)
 
     @classmethod
+    @contextmanager
+    def measuring(cls, name: str) -> Iterator[None]:
+        started = cls.ledger.clock()
+        try:
+            yield
+        finally:
+            cls.observed(name, started, cls.ledger.clock())
+
+    @classmethod
     def totals(cls) -> PublicationMeasurements:
         with cls.changing:
             return copy.deepcopy(cls.ledger)
@@ -109,15 +118,11 @@ class WorkCpu(WorkLedger):
     @classmethod
     def measured[**P, Result](cls, operation: Callable[P, Result]) -> Callable[P, Result]:
         name = cls.name_of(operation)
-        clock = cls.ledger.clock
 
         @wraps(operation)
         def run(*args: P.args, **kwargs: P.kwargs) -> Result:
-            started = clock()
-            try:
+            with cls.measuring(name):
                 return operation(*args, **kwargs)
-            finally:
-                cls.observed(name, started, clock())
 
         return run
 
@@ -133,5 +138,14 @@ class CoordinatorWait(WorkLedger):
 class CoordinatorRun(WorkLedger):
     """Elapsed time each coordinator operation ran on the coordinator thread. Less its
     WorkCpu, it is what the operation waited on there: locks, the disk, the GIL."""
+
+    ledger: ClassVar[PublicationMeasurements] = PublicationMeasurements()
+
+
+class TransactionWait(WorkLedger):
+    """Elapsed time each kind of store spent beginning its read snapshots and write
+    transactions and committing them, by store class: a lock another connection holds, and
+    SQLite's busy handler sleeping between retries (1, 2, 5, 10 ms and up), show here; a
+    commit also pays its disk syncs."""
 
     ledger: ClassVar[PublicationMeasurements] = PublicationMeasurements()

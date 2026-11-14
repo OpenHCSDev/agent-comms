@@ -22,6 +22,7 @@ from agent_comms.execution.publication_measurements import (
     CoordinatorWait,
     PublicationMeasurements,
     ThreadCpuMeasurements,
+    TransactionWait,
     WorkCpu,
 )
 from agent_comms.execution.request_progress import RequestProgress
@@ -108,6 +109,9 @@ class AcquisitionObservation(RequestObservation):
     coordinator_run_cumulative: PublicationMeasurements = field(
         default_factory=CoordinatorRun.totals)
     """How long each kind of coordinator operation has run on the coordinator thread."""
+    transaction_wait_cumulative: PublicationMeasurements = field(
+        default_factory=TransactionWait.totals)
+    """How long each kind of store has spent beginning and committing its transactions."""
 
 
 def record_request_progress(root, lease, progress, native_process, *, publication=None):

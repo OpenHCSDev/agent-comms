@@ -31,6 +31,7 @@ from agent_comms.coordination.errors import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import Platform
+from agent_comms.execution.publication_measurements import TransactionWait
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.storage.private_path import (
@@ -865,13 +866,14 @@ class SQLiteStorage(RootFile, SqliteStore):
             db.setconfig(option, False)
         return db
 
-    @staticmethod
-    def begin_snapshot(db: sqlite3.Connection) -> None:
+    @classmethod
+    def begin_snapshot(cls, db: sqlite3.Connection) -> None:
         """Acquire one committed read revision before any consumer query."""
-        db.execute("BEGIN")
-        # BEGIN is lazy. Acquire the snapshot before schema decoders can
-        # reclassify BUSY as unsupported data or absent rows.
-        db.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
+        with TransactionWait.measuring(f"{cls.__name__} read"):
+            db.execute("BEGIN")
+            # BEGIN is lazy. Acquire the snapshot before schema decoders can
+            # reclassify BUSY as unsupported data or absent rows.
+            db.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
 
     @classmethod
     def _configure_reader(cls, db: sqlite3.Connection) -> sqlite3.Connection:
@@ -966,11 +968,13 @@ class SQLiteStorage(RootFile, SqliteStore):
 
         A busy BEGIN is CoordinationBeginUnavailable: the block never ran. Past BEGIN, every
         error keeps its own type."""
-        with CoordinationBeginUnavailable.checking():
+        with (CoordinationBeginUnavailable.checking(),
+              TransactionWait.measuring(f"{cls.__name__} begin")):
             cls._begin_transaction(connection)
         try:
             yield connection
-            connection.execute("COMMIT")
+            with TransactionWait.measuring(f"{cls.__name__} commit"):
+                connection.execute("COMMIT")
         except BaseException:
             if connection.in_transaction:
                 connection.execute("ROLLBACK")
