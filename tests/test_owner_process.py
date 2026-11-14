@@ -104,7 +104,7 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
     assert replacement.process_alive and replacement.require_process().pid == installed.pid
     await Coordination.run_worker(partial(comms.owners.stop, "worker"))
     assert not replacement.process_alive
-    assert comms.registry.status("worker").stopped
+    assert comms.registry.status("worker").is_stopped()
     assert comms.registry.require("worker").created_at == declared.created_at
 
 
@@ -236,7 +236,7 @@ def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None
         assert child.alive()
         comms.owners.stop("stale")
         assert child.alive()
-        assert comms.registry.status("stale").stopped
+        assert comms.registry.status("stale").is_stopped()
     finally:
         child.stop_sync()
 

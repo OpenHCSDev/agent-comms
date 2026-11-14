@@ -107,7 +107,13 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
         for _ in range(self.patience):
             for instance in type(self).running():
                 if instance == self:
-                    runtime = instance.runtime()
+                    try:
+                        runtime = instance.runtime()
+                    except ServiceNotServingError as starting:
+                        # Its manager names the process before that process has its command:
+                        # a service read in that moment is still starting, inside its patience.
+                        failure = str(starting)
+                        continue
                     if runtime == installed:
                         return RestartedService(instance.described(), installed)
                     failure = (

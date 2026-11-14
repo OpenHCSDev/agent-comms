@@ -37,7 +37,7 @@ from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.installer.target_tree import STEPS, TargetTree
 from agent_comms.installer.upgrade import (
     ExistingBusInstall,
-    HeldOwnersStopped,
+    OwnersStopped,
     PracticeBus,
     PreparedMigration,
     RehearsalFiles,
@@ -296,9 +296,9 @@ def test_a_backup_undoes_a_real_worker_failure(comms, staged, noisy_step):
     maintenance.clear(hold)
 
 
-def held_owners(maintenance: MaintenanceBarrier, hold, started: list[str]) -> HeldOwnersStopped:
+def held_owners(maintenance: MaintenanceBarrier, hold, started: list[str]) -> OwnersStopped:
     """Owners stopped under ``hold``: their release clears it and their exit starts them."""
-    owners = HeldOwnersStopped()
+    owners = OwnersStopped()
     owners.give_back.callback(started.append, "owners")
     owners.hold.callback(maintenance.clear, hold)
     return owners
@@ -337,6 +337,28 @@ def test_a_rollback_holds_the_root_until_every_store_opens_under_its_runtime(
     assert started == []
     assert maintenance.read().phase is DrainingPhase
     maintenance.clear(hold)
+
+
+def test_a_restore_after_the_release_ends_the_hold_it_took(comms):
+    """An install releases its hold before it restarts its services, so a service that does
+    not serve again finds the root open: the restore takes a new hold, and the release after
+    it must end that one. Install 9bede72a3 left it held, the restart of its own owners was
+    refused, and the fleet stayed down until the installer exited."""
+    maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
+    operator = MaintenanceOperator.current()
+    owners = OwnersStopped()
+    maintenance.begin(operator)
+    owners.hold.callback(maintenance.released_by, operator)
+    owners.release()
+    assert maintenance.read().phase is ReadyPhase
+
+    owners.held_for_restore(maintenance)
+    assert maintenance.read().phase is DrainingPhase
+    owners.release()
+    assert maintenance.read().phase is ReadyPhase
+    generation = maintenance.read().generation
+    owners.release()
+    assert maintenance.read().generation == generation
 
 
 def test_an_unchanged_install_opens_the_bus_before_its_bridges_resume(comms, staged):
@@ -420,7 +442,7 @@ def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms,
         for outcome in stack.owners(comms.root, StopCliCommand, names):
             outcome.require_success(UpgradeRefused)
     saved = comms.registry.snapshot()
-    assert all(saved.status(name).stopped for name in names[1:])
+    assert all(saved.status(name).is_stopped() for name in names[1:])
 
 
 async def test_the_install_start_stops_owners_under_its_hold(
