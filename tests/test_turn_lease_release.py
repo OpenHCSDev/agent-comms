@@ -53,7 +53,7 @@ def test_unattested_saved_turn_remains_data_without_a_lease(tmp_path, *, thread_
     expected = retained.turn_record.read().without_claim()
     thread_registration.register(retained, new_owner=True)
     # P482 stores the turn separately; the registry binds a decoded reference.
-    restored = thread_registration.store._bind_thread(
+    restored = thread_registration.store.binding(
         FieldCodec.decode(Thread, FieldCodec.encode(retained))
     )
     assert restored.turn_record.read() == expected

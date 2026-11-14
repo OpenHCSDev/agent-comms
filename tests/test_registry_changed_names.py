@@ -109,17 +109,22 @@ def another_process_retitles(path: Path, name: str, title: str) -> None:
     subprocess.run([sys.executable, "-c", WRITE_TITLE, str(path), name, title], check=True)
 
 
+def written_by_another_process(root: Path) -> Path:
+    """The registry with a fork, none of it decoded in this process yet."""
+    subprocess.run([sys.executable, "-c", (
+        "import sys; from pathlib import Path; sys.path.insert(0, sys.argv[2]);"
+        "from test_registry_changed_names import registry_with_a_fork;"
+        "registry_with_a_fork(Path(sys.argv[1]))"), str(root), str(Path(__file__).parent)],
+        check=True)
+    return RegistryFile.path_in(root)
+
+
 def test_a_reader_process_decodes_each_unchanged_row_once(tmp_path: Path) -> None:
     """The observer and connector only read the registry file, so every row they hold arrives
     raw and is decoded through a frozen snapshot. Those decodes reach the revision the snapshot
     was frozen from, so another process's write re-decodes only the rows it changed: on
     2026-11-04 every heartbeat revision re-decoded all 2,911 rows, about 1 s per walk."""
-    path = RegistryFile.path_in(tmp_path)
-    subprocess.run([sys.executable, "-c", (
-        "import sys; from pathlib import Path; sys.path.insert(0, sys.argv[2]);"
-        "from test_registry_changed_names import registry_with_a_fork;"
-        "registry_with_a_fork(Path(sys.argv[1]))"), str(tmp_path), str(Path(__file__).parent)],
-        check=True)
+    path = written_by_another_process(tmp_path)
     reader = Registration(path)
     before = reader.snapshot()
     read = {name: before.threads[name] for name in before.threads}
@@ -132,3 +137,19 @@ def test_a_reader_process_decodes_each_unchanged_row_once(tmp_path: Path) -> Non
     renamed = after.threads["alpha"]
     another_process_retitles(path, "beta", "moved")
     assert reader.snapshot().threads["alpha"] is renamed
+
+
+def test_every_reader_of_one_registry_keeps_the_rows_another_decoded(tmp_path: Path) -> None:
+    """A turn builds its own registry reader, and a row is bound to the registry file it came
+    from. Bound to the reader that asked instead, a row another reader decoded was dropped by
+    the next one: on 2026-11-14 the worker decoded every thread it touched again after each
+    registry write, about half a millisecond a thread, several writes a turn."""
+    path = written_by_another_process(tmp_path)
+    before = Registration(path).snapshot()
+    read = {name: before.threads[name] for name in before.threads}
+    another_process_retitles(path, "alpha", "renamed")
+    after = Registration(path).snapshot()
+
+    assert after.threads["beta"] is read["beta"]
+    assert after.threads["alpha-fork"] is read["alpha-fork"]
+    assert after.threads["alpha"].title == GivenThreadText("renamed")

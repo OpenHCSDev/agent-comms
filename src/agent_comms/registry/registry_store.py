@@ -365,6 +365,27 @@ class RegistryEdit:
 
 
 @dataclass(frozen=True, slots=True)
+class RegistryBinding:
+    """What a registry file binds its threads to: its own path for their turn records and its
+    directory for their session files.
+
+    The file names the binding, so every store of one registry binds alike. A decoded row
+    carries its binding, and a new revision keeps an unchanged row only while the two compare
+    equal. As a method of the store that asked, a binding equalled only itself: a turn builds
+    its own store, so each revision threw away every thread the one before had decoded.
+    """
+
+    path: Path
+
+    def __call__(self, thread: Thread) -> Thread:
+        record = thread.turn_record.bound_to(self.path, thread.turn_identity, registry_type=RegistryStore)
+        session = thread.session_file.bound_to(self.path.parent)
+        if record is thread.turn_record and session is thread.session_file:
+            return thread
+        return replace(thread, turn_record=record, session_file=session)
+
+
+@dataclass(frozen=True, slots=True)
 class RegistryStore(
     RegistryLocking,
     RegistryFile,
@@ -628,16 +649,13 @@ class RegistryStore(
     def _encode(self, value: RegistryDocument) -> dict:
         return FieldCodec.encode(value)
 
-    def _bind_thread(self, thread: Thread) -> Thread:
-        record = thread.turn_record.bound_to(self.path, thread.turn_identity, registry_type=RegistryStore)
-        session = thread.session_file.bound_to(self.path.parent)
-        if record is thread.turn_record and session is thread.session_file:
-            return thread
-        return replace(thread, turn_record=record, session_file=session)
+    @property
+    def binding(self) -> RegistryBinding:
+        return RegistryBinding(self.path)
 
     def _decode(self, data: object, earlier: tuple[Mapping[str, object], RegistryDocument] | None = None) -> RegistryDocument:
         document = self.record_type.from_wire(data, earlier)
-        document.threads.bind(self._bind_thread)
+        document.threads.bind(self.binding)
         return document
 
     @contextmanager
@@ -700,7 +718,7 @@ class RegistryStore(
         original = self.read_revision_unlocked()
         original.document.purpose.require_write()
         document.require_valid_rows(original.document)
-        document.threads.bind(self._bind_thread)
+        document.threads.bind(self.binding)
         raw = original.source.encoded(document, original.document)
         source = self._commit_unlocked(raw, original.source)
         # Still under the exclusive lock: the committed revision is this document.
