@@ -10,7 +10,9 @@ and a reader holding revision r reads only what changed after r.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import sqlite3
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from functools import cache
 from pathlib import Path
@@ -28,8 +30,10 @@ from agent_comms.storage.row_mapping import RowMapping
 from agent_comms.storage.typed_table import (
     Column,
     DurableStore,
+    DurableTables,
     FrozenColumn,
     Index,
+    SharedFileTables,
     StoreRows,
     TypedTable,
 )
@@ -65,12 +69,17 @@ class RegistryRow(RegistryRows, TypedTable, declared_name=None):
 
 
 @dataclass(frozen=True)
-class RevisionStamped(RegistryRow, declared_name=None):
+class ChangeStamped(TypedTable, declared_name=None):
     """A row stamped with the revision that last wrote it, so a reader holding revision r reads
     only the rows with changed_at > r."""
 
     changed_at: Annotated[int, Column(check="changed_at > 0")]
     indexes = (Index(("changed_at",), unique=False, where=None),)
+
+
+@dataclass(frozen=True)
+class RevisionStamped(ChangeStamped, RegistryRow, declared_name=None):
+    """A registry row stamped with the registry revision that last wrote it."""
 
 
 @dataclass(frozen=True)
@@ -350,8 +359,12 @@ class RegistryChanges:
         return frozenset(removal.name for removal in self.removals if removal.family is family)
 
 
+class PresenceTables(StoreRows):
+    """The presence store discovers its rows through this membership declaration."""
+
+
 @dataclass(frozen=True)
-class PresenceRow(RevisionStamped):
+class PresenceRow(PresenceTables, ChangeStamped):
     """When a thread was last seen, stamped with the presence revision that wrote it.
 
     Being seen is not a fact about a thread's declaration: presence has its own header, so a
@@ -363,20 +376,42 @@ class PresenceRow(RevisionStamped):
 
 
 @dataclass(frozen=True)
-class PresenceHeader(RegistryRow):
+class PresenceHeader(PresenceTables, TypedTable):
     """The presence revision that last committed."""
 
     header: Annotated[int, FrozenColumn(primary_key=True, check="header = 1")]
     revision: Annotated[int, Column(check="revision > 0")]
 
 
+class PresenceSchema(SharedFileTables, DurableTables):
+    """Presence's tables in the registry's file, judged apart from the registry's rows: a
+    change to either family's schema never refuses a reader of the other."""
+
+    @classmethod
+    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
+        return TypedTable.members_with(PresenceTables)
+
+
 @dataclass(frozen=True, slots=True)
-class RegistryRowStore(DurableStore, RegistryFile):
+class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile):
     """The registry's rows: one owner-only SQLite file beside the bus, which every installation
-    carries and nothing else can rebuild."""
+    carries and nothing else can rebuild.
+
+    The file holds two table families: the registry's rows, which this store's snapshot judges,
+    and presence (PresenceSchema), with its own header, which a presence read judges. A commit
+    writes both on one transaction. A runtime copy retires its processes before any carry
+    reaches its presence (RegistryFile.copy_group), so neither family's schema change refuses a
+    reader of the other."""
 
     root: Path
     tables = RegistryRows
+
+    @classmethod
+    def create_schema(cls, db) -> None:
+        """A new registry file holds every family its commit writes."""
+        super().create_schema(db)
+        if not PresenceSchema.stored_schema(db):
+            PresenceSchema.create_schema(db)
 
     @classmethod
     def acquire_declarations(cls) -> None:
@@ -453,6 +488,14 @@ class RegistryRowStore(DurableStore, RegistryFile):
                            scalars=StoredWire(cast(JsonValue, scalars))).upsert(db)
             return mark
 
+
+    @contextmanager
+    def presence_snapshot(self) -> Iterator[sqlite3.Connection]:
+        """A committed read judged against the presence family's declaration."""
+        with self.committed_or_empty(type(self), self.reader_snapshot) as connection:
+            PresenceSchema.require_schema(connection)
+            yield connection
+
     def presence_revision_in(self, db) -> PresenceRevision:
         headers = PresenceHeader.select(db, header=1)
         return PresenceRevision(FileRevision.capture(self.path).file_identity(),
@@ -462,14 +505,14 @@ class RegistryRowStore(DurableStore, RegistryFile):
         return self.remembered("presence_revision", self._read_presence_revision)
 
     def _read_presence_revision(self) -> PresenceRevision:
-        with self.snapshot() as db:
+        with self.presence_snapshot() as db:
             return self.presence_revision_in(db)
 
     def read_presence(self, earlier: PresenceCapture = PresenceCapture.empty()) -> PresenceCapture:
         """The presence committed now, read as the rows changed since ``earlier``."""
         if self.presence_revision() == earlier.revision:
             return earlier
-        with self.snapshot() as db:
+        with self.presence_snapshot() as db:
             revision = self.presence_revision_in(db)
             if revision == earlier.revision:
                 return earlier
@@ -486,11 +529,13 @@ class RegistryRowStore(DurableStore, RegistryFile):
             with self.writing() as db:
                 self.presence_in(db, presence)
 
-    def presence_in(self, db, presence: PresenceChange) -> None:
+    @staticmethod
+    def presence_in(db, presence: PresenceChange) -> None:
+        """On the caller's write transaction, which may also be committing registry rows."""
         names = presence.names()
         if not names:
             return
-        revision = self.presence_revision_in(db).counter + 1
+        revision = max((header.revision for header in PresenceHeader.select(db)), default=0) + 1
         for name in names:
             PresenceRow(changed_at=revision, name=name, seen=presence.after[name]).upsert(db)
         PresenceHeader(header=1, revision=revision).upsert(db)

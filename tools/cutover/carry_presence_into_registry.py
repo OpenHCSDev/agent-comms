@@ -6,9 +6,10 @@ rewritten whole on every write and 19 of 39 sampled writes changed only a last-s
 commit, so presence is two tables beside them now: an edit commits its rows and its presence
 in one transaction, and a heartbeat still moves only the presence header.
 
-This copies every presence row and the presence header unchanged, in one transaction per
-registry. Once the install is accepted it removes the old file, its WAL, its lock, and the
-lock ``presence.json`` left behind when it became ``presence.sqlite3``.
+The carry creates the presence family's two tables beside the registry's from their
+declaration (PresenceSchema) and copies every presence row and the presence header unchanged, in one transaction per registry.
+Once the install is accepted it removes the old file, its WAL, its lock, and the lock
+``presence.json`` left behind when it became ``presence.sqlite3``.
 """
 
 import sqlite3
@@ -17,9 +18,13 @@ from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.installer.probes.carry import Carried, Carry
-from agent_comms.registry.registry_tables import PresenceHeader, PresenceRow, RegistryRowStore
+from agent_comms.registry.registry_tables import (
+    PresenceHeader,
+    PresenceRow,
+    PresenceSchema,
+    RegistryRowStore,
+)
 from agent_comms.storage.locked_store import RegistryFile, RootFile
-from agent_comms.storage.typed_table import SQLiteCatalogObject
 
 
 class PresenceIntoRegistry(Carry):
@@ -60,16 +65,12 @@ class PresenceIntoRegistry(Carry):
             for registry, (rows, revision) in carried.items():
                 with (closing(RegistryRowStore.writer(registry)) as db,
                       RegistryRowStore.write_transaction(db)):
-                    for table in (PresenceRow, PresenceHeader):
-                        table.create(db, if_not_exists=True)
-                        SQLiteCatalogObject.release_guards(db, table)
+                    if not PresenceSchema.stored_schema(db):
+                        PresenceSchema.create_schema(db)
                     for name, seen, changed_at in rows:
                         PresenceRow(changed_at=changed_at, name=name, seen=seen).upsert(db)
                     if revision:
                         PresenceHeader(header=1, revision=revision).upsert(db)
-                    for table in (PresenceRow, PresenceHeader):
-                        for sql in table.triggers().values():
-                            db.execute(sql)
         return Carried(
             len(carried),
             detail={"registries": len(carried),
