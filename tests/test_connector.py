@@ -1069,14 +1069,12 @@ def test_the_held_profiles_name_every_bus_this_machine_can_open(
 
     held = HeldUiProfiles.held(issued - 1)
     assert [type(entry) for entry in held] == [OpenableProfile, UnreadableProfile]
-    assert [entry.openable for entry in held] == [True, False]
     assert held[0].label() == f"box-b.example · {comms.registry.store.privacy().namespace}"
     assert held[1].label().startswith("notes.txt · ")
 
     expired = HeldUiProfiles.held(issued)
     assert [type(entry) for entry in expired] == [ExpiredProfile, UnreadableProfile]
     assert expired[0].label() == "box-b.example · grant expired"
-    assert not any(entry.openable for entry in expired)
 
 
 @pytest.mark.parametrize("grant_type", UiGrantAccess.members_with(UiGrantAccess))

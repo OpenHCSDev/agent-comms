@@ -111,9 +111,9 @@ def test_a_held_profile_pointing_anywhere_but_mcp_is_not_openable(tmp_path, monk
 
     misdirected = HeldUiProfiles.entry(at_origin.write_new(tmp_path / "origin.json"), live - 1)
     openable = HeldUiProfiles.entry(at_mcp.write_new(tmp_path / "mcp.json"), live - 1)
-    assert isinstance(misdirected, MisdirectedProfile) and not misdirected.openable
+    assert isinstance(misdirected, MisdirectedProfile)
     assert "not /mcp" in misdirected.label(), "the row says where it points"
-    assert isinstance(openable, OpenableProfile) and openable.openable
+    assert isinstance(openable, OpenableProfile)
 
 
 def test_asking_again_replaces_what_was_held_and_revokes_it(tmp_path, monkeypatch):

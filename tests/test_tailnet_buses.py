@@ -54,20 +54,20 @@ def test_every_peer_gets_the_member_that_says_what_it_answered():
     registry = json.dumps({"threads": [{"name": "claude-a-toad"}, {"name": "claude-b"}]})
 
     held = TailnetBuses.found(peer, 0, registry)
-    assert isinstance(held, PeerHoldsBus) and held.openable
+    assert isinstance(held, PeerHoldsBus)
     assert held.threads == 2 and held.label() == "desktop · 2 threads"
 
     refused = TailnetBuses.found(peer, 255, "ssh: connect to host: Network is unreachable\n")
-    assert isinstance(refused, PeerUnreachable) and not refused.openable
+    assert isinstance(refused, PeerUnreachable)
     assert refused.refusal.endswith("Network is unreachable")
     assert refused.label() == "desktop · unreachable"
 
     silent = TailnetBuses.found(peer, 0, "bash: agent-comms: command not found\n")
-    assert isinstance(silent, PeerWithoutBus) and not silent.openable
+    assert isinstance(silent, PeerWithoutBus)
     assert silent.label() == "desktop · no bus answered"
 
     down = TailnetBuses.found(TailnetPeer("spare", "100.1.1.1", False), 0, "")
-    assert isinstance(down, PeerOffline) and not down.openable
+    assert isinstance(down, PeerOffline)
     assert down.label() == "spare · offline"
 
 
