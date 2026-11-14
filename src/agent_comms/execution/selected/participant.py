@@ -21,6 +21,7 @@ from agent_comms.coordination.cohort import (
     _claim_record,
     pending_sealed_assignments,
 )
+from agent_comms.coordination.cohort_foreground import DrainRecipient
 from agent_comms.coordination.cohort_schema import CohortTable
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (
@@ -119,14 +120,29 @@ class NoSelectedWork(SelectedWork):
 
 
 @dataclass
-class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner], SelectedWork):
+class ClaimedOwner:
+    """A leased turn owner and the participant row that names it: what a claim proves on the
+    coordinator before its selection is built on the caller's loop."""
+
     comms: Comms
-    bus: MessageBus
-    store: Coordination
-    root_id: RootId
     owner: RegistryOwner
     identity: ParticipantOwner
     lookup: ThreadLookup
+
+    def current_in(self, resource: Coordination) -> None:
+        """The leased owner is still the registry's and its participant row still names it."""
+        self.owner.require_registry(self.comms.registry)
+        with resource.session.read():
+            self.identity.require(resource, self.lookup)
+
+
+@dataclass(kw_only=True)
+class SelectedParticipant(
+    ClaimedOwner, MroDispatch, RegistryOwnerSource[RegistryOwner], SelectedWork,
+):
+    bus: MessageBus
+    store: Coordination
+    root_id: RootId
     batch: SelectedSourceBatch
     sent_outcomes: tuple[SentMessageOutcome, ...]
     model: SelectedModel
@@ -184,12 +200,7 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner], Selec
         await self.require_current()
 
     async def require_current(self) -> None:
-        def check(resource: Coordination) -> None:
-            self.owner.require_registry(self.comms.registry)
-            with resource.session.read():
-                self.identity.require(resource, self.lookup)
-
-        await Coordination.run_read_async(self.store.session.path, check)
+        await Coordination.run_read_async(self.store.session.path, self.current_in)
 
     @property
     def response_owner(self) -> LiveResponseOwner:
@@ -226,17 +237,13 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner], Selec
         *, cursor_delivery: CursorDelivery,
         publication: MroDispatch = NoLivePublication(),
     ):
-        bus = MessageBus(comms.root, comms.registry, ParticipantPublisher)
-        measured = cursor_delivery.measurements.named("claim_prepare")
-        with measured.measuring():
-            prepared = await Coordination.run_async(
-                store.session.path,
-                lambda resource: cls.prepare(
-                    comms, bus, resource, root_id, name, after_seq, measured),
-            )
-        async with prepared.selected(
-            comms, bus, store, root_id, name, cursor_delivery, publication,
-        ) as work:
+        claim = ClaimPass(
+            bus=MessageBus(comms.root, comms.registry, ParticipantPublisher),
+            root_id=root_id, thread_name=name, comms=comms, store=store, after_seq=after_seq,
+            cursor_delivery=cursor_delivery, publication=publication,
+        )
+        claimed = await Coordination.run_async(store.session.path, claim.run)
+        async with claimed.selected() as work:
             yield work
 
     async def considered_by(self, execution: ConsidersSelectedWork) -> CoordinatedTurn:
@@ -276,73 +283,6 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner], Selec
         )
 
     @staticmethod
-    def prepare(
-        comms: Comms, bus: MessageBus, store: Coordination,
-        root_id: RootId, name: str, after_seq: int, measured: PublicationMeasurements,
-    ) -> PreparedSelection:
-        """Capture detached registry, participant and optional context in one worker.
-
-        ``measured`` is this claim's own counter. Each part of the capture names itself under
-        it, as the prompt's send does, so a turn's diagnostics say where its claim went."""
-        with measured.operation("registry_owner"):
-            privacy = comms.registry.store.privacy()
-            privacy.require_root(root_id, IdentityConflict("Selected claim namespace changed"))
-            try:
-                thread, generation = comms.registry.live_owner_with_claim(name)
-            except (RelationViolationError, ValueError) as error:
-                raise StaleFence("recipient registry identity stopped or changed") from error
-            owner = RegistryOwner(thread=thread, claimed_generation=generation)
-            owner.require_registry(comms.registry)
-            lookup = thread.incarnation.lookup
-        with measured.operation("sent_sources"):
-            sent_owner, sent_sources = MessageNotification.sent_sources(
-                comms.root, comms.registry, comms.bus.bus, name,
-                limit=NotificationSelection.window_limit,
-            )
-        with measured.operation("retained_response"):
-            LiveResponseOwner(
-                thread=thread, claimed_generation=generation
-            ).resolve_retained(store, bus)
-        with store.session.read():
-            with measured.operation("participant_and_pending"):
-                CohortTable.require_installed(store.session._connection)
-                ResponseTable.require_installed(store.session._connection)
-                NativeRuntimeTable.require_installed(store.session._connection)
-                participant = store.participants.get(lookup)
-                identity = ParticipantOwner(thread, participant.owner_identity.generation)
-                identity.require(store, lookup)
-                pending = pending_sealed_assignments(
-                    store, lookup, after_seq=after_seq
-                )
-            if not pending:
-                return NothingPending()
-            # The prompt shows sent_limit outcomes and only a turn with pending work has a
-            # prompt. Reading all 120 sent messages' assignments (about 1,500 rows) to fill
-            # five slots cost every turn a quarter second; newest pages stop when they are full.
-            viewer = OwnerOutcomes.of(sent_owner.incarnation)
-            pages = SelectedParticipant.sent_pages(viewer, sent_sources)
-            with measured.operation("sent_assignments"):
-                sent_read = NotificationAssignment.capture(
-                    store.session._connection,
-                    NotificationSelection.of(viewer, next(pages, ())), privacy,
-                )
-        participant.pointer.require_idle()
-        assignments = AssignmentSource(comms.root)
-        with measured.operation("sent_evidence"):
-            sent_evidence = NotificationAssignment.capture_detached(assignments, sent_read)
-        with measured.operation("sent_outcomes"):
-            sent_outcomes = SelectedParticipant.capture_sent_outcomes(
-                comms, assignments, sent_evidence)
-        with measured.operation("sent_further_pages"):
-            for page in pages:
-                if len(sent_outcomes) >= SelectedWakeSegment.sent_limit:
-                    break
-                sent_outcomes += SelectedParticipant.capture_sent_outcomes(
-                    comms, assignments,
-                    assignments.read_assignments(NotificationSelection.of(viewer, page)))
-        return PendingSelection(owner, participant, pending, sent_outcomes)
-
-    @staticmethod
     def configured_model(comms: Comms, name: str) -> SelectedModel:
         return SelectedModel.decode(comms.threads.resolve_thread_model(name))
 
@@ -368,68 +308,20 @@ class SelectedParticipant(MroDispatch, RegistryOwnerSource[RegistryOwner], Selec
         finally:
             comms.agents.finish_turn(lease)
 
-    @staticmethod
-    async def sources(bus, store, root_id, assignments, identity) -> tuple[SelectedSource, ...]:
-        """Read the pending batch from the bus and check its saved acknowledgements.
-
-        Accepting input writes the records. Selecting it checks those records
-        without accepting it again. Close both the bus and database reads before
-        preparing the native session or making a provider request.
-        """
-        def capture():
-            # Historical public records have no delivery capability. Native identity
-            # belongs to the original registry guard, not a second bus metadata file.
-            bus._registry.store.privacy().require_root(
-                root_id, IdentityConflict("Selected source namespace changed"))
-            with bus.bus.reading() as source:
-                return source.deliveries_for_references(tuple(
-                    MessageReference(assignment.wire_seq, assignment.message_id)
-                    for assignment in assignments
-                ))
-
-        originals = await Coordination.run_worker(capture)
-
-        def verify(resource: Coordination):
-            with resource.session.capture(bus) as boundary, resource.session.read():
-                boundary.privacy.require_root(root_id, IdentityConflict("Selected source namespace changed"))
-                CohortTable.require_installed(resource.session._connection)
-                for assignment, initial in zip(assignments, originals, strict=True):
-                    acknowledgement = _claim_record(resource.session._connection, initial, boundary.privacy)
-                    if not any(row.assignment_id == assignment.assignment_id
-                               for row in acknowledgement.assignments):
-                        raise IdentityConflict("selected assignment is absent from its sealed acknowledgement")
-                    assignment.require_selected_source(initial, identity.thread)
-                    identity.require(resource, assignment.recipient_lookup)
-
-        await Coordination.run_read_async(store.session.path, verify)
-        # Mutable claims stay with the original caller's open store; the worker
-        # exports no connection, lease or second source/lifecycle authority.
-        return tuple(
-            SelectedSource(assignment.assignment_id, store.assignments, initial)
-            for assignment, initial in zip(assignments, originals, strict=True)
-        )
-
 
 class PreparedSelection(ABC):
     """What preparing a selection read for its participant. The pending rows get their type
-    once, where they are read, and each member opens the selection it stands for."""
+    once, where they are read, and each member claims what it stands for."""
 
     @abstractmethod
-    def selected(
-        self, comms: Comms, bus: MessageBus, store: Coordination, root_id: RootId, name: str,
-        cursor_delivery: CursorDelivery, publication: MroDispatch,
-    ) -> AbstractAsyncContextManager[SelectedWork]: ...
+    def claim(self, claim: ClaimPass, resource: Coordination) -> Claim: ...
 
 
 class NothingPending(PreparedSelection):
     """No sealed assignment waits for this participant."""
 
-    @asynccontextmanager
-    async def selected(
-        self, comms: Comms, bus: MessageBus, store: Coordination, root_id: RootId, name: str,
-        cursor_delivery: CursorDelivery, publication: MroDispatch,
-    ) -> AsyncIterator[SelectedWork]:
-        yield NoSelectedWork()
+    def claim(self, claim: ClaimPass, resource: Coordination) -> Claim:
+        return NoClaim()
 
 
 @dataclass(frozen=True)
@@ -442,43 +334,191 @@ class PendingSelection(PreparedSelection):
     pending: tuple[WakeAssignment, ...]
     sent_outcomes: tuple[SentMessageOutcome, ...]
 
-    @asynccontextmanager
-    async def selected(
-        self, comms: Comms, bus: MessageBus, store: Coordination, root_id: RootId, name: str,
-        cursor_delivery: CursorDelivery, publication: MroDispatch,
-    ) -> AsyncIterator[SelectedWork]:
+    def claim(self, claim: ClaimPass, resource: Coordination) -> Claim:
+        """Model, turn lease, sources and currency, in the operation that prepared them."""
+        measurements = claim.cursor_delivery.measurements
         identity = ParticipantOwner(self.owner.thread, self.participant.owner_identity.generation)
-        with cursor_delivery.measurements.operation("model_selection"):
-            model = await Coordination.run_worker(
-                lambda: SelectedParticipant.configured_model(comms, name))
-        lease = SelectedParticipant.lease(comms, self.owner)
+        with measurements.operation("model_selection"):
+            model = SelectedParticipant.configured_model(claim.comms, claim.thread_name)
+        lease = SelectedParticipant.lease(claim.comms, self.owner)
+        with measurements.operation("claim_lease"):
+            leased = next(lease)
         try:
-            with cursor_delivery.measurements.operation("claim_lease"):
-                leased = await Coordination.run_worker(lambda: next(lease))
-            with cursor_delivery.measurements.operation("claim_sources"):
-                sources = await SelectedParticipant.sources(
-                    bus, store, root_id, self.pending, identity)
-            batch = SelectedSourceBatch.first_route(sources)
-            selected = SelectedParticipant(
-                comms,
-                bus,
-                store,
-                root_id,
-                leased,
-                ParticipantOwner(leased.thread, identity.generation),
+            with measurements.operation("claim_sources"):
+                originals = claim.verified_originals(resource, self.pending, identity)
+            claimed = ClaimedOwner(
+                claim.comms, leased, ParticipantOwner(leased.thread, identity.generation),
                 self.participant.lookup,
-                batch,
-                self.sent_outcomes,
-                model,
-                cursor_delivery,
-                publication=publication,
             )
-            with cursor_delivery.measurements.operation("claim_current"):
-                await selected.require_current()
-            # The consideration that takes this claim states what it prepares: a triage or
-            # a response. A phase published here was replaced by that one a moment later.
-            yield selected
+            with measurements.operation("claim_current"):
+                claimed.current_in(resource)
+        except BaseException:
+            lease.close()
+            raise
+        # The consideration that takes this claim states what it prepares: a triage or a
+        # response. A phase published here was replaced by that one a moment later.
+        return LeasedClaim(claim, claimed, self, originals, model, lease)
+
+
+class Claim(ABC):
+    """What one claim pass holds when its operation returns."""
+
+    @abstractmethod
+    def selected(self) -> AbstractAsyncContextManager[SelectedWork]: ...
+
+
+class NoClaim(Claim):
+    @asynccontextmanager
+    async def selected(self) -> AsyncIterator[SelectedWork]:
+        yield NoSelectedWork()
+
+
+@dataclass(frozen=True)
+class LeasedClaim(Claim):
+    """A claim proved on the coordinator and the turn lease it runs under. Its selection is
+    built here, on the caller's loop: mutable claims stay with the caller's open store,
+    whose connection belongs to this thread."""
+
+    claim: ClaimPass
+    claimed: ClaimedOwner
+    selection: PendingSelection
+    originals: tuple[Delivered, ...]
+    model: SelectedModel
+    lease: Generator[RegistryOwner, None, None]
+
+    @asynccontextmanager
+    async def selected(self) -> AsyncIterator[SelectedWork]:
+        try:
+            claim, claimed = self.claim, self.claimed
+            yield SelectedParticipant(
+                comms=claimed.comms, owner=claimed.owner, identity=claimed.identity,
+                lookup=claimed.lookup, bus=claim.bus, store=claim.store, root_id=claim.root_id,
+                batch=SelectedSourceBatch.first_route(tuple(
+                    SelectedSource(assignment.assignment_id, claim.store.assignments, initial)
+                    for assignment, initial in zip(
+                        self.selection.pending, self.originals, strict=True)
+                )),
+                sent_outcomes=self.selection.sent_outcomes, model=self.model,
+                cursor_delivery=claim.cursor_delivery, publication=claim.publication,
+            )
         finally:
-            # The blocking call may acquire the lease even if its result is not delivered.
-            # The original generator owns retirement even in that case.
-            await Coordination.run_worker(lease.close)
+            await Coordination.run_worker(self.lease.close)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClaimPass(DrainRecipient):
+    """One claim of a participant's pending work, as one coordinator operation: its registry
+    owner, pending assignments and sent outcomes, then its model, turn lease and sources.
+
+    These were the prepare operation, two thread-pool hops (model, lease), a third for the
+    bus sources and two more coordinator operations to verify them and check currency.
+    """
+
+    comms: Comms
+    store: Coordination
+    """The caller's open store: mutable claims stay with it, never the worker's connection."""
+    after_seq: int
+    cursor_delivery: CursorDelivery
+    publication: MroDispatch
+
+    def run(self, resource: Coordination) -> Claim:
+        measured = self.cursor_delivery.measurements.named("claim_prepare")
+        with measured.measuring():
+            prepared = self.prepare(resource, measured)
+        return prepared.claim(self, resource)
+
+    def prepare(self, store: Coordination, measured: PublicationMeasurements) -> PreparedSelection:
+        """Capture detached registry, participant and optional context in one worker.
+
+        ``measured`` is this claim's own counter. Each part of the capture names itself under
+        it, as the prompt's send does, so a turn's diagnostics say where its claim went."""
+        with measured.operation("registry_owner"):
+            privacy = self.comms.registry.store.privacy()
+            privacy.require_root(self.root_id, IdentityConflict("Selected claim namespace changed"))
+            try:
+                thread, generation = self.comms.registry.live_owner_with_claim(self.thread_name)
+            except (RelationViolationError, ValueError) as error:
+                raise StaleFence("recipient registry identity stopped or changed") from error
+            owner = RegistryOwner(thread=thread, claimed_generation=generation)
+            owner.require_registry(self.comms.registry)
+            lookup = thread.incarnation.lookup
+        with measured.operation("sent_sources"):
+            sent_owner, sent_sources = MessageNotification.sent_sources(
+                self.comms.root, self.comms.registry, self.comms.bus.bus, self.thread_name,
+                limit=NotificationSelection.window_limit,
+            )
+        with measured.operation("retained_response"):
+            LiveResponseOwner(
+                thread=thread, claimed_generation=generation
+            ).resolve_retained(store, self.bus)
+        with store.session.read():
+            with measured.operation("participant_and_pending"):
+                CohortTable.require_installed(store.session._connection)
+                ResponseTable.require_installed(store.session._connection)
+                NativeRuntimeTable.require_installed(store.session._connection)
+                participant = store.participants.get(lookup)
+                identity = ParticipantOwner(thread, participant.owner_identity.generation)
+                identity.require(store, lookup)
+                pending = pending_sealed_assignments(
+                    store, lookup, after_seq=self.after_seq
+                )
+            if not pending:
+                return NothingPending()
+            # The prompt shows sent_limit outcomes and only a turn with pending work has a
+            # prompt. Reading all 120 sent messages' assignments (about 1,500 rows) to fill
+            # five slots cost every turn a quarter second; newest pages stop when they are full.
+            viewer = OwnerOutcomes.of(sent_owner.incarnation)
+            pages = SelectedParticipant.sent_pages(viewer, sent_sources)
+            with measured.operation("sent_assignments"):
+                sent_read = NotificationAssignment.capture(
+                    store.session._connection,
+                    NotificationSelection.of(viewer, next(pages, ())), privacy,
+                )
+        participant.pointer.require_idle()
+        assignments = AssignmentSource(self.comms.root)
+        with measured.operation("sent_evidence"):
+            sent_evidence = NotificationAssignment.capture_detached(assignments, sent_read)
+        with measured.operation("sent_outcomes"):
+            sent_outcomes = SelectedParticipant.capture_sent_outcomes(
+                self.comms, assignments, sent_evidence)
+        with measured.operation("sent_further_pages"):
+            for page in pages:
+                if len(sent_outcomes) >= SelectedWakeSegment.sent_limit:
+                    break
+                sent_outcomes += SelectedParticipant.capture_sent_outcomes(
+                    self.comms, assignments,
+                    assignments.read_assignments(NotificationSelection.of(viewer, page)))
+        return PendingSelection(owner, participant, pending, sent_outcomes)
+
+    def verified_originals(
+        self, resource: Coordination, assignments: tuple[WakeAssignment, ...],
+        identity: ParticipantOwner,
+    ) -> tuple[Delivered, ...]:
+        """Read the pending batch from the bus and check its saved acknowledgements.
+
+        Accepting input writes the records. Selecting it checks those records
+        without accepting it again. Both reads close before the native session is
+        prepared or a provider request is made; the sources are bound to the caller's
+        store on its own loop.
+        """
+        with (resource.session.capture(self.bus) as boundary,
+              self.bus.bus.reading() as source, resource.session.read()):
+            # Historical public records have no delivery capability. Native identity
+            # belongs to the original registry guard, not a second bus metadata file.
+            boundary.privacy.require_root(
+                self.root_id, IdentityConflict("Selected source namespace changed"))
+            originals = source.deliveries_for_references(tuple(
+                MessageReference(assignment.wire_seq, assignment.message_id)
+                for assignment in assignments
+            ))
+            CohortTable.require_installed(resource.session._connection)
+            for assignment, initial in zip(assignments, originals, strict=True):
+                acknowledgement = _claim_record(
+                    resource.session._connection, initial, boundary.privacy)
+                if not any(row.assignment_id == assignment.assignment_id
+                           for row in acknowledgement.assignments):
+                    raise IdentityConflict(
+                        "selected assignment is absent from its sealed acknowledgement")
+                assignment.require_selected_source(initial, identity.thread)
+                identity.require(resource, assignment.recipient_lookup)
+        return originals
