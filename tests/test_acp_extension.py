@@ -195,7 +195,10 @@ def test_request_family_strict_boundary():
         CompactRequest("focus"),
         ClearQueueRequest(),
         SendNowRequest(),
-        SelectedWriteRequest(1, MessageId.mint("message"), "/file", "bytes"),
+        SelectedWriteRequest(
+            source_seq=1, source_message_id=MessageId.mint("message"),
+            resource="/file", contents="bytes",
+        ),
     )
     assert {type(value) for value in samples} == set(CommsRequest.members_with(CommsRequest))
     for value in samples:

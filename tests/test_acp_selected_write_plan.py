@@ -125,7 +125,8 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
                 assert alpha_before[0].lifecycle == TriagePendingAssignment()
             options = encode_request(
                 SelectedWriteRequest(
-                    message.seq, message.message_id, str(resource), "after second pid\n"
+                    source_seq=message.seq, source_message_id=message.message_id,
+                    resource=str(resource), contents="after second pid\n",
                 )
             )
             response = await attached.prompt("beta", [], field_meta=options)

@@ -384,7 +384,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         attached = self._runtime.controller.get().attached(self.sessions.client).require_present(
             RequestError.invalid_params({"reason": "Selected write requires attached ACP controller"})
         )
-        scope = await Coordination.run_worker(partial(self.cursors.scope, owner, session_id))
+        _, scope = await Coordination.run_worker(partial(self.cursors.scope, owner, session_id))
         plans = SelectedWritePlans(self._comms, scope.require_live().wire_root_id)
         acknowledgement = await Coordination.run_worker(
             partial(
