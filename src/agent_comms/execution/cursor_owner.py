@@ -68,14 +68,6 @@ class CursorOwner(RegistryOwner):
                    generation=person.owner_identity.generation)
 
     @classmethod
-    async def read_async(cls, bus: MessageBus, *, wire_root_id: RootId, owner_name: str,
-                         source_reads: NativeEvidenceScope) -> CursorState:
-        return await Coordination.run_read_async(
-            CoordinationStore.path_in(bus.bus.path.parent),
-            partial(cls._read_owned, bus, wire_root_id, owner_name, source_reads),
-        )
-
-    @classmethod
     def _read_owned(
         cls, bus: MessageBus, root_id: RootId, owner_name: str,
         source_reads: NativeEvidenceScope, store: Coordination,

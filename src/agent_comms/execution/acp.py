@@ -23,10 +23,12 @@ import logging
 import os
 import sys
 import time
+from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from functools import partial
+from typing import ClassVar
 
 from acp import RequestError
 from acp.agent.connection import AgentSideConnection
@@ -59,7 +61,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.config_options import ConfigOptions
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination.cohort import next_sealed_assignment
-from agent_comms.coordination.cohort_foreground import _accept_visible_deliveries
+from agent_comms.coordination.cohort_foreground import AcceptsDeliveries
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import IdentityConflict, Refused
@@ -97,6 +99,7 @@ from agent_comms.execution.native_arguments import (
     LaunchArguments,
     LaunchBinary,
 )
+from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.queued_input import DeliveredInput
 from agent_comms.execution.runtime import RuntimeProxy
 from agent_comms.execution.selected.actions import BoundSelectedWriteAuthority
@@ -195,6 +198,117 @@ class SelectedWakeCheck(SchedulesWake):
                 if before == await inputs._observe_private_revision(session_id, root_id):
                     inputs.state(session_id).receive(InboxUnchanged(before))
         return WakeDue()
+
+
+class DrainFound(ABC):
+    """What one drain's coordinator pass found; each member owns how that drain ends."""
+
+    @abstractmethod
+    async def finish(self, agent: CommsAgent, drain: DrainPass) -> None: ...
+
+
+class PublishesCursor(DrainFound):
+    """A drain that ends by publishing its owner's cursor to the attached client."""
+
+    advance: ClassVar[bool] = False
+
+    async def finish(self, agent: CommsAgent, drain: DrainPass) -> None:
+        await agent.cursors.publish(drain.session_id, drain.thread_name, advance=self.advance)
+
+
+class HeldDrain(PublishesCursor):
+    """Background wakes are off or the owner is stopped. Input permission changes still
+    reach the client; nothing is accepted or selected."""
+
+
+class NothingPendingDrain(PublishesCursor):
+    """No sealed assignment past the cursor. Extend only an existing current generation or an
+    all-N prefix."""
+
+    advance = True
+
+
+@dataclass(frozen=True)
+class RunningTurnDrain(PublishesCursor):
+    """A running turn takes its owner's pending messages as inputs; whatever it cannot take
+    wakes this owner once the turn ends."""
+
+    owner: Thread
+    after_seq: int
+
+    async def finish(self, agent: CommsAgent, drain: DrainPass) -> None:
+        await DeliveredInput.deliver_pending(
+            agent.inputs, drain.session_id, self.owner, drain.bus, drain.root_id, self.after_seq
+        )
+        await super().finish(agent, drain)
+
+
+class MaintenanceHeldDrain(DrainFound):
+    """An install holds new turns. The accepted row stays in its durable assignment ledger,
+    unselected; the maintenance witness wakes observation again on READY, without replaying
+    this bus input."""
+
+    async def finish(self, agent: CommsAgent, drain: DrainPass) -> None:
+        """Nothing to start until the install releases its hold."""
+
+
+@dataclass(frozen=True)
+class PendingDrain(DrainFound):
+    owner: OwnerIdentity
+
+    async def finish(self, agent: CommsAgent, drain: DrainPass) -> None:
+        SelectedWakeCheck(
+            session_id=drain.session_id, inputs=agent.inputs, execution=drain.execution,
+            thread=drain.thread_name, owner=self.owner,
+        ).schedule()
+
+
+@dataclass(frozen=True, kw_only=True)
+class DrainPass(AcceptsDeliveries):
+    """One drain of a private session's inbox, as one coordinator operation: its registry
+    entry, the acceptance of new originals, its cursor and its next sealed assignment.
+
+    These were a thread-pool hop and three coordinator operations, each capturing the
+    registry again and queueing again behind the other agents' work.
+    """
+
+    comms: Comms
+    session_id: AcpSessionId
+    execution: SelectedExecution
+    source_reads: NativeEvidenceScope
+    wakes_disabled: bool
+    turn_live: bool
+    """This session's own turn, read on the loop before the pass is submitted. A turn that
+    ends meanwhile posts its own drain; none starts, since only a drain schedules one."""
+
+    def validate_package(self) -> None:
+        self.execution.validate()
+
+    def run(self, store: Coordination) -> DrainFound:
+        snapshot = self.comms.registry.snapshot()
+        owner = snapshot.require(self.thread_name)
+        if self.wakes_disabled or snapshot.status(self.thread_name).is_stopped():
+            return HeldDrain()
+        if not owner.process_identity.runs_here():
+            raise IdentityConflict("private N/K ACP recipient is not this process owner")
+        self.accept(store)
+        # Acceptance visited the originals; pending work still starts at what the native
+        # history proves consumed, including work below the frontier.
+        after_seq = CursorOwner._read_owned(
+            self.bus, self.root_id, self.thread_name, self.source_reads, store,
+        ).covered_seq
+        if InputDrain.execution_owned(owner, turn_live=self.turn_live):
+            return RunningTurnDrain(owner, after_seq)
+        with store.session.read():
+            participant = store.participants.get(owner.incarnation.require_recorded().lookup)
+            if next_sealed_assignment(store, participant.lookup, after_seq=after_seq) is None:
+                return NothingPendingDrain()
+            # An older turn is still running: refuse idle handling and let the drain
+            # diagnostic explain the refusal; never retire or replay that turn here.
+            participant.pointer.require_idle()
+        if self.comms.owners.maintenance.read().turn_pending:
+            return MaintenanceHeldDrain()
+        return PendingDrain(snapshot.owner_identity(self.thread_name))
 
 
 class SdkSessionConnection(AgentSideConnection, SessionClient):
@@ -507,86 +621,32 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         uncertain native turn propagates and cannot be replayed by a drain.
         """
         launch = self._comms.owners.require_private_launch()
-        package = launch.native_package
         thread_name = await self.sessions.sync_identity(session_id)
-        snapshot = await Coordination.run_worker(self._comms.registry.snapshot)
-        owner = snapshot.require(thread_name)
-        if self.inputs.background_wakes_disabled or snapshot.status(thread_name).is_stopped():
-            # Input permission changes still invalidate the client while this owner
-            # cannot run a wake. An eligible drain observes once after its
-            # acceptance/selection, instead of verifying history before it too.
-            await self.cursors.publish(session_id, thread_name)
-            return
-        if not owner.process_identity.runs_here():
-            raise IdentityConflict("private N/K ACP recipient is not this process owner")
-        lookup = owner.incarnation.require_recorded().lookup
-        bus = MessageBus(self._comms.root, self._comms.registry, ResponseWrites)
         delivery = self.cursors.delivery(session_id)
-        store_path = CoordinationStore.path_in(self._comms.root)
         # One execution owns this wake's package acquisition: acceptance of new
         # originals and the selected launch share it instead of verifying twice.
         execution = SelectedExecution(
             root=self._comms.root,
             wire_root_id=wire_root_id,
             owner_name=thread_name,
-            native_package=package,
+            native_package=launch.native_package,
             cursor_delivery=delivery,
             write_authority=AcpSelectedWriteAuthority(
                 self, session_id, SelectedWritePlans(self._comms, wire_root_id)
             ),
         )
-        with execution.cursor_delivery.measurements.operation("accept_deliveries"):
-            await _accept_visible_deliveries(
-                bus,
-                wire_root_id,
-                store_path,
-                lookup,
-                owner_name=owner.name,
-                acquire_package=execution.validate,
-            )
-        # Acceptance visited the originals; pending work still starts at what
-        # the native history proves consumed, including work below the frontier.
         async with delivery.reading() as source_reads:
-            state = await CursorOwner.read_async(
-                bus,
-                wire_root_id=wire_root_id,
-                owner_name=thread_name,
-                source_reads=source_reads,
+            drain = DrainPass(
+                bus=MessageBus(self._comms.root, self._comms.registry, ResponseWrites),
+                root_id=wire_root_id, thread_name=thread_name, comms=self._comms,
+                session_id=session_id, execution=execution, source_reads=source_reads,
+                wakes_disabled=self.inputs.background_wakes_disabled,
+                turn_live=self.inputs.turn_live(session_id),
             )
-        after_seq = state.covered_seq
-        if self.inputs.owns_execution(session_id, owner):
-            # A running turn takes its owner's pending messages as inputs;
-            # whatever it cannot take wakes this owner once the turn ends.
-            await DeliveredInput.deliver_pending(
-                self.inputs, session_id, owner, bus, wire_root_id, after_seq
-            )
-            await self.cursors.publish(session_id, thread_name)
-            return
-        def select(store):
-            with store.session.read():
-                participant = store.participants.get(lookup)
-                candidate = next_sealed_assignment(
-                    store, participant.lookup, after_seq=after_seq,
-                )
-                if candidate is None:
-                    return False
-                # An older turn is still running: refuse idle handling and let
-                # the existing drain diagnostic explain the refusal; never retire
-                # or replay that turn here.
-                participant.pointer.require_idle()
-                return True
-        if not await Coordination.run_read_async(store_path, select):
-            await self.cursors.publish(session_id, thread_name, advance=True)
-            return
-        # The accepted channel row stays in its durable assignment ledger.
-        # During cutover, leave it unselected; the maintenance witness wakes
-        # observation again on READY, without replaying this bus input.
-        if (await Coordination.run_worker(self._comms.owners.maintenance.read)).turn_pending:
-            return
-        SelectedWakeCheck(
-            session_id=session_id, inputs=self.inputs, execution=execution,
-            thread=thread_name, owner=snapshot.owner_identity(thread_name),
-        ).schedule()
+            with delivery.measurements.operation("drain_pass"):
+                found = await Coordination.run_async(
+                    CoordinationStore.path_in(self._comms.root), drain.run)
+        await found.finish(self, drain)
 
     def stop_all(self) -> None:
         """Request every executing session's own stop; attachments have no execution."""

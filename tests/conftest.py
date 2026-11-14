@@ -197,16 +197,15 @@ def accept_initial(bus: MessageBus, root_id: str, seq: int, store) -> tuple:
     from concurrent.futures import ThreadPoolExecutor
 
     from agent_comms.coordination.cohort import sealed_cohort_assignments
-    from agent_comms.coordination.cohort_foreground import _accept_visible_deliveries
+    from agent_comms.coordination.cohort_foreground import AcceptsDeliveries
 
     recipients = bus.bus.delivery(seq).recipients
     if recipients:
         owner = recipients[0]
         with ThreadPoolExecutor(1) as pool:
-            pool.submit(asyncio.run, _accept_visible_deliveries(
-                bus, root_id, Path(store.session.path), owner.recipient_lookup,
-                owner_name=owner.canonical_thread,
-            )).result()
+            pool.submit(asyncio.run, AcceptsDeliveries(
+                bus=bus, root_id=root_id, thread_name=owner.canonical_thread,
+            ).accepted(Path(store.session.path))).result()
     return tuple(
         assignment for recipient in recipients
         for assignment in sealed_cohort_assignments(

@@ -5,7 +5,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.coordination.cohort import sealed_cohort_assignments
-from agent_comms.coordination.cohort_foreground import _accept_visible_deliveries
+from agent_comms.coordination.cohort_foreground import AcceptsDeliveries
 from agent_comms.coordination.cohort_schema import AcceptanceFrontier
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.tables.participants import Participants
@@ -35,9 +35,9 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
         assert {r.canonical_thread for r in initial.recipients} == {
             "receiver", "stopped-reviewer", "unstarted-reviewer"
         }
-        await _accept_visible_deliveries(
-            comms.bus, root_id, store.session.path, lookup, owner_name=receiver.name
-        )
+        await AcceptsDeliveries(
+            bus=comms.bus, root_id=root_id, thread_name=receiver.name,
+        ).accepted(store.session.path)
         assert (
             AcceptanceFrontier.require(
                 store.session._connection,
@@ -52,9 +52,9 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
         before = tuple(store.participants.get(r.recipient_lookup)
                        for r in initial.recipients)
         again = comms.messaging.send("sender", "#team", "Second @receiver").message
-        await _accept_visible_deliveries(
-            comms.bus, root_id, store.session.path, lookup, owner_name=receiver.name
-        )
+        await AcceptsDeliveries(
+            bus=comms.bus, root_id=root_id, thread_name=receiver.name,
+        ).accepted(store.session.path)
         assert (
             AcceptanceFrontier.require(
                 store.session._connection,

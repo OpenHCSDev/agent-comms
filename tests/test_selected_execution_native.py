@@ -6,6 +6,7 @@ import shlex
 import threading
 import traceback
 from dataclasses import replace
+from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -17,8 +18,8 @@ from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.execution.cursor_owner import CursorOwner
 from agent_comms.execution.historical_native_inputs import read_historical_native_inputs
 from agent_comms.execution.native_input_record import FullNativeExecution, TriageNativeExecution
-from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.native_pi import CommittedInput, read_tracked_input_commitment
+from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.pi_vocabulary import LowThinkingLevel
 from agent_comms.execution.selected.actions import CodingSelectedAction
 from agent_comms.execution.selected.tool_broker import SelectedToolIntent
@@ -242,9 +243,9 @@ async def test_native_full_four_tools_publish_and_release(
                 snapshot.attempt.lifecycle.backend_done and snapshot.attempt.lifecycle.process_dead
             )
             assert assignment.wire_seq == initial.message.seq
-            state = await CursorOwner.read_async(
-                comms.bus, wire_root_id=root_id,
-                owner_name="beta", source_reads=source_reads,
+            state = await Coordination.run_read_async(
+                root / "coordination.sqlite3",
+                partial(CursorOwner._read_owned, comms.bus, root_id, "beta", source_reads),
             )
             assert state.injected_seq == initial.message.seq
             assert state.covered_seq >= state.injected_seq

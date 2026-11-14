@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.coordination.assignment_states import DeferredAssignment, FullPendingAssignment
 from agent_comms.coordination.cohort import pending_sealed_assignments
-from agent_comms.coordination.cohort_foreground import _accept_visible_deliveries
+from agent_comms.coordination.cohort_foreground import AcceptsDeliveries
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.queued_input import DeliveredInput
 from agent_comms.input_attempt import NotSentInput
@@ -30,7 +30,9 @@ async def reserve_one(comms, agent, root_id, owner, body):
     message = publish_initial(comms, "sender", owner.name, body)
     store_path = comms.root / "coordination.sqlite3"
     lookup = owner.incarnation.lookup
-    await _accept_visible_deliveries(comms.bus, root_id, store_path, lookup, owner_name=owner.name)
+    await AcceptsDeliveries(
+        bus=comms.bus, root_id=root_id, thread_name=owner.name,
+    ).accepted(store_path)
     with Coordination(str(store_path)) as store:
         assignments = pending_sealed_assignments(store, lookup)
         deliveries = comms.bus.bus.deliveries_for_references(

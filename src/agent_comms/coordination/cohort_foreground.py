@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.coordination.cohort import AcceptedCohort
@@ -13,37 +13,56 @@ from agent_comms.coordination.session import NativeCommit
 from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import RootId, ThreadLookup
+from agent_comms.registry.registry_document import RegistrySnapshot
 
 
-async def _accept_visible_deliveries(
-    bus: MessageBus,
-    root_id: RootId,
-    store_path: Path,
-    lookup: ThreadLookup,
-    *,
-    owner_name: str,
-    acquire_package: Callable[[], None] | None = None,
-) -> None:
-    """Accept only committed initial messages addressed to this registered recipient.
+@dataclass(frozen=True, kw_only=True)
+class DrainRecipient:
+    """Who one drain is for: the bus it reads, its private root and its registered thread.
+
+    Every step of a drain inherits these; none takes them as arguments. The thread's lookup
+    is read from the registry cut each step already holds, never carried in beside it.
+    """
+
+    bus: MessageBus
+    root_id: RootId
+    thread_name: str
+
+    def recorded_lookup(self, registry: RegistrySnapshot) -> ThreadLookup:
+        return registry.require(self.thread_name).incarnation.require_recorded().lookup
+
+
+@dataclass(frozen=True, kw_only=True)
+class AcceptsDeliveries(DrainRecipient):
+    """Accept the committed initial messages addressed to this recipient, once each.
 
     Use the checked address index to find messages and decode only those not
     yet accepted. Every participant must already be registered. Public message
     text alone cannot identify the group receiving private input.
     """
-    def accept(resource: Coordination) -> None:
-        with resource.session.capture(bus) as boundary, bus.bus.reading() as source:
-            boundary.privacy.require_root(root_id, IdentityConflict("native namespace changed"))
+
+    def validate_package(self) -> None:
+        """Before SQL acceptance of new originals: a recipient with no native package has
+        nothing to validate. Sealed evidences need no repeated preflight."""
+
+    async def accepted(self, store_path: Path) -> None:
+        await Coordination.run_async(store_path, self.accept)
+
+    def accept(self, resource: Coordination) -> None:
+        with resource.session.capture(self.bus) as boundary, self.bus.bus.reading() as source:
+            boundary.privacy.require_root(self.root_id, IdentityConflict("native namespace changed"))
+            lookup = self.recorded_lookup(boundary.registry)
             with resource.session.read():
                 db = resource.session._connection
                 CohortTable.require_installed(db)
                 after_seq = AcceptanceFrontier.scan_after(
                     db,
-                    wire_root_id=root_id,
+                    wire_root_id=self.root_id,
                     recipient_lookup=lookup,
                 )
                 sealed = CohortDeliveries.sealed_sequences_after(
                     db,
-                    wire_root_id=root_id,
+                    wire_root_id=self.root_id,
                     recipient_lookup=lookup,
                     after_seq=after_seq,
                     limit=AcceptanceFrontier.page,
@@ -61,32 +80,29 @@ async def _accept_visible_deliveries(
                 recipients = [r for r in initial.recipients if r.recipient_lookup == lookup]
                 if not recipients:
                     raise RelationViolationError("checked initial lookup differs from bus row.")
-                if any(r.canonical_thread == owner_name for r in recipients):
+                if any(r.canonical_thread == self.thread_name for r in recipients):
                     unaccepted.append(initial)
         visited_after = addressed[-1] if addressed else after_seq
         if not unaccepted and visited_after == after_seq:
             # Nothing to record and the frontier stays where this cut read it: the write
             # below would take the coordinator's exclusive lock to change no row.
             return
-        if unaccepted and acquire_package is not None:
-            # An ACP observation with new originals must still validate the package
-            # before SQL acceptance. Sealed evidences require no repeated preflight.
-            acquire_package()
+        if unaccepted:
+            self.validate_package()
         # The frontier cannot outlive a rolled-back acceptance, nor does it
         # assert that any native input was consumed.
         with (
-            NativeCommit(bus) as boundary,
-            bus.bus.reading() as source,
+            NativeCommit(self.bus) as boundary,
+            self.bus.bus.reading() as source,
             resource.session.writing() as db,
         ):
-            boundary.privacy.require_root(root_id, IdentityConflict("native namespace changed"))
+            boundary.privacy.require_root(self.root_id, IdentityConflict("native namespace changed"))
             for initial in unaccepted:
                 # Frozen recipients keep their original names after a rename.
                 AcceptedCohort.record(source.delivery(initial.seq), boundary.privacy, resource, db)
             AcceptanceFrontier(
-                wire_root_id=root_id,
+                wire_root_id=self.root_id,
                 recipient_lookup=lookup,
                 through_seq=visited_after,
             ).advance(db)
 
-    await Coordination.run_async(store_path, accept)
