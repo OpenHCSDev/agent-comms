@@ -168,20 +168,33 @@ class CursorPublication(CursorMetadataRead[CursorAdvancedUpdate]):
         advance: bool = False,
     ) -> CursorEnvelope:
         delivery = self.delivery(session_id)
-        with delivery.measurements.operation("cursor_observation"):
+        measured = delivery.measurements.named("cursor_observation")
+        with measured.measuring():
             async with delivery.reading() as source_reads:
-                return await self._observe(
-                    delivery, thread_name, session_id, source_reads=source_reads,
-                    defer_busy=defer_busy, advance=advance,
-                )
+                with measured.operation("source_reads_held"):
+                    return await self._observe(
+                        delivery, thread_name, session_id, source_reads=source_reads,
+                        defer_busy=defer_busy, advance=advance,
+                        measured=measured.named("source_reads_held"),
+                    )
 
     async def _observe(
         self, delivery: CursorDelivery, thread_name: str, session_id: AcpSessionId, *,
         source_reads: NativeEvidenceScope, defer_busy: bool, advance: bool,
+        measured: PublicationMeasurements,
     ) -> CursorEnvelope:
+        """``measured`` is this observation's own counter: the time it held the session's
+        source reads, each part naming itself under it. What the observation spent waiting
+        for those reads is its total less this."""
         revision = delivery.next_revision()
-        cut, scope = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
-        current_scope = partial(self.scope_after, cut, scope, thread_name, session_id)
+        with measured.operation("scope"):
+            cut, scope = await Coordination.run_worker(
+                partial(self.scope, thread_name, session_id))
+        scope_after = partial(self.scope_after, cut, scope, thread_name, session_id)
+
+        async def current_scope() -> CursorScope:
+            with measured.operation("scope_after"):
+                return await Coordination.run_worker(scope_after)
         unavailable = CursorEnvelope(scope, revision, UnavailableCursorObservation())
         if not scope.matches_session(session_id):
             return unavailable
@@ -191,16 +204,17 @@ class CursorPublication(CursorMetadataRead[CursorAdvancedUpdate]):
             read_cursor = (
                 CursorOwner.refresh_async if advance else CursorOwner.read_async
             )
-            state = await read_cursor(
-                bus, wire_root_id=root_id, owner_name=thread_name,
-                source_reads=source_reads,
-            )
+            with measured.operation("read"):
+                state = await read_cursor(
+                    bus, wire_root_id=root_id, owner_name=thread_name,
+                    source_reads=source_reads,
+                )
         except DeferredRead:
-            current = await Coordination.run_worker(current_scope)
+            current = await current_scope()
             if defer_busy and current == scope:
                 raise
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
-        current = await Coordination.run_worker(current_scope)
+        current = await current_scope()
         if current != scope:
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
         return CursorEnvelope(
