@@ -67,6 +67,7 @@ from agent_comms.installer.native_build_inputs import ConfiguredChildStdio
 from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, SnapshotExclude
 from agent_comms.storage.store_files import StoreBusy
+from agent_comms.storage.typed_table import SQLiteJournalMode
 from agent_comms.storage.typed_table import HeldBusFile, JsonStorage
 from agent_comms.waking.wake_policy import FullWake
 from bus_record_fixture import (
@@ -506,7 +507,7 @@ print("ready")
                 child.wait()
     with CoordinationStore(path) as reopened:
         assert not CoordinatorTable.schema_differs(reopened._connection)
-        assert reopened._connection.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
+        assert SQLiteJournalMode.write_ahead(reopened._connection.execute("PRAGMA journal_mode"))
 
 
 def test_first_create_never_closes_a_published_target_fd(tmp_path, monkeypatch):

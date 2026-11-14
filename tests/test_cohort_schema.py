@@ -14,6 +14,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.tables.participants import Participants
 from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, ThreadLookup
+from agent_comms.storage.typed_table import SQLiteJournalMode
 from bus_record_fixture import OWNER_LOOKUP, RECIPIENT_LOOKUP, SENDER_LOOKUP
 
 A, B, C = SENDER_LOOKUP, RECIPIENT_LOOKUP, OWNER_LOOKUP
@@ -139,7 +140,8 @@ def test_private_schema_is_guarded_and_stable_on_reopen(tmp_path: Path, private_
         assert path.stat().st_mode & 0o077 == 0
     with Coordination(str(path)) as reopened:
         assert _tables(reopened) == before
-        assert reopened.session._connection.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
+        assert SQLiteJournalMode.write_ahead(
+            reopened.session._connection.execute("PRAGMA journal_mode"))
         assert reopened.session._connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         assert not CohortTable.schema_differs(reopened.session._connection)
 

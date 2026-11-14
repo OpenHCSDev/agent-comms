@@ -2270,6 +2270,11 @@ class SQLiteForeignKeyViolation(TypedRow):
 class SQLiteJournalMode(TypedRow):
     journal_mode: str
 
+    @classmethod
+    def write_ahead(cls, answer: sqlite3.Cursor) -> bool:
+        """Whether a `PRAGMA journal_mode` answer, read or set, reports WAL."""
+        return cls.read(answer) == [cls("wal")]
+
 
 @dataclass(frozen=True)
 class SQLiteUserVersion(TypedRow):
@@ -3565,9 +3570,7 @@ class WalStore(SQLiteReader, StoreWriter, StoreLockFile):
         try:
             connection.execute(f"PRAGMA synchronous={self.synchronous}")
             connection.execute("PRAGMA foreign_keys=ON")
-            if SQLiteJournalMode.read(connection.execute("PRAGMA journal_mode=WAL")) != [
-                SQLiteJournalMode("wal")
-            ]:
+            if not SQLiteJournalMode.write_ahead(connection.execute("PRAGMA journal_mode=WAL")):
                 raise RelationViolationError(f"{self.filename} requires WAL")
             yield connection
         finally:

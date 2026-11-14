@@ -169,9 +169,7 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile, InputCaptureFi
         """Put the file in WAL mode while nothing else has it open: a stage not yet
         published, or a carried file whose owners are stopped."""
         with closing(sqlite3.connect(path, isolation_level=None)) as connection:
-            if SQLiteJournalMode.read(connection.execute("PRAGMA journal_mode=WAL")) != [
-                SQLiteJournalMode("wal")
-            ]:
+            if not SQLiteJournalMode.write_ahead(connection.execute("PRAGMA journal_mode=WAL")):
                 raise CoordinationError(f"{path} could not enter WAL mode")
 
     def _private_file(self) -> os.stat_result:

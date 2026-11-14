@@ -415,7 +415,5 @@ class PrivateCoordinatorSchema(
                 if not family.stored_schema(db, rows):
                     family.create_schema(db)
             cls.require_installed(db)
-            if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode")) != [
-                SQLiteJournalMode("wal")
-            ]:
+            if not SQLiteJournalMode.write_ahead(db.execute("PRAGMA journal_mode")):
                 raise SchemaVersionError("private coordinator requires WAL mode")

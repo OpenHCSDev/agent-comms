@@ -26,9 +26,7 @@ class CoordinatorWal(Carry):
         rollback = []
         for path in self.input_files():
             with closing(CoordinationStore.read_snapshot(path)) as db:
-                if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode")) != [
-                    SQLiteJournalMode("wal")
-                ]:
+                if not SQLiteJournalMode.write_ahead(db.execute("PRAGMA journal_mode")):
                     rollback.append(path)
         if apply:
             for path in rollback:
