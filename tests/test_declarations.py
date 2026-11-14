@@ -427,3 +427,21 @@ class TestCurrentThread:
         assert (thread.name, thread.tags, thread.worktree, thread.parent, thread.task) == (
             "worker", frozenset({"a", "b"}), Checkout(tmp_path / "project"), ForkedParent("colleague"), GivenThreadText("Ship it")
         )
+
+
+def test_an_edit_that_removes_a_thread_retires_its_turn_row(tmp_path: Path) -> None:
+    """A turn row exists exactly while its thread's row names it: removing the thread retires
+    the turn in the same commit, and a thread that never leased leaves nothing to retire."""
+    from agent_comms.registry.registry_tables import TurnChange
+
+    registry = Registration(RegistryFile.path_in(tmp_path))
+    for name in ("a", "b"):
+        registry.register(NativeThread(name=name, tags=frozenset(), worktree=Checkout(Path("/wt")),
+                                       process_identity=ProcessIdentity.capture(os.getpid())))
+    leased, _ = registry.lease_local_turn("a", TurnId("d79d3458a58877cd8e48c18ebaf4c27b"))
+    original = registry.store.read()
+    removed = original.copy()
+    del removed.threads["a"]
+    del removed.threads["b"]
+    assert TurnChange().leaving(original, removed).retired == (leased.turn_identity,)
+    assert TurnChange().leaving(original, original.copy()) == TurnChange()
