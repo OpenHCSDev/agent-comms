@@ -51,6 +51,7 @@ from agent_comms.nominal.field_codec import ClaimId, FieldCodec, MessageId
 from agent_comms.planning.goal_attempts import GoalAttemptStore
 from agent_comms.planning.goal_ledger import FailedTurnEvidence
 from agent_comms.registry.activity import ActivityStore
+from agent_comms.registry.presence import PresenceChange
 from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile, SQLiteFile
 from agent_comms.storage.maintenance_barrier import (
     MaintenanceBarrier,
@@ -238,7 +239,7 @@ def test_schema_selection_does_not_grant_access_to_uncommitted_registry_data(pri
     store = private_comms.registry.store
     captured = store.read_revision().source
     # An unguarded commit invalidates access, but does not change the protocol's table family.
-    store.rows.commit(captured.raw, captured)
+    store.rows.commit(captured.raw, captured, PresenceChange.unchanged())
     with pytest.raises(RelationViolationError):
         store.privacy()
     assert CoordinationStore.schema_at(CoordinationStore.path_in(private_comms.root)) is PrivateCoordinatorSchema

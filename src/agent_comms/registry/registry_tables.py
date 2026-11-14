@@ -20,6 +20,7 @@ from pydantic import JsonValue
 
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.nominal.field_codec import FieldCodec, WireValue
+from agent_comms.registry.presence import PresenceCapture, PresenceChange, PresenceRevision
 from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.private_path import FileIdentity, FileRevision, MissingFile
@@ -349,6 +350,26 @@ class RegistryChanges:
         return frozenset(removal.name for removal in self.removals if removal.family is family)
 
 
+@dataclass(frozen=True)
+class PresenceRow(RevisionStamped):
+    """When a thread was last seen, stamped with the presence revision that wrote it.
+
+    Being seen is not a fact about a thread's declaration: presence has its own header, so a
+    heartbeat moves the presence revision and leaves the registry's alone, and an edit that
+    changes both commits them in one transaction."""
+
+    name: Annotated[str, FrozenColumn(primary_key=True)]
+    seen: float
+
+
+@dataclass(frozen=True)
+class PresenceHeader(RegistryRow):
+    """The presence revision that last committed."""
+
+    header: Annotated[int, FrozenColumn(primary_key=True, check="header = 1")]
+    revision: Annotated[int, Column(check="revision > 0")]
+
+
 @dataclass(frozen=True, slots=True)
 class RegistryRowStore(DurableStore, RegistryFile):
     """The registry's rows: one owner-only SQLite file beside the bus, which every installation
@@ -405,12 +426,16 @@ class RegistryRowStore(DurableStore, RegistryFile):
                     db, where="changed_at > ?", parameters=since)),
             ))
 
-    def commit(self, raw: RawDocument, previous: RegistryCapture) -> RegistryRevisionMark:
-        """Write the rows of ``raw`` that differ from ``previous`` as its successor, in one
-        transaction; refused if another revision committed since ``previous``."""
+    def commit(
+        self, raw: RawDocument, previous: RegistryCapture, presence: PresenceChange,
+    ) -> RegistryRevisionMark:
+        """Write the rows of ``raw`` that differ from ``previous`` as its successor, and the
+        presence the same edit changed, in one transaction; refused if another revision
+        committed since ``previous``."""
         with self.writing() as db:
             if not self.revision_in(db).accepts_write(previous.revision):
                 raise StaleFence("registry rows changed after this write read them")
+            self.presence_in(db, presence)
             mark = previous.mark.successor()
             scalars = raw
             for family in RegistryNamedRow.families():
@@ -427,3 +452,45 @@ class RegistryRowStore(DurableStore, RegistryFile):
             RegistryHeader(header=1, revision=mark.revision,
                            scalars=StoredWire(cast(JsonValue, scalars))).upsert(db)
             return mark
+
+    def presence_revision_in(self, db) -> PresenceRevision:
+        headers = PresenceHeader.select(db, header=1)
+        return PresenceRevision(FileRevision.capture(self.path).file_identity(),
+                                headers[0].revision if headers else 0)
+
+    def presence_revision(self) -> PresenceRevision:
+        return self.remembered("presence_revision", self._read_presence_revision)
+
+    def _read_presence_revision(self) -> PresenceRevision:
+        with self.snapshot() as db:
+            return self.presence_revision_in(db)
+
+    def read_presence(self, earlier: PresenceCapture = PresenceCapture.empty()) -> PresenceCapture:
+        """The presence committed now, read as the rows changed since ``earlier``."""
+        if self.presence_revision() == earlier.revision:
+            return earlier
+        with self.snapshot() as db:
+            revision = self.presence_revision_in(db)
+            if revision == earlier.revision:
+                return earlier
+            base = earlier if revision.extends(earlier.revision) else PresenceCapture.empty()
+            seen = base.seen.copy()
+            for row in PresenceRow.select(
+                    db, where="changed_at > ?", parameters=(base.revision.counter,)):
+                seen[row.name] = row.seen
+            return PresenceCapture(revision, seen.freeze())
+
+    def write_presence(self, presence: PresenceChange) -> None:
+        """An edit that changed presence alone: its own transaction, the registry untouched."""
+        if presence.names():
+            with self.writing() as db:
+                self.presence_in(db, presence)
+
+    def presence_in(self, db, presence: PresenceChange) -> None:
+        names = presence.names()
+        if not names:
+            return
+        revision = self.presence_revision_in(db).counter + 1
+        for name in names:
+            PresenceRow(changed_at=revision, name=name, seen=presence.after[name]).upsert(db)
+        PresenceHeader(header=1, revision=revision).upsert(db)

@@ -32,7 +32,7 @@ from agent_comms.execution.turn_lease import (
 from agent_comms.execution.turn_registry import TurnRegistry
 from agent_comms.messaging.routing import Routing
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, TurnId
-from agent_comms.registry.presence import PresenceCapture, PresenceRevision, PresenceStore
+from agent_comms.registry.presence import PresenceCapture, PresenceChange, PresenceRevision
 from agent_comms.registry.private_registry_guard import (
     PrivateRegistryGuard,
     PublicRegistry,
@@ -131,7 +131,7 @@ class RegistryRevision(CachedRegistry):
     @classmethod
     def presented(cls, store: RegistryStore, source: RegistryCapture,
                   document: RegistryDocument) -> RegistryRevision:
-        captured = store.presence.read(store.cache.presence_source)
+        captured = store.rows.read_presence(store.cache.presence_source)
         store.cache.presence_source = captured
         # Validate against the edit's original key root before copying resets its
         # change baseline. The retained document then owns an independent edit view.
@@ -140,7 +140,7 @@ class RegistryRevision(CachedRegistry):
     def current(self, store: RegistryStore) -> RegistryRevision:
         """This registry revision with the presence stored now: re-laid, and cached in this
         revision's place, only when presence committed since it was laid."""
-        if store.presence.revision() == self.presence:
+        if store.rows.presence_revision() == self.presence:
             return self
         revision = RegistryRevision.presented(store, self.source, self.document)
         store.cache.entry = revision
@@ -352,13 +352,15 @@ class RegistryEdit:
         return leased, self.document.owners.generations[current.name]
 
     def commit(self) -> None:
-        # Presence rows before the registry, and none dropped: any revision a reader captured,
-        # however long before it reads presence, names only threads that have a row.
-        if self.document.last_seen != self.original.document.last_seen:
-            self.store.presence.set_rows(self.document.last_seen, self.original.document.last_seen)
+        # A declaration change commits its presence rows in its own transaction; a heartbeat
+        # commits presence alone. No row is dropped: any revision a reader captured names only
+        # threads that have one.
         if self.document != self.original.document:
             self.store.save_unlocked(self.document)
             self.original = self.store.read_revision_unlocked()
+        else:
+            self.store.rows.write_presence(
+                PresenceChange(self.document.last_seen, self.original.document.last_seen))
         for record in self.superseded:
             record.retire()
         self.superseded.clear()
@@ -396,7 +398,6 @@ class RegistryStore(
     declared_name=None,
 ):
     cache: RegistryCache = field(init=False, compare=False, repr=False)
-    presence: PresenceStore = field(init=False, compare=False, repr=False)
     rows: RegistryRowStore = field(init=False, compare=False, repr=False)
 
     def __reduce__(self) -> tuple[type[Self], tuple[Path]]:
@@ -410,29 +411,25 @@ class RegistryStore(
         PrivateCoordinatorTable.declarations()
         RegistryRowStore.acquire_declarations()
         object.__setattr__(self, "cache", RegistryCache.for_path(self.path))
-        object.__setattr__(self, "presence", PresenceStore(self.path.parent))
         object.__setattr__(self, "rows", RegistryRowStore(self.path.parent))
 
     record_type = RegistryDocument
 
     def stored_files(self) -> tuple[Path, ...]:
-        """The registry and presence files selected together by installer backups."""
-        return self.path, self.presence.path
+        """The registry file, presence rows included, selected by installer backups."""
+        return (self.path,)
 
     def retain(self, destination: Path) -> RegistryRevision:
         """Retain a consistent registry for history, then seal the copy against live writes.
 
-        SQLite backup includes committed WAL rows. Presence is copied with its own file owner;
-        neither operation retires the source's participants or copies live execution grants.
+        SQLite backup includes committed WAL rows, presence among them; it neither retires the
+        source's participants nor copies live execution grants.
         """
         copied = type(self).at(destination)
         destination.mkdir(mode=0o700, parents=True, exist_ok=True)
         with self.guarded_read():
             self.copy_file(self.path, copied.path)
             Platform.current().sync_file(copied.path)
-            if self.presence.path.exists():
-                self.presence.copy_file(self.presence.path, copied.presence.path)
-                Platform.current().sync_file(copied.presence.path)
         copied.mark_historical()
         return copied.read_revision()
 
@@ -607,7 +604,7 @@ class RegistryStore(
     @property
     def companion_files(self) -> dict[Path, type[RootFile]]:
         """Retain each companion with its owner's copying behavior."""
-        return {self.presence.path: type(self.presence), self.guard_path: PrivateRegistryGuard,
+        return {self.guard_path: PrivateRegistryGuard,
                 **dict.fromkeys(sorted(StoredTurnRecord.matching_in(self.path.parent)), StoredTurnRecord)}
 
     def revision_unlocked(self) -> tuple[RegistryRowRevision, FileObservation]:
@@ -694,7 +691,7 @@ class RegistryStore(
             stored = original.wire_document()
             raw = change(FieldCodec.parse(FieldCodec.compact(stored)))
             if raw != stored:
-                self._commit_unlocked(raw, original)
+                self._commit_unlocked(raw, original, PresenceChange.unchanged())
                 # The earlier revision stays cached: the next read applies only the rows this
                 # commit changed, and decodes them then, so a form the decoder refuses is refused
                 # by its reader, never here.
@@ -720,18 +717,23 @@ class RegistryStore(
         document.require_valid_rows(original.document)
         document.threads.bind(self.binding)
         raw = original.source.encoded(document, original.document)
-        source = self._commit_unlocked(raw, original.source)
+        source = self._commit_unlocked(
+            raw, original.source, PresenceChange(document.last_seen, original.document.last_seen))
         # Still under the exclusive lock: the committed revision is this document.
         self.cache.entry = RegistryRevision.presented(self, source, document)
 
     def _publish_unlocked(self, document: RegistryDocument) -> None:
         self.save_unlocked(document)
 
-    def _commit_unlocked(self, raw: RawDocument, previous: RegistryCapture) -> RegistryCapture:
-        """Commit the rows of ``raw`` that differ from ``previous``, bracketed by the guard."""
+    def _commit_unlocked(
+        self, raw: RawDocument, previous: RegistryCapture, presence: PresenceChange,
+    ) -> RegistryCapture:
+        """Commit the rows of ``raw`` that differ from ``previous``, and the presence the same
+        edit changed, in one transaction bracketed by the guard."""
         mark = previous.mark.successor()
         self.cache.entry = UncachedRegistry()
-        self.private_guard_unlocked().write(self.path, mark, lambda: self.rows.commit(raw, previous))
+        self.private_guard_unlocked().write(
+            self.path, mark, lambda: self.rows.commit(raw, previous, presence))
         return RegistryCapture(self.rows.revision(), raw)
 
     def private_guard_unlocked(self) -> RegistryPrivacy:

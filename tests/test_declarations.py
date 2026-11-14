@@ -24,6 +24,7 @@ from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
 from agent_comms.pi_counts import PiCount
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.presence import PresenceChange
 from agent_comms.registry.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistryDocument
@@ -351,7 +352,7 @@ class TestRegistration:
             for field in ("owners", "claims"):
                 data[FieldCodec.record_key(RegistryDocument, field)]["generations"].clear()
             # A writer outside the guard removes required generation rows.
-            comms.registry.store.rows.commit(data, source)
+            comms.registry.store.rows.commit(data, source, PresenceChange.unchanged())
         with pytest.raises(RelationViolationError):
             cold.require("a")
         with pytest.raises(RelationViolationError):

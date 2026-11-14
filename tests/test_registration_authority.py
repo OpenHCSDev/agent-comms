@@ -16,6 +16,7 @@ from agent_comms.execution.turn_phase import PreparingPhase
 from agent_comms.nominal.field_codec import GoalId, TurnId
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.presence import PresenceChange
 from agent_comms.registry.thread_identity import UserThreadRole
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
@@ -200,7 +201,7 @@ def test_turn_access_waits_for_private_registry_commit(tmp_path, operation):
             original = registry.store.read_revision_unlocked().source
             digest = revision_digest(original.mark.successor())
             sequence, slot = guard.prepare(digest)
-            registry.store.rows.commit(original.raw, original)
+            registry.store.rows.commit(original.raw, original, PresenceChange.unchanged())
             future = pool.submit(access)
             try:
                 assert entered.wait(5)
@@ -229,7 +230,7 @@ def test_turn_read_still_rejects_abandoned_post_replacement_guard(tmp_path):
         guard = registry.store.private_guard_unlocked()
         original = registry.store.read_revision_unlocked().source
         guard.prepare(revision_digest(original.mark.successor()))
-        registry.store.rows.commit(original.raw, original)
+        registry.store.rows.commit(original.raw, original, PresenceChange.unchanged())
         # Deliberately abandon the real write before committing its authority.
     with pytest.raises(RelationViolationError, match='pending, not committed'):
         leased.turn_record.read()
@@ -256,7 +257,7 @@ def test_private_guard_check_survives_coordination_writes(tmp_path, monkeypatch)
         edit.commit()
     hashed.clear()
     original = registry.store.read_revision_unlocked().source
-    registry.store.rows.commit(original.raw, original)
+    registry.store.rows.commit(original.raw, original, PresenceChange.unchanged())
     with pytest.raises(RelationViolationError):
         registry.store.private_guard_unlocked()
     assert hashed == [registry.store.path], 'a row commit outside the guard must re-verify it'

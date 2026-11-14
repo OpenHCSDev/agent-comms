@@ -7,14 +7,15 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.presence import PresenceRows, PresenceStore
-from agent_comms.storage.row_mapping import RowMapping
+from agent_comms.registry.presence import PresenceChange, PresenceRows
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import InvalidRegistryDocument
 from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.registry.registry_tables import RegistryRowStore
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.row_mapping import RowMapping
 from agent_comms.storage.store_files import AtomicFile
 
 
@@ -33,9 +34,9 @@ def test_complete_declaration_keeps_row_reads_bounded_as_the_registry_grows(tmp_
 
 
 def test_presence_updates_and_presentations_do_not_enumerate_unchanged_rows(tmp_path, monkeypatch):
-    store = PresenceStore(tmp_path)
-    store.set_rows({f"worker-{i}": float(i) for i in range(400)}, {})
-    before = store.read()
+    store = RegistryRowStore(tmp_path)
+    store.write_presence(PresenceChange({f"worker-{i}": float(i) for i in range(400)}, {}))
+    before = store.read_presence()
     scope = before.seen.keyset()
     retained = PresenceRows().presented(before, scope)
     changed = retained.copy()
@@ -48,8 +49,8 @@ def test_presence_updates_and_presentations_do_not_enumerate_unchanged_rows(tmp_
         return original(rows)
 
     monkeypatch.setattr(RowMapping, "__iter__", require_changed_rows_only)
-    store.set_rows(changed, retained)
-    following = retained.presented(store.read(before), scope)
+    store.write_presence(PresenceChange(changed, retained))
+    following = retained.presented(store.read_presence(before), scope)
     assert retained["worker-0"] == 0.0
     assert following["worker-0"] == 1000.0
     assert following["worker-399"] == 399.0
@@ -67,9 +68,6 @@ def test_replacing_a_database_at_the_same_counter_does_not_reuse_its_cached_rows
     RegistryFile.copy_file(second.store.path, staged)
     # Publish a complete replacement, as rollback does; this is not a row update.
     AtomicFile(first.store.path).replace(staged)
-    staged_presence = staged.parent / second.store.presence.path.name
-    second.store.presence.copy_file(second.store.presence.path, staged_presence)
-    AtomicFile(first.store.presence.path).replace(staged_presence)
     assert set(first.all_threads()) == {"replacement"}
     assert not first.store.has_revision(before.source.revision)
 
@@ -364,7 +362,7 @@ def test_captures_and_row_commits_visit_only_changed_keys(tmp_path, monkeypatch)
     with monkeypatch.context() as patch:
         patch.setattr(RowMapping, "__iter__", bounded_rows)
         encoded = original.source.encoded(document, original.document)
-        registry.store.rows.commit(encoded, original.source)
+        registry.store.rows.commit(encoded, original.source, PresenceChange.unchanged())
         refreshed = registry.store.rows.captured(original.source, registry.store.rows.revision())
     assert RegistryThreads.mapping_in(refreshed.raw)["second"] == FieldCodec.encode(changed)
     assert RegistryThreads.mapping_in(refreshed.raw)["first"] is RegistryThreads.mapping_in(original.source.raw)["first"]
