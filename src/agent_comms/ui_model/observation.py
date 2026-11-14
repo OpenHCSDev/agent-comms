@@ -27,6 +27,7 @@ import sys
 import time
 import traceback
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from collections.abc import Callable, Generator, Iterator, Mapping
 from concurrent.futures import Future
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, AsyncExitStack, ExitStack, aclosing, nullcontext
@@ -899,8 +900,9 @@ class SidebarReading(ReadingObservation[ObserveSidebar]):
     def publish(self, result: SidebarResult) -> Iterator[SidebarResult]:
         result.advance(self)
         if result.accepted_by(self.published):
+            sent = self.published.sent_as(result)
             self.published = result
-            yield result
+            yield sent
 
 
 @dataclass(frozen=True)
@@ -1511,6 +1513,13 @@ class PublishState:
     def same_observation(self, current: object) -> bool:
         return self == current
 
+    def sent_as(self, result: SidebarResult) -> SidebarResult:
+        """What crosses the connection for ``result`` after this one was sent: all of it."""
+        return result
+
+    def rebuilt(self, changed: SidebarRowsChanged) -> SidebarObserved:
+        raise RelationViolationError("Sidebar rows arrived without the sidebar they change")
+
     def accepts_preparing(self) -> bool:
         return False
 
@@ -1530,6 +1539,10 @@ class SidebarResult(PublishState, Observed, declared_name=None):
 
     def accepted_by(self, previous: PublishState) -> bool:
         return not previous.same_observation(self)
+
+    def sent_after(self, previous: SidebarObserved) -> SidebarResult:
+        """Only a whole sidebar can be sent as the rows it changed."""
+        return self
 
 
 @dataclass(frozen=True)
@@ -1552,6 +1565,48 @@ class SidebarObserved(SidebarResult):
 
     def advance(self, reading: SidebarReading) -> None:
         reading.stage.advance(reading, self.snapshot)
+
+    def sent_as(self, result: SidebarResult) -> SidebarResult:
+        return result.sent_after(self)
+
+    def sent_after(self, previous: SidebarObserved) -> SidebarResult:
+        if previous.request != self.request:
+            return self
+        return SidebarRowsChanged(
+            self.revision, self.request,
+            replace(self.snapshot, threads=OrderedDict(
+                (name, view) for name, view in self.snapshot.threads.items()
+                if previous.snapshot.threads.get(name) != view)),
+            self.derived, tuple(self.snapshot.threads))
+
+    def rebuilt(self, changed: SidebarRowsChanged) -> SidebarObserved:
+        if changed.request != self.request:
+            raise RelationViolationError("Sidebar rows changed a sidebar of another request")
+        threads = changed.snapshot.threads
+        return SidebarObserved(changed.revision, changed.request, replace(
+            changed.snapshot, threads=OrderedDict(
+                (name, threads[name] if name in threads else self.snapshot.threads[name])
+                for name in changed.order)), changed.derived)
+
+    async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
+        process.sidebar = self
+        observed(self)
+
+
+@dataclass(frozen=True)
+class SidebarRowsChanged(SidebarResult):
+    """A sidebar sent after another for the same request on one connection: every field
+    whole except the thread rows, which carry only the rows that changed, and their order.
+    The receiving process rebuilds the whole sidebar from the one it holds; one agent's badge
+    flip used to send every thread's registry record again (about 176 KB a send)."""
+
+    snapshot: CoordinationSnapshot
+    derived: tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]
+    order: tuple[str, ...]
+
+    async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
+        process.sidebar = full = process.sidebar.rebuilt(self)
+        observed(full)
 
 
 @dataclass(frozen=True)
@@ -2316,6 +2371,8 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         self._resources.callback(self.peer.retire)
         self._resources.enter_context(self.connection)
         self._reader = AsyncExitStack()
+        self.sidebar: PublishState = NoSidebarResult()
+        """The last whole sidebar received, which the next sidebar's changed rows apply to."""
 
     async def __aexit__(self, *exc: object) -> None:
         await self.close()
