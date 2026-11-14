@@ -410,7 +410,7 @@ def test_each_team_gets_its_own_failure_packet(notification_bus):
     now = time.time()
     for name in ("colleague", "worker"):
         teammate = comms.registry.require(name).incarnation
-        update, = TeamUpdate.report_failure(teammate, failure, (), published=(), now=now)
+        update = TeamUpdate.report_failure(teammate, failure, (), published=(), now=now)
         TeamUpdateStore.record(comms.root, update)
         update.send(comms, ())
         latest, = TeamUpdate.latest(comms, teammate)
@@ -418,7 +418,7 @@ def test_each_team_gets_its_own_failure_packet(notification_bus):
         assert latest.handled == (RulePing.capture(failure),)
         assert TeamUpdate.report_failure(
             teammate, failure, (latest,), published=TeamUpdate.published(comms, teammate),
-            now=now + 1) == ()
+            now=now + 1) is None
     # The worker's later packet is not the colleague's board.
     colleague = comms.registry.require("colleague").incarnation
     lead_board, = TeamUpdate.latest(comms, colleague)
@@ -550,7 +550,7 @@ def test_a_recreated_team_inherits_no_board(notification_bus):
     assert TeamUpdate.latest(comms, reborn) == ()
     assert TeamUpdate.latest(comms, board.task.teammate) == (board.task,)
     now = time.time()
-    update, = TeamUpdate.report_failure(reborn, failing, (), published=(), now=now)
+    update = TeamUpdate.report_failure(reborn, failing, (), published=(), now=now)
     TeamUpdateStore.record(comms.root, update)
     update.send(comms, ())
     latest, = TeamUpdate.latest(comms, reborn)
