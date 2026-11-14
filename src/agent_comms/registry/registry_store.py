@@ -522,9 +522,15 @@ class RegistryStore(
     def change_turn[Result](
         self, record: StoredTurnRecord, change: Callable[[LockedTurn], Result],
     ) -> Result:
-        """Keep retirement excluded while the named turn's own transaction changes it."""
-        with self.current_snapshot() as cut:
-            return change(cut.snapshot.locked_turn(record))
+        """A phase change decides in its turn row's own write transaction, which no registry
+        commit interleaves with: the row exists exactly while the registry names its turn, since
+        the commit that supersedes the turn or removes its thread deletes it. The owner comes from
+        the decoded revision, which a phase write leaves unchanged; a turn that revision no longer
+        names is retired, and one retired since finds no row and changes nothing."""
+        revision = self.read_revision()
+        with self.cache.decoding:
+            snapshot = revision.snapshot
+        return change(snapshot.locked_turn(record))
 
     def prepare_native_root(self) -> PrivateRegistry:
         """Commit this store's namespace before preparing runtime tables outside its writer."""
@@ -716,7 +722,8 @@ class RegistryStore(
         raw = original.source.encoded(document, original.document)
         source = self._commit_unlocked(
             raw, original.source,
-            EditTables(PresenceChange(document.last_seen, original.document.last_seen), turns))
+            EditTables(PresenceChange(document.last_seen, original.document.last_seen),
+                       turns.leaving(original.document, document)))
         # Still under the exclusive lock: the committed revision is this document.
         self.cache.entry = RegistryRevision.presented(self, source, document)
 
