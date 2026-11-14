@@ -141,8 +141,8 @@ async def test_external_mid_turn_goal_reaches_actual_consumer_without_inbox_wake
     agent.inputs.ensure_live_drain(session)
     scheduler = agent.turns.goals
     try:
-        await until(lambda: state.observation_watcher is not None and state.settled()
-                    and not state.observation_ready.is_set() and not state.repeat_observation
+        await until(lambda: state.observation_watcher is not None and state.inbox.quiet
+                    and not state.observation_ready.is_set()
                     and scheduler.publication(session).snapshot.goal_changed(
                         comms.registry.require(session).goal) is False)
         before_messages = comms.bus.bus.revision()

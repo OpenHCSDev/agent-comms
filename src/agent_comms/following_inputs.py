@@ -12,7 +12,7 @@ from agent_comms.execution.following_input_contracts import (
     FollowingInputRetirement,
     FollowingTurnSource,
 )
-from agent_comms.execution.input_drain import InputDrain
+from agent_comms.execution.input_drain import InputDrain, PendingTaken
 from agent_comms.execution.owned_send import OwnedSend
 from agent_comms.execution.queued_input import DeliveredInput, InputHandoffRefused
 from agent_comms.execution.turn_inbox import TurnInbox
@@ -29,7 +29,7 @@ class FollowingInputs:
     async def ready(inputs: InputDrain, session_id: AcpSessionId, after_seq: int = 0) -> None:
         """Take accepted work when a running turn opens or frees following capacity."""
         async with inputs.state(session_id).lock:
-            inputs.state(session_id).forget_observation()
+            inputs.state(session_id).receive(PendingTaken())
             owner = await Coordination.run_worker(partial(
                 inputs.comms.registry.require, inputs.sessions.require(session_id),
             ))

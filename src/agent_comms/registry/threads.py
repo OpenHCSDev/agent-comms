@@ -726,6 +726,14 @@ class Thread(
             and self.turn_generation == other.turn_generation
         )
 
+    def apart_from_turn(self) -> Thread:
+        """Everything recorded about this thread except which turn it is on.
+
+        Claiming or finishing a turn moves the two fields ``same_turn`` compares and nothing
+        else here, so two captures that agree on this are the same thread whichever turn each
+        was taken in."""
+        return replace(self, turn_record=NoTurnRecord(), turn_generation=0)
+
     def without_turn(self) -> Thread:
         """Drop the reference; the registry transaction owns revoking the record."""
         return replace(self, turn_record=self.turn_record.released())
