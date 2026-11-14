@@ -146,3 +146,42 @@ def test_in_memory_schema_checks_remember_nothing():
         assert isinstance(revision, UnfiledSchema)
         revision.remember(TableSchema, ())
     assert len(FiledSchema.verified_schemas) == before
+
+
+def test_an_opening_that_found_its_schema_declared_does_not_read_the_catalog_again(
+    tmp_path, monkeypatch,
+):
+    """Every coordinator operation opens the store. An opening asked the catalog for every
+    stored object to learn whether the file has a schema at all, after the same file and
+    schema version had already been found equal to the declaration. A schema changed in
+    place is another version, and that opening reads the catalog again."""
+    from agent_comms.comms import wire
+    from agent_comms.coordination.coordinator import Coordination
+    from agent_comms.coordination.database import CoordinationStore
+
+    root = tmp_path / "bus"
+    root.mkdir()
+    wire(root)
+    path = CoordinationStore.path_in(root)
+    with Coordination(str(path)):
+        pass
+    statements: list[str] = []
+    open_connection = CoordinationStore._open_connection
+
+    def traced(store, contention):
+        connection = open_connection(store, contention)
+        connection.set_trace_callback(statements.append)
+        return connection
+
+    monkeypatch.setattr(CoordinationStore, "_open_connection", traced)
+    with Coordination(str(path)):
+        pass
+    assert not [statement for statement in statements if "sqlite_master" in statement]
+
+    with sqlite3.connect(path) as other:
+        other.execute("CREATE TABLE stray_from_another_writer (value)")
+    other.close()
+    statements.clear()
+    with Coordination(str(path)):
+        pass
+    assert [statement for statement in statements if "sqlite_master" in statement]

@@ -1602,8 +1602,13 @@ class TableSchema(ABC):
     def install_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> None:
         """Every writer's opening: a file with no stored schema gets its declaration, and
         ``change`` answers one that has a schema. The first read also attaches an existing
-        WAL, and an opening that finds its schema takes no write lock."""
-        if not cls.stored_schema(db):
+        WAL, and an opening that finds its schema takes no write lock.
+
+        A file and schema version already found equal to the declaration has its schema, so
+        only an opening that has not found that reads the catalog to ask whether one is there:
+        that read decoded every stored object of every coordinator opening to answer yes
+        (0.6 of the 2.1 ms an opening costs, some forty openings a message, 2026-11-14)."""
+        if not SchemaRevision.read(db).verified(cls, ()) and not cls.stored_schema(db):
             with SQLiteFile.write_transaction(db):
                 if not cls.stored_schema(db):
                     cls.create_schema(db)
