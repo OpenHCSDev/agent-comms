@@ -208,6 +208,27 @@ def test_changed_text_and_replaced_transcript_do_not_reuse_old_values(tmp_path):
     assert len(page.resources[-1].value.segments[2].contributors) == 1
 
 
+def test_a_text_its_writer_recorded_is_named_however_many_came_between(tmp_path):
+    comms = context_comms(tmp_path)
+    owner = comms.registry.require('Alice')
+
+    def answer(turn):
+        """The same request under the other system prompt its process alternates with."""
+        manifest = context(owner, tmp_path, 1, turn)
+        other = replace(manifest.segments[0], sha256='b' * 64, captured_text=('Coding system',))
+        return replace(manifest, segments=(other, *manifest.segments[1:]))
+
+    requests = (context(owner, tmp_path, 1, 1), answer(2), context(owner, tmp_path, 1, 3), answer(4))
+    prior = UNREAD_CONTEXT
+    for manifest in requests:
+        prior = comms.contexts.record_after(prior, manifest)
+    recorded = comms.contexts.page(owner.name, comms.registry).resources
+    assert [resource.value.segments[0].captured_text for resource in recorded] == [
+        manifest.segments[0].captured_text for manifest in requests]
+    assert [bool(resource.recorded.segments[0].manifest.captured_text)
+            for resource in recorded] == [True, True, False, False]
+
+
 def test_newly_captured_text_is_not_replaced_by_an_empty_predecessor(tmp_path):
     comms = context_comms(tmp_path)
     owner = comms.registry.require('Alice')
