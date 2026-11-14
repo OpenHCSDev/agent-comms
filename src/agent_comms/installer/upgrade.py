@@ -529,6 +529,9 @@ class OwnersStopped:
     stopped: list[str] = field(default_factory=list)
     started: tuple[OwnerStart, ...] = ()
     give_back: ExitStack = field(default_factory=ExitStack)
+    hold: ExitStack = field(default_factory=ExitStack)
+    """The maintenance hold an install took with these owners, when it took one. It lasts to
+    its release, before anything starts on the root again, or to the install's exit."""
 
     def stop(self, stack: Stack, root: Path) -> None:
         """Each owner is remembered once, before its batch, so a partly refused stop still
@@ -572,11 +575,24 @@ class OwnersStopped:
         """The owners belong to a bus moved aside; nothing starts them again."""
         self.give_back.pop_all()
 
+    def held_for_restore(self, maintenance: MaintenanceBarrier) -> MaintenanceState:
+        """The hold a restore works under, ended by the release that follows the restore.
+        An install releases its hold before it restarts its services, so a service that does
+        not serve again finds the root open and the restore takes a new hold here. Install
+        9bede72a3 took it with nothing to end it: its own restart of the owners was refused
+        and the fleet stayed down until the installer exited."""
+        operator = MaintenanceOperator.current()
+        held = maintenance.held_by(operator)
+        self.hold.callback(maintenance.released_by, operator)
+        return held
+
     def release(self) -> None:
-        """No hold was taken with these owners, so none is cleared."""
+        """Ends the hold; a later call finds nothing left to end."""
+        self.hold.close()
 
     def keep(self) -> None:
-        """Nothing starts on the root again."""
+        """Nothing starts on the root again, and its hold stays draining."""
+        self.hold.pop_all()
         self.give_back.pop_all()
 
     @contextmanager
@@ -590,23 +606,6 @@ class OwnersStopped:
 
     def lines(self) -> tuple[str, ...]:
         return tuple(line for owner in self.started for line in owner.lines())
-
-
-@dataclass
-class HeldOwnersStopped(OwnersStopped):
-    """Owners the outgoing runtime stopped under the install's one maintenance hold, which lasts
-    to its release, before anything starts on the root again, or to the install's exit."""
-
-    hold: ExitStack = field(default_factory=ExitStack)
-
-    def release(self) -> None:
-        """Clears the hold once; a later call finds nothing left to clear."""
-        self.hold.close()
-
-    def keep(self) -> None:
-        """The hold stays draining too."""
-        self.hold.pop_all()
-        super().keep()
 
 
 @dataclass(frozen=True)
@@ -1048,13 +1047,12 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
         with OutgoingRuntimeMaintenancePhase().running(clock):
             RootRuntimeStore.at(root).adopt(installed.runtime)
         maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
-        owners = HeldOwnersStopped()
+        owners = OwnersStopped()
         with owners.given_back_on(installed, root):
             with owners.hold:
                 with BeginMaintenancePhase().running(clock):
                     held = maintenance.begin(MaintenanceOperator.current())
-                owners.hold.callback(
-                    lambda: maintenance.clear(maintenance.held_by(MaintenanceOperator.current())))
+                owners.hold.callback(maintenance.released_by, MaintenanceOperator.current())
                 with held.holding():
                     owners.stop(installed, root)
                 with RetargetMaintenancePhase().running(clock):
@@ -1260,7 +1258,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                             holder.close()
                             holder.enter_context(hold.holding())
 
-                        hold = maintenance.held_by(MaintenanceOperator.current())
+                        hold = report.owners.held_for_restore(maintenance)
                         rehold(hold)
                         hold = backup.restore(partial(self.installed.restore_stores, hold))
                         rehold(hold)

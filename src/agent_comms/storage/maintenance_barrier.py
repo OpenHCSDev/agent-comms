@@ -160,6 +160,12 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
         raise MaintenanceHeldError('Another maintenance operation holds this root')
 
     @classmethod
+    def release_for(cls, barrier: MaintenanceBarrier, state: MaintenanceStatus,
+                    operator: MaintenanceOperator) -> MaintenanceStatus:
+        """End ``operator``'s hold on this root."""
+        return barrier.clear(cls.hold_for(barrier, state, operator))
+
+    @classmethod
     def require_held_by(cls, state: MaintenanceState, holder: MaintenanceHolder,
                        change: str) -> None:
         if not holder.holds(state.nonce):
@@ -224,6 +230,12 @@ class ReadyPhase(MaintenancePhase):
     def hold_for(cls, barrier: MaintenanceBarrier, state: MaintenanceStatus,
                  operator: MaintenanceOperator) -> MaintenanceState:
         return barrier.begin(operator)
+
+    @classmethod
+    def release_for(cls, barrier: MaintenanceBarrier, state: MaintenanceStatus,
+                    operator: MaintenanceOperator) -> MaintenanceStatus:
+        """Nothing is held, so nothing is left to end."""
+        return state
 
     @classmethod
     def successors(cls):
@@ -655,6 +667,11 @@ class MaintenanceBarrier(MaintenanceIngress):
         """``operator``'s hold as the root records it now, in whatever phase it is in."""
         state = self.read()
         return state.phase.hold_for(self, state, operator)
+
+    def released_by(self, operator: MaintenanceOperator) -> MaintenanceStatus:
+        """End ``operator``'s hold as the root records it now; an open root stays open."""
+        state = self.read()
+        return state.phase.release_for(self, state, operator)
 
     def _write_unlocked(self, hold: MaintenanceState) -> None:
         marker = MaintenanceMarker(version=hold.version, root=hold.root,

@@ -553,3 +553,28 @@ def test_services_of_every_member_stop_in_one_call(tmp_path, monkeypatch, user_m
         "systemctl", "--user", "stop",
         "codex-comms-inbox@a.service", "codex-comms-inbox@b.service", connector.unit_name(),
     )]
+
+
+def test_a_service_read_before_it_has_its_command_is_still_starting(monkeypatch):
+    """systemd names a simple unit's main process before that process has exec'd, and
+    /proc shows no command line for it in that moment. Install 9bede72a3 read the Codex
+    inbox right then, called it not serving and rolled the whole install back."""
+    installed = Path("/installed/bin/python")
+    service = CodexInboxService("0" * 8)
+    reads = iter((ProcessLookupError(4321), (str(installed), "resume")))
+
+    class Forked:
+        def arguments(self):
+            read = next(reads)
+            if isinstance(read, ProcessLookupError):
+                raise read
+            return read
+
+    monkeypatch.setattr(CodexInboxService, "running", classmethod(lambda cls: (service,)))
+    monkeypatch.setattr(CodexInboxService, "pid", lambda self: 4321)
+    monkeypatch.setattr(
+        "agent_comms.host_services.ProcessIdentity.capture", staticmethod(lambda pid: Forked()))
+    monkeypatch.setattr("agent_comms.host_services.time.sleep", lambda seconds: None)
+
+    assert service.running_on(installed).runtime == installed
+    assert next(reads, None) is None
