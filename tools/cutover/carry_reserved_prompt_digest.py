@@ -6,8 +6,10 @@ stored digest onto its row and, once the install is accepted, removes the file. 
 other columns are not carried: six repeat the input row's own identity, the wire root is the
 one its claims were accepted under, and nothing read the time it was written.
 
-An input with no stored digest was reserved by a process that died before writing one. No
-digest can be made up for it, so the carry refuses and names how many there are.
+An input with no stored digest was reserved by a process that died before writing one, and
+nothing could ever be sent for it. It carries as an input reserved for the empty request,
+which ``NativeSendStage.reserve`` refuses to send too: no prompt has that digest, so the
+input stays as unsendable as it was. The carry counts them.
 """
 
 import sqlite3
@@ -16,7 +18,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.errors import RelationViolationError
+from agent_comms.execution.native_prompt_binding import native_request_digest
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.storage.locked_store import RootFile
@@ -52,7 +54,8 @@ class ReservedPromptDigest(Carry):
 
     def carry(self, *, apply: bool) -> Carried:
         carried: dict[Path, dict[str, str]] = {}
-        inputs = 0
+        inputs = unbound = 0
+        unsendable = native_request_digest("")
         for path in super().input_files():
             with closing(CoordinationStore.read_snapshot(path)) as db:
                 if not NativeRuntimeInput.present(db):
@@ -62,12 +65,9 @@ class ReservedPromptDigest(Carry):
                 reserved = {input_id for (input_id,) in db.execute(
                     f'SELECT "input_id" FROM "{NativeRuntimeInput.declared_name}"')}
             digests = self.digests(path)
-            if unbound := len(reserved.difference(digests)):
-                raise RelationViolationError(
-                    f"{path.name}: {unbound} of {len(reserved)} reserved inputs have no stored"
-                    f" prompt digest in {self.previous}")
-            carried[path] = {input_id: digests[input_id] for input_id in reserved}
+            carried[path] = {input_id: digests.get(input_id, unsendable) for input_id in reserved}
             inputs += len(reserved)
+            unbound += len(reserved.difference(digests))
         if apply:
             for path, digests in carried.items():
                 with (
@@ -84,7 +84,7 @@ class ReservedPromptDigest(Carry):
                     db.execute('DROP TABLE "carried_prompt_digest"')
         return Carried(
             len(carried),
-            detail={"stores": len(carried), "inputs": inputs},
+            detail={"stores": len(carried), "inputs": inputs, "unbound": unbound},
             rewritten=tuple(path.relative_to(self.root) for path in carried) if apply else (),
         )
 

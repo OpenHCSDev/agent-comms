@@ -7,7 +7,7 @@ import pytest
 from cutover.carry_reserved_prompt_digest import ReservedPromptDigest
 
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.errors import RelationViolationError
+from agent_comms.execution.native_prompt_binding import native_request_digest
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.nominal.field_codec import InputId, ThreadLookup
 from agent_comms.storage.locked_store import LiveFilesRequest
@@ -46,7 +46,7 @@ def test_each_input_takes_its_stored_digest_and_the_file_goes_after_acceptance(t
     step = ReservedPromptDigest(LiveFilesRequest(root), tmp_path / "spill")
 
     assert retired in step.input_files()
-    assert step.carry(apply=False).detail == {"stores": 1, "inputs": 2}
+    assert step.carry(apply=False).detail == {"stores": 1, "inputs": 2, "unbound": 0}
     assert step.carry(apply=True).rewritten == (path.relative_to(root),)
     with closing(sqlite3.connect(path)) as db:
         assert {row.input_id: row.expected_prompt_digest
@@ -62,12 +62,15 @@ def test_each_input_takes_its_stored_digest_and_the_file_goes_after_acceptance(t
     assert step.after_acceptance().changed == 0
 
 
-def test_an_input_reserved_without_a_digest_refuses_the_carry(tmp_path):
+def test_an_input_reserved_without_a_digest_stays_unsendable(tmp_path):
     root = tmp_path / "root"
     path = old_root(root, {FIRST: DIGESTS[FIRST]})
     step = ReservedPromptDigest(LiveFilesRequest(root), tmp_path / "spill")
 
-    with pytest.raises(RelationViolationError, match="1 of 2 reserved inputs"):
-        step.carry(apply=True)
+    assert step.carry(apply=True).detail == {"stores": 1, "inputs": 2, "unbound": 1}
     with closing(sqlite3.connect(path)) as db:
-        assert "expected_prompt_digest" not in NativeRuntimeInput.stored_columns(db)
+        stored = {row.input_id: row.expected_prompt_digest
+                  for row in NativeRuntimeInput.select(db)}
+    # The digest of the empty request, which no reservation may send.
+    assert stored == {FIRST: DIGESTS[FIRST], SECOND: native_request_digest("")}
+    assert stored[SECOND] != native_request_digest("any prompt")
