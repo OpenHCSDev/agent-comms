@@ -304,12 +304,34 @@ export class PublishedContext {
     }
 }
 
+/** The journal entries of a session's context, as its process read them. An entry never
+ * changes, so one read serves every request that still holds it. Each request used to read
+ * all of them back from the session file: 0.9 MB for a context of 388 entries. */
+export class ContextEntries {
+    static #held = new WeakMap();
+    #store;
+    #read = new Map();
+    static of(manager) {
+        if (!this.#held.has(manager)) this.#held.set(manager, new this());
+        return this.#held.get(manager).current(manager);
+    }
+    current(manager) {
+        const store = manager.entryStore;
+        const earlier = store === this.#store ? this.#read : new Map();
+        // Only the context's own entries stay: what a compaction dropped leaves with it.
+        this.#store = store; this.#read = new Map();
+        for (const meta of store.contextMetadata(manager.leafId))
+            this.#read.set(meta.id, earlier.get(meta.id) ?? store.get(meta.id));
+        return [...this.#read.values()];
+    }
+}
+
 export class TurnContext {
     constructor(identity, segments, offeredTools) {
         this.identity=identity; this.segments=segments; this.offeredTools=offeredTools;
     }
     static async capture(session, context, source,
-                         sourceEntries=session.sessionManager.buildContextEntries()) {
+                         sourceEntries=ContextEntries.of(session.sessionManager)) {
         const identity = {sessionId:session.sessionId,sessionFile:session.sessionFile};
         const provenance = [source ? {kind:'native',identity,
             request_generation:source.request_generation,context_digest:source.context_digest}
