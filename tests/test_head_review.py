@@ -1465,7 +1465,7 @@ def test_a_request_no_order_links_reaches_the_thread_working_on_its_branch(
     assert stuck.line().endswith(" -> fix debt-src at its owner at armer")
 
     snapshot = comms.registry.snapshot()
-    assert snapshot.statuses["author"].is_stopped() and not snapshot.statuses["author"].archived
+    assert snapshot.statuses["author"].is_stopped() and not snapshot.statuses["author"].is_archived()
     reader = WorkBranches(reviewed_source.checkout)
     worktrees = reader.worktrees()
     path = str(snapshot.require("author").worktree.path)
@@ -1473,7 +1473,7 @@ def test_a_request_no_order_links_reaches_the_thread_working_on_its_branch(
         ThreadBranchCheckout(("author",), path),)
     comms.registry.archive("author")
     archived = comms.registry.snapshot()
-    assert archived.statuses["author"].archived
+    assert archived.statuses["author"].is_archived()
     # The same real Git worktree remains: only its registered holder changed.
     assert reader.checkouts(archived, "fix/head-9", worktrees) == (
         UnregisteredBranchCheckout(path),)

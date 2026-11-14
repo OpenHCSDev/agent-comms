@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from sqlite3 import Connection
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.errors import GoalRefused, UnresolvedAttemptError
+from agent_comms.errors import GoalRefused, StaleAttemptError, UnresolvedAttemptError
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AttemptId, NoAttemptId
@@ -31,9 +31,6 @@ from agent_comms.planning.goal_mutation import (
 
 @dataclass(frozen=True)
 class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
-    def require_ready(self) -> None:
-        raise GoalRefused("Goal generation is not ready or already reserved.")
-
     def has_ready_grant(self, matching: bool) -> bool:
         return False
 
@@ -72,8 +69,7 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
         raise UnresolvedAttemptError(UnresolvedAttemptError.diagnostic_text)
 
     def require_retirement_without_attempt(self) -> None:
-        from agent_comms.coordination import errors
-        raise errors.StaleAttemptError('Goal or attempt is no longer eligible for retirement.')
+        raise StaleAttemptError('Goal or attempt is no longer eligible for retirement.')
 
     def permits_retirement(self, phase: GoalAttemptPhase) -> bool:
         return False
@@ -96,9 +92,6 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
 
 @dataclass(frozen=True)
 class ReadyGeneration(GenerationState):
-    def require_ready(self) -> None:
-        pass
-
     def has_ready_grant(self, matching: bool) -> bool:
         return matching
 

@@ -1101,7 +1101,7 @@ def test_an_untagged_peers_sdk_children_keep_real_ids_and_parent_delegation(
             assert f"--fork claude-{agent}" in told["additionalContext"]
             child = comms.registry.require_member(f"claude-{agent}", ForkThread)
             assert child.parent.named("worker")
-            assert comms.registry.status(child.name).receiving
+            assert comms.registry.status(child.name).is_receiving()
         assert run(ReadGateRequest, agent_id="a2", tool_name="Read",
                    tool_input={"file_path": str(transcript)}) == ""
         activity = comms.agents.activity.current("claude-a2")
