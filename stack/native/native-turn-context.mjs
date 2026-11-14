@@ -154,10 +154,14 @@ class ContextSegment {
     // serves a tool-less ask and a coding answer holds two of them in turn.
     publicationValues(projection, published) {
         const key=`${projection.manifest.kind}:${projection.manifest.sha256}`;
-        if (published.has(key)) return [];
-        published.add(key);
+        if (published.values.has(key)) return [];
+        published.values.add(key);
         return [projection.value];
     }
+    // A segment is sent whole, and its process has sent none of its entries for the next
+    // observation to come after, unless its kind says otherwise.
+    sent(projection) { return {manifest:projection.manifest}; }
+    marks() { return []; }
     static matches(manifest,expected) {
         return manifest.kind===expected.kind && manifest.sha256===expected.sha256;
     }
@@ -242,6 +246,8 @@ class NativeMessages extends ContextSegment {
             projections.map(projection=>projection.manifest));
         group.unresolved=observations.flatMap(({original},index)=>
             original ? [] : [projections[index].value]);
+        group.request=provenance;
+        group.entries=observations.map(({original})=>original?.source.entries[0]);
         return group;
     }
     tokens() { return this.value.reduce((count,message) => count + estimateTokens(message),0); }
@@ -252,7 +258,27 @@ class NativeMessages extends ContextSegment {
         return this.value.map(message=>new this.constructor(this.provenance,[message]));
     }
 }
-class TranscriptSegment extends NativeMessages {}
+class TranscriptSegment extends NativeMessages {
+    // A process sends a transcript entry once. Its next observation at this position names
+    // the leading entries it sent before by their mark and sends the rest; the reader keeps
+    // what this process published (Core: SentEntries). The header's sources are the
+    // request's: each entry's journal source is on that entry, sent once.
+    sent(projection, sentBefore) {
+        const marks=this.marks(projection);
+        let held=0;
+        while (held<marks.length && marks[held]===sentBefore[held]) held++;
+        return {manifest:{...projection.manifest,provenance:this.request,
+                          contributors:projection.manifest.contributors.slice(held)},
+                ...(held ? {after:marks[held-1]} : {})};
+    }
+    // The mark of each leading run of entries: the hash chain of each entry's journal
+    // identity and digest, so equal marks are equal runs.
+    marks(projection) {
+        let mark='';
+        return projection.manifest.contributors.map((entry,index)=>
+            mark=hash(`${mark}\n${this.entries[index]}:${entry.sha256}`));
+    }
+}
 class CompactionSummarySegment extends NativeMessages {}
 class InjectionMessageSegment extends NativeMessages {}
 class TransformedInputSegment extends NativeMessages {}
@@ -260,6 +286,22 @@ class ToolCatalogSegment extends ContextSegment {
     tokens(raw) { return estimateTokens({role:'user',content:[{type:'text',text:raw}],timestamp:0}); }
     payload() { return {tools:this.value}; }
     render(provider) { provider.tools = this.value; }
+}
+
+/** What one process has published: the values it sent, which it names by hash from then
+ * on, and the marks of the entries it sent for each segment of its last observation. */
+export class PublishedContext {
+    constructor() { this.values=new Set(); this.marks=[]; }
+    observe(segments) {
+        const sentBefore=this.marks;
+        this.marks=[];
+        return segments.map((segment,position)=>{
+            const projection=segment.projection();
+            this.marks.push(segment.marks(projection));
+            return {sent:segment.sent(projection,sentBefore[position] ?? []),
+                    values:segment.publicationValues(projection,this)};
+        });
+    }
 }
 
 export class TurnContext {
@@ -359,18 +401,14 @@ export class TurnContext {
         return {systemPrompt:provider.systemPrompt,messages:provider.messages,tools:provider.tools};
     }
     manifest(requestId) {
-        const {values,...manifest}=this.observation(requestId);
-        return manifest;
-    }
-    observation(requestId, published=new Set()) {
-        const observed=this.segments.map(segment=>{
-            const projection=segment.projection();
-            return {manifest:projection.manifest,
-                values:segment.publicationValues(projection,published)};
-        });
-        return {counter:'pi.estimateTokens',segments:observed.map(value=>value.manifest),
+        return {counter:'pi.estimateTokens',segments:this.segments.map(segment=>segment.manifest()),
             offered_tools:this.offeredTools,
-            ...(requestId===undefined ? {} : {requestId}),
+            ...(requestId===undefined ? {} : {requestId})};
+    }
+    // The manifest as this process sends it, given what it has published.
+    observation(requestId, published=new PublishedContext()) {
+        const observed=published.observe(this.segments);
+        return {...this.manifest(requestId),segments:observed.map(value=>value.sent),
             values:observed.flatMap(value=>value.values)};
     }
     full() { return {identity:this.identity,counter:'pi.estimateTokens',segments:this.segments.map(segment=>segment.full())}; }

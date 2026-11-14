@@ -51,8 +51,14 @@ export interface NativeContextManifest {
     offered_tools: {kind: 'reported_tools'; version: string; names: readonly string[]};
     segments: readonly NativeContextSegmentManifest[];
     requestId?: string;
-    values?: NativeContextData['segments'];
 }
+/** A manifest as its process sends it: each segment less the leading entries the process sent
+ * at that position before, named by their mark, and the values it has not sent before. */
+export interface NativeContextObservation extends Omit<NativeContextManifest, 'segments'> {
+    segments: readonly {manifest: NativeContextSegmentManifest; after?: string}[];
+    values: NativeContextData['segments'];
+}
+export declare class PublishedContext {}
 export interface NativeContextData {
     identity: {sessionId: string; sessionFile: string};
     counter: string;

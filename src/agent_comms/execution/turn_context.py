@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Annotated, Self
+from typing import Annotated, ClassVar, Self
 
 from pydantic import JsonValue
 
@@ -320,6 +320,14 @@ class SegmentManifest(ToolResult):
                 and span.coordinates.kind is self.kind
                 and self.kind.contains_contribution(self, span.coordinates))
 
+    def with_entries(self, entries: tuple[SegmentManifest, ...]) -> SegmentManifest:
+        """This header with the entries it was recorded or sent without: each entry's
+        journal source is one of the whole segment's sources."""
+        membership = tuple(source for entry in entries
+                           for source in entry.provenance
+                           for source in source.entry_membership())
+        return replace(self, provenance=(*self.provenance, *membership), contributors=entries)
+
     def selected_contributor(self, positions: tuple[int, ...]) -> SegmentManifest:
         selected = self
         for position in positions:
@@ -425,6 +433,52 @@ class ContextEntryManifest:
     @property
     def reference(self) -> ContextEntryReference:
         return ContextEntryReference.from_sources(self.manifest.sources)
+
+
+@dataclass(frozen=True)
+class SentWhole:
+    """What a reader holds of one segment after its Pi process sent it, which the process's
+    next observation at that position is sent after. A kind is sent whole each time: the
+    reader holds none of its entries, and the name of none is the empty mark."""
+
+    entries: tuple[SegmentManifest, ...] = ()
+    runs: Mapping[str, int] = field(default_factory=lambda: {"": 0})
+    """How many leading entries each mark names."""
+
+    def named(self, mark: str) -> tuple[SegmentManifest, ...]:
+        if mark not in self.runs:
+            raise ValueError("A segment was sent after entries its process never sent here")
+        return self.entries[:self.runs[mark]]
+
+    def then(self, mark: str, sent: SegmentManifest) -> Self:
+        """What the reader holds once ``sent`` arrives after the entries ``mark`` names."""
+        self.named(mark)
+        return self
+
+    def whole(self, sent: SegmentManifest) -> SegmentManifest:
+        return sent
+
+
+@dataclass(frozen=True)
+class SentEntries(SentWhole):
+    """A kind whose process sends each entry once (``TranscriptSegment.sent`` in
+    stack/native): 220 transcript entries are not sent again with every request. The next
+    observation names the leading entries it sent before by their mark, the hash chain of
+    each entry's journal identity and digest, and sends the rest. A reader that holds other
+    entries does not know the mark, so it cannot take them for the ones named."""
+
+    def then(self, mark: str, sent: SegmentManifest) -> Self:
+        entries = [*self.named(mark)]
+        runs = {name: length for name, length in self.runs.items() if length <= len(entries)}
+        for entry in sent.contributors:
+            identity = ContextEntryReference.from_sources(entry.sources).entry_id
+            mark = hashlib.sha256(f"{mark}\n{identity}:{entry.sha256}".encode()).hexdigest()
+            entries.append(entry)
+            runs[mark] = len(entries)
+        return replace(self, entries=tuple(entries), runs=runs)
+
+    def whole(self, sent: SegmentManifest) -> SegmentManifest:
+        return sent.with_entries(self.entries)
 
 
 _NO_CONTEXT_RECORDS: Mapping[int, RecordedContextManifest] = MappingProxyType({})
@@ -615,13 +669,9 @@ class SegmentRecording(ABC):
         original = self.restore_text(recorded.manifest)
         if not recorded.entries and not recorded.inherited_entries:
             return original
-        contributors = self.inherited(recorded.inherited_entries)
-        contributors += tuple(entries[reference] for reference in recorded.entries)
-        membership = tuple(source for contributor in contributors
-                           for source in contributor.provenance
-                           for source in source.entry_membership())
-        return replace(original, provenance=(*original.provenance, *membership),
-                       contributors=contributors)
+        return original.with_entries((
+            *self.inherited(recorded.inherited_entries),
+            *(entries[reference] for reference in recorded.entries)))
 
 
 class UnrecordedSegment(SegmentRecording):
@@ -680,6 +730,9 @@ class ContextSegment(
     WithheldAnnotations, DeclaredFamily, affix="Segment", discovery_package="agent_comms.context_segments"
 ):
     provenance: tuple[Provenance, ...]
+
+    sending: ClassVar[type[SentWhole]] = SentWhole
+    """How a Pi process sends this kind, observation after observation."""
 
     def __post_init__(self) -> None:
         if not self.provenance:

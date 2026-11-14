@@ -358,10 +358,10 @@ def main(package):
         '''        this.agent.onContextReady = async (context, requestId) => {
             const source = await this._commitNativeContext(context);
             const observed = await TurnContext.capture(this,context,source);
-            this._emit({type: "turn_context_observed", context:observed.observation(requestId,this._publishedContext ??= new Set())});
+            this._emit({type: "turn_context_observed", context:observed.observation(requestId,this._publishedContext ??= new PublishedContext())});
         };''')
     source=session.read_text()
-    session.write_text('import { TurnContext, NativeInputClaim, AllowedTools, SystemLayerSegment } from "./turn-context.js";\n'+source)
+    session.write_text('import { TurnContext, PublishedContext, NativeInputClaim, AllowedTools, SystemLayerSegment } from "./turn-context.js";\n'+source)
     replace_once(session, '''            this._emit(record);
         }
     }
@@ -385,7 +385,7 @@ def main(package):
             case "get_state": {''')
     replace_once(core/'agent-session.d.ts', '    type: "context_committed";',
         '''    type: "turn_context_observed";
-    context: import("./turn-context.js").NativeContextManifest;
+    context: import("./turn-context.js").NativeContextObservation;
 } | {
     type: "context_committed";''')
     types=package/'dist/modes/rpc/rpc-types.d.ts'

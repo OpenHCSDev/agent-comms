@@ -14,6 +14,7 @@ from agent_comms.execution.turn_context import (
     MeasuredNativeSegment,
     RecordedContextTurn,
     SegmentManifest,
+    SentWhole,
     UnobservedDispatchRequest,
 )
 from agent_comms.nominal import field_codec
@@ -24,17 +25,30 @@ from agent_comms.registry.thread_identity import OfferedTools
 @dataclass(eq=False)
 class PublishedContext:
     """One Pi process's published context, as Core holds it: the text of each value the
-    process sent, which it names by hash from then on, and the request recorded from its
-    last observation, which its next one follows. It lives and dies with the process."""
+    process sent, which it names by hash from then on, what it sent of each segment of its
+    last observation, and the request recorded from that observation, which its next one
+    follows. It lives and dies with the process."""
 
     texts: dict[tuple[type[ContextSegment], str], tuple[str, ...]] = field(default_factory=dict)
+    sent: dict[tuple[int, type[ContextSegment]], SentWhole] = field(default_factory=dict)
+    """What this reader holds of each segment of the process's last observation, by its
+    position."""
     prior: ContextPrior = UNREAD_CONTEXT
 
     def observed(self, context: NativeContextManifestData) -> ContextObserved:
         """The process's next observation, whole. Every observation passes here whether or
-        not its turn records it, so a text is held from the moment its process sent it."""
+        not its turn records it, so a text or an entry is held from the moment its process
+        sent it."""
+        captured = context.captured()
+        held = {}
+        for position, (sent, manifest) in enumerate(zip(context.segments, captured, strict=True)):
+            kind = manifest.kind
+            held[position, kind] = self.sent.get((position, kind), kind.sending()).then(
+                sent.after, manifest)
+        self.sent = held
         return ContextObserved(context, self, tuple(
-            segment.kind.sent_once(self.texts, segment) for segment in context.captured()))
+            manifest.kind.sent_once(self.texts, state.whole(manifest))
+            for state, manifest in zip(held.values(), captured, strict=True)))
 
 
 @dataclass(frozen=True)
@@ -57,9 +71,19 @@ class ContextObserved(AgentEvent):
 
 
 @dataclass(frozen=True)
+class SentSegment:
+    """A segment as its Pi process sends it: its manifest, less the leading entries the
+    process sent at this position in its previous observation, which ``after`` names by
+    their mark (``SentWhole``)."""
+
+    manifest: SegmentManifest
+    after: Annotated[str, field_codec.WireOmitDefault()] = ""
+
+
+@dataclass(frozen=True)
 class NativeContextManifestData(StrictFields, PiResponseData):
     counter: str
-    segments: tuple[SegmentManifest, ...]
+    segments: tuple[SentSegment, ...]
     offered_tools: OfferedTools
     request_id: Annotated[
         DispatchRequest, field_codec.WireName("requestId"), field_codec.WireOmitDefault()
@@ -67,15 +91,14 @@ class NativeContextManifestData(StrictFields, PiResponseData):
     values: tuple[MeasuredNativeSegment, ...] = ()
 
     def captured(self) -> tuple[SegmentManifest, ...]:
-        """Each segment with the public text of the values sent with it."""
-        if any(not any(segment.contains_value(value) for segment in self.segments)
+        """Each segment as sent, with the public text of the values sent with it. A value
+        belongs to what its observation sends: an entry sent before took its text then."""
+        segments = tuple(sent.manifest for sent in self.segments)
+        if any(not any(segment.contains_value(value) for segment in segments)
                for value in self.values):
             raise ValueError("Captured SDK value is outside the original manifest")
-        return tuple(segment.capture_public(self.values) for segment in self.segments)
+        return tuple(segment.capture_public(self.values) for segment in segments)
 
     def manifest(self, thread, turn, segments: tuple[SegmentManifest, ...]) -> ContextManifest:
         return ContextManifest(thread=thread, turn=turn, segments=segments,
                                counter=self.counter, request_id=self.request_id)
-
-    def for_turn(self, thread, turn):
-        return self.manifest(thread, turn, self.captured())
