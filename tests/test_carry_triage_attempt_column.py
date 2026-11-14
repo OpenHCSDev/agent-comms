@@ -24,8 +24,8 @@ def old_store(root: Path) -> Path:
         db.execute('CREATE TABLE "wake_claims" ("assignment_id" TEXT NOT NULL,'
                    ' "recipient_lookup" TEXT)')
         db.execute("INSERT INTO native_runtime_input (input_id, stage, owner_lookup,"
-                   " owner_generation, owner_token_digest) VALUES (?, 'triage', ?, 1, ?)",
-                   (FIRST, OWNER, "0" * 64))
+                   " owner_generation, owner_token_digest, expected_prompt_digest)"
+                   " VALUES (?, 'triage', ?, 1, ?, ?)", (FIRST, OWNER, "0" * 64, "1" * 64))
         db.execute(f'CREATE TABLE "{TriageNativeSource.declared_name}" ('
                    ' "input_id" TEXT NOT NULL, "ordinal" INTEGER NOT NULL,'
                    ' "assignment_id" TEXT NOT NULL UNIQUE, PRIMARY KEY ("input_id","ordinal"))'

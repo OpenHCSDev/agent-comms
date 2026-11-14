@@ -82,7 +82,7 @@ def reservation() -> NativeRuntimeInput:
         input_id=FieldCodec.decode(InputId, "c" * 32), stage=TriageNativeExecution,
         execution_id=UnrecordedNativeColumn(), attempt_ordinal=UnrecordedNativeColumn(),
         owner_lookup=FieldCodec.decode(ThreadLookup, "b" * 32), owner_generation=1,
-        owner_token_digest="e" * 64,
+        owner_token_digest="e" * 64, expected_prompt_digest="d" * 64,
     )
 
 

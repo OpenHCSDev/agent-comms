@@ -388,7 +388,7 @@ class DuplicatesPhase(MultipleInheritancePhase):
                 ),
                 (
                     ("trigger_bodies",),
-                    ("coordination/response.py", "execution/native_prompt_binding.py", "private_sidecar.py"),
+                    ("coordination/response.py", "execution/native_prompt_binding.py"),
                 ),
                 (
                     ("__init__",),

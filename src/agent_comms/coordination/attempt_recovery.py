@@ -36,10 +36,7 @@ from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.native_entries import NativeEntry
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_input_record import FullNativeExecution, TriageNativeExecution
-from agent_comms.execution.native_prompt_binding import (
-    expected_prompt_bindings,
-    expected_prompt_matches_journal,
-)
+from agent_comms.execution.native_prompt_binding import expected_prompt_matches_journal
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.pi_vocabulary import PendingStopReason, PiStopReason
@@ -456,14 +453,11 @@ class RecoveryMonitorCapability:
         terminal = source.sent_owner_claimed_generation.recovery_stop_reason()
         revision = MissingFile()
         for session in source.selected_session.present():
-            with expected_prompt_bindings(store, (source.input_id,)) as bindings:
-                binding = bindings.get(source.input_id)
-                if binding is None or binding.identity != source.identity:
-                    raise RecoveryBlocked("native recovery lacks its bound original input")
             revision = FileRevision.capture(session.path)
             with NativeEntry.open_evidence(session.path) as evidence:
-                if not expected_prompt_matches_journal(session.path, binding, evidence=evidence):
-                    raise RecoveryBlocked("native recovery input does not match its binding")
+                if not expected_prompt_matches_journal(session.path, source, evidence=evidence):
+                    raise RecoveryBlocked(
+                        "native recovery input does not match the prompt it was reserved for")
                 try:
                     proof = evidence.context_proof(
                         NativeSessionFiles.for_identity(session, root=store.session.path.parent,

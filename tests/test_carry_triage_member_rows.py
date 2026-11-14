@@ -23,8 +23,8 @@ def old_triage_store(root: Path) -> Path:
         db.execute(NativeRuntimeInput.schema_objects()[NativeRuntimeInput.declared_name])
         db.executemany(
             "INSERT INTO native_runtime_input (input_id, stage, owner_lookup, owner_generation,"
-            " owner_token_digest) VALUES (?, 'triage', ?, 1, ?)",
-            [(FIRST, OWNER, "0" * 64), (SECOND, OWNER, "0" * 64)])
+            " owner_token_digest, expected_prompt_digest) VALUES (?, 'triage', ?, 1, ?, ?)",
+            [(FIRST, OWNER, "0" * 64, "1" * 64), (SECOND, OWNER, "0" * 64, "1" * 64)])
         db.execute('CREATE TABLE "native_runtime_triage_sources" ("input_id" TEXT NOT NULL,'
                    ' "assignment_ids" TEXT NOT NULL, PRIMARY KEY ("input_id")) WITHOUT ROWID')
         db.executemany("INSERT INTO native_runtime_triage_sources VALUES (?, ?)",

@@ -63,7 +63,7 @@ from agent_comms.execution.native_startup import NATIVE_STARTUP_POLICY, NativeSt
 from agent_comms.execution.participant_identity import ParticipantIdentity
 from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.pi_wire import RequestId
-from agent_comms.execution.private_sidecar import native_request_digest
+from agent_comms.execution.native_prompt_binding import native_request_digest
 from agent_comms.execution.prompt_state import PromptState, QueuedOperation, UnwrittenPrompt
 from agent_comms.execution.request_progress import (
     NO_REQUEST_OBSERVER,

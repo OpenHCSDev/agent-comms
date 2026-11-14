@@ -47,12 +47,13 @@ async def test_one_claim_takes_an_original_ask_and_one_replacement(tmp_path: Pat
             claim.stage.burn_turn(store, claim.selected.identity, claim.input_id,
                                   claim.token_digest, context)
             stage = claim.stage.refreshed(store)
-            replacement = stage.reserve(store, claim.selected.identity, claim.token_digest, attempt=1)
+            replacement = stage.reserve(store, claim.selected.identity, claim.token_digest,
+                                        claim.prompt.text, attempt=1)
             assert replacement != claim.input_id
             assert len(NativeRuntimeInput.select(store.session._connection)) == 2
             with pytest.raises(Exception):
                 stage.refreshed(store).reserve(store, claim.selected.identity,
-                                               claim.token_digest, attempt=1)
+                                               claim.token_digest, claim.prompt.text, attempt=1)
 
 
 async def test_the_replacement_alone_proves_the_source(tmp_path: Path):
@@ -69,7 +70,7 @@ async def test_the_replacement_alone_proves_the_source(tmp_path: Path):
             # again; an inbox read in that window must not take the burned input as proof.
             assert TriageNativeExecution().retried_in(db, claim.input_id)
             replacement = claim.stage.refreshed(store).reserve(
-                store, claim.selected.identity, claim.token_digest, attempt=1)
+                store, claim.selected.identity, claim.token_digest, claim.prompt.text, attempt=1)
             # Historical evidence keeps one triage input per source: the burned original is
             # superseded, as a FULL attempt behind a later one is.
             assert TriageNativeExecution().retried_in(db, claim.input_id)

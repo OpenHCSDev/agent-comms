@@ -241,7 +241,7 @@ def test_recover_owner_refuses_a_conflicting_input_identity(released_starting, c
                 attempt_ordinal=NumberNativeColumn(before.attempt.attempt_ordinal),
                 owner_lookup=owner.incarnation.lookup,
                 owner_generation=before.attempt.owner_generation + 1,
-                owner_token_digest="e" * 64,
+                owner_token_digest="e" * 64, expected_prompt_digest="d" * 64,
             ).insert(db)
         inputs = input_evidence(store)
     with pytest.raises(RecoveryBlocked) as blocked:

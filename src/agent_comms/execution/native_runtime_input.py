@@ -55,6 +55,7 @@ from agent_comms.nominal.field_codec import (
     MalformedRecord,
     NativeContext,
     RootId,
+    Sha256Text,
     SlotId,
     ThreadLookup,
     ToolCallId,
@@ -338,6 +339,11 @@ class NativeRuntimeInput(
     ]
     owner_generation: Annotated[int, FrozenColumn(check="owner_generation>0")]
     owner_token_digest: Annotated[str, FrozenColumn(check="length(owner_token_digest)=64")]
+    expected_prompt_digest: Annotated[str, Sha256Text, FrozenColumn()]
+    """The digest of the request Pi must receive for this input. It was a row in a file of
+    its own, written after the reservation: a whole SQLite snapshot (1.8 MB for 7,584
+    inputs) read three times and rewritten with five fsyncs for every prompt, refused past
+    32 MB, and an input could be reserved without one."""
     sent_owner_claimed_generation: Annotated[
         NativeClaimEpoch,
         Column(

@@ -26,7 +26,6 @@ from agent_comms.execution.native_execution import PackagedNativeExecution
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.native_pi import NativeTurnResult
-from agent_comms.execution.native_prompt_binding import bind_expected_prompt
 from agent_comms.execution.native_runtime_input import NativeRuntimeTable
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.native_startup import NativeStartup
@@ -101,25 +100,13 @@ class PrivateSendClaim(FollowingPromptBoundary):
         session: SelectedSession,
         attempt: int = 0,
     ) -> PrivateSendClaim:
-        """Reserve once and bind the exact prompt before any native process starts.
-
-        A failed binding leaves the durable reservation intact; construction must
-        never roll it back or make another input eligible for automatic replay.
-        """
+        """Reserve once, for the exact prompt, before any native process starts."""
         measurements = PublicationMeasurements()
         digest = TextDigest.of(token).value
         def reserve(store):
             with measurements.operation("input_reservation_binding_worker"):
-                input_id = stage.reserve(store, selected.identity, digest, attempt=attempt)
-                bind_expected_prompt(
-                    store,
-                    input_id=input_id,
-                    stage=stage,
-                    owner=selected.owner.thread,
-                    generation=selected.identity.generation,
-                    prompt=prompt.text,
-                )
-                return input_id
+                return stage.reserve(
+                    store, selected.identity, digest, prompt.text, attempt=attempt)
 
         with measurements.operation("input_reservation_binding"):
             input_id = await Coordination.run_async(selected.store.session.path, reserve)
@@ -262,13 +249,13 @@ class PrivateSendClaim(FollowingPromptBoundary):
             with self.measurements.operation("registry_exclusion"):
                 cut = authority.enter_context(self.selected.bus._registry.store.current_snapshot())
                 registry = cut.snapshot
-            with self.measurements.operation("prompt_binding"):
-                authority.enter_context(self.stage.bound_prompt(
-                    store, self.input_id, self.selected.identity, self.selected.root_id,
-                    self.prompt.text,
-                ))
             with self.measurements.operation("coordinator_exclusive"):
                 db = authority.enter_context(store.session.writing())
+            with self.measurements.operation("prompt_binding"):
+                self.stage.bound_input(
+                    store, self.input_id, self.selected.identity, self.selected.root_id,
+                    self.prompt.text,
+                )
             with self.measurements.operation("selected_source_check"):
                 self.session.verify_start(identity)
             # From token consumption through COMMIT/fsync, every failure
