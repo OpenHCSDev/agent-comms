@@ -209,6 +209,43 @@ def test_the_rules_come_back_once_at_each_declared_share_of_context_left(peer_de
     assert refused(peer_deal)
 
 
+def test_a_context_report_that_owes_no_refresh_never_judges_the_deal(peer_deal, monkeypatch):
+    """Every model request reports its context, and nearly every report owes no refresh: it is
+    below the first share, or past one this compaction already dealt. Such a report reads the
+    stored deal and the refresh log and stops. Judging the deal first resolved each of its 26
+    files against the installed packages, twice, to answer `nothing is due` (11.8 ms of worker
+    CPU per model request on a live thread's deal)."""
+    events.CompactionEnd().deal_rules(peer_deal)
+    answer_deal(peer_deal)
+    judged = []
+    judge = PiRedeal.state
+    monkeypatch.setattr(PiRedeal, "state", lambda deal: judged.append(deal) or judge(deal))
+
+    peer_deal.observe_context(ContextUsage(30, 100))
+    assert not judged
+
+    peer_deal.observe_context(ContextUsage(35, 100))
+    assert judged
+    assert refused(peer_deal)
+    answer_deal(peer_deal)
+    judged.clear()
+
+    peer_deal.observe_context(ContextUsage(40, 100))
+    assert not judged
+
+
+def test_a_thread_never_dealt_hears_no_refresh(team_bus):
+    """A thread with no deal has no refresh log either; its context reports deal nothing."""
+    deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
+    assert not deal.refreshed.exists()
+
+    deal.observe_context(ContextUsage(95, 100))
+
+    assert not deal.record.exists()
+    assert not deal.refreshed.exists()
+    assert not refused(deal)
+
+
 def test_policy_fields_preserve_evidence_and_survive_redealing(peer_deal):
     peer_deal.start()
     answer_deal(peer_deal)
