@@ -555,10 +555,13 @@ def test_services_of_every_member_stop_in_one_call(tmp_path, monkeypatch, user_m
     )]
 
 
-def test_a_service_read_before_it_has_its_command_is_still_starting(monkeypatch):
+@pytest.mark.parametrize("asked", ("restart", "serving proof"))
+def test_a_service_read_before_it_has_its_command_is_still_starting(monkeypatch, asked):
     """systemd names a simple unit's main process before that process has exec'd, and
     /proc shows no command line for it in that moment. Install 9bede72a3 read the Codex
-    inbox right then, called it not serving and rolled the whole install back."""
+    inbox right then, called it not serving and rolled the whole install back. The restart
+    learned to wait; the serving proof asked the same question once and rolled install
+    1a5d4f568 back, and its rollback, the same way."""
     installed = Path("/installed/bin/python")
     service = CodexInboxService("0" * 8)
     reads = iter((ProcessLookupError(4321), (str(installed), "resume")))
@@ -576,5 +579,12 @@ def test_a_service_read_before_it_has_its_command_is_still_starting(monkeypatch)
         "agent_comms.host_services.ProcessIdentity.capture", staticmethod(lambda pid: Forked()))
     monkeypatch.setattr("agent_comms.host_services.time.sleep", lambda seconds: None)
 
-    assert service.running_on(installed).runtime == installed
+    monkeypatch.setattr(
+        "agent_comms.host_services.codex_inbox.LaunchRuntime.installed",
+        staticmethod(lambda: type("Installed", (), {"interpreter": installed})()))
+
+    if asked == "restart":
+        assert service.running_on(installed).runtime == installed
+    else:
+        service.serves()
     assert next(reads, None) is None
