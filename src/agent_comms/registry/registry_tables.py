@@ -606,6 +606,12 @@ class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile, TurnRows):
                 raise RelationViolationError("Registry already belongs to another native namespace")
             RegistryNamespace(header=1, root_id=root_id).insert_if_absent(db)
 
+    def withdraw_namespace(self) -> None:
+        """A copy kept for history scopes no native inputs: it has no namespace."""
+        with self.writing() as db:
+            NamespaceSchema.require_schema(db)
+            RegistryNamespace.delete(db)
+
     def turn_wires(self, identities: tuple[TurnIdentity, ...]) -> dict[TurnIdentity, JsonValue]:
         with self.family_snapshot(TurnSchema) as db:
             return {identity: rows[0].active.wire for identity in identities

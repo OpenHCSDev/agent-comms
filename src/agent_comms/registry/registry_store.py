@@ -430,13 +430,15 @@ class RegistryStore(
         """Retain a consistent registry for history, then seal the copy against live writes.
 
         SQLite backup includes committed WAL rows, presence among them; it neither retires the
-        source's participants nor copies live execution grants.
+        source's participants nor copies live execution grants: the native namespace is
+        withdrawn from the copy, which holds no coordinator to scope.
         """
         copied = type(self).at(destination)
         destination.mkdir(mode=0o700, parents=True, exist_ok=True)
         with self.guarded_read():
             self.copy_file(self.path, copied.path)
             Platform.current().sync_file(copied.path)
+        copied.rows.withdraw_namespace()
         copied.mark_historical()
         return copied.read_revision()
 
@@ -632,7 +634,7 @@ class RegistryStore(
         """
         revision = self.revision_unlocked()
         source = self._capture_unlocked()
-        if source.revision != revision[0] or self.revision_unlocked() != revision:
+        if source.revision != revision or self.revision_unlocked() != revision:
             raise StaleFence("Registry changed during history observation; read history again")
         return self.read_copied(source).entry(name)
 

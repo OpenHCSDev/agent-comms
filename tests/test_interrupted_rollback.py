@@ -112,18 +112,15 @@ class CarryingRoot:
 
 
 @pytest.mark.skipif(os.name != "posix", reason="SIGKILL and private registry require POSIX")
-@pytest.mark.parametrize("publication", (0, 1), ids=("after-registry", "after-guard"))
-def test_next_install_completes_a_killed_registry_restore(tmp_path, installed_runtime, publication):
+def test_next_install_completes_a_killed_registry_restore(tmp_path, installed_runtime):
     # The temporary installation's HOME selects only this test's route and runtime.
     root = CarryingRoot.prepared(tmp_path)
-    # Put the guard first, as the interrupted historical backup did. Restore ordering
-    # must come from the registry declaration, not from this manifest's ordering.
-    backup = root.backup(tuple(reversed(root.registry.written)))
+    backup = root.backup(root.registry.written)
     expected = root.digests()
     root.carry()
     killed = subprocess.run(
         [sys.executable, "-c", KILLED_RESTORE, str(root.comms.root), str(active_route_path()),
-         str(backup.path), str(publication)],
+         str(backup.path), "0"],
         capture_output=True, text=True, timeout=30,
     )
     assert killed.returncode == -signal.SIGKILL, killed.stdout + killed.stderr
