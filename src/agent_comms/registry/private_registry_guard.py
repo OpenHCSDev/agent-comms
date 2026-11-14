@@ -21,7 +21,7 @@ import os
 import sqlite3
 import stat
 import struct
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from pathlib import Path
@@ -271,6 +271,7 @@ class PublicRegistry(RegistryPrivacy):
                     guard.declare_acceptance(db, participant.participant_lookup)
         guard.create_pending()
         guard.commit_initial()
+        RegistryRowStore(registry_path.parent).write_namespace(guard.namespace)
         return guard
 
     def require_root(self, root_id: RootId, error: Exception) -> None:

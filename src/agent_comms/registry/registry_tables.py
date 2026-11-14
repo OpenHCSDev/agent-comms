@@ -23,7 +23,7 @@ from pydantic import JsonValue
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.turn_registry import TurnRows
-from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, WireValue
+from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup, WireValue
 from agent_comms.registry.presence import PresenceCapture, PresenceChange, PresenceRevision
 from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.registry.thread_identity import TurnIdentity
@@ -387,13 +387,22 @@ class PresenceHeader(PresenceTables, TypedTable):
     revision: Annotated[int, Column(check="revision > 0")]
 
 
-class PresenceSchema(SharedFileTables, DurableTables):
-    """Presence's tables in the registry's file, judged apart from the registry's rows: a
-    change to either family's schema never refuses a reader of the other."""
+class RegistryFamily(SharedFileTables, DurableTables):
+    """One table family beside the registry's rows in its file, judged apart from them and
+    from each other: a change to one family's schema never refuses a reader of another, and
+    a new registry file creates every member."""
+
+    tables: ClassVar[type[StoreRows]]
 
     @classmethod
     def schema_rows(cls) -> tuple[type[TypedTable], ...]:
-        return TypedTable.members_with(PresenceTables)
+        return TypedTable.members_with(cls.tables)
+
+
+class PresenceSchema(RegistryFamily):
+    """When each thread was last seen, under presence's own header."""
+
+    tables = PresenceTables
 
 
 class TurnTables(StoreRows):
@@ -419,12 +428,29 @@ class TurnRow(TurnTables, TypedTable):
         return cls(active=StoredWire(active), **TurnRow.key(identity))
 
 
-class TurnSchema(SharedFileTables, DurableTables):
-    """The turn rows in the registry's file, judged apart from the registry's rows."""
+class TurnSchema(RegistryFamily):
+    """The record of each leased turn generation."""
 
-    @classmethod
-    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
-        return TypedTable.members_with(TurnTables)
+    tables = TurnTables
+
+
+class NamespaceTables(StoreRows):
+    """The namespace family's row: which native protocol root this registry is."""
+
+
+@dataclass(frozen=True)
+class RegistryNamespace(NamespaceTables, TypedTable):
+    """The native namespace a private root's inputs and cursors are scoped by. A public root
+    has none. Written once, when the root becomes private, and never changed."""
+
+    header: Annotated[int, FrozenColumn(primary_key=True, check="header = 1")]
+    root_id: Annotated[RootId, FrozenColumn()]
+
+
+class NamespaceSchema(RegistryFamily):
+    """The registry's native namespace."""
+
+    tables = NamespaceTables
 
 
 @dataclass(frozen=True)
@@ -476,7 +502,7 @@ class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile, TurnRows):
     def create_schema(cls, db) -> None:
         """A new registry file holds every family its commit writes."""
         super().create_schema(db)
-        for family in (PresenceSchema, TurnSchema):
+        for family in RegistryFamily.__subclasses__():
             if not family.stored_schema(db):
                 family.create_schema(db)
 
@@ -562,6 +588,19 @@ class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile, TurnRows):
         with self.committed_or_empty(type(self), self.reader_snapshot) as connection:
             family.require_schema(connection)
             yield connection
+
+    def namespace(self) -> tuple[RegistryNamespace, ...]:
+        """This root's native namespace, or none for a public root."""
+        with self.family_snapshot(NamespaceSchema) as db:
+            return tuple(RegistryNamespace.select(db))
+
+    def write_namespace(self, root_id: RootId) -> None:
+        """Record the namespace once; a different one already recorded is refused."""
+        with self.writing() as db:
+            NamespaceSchema.require_schema(db)
+            if any(row.root_id != root_id for row in RegistryNamespace.select(db)):
+                raise RelationViolationError("Registry already belongs to another native namespace")
+            RegistryNamespace(header=1, root_id=root_id).insert_if_absent(db)
 
     def turn_wires(self, identities: tuple[TurnIdentity, ...]) -> dict[TurnIdentity, JsonValue]:
         with self.family_snapshot(TurnSchema) as db:
