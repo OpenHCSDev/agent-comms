@@ -8,7 +8,7 @@ import stat
 import tempfile
 from abc import abstractmethod
 from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
@@ -22,6 +22,7 @@ from agent_comms.storage.store_files import DEFAULT_STORE_CONTENTION, StoreConte
 from agent_comms.storage.typed_table import (
     CarriedWriter,
     ReconciledFile,
+    SQLiteJournalMode,
     StoreWriter,
     TableSchema,
 )
@@ -137,7 +138,10 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile, InputCaptureFi
             row_type.configure_connection(connection)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
-        # Rollback journal avoids a post-schema WAL-mode race among fresh openers.
+        # WAL is set once, on the private stage before the file is published (or by the
+        # coordinator_wal carry with every owner stopped), and persists in the file header, so
+        # no opener switches the mode and fresh openers cannot race over it. A commit is one
+        # sync of the log; the rollback journal took three (journal, file, directory).
         connection.execute("PRAGMA synchronous = FULL")
 
     def _prepare_private_file(self) -> None:
@@ -151,6 +155,7 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile, InputCaptureFi
             descriptor, staging = tempfile.mkstemp(prefix=".coord-init-", dir=self.path.parent)
             try:
                 os.close(descriptor)
+                self.write_ahead(Path(staging))
                 # Another initializer may win; never overwrite its inode.
                 with suppress(FileExistsError):
                     Platform.current().publish_new_file(staging, self.path)
@@ -158,6 +163,16 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile, InputCaptureFi
                 Path(staging).unlink(missing_ok=True)
         self._private_file()
         Platform.current().make_private(self.path, 0o600)
+
+    @classmethod
+    def write_ahead(cls, path: Path) -> None:
+        """Put the file in WAL mode while nothing else has it open: a stage not yet
+        published, or a carried file whose owners are stopped."""
+        with closing(sqlite3.connect(path, isolation_level=None)) as connection:
+            if SQLiteJournalMode.read(connection.execute("PRAGMA journal_mode=WAL")) != [
+                SQLiteJournalMode("wal")
+            ]:
+                raise CoordinationError(f"{path} could not enter WAL mode")
 
     def _private_file(self) -> os.stat_result:
         try:

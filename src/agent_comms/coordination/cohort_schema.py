@@ -416,6 +416,6 @@ class PrivateCoordinatorSchema(
                     family.create_schema(db)
             cls.require_installed(db)
             if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode")) != [
-                SQLiteJournalMode("delete")
+                SQLiteJournalMode("wal")
             ]:
-                raise SchemaVersionError("private coordinator requires rollback-journal mode")
+                raise SchemaVersionError("private coordinator requires WAL mode")
