@@ -22,7 +22,7 @@ from agent_comms.acp_extension import (
 from agent_comms.comms import wire
 from agent_comms.coordination.assignment_states import TriagePendingAssignment
 from agent_comms.coordination.cohort import sealed_cohort_assignments
-from agent_comms.coordination.cohort_foreground import _accept_visible_deliveries
+from agent_comms.coordination.cohort_foreground import AcceptsDeliveries
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.launch_root import LaunchRoot
@@ -117,9 +117,9 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
             message = comms.messaging.send("sender", "#team", "@beta inspect module.py").message
             bus = responder(root, comms.registry)
             with Coordination(str(root / "coordination.sqlite3")) as store:
-                await _accept_visible_deliveries(
-                    bus, root_id, store.session.path, beta.incarnation.lookup, owner_name="beta"
-                )
+                await AcceptsDeliveries(
+                    bus=bus, root_id=root_id, thread_name="beta"
+                ).accepted(store.session.path)
                 alpha_before = sealed_cohort_assignments(store, alpha.incarnation.lookup)
                 assert len(alpha_before) == 1
                 assert alpha_before[0].lifecycle == TriagePendingAssignment()

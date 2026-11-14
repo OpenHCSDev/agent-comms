@@ -1,7 +1,7 @@
 """A channel message reaches a running turn at its next tool call, like a DM."""
 
 from agent_comms.coordination.cohort import pending_sealed_assignments
-from agent_comms.coordination.cohort_foreground import _accept_visible_deliveries
+from agent_comms.coordination.cohort_foreground import AcceptsDeliveries
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.queued_input import DeliveredInput
 from agent_comms.execution.turn_goal_permission import (
@@ -23,9 +23,9 @@ async def accepted_channel_post(comms, root_id, body):
     owner = comms.registry.require("beta")
     message = publish_initial(comms, "sender", "#team", body)
     store_path = comms.root / "coordination.sqlite3"
-    await _accept_visible_deliveries(
-        comms.bus, root_id, store_path, owner.incarnation.lookup, owner_name=owner.name,
-    )
+    await AcceptsDeliveries(
+        bus=comms.bus, root_id=root_id, thread_name=owner.name,
+    ).accepted(store_path)
     with Coordination(str(store_path)) as store:
         pending = pending_sealed_assignments(store, owner.incarnation.lookup)
     return owner, message, pending

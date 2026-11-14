@@ -1308,10 +1308,14 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
 
     def owns_execution(self, session_id: AcpSessionId, owner: Thread) -> bool:
         """An attached turn can take follow-ups; a predecessor cannot."""
-        return (
-            owner.turn_record.read().phase.busy
-            or self.turn_live(session_id)
-        )
+        return self.execution_owned(owner, turn_live=self.turn_live(session_id))
+
+    @staticmethod
+    def execution_owned(owner: Thread, *, turn_live: bool) -> bool:
+        """The registry's turn record or this session's own turn says a turn is running. A
+        drain reads the session's half on the loop and the registry's in its coordinator
+        operation."""
+        return owner.turn_record.read().phase.busy or turn_live
 
     def __init__(
         self,
