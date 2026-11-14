@@ -25,7 +25,7 @@ from agent_comms.messaging.channel_targets import (
     CommandTarget,
     ThreadTarget,
 )
-from agent_comms.messaging.channels import ChannelMemberIndex
+from agent_comms.messaging.channels import ChannelMemberIndex, Channels
 from agent_comms.messaging.exporting import (
     WireExportBoundary,
     WireExportFormat,
@@ -86,6 +86,7 @@ from agent_comms.messaging.read_basis import (
     DMDisplayBasis,
     NamedViewer,
 )
+from agent_comms.messaging.read_ledger import ReadNotice
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.messaging.sending import Messaging
 from agent_comms.planning.goal_management import Goals
@@ -101,6 +102,7 @@ from agent_comms.presentation import (
     ThreadView,
     WireRevision,
 )
+from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.collaboration_ledger import CollaborationLedger
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_names import DeletedThread
@@ -112,6 +114,7 @@ from agent_comms.registry.thread_presentation import (
 )
 from agent_comms.storage.private_path import FileRevision
 from agent_comms.transport.progress import WireExportObserver
+from agent_comms.ui_model.unread import UnreadPresentation
 
 _LOG = logging.getLogger(__name__)
 
@@ -240,6 +243,34 @@ class OpenThreadPresentations(ThreadPresentations):
     @cached_property
     def input_dispositions(self) -> ScopedInputDispositions:
         return ScopedInputDispositions(self.root, self.scope)
+
+
+@dataclass(frozen=True)
+class SidebarCut:
+    """What one sidebar read takes under the bus cut: the registry and catalog it read and
+    every count over them. Activity, goals and relationships are read for the rows outside it,
+    so a revision that moved none of the cut's stores derives the rows again over the same cut.
+    """
+
+    registry: RegistrySnapshot
+    catalog: CatalogDocument
+    channels: Channels
+    sent: Mapping[str, float]
+    messages: Mapping[str, ChannelActivity]
+    unread: Mapping[str, int]
+    channel_unread: Mapping[str, int]
+    thread_unread: Mapping[str, UnreadPresentation]
+    notice: ReadNotice
+    visibility: RosterVisibility
+
+    def snapshot(self, views: HistoryViews) -> CoordinationSnapshot:
+        snapshot = CoordinationSnapshot.capture(
+            views.root, self.registry, self.catalog, views.agents, self.channels, self.sent,
+            self.messages, goals=views.goals, unread=self.unread,
+            channel_unread=self.channel_unread, visibility=self.visibility,
+            read_marker_notice=self.notice,
+        )
+        return replace(snapshot, thread_unread={**snapshot.thread_unread, **self.thread_unread})
 
 
 class HistoryViews(RelationshipSource):
@@ -485,28 +516,30 @@ class HistoryViews(RelationshipSource):
             self.transcripts, sent_source_limit,
         )
 
-    def viewer_snapshot(
+    def viewer_cut(
         self, worktree: Checkout, visibility: RosterVisibility = DEFAULT_ROSTER,
-    ) -> CoordinationSnapshot:
+    ) -> SidebarCut:
         """Local presentation scope, independent of agent delivery cursors."""
         with self.presentation.snapshot(viewer=self.display_viewer(worktree)) as (basis, source):
             captured_viewer = basis.require_viewer()
             display_activity, display_unread = self.presentation.display_view_metrics(source, basis)
             clocks = source.activity_clocks()
-            snapshot = CoordinationSnapshot.capture(
-                self.root, basis.registry, basis.catalog, self.agents, basis.channels,
-                self.last_sent_timestamps(clocks.sent.items(), registry=basis.registry),
-                display_activity,
-                goals=self.goals, unread=self.bus.pending_counts_opened(
-                    source, basis, conversations=basis.registry.threads,
-                ), channel_unread=display_unread,
-                visibility=visibility, read_marker_notice=basis.document.notice,
-            )
+            sent = self.last_sent_timestamps(clocks.sent.items(), registry=basis.registry)
+            unread = self.bus.pending_counts_opened(
+                source, basis, conversations=basis.registry.threads)
         # Native file IO never holds the display/bus snapshot locks.
-        unread = self.transcript_reads.counts(
+        native = self.transcript_reads.counts(
             captured_viewer, registry=basis.registry, document=basis.document, visibility=visibility,
         )
-        return replace(snapshot, thread_unread={**snapshot.thread_unread, **unread.counts})
+        return SidebarCut(
+            basis.registry, basis.catalog, basis.channels, sent, display_activity, unread,
+            display_unread, native.counts, basis.document.notice, visibility,
+        )
+
+    def viewer_snapshot(
+        self, worktree: Checkout, visibility: RosterVisibility = DEFAULT_ROSTER,
+    ) -> CoordinationSnapshot:
+        return self.viewer_cut(worktree, visibility).snapshot(self)
 
     def mark_thread_view_read(self, name: str, *, worktree: Checkout, through: TranscriptCursor) -> None:
         """Acknowledge the displayed position through the thread's receiving contract."""

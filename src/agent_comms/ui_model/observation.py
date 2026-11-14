@@ -59,7 +59,7 @@ from agent_comms.coordination.errors import (
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import HelperStart, SpawnedHelper, join_retirement
 from agent_comms.execution.launch_root import started
-from agent_comms.history_views import RetiredViews
+from agent_comms.history_views import RetiredViews, SidebarCut
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.installer.active_route import CommsRoute
 from agent_comms.messaging.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
@@ -77,7 +77,7 @@ from agent_comms.messaging.revision_views import (
     NotificationsView,
     RegistrationsView,
     RevisionView,
-    SidebarStructureView,
+    SidebarBasisView,
     SidebarView,
     StatusView,
     StoresView,
@@ -781,13 +781,13 @@ class ObserveSidebar(InterestRequest):
     def observation(self) -> SidebarReading:
         return SidebarReading(self)
 
-    def _answer[T](
-        self, revision: WireRevision, read: Callable[[T, RosterVisibility], CoordinationSnapshot], subject: T
-    ) -> SidebarResult:
+    @property
+    def visibility(self) -> RosterVisibility:
+        return RosterVisibility(self.show_stopped, self.show_archived)
 
-        visibility = RosterVisibility(self.show_stopped, self.show_archived)
+    def _answer(self, revision: WireRevision, read: Callable[[], CoordinationSnapshot]) -> SidebarResult:
         return UnreadableHistory.outcome(lambda: SidebarObserved(
-            revision, self, snapshot := read(subject, visibility), SidebarModel.derive(snapshot),
+            revision, self, snapshot := read(), SidebarModel.derive(snapshot),
         )).answer(
             lambda observed: observed, lambda error: SidebarPreparing(revision, self, error),
             lambda error: SidebarUnreadable(revision, self, error),
@@ -797,92 +797,75 @@ class ObserveSidebar(InterestRequest):
             lambda error: SidebarPreparing(revision, self, error))
 
 
+class HeldSidebarCut(ABC):
+    """What a sidebar stage holds from its last full read."""
+
+    @abstractmethod
+    def read(self, stage: SidebarReadStage, request: ObserveSidebar, comms: Comms,
+             revision: WireRevision) -> SidebarResult: ...
+
+
+class NoSidebarCut(HeldSidebarCut):
+    def read(self, stage: SidebarReadStage, request: ObserveSidebar, comms: Comms,
+             revision: WireRevision) -> SidebarResult:
+        return stage.read_cut(request, comms, revision)
+
+
+@dataclass(frozen=True)
+class SidebarCutAt(HeldSidebarCut):
+    """A cut and the revision it was read at. A revision that moved none of its stores moved
+    only activity, goals or relationships: the rows are derived again over the same cut, without
+    reopening the bus, recounting unread or reading native transcripts."""
+
+    cut: SidebarCut
+    revision: WireRevision
+
+    def read(self, stage: SidebarReadStage, request: ObserveSidebar, comms: Comms,
+             revision: WireRevision) -> SidebarResult:
+        if revision.changed_since(SidebarBasisView(), self.revision):
+            return stage.read_cut(request, comms, revision)
+        return request._answer(revision, partial(self.cut.snapshot, comms.views))
+
+
 class SidebarReadStage:
-    """After the first roster read, refresh only the sources that changed.
-
-    The full viewer_snapshot opens every store's SQLite snapshot and rebuilds
-    the thread/channel rosters from scratch. Most sidebar ticks change only
-    the bus sequence (a message arrived) or the read ledger (someone read a
-    message). Those only affect unread counts, not the roster structure.
-
-    This stage caches the last snapshot and revision, and on the next read
-    checks which WireRevision fields actually changed. A bus-only change
-    refreshes unread counts on the cached snapshot without reopening the
-    registry, catalog, agent activity, or goal stores.
-    """
+    """After the first roster read, each read holds the cut it took. Every sidebar store feeds
+    SidebarView, so a revision that reaches this stage moved one; SidebarBasisView says whether
+    it was one of the cut's."""
 
     def __init__(self) -> None:
-        self._cached_snapshot: CoordinationSnapshot | None = None
-        self._cached_revision: WireRevision | None = None
-        self._cached_derived: tuple | None = None
-
-    _cached_thread_names: frozenset[str] | None = None
+        self.held: HeldSidebarCut = NoSidebarCut()
 
     def read(
         self, request: ObserveSidebar, comms: Comms, revision: WireRevision
     ) -> SidebarResult:
-        previous = self._cached_revision
-        if previous is not None and self._cached_snapshot is not None:
-            if not revision.changed_since(SidebarStructureView(), previous):
-                result = self._refresh_counts_only(request, comms, revision)
-                if result is not None:
-                    return result
-            elif self._roster_unchanged(comms):
-                result = self._refresh_counts_only(request, comms, revision)
-                if result is not None:
-                    self._cached_revision = revision
-                    return result
-        result = request._answer(revision, comms.views.viewer_snapshot, request.worktree)
-        if isinstance(result, SidebarObserved):
-            self._cached_snapshot = result.snapshot
-            self._cached_revision = revision
-            self._cached_derived = result.derived
-            self._cached_thread_names = frozenset(result.snapshot.threads)
-        return result
+        return self.held.read(self, request, comms, revision)
 
-    def _roster_unchanged(self, comms: Comms) -> bool:
-        if self._cached_thread_names is None:
-            return False
-        return frozenset(comms.registry.snapshot().threads) == self._cached_thread_names
+    def read_cut(
+        self, request: ObserveSidebar, comms: Comms, revision: WireRevision
+    ) -> SidebarResult:
+        def read() -> CoordinationSnapshot:
+            cut = comms.views.viewer_cut(request.worktree, request.visibility)
+            self.held = SidebarCutAt(cut, revision)
+            return cut.snapshot(comms.views)
 
-    def _refresh_counts_only(
-        self, request: ObserveSidebar, comms: Comms, revision: WireRevision,
-    ) -> SidebarResult | None:
-        """No structural store changed — return the cached snapshot and model.
-
-        The sidebar's thread roster, channel roster, activity badges, and goal
-        states haven't moved. Only the bus sequence or read ledger ticked, which
-        the sidebar's own model doesn't derive from (the conversation observer
-        owns per-thread unread). Returning the cached snapshot skips every store
-        snapshot open and the full CoordinationSnapshot.capture rebuild.
-        """
-        cached = self._cached_snapshot
-        if cached is None or self._cached_derived is None:
-            return None
-        return SidebarObserved(revision, request, cached, self._cached_derived)
+        return request._answer(revision, read)
 
     def advance(self, reading: SidebarReading, snapshot: CoordinationSnapshot) -> None:
         """A full read waits for a changed source or its native-index watcher."""
 
 
 class RosterSidebarRead(SidebarReadStage):
+    """The first read: rows without whole-bus derived indexes; the next read takes a cut."""
+
     def read(
         self, request: ObserveSidebar, comms: Comms, revision: WireRevision
     ) -> SidebarResult:
         viewer = comms.messaging.user_identity(request.worktree).name
-        result = request._answer(revision, comms.views.presentation.roster, viewer)
-        if isinstance(result, SidebarObserved):
-            self._cached_snapshot = result.snapshot
-            self._cached_revision = revision
-            self._cached_derived = result.derived
-        return result
+        return request._answer(
+            revision, partial(comms.views.presentation.roster, viewer, request.visibility))
 
     def advance(self, reading: SidebarReading, snapshot: CoordinationSnapshot) -> None:
-        stage = SidebarReadStage()
-        stage._cached_snapshot = self._cached_snapshot
-        stage._cached_revision = self._cached_revision
-        stage._cached_derived = self._cached_derived
-        reading.stage = stage
+        reading.stage = SidebarReadStage()
         reading.invalidate()
 
 

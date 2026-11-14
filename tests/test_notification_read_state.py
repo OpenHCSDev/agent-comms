@@ -33,6 +33,7 @@ from agent_comms.messaging.revision_views import (
     HumanReadEvidenceView,
     NotificationsView,
     RegistrationsView,
+    SidebarBasisView,
     SidebarView,
     StatusView,
     StoresView,
@@ -331,6 +332,36 @@ def test_notification_sources_read_only_their_own_evidence(comms, tmp_path, sour
     finally:
         sys.setprofile(previous)
     assert calls == expected
+
+
+@pytest.mark.parametrize(
+    ("source_field", "sidebar", "cut"),
+    (("notifications", False, False),
+     ("external_transcripts", False, False),
+     ("activity", True, False),
+     ("goal_execution", True, False),
+     ("relationships", True, False),
+     ("registry", True, True),
+     ("catalog", True, True),
+     ("bus_changes", True, True),
+     ("reads", True, True),
+     ("native_unread", True, True)),
+)
+def test_the_sidebar_rereads_its_cut_only_when_a_store_of_the_cut_moved(
+        tmp_path, source_field, sidebar, cut):
+    """Coordination and CLI transcripts feed no sidebar row; activity, goals and relationships
+    re-derive the rows over the held cut; the cut's own stores take a new cut."""
+    marker = tmp_path / "changed"
+    marker.write_text(source_field)
+    original = WireRevision.empty()
+    later = replace(original, **{source_field: FileRevision.capture(marker).revisions()})
+    assert later.changed_since(SidebarView(), original) is sidebar
+    assert later.changed_since(SidebarBasisView(), original) is cut
+
+
+def test_a_new_message_takes_a_new_sidebar_cut():
+    original = WireRevision.empty()
+    assert replace(original, bus_seq=1).changed_since(SidebarBasisView(), original)
 
 
 def test_first_revision_requires_reads_even_for_unchanged_empty_stores():
