@@ -151,6 +151,7 @@ class NativeContextJournal(
             "session": f"SELECT session_id AS id FROM {table} ORDER BY session_id LIMIT 1",
             "current": f"SELECT input_id,session_entry_id FROM {table} "
             f"WHERE request_generation=(SELECT MAX(request_generation) FROM {table})",
+            "recorded": f"SELECT 1 FROM {table} WHERE input_id=? LIMIT 1",
         }
 
     @classmethod

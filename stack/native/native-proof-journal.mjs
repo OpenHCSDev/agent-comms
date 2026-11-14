@@ -29,6 +29,8 @@ class UnconfiguredNativeProof extends NativeProof {
 }
 
 export class NativeProofJournal extends PrivateNativeFile(NativeProof) {
+    // The inputs this process knows the journal holds a row of.
+    #recorded = new Set();
     constructor(file, sessionId) {
         super();
         this.file = file;
@@ -127,6 +129,16 @@ export class NativeProofJournal extends PrivateNativeFile(NativeProof) {
         }
         finally { db.close(); }
     }
+    // An input is recorded by the first request whose context holds it, and that row is its
+    // proof: Core never asks for more of an earlier input (NativeContextProof.
+    // require_continuation). The newest input is recorded by every request, which is what
+    // gives a request its generation. A row for every input of every request was 127 rows
+    // per input, and a request read 30 MB and wrote 5 MB to add 130 more of them.
+    #entering(db, tracked) {
+        const recorded = db.prepare(nativeProofSchema.recorded);
+        return tracked.filter(({inputId}, position) => position === tracked.length - 1 ||
+            !(this.#recorded.has(inputId) || recorded.get(inputId)));
+    }
     commit(tracked, digest) {
         this.requirePrivateNativeFile();
         if (!existsSync(this.file)) this.#initialize();
@@ -137,12 +149,13 @@ export class NativeProofJournal extends PrivateNativeFile(NativeProof) {
             const committedAtMs = Date.now();
             const insert = db.prepare(nativeProofSchema.insert);
             // Each journal row is also the live context_committed event, unchanged.
-            const records = tracked.map(({inputId, sessionEntryId}) => ({
+            const records = this.#entering(db, tracked).map(({inputId, sessionEntryId}) => ({
                 schema:2, type:'context_committed', sessionId:this.sessionId, inputId,
                 sessionEntryId, requestGeneration:generation, llmContextDigest:digest, committedAtMs}));
             for (const record of records)
                 insert.run(...nativeProofSchema.columns.map(column => record[column.wire]));
             db.exec('COMMIT');
+            for (const {inputId} of tracked) this.#recorded.add(inputId);
             // An exception here is still UNKNOWN to the live observer. On reopen
             // the committed generation is reserved, never re-emitted as a receipt.
             this.#syncDirectory();
