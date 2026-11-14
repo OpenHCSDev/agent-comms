@@ -23,6 +23,7 @@ from agent_comms.nominal.field_codec import (
     SingleFieldValue,
     SubclassUnion,
     TurnId,
+    WireOmitDefault,
     WireTransient,
     boundary_decoder,
 )
@@ -234,6 +235,9 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
     claimed_generation: TurnGeneration = UnrecordedGeneration()
     turn_generation: TurnGeneration = UnrecordedGeneration()
     phase: TurnPhase = field(default_factory=PreparingPhase)
+    phase_at: Annotated[float, WireOmitDefault()] = 0.0
+    """When the phase last changed; a turn's activity is as recent as this or its start."""
+
     def execution[Execution](self, source: GoalTurnProjection[Execution, ActiveTurn]) -> Execution:
         return source.active_turn_execution(self)
 
@@ -304,11 +308,11 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
 
     def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
         return replace(super().project_activity(activity),
-                       timestamp=max(activity.timestamp, self.started_at))
+                       timestamp=max(activity.timestamp, self.started_at, self.phase_at))
 
     def phase_effects(self, phase: TurnPhase) -> Iterator[TurnDeclaration]:
         if phase != self.phase:
-            yield replace(self, phase=phase)
+            yield replace(self, phase=phase, phase_at=time.time())
 
     def owned_by(self, process: ProcessState, claimed_generation: int) -> bool:
         """Check that this turn's local process and registered input generation agree."""
