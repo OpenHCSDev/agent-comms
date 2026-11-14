@@ -817,9 +817,9 @@ class RegistryDocument(RegistryPresence[MutableMapping[str, ThreadStatus]]):
     last_seen: Annotated[MutableMapping[str, float], SlicePolicy(PresenceRowsSlice), WireTransient()] = field(
         default_factory=dict, compare=False
     )
-    """Presence, stored by PresenceStore and laid over each revision as it is read: a
-    heartbeat that changes only this leaves the document equal, so registry.json is not
-    rewritten for it."""
+    """Presence, stored in the registry file under its own header and laid over each revision
+    as it is read: a heartbeat that changes only this leaves the document equal, so the
+    registry revision does not move for it."""
     aliases: Annotated[MutableMapping[str, str], SlicePolicy(SharedRowsSlice)] = field(
         default_factory=dict
     )

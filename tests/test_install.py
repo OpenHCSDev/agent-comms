@@ -21,6 +21,7 @@ from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import NoTeamProject, RegisteredTeamProject
+from agent_comms.registry.registry_tables import RegistryRowStore
 from agent_comms.registry.threads import NativeThread, ParkedThreadWorkState
 from agent_comms.storage.locked_store import (
     BusFile,
@@ -271,7 +272,7 @@ def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(priva
         assert '"failed"' not in capsys.readouterr().out
 
 
-def test_practice_copy_takes_turn_files_but_no_live_process(private_directory):
+def test_practice_copy_takes_turn_rows_but_no_live_process(private_directory):
     root = private_directory / "bus"
     Bus.install(Bus.path_in(root))
     comms = wire(root)
@@ -279,15 +280,15 @@ def test_practice_copy_takes_turn_files_but_no_live_process(private_directory):
     comms.registry.declare(NativeThread(
         "owner", frozenset(), Checkout(root), process_identity=ProcessIdentity.capture(os.getpid())))
     lease = comms.agents.begin_turn("owner", TurnId('9b473845f684444f80a26586ae298d2b')).turn_lease
-    turn = comms.registry.require("owner").turn_record.path
-    assert turn in comms.registry.store.cut_paths
+    identity = comms.registry.require("owner").turn_record.identity
+    turn = comms.registry.store.rows.turn_wires((identity,))[identity]
 
     practice = PracticeCopy(root, private_directory / 'practice/bus')
     practice.include(tuple(RootFile.existing_in(root)))
     copy = practice.path
     # Install 20's copy still named unit-signal's live pid 2128765: a start, stop or wake
-    # on the copy aimed at the live unit. The copy keeps the turn file, never its owner.
-    assert (copy / turn.relative_to(root)).read_bytes() == turn.read_bytes()
+    # on the copy aimed at the live unit. The copy keeps the turn's row, never its owner.
+    assert RegistryRowStore(copy).turn_wires((identity,)) == {identity: turn}
     copied = wire(copy).registry.require("owner")
     assert (copied.process_identity, copied.executing) == (NoProcess(), False)
     assert comms.registry.require("owner").turn_lease.identity == lease.identity

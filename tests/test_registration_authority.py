@@ -16,10 +16,12 @@ from agent_comms.execution.turn_phase import PreparingPhase
 from agent_comms.nominal.field_codec import GoalId, TurnId
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_tables import EditTables
 from agent_comms.registry.thread_identity import UserThreadRole
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
-from agent_comms.storage.store_files import SharedLock, store_lock_path
+from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.storage.store_files import SharedLock
 from test_locked_store import RegistryWithConcurrentDecoder, _hold_lock, event, process
 
 
@@ -83,7 +85,8 @@ def test_live_owner_read_rejects_raw_stale_turn_witness(tmp_path):
     leased, _ = registry.lease_local_turn('owner', TurnId('9b473845f684444f80a26586ae298d2b'))
     with registry.store.editing() as edit:
         record = edit.document.threads['owner'].turn_record
-        record.writers.replace(replace(record.read(), claimed_generation=RecordedGeneration(99)))
+        record.writers.update(lambda active: DocumentChange.to(
+            replace(active, claimed_generation=RecordedGeneration(99))))
         edit.commit()
     with pytest.raises(RelationViolationError):
         registry.live_owner_with_claim('owner')
@@ -96,8 +99,8 @@ def test_a_superseded_generation_is_deleted_and_its_late_transition_changes_noth
     stale = first.turn_lease
     assert registry.release_turn(stale)[0]
     second, _ = registry.lease_local_turn('owner', TurnId('16367aacb67a4a017c8da8ab95682ccb'))
-    assert not stale.record.path.exists() and second.turn_record.path.exists()
-    assert not store_lock_path(stale.record.path).exists()
+    rows = registry.store.rows.turn_wires((stale.record.identity, second.turn_record.identity))
+    assert stale.record.identity not in rows and second.turn_record.identity in rows
     assert stale.record.transition(stale, PreparingPhase()).states == ()
     assert stale.record.observe_native_phase(stale, PreparingPhase()).states == ()
     assert second.turn_record.read().id == '16367aacb67a4a017c8da8ab95682ccb'
@@ -109,7 +112,7 @@ def test_an_older_snapshot_reads_the_turn_its_thread_names_now(tmp_path):
     first, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
     assert registry.release_turn(first.turn_lease)[0]
     second, _ = registry.lease_local_turn('owner', TurnId('16367aacb67a4a017c8da8ab95682ccb'))
-    assert not first.turn_record.path.exists()
+    assert not registry.store.rows.turn_wires((first.turn_record.identity,))
     assert first.turn_state.active.id == '16367aacb67a4a017c8da8ab95682ccb'
     assert first.turn_record.read() == second.turn_record.read()
 
@@ -155,14 +158,14 @@ def test_a_claim_drop_waiting_on_a_turn_retired_under_it_finds_the_retirement(tm
         except Exception as error:
             failures.append(error)
 
-    with registry.store.guarded_write(), record.writers.guarded_write():
+    with registry.store.guarded_write():
         waiter = threading.Thread(target=drop_claim)
         waiter.start()
         assert started.wait(5)
         time.sleep(0.2)  # The waiter is parked on this thread's registry writer lock.
         assert registry.release_turn(first.turn_lease)[0]
         second, _ = registry.lease_local_turn('owner', TurnId('16367aacb67a4a017c8da8ab95682ccb'))
-        assert not record.path.exists()
+        assert not registry.store.rows.turn_wires((record.identity,))
     waiter.join(5)
     assert not waiter.is_alive() and failures == []
     assert second.turn_record.read().id == '16367aacb67a4a017c8da8ab95682ccb'
@@ -200,7 +203,7 @@ def test_turn_access_waits_for_private_registry_commit(tmp_path, operation):
             original = registry.store.read_revision_unlocked().source
             digest = revision_digest(original.mark.successor())
             sequence, slot = guard.prepare(digest)
-            registry.store.rows.commit(original.raw, original)
+            registry.store.rows.commit(original.raw, original, EditTables.unchanged())
             future = pool.submit(access)
             try:
                 assert entered.wait(5)
@@ -229,7 +232,7 @@ def test_turn_read_still_rejects_abandoned_post_replacement_guard(tmp_path):
         guard = registry.store.private_guard_unlocked()
         original = registry.store.read_revision_unlocked().source
         guard.prepare(revision_digest(original.mark.successor()))
-        registry.store.rows.commit(original.raw, original)
+        registry.store.rows.commit(original.raw, original, EditTables.unchanged())
         # Deliberately abandon the real write before committing its authority.
     with pytest.raises(RelationViolationError, match='pending, not committed'):
         leased.turn_record.read()
@@ -256,7 +259,7 @@ def test_private_guard_check_survives_coordination_writes(tmp_path, monkeypatch)
         edit.commit()
     hashed.clear()
     original = registry.store.read_revision_unlocked().source
-    registry.store.rows.commit(original.raw, original)
+    registry.store.rows.commit(original.raw, original, EditTables.unchanged())
     with pytest.raises(RelationViolationError):
         registry.store.private_guard_unlocked()
     assert hashed == [registry.store.path], 'a row commit outside the guard must re-verify it'

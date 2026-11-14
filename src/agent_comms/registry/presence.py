@@ -8,34 +8,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
-from pathlib import Path
-from sqlite3 import Connection
-from typing import Annotated, ClassVar, Self
+from typing import Self
 
 from agent_comms.messaging.snapshot_slices import SharedRowsSlice
 from agent_comms.nominal.field_codec import MalformedRecord
-from agent_comms.storage.private_path import FileIdentity, FileRevision, MissingFile
+from agent_comms.storage.private_path import FileIdentity, MissingFile
 from agent_comms.storage.row_mapping import ReadOnlyRows, RowKeys, RowMapping, SnapshotRows
-from agent_comms.storage.store_files import DependentStateTier
-from agent_comms.storage.typed_table import Column, DurableStore, FrozenColumn, Index, StoreRows, TypedTable
-
-
-class PresenceTables(StoreRows):
-    """The presence file discovers its declared tables."""
-
-
-@dataclass(frozen=True)
-class PresenceHeader(PresenceTables, TypedTable):
-    header: Annotated[int, FrozenColumn(primary_key=True, check="header = 1")]
-    revision: Annotated[int, Column(check="revision > 0")]
-
-
-@dataclass(frozen=True)
-class PresenceRow(PresenceTables, TypedTable):
-    name: Annotated[str, FrozenColumn(primary_key=True)]
-    seen: float
-    changed_at: Annotated[int, Column(check="changed_at > 0")]
-    indexes = (Index(("changed_at",), unique=False, where=None),)
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +23,25 @@ class PresenceRevision:
 
     def extends(self, earlier: PresenceRevision) -> bool:
         return self.identity == earlier.identity and self.counter >= earlier.counter
+
+
+@dataclass(frozen=True)
+class PresenceChange:
+    """The last-seen rows an edit changed, written in the transaction that commits the edit."""
+
+    after: Mapping[str, float]
+    before: Mapping[str, float]
+
+    @classmethod
+    def unchanged(cls) -> Self:
+        """A rewrite of stored rows changes no presence."""
+        return cls({}, {})
+
+    def names(self) -> tuple[str, ...]:
+        """Rows are never dropped: a retained registry revision may still name an old thread."""
+        after = PresenceRows.owning(self.after)
+        return tuple(name for name in after.differing(PresenceRows.owning(self.before))
+                     if name in after)
 
 
 @dataclass(frozen=True)
@@ -163,49 +160,3 @@ class PresenceRowsSlice(SharedRowsSlice):
     @classmethod
     def owned(cls, value: Mapping[str, float]) -> PresenceRows:
         return PresenceRows.owning(value)
-
-
-
-@dataclass(frozen=True, slots=True)
-class PresenceStore(DurableStore, DependentStateTier):
-    """One transaction writes only the presence keys that changed."""
-
-    root: Path
-    filename: ClassVar[str] = "presence.sqlite3"
-    tables = PresenceTables
-
-    def revision_in(self, db: Connection) -> PresenceRevision:
-        headers = PresenceHeader.select(db, header=1)
-        return PresenceRevision(FileRevision.capture(self.path).file_identity(),
-                                headers[0].revision if headers else 0)
-
-    def revision(self) -> PresenceRevision:
-        return self.remembered("revision", self._read_revision)
-
-    def _read_revision(self) -> PresenceRevision:
-        with self.snapshot() as db:
-            return self.revision_in(db)
-
-    def read(self, earlier: PresenceCapture = PresenceCapture.empty()) -> PresenceCapture:
-        if self.revision() == earlier.revision:
-            return earlier
-        with self.snapshot() as db:
-            revision = self.revision_in(db)
-            if revision == earlier.revision:
-                return earlier
-            base = earlier if revision.extends(earlier.revision) else PresenceCapture.empty()
-            seen = base.seen.copy()
-            for row in PresenceRow.select(db, where="changed_at > ?", parameters=(base.revision.counter,)):
-                seen[row.name] = row.seen
-            return PresenceCapture(revision, seen.freeze())
-
-    def set_rows(self, after: Mapping[str, float], before: Mapping[str, float]) -> None:
-        current, earlier = PresenceRows.owning(after), PresenceRows.owning(before)
-        changed = tuple(name for name in current.differing(earlier) if name in current)
-        if not changed:
-            return
-        with self.writing() as db:
-            revision = self.revision_in(db).counter + 1
-            for name in changed:
-                PresenceRow(name=name, seen=current[name], changed_at=revision).upsert(db)
-            PresenceHeader(header=1, revision=revision).upsert(db)

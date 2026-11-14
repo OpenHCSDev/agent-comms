@@ -6,7 +6,9 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from functools import cached_property
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
+
+from pydantic import JsonValue
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, ProcessState
@@ -15,6 +17,7 @@ from agent_comms.execution.turn_phase import IdlePhase, PreparingPhase, TurnPhas
 from agent_comms.execution.turn_registry import TurnRegistry
 from agent_comms.messaging.routing import NoTurnRouting, Routing
 from agent_comms.nominal.field_codec import (
+    FieldCodec,
     NullMember,
     RecordMember,
     SingleFieldValue,
@@ -34,15 +37,7 @@ from agent_comms.registry.thread_identity import (
     TurnFence,
     TurnIdentity,
 )
-from agent_comms.storage.locked_store import (
-    DocumentBytes,
-    DocumentChange,
-    DocumentTransactions,
-    DurableFile,
-    LockedFile,
-    PatternFile,
-)
-from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
+from agent_comms.storage.locked_store import DocumentChange
 
 
 class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
@@ -156,7 +151,7 @@ class NoTurn(NullMember, TurnDeclaration):
 
 
 class TurnGeneration(SubclassUnion, affix="Generation"):
-    """A registry generation the turn file recorded, or none."""
+    """A registry generation the turn record recorded, or none."""
 
     @abstractmethod
     def matches(self, generation: int) -> bool: ...
@@ -208,7 +203,7 @@ class RecordedGeneration(SingleFieldValue, TurnGeneration):
 
 @dataclass(frozen=True, slots=True)
 class UnrecordedGeneration(NullMember, TurnGeneration):
-    """The turn file carries no registry generation: never leased, or its claim was released."""
+    """The turn record carries no registry generation: never leased, or its claim was released."""
 
     def matches(self, generation: int) -> bool:
         return False
@@ -455,12 +450,14 @@ class TurnRecord(LifecycleCapability, SubclassUnion, affix=""):
     @abstractmethod
     def read(self) -> TurnDeclaration: ...
 
-    def read_copied(self, original: StoredTurnRecord, source: DocumentBytes) -> TurnDeclaration:
-        """A value-backed turn has no file to decode or retain."""
+    def read_held(
+        self, original: StoredTurnRecord, rows: Mapping[TurnIdentity, JsonValue],
+    ) -> TurnDeclaration:
+        """A value-backed turn has no row to decode."""
         return self.read()
 
     def stored(self) -> tuple[StoredTurnRecord, ...]:
-        """The turn files this record reads; a value-backed turn reads none."""
+        """The turn rows this record reads; a value-backed turn reads none."""
         return ()
 
     def read_in(self, turns: Mapping[StoredTurnRecord, TurnDeclaration]) -> TurnDeclaration:
@@ -587,33 +584,45 @@ class StoredTurnReference(RecordMember, TurnRecord):
         raise RelationViolationError("Turn reference must be bound by its registry")
 
 
-class TurnFile(DurableFile, PatternFile):
-    """Where one turn generation's file lives; its record and its writer lock own the rest."""
-
-    __slots__ = ()
-    filename = "turns/{lookup}-{generation}.json"
-
-
 @dataclass(frozen=True)
-class LockedTurnFile(SingleFileStore, TurnFile, LockedFile,
-                     DocumentTransactions[ActiveTurn], DependentStateTier):
-    """The writer lock of one turn file. A phase change takes this lock, never the
-    registry's; a registry edit superseding the turn takes it before retiring the file."""
+class TurnRowWriter:
+    """One leased turn's row in its registry's file. A phase change rewrites it in a SQLite
+    transaction of its own, never under the registry's lock and waking none of its readers; the
+    lease that supersedes it deletes it in the registry's own commit."""
 
-    path: Path
+    record: StoredTurnRecord
 
-    record_type = ActiveTurn
+    @staticmethod
+    def encoded(turn: ActiveTurn) -> JsonValue:
+        return FieldCodec.encode_document(turn, ActiveTurn)
 
-    def empty(self) -> ActiveTurn:
-        raise RelationViolationError(f"Active turn record is missing: {self.path}")
+    @staticmethod
+    def decoded(wire: JsonValue) -> ActiveTurn:
+        return FieldCodec.decode_document(ActiveTurn, wire)
 
     def read(self) -> ActiveTurn:
-        return self.read_copied(DocumentBytes.capture(self.path))
+        identity = self.record.identity
+        wires = self.record.registry.rows.turn_wires((identity,))
+        if identity not in wires:
+            raise RelationViolationError(f"Active turn record is missing: {identity}")
+        return self.decoded(wires[identity])
+
+    def update[R](self, change: Callable[[ActiveTurn], DocumentChange[ActiveTurn, R]]) -> R:
+        result, = self.update_each(lambda original: (change(original),))
+        return result
+
+    def update_each[R](
+        self, change: Callable[[ActiveTurn], Iterable[DocumentChange[ActiveTurn, R]]],
+    ) -> tuple[R, ...]:
+        return self.record.registry.rows.change_turn_wire(
+            self.record.identity,
+            lambda wire: ((self.encoded(changed.document), changed.result)
+                          for changed in change(self.decoded(wire))))
 
 
 class LockedTurn(ABC):
-    """What a turn file's writer finds once it holds the file's lock: the generation its
-    registry still names, or one a registry edit superseded, whose file retire() deletes."""
+    """What a turn's writer finds in a current registry cut: the generation its registry
+    still names, or one a registry edit superseded, whose row that edit deleted."""
 
     @abstractmethod
     def without_claim(self) -> None: ...
@@ -710,9 +719,8 @@ class TurnReads(Mapping["StoredTurnRecord", TurnDeclaration]):
 
 
 @dataclass(frozen=True)
-class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
-                       declared_name=None):
-    """Turn file bound to the registry that decoded its wire reference."""
+class StoredTurnRecord(Executing, StoredTurnReference, declared_name=None):
+    """A turn row bound to the registry that decoded its wire reference."""
 
     identity: Annotated[TurnIdentity, WireTransient()]
     registry_path: Annotated[Path, WireTransient()] = field(
@@ -724,15 +732,8 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
     )
 
     @property
-    def path(self) -> Path:
-        identity = self.identity
-        return self.path_in(self.registry_path.parent,
-                            lookup=identity.incarnation.require_recorded().lookup,
-                            generation=str(identity.generation))
-
-    @property
-    def writers(self) -> LockedTurnFile:
-        return LockedTurnFile(self.path)
+    def writers(self) -> TurnRowWriter:
+        return TurnRowWriter(self)
 
     @property
     def registry(self) -> TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]:
@@ -756,14 +757,17 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
     def read(self) -> TurnDeclaration:
         """This turn while its thread still names it, else the thread's current turn.
 
-        The shared registry lock covers its two-file authority and keeps a named
-        turn from being retired while it is read. Turn-file replacements are atomic.
+        The registry lock keeps a named turn from being retired while its row is read.
         """
         return self.registry.read_turn(self)
 
-    def read_copied(self, original: StoredTurnRecord, source: DocumentBytes) -> TurnDeclaration:
+    def read_held(
+        self, original: StoredTurnRecord, rows: Mapping[TurnIdentity, JsonValue],
+    ) -> TurnDeclaration:
         if self == original:
-            return self.writers.read_copied(source)
+            if self.identity not in rows:
+                raise RelationViolationError(f"Active turn record is missing: {self.identity}")
+            return TurnRowWriter.decoded(rows[self.identity])
         return self.read()
 
     @classmethod
@@ -773,16 +777,6 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
     ) -> StoredTurnRecord:
         return cls(identity, registry_path.resolve(), registry_type)
 
-    @classmethod
-    def begin(
-        cls, registry_path: Path, identity: TurnIdentity, turn: ActiveTurn, *,
-        registry_type: type[TurnRegistry[StoredTurnRecord, TurnDeclaration, LockedTurn]],
-    ) -> StoredTurnRecord:
-        record = cls.for_identity(registry_path, identity, registry_type=registry_type)
-        record.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        record.writers.replace(turn)
-        return record
-
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
               generation: int) -> TurnLease:
         active = self.writers.read()
@@ -791,12 +785,6 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
 
     def without_claim(self) -> None:
         self.registry.change_turn(self, lambda named: named.without_claim())
-
-    def retire(self) -> None:
-        """Delete a superseded turn under its own lock; a phase change waiting on that lock
-        then finds the registry no longer names it. The generation never recurs, so its
-        lock file goes with it."""
-        self.writers.retire()
 
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],

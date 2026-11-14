@@ -156,8 +156,6 @@ class TestPresence:
         capture decodable, and declaring the old name again writes a new time over its row."""
         import time
 
-        from agent_comms.registry.presence import PresenceStore
-
         path = RegistryFile.path_in(tmp_path)
         registry = Registration(path)
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
@@ -166,7 +164,7 @@ class TestPresence:
         registry.remove("a")
         reader.cache.entry = UncachedRegistry()
         stale = reader._decode_revision(captured).document.seen_at("a")
-        assert PresenceStore(tmp_path).read().seen["a"] == stale
+        assert reader.rows.read_presence().seen["a"] == stale
         time.sleep(0.01)
         registry.register(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         assert Registration(path).last_seen("a") > stale
