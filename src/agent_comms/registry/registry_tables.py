@@ -469,6 +469,16 @@ class TurnChange:
 
 
 @dataclass(frozen=True)
+class RegistryHeads:
+    """What a guarded registry read asks of the file's committed state: the row revision, the
+    namespace that decides privacy and the presence revision."""
+
+    revision: RegistryRowRevision
+    namespace: tuple[RegistryNamespace, ...]
+    presence: PresenceRevision
+
+
+@dataclass(frozen=True)
 class EditTables:
     """What one registry edit writes beside its rows, on the transaction that commits them."""
 
@@ -522,12 +532,19 @@ class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile, TurnRows):
         return RegistryRevisionMark(
             max((header.revision for header in RegistryHeader.select(db)), default=0))
 
-    def revision(self) -> RegistryRowRevision:
-        return self.remembered("revision", self._read_revision)
+    def heads(self) -> RegistryHeads:
+        """The file's committed heads, read together in one snapshot and again only after a
+        commit. Turns and presence share this file, so every phase change commits here; three
+        heads remembered apart were three snapshots and three schema checks after each one."""
+        return self.remembered("heads", self._read_heads)
 
-    def _read_revision(self) -> RegistryRowRevision:
+    def _read_heads(self) -> RegistryHeads:
         with self.snapshot() as db:
-            return self.revision_in(db)
+            return RegistryHeads(self.revision_in(db), tuple(RegistryNamespace.select(db)),
+                                 self.presence_revision_in(db))
+
+    def revision(self) -> RegistryRowRevision:
+        return self.heads().revision
 
     def revision_in(self, db) -> RegistryRowRevision:
         return RegistryRowRevision(FileRevision.capture(self.path).file_identity(), self.mark_in(db))
@@ -590,13 +607,8 @@ class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile, TurnRows):
             yield connection
 
     def namespace(self) -> tuple[RegistryNamespace, ...]:
-        """This root's native namespace, or none for a public root; read again only after a
-        commit, since every privacy decision asks it."""
-        return self.remembered("namespace", self._read_namespace)
-
-    def _read_namespace(self) -> tuple[RegistryNamespace, ...]:
-        with self.family_snapshot(NamespaceSchema) as db:
-            return tuple(RegistryNamespace.select(db))
+        """This root's native namespace, or none for a public root."""
+        return self.heads().namespace
 
     def write_namespace(self, root_id: RootId) -> None:
         """Record the namespace once; a different one already recorded is refused."""
@@ -644,11 +656,7 @@ class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile, TurnRows):
                                 headers[0].revision if headers else 0)
 
     def presence_revision(self) -> PresenceRevision:
-        return self.remembered("presence_revision", self._read_presence_revision)
-
-    def _read_presence_revision(self) -> PresenceRevision:
-        with self.family_snapshot(PresenceSchema) as db:
-            return self.presence_revision_in(db)
+        return self.heads().presence
 
     def read_presence(self, earlier: PresenceCapture = PresenceCapture.empty()) -> PresenceCapture:
         """The presence committed now, read as the rows changed since ``earlier``."""
