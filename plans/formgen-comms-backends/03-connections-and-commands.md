@@ -161,7 +161,9 @@ Every method that uses only Core types, the connection family (phase 3.1) and De
 | `toggle_irc()`/`toggle_dm()` | Calls `ConversationNavigation` (a Textual screen) | Native class methods on the Textual conversation family |
 | `historical_sessions()` | `create_view` factory constructs native screens | Native members with DeclaredViews selection, as phase 4's entry pattern |
 
-The concrete conversation members (`ChannelConversation`, `DirectMessageConversation`, etc.) split the same way as SessionEntry in §4.4: the shared member owns identity/address/Core-read behavior with `shows=(...)` and the native member owns view construction through DeclaredViews.showing() (Cor 4.12: zero outside pairs). `ConversationSubmission` and `BusSubmission` move the original queue/send/outcome algorithms to `toad/client/submission.py`; native prompt feedback and scroll effects stay native. The submission never touches a Textual Worker or Qt Task — it uses the phase-2 operation owner.
+The concrete conversation members (`ChannelConversation`, `DirectMessageConversation`, etc.) split the same way as SessionEntry in §4.4: the shared member owns identity/address/Core-read behavior with `shows=(...)` and the native member owns view construction through DeclaredViews.showing() (Cor 4.12: zero outside pairs).
+
+`BusSubmission` already imports only Core types plus `InputDecision` — nearly shared. `InputDecision(DeclaredFamily)` needs the same split: its `allows: ClassVar[bool]` and permission/refusal logic move to `toad/client/input_decision.py`; its Textual `Content` explanation and `Widget` notification target stay on native presentation members. `InputRefused.explanation` becomes an abstract `str` on the shared base; `TextualInputRefused` builds `Content` from it. The shared `bus_submission.py` then imports the shared `InputDecision` and moves unchanged to `toad/client/submission.py`. `ConversationSubmission` moves its original queue/send/outcome algorithms there too; native prompt feedback and scroll effects stay native. The submission never touches a Textual Worker or Qt Task — it uses the phase-2 operation owner.
 
 ### Reuse
 
