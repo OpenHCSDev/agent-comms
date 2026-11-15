@@ -29,6 +29,7 @@ class MessageAudience(StrEnum):
 
 class NoWakeReason(StrEnum):
     UNMENTIONED_OBSERVER = "unmentioned_observer"
+    MUTED = "muted"
 
 
 @dataclass(frozen=True, slots=True)

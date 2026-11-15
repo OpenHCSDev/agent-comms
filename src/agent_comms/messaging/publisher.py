@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+import time
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
@@ -45,6 +46,7 @@ from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.storage.private_path import FileRevision
+from agent_comms.waking.mute_ledger import MuteLedger
 
 
 class PublicationSnapshot(InputPublicationSource, BusSnapshot):
@@ -204,6 +206,7 @@ class InitialWrites(Publisher):
             selected = [snapshot.threads[name] for name in names]
             lookups = [thread.incarnation.lookup for thread in selected]
             sender_lookup = snapshot.threads[sender].incarnation.lookup
+            muted = MuteLedger.at(self.registry.store.path.parent).muted(time.time())
             def build(seq: int, db: sqlite3.Connection) -> PrivateRecord:
                 source = PublicationSnapshot.from_connection(db)
                 stored = self._prepare_message_unlocked(
@@ -224,7 +227,7 @@ class InitialWrites(Publisher):
                     revision, sender_lookup=sender_lookup, sender_name=sender,
                 )
                 decisions = resolve_wake_cohort(
-                    audience, control=OrdinaryControl,
+                    audience, control=OrdinaryControl, muted=muted,
                 )
                 return PrivateRecord.from_message(
                     audience, decisions=decisions,
