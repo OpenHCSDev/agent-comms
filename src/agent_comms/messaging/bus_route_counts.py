@@ -5,7 +5,7 @@ import sqlite3
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Annotated, ClassVar, Self
 
 from agent_comms.messaging.bus_publication import Delivered
@@ -18,7 +18,6 @@ from agent_comms.messaging.read_basis import ReadCursor
 from agent_comms.messaging.routing import DeliveryScope
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.field_codec import ThreadLookup
-from agent_comms.storage.private_path import FileIdentity, FileObservation, MissingFile
 from agent_comms.storage.typed_table import Column, ExpressionIndex, Index, TypedRow
 
 
@@ -111,13 +110,6 @@ class UnseenDelivery(TypedRow):
 
 
 @dataclass(frozen=True)
-class RouteOldest(TypedRow):
-    actor: str
-    oldest: float
-    seq: int
-
-
-@dataclass(frozen=True)
 class RouteInputs:
     """Every value a route count binds besides its sequence interval, around the interval's
     place in the query's arguments. Two counts with equal inputs count the same rows the same
@@ -143,22 +135,6 @@ class HeldUnseenCounts(HeldRouteRead):
     """Unseen counts per actor and conversation through one bus revision."""
 
     counts: Mapping[str, Mapping[str, int]] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class HeldUnseenOldest(HeldRouteRead):
-    """The oldest unseen timestamp per actor on one physical bus."""
-
-    source: FileIdentity | MissingFile = field(default_factory=MissingFile)
-    witnesses: Mapping[str, RouteOldest] = field(default_factory=dict)
-    rule: str = ""
-    # The taken-input store's commit signal when the witnesses were last checked: a take
-    # is a coordinator commit, so an unchanged signal leaves every witness untaken.
-    coordinator: FileObservation = field(default_factory=MissingFile)
-
-    @property
-    def oldest(self) -> Mapping[str, float]:
-        return {actor: row.oldest for actor, row in self.witnesses.items()}
 
 
 class RouteCounts(ABC):
@@ -335,54 +311,6 @@ class RouteCounts(ABC):
             rows = self._route_query(db, RouteUnread, inputs, through, start.through,
                                      self._unseen_query(seen))
             return HeldUnseenCounts(inputs, through, self._grouped(deliveries, rows, start.counts))
-
-    def advanced_unseen_oldest(
-        self, held: HeldUnseenOldest, registry, deliveries: Mapping[str, DeliveryScope],
-        seen: Mapping[str, ReadCursor], *, source: FileIdentity, coordinator: FileObservation,
-    ) -> HeldUnseenOldest:
-        """Reuse surviving oldest messages and examine only appended messages.
-
-        The inbox's consumption rule also reads live coordinator rows. After a coordinator
-        commit, recheck that rule on one retained message per actor before reusing its
-        minimum; without one, no witness can have been taken. Taking another message cannot
-        change that minimum: takes only remove rows. ``coordinator`` is observed before this
-        read's snapshot, so a commit racing it is rechecked on the next read.
-        """
-        with self.observing() as db:
-            through = BusRow.last_seq(db)
-            inputs = self._route_inputs(db, registry, deliveries, seen, through)
-            rule = ReadCursor.rule_of(seen.values())
-            start = held if (inputs == held.inputs and source == held.source and rule == held.rule
-                             and through >= held.through) else HeldUnseenOldest(
-                                 inputs, source=source, rule=rule)
-            if start.witnesses and coordinator != start.coordinator:
-                surviving = self._route_query(db, RouteOldest, inputs, through, 0,
-                    f'''SELECT request.actor,request.oldest,request.seq FROM cursors AS request
-                    WHERE {rule}''',
-                    (json.dumps({actor: row.seq for actor, row in start.witnesses.items()}),),
-                    requests=f'''requests AS NOT MATERIALIZED (
-                        SELECT held.key AS actor,message.seq,message.target,message.sender,
-                            message.timestamp AS oldest
-                        FROM json_each(?) AS held
-                        CROSS JOIN "{BusRouteCounts.declared_name}" AS message
-                            ON message.seq=held.value)''')
-                start = replace(start, coordinator=coordinator) if len(surviving) == len(
-                    start.witnesses) else HeldUnseenOldest(inputs, source=source, rule=rule,
-                                                          coordinator=coordinator)
-            if through == start.through:
-                return start
-            # SQLite's single min aggregate supplies the bare seq from a minimum's row;
-            # equal timestamps may choose either row, both valid unread witnesses.
-            rows = self._route_query(db, RouteOldest, inputs, through, start.through,
-                f'''SELECT request.actor AS actor,min(message.timestamp) AS oldest,request.seq
-                FROM cursors AS request
-                CROSS JOIN "{MessageInput.table.declared_name}" AS message USING(seq)
-                WHERE {rule} GROUP BY request.actor''')
-            witnesses = dict(start.witnesses)
-            for row in rows:
-                earlier = witnesses.get(row.actor, row)
-                witnesses[row.actor] = min(earlier, row, key=lambda value: value.oldest)
-            return HeldUnseenOldest(inputs, through, source, witnesses, rule, coordinator)
 
     def unseen_deliveries(self, registry, delivery, seen, *, after: int = 0, scope=None, limit: int = 100,
                           traversal: PageTraversal):
