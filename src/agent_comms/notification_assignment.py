@@ -207,18 +207,6 @@ class NotificationAssignmentRead:
         return any(previous != fresh.get(source, SourceEvidence())
                    for source, previous in self.evidence.items())
 
-    def sliced(self, selection: NotificationSelection) -> NotificationAssignmentRead:
-        """This read's rows for one window's keys, as that window's own read. A combined
-        read covers many windows' keys in one capture; each window owns its slice, so its
-        evidence and change check answer exactly as a lone read of its selection would."""
-        keys = frozenset(selection.keys)
-        return NotificationAssignmentRead(
-            selection,
-            tuple(row for row in self.rows if (row[0].recipient_lookup, row[0].source) in keys),
-            MappingProxyType({key: value for key, value in self.consumption.items() if key in keys}),
-            MappingProxyType({key: value for key, value in self.responses.items() if key in keys}),
-        )
-
 
 @dataclass(frozen=True)
 class NotificationReadMark:
@@ -361,6 +349,22 @@ class UnrecordedNotificationSource(NotificationSource):
 
 
 @dataclass(frozen=True)
+class _DecodedRows:
+    """Already-read rows and their column description, presented to joined() as the cursor it
+    expects. The cache holds the raw rows for its fingerprint; when it must decode, joined reads
+    the columns from `description` and the rows by iteration, exactly as from a live cursor."""
+
+    rows: list
+    description: object
+
+    def __iter__(self):
+        return iter(self.rows)
+
+    def close(self) -> None:
+        pass
+
+
+@dataclass(frozen=True)
 class NotificationAssignment(NotificationSource):
     assignment: WakeAssignment
     activity: AssignmentActivity
@@ -467,12 +471,21 @@ class NotificationAssignment(NotificationSource):
         """Every bus-side evidence read that follows the coordinator snapshot."""
         return cls.capture_inputs(source, cls.capture_responses(source.root, read))
 
+    # One decoded claim set per (root, selection), reused across the cut changes a ping brings
+    # while the raw join rows are byte-identical. Decoding the rows (FieldCodec, ~a third of the
+    # observer's per-ping CPU) is a pure function of them; consumption, bus responses and stored
+    # inputs are never cached and are read fresh every pass, so nothing displayed can go stale.
+    _decoded: ClassVar[dict[tuple[Path, NotificationSelection], tuple[int, tuple[
+        tuple[WakeAssignment, AssignmentActivityEvidence], ...]]]] = {}
+    _decoded_limit: ClassVar[int] = 512
+
     @classmethod
     def capture(
         cls,
         connection: sqlite3.Connection,
         selection: NotificationSelection,
         privacy: RegistryPrivacy,
+        root: Path | None = None,
     ) -> NotificationAssignmentRead:
         """Probe only selected frozen keys before joining any claim/context/proof.
 
@@ -484,10 +497,57 @@ class NotificationAssignment(NotificationSource):
         keys = tuple(dict.fromkeys(selection.keys))
         if not keys:
             return NotificationAssignmentRead(selection, ())
+        rows = cls._decoded_claims(connection, selection, keys, privacy, root)
+        consumption: dict[
+            tuple[ThreadLookup, MessageReference], tuple[ConsumptionEvidence, ...]
+        ] = {}
+        for attempt in HarnessDelivery.for_recipients(connection, keys):
+            key = (attempt.recipient_lookup, attempt.reference)
+            consumption[key] = (*consumption.get(key, ()), attempt.monitor)
+        return NotificationAssignmentRead(
+            selection,
+            tuple(sorted(rows, key=lambda row: (-row[0].wire_seq, row[0].recipient))),
+            MappingProxyType(consumption),
+        )
+
+    @classmethod
+    def _decoded_claims(
+        cls, connection: sqlite3.Connection, selection: NotificationSelection,
+        keys: tuple[tuple[ThreadLookup, MessageReference], ...], privacy: RegistryPrivacy,
+        root: Path | None,
+    ) -> tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]:
+        raw, description = cls._claim_scan(connection, keys, privacy)
+        if root is None:  # a caller outside the observer loop never reuses a decode
+            return tuple(WakeAssignment.joined(
+                _DecodedRows(raw, description), AssignmentActivityEvidence))
+        fingerprint = hash(frozenset(tuple(row) for row in raw))
+        cache_key = (root, selection)
+        cached = cls._decoded.pop(cache_key, None)
+        if cached is not None and cached[0] == fingerprint:
+            cls._decoded[cache_key] = cached  # keep as most-recently-used
+            return cached[1]
+        decoded = tuple(WakeAssignment.joined(
+            _DecodedRows(raw, description), AssignmentActivityEvidence))
+        cls._decoded[cache_key] = (fingerprint, decoded)
+        # A sliding window makes a new selection value each time it moves, so bound the cache
+        # to the most recent (root, selection)s instead of the observer's whole lifetime.
+        while len(cls._decoded) > cls._decoded_limit:
+            del cls._decoded[next(iter(cls._decoded))]
+        return decoded
+
+    @classmethod
+    def _claim_scan(
+        cls, connection: sqlite3.Connection,
+        keys: tuple[tuple[ThreadLookup, MessageReference], ...], privacy: RegistryPrivacy,
+    ) -> tuple[list[sqlite3.Row], object]:
+        """The raw claim-and-evidence rows for the keys, undecoded, with the cursor's column
+        description: the four-table join whose decode the cache reuses while these rows do not
+        move. The rows feed the fingerprint; rows+description feed joined() when it decodes."""
         privacy.coordinator_schema().require_schema(connection)
         columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
         context = privacy.notification_context_sql(connection)
-        rows = []
+        raw: list[sqlite3.Row] = []
+        description: object = ()
         # Each batch's selected frozen keys select their assignments through the
         # recipient/seq index; message_id corroborates the exact original, and native-input
         # membership is selected once per batch by its assignment index.
@@ -502,38 +562,26 @@ class NotificationAssignment(NotificationSource):
                 for lookup, reference in keys
             ),
         ):
-            rows.extend(
-                WakeAssignment.joined(
-                    connection.execute(
-                        f"WITH {requested.values}, "
-                        f"w AS MATERIALIZED (SELECT * {requested.join}), "
-                        f"context AS MATERIALIZED ({context}) "
-                        f"SELECT {columns},context.triage_inflight,"
-                        "pointer.execution_id IS NOT NULL AS queued,context.context_committed_at_ms,"
-                        "p.seq AS response_seq, p.message_id AS response_message_id, "
-                        "p.received_at_ms AS response_received_at_ms "
-                        "FROM w "
-                        "JOIN context ON context.assignment_id=w.assignment_id "
-                        f"LEFT JOIN {CurrentExecutions.declared_name} pointer "
-                        "ON pointer.owner_lookup=w.recipient_lookup "
-                        f"LEFT JOIN {PublicationEvidence.declared_name} p "
-                        "ON p.execution_id=w.execution_id AND p.exact_target=w.exact_target",
-                        requested.bindings,
-                    ),
-                    AssignmentActivityEvidence,
-                )
+            cursor = connection.execute(
+                f"WITH {requested.values}, "
+                f"w AS MATERIALIZED (SELECT * {requested.join}), "
+                f"context AS MATERIALIZED ({context}) "
+                f"SELECT {columns},context.triage_inflight,"
+                "pointer.execution_id IS NOT NULL AS queued,context.context_committed_at_ms,"
+                "p.seq AS response_seq, p.message_id AS response_message_id, "
+                "p.received_at_ms AS response_received_at_ms "
+                "FROM w "
+                "JOIN context ON context.assignment_id=w.assignment_id "
+                f"LEFT JOIN {CurrentExecutions.declared_name} pointer "
+                "ON pointer.owner_lookup=w.recipient_lookup "
+                f"LEFT JOIN {PublicationEvidence.declared_name} p "
+                "ON p.execution_id=w.execution_id AND p.exact_target=w.exact_target",
+                requested.bindings,
             )
-        consumption: dict[
-            tuple[ThreadLookup, MessageReference], tuple[ConsumptionEvidence, ...]
-        ] = {}
-        for attempt in HarnessDelivery.for_recipients(connection, keys):
-            key = (attempt.recipient_lookup, attempt.reference)
-            consumption[key] = (*consumption.get(key, ()), attempt.monitor)
-        return NotificationAssignmentRead(
-            selection,
-            tuple(sorted(rows, key=lambda row: (-row[0].wire_seq, row[0].recipient))),
-            MappingProxyType(consumption),
-        )
+            description = cursor.description  # one query shape, so every batch shares it
+            raw.extend(cursor.fetchall())
+            cursor.close()
+        return raw, description
 
     @classmethod
     def read(cls, root: Path, selection: NotificationSelection) -> NotificationAssignmentRead:
@@ -547,6 +595,7 @@ class NotificationAssignment(NotificationSource):
         store: MissingStore,
         selection: NotificationSelection,
         privacy: RegistryPrivacy,
+        root: Path | None = None,
     ) -> NotificationAssignmentRead:
         return privacy.missing_notification_assignments(selection)
 
@@ -556,6 +605,7 @@ class NotificationAssignment(NotificationSource):
         store: InvalidStore,
         selection: NotificationSelection,
         privacy: RegistryPrivacy,
+        root: Path | None = None,
     ) -> NoReturn:
         raise ValueError(f"Channel notification status unavailable: {store.failure_reason}")
 
@@ -612,30 +662,10 @@ class AssignmentSource:
         held = self._current_held()
         if selection not in held.reads:
             with self.coordinator.observing(
-                    NotificationAssignment, selection, self.privacy) as result:
+                    NotificationAssignment, selection, self.privacy, self.root) as result:
                 captured = result
             held.reads[selection] = NotificationAssignment.capture_detached(self, captured)
         return held.reads[selection]
-
-    def read_batch(self, selections: Iterable[NotificationSelection]) -> None:
-        """Warm the held cache for many windows' selections in as few coordinator reads as
-        possible. A notification pass checks every open thread's window on one revision;
-        reading them one window at a time re-stat'd every source, re-checked the schema and
-        took a coordinator round-trip each. One read per bounded batch covers them, and each
-        selection owns its slice (read_assignments then returns it without touching SQLite)."""
-        held = self._current_held()
-        pending = [selection for selection in dict.fromkeys(selections)
-                   if selection.pages and selection not in held.reads]
-        batch: list[NotificationSelection] = []
-        pages = 0
-        for selection in pending:
-            if batch and pages + len(selection.pages) > NotificationSelection.window_limit:
-                self._read_combined(held, batch)
-                batch, pages = [], 0
-            batch.append(selection)
-            pages += len(selection.pages)
-        if batch:
-            self._read_combined(held, batch)
 
     def _current_held(self) -> HeldAssignmentReads:
         cut = tuple(FileRevision.capture(path)
@@ -644,18 +674,6 @@ class AssignmentSource:
         if held is None or held.cut != cut or held.registry is not self.registry:
             held = AssignmentSource._held[self.root] = HeldAssignmentReads(cut, self.registry)
         return held
-
-    def _read_combined(
-        self, held: HeldAssignmentReads, selections: list[NotificationSelection],
-    ) -> None:
-        combined = NotificationSelection(
-            selections[0].viewer, tuple(page for s in selections for page in s.pages))
-        with self.coordinator.observing(
-                NotificationAssignment, combined, self.privacy) as result:
-            captured = result
-        full = NotificationAssignment.capture_detached(self, captured)
-        for selection in selections:
-            held.reads[selection] = full.sliced(selection)
 
 
 @dataclass
