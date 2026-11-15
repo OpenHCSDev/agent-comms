@@ -137,12 +137,11 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile, InputCaptureFi
         for row_type in CoordinatorTable.declarations():
             row_type.configure_connection(connection)
         connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        # WAL is set once, on the private stage before the file is published (or by the
-        # coordinator_wal carry with every owner stopped), and persists in the file header, so
-        # no opener switches the mode and fresh openers cannot race over it. The durability of
-        # a commit is the one StoreWriter policy every WAL writer shares, not a literal here.
-        connection.execute(f"PRAGMA synchronous = {cls.synchronous}")
+        # Referential integrity and commit durability are the one WAL-writer policy on
+        # StoreWriter, applied here, not restated. WAL itself is set once on the private stage
+        # before the file is published (or by the coordinator_wal carry with every owner
+        # stopped) and persists in the file header, so no opener switches the mode.
+        cls.apply_connection_policy(connection)
 
     def _prepare_private_file(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
