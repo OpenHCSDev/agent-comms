@@ -56,9 +56,12 @@ The exact concrete view bases and initialization winners must be checked for Mai
 Keep the original entry family and split only its rendering effects:
 
 - `NativeSessionEntry` uses `DeclaredViews` for native view selection, the same pattern as phase 1's editor selector: `TextualHistorySessionEntry.declared_for(entry)` selects the native entry through `cls.showing(...)` on the entry's identity, not a factory parameter or `if backend ==` branch (Cor 4.12). Generalize its MainScreen annotation to the shared session contract; preserve initial identity binding, original-thread fallback before mount, reconnect guards, source-status projection and return preference.
-- `HistorySessionEntry` retains the CommsViewKey, viewer/project/participants, address, label/unread/reference projection and `ready` behavior. Its direct `CommsScreen(...)` construction moves to native entry members/factories.
-- `PreviewSessionEntry`/`AcpLogSessionEntry` retain path/address/title and log classification. FilePreviewScreen/FilePreview/AcpLogPreview construction stays native.
-- Native factories are selected by the app's declared entry family, not `if backend == ...` in the logical navigator. Creating another native view must not copy `history`, `register`, `detach` or `finish`.
+- `HistorySessionEntry(SessionEntry, DeclaredViews, shows=(CommsViewKey,))` retains the CommsViewKey, viewer/project/participants, address, label/unread/reference projection and `ready` behavior. Native construction lives on native members selected by `DeclaredViews.showing()`:
+  - `TextualHistorySessionEntry(HistorySessionEntry, shows=(CommsViewKey,))`: owns `CommsScreen(...)` construction.
+  - `QtHistorySessionEntry(HistorySessionEntry, shows=(CommsViewKey,))`: owns `QtCommsView(...)` construction.
+  - Selection: `HistorySessionEntry.declared_for(entry)` calls `cls.showing(declarations(entry.identity))(entry)` — the same one-line pattern as phase 1's editor selector (Cor 4.12: zero outside pairs). Both native members are empty beyond their one construction method.
+- `PreviewSessionEntry`/`AcpLogSessionEntry` follow the same DeclaredViews pattern. Each shared entry retains path/address/title and log classification. Each native member owns only its view construction — `TextualPreviewSessionEntry` owns `FilePreviewScreen(...)`, `QtPreviewSessionEntry` owns the Qt equivalent.
+- Adding a new entry kind is adding one shared entry class with `shows=` and one native member per backend. No factory parameter, no `if backend ==` branch, no roster to update (Prop 4.2). The navigator calls `entry.declared_for(...)` and gets the right native type through the MRO.
 - Logical `OpenTab`/`ThreadTab.label` must stop returning Textual Content. Retain the original title/row/unread data; native tab renderers draw it. Do not store a second label snapshot beside the original row.
 
 Update `SessionNavigation.history_entry/history/native_entry/launch_entry/preview` and every other entry constructor to the selected native factory contract. Do not instantiate an abstract shared entry or retain a former native constructor as an alias.

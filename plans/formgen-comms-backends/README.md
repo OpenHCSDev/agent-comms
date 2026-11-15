@@ -18,16 +18,18 @@ Existing Core permissions, channel/thread identities, command declarations, mess
 
 ## Implementation order
 
-| Phase | Complete change | Selected design for exact-head review |
+| Phase | Complete change | New code type |
 |---|---|---|
-| [1. Shared form behavior](01-fields-and-forms.md) | Bound fields, literal/optional/inherited input, validation, finishing, filtering and model following | One shared selector/field-only constructor; native field/write/view/creation families and ordered authoring stages |
-| [2. Application runtime and events](02-runtime-and-publications.md) | Shared subscriptions/deliveries with native scheduling and shutdown | Receiver-scoped Qt queue/input barriers, native operation owners and qasync context/handle/executor fixes |
-| [3. Core connection and commands](03-connections-and-commands.md) | Original local/remote observation/capture and command drafts | Host signatures, native touch points and importer closure in the phase document |
-| [4. Navigation](04-navigation-and-selection.md) | Original identities/order/back/return/source lifetime with native views | Native touch points, ordering and importer closure; no second native roster |
-| [5. Conversations and history](05-history-and-read-evidence.md) | Original submission/page/read proof with separate rendering | Member-level fragment/geometry/paint boundary; renderer-valued methods stay native; exact-head source review applies |
-| [6. Preferences and native application](06-preferences-and-native-application.md) | One client application, original concrete schema and native entries | Shared store/effects, common Click startup, native constructor order, full-stack Qt extra and original PTY/Neovim owners |
+| [1. Shared form behavior](01-fields-and-forms.md) | Bound fields, literal/optional/inherited input, validation, finishing, filtering and model following | Shared parents in Formbridge (moved bodies from Toad editors); empty Qt editor crossings; DeclaredViews replaces AutoRegisterMeta for creation families |
+| [2. Application runtime and events](02-runtime-and-publications.md) | Shared subscriptions/deliveries with native scheduling and shutdown | Publication parents in Formbridge (moved bodies from Toad events); OperationKind as DeclaredFamily; Qt delivery receiver (irreducible native primitive); qasync fixes (upstream owner changes) |
+| [3. Core connection and commands](03-connections-and-commands.md) | Original local/remote observation/capture and command drafts | Connection/command module relocations (moved bodies); thin CommsHost ABC (6 native primitives); CommandDraft extraction; SortCapable capability on commands |
+| [4. Navigation](04-navigation-and-selection.md) | Original identities/order/back/return/source lifetime with native views | Module relocations; DeclaredViews for entry selection; SidebarNavigation as MI capability on native sidebar; native SidebarState subclasses (scroll unit only) |
+| [5. Conversations and history](05-history-and-read-evidence.md) | Original submission/page/read proof with separate rendering | Empty fragment crossings; shared position family (moved bodies, generic distance type); Qt paint admission (irreducible native primitive); DeclaredViews for role factory scoping |
+| [6. Preferences and native application](06-preferences-and-native-application.md) | One client application, original concrete schema and native entries | SettingsState extraction; ClientApplication (moved bodies from ToadApp); empty native app crossings; FrontendEntry nominal dispatch; NeovimBufferSession extraction |
 
 Phases are complete caller-family changes, not individual method moves. Forms and runtime investigations can be independent, but their commits must not leave two semantic implementations alive. Later phases may be combined where their source/MRO proof says they must land together.
+
+Each phase produces mostly empty crossing classes. The new line count is dominated by moved bodies (one owner, deleted from the old site) and irreducible native primitives. An implementation that writes more new algorithm than it deletes old duplication has gone wrong.
 
 ## What every phase document must contain
 
