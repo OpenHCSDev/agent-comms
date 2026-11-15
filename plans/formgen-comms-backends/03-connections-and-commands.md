@@ -181,9 +181,17 @@ After phases 2 and 3.1–3.2 land, the remaining native imports in conversation_
 
 The submission family (`SubmissionState(DeclaredFamily)`) already exists — no new mechanism. The queue/send/committed/refused/outcome state machine stays as is; only its native feedback effects split out.
 
+### Supporting modules
+
+**`conversation_capabilities.py`** declares three contracts: `ConversationSource(ReferencedCore)` (adds `project: Checkout` — already shared, only Core imports), `ConversationNavigation(metaclass=AbstractHooksMeta)` (abstract screen navigation — native Textual metaclass), and `ConversationActivity` (also AbstractHooksMeta, compose_result). Split: `ConversationSource` moves to `toad/client/conversation.py` unchanged. `ConversationNavigation` and `ConversationActivity` become plain ABCs in the shared client; Textual screens retain the native metaclass through their own widget bases, same pattern as phase 4's SessionScope split.
+
+**`status_thread.py`** imports `ThreadRowsChanged` and `ThreadCallbackSubscription` (both become shared after phase 2 event extraction), Core's `ThreadStatusModel` (already shared), and TYPE_CHECKING native widgets (`ObservedThreadActivity`, `ThreadStatusOwner`). After phase 2: `StatusThread` and its `LocalStatusThread`/`RemoteStatusThread`/`NoStatusThread` members move to `toad/client/status_thread.py`. The TYPE_CHECKING guard goes — the native view reference moves to native conversation members that construct the activity widget. No new mechanism; the status family is already nominal dispatch.
+
+**`submission_queue.py`** imports: `Observing` (shared after §3.1), `Span`/`MutedRole` from `line_blocks` (native Rich), `DetailLines`/`MessageQueueEntry` from `notification_status` (phase 5 splits these), `AgentPresentation`, `ConversationEntry`, `QueueActionRefused`. After phases 3.1 and 5: shared queue capabilities (`QueueSource`, `QueueEvidence` data fields) move to `toad/client/submission.py`; native queue presentation (`Span`-returning methods, `DetailLines`) stays on Textual members. The `read_targets` and `observing` callbacks in `QueueEvidence` become typed references to the shared connection and navigation owners rather than anonymous callables.
+
 ### Reuse
 
-ConversationKind is already a DeclaredFamily. The split adds zero new mechanism. MessageDestination, SubmissionOwner and the seen_page algorithm move as bodies. The native prompt/compose/toggle methods are the only new declarations — empty crossing classes inheriting both the shared conversation and the native view capability. Adding a new conversation kind is adding one shared member with `shows=` and one native member per backend.
+ConversationKind is already a DeclaredFamily. The split adds zero new mechanism. MessageDestination, SubmissionOwner, ConversationSource and the seen_page algorithm move as bodies. The native prompt/compose/toggle methods are the only new declarations — empty crossing classes inheriting both the shared conversation and the native view capability. Adding a new conversation kind is adding one shared class with `shows=` and one native member per backend.
 
 ## 3.4 Execution remains one shared operation
 
