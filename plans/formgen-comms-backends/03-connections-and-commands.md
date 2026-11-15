@@ -189,6 +189,42 @@ The submission family (`SubmissionState(DeclaredFamily)`) already exists — no 
 
 **`submission_queue.py`** imports: `Observing` (shared after §3.1), `Span`/`MutedRole` from `line_blocks` (native Rich), `DetailLines`/`MessageQueueEntry` from `notification_status` (phase 5 splits these), `AgentPresentation`, `ConversationEntry`, `QueueActionRefused`. After phases 3.1 and 5: shared queue capabilities (`QueueSource`, `QueueEvidence` data fields) move to `toad/client/submission.py`; native queue presentation (`Span`-returning methods, `DetailLines`) stays on Textual members. The `read_targets` and `observing` callbacks in `QueueEvidence` become typed references to the shared connection and navigation owners rather than anonymous callables.
 
+### Native uses inside conversation/submission modules
+
+| Module | Native use (line) | Goes to |
+|---|---|---|
+| `conversation_kind.py` | `textual.app.ComposeResult` (:38); `widgets.channel_prompt.ChannelPrompt` (:51); `widgets.prompt.MessagePrompt` (:52) | Native conversation members: `compose_activity`, `prompt` |
+| `conversation_capabilities.py` | `textual.abstract_hooks.AbstractHooksMeta` (:6); `textual.app.ComposeResult` (:7) | Drop metaclass to plain ABC; Textual screens keep it through their own bases |
+| `input_decision.py` | `textual.content.Content` (:10); `textual.widget.Widget` (:11) | Shared `allows`/permission; native `Content` explanation and `Widget` target on Textual members |
+| `status_thread.py` | `TYPE_CHECKING widgets.observed_thread_activity` (:17) | Guard deleted; native view reference on native conversation members |
+| `submission_queue.py` | `line_blocks.MutedRole, Span` (:27) | Native queue presentation stays on Textual members |
+| `bus_submission.py` | None — only Core + InputDecision | Moves unchanged after InputDecision split |
+
+### Importers the conversation/submission relocation rewrites
+
+Production import sites on main (24 files, test sites rewritten by the same operation):
+
+- **`conversation_kind` (9):** `navigation_target.py:18`, `tab_identity/kinds.py:11`, `screens/comms.py:21`, `widgets/comms_chat.py:23`, `widgets/conversation.py` (implicit), `wire_conversation_view.py:7`, `wire_history.py:60`, `transcript_scope.py:47`, `session_tracker.py:17` (TYPE_CHECKING).
+- **`conversation_capabilities` (3):** `conversation_kind.py:42`, `screens/comms.py:20`, `wire_conversation_view.py:6`, `wire_history.py:59`.
+- **`bus_submission` (5):** `conversation_kind.py:40`, `conversation_submission.py:35`, `transcript_preparation.py:30`, `transcript_scope.py:40`, `widgets/comms_chat.py:22`, `widgets/conversation.py:80`, `wire_history.py:52`.
+- **`input_decision` (8):** `acp/agent_configuration.py:26`, `agent_binding.py:19`, `bus_submission.py:14`, `conversation_submission.py:46`, `owner_preparation.py:15`, `session_presentation.py:27`, `transcript_scope.py:50`, `widgets/conversation.py:103`, `widgets/prompt.py:48`.
+- **`status_thread` (6):** `conversation_kind.py:50`, `transcript_preparation.py:661` (local import), `transcript_scope.py:53`, `widgets/channel_activity.py:22`, `widgets/comms_chat.py:31`, `widgets/conversation.py:145`, `widgets/observed_thread_activity.py:18`.
+- **`submission_queue` (5):** `conversation_submission.py:47`, `screens/queue.py:23`, `session_presentation.py:34`, `widgets/comms_chat.py:32`, `widgets/conversation.py:146`, `wire_history.py:66`.
+- **`conversation_submission` (3):** `agent_binding.py:35` (TYPE_CHECKING), `screens/queue.py:18`, `widgets/comms_chat.py:24`, `widgets/conversation.py:86`.
+
+### NRA stages for conversation/submission extraction
+
+All use existing operations. These stages execute after the phase-3.1 connection family and phase-3.2 command/host moves:
+
+| Stage | Operation | What it does |
+|---|---|---|
+| A | `patch_target` on `ConversationNavigation`, `ConversationActivity` | Drop `AbstractHooksMeta`; replace with plain ABC |
+| B | `patch_target` on `InputDecision` members | Split native `Content`/`Widget` references to native members; shared `allows`/permission base retains DeclaredFamily |
+| C | `relocate_module_to_new_module` | Move `bus_submission.py`, `conversation_capabilities.py` (now pure) to `toad/client/` |
+| D | `relocate_symbols_to_module` | Move shared `ConversationKind` methods, `ConversationSource`, `StatusThread` family to `toad/client/conversation.py` and `status_thread.py` |
+| E | `insert_before_target` + `patch_target` | Create native conversation members (`TextualChannelConversation` etc.) with `DeclaredViews.showing()`; move native `compose_activity`/`prompt`/`toggle` methods to them |
+| F | `relocate_symbols_to_module` | Move shared submission algorithms from `conversation_submission.py` and `submission_queue.py` to `toad/client/submission.py` |
+
 ### Reuse
 
 ConversationKind is already a DeclaredFamily. The split adds zero new mechanism. MessageDestination, SubmissionOwner, ConversationSource and the seen_page algorithm move as bodies. The native prompt/compose/toggle methods are the only new declarations — empty crossing classes inheriting both the shared conversation and the native view capability. Adding a new conversation kind is adding one shared class with `shows=` and one native member per backend.

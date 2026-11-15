@@ -185,4 +185,5 @@ The importers of `SessionScope` that read `COMMANDS` or `sidebars()` must import
 
 - **No native imports in the shared namespace:** after step 7, an import of every module under `toad/client/` with Textual and Qt both blocked imports cleanly. That is the namespace test in [00](00-ownership-and-imports.md).
 - **No old path left:** `git grep -nE "from toad\.(tab_order|session_navigation|session_entry|session_tracker|session_scope|workspace_sessions|sidebar_navigation|tab_identity)\b" -- src tests` returns nothing.
+- **No guarded imports:** `git grep -n "TYPE_CHECKING" -- src/toad/client` returns nothing. A cycle hidden behind a guard is not a resolved cycle; move the declaration that caused it (slop.md: "they never fix one").
 - **Behaviour:** the existing tests in §4.7 pass, plus the new Qt cases.
