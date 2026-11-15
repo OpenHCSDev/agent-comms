@@ -161,9 +161,6 @@ class AgentActivity(ActivityAnswers, RuntimeInfoWrites[RuntimeInfoProjection[Age
                     for name, thread in requested.items()}
         for name, claim in claims.items():
             observed[name] = claim.phase.project(observed[name], claim.work)
-        for name, oldest in self.stalled(snapshot.claimed_readers(requested), snapshot).items():
-            observed[name] = replace(
-                observed[name], readiness=observed[name].readiness.stalled(oldest))
         return ActivityCapture(observed, events.expires_at)
 
     def _events(self, requested: Mapping[str, Thread],
@@ -182,11 +179,6 @@ class AgentActivity(ActivityAnswers, RuntimeInfoWrites[RuntimeInfoProjection[Age
         event = self._events({participant.name: participant}, snapshot).activity[participant.name]
         return ObservedActivity.acquire(
             event, snapshot.owner_identity(participant.name)).readiness.source_diagnostic()
-
-    def stalled(self, readers: tuple[str, ...], snapshot: ActivityRegistryRead) -> Mapping[str, float]:
-        """Each claimed reader that stopped taking its inbox, by when. A store without the bus
-        reads no inbox, so it sees no stall; Comms's store reads the taken-input inbox."""
-        return {}
 
     def observe_recipients(
         self,

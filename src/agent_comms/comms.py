@@ -10,9 +10,7 @@ from agent_comms.execution.input_text_context import InputTextContext
 from agent_comms.messaging.notification_contracts import NotificationEvidenceSource
 from agent_comms.messaging.message_notification import CapturedNotificationEvidence
 
-import math
-import time
-from collections.abc import AsyncGenerator, Callable, Mapping
+from collections.abc import AsyncGenerator, Callable
 from contextlib import AbstractContextManager, aclosing
 from functools import cached_property, partial
 from pathlib import Path
@@ -28,7 +26,6 @@ from agent_comms.input_attempt import InputAttempt
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
 from agent_comms.messaging.agent_inbox import TakenInputStart
-from agent_comms.messaging.bus_route_counts import HeldUnseenOldest
 from agent_comms.messaging.channel_management import ChannelManagement
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_page import InboxPage
@@ -41,8 +38,6 @@ from agent_comms.planning.goal_management import Goals
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.collaboration_ledger import CollaborationLedger
-from agent_comms.registry.registration import Registration
-from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.relationships import ThreadRelationships
 from agent_comms.registry.route_client import ActivityClient
 from agent_comms.registry.thread_configuration import ThreadConfiguration
@@ -51,32 +46,6 @@ from agent_comms.registry.thread_management import ThreadManagement
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.transcript.transcripts import Transcripts
-
-
-class InboxActivity(AgentActivity):
-    """Activity read beside the bus. A connected reader whose oldest untaken message is
-    older than the stall window has stopped reading, whatever its process says: on
-    2026-11-04 a py-spy that paused a session bridge left it `connected` for almost four
-    minutes while its messages waited."""
-
-    stall_seconds: ClassVar[float] = 60.0
-
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus) -> None:
-        super().__init__(root, registry)
-        self.bus = bus
-        self.untaken = HeldUnseenOldest()
-
-    def stalled(self, readers: tuple[str, ...], snapshot: RegistrySnapshot) -> Mapping[str, float]:
-        cutoff = time.time() - self.stall_seconds
-        oldest = self.oldest_untaken(snapshot)
-        return {name: at for name in readers if (at := oldest.get(name, math.inf)) < cutoff}
-
-    def oldest_untaken(self, snapshot: RegistrySnapshot) -> Mapping[str, float]:
-        """Share one routing-owned answer across activity reads and unrelated publications."""
-        self.untaken = self.bus.advanced_oldest_untaken(
-            self.untaken, snapshot.claimed_readers(snapshot.threads), snapshot,
-        )
-        return self.untaken.oldest
 
 
 class Comms(
@@ -145,8 +114,8 @@ class Comms(
     def bus(self) -> MessageBus:
         return MessageBus(self.root, self.registry, OwnerPublisher)
 
-    def activity_store(self) -> InboxActivity:
-        return InboxActivity(self.root, self.registry, self.bus)
+    def activity_store(self) -> AgentActivity:
+        return AgentActivity(self.root, self.registry)
 
     def watched_reader(self, name: str) -> ThreadIncarnation:
         with Comms.client(self.route) as comms:
