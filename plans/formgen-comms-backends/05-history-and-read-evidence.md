@@ -1,6 +1,10 @@
 # 5. Conversations, history and actual painted reads
 
-**Planning status:** page/proof ownership, acknowledgement order, source retirement and the caller set are traced. §5.8 decides the three remaining declarations, read against Toad main `1421d01d4`:
+**Planning status:** page/proof ownership, acknowledgement order, source retirement and the caller set are traced. §5.8 decides the three remaining declarations, read against Toad main `1421d01d4`.
+
+**Reuse checkpoint:** Core's MessagePage/message_evidence/select/combine own page/proof — kept as is, zero new code. Fragment families are MI crossings: shared identity/evidence parents compose with native row/block parents, producing empty crossing classes (Prop 4.2). The role factory uses DeclaredViews.showing() scoped per native root — same mechanism as phase 1's editor selector, not a second registry. ReadMarkedHistory moves its original bodies once via promotion. Position arithmetic uses generic ReaderDistance whose nominal members (TerminalRows, ViewPixels) keep their identities distinct (Thm 3.2) while sharing addition/subtraction/ordering. No new page, proof, acknowledgement or position algorithm is written.
+
+§5.8 decides the three remaining declarations, read against Toad main `1421d01d4`:
 - **Fragment base:** every member of the five fragment classes, classified shared or native.
 - **Position contract.**
 - **Qt paint admission:** on `QAbstractScrollArea` viewport painting.

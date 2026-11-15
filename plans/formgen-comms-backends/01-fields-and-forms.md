@@ -2,6 +2,8 @@
 
 **Planning status:** the editor selector and original field-only constructor now have one shared owner. The field/view index, literal-versus-inherited repaint route and inline admission are selected below. Native construction/event/teardown checks remain implementation work; no backend execution is claimed by this documentation.
 
+**Reuse checkpoint:** DeclaredViews.showing() already owns editor selection — one body, moved once; ObjectState owns values/history/dirty — no second cache; DeclaredField owns identity/metadata/validation — no second schema. The Qt editors are empty crossing classes whose body is nothing: `class QtIntEditor(QtLineEditor): shows = (int,)` (Prop 4.2, Cor 4.12). The creation-family split replaces AutoRegisterMeta's hand-kept registry with DeclaredViews' `showing()` on the existing ParameterInfo MRO — ten empty combination classes, zero new algorithm. FollowingForm uses the existing ObjectState subscription; FieldExtraction replaces three metadata strings with typed rules on DeclaredField. No new mechanism is introduced.
+
 ## Outcome
 
 Textual and Qt use the same field declarations, input meaning, validation and form-following algorithms. Native controls supply text/value input, feedback drawing, focus, painting, mounting and signal resources. An ordinary comms string does not become an inherited absence merely because its renderer is Qt.
