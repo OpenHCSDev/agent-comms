@@ -302,6 +302,34 @@ def test_full_cohort_preserves_direct_control_and_fail_closed_envelope() -> None
         )
 
 
+def test_muted_member_is_delivered_without_wake_while_others_still_triage() -> None:
+    message = stored()  # a collective #team post: wake-all is the default.
+    decisions = resolve_wake_cohort(
+        audience(message), control=OrdinaryControl, muted=frozenset({RECIPIENT_LOOKUP}),
+    )
+    assert decisions == (
+        WakeDecision(SENDER_LOOKUP, MessageAudience.COLLECTIVE, BoundedTriageWake()),
+        NoWakeDecision(RECIPIENT_LOOKUP, NoWakeReason.MUTED),
+    )
+    # The muted member is still a frozen recipient: delivery is unchanged, only the wake drops.
+    assert MEMBERS[1] in audience(message).recipients
+    # A MUTED no-wake row round-trips through the wire like any committed decision.
+    assert RecipientDecision.from_wire(decisions[1].to_wire()) == decisions[1]
+
+
+def test_mute_suppresses_wake_even_for_a_mentioned_member() -> None:
+    message = stored("#team", "@beta investigate", mentions=(ThreadMention("beta", 0, 5),))
+    decisions = resolve_wake_cohort(
+        audience(message), control=OrdinaryControl, muted=frozenset({RECIPIENT_LOOKUP}),
+    )
+    # beta is mentioned (would be FullWake) but muted itself: still delivered, not woken.
+    assert decisions[1] == NoWakeDecision(RECIPIENT_LOOKUP, NoWakeReason.MUTED)
+    # An empty mute set leaves the default wake-all untouched.
+    assert resolve_wake_cohort(audience(message), control=OrdinaryControl)[1] == WakeDecision(
+        RECIPIENT_LOOKUP, MessageAudience.MENTIONED, FullWake()
+    )
+
+
 def test_exact_stored_channel_routes_no_wildcard_or_silence_inference(
     tmp_path: Path,
 ) -> None:
