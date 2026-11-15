@@ -471,13 +471,15 @@ class NotificationAssignment(NotificationSource):
         """Every bus-side evidence read that follows the coordinator snapshot."""
         return cls.capture_inputs(source, cls.capture_responses(source.root, read))
 
-    # One decoded claim set per (root, selection), reused across the cut changes a ping brings
-    # while the raw join rows are byte-identical. Decoding the rows (FieldCodec, ~a third of the
-    # observer's per-ping CPU) is a pure function of them; consumption, bus responses and stored
-    # inputs are never cached and are read fresh every pass, so nothing displayed can go stale.
-    _decoded: ClassVar[dict[tuple[Path, NotificationSelection], tuple[int, tuple[
-        tuple[WakeAssignment, AssignmentActivityEvidence], ...]]]] = {}
-    _decoded_limit: ClassVar[int] = 512
+    # One decoded (claim, evidence) per raw join row, reused while that row is byte-identical.
+    # Decoding a row (FieldCodec, ~a third of the observer's per-ping CPU) is a pure function of
+    # it, so a ping re-decodes only the rows that actually moved, not every open window's rows.
+    # Consumption, bus responses and stored inputs are never cached and are read fresh every
+    # pass, so nothing displayed can go stale. The key is the whole raw row, so any change to a
+    # claim, triage context, queue pointer or published response is a different key and re-decodes.
+    _decoded_row: ClassVar[dict[
+        tuple, tuple[WakeAssignment, AssignmentActivityEvidence]]] = {}
+    _decoded_limit: ClassVar[int] = 4096
 
     @classmethod
     def capture(
@@ -485,7 +487,6 @@ class NotificationAssignment(NotificationSource):
         connection: sqlite3.Connection,
         selection: NotificationSelection,
         privacy: RegistryPrivacy,
-        root: Path | None = None,
     ) -> NotificationAssignmentRead:
         """Probe only selected frozen keys before joining any claim/context/proof.
 
@@ -497,7 +498,7 @@ class NotificationAssignment(NotificationSource):
         keys = tuple(dict.fromkeys(selection.keys))
         if not keys:
             return NotificationAssignmentRead(selection, ())
-        rows = cls._decoded_claims(connection, selection, keys, privacy, root)
+        rows = cls._decoded_claims(connection, keys, privacy)
         consumption: dict[
             tuple[ThreadLookup, MessageReference], tuple[ConsumptionEvidence, ...]
         ] = {}
@@ -512,28 +513,34 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def _decoded_claims(
-        cls, connection: sqlite3.Connection, selection: NotificationSelection,
+        cls, connection: sqlite3.Connection,
         keys: tuple[tuple[ThreadLookup, MessageReference], ...], privacy: RegistryPrivacy,
-        root: Path | None,
     ) -> tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]:
         raw, description = cls._claim_scan(connection, keys, privacy)
-        if root is None:  # a caller outside the observer loop never reuses a decode
-            return tuple(WakeAssignment.joined(
-                _DecodedRows(raw, description), AssignmentActivityEvidence))
-        fingerprint = hash(frozenset(tuple(row) for row in raw))
-        cache_key = (root, selection)
-        cached = cls._decoded.pop(cache_key, None)
-        if cached is not None and cached[0] == fingerprint:
-            cls._decoded[cache_key] = cached  # keep as most-recently-used
-            return cached[1]
-        decoded = tuple(WakeAssignment.joined(
-            _DecodedRows(raw, description), AssignmentActivityEvidence))
-        cls._decoded[cache_key] = (fingerprint, decoded)
-        # A sliding window makes a new selection value each time it moves, so bound the cache
-        # to the most recent (root, selection)s instead of the observer's whole lifetime.
-        while len(cls._decoded) > cls._decoded_limit:
-            del cls._decoded[next(iter(cls._decoded))]
-        return decoded
+        out: list[tuple[WakeAssignment, AssignmentActivityEvidence] | None] = []
+        pending_rows: list[sqlite3.Row] = []
+        pending_keys: list[tuple] = []
+        pending_slots: list[int] = []
+        for row in raw:
+            key = tuple(row)
+            hit = cls._decoded_row.pop(key, None)
+            if hit is not None:
+                cls._decoded_row[key] = hit  # most-recently-used
+                out.append(hit)
+            else:
+                pending_slots.append(len(out))
+                out.append(None)
+                pending_rows.append(row)
+                pending_keys.append(key)
+        if pending_rows:
+            fresh = WakeAssignment.joined(
+                _DecodedRows(pending_rows, description), AssignmentActivityEvidence)
+            for key, decoded, slot in zip(pending_keys, fresh, pending_slots, strict=True):
+                cls._decoded_row[key] = decoded
+                out[slot] = decoded
+            while len(cls._decoded_row) > cls._decoded_limit:
+                del cls._decoded_row[next(iter(cls._decoded_row))]
+        return tuple(out)
 
     @classmethod
     def _claim_scan(
@@ -595,7 +602,6 @@ class NotificationAssignment(NotificationSource):
         store: MissingStore,
         selection: NotificationSelection,
         privacy: RegistryPrivacy,
-        root: Path | None = None,
     ) -> NotificationAssignmentRead:
         return privacy.missing_notification_assignments(selection)
 
@@ -605,7 +611,6 @@ class NotificationAssignment(NotificationSource):
         store: InvalidStore,
         selection: NotificationSelection,
         privacy: RegistryPrivacy,
-        root: Path | None = None,
     ) -> NoReturn:
         raise ValueError(f"Channel notification status unavailable: {store.failure_reason}")
 
@@ -662,7 +667,7 @@ class AssignmentSource:
         held = self._current_held()
         if selection not in held.reads:
             with self.coordinator.observing(
-                    NotificationAssignment, selection, self.privacy, self.root) as result:
+                    NotificationAssignment, selection, self.privacy) as result:
                 captured = result
             held.reads[selection] = NotificationAssignment.capture_detached(self, captured)
         return held.reads[selection]
