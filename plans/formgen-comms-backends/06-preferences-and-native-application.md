@@ -253,9 +253,28 @@ Nothing in the shared `toad.client` or Formbridge code changes. The Qt native co
 - Qt editor/form families from phase 1 — QtWidgets work on both platforms
 - The close sequence, operation kinds, event delivery — all platform-independent
 
+### PyQtReactive PySide6 port — scoped prerequisite
+
+PyQtReactive (`/home/ts/code/projects/pyqt-reactive-zmq03-20260930/`) has 273 `from PyQt6` imports across 102 files, 100 `pyqtSignal` usages, 13 `pyqtSlot`. The port is a mechanical rename:
+
+| From | To |
+|---|---|
+| `from PyQt6.QtCore import` | `from PySide6.QtCore import` |
+| `from PyQt6.QtGui import` | `from PySide6.QtGui import` |
+| `from PyQt6.QtWidgets import` | `from PySide6.QtWidgets import` |
+| `from PyQt6.QtOpenGL import` | `from PySide6.QtOpenGL import` |
+| `from PyQt6.QtOpenGLWidgets import` | `from PySide6.QtOpenGLWidgets import` |
+| `from PyQt6.Qsci import` | Verify QScintilla/Qsci availability under PySide6 |
+| `pyqtSignal` | `Signal` |
+| `pyqtSlot` | `Slot` |
+
+This is one sed + ruff pass, not a design change. The form managers, widget strategies, field dispatch and creation pipeline are identical under either binding. `PyQtWidgetMeta` keeps its name (it combines the same Shiboken type with ABCMeta). The port is a separate PR on PyQtReactive, not blocked by or blocking the plan's phase 1 Formbridge work. It must land before the Android build can run.
+
+No binding-agnostic compatibility layer (e.g. `qtpy`) is introduced — PySide6 is the sole target. One binding, no runtime detection, no import shim.
+
 ### Open investigation
 
 - Verify PySide6 6.12's actual QtWidgets support on Android (their blog examples use QtQuick; QtWidgets on Android may have layout/DPI/font quirks)
 - Test `QAbstractScrollArea` viewport painting on Android (phase 5's paint admission) — touch scrolling may differ from mouse scrolling
 - Check if python-for-android's bootstrap supports the full module set the plan needs (especially asyncio, sqlite3, subprocess for terminal execution)
-- Determine whether the PyQtReactive port to PySide6 is a separate prerequisite PR or can be done alongside the plan's phase 1 work
+- Verify QScintilla/Qsci binding availability under PySide6 (used by PyQtReactive for code editor widgets)
