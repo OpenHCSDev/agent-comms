@@ -168,4 +168,6 @@ Behavioral checks:
 - exclusive replacement, cancellation, completion/error reporting, no lost worker resource;
 - explicit/implicit context forwarding, GUI responsiveness during Core work, close during worker→UI dispatch and no nested event-pump wait;
 - native close with queued callbacks, active reads, timers, worker failure and repeated close requests; no orphan task/helper/listener afterward;
-- **no guarded imports:** `git grep -n "TYPE_CHECKING" -- src/formbridge/publications.py src/formbridge/operations.py src/toad/client/events.py src/toad/client/event_receiver.py` returns nothing. A cycle means the declaration moves, not the import hides.
+- **no guarded imports:** `git grep -n "TYPE_CHECKING" -- src/formbridge/publications.py src/formbridge/operations.py src/toad/client/events.py src/toad/client/event_receiver.py` returns nothing. A cycle means the declaration moves, not the import hides;
+- **no native imports in shared code:** import `formbridge.publications`, `formbridge.operations`, `toad.client.events` and `toad.client.event_receiver` with Textual and Qt blocked;
+- **no old path:** `git grep -nE "from toad\.(core\.events|core_event_carrier|worker_group) import" -- src/toad/client` returns nothing. Native carriers import the shared receiver, not vice versa.
