@@ -204,6 +204,14 @@ Required existing tests include `test_saved_settings_write_back_unchanged`, `tes
 
 Add native controls for a refused focused edit during Save, a valid focused edit during Close, atomic write failure, edits arriving while a write runs, discard after explicit-default edits, a hidden/parked prompt following its setting, unknown saved theme, view destruction during an effect and restart reading exactly the stored keys. Use the real store/form owners rather than writing private state.
 
+### Finish check
+
+- **No native imports in shared client code:** import every module under `toad/client/` with Textual and Qt blocked. `preferences.py`, `preference_host.py`, `application.py`, `startup.py`, `cli.py`, `neovim_session.py` and `provider_login.py` must import cleanly.
+- **No guarded imports:** `git grep -n "TYPE_CHECKING" -- src/toad/client` returns nothing.
+- **No old path:** `git grep -nE "from toad\.(preferences import SavedSettings|comms_host import CommsHost)" -- src/toad/client` returns nothing. The concrete schema entry point stays at `toad.preferences`.
+- **Stored keys unchanged:** read a saved settings file, round-trip it through SettingsState, and verify byte-identical output. No key migration, no renamed group, no lost explicit-default.
+- **Behaviour:** all existing tests above pass, plus the new native controls.
+
 ## 6.9 Android and mobile deployment
 
 The Qt backend targets desktop and Android from the same Python source. The Toad TUI already has the mobile UX; reimplementing it twice is pure slop (Thm 4.7: copies supply pairs the original's ancestry misses).
