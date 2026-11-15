@@ -140,9 +140,9 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile, InputCaptureFi
         connection.execute("PRAGMA foreign_keys = ON")
         # WAL is set once, on the private stage before the file is published (or by the
         # coordinator_wal carry with every owner stopped), and persists in the file header, so
-        # no opener switches the mode and fresh openers cannot race over it. A commit is one
-        # sync of the log; the rollback journal took three (journal, file, directory).
-        connection.execute("PRAGMA synchronous = FULL")
+        # no opener switches the mode and fresh openers cannot race over it. The durability of
+        # a commit is the one StoreWriter policy every WAL writer shares, not a literal here.
+        connection.execute(f"PRAGMA synchronous = {cls.synchronous}")
 
     def _prepare_private_file(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

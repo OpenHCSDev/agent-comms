@@ -3274,6 +3274,14 @@ class StoreWriter(PublishedSQLiteFile):
     CarriedFile kind or RuntimeFile, and a TypedStore inherits DurableStore or DerivedStore.
     """
 
+    # The durability every WAL writer here applies, declared once for the family. WAL keeps
+    # the database file consistent at every synchronous level, so NORMAL is correct and loses
+    # nothing an application crash could take: only an OS crash or power loss can roll a WAL
+    # back, and only to the last checkpoint. FULL fsynced the log on every commit; a message
+    # ping committed ~58 times across the coordinator stores and paid ~58 fsyncs for it. A
+    # store that must survive power loss raises its own bar (goal stores declare EXTRA).
+    synchronous: ClassVar[str] = "NORMAL"
+
     @property
     @abstractmethod
     def store(self) -> WrittenFile:
@@ -3518,9 +3526,9 @@ class RuntimeWriter(RuntimeFile, StoreWriter):
 
 
 class WalStore(SQLiteReader, StoreWriter, StoreLockFile):
-    """One WAL file owns connection setup, attachment and retirement."""
+    """One WAL file owns connection setup, attachment and retirement.
 
-    synchronous: ClassVar[str] = "FULL"
+    Its durability is StoreWriter.synchronous; a store that needs more overrides it."""
 
     def _create_file(self) -> None:
         """Create only a new inode; never close a descriptor for a live SQLite inode."""
