@@ -20,16 +20,18 @@ The application owns one persistent asyncio UI-thread loop. Native view resource
 
 ## 2.1 Generic publication mechanism: Formbridge
 
-Create `src/formbridge/publications.py` with these public owners, moving the original algorithms rather than writing another event bus:
+Formbridge already has `weak_events.py: WeakCallbackEvent` — weak subscription, snapshot-at-emission, idempotent cancel, thread-safe, no Qt import. The publication mechanism builds on this existing base rather than replacing it.
 
-| Owner | Original source to move | Contract |
-|---|---|---|
-| `Publication` | Generic parts of `CoreEvent.subscribers/replaces/keyed_as` | Candidate subscribers follow the event's actual MRO; ordinary publications do not coalesce |
-| `CoalescingPublication(Publication)` | `CoalescingEvent.coalescing_key/replaces/keyed_as` | A member defines its real key; no kind-string roster |
-| `Subscription` | Original subscription resource except Core-specific annotations | Weak listener, exact active resource, identity-based acceptance, bucket-open/empty hooks, idempotent close |
-| `PublicationStream` | Generic `CoreEventStream` subscribe/publish/publisher behavior | Snapshot matching resources before callbacks can close or subscribe; no scheduling or cached UI state |
-| `PublicationDelivery` | Original event/subscription/publisher/consume ownership of `CoreEventMessage` | Original publisher is retained at emission; callback and ordinary deliveries retain their distinct consuming behavior |
-| `PublicationReceiver` | Original subscription acquisition/observation/retirement and handler traversal | `MroDispatch` owns handler choice; native hooks enqueue, invoke and stop native propagation |
+Create `src/formbridge/publications.py` with these public owners, moving the original algorithms from Toad's events into parents that compose with WeakCallbackEvent's existing subscription machinery:
+
+| Owner | Original source to move | Contract | Existing Formbridge machinery reused |
+|---|---|---|---|
+| `Publication` | Generic parts of `CoreEvent.subscribers/replaces/keyed_as` | Candidate subscribers follow the event's actual MRO; ordinary publications do not coalesce | WeakCallbackEvent's weak listener/identity/snapshot |
+| `CoalescingPublication(Publication)` | `CoalescingEvent.coalescing_key/replaces/keyed_as` | A member defines its real key; no kind-string roster | Extends the base with key-based replacement |
+| `Subscription` | Original subscription resource except Core-specific annotations | Weak listener, exact active resource, identity-based acceptance, bucket-open/empty hooks, idempotent close | WeakSubscription's cancellation identity |
+| `PublicationStream` | Generic `CoreEventStream` subscribe/publish/publisher behavior | Snapshot matching resources before callbacks can close or subscribe; no scheduling or cached UI state | WeakCallbackEvent.emit's snapshot-before-callback |
+| `PublicationDelivery` | Original event/subscription/publisher/consume ownership of `CoreEventMessage` | Original publisher is retained at emission; callback and ordinary deliveries retain their distinct consuming behavior | — (new: emission-time publisher is the Toad addition over bare WeakCallbackEvent) |
+| `PublicationReceiver` | Original subscription acquisition/observation/retirement and handler traversal | `MroDispatch` owns handler choice; native hooks enqueue, invoke and stop native propagation | MroDispatch from metaclass-registry |
 
 The generic stream must not learn thread names, bus roots, Core update types, native widgets or Textual Worker.
 
