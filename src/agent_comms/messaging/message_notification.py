@@ -132,6 +132,15 @@ class NotificationPass:
     def changed(self, window: NotificationWindow, earlier: RevisionChanges) -> bool:
         return window.changed(self, earlier)
 
+    def prime(self, windows: Iterable[NotificationWindow], earlier: RevisionChanges) -> None:
+        """Read every window's assignment evidence in one batch before any window's change
+        check. A check only reads assignments when the global assignment evidence moved, and
+        then every window reads; batching that read is one coordinator pass for the whole
+        sidebar instead of one per open thread."""
+        if self.revision.changed_since(AssignmentEvidenceView(), earlier):
+            self.assignments.read_batch(
+                read.selection for window in windows for read in window.reads)
+
 
 @dataclass(frozen=True)
 class CapturedNotificationEvidence:

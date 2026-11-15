@@ -207,6 +207,18 @@ class NotificationAssignmentRead:
         return any(previous != fresh.get(source, SourceEvidence())
                    for source, previous in self.evidence.items())
 
+    def sliced(self, selection: NotificationSelection) -> NotificationAssignmentRead:
+        """This read's rows for one window's keys, as that window's own read. A combined
+        read covers many windows' keys in one capture; each window owns its slice, so its
+        evidence and change check answer exactly as a lone read of its selection would."""
+        keys = frozenset(selection.keys)
+        return NotificationAssignmentRead(
+            selection,
+            tuple(row for row in self.rows if (row[0].recipient_lookup, row[0].source) in keys),
+            MappingProxyType({key: value for key, value in self.consumption.items() if key in keys}),
+            MappingProxyType({key: value for key, value in self.responses.items() if key in keys}),
+        )
+
 
 @dataclass(frozen=True)
 class NotificationReadMark:
@@ -597,17 +609,53 @@ class AssignmentSource:
         """This selection's evidence at the sources' current commit. A window's change check
         reads its selection and the read that follows a change asked for the same rows again;
         both now share one read until the coordinator, bus, stored inputs or registry move."""
-        cut = tuple(FileRevision.capture(path)
-                    for path in NotificationAssignment.source_paths(self.root))
-        held = AssignmentSource._held.get(self.root)
-        if held is None or held.cut != cut or held.registry is not self.registry:
-            held = AssignmentSource._held[self.root] = HeldAssignmentReads(cut, self.registry)
+        held = self._current_held()
         if selection not in held.reads:
             with self.coordinator.observing(
                     NotificationAssignment, selection, self.privacy) as result:
                 captured = result
             held.reads[selection] = NotificationAssignment.capture_detached(self, captured)
         return held.reads[selection]
+
+    def read_batch(self, selections: Iterable[NotificationSelection]) -> None:
+        """Warm the held cache for many windows' selections in as few coordinator reads as
+        possible. A notification pass checks every open thread's window on one revision;
+        reading them one window at a time re-stat'd every source, re-checked the schema and
+        took a coordinator round-trip each. One read per bounded batch covers them, and each
+        selection owns its slice (read_assignments then returns it without touching SQLite)."""
+        held = self._current_held()
+        pending = [selection for selection in dict.fromkeys(selections)
+                   if selection.pages and selection not in held.reads]
+        batch: list[NotificationSelection] = []
+        pages = 0
+        for selection in pending:
+            if batch and pages + len(selection.pages) > NotificationSelection.window_limit:
+                self._read_combined(held, batch)
+                batch, pages = [], 0
+            batch.append(selection)
+            pages += len(selection.pages)
+        if batch:
+            self._read_combined(held, batch)
+
+    def _current_held(self) -> HeldAssignmentReads:
+        cut = tuple(FileRevision.capture(path)
+                    for path in NotificationAssignment.source_paths(self.root))
+        held = AssignmentSource._held.get(self.root)
+        if held is None or held.cut != cut or held.registry is not self.registry:
+            held = AssignmentSource._held[self.root] = HeldAssignmentReads(cut, self.registry)
+        return held
+
+    def _read_combined(
+        self, held: HeldAssignmentReads, selections: list[NotificationSelection],
+    ) -> None:
+        combined = NotificationSelection(
+            selections[0].viewer, tuple(page for s in selections for page in s.pages))
+        with self.coordinator.observing(
+                NotificationAssignment, combined, self.privacy) as result:
+            captured = result
+        full = NotificationAssignment.capture_detached(self, captured)
+        for selection in selections:
+            held.reads[selection] = full.sliced(selection)
 
 
 @dataclass
