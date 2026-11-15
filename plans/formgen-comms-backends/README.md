@@ -14,6 +14,8 @@ The [ownership and import plan](00-ownership-and-imports.md) fixes the package b
 
 One application owns connection, conversation, command, history, navigation, form and preference behavior. Textual and Qt inherit that behavior and implement their native controls, layout, input, painting and resource lifetime. A future renderer must not need another copy of the application.
 
+The Qt backend targets both desktop and Android from the same source. The Toad TUI already has the mobile UX; the Qt reimplementation carries it to native Android without a separate codebase. `pyside6-android-deploy` (PySide6 6.12, October 2026) deploys Python + Qt apps to Android with prebuilt CPython, NDK r28c, and support for QtCore/QtGui/QtWidgets/QtNetwork/QtQml/QtQuick. `pyside6-ios-deploy` uses the same spec file for iOS. See [phase 6 §6.9](#69-android-and-mobile-deployment) for the binding decision and deployment path.
+
 Existing Core permissions, channel/thread identities, command declarations, message pages and read proofs remain authoritative. Existing ObjectState, Formbridge field declarations, nominal families and Qt infrastructure are extended rather than wrapped by a second model or manager.
 
 ## Implementation order

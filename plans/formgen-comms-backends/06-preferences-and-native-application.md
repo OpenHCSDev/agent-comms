@@ -203,3 +203,51 @@ Preserve the original reverse cleanup registration in ToadApp._close_all (:280 o
 Required existing tests include `test_saved_settings_write_back_unchanged`, `test_the_file_holds_what_the_user_has_set_even_a_value_equal_to_its_default`, `test_a_group_the_file_holds_empty_is_written_back_empty`, numeric-bound/non-JSON-number refusal, and all settings-screen tests. In particular keep `test_closing_the_form_sends_the_number_still_being_typed` and `test_a_newly_declared_setting_is_edited_applied_saved_and_read_back`. Keep `test_app_close_order.py` and its actual acquired-history retirement controls.
 
 Add native controls for a refused focused edit during Save, a valid focused edit during Close, atomic write failure, edits arriving while a write runs, discard after explicit-default edits, a hidden/parked prompt following its setting, unknown saved theme, view destruction during an effect and restart reading exactly the stored keys. Use the real store/form owners rather than writing private state.
+
+## 6.9 Android and mobile deployment
+
+The Qt backend targets desktop and Android from the same Python source. The Toad TUI already has the mobile UX; reimplementing it twice is pure slop (Thm 4.7: copies supply pairs the original's ancestry misses).
+
+### PySide6 vs PyQt6 binding decision
+
+PySide6 6.12 (October 2026) ships `pyside6-android-deploy`:
+- Prebuilt CPython for Android (no manual cross-compilation since 6.12)
+- NDK r28c, 16KB memory pages, host Python 3.10–3.14
+- Supported modules: QtCore, QtGui, QtWidgets, QtNetwork, QtOpenGL, QtQml, QtQuick, QtQuickControls2
+- Same `pysidedeploy.spec` for desktop, Android and iOS (`pyside6-ios-deploy`)
+- Linux build host (macOS now also works with JDK/NDK fixes in 6.12)
+
+PyQt6 has no Android deployment tooling. The existing PyQtReactive library uses PyQt6.
+
+**Selected path:** target PySide6 for the Qt backend. PySide6 and PyQt6 share nearly identical Python APIs (both wrap Qt6 C++); the differences are:
+- Signal/slot syntax: `pyqtSignal` → `Signal`, `pyqtSlot` → `Slot`
+- Module naming: `PyQt6.QtCore` → `PySide6.QtCore`
+- License: PySide6 is LGPL; PyQt6 is GPL or commercial
+
+PyQtReactive must be ported to PySide6 or made binding-agnostic (a shim module mapping `Signal`/`Slot`/`Property` to whichever binding is installed). This is a mechanical rename across the Qt library, not a design change — the form managers, widget strategies, field dispatch and creation pipeline are the same under either binding. The existing `PyQtWidgetMeta` name stays as the metaclass even under PySide6 (it combines the same SIP/Shiboken type with ABCMeta).
+
+### What Android changes in the plan
+
+Nothing in the shared `toad.client` or Formbridge code changes. The Qt native code uses QtWidgets, which PySide6 supports on Android. The irreducible Android additions are:
+
+1. **Entry point:** `main.py` at the APK root (python-for-android requirement). It imports the shared startup and calls `make_cli(QtFrontend)`.
+2. **Touch input:** QtWidgets work on Android with touch; Qt translates touch to mouse events. Gesture handling (swipe for sidebar, pull-to-refresh) uses `QScroller` on existing scroll areas — native primitives, not a framework change.
+3. **Screen lifecycle:** `QApplication` handles Android activity lifecycle. Qt's `QGuiApplication::applicationStateChanged` maps to pause/resume. The phase-2 close sequence already covers the operations needed.
+4. **Notifications:** Android notification channels replace desktop tray. The shared notification subscription (phase 2) stays; native delivery uses Android's `NotificationManager` through PySide6's `QAndroidJniObject` or a small Java helper via Chaquopy's interop.
+5. **File access:** Android scoped storage. The bus and settings paths use `QStandardPaths`, which resolves correctly on Android.
+6. **Build/deploy:** `pyside6-android-deploy --name toad-comms` produces the APK. The `pysidedeploy.spec` lists the app's Python and Qt dependencies.
+
+### What does NOT change
+
+- Shared client code (`toad.client.*`) — identical on desktop and Android
+- Formbridge mechanisms — no platform code
+- Core bus communication — the bus runs on a server; the Android app connects over the network like any remote client
+- Qt editor/form families from phase 1 — QtWidgets work on both platforms
+- The close sequence, operation kinds, event delivery — all platform-independent
+
+### Open investigation
+
+- Verify PySide6 6.12's actual QtWidgets support on Android (their blog examples use QtQuick; QtWidgets on Android may have layout/DPI/font quirks)
+- Test `QAbstractScrollArea` viewport painting on Android (phase 5's paint admission) — touch scrolling may differ from mouse scrolling
+- Check if python-for-android's bootstrap supports the full module set the plan needs (especially asyncio, sqlite3, subprocess for terminal execution)
+- Determine whether the PyQtReactive port to PySide6 is a separate prerequisite PR or can be done alongside the plan's phase 1 work
