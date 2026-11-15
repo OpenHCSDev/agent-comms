@@ -179,7 +179,22 @@ Preserve the original reverse cleanup registration in ToadApp._close_all (:280 o
 ## 6.8 Ordered work and verification
 
 1. Extract the generic SettingsState and shared preference-host/effect bodies while retaining the concrete schema/reader at its real boundary. Migrate consumers to the actual generic or concrete role; keep stored identities and validation. Do not move native choice/editing bodies just to satisfy a module-name test (paper1 Theorem 4.8; paper4 Theorem 2.6).
-2. Insert SettingsState, PreferenceHost, ClientApplication, NeovimBufferSession and native entry/receiver skeletons at existing source targets with insert_before_target/patch_target, then reindex. Promote unchanged original members only once those ancestors exist, and use binding-removing relocation for their completed modules. Pure setting choices move individually; the concrete SavedSettings schema/entry point stays native. Extract the Core LoginInvocation at execution/login.run_login and patch its real callers. The completed form scan supplies no automatic recipe for these moves; descriptor/default-schema, native startup/constructor, editor-receiver and PTY adaptations are the bounded authored stages, with the controls below. A missing extract-new-base operation never parks this batch.
+2. NRA batch, using the operations already available:
+
+   | Stage | Operation | What it does |
+   |---|---|---|
+   | A | `insert_before_target` at SavedSettings | Insert SettingsState skeleton; attach as SavedSettings parent with `patch_target` |
+   | B | `insert_before_target` at ToadApp | Insert ClientApplication skeleton; attach as ToadApp parent |
+   | C | `insert_before_target` at NeovimEditing | Insert NeovimBufferSession skeleton; attach as parent |
+   | D | `insert_before_target` at setting_effects | Insert PreferenceHost ABC and shared Effect base |
+   | E | `insert_before_target` at cli.py | Insert FrontendEntry contract and make_cli factory |
+   | F | `insert_before_target` at execution/login.py | Extract LoginInvocation from run_login's body |
+   | G | `promote_class_members_to_ancestor` | Promote original SavedSettings store/edit/save bodies to SettingsState; promote original ToadApp client bodies to ClientApplication; promote original NeovimEditing session bodies to NeovimBufferSession. Only after each ancestor exists and its binding/member-authority proof applies |
+   | H | `relocate_symbols_to_new_module` / `relocate_module_to_new_module` | Move completed shared declarations to `toad/client/` destinations; move pure setting choices individually to `toad/client/setting_choices.py`. Every importer rewritten; no re-export |
+   | I | `replace_function_signature` | Retype native annotations from ToadApp to ClientApplication, from SavedSettings to SettingsState, from App to the shared host |
+   | J | Authored `patch_target` / `insert_class_member` | Native app composition (TextualCommsHost, QtCommsHost, QtToadApp bases); native entry implementations; editor-receiver contract; native effect implementations. These are the bounded authored stages whose native metaclass/constructor behavior is not proved by structural operations |
+
+   The concrete SavedSettings schema/entry point stays native. The completed form scan supplies no automatic recipe for stages F–J; existing authoring operations provide the bounded route now. A missing extract-new-base operation never parks this batch.
 3. Move the original store/event/effect/client algorithms once and delete those bodies from the native classes. The concrete store and its writer-owned entry point remain at their actual declaration; no generic-base entry point or old-path re-export is added. Migrate CLI/host/effect consumers to the selected shared or native owner and compose each native application through its shared parents.
 4. Preserve original model/settings tests, and add only new native boundary cases for input completion, effects, file-write failure and application close. Do not port tests whose only assertion keeps a deleted alias alive.
 5. Run native-free shared import discovery in a fresh interpreter, all changed-name consumers and actual native constructor/MRO checks. Preserve the real saved document on read/write and verify installed store discovery on a scratch copy before any live carry.
