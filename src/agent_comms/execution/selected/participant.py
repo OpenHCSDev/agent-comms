@@ -473,6 +473,7 @@ class ClaimPass(DrainRecipient):
                 sent_read = NotificationAssignment.capture(
                     store.session._connection,
                     NotificationSelection.of(viewer, next(pages, ())), privacy,
+                    self.comms.root,
                 )
         participant.pointer.require_idle()
         assignments = AssignmentSource(self.comms.root)

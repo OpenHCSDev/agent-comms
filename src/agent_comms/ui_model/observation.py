@@ -1726,7 +1726,6 @@ class ThreadsObserved(Observed):
                            if not self.results[name].same_status(status_batch.view(name)))
         remaining = {name: view for name, view in readable.items() if name not in changed}
         notifications = NotificationPass(comms, revision)
-        notifications.prime((view.notification_window for view in remaining.values()), earlier)
         changed.update(name for name, view in remaining.items()
                        if view.notification_window.activity_names() & activity_changed
                        or notifications.changed(view.notification_window, earlier))
