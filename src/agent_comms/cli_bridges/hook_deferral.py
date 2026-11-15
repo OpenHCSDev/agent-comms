@@ -14,6 +14,7 @@ from functools import cached_property
 from typing import (
     ClassVar,
     Self,
+    cast,
 )
 
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
@@ -21,6 +22,7 @@ from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.cli_bridges.shared import Binding
 from agent_comms.comms import Comms
 from agent_comms.messaging.channel_targets import ThreadTarget
+from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.task_attachments.owner_notices import GoalWakeNotice
 from agent_comms.team.rule_deal import MeantStore, RuleDeal, SessionAudit
@@ -200,6 +202,11 @@ class StopHook(ClaudeTranscriptHook):
     def idle(self) -> ReadIdle:
         return ReadIdle.read(self.comms, self.binding)
 
+    @cached_property
+    def idle_turns(self) -> int:
+        """Turns in a row that changed nothing, read once per stop from the transcript tail."""
+        return ClaudeJsonLines().receipts(self.tail()).idle_turns
+
     def reply(self) -> str:
         """The text of the reply that ends the turn: what the model said after its last act."""
         said: list[str] = []
@@ -224,9 +231,9 @@ class StopHook(ClaudeTranscriptHook):
         # harness drops, and not Core's heartbeat. It stops after idle_turns_asked turns in a row
         # that changed nothing, so an idle session goes quiet instead of spinning.
         held = tuple(reason for goal in thread.goal for reason in goal.held_stop())
-        if held and ClaudeJsonLines().receipts(self.tail()).idle_turns < self.idle_turns_asked:
+        if held and self.idle_turns < self.idle_turns_asked:
             GoalWakeNotice().publish(
-                self.comms.messaging, ThreadTarget(thread.name), "\n".join(held))
+                cast(Messaging, self.comms.messaging), ThreadTarget(thread.name), "\n".join(held))
         if reasons := (*deaf, *self.deferred()):
             self.output.line(json.dumps({"decision": "block", "reason": "\n".join(reasons)}))
 
@@ -248,7 +255,6 @@ class StopHook(ClaudeTranscriptHook):
         session answering, not idling."""
         if MeantStore(self.stem.with_suffix(".meant")).read().open:
             return
-        receipts = ClaudeJsonLines().receipts(self.tail())
-        if receipts.idle_turns >= self.idle_turns_asked:
+        if self.idle_turns >= self.idle_turns_asked:
             audit = SessionAudit.read(RuleDeal.audit_beside(self.stem))
             yield audit.his_question(audit.answered_probes())
