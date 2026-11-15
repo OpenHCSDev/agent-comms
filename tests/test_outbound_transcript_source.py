@@ -102,10 +102,7 @@ def test_a_read_selects_only_its_viewers_claims_and_attempts_before_decoding(tmp
             own = NotificationAssignment.read(root, NotificationSelection.of(viewer, (initial,)))
         finally:
             sys.setprofile(profiling)
-        # The read decodes at most its own one row; the row cache may reuse a row already
-        # decoded for another viewer, so it never decodes more, and may decode none. own.rows
-        # below proves the viewer still gets exactly its own row.
-        assert decoded <= 1
+        assert decoded == 1
         assert own.selection.viewer == viewer and own.sources == (initial,)
         assert own.rows == tuple(row for row in everyone.rows if row[0].recipient == name)
         assert own.evidence[reference].claims == own.rows
