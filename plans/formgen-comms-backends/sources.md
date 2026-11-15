@@ -2,6 +2,26 @@
 
 These revisions record a source read, not a package freeze. Implementation uses refreshed current mains. The owning rule is [no-waiting.md](../../src/agent_comms/team/rules/no-waiting.md), under “Our own packages track latest main”.
 
+## Reusable mechanisms already installed
+
+These are the existing libraries the plan composes rather than rewrites. Each phase's reuse checkpoint names which mechanism it uses; the [README](README.md#minimum-new-code-compose-existing-machinery) lists what each one handles. Implementation verifies against refreshed current mains, not these pinned versions.
+
+| Mechanism | Package | Installed version | Module |
+|---|---|---|---|
+| `DeclaredFamily` / `members_with` | agent-comms | 0.1.0 | `agent_comms.nominal.declared_family` |
+| `LifecycleState` | agent-comms | 0.1.0 | `agent_comms.nominal.lifecycle` |
+| `ClassFact` | agent-comms | 0.1.0 | `agent_comms.nominal.class_fact` |
+| `FieldCodec` | agent-comms | 0.1.0 | `agent_comms.nominal.field_codec` |
+| `TypedTable` | agent-comms | 0.1.0 | `agent_comms.storage.typed_table` |
+| `MroDispatch` / `@handles` | metaclass-registry | 0.4.1 | `metaclass_registry.mro_dispatch` |
+| `DeclaredViews` / `showing` | formbridge | 0.2.0 | `formbridge.forms.declared_fields` |
+| `DeclaredField` / `DeclaredMetadata` | formbridge | 0.2.0 | `formbridge.forms.declared_fields` |
+| `WeakCallbackEvent` | formbridge | 0.2.0 | `formbridge.weak_events` |
+| `MainThreadDispatcher` | formbridge | 0.2.0 | `formbridge.services.main_thread_dispatch` |
+| `ObjectState` / `DottedFieldPath` | objectstate | 5.0.0 | `objectstate` |
+| `ParameterInfo` / annotation analysis | python-introspect | 0.3.0 | `python_introspect` |
+| Toad forms/history/navigation | batrachian-toad | 0.6.20 | `toad.*` |
+
 ## Source acquisition
 
 Core planning uses the owned Core worktree on a branch from freshly fetched main. Toad uses the existing owned Toad checkout, refreshed from `origin/main`. Qt, Formbridge and their model/introspection dependencies were refreshed through the declared main branches in an owned OpenHCS source tree. The Qt source is also acquired through Core's `comms_repository_read`; that tool supports unregistered repositories and grants no edits.

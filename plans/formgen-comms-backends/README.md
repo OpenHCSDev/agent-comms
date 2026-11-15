@@ -31,6 +31,27 @@ Phases are complete caller-family changes, not individual method moves. Forms an
 
 Each phase produces mostly empty crossing classes. The new line count is dominated by moved bodies (one owner, deleted from the old site) and irreducible native primitives. An implementation that writes more new algorithm than it deletes old duplication has gone wrong.
 
+## Phase dependencies
+
+```
+Phase 1 (forms) ──────────────────────────────────────┐
+Phase 2 (runtime/events) ────────┬────────────────────┤
+                                 │                    │
+Phase 3 (connections/commands) ──┤ depends on phase 2 │
+Phase 4 (navigation) ───────────┤ (event/operation    ├── Phase 6 (preferences/app)
+Phase 5 (history/read evidence) ─┘  extraction)       │   depends on all
+                                                      │
+```
+
+- **Phase 1** (forms): independent. Formbridge editor parents, Qt editor family and creation-family split have no event/connection dependency.
+- **Phase 2** (runtime): independent. Publication/subscription and operation kinds extract from Toad into Formbridge. No form or connection dependency.
+- **Phase 3** (connections/commands): depends on phase 2. ConversationSubmission imports `CoreEventMessage` and `InputHistoryRecord`, which become shared only after phase 2's event/operation extraction. Connection host uses `schedule_ui`/`repeat_ui` from the phase-2 runtime.
+- **Phase 4** (navigation): depends on phase 2. Workspace switch uses operation kinds for source/view work. Sidebar navigation uses event subscriptions.
+- **Phase 5** (history): depends on phases 2 and 3. Fragment events use phase-2 publications. Read acknowledgement uses phase-3 connection captures. Source preparation uses phase-2 operation kinds.
+- **Phase 6** (preferences/app): depends on all. ClientApplication composes the shared host (phase 3), navigation (phase 4), history (phase 5) and form (phase 1) owners with native bases. Startup uses the phase-2 persistent loop.
+
+Phases 1 and 2 can proceed in parallel. Phases 3–5 can proceed in parallel once phase 2 lands. Phase 6 integrates everything.
+
 ## What every phase document must contain
 
 The planning work fills these details from source; they are not homework passed to the implementer:
