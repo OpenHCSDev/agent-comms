@@ -163,7 +163,23 @@ Every method that uses only Core types, the connection family (phase 3.1) and De
 
 The concrete conversation members (`ChannelConversation`, `DirectMessageConversation`, etc.) split the same way as SessionEntry in §4.4: the shared member owns identity/address/Core-read behavior with `shows=(...)` and the native member owns view construction through DeclaredViews.showing() (Cor 4.12: zero outside pairs).
 
-`BusSubmission` already imports only Core types plus `InputDecision` — nearly shared. `InputDecision(DeclaredFamily)` needs the same split: its `allows: ClassVar[bool]` and permission/refusal logic move to `toad/client/input_decision.py`; its Textual `Content` explanation and `Widget` notification target stay on native presentation members. `InputRefused.explanation` becomes an abstract `str` on the shared base; `TextualInputRefused` builds `Content` from it. The shared `bus_submission.py` then imports the shared `InputDecision` and moves unchanged to `toad/client/submission.py`. `ConversationSubmission` moves its original queue/send/outcome algorithms there too; native prompt feedback and scroll effects stay native. The submission never touches a Textual Worker or Qt Task — it uses the phase-2 operation owner.
+`BusSubmission` already imports only Core types plus `InputDecision` — nearly shared. `InputDecision(DeclaredFamily)` needs the same split: its `allows: ClassVar[bool]` and permission/refusal logic move to `toad/client/input_decision.py`; its Textual `Content` explanation and `Widget` notification target stay on native presentation members. `InputRefused.explanation` becomes an abstract `str` on the shared base; `TextualInputRefused` builds `Content` from it. The shared `bus_submission.py` then imports the shared `InputDecision` and moves unchanged to `toad/client/submission.py`.
+
+`ConversationSubmission` (581 lines) has deeper native dependencies that phase 2 must resolve first:
+
+| Current import | Becomes shared after | Shared destination |
+|---|---|---|
+| `toad.messages` (Textual Message classes) | Never — native notification/feedback | Native submission presentation members |
+| `toad.core_event_carrier.CoreEventMessage` | Phase 2 carrier extraction | Shared `PublicationDelivery` |
+| `toad.worker_group.InputHistoryRecord` | Phase 2 operation kind extraction | Shared `InputHistoryRecord(OperationKind)` |
+| `toad.widgets.prompt.Prompt` | Never — native widget | Native prompt submission interface |
+| `toad.delivery_failure_view.DeliveryFailureView` | Never — native view | Native failure presentation |
+| `toad.comms_root.Observing` | Phase 3.1 connection extraction | Shared `Observing` from `toad/client/connection.py` |
+| `toad.command_catalog.CommandCatalog` | Phase 3.2 command extraction | Shared `CommandCatalog` from `toad/client/command_catalog.py` |
+
+After phases 2 and 3.1–3.2 land, the remaining native imports in conversation_submission are: messages, Prompt, DeliveryFailureView. The shared submission algorithms (input intent/request identity/draft recovery/queue/send/outcome/committed-message error handling) move to `toad/client/submission.py`; native feedback (prompt text restore, failure view creation, notification posting) stays on a native `TextualSubmissionFeedback` capability. Qt feedback uses the same shared outcomes through its native prompt/error presentation.
+
+The submission family (`SubmissionState(DeclaredFamily)`) already exists — no new mechanism. The queue/send/committed/refused/outcome state machine stays as is; only its native feedback effects split out.
 
 ### Reuse
 
