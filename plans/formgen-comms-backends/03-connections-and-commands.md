@@ -142,6 +142,31 @@ The native draft-view contract draws confirmation, enables apply, repaints affec
 
 [Phase 6's login section](06-preferences-and-native-application.md#66-login-retain-the-actual-request-and-readiness-owner) records the three actual login paths, original request/readiness owners and required native checks. The command catalogue's provider action is part of this complete command flow, not an optional button to omit while the interactive Qt terminal boundary remains unfinished.
 
+## 3.3a Conversation and submission: split the native view creation
+
+Phase 00's table maps `conversation_kind.py`, `conversation_submission.py` and `bus_submission.py` to `toad/client/conversation.py` and `submission.py`. This section traces that move.
+
+`ConversationKind(MessageDestination, DeclaredFamily, affix="Conversation")` already uses DeclaredFamily — the existing machinery owns identity, wire encoding and member discovery. No new family mechanism is needed.
+
+### What is already shared (moves to `toad/client/conversation.py`)
+
+Every method that uses only Core types, the connection family (phase 3.1) and DeclaredFamily itself: `page()` (Core's `CommsConversationPageTool`), `label()`, `destination()`, `retained_target()`, `send_target()`, `read_only()`, `seen_page()` (the original page-proof selector from phase 5), `view_identity()`, `unread()`, `sidebar_threads()`, `threads_needed()`, `channels_needed()`, `activity_members()`, `active_members()`, `resolve()`, `update_mentions()`, `status_text()`, `status_thread()`, `initial_label`, `input_scope`. These are the application's conversation behavior, backed by Core reads — no native import.
+
+### What stays native
+
+| Method | Why | Native owner |
+|---|---|---|
+| `compose_activity()` | Returns Textual `ComposeResult` | `TextualChannelConversation`, `TextualDirectMessageConversation` etc. |
+| `prompt()` | Creates `ChannelPrompt`/`MessagePrompt` native widgets | Same native members |
+| `toggle_irc()`/`toggle_dm()` | Calls `ConversationNavigation` (a Textual screen) | Native class methods on the Textual conversation family |
+| `historical_sessions()` | `create_view` factory constructs native screens | Native members with DeclaredViews selection, as phase 4's entry pattern |
+
+The concrete conversation members (`ChannelConversation`, `DirectMessageConversation`, etc.) split the same way as SessionEntry in §4.4: the shared member owns identity/address/Core-read behavior with `shows=(...)` and the native member owns view construction through DeclaredViews.showing() (Cor 4.12: zero outside pairs). `ConversationSubmission` and `BusSubmission` move the original queue/send/outcome algorithms to `toad/client/submission.py`; native prompt feedback and scroll effects stay native. The submission never touches a Textual Worker or Qt Task — it uses the phase-2 operation owner.
+
+### Reuse
+
+ConversationKind is already a DeclaredFamily. The split adds zero new mechanism. MessageDestination, SubmissionOwner and the seen_page algorithm move as bodies. The native prompt/compose/toggle methods are the only new declarations — empty crossing classes inheriting both the shared conversation and the native view capability. Adding a new conversation kind is adding one shared member with `shows=` and one native member per backend.
+
 ## 3.4 Execution remains one shared operation
 
 Destination `src/toad/client/thread_actions.py`:
