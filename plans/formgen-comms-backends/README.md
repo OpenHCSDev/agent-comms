@@ -48,6 +48,32 @@ A phase plan is ready only when its remaining work is execution and verification
 
 Implementation completion is separate: the written moves, code and native checks must actually run before the backend is reported working. Those checks remain required; running an unwritten backend is not a prerequisite for completing this documentation-only task. A change in main triggers a focused recheck of affected declarations, not a frozen old package set or a ritual full audit after every edit. Documentation checkpoints land on main while the planning work continues.
 
+## Minimum new code: compose existing machinery
+
+Every required pair the declared lattice does not derive is restated by some consumer (paper1 Cor 4.10). The lattice here includes DeclaredFamily, DeclaredViews, MroDispatch, FieldCodec, ObjectState, LifecycleState, TypedTable, ClassFact and the existing Publication/Subscription, OperationKind and form infrastructure in Formbridge and PyQtReactive. New code is a defect unless no existing mechanism handles the requirement.
+
+| Mechanism | Already handles | A new class must not restate |
+|---|---|---|
+| `DeclaredFamily` / `members_with(capability)` | Family membership, capability crossing, wire identity, absence owners | Rosters, kind strings, `isinstance` switches, `None` checks (MEMB-1, MEMB-2, IMPL-1, IMPL-3, IMPL-9) |
+| `DeclaredViews` / `showing(declarations)` | Annotation-driven widget/editor selection per backend | Factory methods, type-to-widget maps, `if annotation ==` branches |
+| `MroDispatch` / `@handles(Type)` | Event/value dispatch through the value's C3 MRO | `match` on types, `isinstance` chains, string-keyed handler dicts (IMPL-3, IMPL-1) |
+| `FieldCodec` | Boundary encoding/decoding from type annotations | Hand-written key sets, `json.loads` + field-by-field reads, validation at every use (BOUND-1, BOUND-3) |
+| `ObjectState` | Form value, history, dirty state, subscriptions | Second value caches, dirty flags, manual diff (IDEN-5) |
+| `LifecycleState` | State machines with transitions declared on the states | Transition tables beside their states, status enums switched everywhere (IMPL-2, IMPL-11) |
+| `TypedTable` | SQLite stores derived from dataclass declarations | Hand-written DDL, positional inserts, column-name reads (MEMB-5) |
+| `ClassFact` | Class-level cached computed properties | Module-level caches, `_cached` class attributes |
+| Publication/Subscription (existing in events.py) | Event stream, coalescing, weak listeners, scoped interest | Another event bus, callback registries, observer lists |
+| Formbridge declared fields | Field identity, metadata, validation, annotation-driven conversion | Second field schemas, hand-kept type maps, per-widget parse |
+| PyQtReactive form infrastructure | Qt form building, native widget creation/binding, field dispatch | Another Qt form manager, widget factories, signal wiring |
+
+The target: most new declarations are **empty crossing classes** whose meaning is their base list (paper1 Prop 4.2, Cor 4.12; slop.md: "empty classes are the clean form"). A class body beyond a docstring is new algorithm, which needs justification:
+
+1. **Moved body:** the original algorithm from its current owner. Not new code; one owner, deleted from the old site.
+2. **Crossing composition:** `class QtLineEditor(LineEditing, ControlConstruction, QtEditorSignals, QLineEdit, QtValueEditor): ...` — empty body, five existing parents, zero new code. Adding a kind is adding a class (Thm 4.6: no helper lowers the minimum).
+3. **Native primitive:** an irreducible toolkit call that no shared parent can own. Keep it short; a long native body means a missing shared parent.
+
+A new ABC, contract, or mechanism that does not compose existing machinery must name which of the seven libraries it extends and why none of them already handles the requirement. "Cleaner API" and "separation of concerns" certify nothing (paper4 Thm 6.5).
+
 ## Settled boundaries
 
 - **Core:** identity, permissions, membership, command availability/execution, routing/write checks, messages/transcripts, pagination/read evidence and stored ledgers.

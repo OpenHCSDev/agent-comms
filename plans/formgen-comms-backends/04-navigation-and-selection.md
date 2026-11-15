@@ -2,6 +2,8 @@
 
 **Planning status:** logical owners, transition order, native touch points and importer sites are traced on Toad main `1421d01d4` (§4.8), rechecked unchanged at `615575549`. The sidebar's actual scroll/frame/selection split is selected in §4.6. Base extraction uses the bounded existing insert/patch/reindex/member operations below; it does not wait for an absent dedicated recipe or claim a native execution proof.
 
+**Reuse checkpoint:** tab identities already use `DeclaredFamily`. SessionEntry uses the same `DeclaredViews` pattern as phase 1's editor selection: native entry selection is `TextualHistorySessionEntry.declared_for(entry)`, not a factory parameter or backend branch (Cor 4.12: the empty crossing class is at (0,0); a factory parameter is an outside route). Workspace source states are `LifecycleState` members (Detached/Loading/Shown/Parked), not flags. SidebarNavigation becomes a capability mixin on the actual sidebar widget, composed by MI — not a helper object forwarding to it (Thm 4.6). SidebarState uses MI for the native/shared split: `TextualSidebarState(SidebarState)` adds terminal scroll, `QtSidebarState(SidebarState)` adds native scroll — one object, not two caches.
+
 ## Outcome
 
 Both views use the original tab identities, saved roster, visit history, session membership, source states and selected targets. Qt does not maintain another open-tab list or derive identity from the text of a tab/row.
@@ -53,7 +55,7 @@ The exact concrete view bases and initialization winners must be checked for Mai
 
 Keep the original entry family and split only its rendering effects:
 
-- `NativeSessionEntry` already receives a factory. Generalize its MainScreen annotation to the shared session contract; preserve initial identity binding, original-thread fallback before mount, reconnect guards, source-status projection and return preference.
+- `NativeSessionEntry` uses `DeclaredViews` for native view selection, the same pattern as phase 1's editor selector: `TextualHistorySessionEntry.declared_for(entry)` selects the native entry through `cls.showing(...)` on the entry's identity, not a factory parameter or `if backend ==` branch (Cor 4.12). Generalize its MainScreen annotation to the shared session contract; preserve initial identity binding, original-thread fallback before mount, reconnect guards, source-status projection and return preference.
 - `HistorySessionEntry` retains the CommsViewKey, viewer/project/participants, address, label/unread/reference projection and `ready` behavior. Its direct `CommsScreen(...)` construction moves to native entry members/factories.
 - `PreviewSessionEntry`/`AcpLogSessionEntry` retain path/address/title and log classification. FilePreviewScreen/FilePreview/AcpLogPreview construction stays native.
 - Native factories are selected by the app's declared entry family, not `if backend == ...` in the logical navigator. Creating another native view must not copy `history`, `register`, `detach` or `finish`.

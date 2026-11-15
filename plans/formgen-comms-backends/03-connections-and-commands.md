@@ -2,6 +2,8 @@
 
 **Planning status:** the connection families, Core request boundary, command draft owner, host method list and source checks are decided. Every native touch and importer is traced on Toad main `1421d01d4` (§3.6). Qt provider-login presentation belongs to [phase 6 §6.6](06-preferences-and-native-application.md#66-login-retain-the-actual-request-and-readiness-owner). The one operation gap is the same as phase 4: extract-new-base for shared and native classes, bounded in §3.6.
 
+**Reuse checkpoint:** the connection family already uses `AnsweringReads.__init_subclass__` to derive stopped/active pairs — that derivation stays, no roster (MEMB-2). Commands use Core's existing `ToolRequest` family and `DeclaredFamily`. CommandDraft is EXTRACTED from CommandDialog, not written — one body, promoted. `TargetActionState`/`NoTargetAction` is the absence-owner pattern. The host contract (`CommsHost`, `CommandHost`) is the thinnest possible ABC — only irreducible native primitives. Per-command capabilities like sort-group checking use `members_with(SortCapable)` on the command family so the host does not re-ask what the command already knows (Thm 4.6: the host method forwarding to the command's own knowledge is a helper that cannot lower the gap).
+
 ## Outcome
 
 Both views use the same original connection, target context, command discovery, draft and execution algorithms. Core still decides which action is allowed and performs the write. Native code draws the menu/form, collects input, reports feedback and manages its native lifetime.

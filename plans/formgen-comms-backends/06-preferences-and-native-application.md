@@ -2,6 +2,8 @@
 
 **Planning status:** select the original concrete settings schema, one shared store/effect algorithm, a common Click startup factory, native application construction and the existing PTY/ANSI owner for interactive login. The initial Qt extra is added to the existing full Toad distribution; a Qt-only installation without Textual is not this release target. Native execution remains a required implementation check, not evidence claimed here.
 
+**Reuse checkpoint:** ObjectState already owns settings values/history/dirty — SettingsState adds only save/discard/explicit-key semantics, not a new value model. DeclaredField owns each setting's identity/metadata/validation. DeclaredChoice/AnnotationChoices own offered choices for settings. Effects use `EachOpenWidget` capability membership, not a hand-kept effect registry. ClientApplication composes the shared host/connection/command/navigation/history/preference owners with native application bases through MI — the native app is an empty crossing class plus irreducible native construction. `FrontendEntry` uses nominal dispatch: the native entry module imports its own toolkit, common startup never imports both (IMPL-1: no `if backend ==`). TerminalExecution/PtyProcess already own the PTY — the Qt login dialog wraps the same process, zero new terminal implementation. NeovimBufferSession extracts from NeovimEditing — moved body, not new algorithm.
+
 ## Outcome
 
 Both applications edit the original declared settings through one ObjectState and the original save/discard algorithm. Native effects apply through the application's actual controls and layout. Qt does not create a second JSON schema, settings value cache, connection application or command parser.
