@@ -229,7 +229,7 @@ class ApprovalAudience(DeclaredFamily, affix="Audience"):
 
     `transport/served_endpoints.py` already owns that distinction for this machine's URLs:
     reaching a tailnet-only one means tailscale admitted the caller's machine first
-    (`TailnetServed.offers_profiles`), while a Funnel URL "proves nothing about its caller".
+    (`TailnetServed.profile_offer`), while a Funnel URL "proves nothing about its caller".
     Tailscale marks every Funnel request with its own header, so the same rule decides it
     per request, once, at the HTTP boundary.
     """

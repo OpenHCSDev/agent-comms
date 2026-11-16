@@ -32,7 +32,7 @@ def test_the_funnelled_origin_and_the_tailnet_port_are_different_members():
     # 443 is the bare origin; any other port belongs in the URL a profile is written for.
     assert funnel.target.url == "https://ts-gaming.tail553874.ts.net"
     assert tailnet.target.url == "https://ts-gaming.tail553874.ts.net:8443"
-    assert (funnel.offers_profiles, tailnet.offers_profiles) == (False, True)
+    assert (funnel.profile_offer(), len(tailnet.profile_offer())) == ((), 1)
     assert "public (Funnel)" in funnel.label() and "tailnet only" in tailnet.label()
 
 
