@@ -39,12 +39,12 @@ from agent_comms.cli_bridges.runtime_updates import (
 )
 from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
 from agent_comms.cli_bridges.shared import (
-    CliBridge,
     IncomingFrame,
     Operation,
     Options,
     SessionBinding,
     SuppliedSession,
+    DirectDeliveryBridge,
     TranscriptBridge,
     Watch,
     run_bridge,
@@ -95,7 +95,7 @@ class CodexAppServer(CodexHistory, OnlineHistory):
         yield resumed.thread.status.update()
 
 
-class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
+class CodexBridge(CodexAppServer, DirectDeliveryBridge[CodexOptions]):
     state_directory = Path('.local/state/codex-comms-inbox')
     reconnect_seconds: ClassVar[float] = 1.0
 
@@ -170,12 +170,8 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
 
 
 @dataclass(frozen=True)
-class Connect(Watch):
+class Connect(Watch[CodexBridge]):
     help = "Connect this Codex conversation and start its live inbox, replies and status"
-
-    @classmethod
-    def serves(cls, bridge: type[CliBridge]) -> bool:
-        return issubclass(bridge, CodexBridge)
 
     async def register(self, bridge: CodexBridge) -> None:
         await super().register(bridge)
@@ -207,10 +203,6 @@ class Connect(Watch):
 class Resume(Operation[CodexBridge]):
     help = "Start the exact live Codex connection saved by connect"
     binding_session = SuppliedSession
-
-    @classmethod
-    def serves(cls, bridge: type[CliBridge]) -> bool:
-        return issubclass(bridge, CodexBridge)
 
     async def execute(self, bridge: CodexBridge) -> None:
         record = WatchClaim(bridge.binding.thread).recorded()
