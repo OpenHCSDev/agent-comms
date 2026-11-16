@@ -554,6 +554,44 @@ class Blocked(ToolGateState):
         deal.refresh_answered(usage)
 
 
+class RuleCheckPolicy(DeclaredFamily, affix="RuleCheckPolicy"):
+    """Whether one check is required, independently of the refresh schedule."""
+
+    @classmethod
+    def owing(cls, requirement: type[Owed], deal: RuleDeal, record: DealRecord,
+              opened: OpenedReads) -> Iterator[Owed]:
+        return iter(())
+
+    @classmethod
+    def then(cls, following: type[RuleCheckPolicy]) -> type[RuleCheckPolicy]:
+        return cls
+
+    @classmethod
+    def voice(cls, voice: Voice) -> Voice:
+        return Mute()
+
+
+class OffRuleCheckPolicy(RuleCheckPolicy):
+    """Leave this check off without removing the dealt sources."""
+
+
+class RequiredRuleCheckPolicy(RuleCheckPolicy):
+    """Require this check before ordinary work continues."""
+
+    @classmethod
+    def owing(cls, requirement: type[Owed], deal: RuleDeal, record: DealRecord,
+              opened: OpenedReads) -> Iterator[Owed]:
+        return requirement.owed_by(deal, record, opened)
+
+    @classmethod
+    def then(cls, following: type[RuleCheckPolicy]) -> type[RuleCheckPolicy]:
+        return following
+
+    @classmethod
+    def voice(cls, voice: Voice) -> Voice:
+        return voice
+
+
 class DealMode(DeclaredFamily, affix="DealMode"):
     """Session gate policy, retained with the deal and shared by every backend."""
 
@@ -580,7 +618,7 @@ class StartupDealMode(DealMode):
 
     @classmethod
     def answer(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> ToolGateState:
-        owed = (case for owes in deal.requirements for case in owes.owed_by(deal, record, opened))
+        owed = (case for owes in deal.requirements for case in owes.policy(record).owing(owes, deal, record, opened))
         return next(owed, Open()).state()
 
 
@@ -704,7 +742,13 @@ class RuleGateSettings(ConfigurationRecord):
     """One session's editable rule policy; read and audit evidence is not configuration."""
 
     mode: Annotated[type[DealMode], RegisteredClassChoices(DealMode),
-                    Description("When this session must read and answer its rules")] = FullDealMode
+                    Description("Refresh schedule; off disables all checks and automatic refreshes")] = FullDealMode
+    required_reads: Annotated[type[RuleCheckPolicy], RegisteredClassChoices(RuleCheckPolicy),
+                              Description("Require reading the supplied rules and papers")] = RequiredRuleCheckPolicy
+    audit: Annotated[type[RuleCheckPolicy], RegisteredClassChoices(RuleCheckPolicy),
+                     Description("Require a written audit; off keeps rules, papers and refreshes")] = RequiredRuleCheckPolicy
+    confirmation: Annotated[type[RuleCheckPolicy], RegisteredClassChoices(RuleCheckPolicy),
+                            Description("Ask did you mean it after an audit; ignored when audit is off")] = RequiredRuleCheckPolicy
     read_batch: Annotated[int, Ge(1),
                           Description("Files opened together before answering the audit")] = 5
     owner_prompts: Annotated[int, Ge(1),
@@ -858,6 +902,10 @@ class Owed(State):
     signed Tristan is Failure 10, inventing rules and blaming them on him, in the one place a
     session cannot check."""
 
+    @classmethod
+    def policy(cls, record: DealRecord) -> type[RuleCheckPolicy]:
+        return record.audit
+
     def state(self) -> ToolGateState:
         return Blocked(self)
 
@@ -910,6 +958,10 @@ class Unmeant(Owed):
 
     before: ClassVar[str] = "answering Tristan"
 
+    @classmethod
+    def policy(cls, record: DealRecord) -> type[RuleCheckPolicy]:
+        return record.audit.then(record.confirmation)
+
     nudges: ClassVar[tuple[str, ...]] = (
         "I asked you something. answer me before anything else.",
         "did you see my question? it's right below.",
@@ -960,6 +1012,10 @@ class Unread(Owed):
     opened, so a parallel batch's first read does not pin the order to itself."""
 
     before: ClassVar[str] = "reading"
+
+    @classmethod
+    def policy(cls, record: DealRecord) -> type[RuleCheckPolicy]:
+        return record.required_reads
 
     @property
     def batch(self) -> int:
@@ -1129,7 +1185,7 @@ class RuleDeal(State, DealtCalls):
 
         settled = self.meant.update(settle)
         meant = self.meant.read()
-        voice = self.voice()
+        voice = record.audit.then(record.confirmation).voice(self.voice())
         if settled is not None:
             voice.answered(*settled)
         if meant.open:
@@ -1172,6 +1228,11 @@ class RuleDeal(State, DealtCalls):
         with self.write_guard(self.record):
             self.record.stat()  # Configuration targets an existing session, never fabricates a deal.
             self.publish(settings.applied_to(self.current()))
+
+    def disable(self) -> None:
+        """Release this session's checks without deleting its read or audit evidence."""
+        if self.record.exists():
+            self.configure(replace(RuleGateSettings.capture(self.current()), mode=OffDealMode))
 
     def deal(self, dealt: type[DealtSources], due: AuditDue, trigger: DealTrigger) -> None:
         with self.write_guard(self.record):
