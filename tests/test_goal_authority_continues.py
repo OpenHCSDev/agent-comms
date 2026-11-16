@@ -25,7 +25,11 @@ RUNNING, OTHER = GoalId.mint(), GoalId.mint()
     pytest.param(GoalAuthority(RUNNING, ActiveGoal()), NoGoal().authority, True, id="cleared"),
     pytest.param(GoalAuthority(RUNNING, CompletedGoal()), NoGoal().authority, True,
                  id="completed-then-cleared"),
-    pytest.param(NoGoal().authority, GoalAuthority(RUNNING, ActiveGoal()), False, id="from-none"),
+    pytest.param(NoGoal().authority, GoalAuthority(RUNNING, ActiveGoal()), True, id="first-assignment"),
+    pytest.param(NoGoal().authority, NoGoal().authority, True, id="still-unassigned"),
+    *[pytest.param(NoGoal().authority, GoalAuthority(RUNNING, state), False,
+                   id=f"unassigned-to-{state.display_label()}")
+      for state in (PausedGoal(), BlockedGoal("stopped"), CompletedGoal())],
 ])
 def test_running_turn_continues_only_under_its_reactivated_goal(captured, current, keeps):
     assert captured.keeps_turn_under(current) is keeps

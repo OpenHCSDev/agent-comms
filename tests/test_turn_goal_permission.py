@@ -28,7 +28,7 @@ from agent_comms.transport.tools.goals import GoalSet
 def test_goal_publication_is_exact_and_coding_output_cannot_author_it():
     own_goal_id = GoalId.mint()
     another_goal_id = GoalId.mint()
-    original = NoGoal()
+    original = Goal('the earlier assignment', GoalId.mint(), published_seq=0)
     goal = Goal('the actual publication', own_goal_id, published_seq=0)
     permission = TurnGoalPermission(OwnerGoalPermission(original.authority))
     result = ProvidedToolResult.from_wire({'content': [], 'details':
@@ -41,6 +41,16 @@ def test_goal_publication_is_exact_and_coding_output_cannot_author_it():
     assert permission.allows(goal)
     assert not permission.allows(replace(goal, revision=goal.revision + 1, state=PausedGoal()))
     assert not permission.allows(replace(goal, id=another_goal_id))
+
+
+def test_first_assignment_keeps_accepted_owner_input_but_pause_stops_it():
+    permission = TurnGoalPermission(OwnerGoalPermission(NoGoal().authority))
+    assigned = Goal('the work already in progress', GoalId.mint(), published_seq=0)
+    OrdinaryGoalRule.require(permission, assigned)
+    with pytest.raises(SelectedToolDenied):
+        OrdinaryGoalRule.require(permission, replace(assigned, state=PausedGoal()))
+    with pytest.raises(SelectedToolDenied):
+        OrdinaryGoalRule.require(permission, replace(assigned, state=BlockedGoal('stopped')))
 
 
 def test_order_revision_keeps_the_granted_authority():
@@ -70,5 +80,5 @@ def test_a_dead_permission_names_both_authorities_it_compared():
         OrdinaryGoalRule.require(permission, current)
     said = str(denial.value)
     assert str(completed.id) in said
-    assert 'in state completed' in said
+    assert f'in state {completed.state.display_label()}' in said
     assert f'the goal is now goal {current.id}' in said

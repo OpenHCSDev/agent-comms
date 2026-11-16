@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from agent_comms.instruction_bytes import InstructionBytes
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -93,6 +93,10 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
         if not self.may_become(nxt):
             raise ValueError(self.transition_refusal())
 
+    def continues_unassigned_turn(self) -> bool:
+        """Only an active first assignment keeps an accepted unassigned input working."""
+        return False
+
     def continues_turn_from(self, captured: GoalState) -> bool:
         """A running turn keeps its authority only while the state it was granted stands."""
         return self == captured
@@ -149,6 +153,9 @@ class ActiveGoal(Active, OpenGoal, FromOpenGoal):
 
     def continues_turn_from(self, captured: GoalState) -> bool:
         """An order or retry that makes the goal active never ends a running turn."""
+        return True
+
+    def continues_unassigned_turn(self) -> bool:
         return True
 
     def held_stop(self, text: str) -> tuple[str, ...]:
