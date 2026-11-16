@@ -39,6 +39,7 @@ from agent_comms.nominal.field_codec import (
     FieldCodec,
     MalformedRecord,
     MessageId,
+    WireName,
 )
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.rule_probes import Probe, ProbeContext
@@ -747,7 +748,8 @@ class RuleGateSettings(ConfigurationRecord):
                               Description("Require reading the supplied rules and papers")] = RequiredRuleCheckPolicy
     audit: Annotated[type[RuleCheckPolicy], RegisteredClassChoices(RuleCheckPolicy),
                      Description("Require a written audit; off keeps rules, papers and refreshes")] = RequiredRuleCheckPolicy
-    confirmation: Annotated[type[RuleCheckPolicy], RegisteredClassChoices(RuleCheckPolicy),
+    audit_confirmation: Annotated[type[RuleCheckPolicy], RegisteredClassChoices(RuleCheckPolicy),
+                                  WireName("confirmation"),
                             Description("Ask did you mean it after an audit; ignored when audit is off")] = RequiredRuleCheckPolicy
     read_batch: Annotated[int, Ge(1),
                           Description("Files opened together before answering the audit")] = 5
@@ -960,7 +962,7 @@ class Unmeant(Owed):
 
     @classmethod
     def policy(cls, record: DealRecord) -> type[RuleCheckPolicy]:
-        return record.audit.then(record.confirmation)
+        return record.audit.then(record.audit_confirmation)
 
     nudges: ClassVar[tuple[str, ...]] = (
         "I asked you something. answer me before anything else.",
@@ -1185,7 +1187,7 @@ class RuleDeal(State, DealtCalls):
 
         settled = self.meant.update(settle)
         meant = self.meant.read()
-        voice = record.audit.then(record.confirmation).voice(self.voice())
+        voice = record.audit.then(record.audit_confirmation).voice(self.voice())
         if settled is not None:
             voice.answered(*settled)
         if meant.open:
