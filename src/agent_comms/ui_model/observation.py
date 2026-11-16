@@ -154,10 +154,6 @@ class InterestRequest(TaggedRecordMember, ObservationRequest, declared_name=None
         service.interest.receive(self, service)
 
 
-class ObservationInterestStopped(RuntimeError):
-    """The observer still serves acquired reads but accepts no new interests."""
-
-
 class ObservationInterest(ABC):
     @abstractmethod
     def receive(self, request: InterestRequest, service: ObservationService) -> None: ...
@@ -178,7 +174,7 @@ class ObservationInterest(ABC):
 
 class StoppedObservationInterest(ObservationInterest):
     def receive(self, request: InterestRequest, service: ObservationService) -> None:
-        raise ObservationInterestStopped("The observer has stopped accepting interests")
+        raise RuntimeError("The observer has stopped accepting interests")
 
     def stop(self) -> ObservationInterest:
         return self
