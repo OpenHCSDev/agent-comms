@@ -11,7 +11,7 @@ import {randomBytes} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
-const modes=['threshold','overflow','manual','wip','policy','oversized'];
+const modes=['threshold','overflow','manual','wip','policy','oversized','preflight'];
 const mode=process.argv[2];
 if (mode === undefined) {
     for (const scenario of modes) {
@@ -24,6 +24,9 @@ assert.ok(modes.includes(mode));
 const pkg=process.env.PI_NATIVE_PACKAGE_DIR;
 assert.ok(pkg,'Prepared native package required');
 const requests=[];
+let summaryStarted,releaseSummary;
+const summaryEntered=new Promise(resolve=>{summaryStarted=resolve;});
+const summaryReleased=new Promise(resolve=>{releaseSummary=resolve;});
 let overflowSent=false;
 let replyCount=0;
 // The next input reads the completed response's reported usage.
@@ -42,6 +45,10 @@ const server=createServer(async(request,response)=>{
             message.content.reduce((chars,block)=>chars+(block.text?.length??0),0)),0);
     requests.push({summary,text,inputChars});
     if(summary){
+        if(mode==='preflight'){
+            summaryStarted();
+            await summaryReleased;
+        }
         response.writeHead(200,{'content-type':'text/event-stream'});
         return response.end(chunk('SUMMARY_FIXTURE',500));
     }
@@ -90,7 +97,7 @@ try {
     manager.appendModelChange(model.provider,model.id);
     // Old history (summarized) followed by a recent turn (kept). The last
     // assistant usage puts the context past Pi's threshold (window - reserve).
-    const used=(mode==='threshold'||mode==='wip') ? 90000 : (mode==='policy' ? 300001 : 30000);
+    const used=(mode==='threshold'||mode==='wip'||mode==='preflight') ? 90000 : (mode==='policy' ? 300001 : 30000);
     const statedLines='Now: adding an event class\nUncommitted: stack/patch test edits\nNext: run the focused tests';
     for(let turn=0;turn<4;turn++){
         const historyRepeats=mode==='oversized' ? 25000 : 1500;
@@ -119,7 +126,22 @@ try {
     const compactions=()=>[...manager.entryStore.branch(manager.getLeafId())].filter(entry=>entry.type==='compaction');
     const inputId=randomBytes(16).toString('hex');
     let result;
-    if(mode==='policy'){
+    if(mode==='preflight'){
+        const first=session.prompt('TRACKED_INPUT',{inputId});
+        await summaryEntered;
+        const followingId=randomBytes(16).toString('hex');
+        const following=session.prompt('FOLLOWING_INPUT',{
+            inputId:followingId,streamingBehavior:'followUp'});
+        // Let a wrongly concurrent preflight reach its local provider request.
+        await new Promise(resolve=>setImmediate(resolve));
+        releaseSummary();
+        await Promise.all([first,following]);
+        for(const id of [inputId,followingId]){
+            assert.equal(events.filter(event=>event.type==='input_committed'&&event.inputId===id).length,1,
+                'each distinct input is persisted once, never replayed');
+        }
+        assert.equal(session.isStreaming,false);
+    } else if(mode==='policy'){
         await session.prompt('ABOVE_OLD_CAP',{inputId:randomBytes(16).toString('hex')});
         assert.equal(compactions().length,0,'300k fits the model window without compaction');
         assert.ok(requests.at(-1).text.includes('OLD_FACT_0'),'the full session reached the model');

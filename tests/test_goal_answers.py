@@ -11,6 +11,7 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.coordination.errors import Refused
+from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.goal_turn_permit import NoLaunchPermit
 from agent_comms.execution.launch_runtime import LaunchRuntime
@@ -146,6 +147,47 @@ async def test_entered_attempt_settles_during_drain_but_retains_retarget_refusal
             assert gate.read() == held
         finally:
             gate.clear(held)
+
+
+def test_teammate_goal_assignment_keeps_the_callers_existing_launch(copied_goal_bus):
+    with goal_turn(copied_goal_bus, True) as account:
+        copied_goal_bus.registry.declare(NativeThread(
+            'teammate', frozenset(), Checkout(copied_goal_bus.root.parent),
+            process_identity=ProcessIdentity.capture(os.getpid())))
+        store = copied_goal_bus.goals.open_goal_store()
+        goal = copied_goal_bus.registry.require('worker').goal.require()
+        before = store.require_generation(goal.id)
+        assigned = copied_goal_bus.goals.update_goal(
+            'teammate', SetGoalAction(text='Independent teammate work'))
+        account.tool_ended(events.ToolEnd('set', 'comms_set_goal', True, 'assigned teammate'))
+        assert copied_goal_bus.registry.require('teammate').goal == assigned
+        assert not account.originated
+        assert store.require_generation(goal.id) == before
+        assert account.permit.claims[0].is_claimed(store)
+
+
+def test_failed_origin_reservation_does_not_record_or_cancel_an_unowned_attempt(copied_goal_bus):
+    with goal_turn(copied_goal_bus, True) as account:
+        unclaimed = replace(account, permit=NoLaunchPermit())
+        store = copied_goal_bus.goals.open_goal_store()
+        goal = copied_goal_bus.registry.require('worker').goal.require()
+        before = store.require_generation(goal.id)
+        with pytest.raises(UnresolvedAttemptError):
+            unclaimed._reserve_origin(account.owner, goal)
+        assert not unclaimed.originated
+        unclaimed.finish(EndedWithoutResult())
+        assert store.require_generation(goal.id) == before
+        assert account.permit.claims[0].is_claimed(store)
+
+
+def test_no_launch_permit_cannot_retire_ready_work(copied_goal_bus):
+    store = copied_goal_bus.goals.open_goal_store()
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
+    before = store.require_generation(goal_id)
+    NoLaunchPermit().fail_origin(store, goal_id)
+    assert store.require_generation(goal_id) == before
+    assert before.lifecycle == ReadyGeneration()
 
 
 def test_absent_goal_contains_no_actual_goals():

@@ -1,0 +1,28 @@
+--- a/dist/core/agent-session.js
++++ b/dist/core/agent-session.js
+@@ -1151,2 +1151,25 @@
+     async prompt(text, options) {
++        // A prompt owns preflight until it queues or starts its native run.
++        // Following prompts must not enter the same compaction concurrently.
++        const previous = this._promptPreflight;
++        let release;
++        const pending = new Promise(resolve => { release = resolve; });
++        this._promptPreflight = pending;
++        await previous;
++        try {
++            return await this._promptAdmitted(text, {
++                ...options,
++                preflightResult: success => {
++                    release();
++                    options?.preflightResult?.(success);
++                },
++            });
++        }
++        finally {
++            release();
++            if (this._promptPreflight === pending)
++                this._promptPreflight = undefined;
++        }
++    }
++    async _promptAdmitted(text, options) {
+         const expandPromptTemplates = options?.expandPromptTemplates ?? true;

@@ -136,10 +136,11 @@ class TurnGoalAccount(ProgressGoalAccount):
             self._record_origin_usage(permit)
 
     def _reserve_origin(self, owner: NativeThread, goal: Goal) -> LaunchPermit | None:
-        if goal.id in self.originated:
+        if goal.id in self.originated or any(
+            claim.reservation.goal_id == goal.id for claim in self.permit.claims
+        ):
             return None
         store = self.comms.goals.open_goal_store()
-        self.originated[goal.id] = NoLaunchPermit()
         generation = store.require_generation(goal.id)
         generation.lifecycle.require_ready()
         grant = self.comms.goals.ready_goal_grant_locked(
