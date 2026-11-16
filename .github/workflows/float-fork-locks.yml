@@ -1,0 +1,63 @@
+name: float-fork-locks
+
+# Keep the committed fork-main locks at their branch HEAD.
+#
+# Our own sibling packages (textual, toad, ui-theme, metaclass-registry,
+# nominal-refactor-advisor, python-introspect, ...) are declared `branch = "main"`,
+# but a uv.lock freezes a resolved commit. The installer and the client-imports
+# job float those pins to HEAD in a throwaway workspace and never write them back,
+# so the committed uv.lock / stack/uv.lock drift behind the fork mains. Every path
+# that syncs `--locked` without the float (worktree tests, a fresh checkout, the
+# nra-gate checker venvs) then builds against stale sibling code while the live
+# runtime runs HEAD -- a divergence that hides real breakage and wastes hours.
+#
+# This runs after every push to main and commits the float, so the committed locks
+# track HEAD continuously. A push made with GITHUB_TOKEN does not trigger another
+# workflow run, so the bump commit cannot loop.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: float-fork-locks
+  cancel-in-progress: false
+
+jobs:
+  float:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+      - name: Install the declared uv
+        run: |
+          python -m pip install packaging
+          python -m pip install "$(python -I src/agent_comms/installer/declared_uv.py pyproject.toml)"
+      - name: Sync the root project so agent_comms (and refresh_arguments) import
+        run: uv sync --locked
+      - name: Float every branch-tracking lock to its branch HEAD
+        # refresh_arguments emits one --upgrade-package per branch-tracking package; a lock with
+        # none (nothing declared `branch`) yields empty args, and we skip it rather than run a
+        # bare `uv lock` that would only churn hashes.
+        run: |
+          root_args=$(.venv/bin/python -I -m agent_comms.installer.refresh_arguments uv.lock)
+          [ -n "$root_args" ] && uv lock $root_args || echo "root uv.lock: no branch-tracking packages"
+          stack_args=$(.venv/bin/python -I -m agent_comms.installer.refresh_arguments stack/uv.lock)
+          [ -n "$stack_args" ] && uv lock --project stack $stack_args || echo "stack/uv.lock: no branch-tracking packages"
+      - name: Commit the bump if any lock moved
+        run: |
+          if git diff --quiet -- uv.lock stack/uv.lock; then
+            echo "Committed locks already at fork-main HEAD; nothing to float."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add uv.lock stack/uv.lock
+          git commit -m "chore(lock): float fork-main packages to branch HEAD"
+          # main advanced since checkout (a near-simultaneous merge): rebase onto it and retry once.
+          git push || { git pull --rebase origin main && git push; }
