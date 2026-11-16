@@ -96,9 +96,11 @@ from agent_comms.projects.head_review import (
 )
 from agent_comms.projects.work_branches import WorkBranchError
 from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.team.pi_rule_gate import PiThreadGate
 from agent_comms.team.team_hud import TeamFrame, TeamHud, TeamLoad
 from agent_comms.team.team_hud_records import Teammate, TeammateDetail, TeamOrderDetail
 from agent_comms.transcript.transcripts import TranscriptRead
+from agent_comms.transport.native_tools import CommunicationCall
 from agent_comms.transport.request import tool_field
 from agent_comms.transport.runtime_server import AttachedRuntimeRequestContext
 from agent_comms.transport.serving.served_requests import OwnedRead, OwnerLiveRead
@@ -785,14 +787,17 @@ class CommsEmergencyReleaseTool(ThreadToolRequest, declared_name="comms_emergenc
     line. The rules stay; only the current pile and the current holds go, and the pull is
     posted under the puller's name, so a cheat is caught in the open."""
 
+    native_call = CommunicationCall
     label = "Emergency release"
     description = (
-        "The team's emergency stop, open to every teammate: lift every chokehold and waive every "
+        "The team's emergency stop, open even while tools are locked: disable your session's "
+        "rule gate, lift every chokehold and waive every "
         "unjudged edit as of now. Posts the pull to #comms under your name; waived edits are "
         "neither approved nor struck, and new edits and vibe checks count again afterwards.")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> EmergencyReleased:
         actor = caller.identity(comms)
+        PiThreadGate.of(comms, comms.registry.require(actor.name)).disable()
         waived: list[WaivedEdits] = []
         unreadable: list[UnavailableOrderEdits] = []
         verdicts: list[JudgedCall] = []
@@ -814,7 +819,10 @@ class CommsEmergencyReleaseTool(ThreadToolRequest, declared_name="comms_emergenc
         held = tuple(thread.incarnation for thread in comms.registry.snapshot().threads.values()
                      if any(goal.state.lifts_on_compliance for goal in thread.goal))
         release = EmergencyRelease(held, tuple(waived), tuple(unreadable))
-        notice = comms.messaging.send(caller.name, CommsTag.channel(), release.text(caller.name)).message
+        notice = comms.messaging.send(
+            caller.name, CommsTag.channel(),
+            release.text(caller.name) + " The caller's session rule gate is off; saved evidence stays.",
+        ).message
         for identity in held:
             comms.goals.update_goal(identity.name, CompliedGoalAction(witness=notice.message_id),
                                     actor=OwnerInvocable)

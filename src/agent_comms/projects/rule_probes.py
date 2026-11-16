@@ -112,6 +112,11 @@ class Probe(DeclaredFamily, affix="Probe"):
         """The answer's own words, which the no-reuse check reads."""
 
     @classmethod
+    def requirement(cls) -> type[Probe]:
+        """The question this answer settles; an alternative names the original question."""
+        return cls
+
+    @classmethod
     def applies(cls, owner_words: tuple[str, ...]) -> bool:
         """Whether a deal with these recorded prompts can ask this probe."""
         return True
@@ -126,7 +131,7 @@ class Probe(DeclaredFamily, affix="Probe"):
     def missing(
         cls, answers: Iterable[Probe], owner_words: tuple[str, ...],
     ) -> tuple[type[Probe], ...]:
-        given = {type(answer) for answer in answers}
+        given = {answer.requirement() for answer in answers}
         return tuple(probe for probe in cls.owed(owner_words) if probe not in given)
 
 
@@ -162,7 +167,8 @@ class PriorProbe(Probe):
 @dataclass(frozen=True)
 class HuntProbe(Slop, Probe):
     question = ("One restated fact in the code you are about to edit, as its formal statement"
-                " (pattern, fact, at, derive, by), with at and by as path:line in a checkout.")
+                " (pattern, fact, at, derive, by), with at and by as path:line in a checkout."
+                " If no source edit is planned, use probe=no_edits_hunt with a reason instead.")
 
     def fault(self, context: ProbeContext) -> str:
         missing = [line.to_wire() for line in (self.at, *self.by.cited())
@@ -176,6 +182,30 @@ class HuntProbe(Slop, Probe):
 
     def text(self) -> str:
         return self.fact
+
+
+@dataclass(frozen=True)
+class NoEditsHuntProbe(Probe):
+    """A non-editing task has no source finding to invent."""
+
+    question = HuntProbe.question
+    reason: str
+
+    @classmethod
+    def requirement(cls) -> type[Probe]:
+        return HuntProbe
+
+    @classmethod
+    def applies(cls, owner_words: tuple[str, ...]) -> bool:
+        return False
+
+    def fault(self, context: ProbeContext) -> str:
+        if not self.reason.strip():
+            return "name the non-editing task"
+        return context.copied(self.reason)
+
+    def text(self) -> str:
+        return self.reason
 
 
 @dataclass(frozen=True)
