@@ -173,6 +173,8 @@ context_budget=node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
     "$stage/node_modules/@earendil-works/pi-coding-agent/$context_budget"
 "$python" "$native_root/patch-native-request-observation.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
+patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
+    -d "$native_package" < "$native_root/native-prompt-preflight.patch"
 "$python" "$native_root/prepare-native-import-boundary.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent" \
     ${PI_MCP_DEPENDENCY_PACKAGE:+"$PI_MCP_DEPENDENCY_PACKAGE"}

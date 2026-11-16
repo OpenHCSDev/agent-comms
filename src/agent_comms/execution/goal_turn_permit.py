@@ -82,7 +82,4 @@ class NoLaunchPermit(GoalTurnPermit):
         return context
 
     def fail_origin(self, store: GoalAttemptStore, goal_id: GoalId) -> None:
-        generation = store.snapshot(goal_id)
-        if generation and generation.lifecycle.allows_resume(True):
-            store.retire_goal(goal_id, expected_generation=generation.number,
-                              attempt_id=generation.attempt_id)
+        """Without a launch claim, this turn has no attempt to fail or goal to retire."""
