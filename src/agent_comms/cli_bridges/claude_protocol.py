@@ -50,7 +50,7 @@ from agent_comms.cli_bridges.runtime_updates import (
     TurnEnded,
     TurnStarted,
 )
-from agent_comms.cli_bridges.session_receipts import SessionReceipts
+from agent_comms.cli_bridges.session_ledger import SessionLedger
 from agent_comms.cli_bridges.shared import (
     MONITOR_FRAME,
     ConfirmedDelivery,
@@ -618,8 +618,8 @@ class ClaudeRecord(TaggedWire, HistoryRecord, affix=""):
         """Where this record says its agent stands; metadata and notices say nothing."""
         return ()
 
-    def tally(self, receipts: SessionReceipts) -> None:
-        """What this record adds to the session's receipts; most records add nothing."""
+    def tally(self, ledger: SessionLedger) -> None:
+        """What this record adds to the session's ledger; most records add nothing."""
 
 
 class AssistantBlock(TaggedWire, ABC, affix="", declared_name=None):
@@ -639,8 +639,8 @@ class AssistantBlock(TaggedWire, ABC, affix="", declared_name=None):
         """The words this block shows the reader; a tool call or hidden reasoning shows none."""
         return ()
 
-    def tally(self, receipts: SessionReceipts) -> None:
-        receipts.said(self.said())
+    def tally(self, ledger: SessionLedger) -> None:
+        ledger.said(self.said())
 
     def subagent_progress(self, record: TimedRecord) -> tuple[SubagentProgress, ...]:
         """Reasoning decides nothing: the text or call it precedes does."""
@@ -712,8 +712,8 @@ class ToolUse(AssistantBlock, declared_name='tool_use'):
     name: str
     input: dict[str, JsonValue]
 
-    def tally(self, receipts: SessionReceipts) -> None:
-        receipts.called(str(self.id), self.name)
+    def tally(self, ledger: SessionLedger) -> None:
+        ledger.called(str(self.id), self.name)
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         call = self.call()
@@ -755,9 +755,9 @@ class AssistantRecord(ClaudeRecord, TimedRecord, declared_name='assistant'):
     def said(self) -> tuple[str, ...]:
         return tuple(words for block in self.message.content for words in block.said())
 
-    def tally(self, receipts: SessionReceipts) -> None:
+    def tally(self, ledger: SessionLedger) -> None:
         for block in self.message.content:
-            block.tally(receipts)
+            block.tally(ledger)
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         """Claude can answer with no prompt record of its own, right after the last turn's
@@ -913,7 +913,7 @@ class UserBlock(TaggedWire, ABC, affix=""):
     def ends_turn(self) -> bool:
         return False
 
-    def tally(self, receipts: SessionReceipts) -> None:
+    def tally(self, ledger: SessionLedger) -> None:
         """A prompt's words are not the session's."""
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
@@ -1072,8 +1072,8 @@ class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
     content: list[Declared[ResultPart]]
     is_error: bool = False
 
-    def tally(self, receipts: SessionReceipts) -> None:
-        receipts.resulted(str(self.tool_use_id), self.is_error)
+    def tally(self, ledger: SessionLedger) -> None:
+        ledger.resulted(str(self.tool_use_id), self.is_error)
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.tool_result(
@@ -1119,9 +1119,9 @@ class UserRecord(Originated, PromptRecord, declared_name='user'):
     def prompt_text(self) -> str:
         return self.message.text()
 
-    def tally(self, receipts: SessionReceipts) -> None:
+    def tally(self, ledger: SessionLedger) -> None:
         for block in self.message.content:
-            block.tally(receipts)
+            block.tally(ledger)
 
     def subagent_progress(self) -> tuple[SubagentProgress, ...]:
         return tuple(progress for block in reversed(self.message.content)

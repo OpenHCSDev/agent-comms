@@ -14,13 +14,17 @@ from functools import cached_property
 from typing import (
     ClassVar,
     Self,
+    cast,
 )
 
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.cli_bridges.shared import Binding
 from agent_comms.comms import Comms
+from agent_comms.messaging.channel_targets import ThreadTarget
+from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.task_attachments.owner_notices import GoalWakeNotice
 from agent_comms.team.rule_deal import MeantStore, RuleDeal, SessionAudit
 from agent_comms.team.standing import UnownedWheelSpin
 from agent_comms_hooks import ClaudeTranscriptHook, HookRecord
@@ -198,6 +202,11 @@ class StopHook(ClaudeTranscriptHook):
     def idle(self) -> ReadIdle:
         return ReadIdle.read(self.comms, self.binding)
 
+    @cached_property
+    def idle_turns(self) -> int:
+        """Turns in a row that changed nothing, read once per stop from the transcript tail."""
+        return ClaudeJsonLines().ledger(self.tail()).idle_turns
+
     def reply(self) -> str:
         """The text of the reply that ends the turn: what the model said after its last act."""
         said: list[str] = []
@@ -216,10 +225,16 @@ class StopHook(ClaudeTranscriptHook):
         thread = snapshot.born(self.binding.owner.require_recorded().lookup)
         deaf_watch = WatchClaim(self.session_id).deaf()
         deaf = (deaf_watch.line(),) if deaf_watch is not None else ()
-        # The bus goal is the session's goal: while it is active the turn does not end,
-        # background jobs or not. stop_hook_active lets the following stop through.
+        # The bus goal is the session's goal: while it is active the turn keeps going. The kick
+        # rides the Ready edge this stop hook already sits on, sent as a bus message the watch
+        # reader delivers and the owner sees on the bus — not a local stop-block a bridged
+        # harness drops, and not Core's heartbeat. It stops after idle_turns_asked turns in a row
+        # that changed nothing, so an idle session goes quiet instead of spinning.
         held = tuple(reason for goal in thread.goal for reason in goal.held_stop())
-        if reasons := (*deaf, *self.deferred(), *held):
+        if held and self.idle_turns < self.idle_turns_asked:
+            GoalWakeNotice().publish(
+                cast(Messaging, self.comms.messaging), ThreadTarget(thread.name), "\n".join(held))
+        if reasons := (*deaf, *self.deferred()):
             self.output.line(json.dumps({"decision": "block", "reason": "\n".join(reasons)}))
 
     def deferred(self) -> tuple[str, ...]:
@@ -240,7 +255,6 @@ class StopHook(ClaudeTranscriptHook):
         session answering, not idling."""
         if MeantStore(self.stem.with_suffix(".meant")).read().open:
             return
-        receipts = ClaudeJsonLines().receipts(self.tail())
-        if receipts.idle_turns >= self.idle_turns_asked:
+        if self.idle_turns >= self.idle_turns_asked:
             audit = SessionAudit.read(RuleDeal.audit_beside(self.stem))
             yield audit.his_question(audit.answered_probes())

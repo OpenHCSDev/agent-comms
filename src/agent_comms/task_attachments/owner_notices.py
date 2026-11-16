@@ -61,6 +61,15 @@ class RestartNotice(OwnerNotice, declared_name="restart_notice"):
 
 
 @dataclass(frozen=True)
+class GoalWakeNotice(OwnerNotice, declared_name="goal_wake"):
+    """At a turn's end the session whose goal is still active is woken to keep working it. The
+    kick rides the Ready edge the session's own stop hook already sits on, as a bus message the
+    watch reader delivers and the owner sees on the bus, not Core's heartbeat and not a local
+    stop-block a bridged harness drops. It lands as his own line; the hook stops sending it after
+    a few turns in a row that changed nothing, so an idle session goes quiet instead of spinning."""
+
+
+@dataclass(frozen=True)
 class OrderNotice(OwnerNotice, declared_name="order_notice"):
     """Core's own word to a holder about its order (an unowned order given to it, its branch
     behind main): Core acts, so no teammate is made its sender."""

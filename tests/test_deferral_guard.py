@@ -116,14 +116,15 @@ def test_transcript_members_and_unknowns_keep_their_reply_behavior(
     assert answer.ends_reply is ends_reply
 
 
-def test_an_active_bus_goal_holds_the_stop_with_its_own_text(stop_binding, tmp_path):
+def test_an_active_bus_goal_wakes_the_session_by_a_bus_message(stop_binding, tmp_path):
     stop_binding.comms.goals.update_goal("claude-code", SetGoalAction(text="Land the scoped relayout"))
     finished = [RESULT, assistant(text("Tests are running in the background."))]
-    decision = json.loads(stop(stop_binding, tmp_path, finished).stdout)
-    assert decision["decision"] == "block"
-    assert "Land the scoped relayout" in decision["reason"]
-    # The stop the goal sent back goes through: it holds once per stop, never loops.
-    assert stop(stop_binding, tmp_path, finished, active=True).stdout == ""
+    result = stop(stop_binding, tmp_path, finished)
+    # The goal no longer holds the stop with a local block a bridged harness would drop; the kick
+    # rides the Ready edge as a bus message the session's watch reader delivers and the owner sees.
+    assert result.stdout == ""
+    pending = stop_binding.comms.bus.pending_count("claude-code")
+    assert pending >= 1, "an active goal publishes a wake message to the session"
 
 
 def test_a_stop_already_sent_back_passes(stop_binding, tmp_path):
