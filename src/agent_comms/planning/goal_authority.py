@@ -16,6 +16,9 @@ class GoalTurnAuthority(SubclassUnion, affix=""):
     def continues(self, captured: GoalAuthority) -> bool:
         return False
 
+    def continues_unassigned_turn(self) -> bool:
+        return False
+
     @abstractmethod
     def describe(self) -> str:
         """This authority in the words a refusal reads back to the model."""
@@ -23,7 +26,13 @@ class GoalTurnAuthority(SubclassUnion, affix=""):
 
 @dataclass(frozen=True)
 class NoGoalAuthority(NullMember, GoalTurnAuthority):
-    """Clearing an assignment leaves an already accepted input free to continue."""
+    """An accepted unassigned input survives assignment; clearing removes restrictions."""
+
+    def keeps_turn_under(self, current: GoalTurnAuthority) -> bool:
+        return current.continues_unassigned_turn()
+
+    def continues_unassigned_turn(self) -> bool:
+        return True
 
     def continues(self, captured: GoalAuthority) -> bool:
         return True
@@ -38,7 +47,8 @@ class GoalAuthority(RecordMember, GoalTurnAuthority):
 
     Assigning or replacing a problem order revises the goal but keeps its authority, and an
     order or retry that makes the same goal active keeps a running turn; pausing, completing,
-    blocking or replacing the goal ends it. Clearing the goal removes that restriction.
+    blocking or replacing the goal ends it. A first active assignment keeps an unassigned
+    turn working. Clearing the goal removes that restriction.
     """
 
     goal_id: GoalId
@@ -50,6 +60,9 @@ class GoalAuthority(RecordMember, GoalTurnAuthority):
 
     def continues(self, captured: GoalAuthority) -> bool:
         return self.goal_id == captured.goal_id and self.state.continues_turn_from(captured.state)
+
+    def continues_unassigned_turn(self) -> bool:
+        return self.state.continues_unassigned_turn()
 
     def describe(self) -> str:
         return f"goal {self.goal_id} in state {self.state.display_label()}"
