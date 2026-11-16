@@ -105,7 +105,7 @@ def transcript_line(kind, content):
     }).encode()
 
 
-def test_the_receipts_read_what_a_transcript_shows_the_session_did():
+def test_the_ledger_reads_what_a_transcript_shows_the_session_did():
     import json
 
     from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
@@ -117,23 +117,23 @@ def test_the_receipts_read_what_a_transcript_shows_the_session_did():
         {"type": "tool_result", "tool_use_id": call, "is_error": error, "content": [{"type": "text", "text": "r"}]}])
     prompt = json.dumps({"type": "system", "subtype": "turn_duration", "uuid": "00000000-0000-4000-8000-000000000001", "cwd": "/w",
                          "version": "1", "timestamp": "2026-10-31T04:00:00.000Z", "durationMs": 1}).encode()
-    receipts = ClaudeJsonLines().receipts([
+    ledger = ClaudeJsonLines().ledger([
         said("reading it"), called("toolu_1", "Bash"), result("toolu_1"), said("did the work"), prompt,
         called("toolu_2", "Read"), result("toolu_2"), said("Skipped"), prompt,
         called("toolu_3", "Bash"), result("toolu_3", error=True), said("Yes, I meant it\nsecond line"),
     ])
-    assert [ending.words for ending in receipts.endings] == [
+    assert [ending.words for ending in ledger.endings] == [
         "did the work", "Skipped", "Yes, I meant it\nsecond line"]
-    assert receipts.idle_turns == 2  # a refused call changed nothing, and neither did a read
+    assert ledger.idle_turns == 2  # a refused call changed nothing, and neither did a read
     typed = json.dumps({**json.loads(transcript_line("user", "are you stalling?")),
                         "origin": {"kind": "human"}}).encode()
     fed_back = transcript_line("user", "Stop hook feedback: did you mean it?")
     talking = [said("Skipped"), prompt, said("Skipped"), prompt, said("Skipped"), prompt]
-    assert ClaudeJsonLines().receipts(talking).idle_turns == 3
+    assert ClaudeJsonLines().ledger(talking).idle_turns == 3
     # He typed, so the turns before his words are behind him; a hook's own line is not his.
-    assert ClaudeJsonLines().receipts([*talking, typed, said("6")]).idle_turns == 1
-    assert ClaudeJsonLines().receipts([*talking, fed_back, said("Yes")]).idle_turns == 4
-    assert ClaudeJsonLines().receipts(
+    assert ClaudeJsonLines().ledger([*talking, typed, said("6")]).idle_turns == 1
+    assert ClaudeJsonLines().ledger([*talking, fed_back, said("Yes")]).idle_turns == 4
+    assert ClaudeJsonLines().ledger(
         [*talking, typed, said("6"), prompt, said("Skipped"), prompt, said("Skipped")]).idle_turns == 3
     # A call that changed something counts before the words that end its turn are written.
-    assert ClaudeJsonLines().receipts([*talking, called("toolu_4", "Bash"), result("toolu_4")]).idle_turns == 0
+    assert ClaudeJsonLines().ledger([*talking, called("toolu_4", "Bash"), result("toolu_4")]).idle_turns == 0

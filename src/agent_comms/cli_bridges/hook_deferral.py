@@ -205,7 +205,7 @@ class StopHook(ClaudeTranscriptHook):
     @cached_property
     def idle_turns(self) -> int:
         """Turns in a row that changed nothing, read once per stop from the transcript tail."""
-        return ClaudeJsonLines().receipts(self.tail()).idle_turns
+        return ClaudeJsonLines().ledger(self.tail()).idle_turns
 
     def reply(self) -> str:
         """The text of the reply that ends the turn: what the model said after its last act."""

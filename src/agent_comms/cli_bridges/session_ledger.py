@@ -19,7 +19,7 @@ class TurnEnding:
 
 
 @dataclass
-class SessionReceipts:
+class SessionLedger:
     """A fold over transcript records, oldest first. A reply followed by a call did not end its
     turn, so its words stay pending until the turn's end or the transcript's end confirms them."""
 

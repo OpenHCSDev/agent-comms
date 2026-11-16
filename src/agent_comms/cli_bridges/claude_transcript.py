@@ -26,7 +26,7 @@ from agent_comms.cli_bridges.history import (
     OnlineHistory,
 )
 from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate, SessionFacts
-from agent_comms.cli_bridges.session_receipts import SessionReceipts
+from agent_comms.cli_bridges.session_ledger import SessionLedger
 from agent_comms.cli_bridges.shared import WireReference
 from agent_comms.cli_bridges.wire_models import WireModel
 from agent_comms.messaging.message_reference import MessageReference
@@ -47,18 +47,18 @@ class ClaudeJsonLines(JsonLines[ClaudeRecord]):
     def decode_line(self, raw: bytes, position: int) -> ClaudeRecord:
         return self.records.validate_python({**json.loads(raw), 'position': position})
 
-    def receipts(self, lines: Iterable[bytes]) -> SessionReceipts:
+    def ledger(self, lines: Iterable[bytes]) -> SessionLedger:
         """What these whole transcript lines show the session did, oldest first."""
-        receipts = SessionReceipts()
+        ledger = SessionLedger()
         for position, raw in enumerate(lines):
             record = self.decode_line(raw, position)
             for _ in record.owner_words():
-                receipts.spoken_to()
-            record.tally(receipts)
+                ledger.spoken_to()
+            record.tally(ledger)
             if record.ends_turn():
-                receipts.turn_ended()
-        receipts.turn_ended()
-        return receipts
+                ledger.turn_ended()
+        ledger.turn_ended()
+        return ledger
 
     def opening_before(self, stream: BinaryIO, boundary: int) -> int:
         """Recover the actual opening, including every prompt folded into that occurrence."""
