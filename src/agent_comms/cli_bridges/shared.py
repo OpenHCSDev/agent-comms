@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import inspect
 import io
 import json
 import os
@@ -28,11 +29,14 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar, cast
+from typing import (
+    TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar, cast, get_args,
+    get_origin,
+)
 
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
-from agent_comms.agent_runtime import ExternalRuntime, PublishesTranscript
+from agent_comms.agent_runtime import ExternalRuntime
 from agent_comms.cli_bridges.cli_arguments import CliArguments
 from agent_comms.cli_bridges.cli_protocol import CoreError, EarlierItems, TaggedWire
 from agent_comms.cli_bridges.harness_delivery_states import (
@@ -598,12 +602,11 @@ class Options:
 
 
 BridgeOptions = TypeVar("BridgeOptions", bound=Options)
-OperationBridge = TypeVar("OperationBridge", bound="CliBridge")
 
 
 @dataclass(frozen=True)
-class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
-    """A decoded CLI command owns its execution."""
+class Operation[OperationBridge: CliBridge](DeclaredOptions, ABC):
+    """A decoded CLI command owns its execution, on the bridge its type parameter names."""
 
     help: ClassVar[str]
     """The one line `--help` shows; every offered command declares it."""
@@ -632,18 +635,30 @@ class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
         """Most operations have no runtime successor."""
 
     @classmethod
-    def serves(cls, bridge: type[CliBridge]) -> bool:
-        """Whether this command runs on that bridge; every bridge sends."""
-        return True
+    def served_bridge(cls) -> type[CliBridge]:
+        """The bridge this command's `Operation` parameter names; a parameter left open
+        names its bound, so `Send` serves every bridge and `Serve` every line monitor."""
+        served: type[CliBridge] | TypeVar = next(
+            get_args(base)[0]
+            for declaring in cls.__mro__
+            for base in vars(declaring).get('__orig_bases__', ())
+            if isinstance(origin := get_origin(base), type) and issubclass(origin, Operation)
+        )
+        if not isinstance(served, TypeVar):
+            return served
+        bound: type[CliBridge] | None = served.__bound__
+        if bound is None:
+            raise TypeError(f'{cls.__name__} leaves its bridge open without a bound')
+        return bound
 
     @classmethod
     def offered(cls, bridge: type[CliBridge]) -> tuple[type[Operation], ...]:
-        """The commands a bridge's CLI takes, derived from what the bridge can do."""
+        """The commands a bridge's CLI takes: every concrete command whose bridge it is."""
         pending, offered = list(cls.__subclasses__()), []
         while pending:
             operation = pending.pop(0)
             pending.extend(operation.__subclasses__())
-            if operation.serves(bridge):
+            if not inspect.isabstract(operation) and issubclass(bridge, operation.served_bridge()):
                 offered.append(operation)
         return tuple(offered)
 
@@ -657,21 +672,18 @@ class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class Send(SendRequest, Operation[OperationBridge]):
-    async def execute(self, bridge: OperationBridge) -> None:
+class Send[SendBridge: CliBridge](SendRequest, Operation[SendBridge]):
+    async def execute(self, bridge: SendBridge) -> None:
         request = replace(self, sender=bridge.binding.bus)
         await bridge.show_sent(await bridge.comms.bus.when_open(
             partial(request.sent, bridge.comms)))
 
 
-class Inbox(Operation[OperationBridge]):
-    help = "Deliver this binding's bus messages to its harness until stopped"
-    @classmethod
-    def serves(cls, bridge: type[CliBridge]) -> bool:
-        """Delivery alone, without the transcript that confirms it on some bridges."""
-        return not issubclass(bridge, TranscriptConfirmsDelivery)
+class Delivery[DeliveryBridge: CliBridge](Operation[DeliveryBridge], ABC):
+    """Delivering this binding's bus messages to its harness until stopped, under its watch
+    claim; `Inbox` and `Watch` differ in how they run it and on which bridges."""
 
-    async def start(self, bridge: OperationBridge, tasks: asyncio.TaskGroup,
+    async def start(self, bridge: DeliveryBridge, tasks: asyncio.TaskGroup,
                     endpoint: ExitStack) -> None:
         bridge.session_process().require_alive()
         registry = await asyncio.to_thread(
@@ -684,10 +696,17 @@ class Inbox(Operation[OperationBridge]):
                 record: WatchRecord) -> AbstractContextManager[HeldClaim]:
         return claim.held(record)
 
-    def keep(self, bridge: OperationBridge, held: HeldClaim) -> None:
+    def keep(self, bridge: DeliveryBridge, held: HeldClaim) -> None:
         """Only a session-owned serve has a successor to keep its claim for."""
 
-    async def execute(self, bridge: OperationBridge) -> None:
+
+class Inbox[InboxBridge: DirectDeliveryBridge](Delivery[InboxBridge]):
+    """Delivery alone: only a bridge whose harness takes each delivery itself can skip the
+    transcript that confirms it."""
+
+    help = "Deliver this binding's bus messages to its harness until stopped"
+
+    async def execute(self, bridge: InboxBridge) -> None:
         await bridge.registered_watch(self)
 
 
@@ -721,42 +740,34 @@ class NoChannelSource(AbsentText, BindingChannels):
 
 
 @dataclass(frozen=True)
-class Watch(Inbox):
+class Watch[WatchBridge: TranscriptBridge](Delivery[WatchBridge]):
     help = "Deliver this binding's bus messages and publish its harness transcript to the bus"
 
     channels_from: Annotated[
         BindingChannels, field_codec.Argument(flags=("--channels-from",))
     ] = NoChannelSource()
 
-    @classmethod
-    def serves(cls, bridge: type[CliBridge]) -> bool:
-        return issubclass(bridge, PublishesTranscript)
-
-    async def execute(self, bridge: OperationBridge) -> None:
+    async def execute(self, bridge: WatchBridge) -> None:
         await bridge.watch_operation(self)
 
     async def register(self, bridge: CliBridge) -> None:
         if not bridge.comms.registry.snapshot().taken(bridge.address.bus):
             await self.channels_from.register(bridge)
 
-    async def start(self, bridge: TranscriptBridge, tasks: asyncio.TaskGroup,
+    async def start(self, bridge: WatchBridge, tasks: asyncio.TaskGroup,
                     endpoint: ExitStack) -> None:
         await super().start(bridge, tasks, endpoint)
         tasks.create_task(bridge.publish_transcript())
 
 
 @dataclass(frozen=True, kw_only=True)
-class Serve(Watch):
+class Serve[ServeBridge: LineMonitorBridge](Watch[ServeBridge]):
     help = "The session bridge process that connect and the SessionStart hook launch; not run by hand"
     owner: Annotated[
         ProcessIdentity,
         field_codec.Argument(flags=("--owner",), options={"type": FieldCodec.parse}),
     ]
     transcript: Annotated[Path, PathText, field_codec.Argument(flags=("--transcript",))]
-
-    @classmethod
-    def serves(cls, bridge: type[CliBridge]) -> bool:
-        return issubclass(bridge, LineMonitorBridge)
 
     def transcript_source(self) -> Path:
         return self.transcript
@@ -775,7 +786,7 @@ class Serve(Watch):
         """The same owner's serve, holding this one's claim across exec."""
         return ResumedServe(owner=self.owner, transcript=self.transcript, claim=claim)
 
-    def keep(self, bridge: LineMonitorBridge, held: HeldClaim) -> None:
+    def keep(self, bridge: ServeBridge, held: HeldClaim) -> None:
         bridge.retirement = bridge.retirement.keeping(held)
 
     @classmethod
@@ -839,16 +850,16 @@ class Serve(Watch):
             bridges.append(SessionBridge(claim, observed))
         return tuple(sorted(bridges, key=lambda bridge: bridge.claim.thread))
 
-    def retired(self, bridge: LineMonitorBridge) -> None:
+    def retired(self, bridge: ServeBridge) -> None:
         bridge.retirement.finish(self, bridge.watch_record(bridge.binding))
 
-    async def execute(self, bridge: LineMonitorBridge) -> None:
+    async def execute(self, bridge: ServeBridge) -> None:
         if self.transcript.stem != bridge.binding.thread:
             raise ValueError('The live transcript belongs to another Claude session')
         self.owner.require_alive()
         await bridge.registered_watch(self)
 
-    async def start(self, bridge: LineMonitorBridge, tasks: asyncio.TaskGroup,
+    async def start(self, bridge: ServeBridge, tasks: asyncio.TaskGroup,
                     endpoint: ExitStack) -> None:
         await super().start(bridge, tasks, endpoint)
         tasks.create_task(MonitorService(bridge, self.owner, bridge.stop).run())
@@ -1122,14 +1133,10 @@ class ReleasedSessionBridge(ConfirmableBridge):
         return ResumedBridge(claim.thread, observed.runtime, current.runtime)
 
 
-class Enrol(Operation):
+class Enrol[EnrolBridge: LineMonitorBridge](Operation[EnrolBridge]):
     help = "Record this session's binding without starting its bridge; the next SessionStart starts it"
     reported: ClassVar[str] = (
         'Session binding enrolled; the next SessionStart starts the bridge. Monitor runs watch.')
-
-    @classmethod
-    def serves(cls, bridge: type[CliBridge]) -> bool:
-        return issubclass(bridge, LineMonitorBridge)
 
     async def prepare(self, bridge: CliBridge) -> None:
         """Enrolment leaves registration and the durable binding to SessionStart."""
@@ -1310,7 +1317,7 @@ class CliBridge(
         where its bridge was started."""
         return Checkout(Path.cwd())
 
-    async def registered_watch(self, operation: Inbox) -> None:
+    async def registered_watch(self, operation: Delivery) -> None:
         with ExitStack() as endpoint:
             with operation.claimed(WatchClaim(self.binding.thread), self.watch_record(self.binding)) as held:
                 try:
@@ -1558,6 +1565,11 @@ class TranscriptBridge(PublishesToBus, CliBridge[BridgeOptions]):
     @property
     def transcript_thread(self) -> str:
         return self.binding.bus
+
+
+class DirectDeliveryBridge(TranscriptBridge[BridgeOptions]):
+    """A bridge whose harness takes each delivery itself, so no transcript has to confirm it
+    and `Inbox` can deliver without publishing one."""
 
 
 WireReference = InstanceOf[

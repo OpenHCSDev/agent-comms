@@ -39,6 +39,7 @@ from agent_comms.cli_bridges.shared import (
     Options,
     SessionBinding,
     SuppliedSession,
+    DirectDeliveryBridge,
     TranscriptBridge,
     Watch,
     run_bridge,
@@ -85,28 +86,6 @@ class AttachedBinding(GivenBinding):
     def from_arguments(cls, arguments: CliArguments, bridge: type[CliBridge]) -> Self:
         arguments.binding_thread = GivenThread(f'opencode-{arguments.binding_session.session}')
         return super().from_arguments(arguments, bridge)
-
-
-@dataclass(frozen=True)
-class Attach(Watch):
-    """The selected native session owns its Core thread and bridge child."""
-
-    help = "Attach the running OpenCode session to its bus thread and deliver to it"
-    binding_session = SuppliedSession
-    binding_request = AttachedBinding
-
-    @classmethod
-    def serves(cls, bridge: type[CliBridge]) -> bool:
-        return issubclass(bridge, OpenCodeBridge)
-
-    @classmethod
-    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        parser.add_argument('--pid', type=int, required=True)
-
-    @classmethod
-    def from_arguments(cls, arguments: argparse.Namespace) -> Self:
-        arguments.root = str(wire(vars(arguments).get('root')).root)
-        return super().from_arguments(arguments)
 
 
 class OpenCodeConnection:
@@ -221,7 +200,7 @@ class OpenCodeServer(OpenCodeHistory, OnlineHistory):
         yield await connection.status()
 
 
-class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions]):
+class OpenCodeBridge(OpenCodeServer, DirectDeliveryBridge[OpenCodeOptions]):
     state_directory = Path('.local/state/opencode-comms-inbox')
     query = {'limit': '20'}  # A restarted bridge publishes again only the newest messages.
 
@@ -266,6 +245,24 @@ class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions]):
     async def report_failure(self, text: str) -> None:
         async with self.connection() as connection:
             await connection.toast(Toast(message=text, variant='error'))
+
+
+@dataclass(frozen=True)
+class Attach(Watch[OpenCodeBridge]):
+    """The selected native session owns its Core thread and bridge child."""
+
+    help = "Attach the running OpenCode session to its bus thread and deliver to it"
+    binding_session = SuppliedSession
+    binding_request = AttachedBinding
+
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument('--pid', type=int, required=True)
+
+    @classmethod
+    def from_arguments(cls, arguments: argparse.Namespace) -> Self:
+        arguments.root = str(wire(vars(arguments).get('root')).root)
+        return super().from_arguments(arguments)
 
 
 def main() -> None:

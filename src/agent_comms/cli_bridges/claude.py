@@ -70,13 +70,9 @@ class ClaudeBridge(RecentClaudeWindow, ClaudeHistory, LineMonitorBridge):
                         yield update
 
 
-class Connect(ConnectCommand, Enrol):
+class Connect(ConnectCommand, Enrol[ClaudeBridge]):
     help = "Bind this running Claude session to a bus thread and start its bridge now"
     reported = 'Session bridge running and ready. Run watch under Monitor to receive.'
-
-    @classmethod
-    def serves(cls, bridge: type) -> bool:
-        return issubclass(bridge, ClaudeBridge)
 
     def begin(self, bridge: LineMonitorBridge) -> None:
         """Serve.launch raises unless the started bridge answers its readiness exchange."""
