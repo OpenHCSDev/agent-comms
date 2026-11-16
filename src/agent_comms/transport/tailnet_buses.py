@@ -77,6 +77,10 @@ class PeerBus(DeclaredFamily, ABC, affix="Peer"):
     def label(self) -> str:
         """How a picker names this peer in one line."""
 
+    def openable(self) -> tuple[PeerBus, ...]:
+        """What of this result a picker can open: nothing, unless there is a bus to ask."""
+        return ()
+
     def on_tailnet(self, peers: tuple[TailnetPeer, ...]) -> TailnetPeer:
         """This row's peer, proven to be one Core's own tailnet reports.
 
@@ -93,8 +97,15 @@ class PeerBus(DeclaredFamily, ABC, affix="Peer"):
         return self.peer
 
 
+class OpensBus(PeerBus, declared_name=None):
+    """A result a picker can open: picking it asks that machine for a profile."""
+
+    def openable(self) -> tuple[PeerBus, ...]:
+        return (self,)
+
+
 @dataclass(frozen=True)
-class PeerHoldsBus(ProbedPeer, PeerBus):
+class PeerHoldsBus(ProbedPeer, OpensBus):
     """Its CLI answered with its registry, so there is a bus here to open."""
 
     peer: TailnetPeer
@@ -105,7 +116,7 @@ class PeerHoldsBus(ProbedPeer, PeerBus):
 
 
 @dataclass(frozen=True)
-class NamedHost(PeerBus):
+class NamedHost(OpensBus):
     """A machine a person typed in, rather than one tailscale reported.
 
     Tristan: let a bus be added by hand - type an address, save it, and be able to remove
