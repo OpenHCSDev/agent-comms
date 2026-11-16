@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from cutover.carry_toad_key_mode import ToadSettingsCarry
+from formbridge.key_declarations import DownKey, LeftKey, NavigationKey, RightKey, UpKey
 from pydantic import JsonValue
-from textual.keys import DownKey, LeftKey, NavigationKey, RightKey, UpKey
 from toad.key_modes import KeyMode
 from toad.keymap import KeyInvocationId, Keymap, KeyRemap
 from toad.preferences import ToadSettings, UiSettings
@@ -76,6 +76,8 @@ class PreviousKeyRemap:
 
 
 class ToadArrowKeys(ToadSettingsCarry):
+    arrows: ClassVar[type[PreviousArrow]] = PreviousArrow
+
     def rewrite(self, document: dict[str, JsonValue]) -> int:
         ui_key = FieldCodec.record_key(ToadSettings, "ui")
         ui = FieldCodec.decode(dict[str, JsonValue], document.get(ui_key, {}))
@@ -83,7 +85,7 @@ class ToadArrowKeys(ToadSettingsCarry):
         keymap = FieldCodec.decode(dict[str, JsonValue], ui.get(keymap_key, {}))
         bindings_key = FieldCodec.record_key(Keymap, "bindings")
         previous = FieldCodec.decode(tuple[PreviousKeyRemap, ...], keymap.get(bindings_key, []))
-        replacements = PreviousArrow.replacements()
+        replacements = self.arrows.replacements()
         changed = sum(row.declaration in replacements for row in previous)
         if not changed:
             return 0
