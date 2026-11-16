@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.14.*"
 
 [manifest]
@@ -291,7 +291,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#3d12f0076208473dd8bb0dffef06b4fbe6e9c333" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#f5f4c24791bd8c3ea6241472f11a2340046df635" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "agent-comms", extra = ["dev"] },
@@ -360,7 +360,7 @@ name = "cffi"
 version = "2.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser" },
+    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9e/ef/008a1939e372c06329a3fce4279c02f328488f3526744906eeec3da7ad5f/cffi-2.1.1.tar.gz", hash = "sha256:dd31f52ea1086513bb9df30f8fcee9b8918323ae067a3d5b78bc826a000712be", size = 530807, upload-time = "2026-08-03T21:21:18.939Z" }
 wheels = [
@@ -493,7 +493,7 @@ wheels = [
 [[package]]
 name = "formbridge"
 version = "0.2.0"
-source = { git = "https://github.com/OpenHCSDev/formbridge.git?branch=main#0547625fd956077b3130fb1bad9e942f38783149" }
+source = { git = "https://github.com/OpenHCSDev/formbridge.git?branch=main#8abdd0e7b6da72645b2d6bacc44e4c7078ed6f95" }
 dependencies = [
     { name = "annotated-types" },
     { name = "docutils" },
@@ -773,7 +773,7 @@ wheels = [
 [[package]]
 name = "metaclass-registry"
 version = "0.4.1"
-source = { git = "https://github.com/OpenHCSDev/metaclass-registry?branch=main#60138d533ef0758c5f093d9110ba9f5656f0934a" }
+source = { git = "https://github.com/OpenHCSDev/metaclass-registry?branch=main#1ad09c889f4c62f3ef97e0eff3e45cdde31e9dde" }
 
 [[package]]
 name = "msgpack"
@@ -900,7 +900,7 @@ wheels = [
 [[package]]
 name = "nominal-refactor-advisor"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?branch=main#bd428c013057b89bbe1eef8bf9c92819bc7db8c2" }
+source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?branch=main#1832c42657afa3a091c0c3835548149f06d56557" }
 dependencies = [
     { name = "metaclass-registry" },
     { name = "tree-sitter" },
@@ -953,7 +953,7 @@ wheels = [
 [[package]]
 name = "objectstate"
 version = "5.0.0"
-source = { git = "https://github.com/OpenHCSDev/objectstate.git?rev=b5dd9f78b9293df145d7629f21deb89b042b9400#b5dd9f78b9293df145d7629f21deb89b042b9400" }
+source = { git = "https://github.com/OpenHCSDev/objectstate.git?rev=d34d75803d3b7e65128bf43ab867bb70f37cd013#d34d75803d3b7e65128bf43ab867bb70f37cd013" }
 dependencies = [
     { name = "dill" },
     { name = "pycodify" },
@@ -1261,7 +1261,7 @@ wheels = [
 [[package]]
 name = "python-introspect"
 version = "0.3.0"
-source = { git = "https://github.com/OpenHCSDev/python-introspect?branch=main#f2876b9ee089c65789607284949e11a9f58283fe" }
+source = { git = "https://github.com/OpenHCSDev/python-introspect?branch=main#adc02dc63daa087de25847aa5a555d8d83369ffc" }
 dependencies = [
     { name = "annotated-types" },
     { name = "metaclass-registry" },
@@ -1398,7 +1398,7 @@ wheels = [
 [[package]]
 name = "textual"
 version = "8.2.8"
-source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#f1b192edebe3bf79868404649256afc59135396f" }
+source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#6af9a9c52129b46f9e836eac7555735217c71f76" }
 dependencies = [
     { name = "markdown-it-py", extra = ["linkify"] },
     { name = "mdit-py-plugins" },
@@ -1791,7 +1791,7 @@ wheels = [
 [[package]]
 name = "ui-theme"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/ui-theme.git?branch=main#6318aab0eb74f3f332dffaf9ba4295774fd07ac7" }
+source = { git = "https://github.com/OpenHCSDev/ui-theme.git?branch=main#160d497a23b32c7e66197d6e7103435621bb0202" }
 dependencies = [
     { name = "metaclass-registry" },
     { name = "terminaltexteffects" },
