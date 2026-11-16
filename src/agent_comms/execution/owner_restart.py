@@ -144,20 +144,26 @@ class OwnerRestartHandoff:
         return results
 
 
-@dataclass(frozen=True)
-class StoppedOwnerBatch:
-    """Only this acquired phase can finish installation and resume the batch."""
+@dataclass(frozen=True, kw_only=True)
+class HeldRestartPhase:
+    """A restart phase holding the locks and descriptors it must release."""
 
-    lifecycle: OwnerLifecycle
-    handoff: OwnerRestartHandoff
     ownership: ExitStack = field(default_factory=ExitStack, repr=False, compare=False)
-
-    def launch(self, runtime: LaunchRuntime) -> tuple[OwnerRestartResult, ...]:
-        return self.handoff.launch(self.lifecycle, runtime)
 
     def close(self) -> None:
         """Release held locks and descriptors; never launch or retry inputs."""
         self.ownership.close()
+
+
+@dataclass(frozen=True, kw_only=True)
+class StoppedOwnerBatch(HeldRestartPhase):
+    """Only this acquired phase can finish installation and resume the batch."""
+
+    lifecycle: OwnerLifecycle
+    handoff: OwnerRestartHandoff
+
+    def launch(self, runtime: LaunchRuntime) -> tuple[OwnerRestartResult, ...]:
+        return self.handoff.launch(self.lifecycle, runtime)
 
     def recover(self, operation: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
         results = operation.recover(self)
@@ -210,19 +216,15 @@ class OwnerBatchLaunch:
     runtime: RestartEnvironment
 
 
-@dataclass(frozen=True)
-class FencedOwnerBatch(OwnerBatchLaunch):
+@dataclass(frozen=True, kw_only=True)
+class FencedOwnerBatch(HeldRestartPhase, OwnerBatchLaunch):
     retired: tuple[RetiredOwnerLaunch, ...] = ()
-    ownership: ExitStack = field(default_factory=ExitStack, repr=False, compare=False)
 
     @property
     def unconfirmed(self) -> tuple[tuple[Thread, int], ...]:
         """No stopped witness for these originals, even if OS exit was observed."""
         names = {owner.name for owner in self.retired}
         return tuple(item for item in self.captured if item[0].name not in names)
-
-    def close(self) -> None:
-        self.ownership.close()
 
     def recover(self, operation: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
         # A partial fence has no all-stopped launch authority. In particular,
