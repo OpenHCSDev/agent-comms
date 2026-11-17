@@ -28,6 +28,8 @@ from agent_comms.comms import Comms
 from agent_comms.conversational_slop import ResponseContext, SlopVerdict, verify_all
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.installer.active_route import resolve_comms_route
+from agent_comms.messaging.agent_inbox import TakenInputStart
+from agent_comms.messaging.message_reference import AfterMessageStart, InboxStart
 from agent_comms.messaging.messages import InfoKind
 from agent_comms.nominal.declared_family import DeclaredFamily
 
@@ -163,6 +165,7 @@ class ModelAgent:
     endpoint: ChatEndpoint
     root: Path
     rejection_k: int = 1
+    skip_backlog: bool = True
     verifier_context: ResponseContext = ResponseContext()
 
     async def run(self) -> None:
@@ -171,11 +174,12 @@ class ModelAgent:
         with LaunchRoot.from_path(self.root).selected():
             route = resolve_comms_route(self.root)
             comms = Comms(route)
+            start = self._initial_start(comms)
             print(f"[model-agent] watching {self.name!r} -> "
                   f"{self.endpoint.url} ({self.endpoint.model}) "
-                  f"k={self.rejection_k}", flush=True)
+                  f"k={self.rejection_k} start={type(start).__name__}", flush=True)
             loop = asyncio.get_running_loop()
-            async for message in comms.watch(self.name):
+            async for message in comms.watch(self.name, after=start):
                 print(f"[model-agent] {message.sender} -> {self.name}: "
                       f"{len(message.body)} chars", flush=True)
                 reply, rendered = await self._best_reply(loop, message.body)
@@ -186,6 +190,25 @@ class ModelAgent:
                           else reply.display())
                 print(f"[model-agent] replied to {message.sender} with "
                       f"{type(reply).__name__}: {suffix}", flush=True)
+
+    def _initial_start(self, comms: Comms) -> InboxStart:
+        """Where the first inbox read begins.
+
+        Default (skip_backlog): read the current inbox once to find its tail and start past it.
+        A daemon connecting fresh should answer messages that arrive next, not replay everything
+        the thread has accumulated — the model-agent bridge doesn't mark messages taken, so
+        without this every reconnect replays the full inbox and fires the model on history that
+        was already handled by whoever was there before.
+
+        With skip_backlog=False, falls back to TakenInputStart() for the classic replay-everything
+        behavior.
+        """
+        if not self.skip_backlog:
+            return TakenInputStart()
+        page = comms.bus.inbox_at(self.name, comms.registry.snapshot(), after=TakenInputStart())
+        if not page.page.messages:
+            return TakenInputStart()
+        return AfterMessageStart(page.page.messages[-1].reference)
 
     async def _best_reply(self, loop: asyncio.AbstractEventLoop,
                           body: str) -> tuple[ModelReply, str]:
@@ -243,6 +266,10 @@ def main() -> None:
     parser.add_argument("--rejection-k", type=int, default=1,
                         help=("Generate K candidates per inbound message and send the "
                               "first verifier-clean one. k=1 (default) disables sampling."))
+    parser.add_argument("--include-backlog", action="store_true",
+                        help=("Replay every untaken message in the inbox on connect. Default "
+                              "skips the backlog: a fresh daemon connect answers only messages "
+                              "that arrive after it starts, since it doesn't own what it forwards."))
     args = parser.parse_args()
     # The bridge declares no tools to the endpoint, so the verifier should fire on
     # any <tool_call> in a candidate. token_budget mirrors max_tokens so a truncated
@@ -259,6 +286,7 @@ def main() -> None:
         ),
         root=args.root.expanduser().absolute(),
         rejection_k=max(args.rejection_k, 1),
+        skip_backlog=not args.include_backlog,
         verifier_context=verifier_context,
     )
     try:
