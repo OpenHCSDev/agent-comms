@@ -258,7 +258,7 @@ class OptionalAwarenessProjection:
             provenance=(
                 instruction.source,
                 content_instruction.source,
-                ResourceProvenance(str(path), digest, "captured typed optional awareness rows"),
+                ResourceProvenance(path=str(path), sha256=digest, representation="captured typed optional awareness rows"),
                 *(
                     WireProvenance(
                         MessageReference(row.assignment.wire_seq, row.assignment.message_id)

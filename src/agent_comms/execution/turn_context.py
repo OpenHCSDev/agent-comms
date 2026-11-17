@@ -86,10 +86,16 @@ class Provenance(DeclaredFamily, affix="Provenance", discovery_package="agent_co
         raise RelationViolationError("Source is not an original human input")
 
 
-@dataclass(frozen=True)
-class FileProvenance(Provenance):
-    path: str
+@dataclass(frozen=True, kw_only=True)
+class Sha256Digest:
+    """The SHA-256 of a value's rendered bytes."""
+
     sha256: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class FileProvenance(Sha256Digest, Provenance):
+    path: str
 
     def public_description(self) -> str:
         return f"File {self.path} · SHA256 {self.sha256}"
@@ -194,10 +200,9 @@ class PreviewProvenance(Provenance):
         return (self.identity,)
 
 
-@dataclass(frozen=True)
-class ResourceProvenance(Provenance):
+@dataclass(frozen=True, kw_only=True)
+class ResourceProvenance(Sha256Digest, Provenance):
     path: str
-    sha256: str
     representation: str
 
     def public_description(self) -> str:
@@ -247,7 +252,7 @@ class InstructionFile:
     @classmethod
     def read(cls, name: str) -> InstructionFile:
         read = InstructionBytes.read(name)
-        return cls(read.text, FileProvenance(str(read.path), hashlib.sha256(read.raw).hexdigest()))
+        return cls(read.text, FileProvenance(path=str(read.path), sha256=hashlib.sha256(read.raw).hexdigest()))
 
     def render(self, values: dict[str, object]) -> str:
         return self.content.format_map(values)
@@ -281,11 +286,16 @@ class ContextSources:
         return entries
 
 
-@dataclass(frozen=True)
-class SegmentManifest(ToolResult):
+@dataclass(frozen=True, kw_only=True)
+class ProvenancedSegment:
+    """Which kind of context segment a value is and where its parts came from."""
+
     kind: type[ContextSegment]
     provenance: tuple[Provenance, ...]
-    sha256: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class SegmentManifest(ProvenancedSegment, Sha256Digest, ToolResult):
     utf8_bytes: int
     tokens: int
     contributors: tuple[SegmentManifest, ...] = ()
@@ -866,24 +876,21 @@ class ContextSegment(
     def contribution(self, offset: int, text: str, images=()) -> InputContributionCoordinates:
         raw = text.encode()
         return InputContributionCoordinates(
-            type(self), self.provenance,
+            kind=type(self), provenance=self.provenance,
             offset=offset, length=len(raw), sha256=hashlib.sha256(raw).hexdigest())
 
 
 @dataclass(frozen=True, kw_only=True)
-class DigestedSpan:
+class DigestedSpan(Sha256Digest):
     """A byte range and its SHA-256: position + integrity in one declaration."""
 
     offset: int
     length: int
-    sha256: str
 
 
-@dataclass(frozen=True)
-class ContributionCoordinates(DigestedSpan):
+@dataclass(frozen=True, kw_only=True)
+class ContributionCoordinates(ProvenancedSegment, DigestedSpan):
     """Byte coordinates and proof in one owner's rendered public value."""
-    kind: type[ContextSegment]
-    provenance: tuple[Provenance, ...]
 
     def __post_init__(self):
         if not self.provenance or min(self.offset, self.length) < 0:
@@ -967,11 +974,10 @@ class UserInputSegment(SuppliedSegment, WireSources):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MeasuredNativeSegment(ContextSegment):
+class MeasuredNativeSegment(Sha256Digest, ContextSegment):
     """An SDK-owned input observation, not a second native message vocabulary."""
 
     tokens: int
-    sha256: str
     utf8_bytes: int
     contributors: tuple[SegmentManifest, ...] = ()
 

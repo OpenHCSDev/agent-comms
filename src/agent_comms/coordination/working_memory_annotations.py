@@ -71,7 +71,7 @@ class WorkingMemoryAnnotations:
         for original, rows in captured:
             effective = SpanAnnotationsRow.effective(rows)
             cases.extend(effective.evaluate_original(original))
-        return CalibrationReport(question, classifier, tuple(cases))
+        return CalibrationReport(question=question, classifier=classifier, cases=tuple(cases))
 
     @classmethod
     def for_segment(

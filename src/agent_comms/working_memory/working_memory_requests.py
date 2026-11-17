@@ -8,14 +8,14 @@ from http.client import HTTPException
 from typing import ClassVar, Literal
 from urllib.error import HTTPError
 
-from agent_comms.execution.turn_context import ContextSpan
 from agent_comms.execution.working_memory_disclosure import DisclosureState
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.working_memory.working_memory_labels import (
-    ClassifierVersion,
+    Classified,
     JevUsage,
+    QuestionedSpan,
     QuestionVersion,
 )
 from agent_comms.working_memory.working_memory_questions import SpanQuestion
@@ -28,11 +28,8 @@ class ChoiceQuestionDefinition:
     type: Literal["choice"] = "choice"
 
 
-@dataclass(frozen=True)
-class DisclosureRequest:
-    span: ContextSpan
-    classifier: ClassifierVersion
-    question: QuestionVersion
+@dataclass(frozen=True, kw_only=True)
+class DisclosureRequest(Classified, QuestionedSpan):
     definition: ChoiceQuestionDefinition
     state: DisclosureState
     grant: MessageReference

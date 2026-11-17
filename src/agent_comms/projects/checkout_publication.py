@@ -9,6 +9,7 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent_comms.execution.turn_context import Sha256Digest
 from agent_comms.installer.harness_install import replace_link
 from agent_comms.projects.checkouts import Checkout, CheckoutMove
 from agent_comms.projects.repo import Repo
@@ -68,12 +69,11 @@ class PublishingCheckout(Checkout, StoreGuard):
         return path
 
 
-@dataclass(frozen=True)
-class PublicationFile:
+@dataclass(frozen=True, kw_only=True)
+class PublicationFile(Sha256Digest):
     """The source bytes and mode that must survive copying before a link can move."""
 
     relative: Path
-    sha256: str
     mode: int
 
     @classmethod
@@ -83,9 +83,9 @@ class PublicationFile:
             observed = path.lstat()
             if stat.S_ISREG(observed.st_mode):
                 with path.open("rb") as stream:
-                    found.append(cls(path.relative_to(root),
-                                     hashlib.file_digest(stream, "sha256").hexdigest(),
-                                     stat.S_IMODE(observed.st_mode)))
+                    found.append(cls(relative=path.relative_to(root),
+                                     sha256=hashlib.file_digest(stream, "sha256").hexdigest(),
+                                     mode=stat.S_IMODE(observed.st_mode)))
             elif not stat.S_ISDIR(observed.st_mode):
                 raise ValueError(f"Publication requires regular files/directories: {path}")
         if not found:
