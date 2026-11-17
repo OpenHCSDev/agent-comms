@@ -52,7 +52,7 @@ class QuestionVersion:
              "owner_rules": question.disclosed_owner_rules(owner_rules)},
             sort_keys=True,
         ).encode()
-        return cls(question, hashlib.sha256(raw).hexdigest())
+        return cls(question=question, sha256=hashlib.sha256(raw).hexdigest())
 
 
 @dataclass(frozen=True)
@@ -65,10 +65,16 @@ class AnswerProbability:
             raise ValueError("Answer probability must lie between zero and one")
 
 
-@dataclass(frozen=True)
-class SpanLabel(DeclaredFamily, affix="Label"):
+@dataclass(frozen=True, kw_only=True)
+class QuestionedSpan:
+    """A span of context and the question asked about it."""
+
     span: ContextSpan
     question: QuestionVersion
+
+
+@dataclass(frozen=True, kw_only=True)
+class SpanLabel(QuestionedSpan, DeclaredFamily, affix='Label'):
     answer: type[SpanAnswer]
 
     def __post_init__(self):
@@ -93,9 +99,15 @@ class SpanLabel(DeclaredFamily, affix="Label"):
         return candidates[0]
 
 
-@dataclass(frozen=True)
-class ModelLabel(SpanLabel):
+@dataclass(frozen=True, kw_only=True)
+class Classified:
+    """The classifier version that answered."""
+
     classifier: ClassifierVersion
+
+
+@dataclass(frozen=True, kw_only=True)
+class ModelLabel(Classified, SpanLabel):
     probabilities: tuple[AnswerProbability, ...]
     confidence: float
     request_id: str
@@ -135,9 +147,9 @@ class HumanLabel(ModelLabel, CliResult):
 
     @classmethod
     def correct(cls, original: ModelLabel, answer: type[SpanAnswer], author: ThreadIncarnation):
-        return cls(original.span, original.question, answer, original.classifier,
-                   original.probabilities, original.confidence, original.request_id,
-                   original.returned_model, author)
+        return cls(span=original.span, question=original.question, answer=answer, classifier=original.classifier,
+                   probabilities=original.probabilities, confidence=original.confidence, request_id=original.request_id,
+                   returned_model=original.returned_model, author=author)
 
     def public_description(self) -> str:
         return f"Human correction by {self.author.name} · original classifier {self.classifier.pin}"
@@ -233,10 +245,10 @@ class JevChoice:
     def label(self, span: ContextSpan, question: QuestionVersion,
               classifier: ClassifierVersion, response: JevResponse) -> ModelLabel:
         family = question.question.answer_family
-        return ModelLabel(span, question, family.member_named(self.choice),
-            classifier, tuple(AnswerProbability(family.member_named(name), probability)
-                for name, probability in self.probabilities.items()), self.confidence,
-            response.id, response.model)
+        return ModelLabel(span=span, question=question, answer=family.member_named(self.choice),
+            classifier=classifier, probabilities=tuple(AnswerProbability(family.member_named(name), probability)
+                for name, probability in self.probabilities.items()), confidence=self.confidence,
+            request_id=response.id, returned_model=response.model)
 
 
 @dataclass(frozen=True)

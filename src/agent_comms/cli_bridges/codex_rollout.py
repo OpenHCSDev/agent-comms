@@ -57,5 +57,5 @@ class CodexRollout(JsonLinesFile[RolloutRecord], CodexHistory, OfflineHistory):
         digest = hashlib.sha256(raw).hexdigest()
         for index, _ in enumerate(record.instructions()):
             yield HistoricalInstruction(CodexRolloutProvenance(
-                str(self.source.resolve()), index,
+                path=str(self.source.resolve()), instruction=index,
                 offset=offset, length=len(raw), sha256=digest))

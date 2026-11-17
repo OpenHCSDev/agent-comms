@@ -247,7 +247,7 @@ class InstructionFile:
     @classmethod
     def read(cls, name: str) -> InstructionFile:
         read = InstructionBytes.read(name)
-        return cls(read.text, FileProvenance(str(read.path), hashlib.sha256(read.raw).hexdigest()))
+        return cls(read.text, FileProvenance(path=str(read.path), sha256=hashlib.sha256(read.raw).hexdigest()))
 
     def render(self, values: dict[str, object]) -> str:
         return self.content.format_map(values)
@@ -866,7 +866,7 @@ class ContextSegment(
     def contribution(self, offset: int, text: str, images=()) -> InputContributionCoordinates:
         raw = text.encode()
         return InputContributionCoordinates(
-            type(self), self.provenance,
+            kind=type(self), provenance=self.provenance,
             offset=offset, length=len(raw), sha256=hashlib.sha256(raw).hexdigest())
 
 

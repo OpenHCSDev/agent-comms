@@ -83,9 +83,9 @@ class PublicationFile:
             observed = path.lstat()
             if stat.S_ISREG(observed.st_mode):
                 with path.open("rb") as stream:
-                    found.append(cls(path.relative_to(root),
-                                     hashlib.file_digest(stream, "sha256").hexdigest(),
-                                     stat.S_IMODE(observed.st_mode)))
+                    found.append(cls(relative=path.relative_to(root),
+                                     sha256=hashlib.file_digest(stream, "sha256").hexdigest(),
+                                     mode=stat.S_IMODE(observed.st_mode)))
             elif not stat.S_ISDIR(observed.st_mode):
                 raise ValueError(f"Publication requires regular files/directories: {path}")
         if not found:

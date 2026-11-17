@@ -30,6 +30,7 @@ from agent_comms.messaging.retained_task_facts import (
     CurrentHumanInputTaskFact,
     HumanInputTaskFact,
     InputTaskFact,
+    retained_fact,
 )
 from agent_comms.nominal.field_codec import (
     AcpSessionId,
@@ -159,7 +160,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     terminal = stored_inputs(inputs.root).lookup(key)
     assert terminal.origin == origin
     assert terminal.counts_as_started() and terminal.source_text == command.user_text
-    assert terminal.origin.retained_fact(terminal).for_owner(
+    assert retained_fact(terminal).for_owner(
         comms.registry.require("beta"), comms.registry.snapshot()
     ) == CurrentHumanInputTaskFact(terminal)
 
@@ -218,18 +219,18 @@ async def test_historical_unknown_author_stays_neutral_and_human_scope_invalidat
     assert "origin" not in payload
     restored = FieldCodec.decode(ReservedInput, payload)
     assert restored.origin == UnattributedInputOrigin()
-    assert restored.origin.retained_fact(restored) == InputTaskFact(restored)
+    assert retained_fact(restored) == InputTaskFact(restored)
     with pytest.raises(RelationViolationError):
         HumanInputTaskFact(restored)
     authored = replace(restored, origin=origin)
-    fact = origin.retained_fact(authored)
+    fact = retained_fact(authored)
     owner = comms.registry.require("beta")
     assert fact.for_owner(owner, comms.registry.snapshot()) == CurrentHumanInputTaskFact(authored)
     changed = replace(owner, worktree=Checkout(Path("/another/project")))
     assert fact.for_owner(changed, comms.registry.snapshot()) == HumanInputTaskFact(authored)
     routed = replace(restored, origin=WireInputOrigin(
         origin.root_id, MessageReference(1, MessageId.mint("original-id"))))
-    assert routed.origin.retained_fact(routed) == InputTaskFact(routed)
+    assert retained_fact(routed) == InputTaskFact(routed)
     assert FieldCodec.decode(ReservedInput, FieldCodec.encode(routed)) == routed
 
 
@@ -326,7 +327,7 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
         owner = comms.registry.require(name)
         with comms.bus.bus.reading() as source:
             wire_facts = RetainedTaskFacts.capture(source, owner.incarnation).facts
-        input_facts = tuple(r.origin.retained_fact(r) for r in stored_inputs(inputs.root).rows.values())
+        input_facts = tuple(retained_fact(r) for r in stored_inputs(inputs.root).rows.values())
         return RetainedTaskFacts(wire_facts + input_facts).for_owner(owner, comms.registry.snapshot())
 
     snapshot = comms.registry.snapshot()

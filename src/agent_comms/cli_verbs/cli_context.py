@@ -72,8 +72,8 @@ class CurrentContextCliCommand(CliCommand, declared_name=None):
             return NativeContextInspection(
                 scope="next-native-base-and-core-contributors; before future input and provider hooks",
                 input_supplied=False, core_context=context, segments=segments, native_manifest=native_context.segments, native_provider_context=native_context.render().provider,
-                native_source_spans=tuple(NativeSourceSpans(position, segment.measured_manifest().sha256,
-                                        segment.source_ranges())
+                native_source_spans=tuple(NativeSourceSpans(segment=position, sha256=segment.measured_manifest().sha256,
+                                        spans=segment.source_ranges())
                       for position, segment in enumerate(native.segments)))
 
         return asyncio.run(inspect())
