@@ -501,8 +501,10 @@ query($owner: String!, $name: String!, $after: String) {
         return SharedCommitBase(bases[0]) if bases else UnrelatedCommitBase()
 
     def commits_since(self, head: str, *excluded: str) -> tuple[str, ...]:
-        return tuple(commit.sha for commit in self.history.commits((head,), *excluded)
-                     if len(commit.parents) < 2)
+        """Read only the requested non-merge range, not every retained branch's graph."""
+        return tuple(self._git(
+            "rev-list", "--no-merges", head, *(f"^{base}" for base in excluded), "--",
+        ).splitlines())
 
     def prepare_whole_patch_ids(self, base: str, head: str) -> frozenset[str]:
         """One stable fingerprint of the entire immutable diff, including multi-commit squash."""
