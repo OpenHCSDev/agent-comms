@@ -1,5 +1,7 @@
 """Record where input came from without granting permission to run or replay it."""
 
+from __future__ import annotations
+
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Annotated
