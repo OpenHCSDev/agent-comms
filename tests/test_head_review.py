@@ -557,6 +557,33 @@ def test_unresolved_order_refuses_before_external_preparation(head_bus, caller_t
     assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
 
 
+def test_commit_ranges_do_not_load_unrelated_history(tmp_path, monkeypatch):
+    source = SourceRepository.create(tmp_path / "ranges")
+    main, feature = source.main_commit, source.branch_commit
+    tree = source.git(source.checkout, "rev-parse", f"{main}^{{tree}}").strip()
+    orphan = source.git(source.checkout, "commit-tree", tree, "-m", "Orphan").strip()
+    merge = source.git(source.checkout, "commit-tree", tree,
+                       "-p", main, "-p", feature, "-m", "Merge").strip()
+    tip = source.git(source.checkout, "commit-tree", tree,
+                     "-p", merge, "-m", "After merge").strip()
+
+    def unbounded_history(reader):
+        pytest.fail("A commit range must not decode the whole repository history")
+
+    monkeypatch.setattr(WorkBranches, "history", property(unbounded_history))
+    reader = WorkBranches(source.checkout)
+    for head, excluded, expected in (
+        (main, (main,), set()),
+        (feature, (main,), {feature}),
+        (feature, (main, feature), set()),
+        (tip, (main,), {feature, tip}),
+        (tip, (main, feature), {tip}),
+        (tip, (tip,), set()),
+        (orphan, (main,), {orphan}),
+    ):
+        assert set(reader.commits_since(head, *excluded)) == expected
+
+
 def test_qualification_does_not_carry_acceptance_to_an_unchanged_later_head(head_bus, reviewed_source):
     comms, github, request = head_bus
     source = reviewed_source
