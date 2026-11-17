@@ -167,7 +167,7 @@ class MessageInput(TurnInput):
     input: tuple[TextInput, ...] = Field(min_length=1)
 
 
-class ClientId(DeclaredFamily, ABC):
+class ClientId(DeclaredFamily):
     """Codex's optional wire key is decoded once, before item behavior is selected."""
 
     @classmethod

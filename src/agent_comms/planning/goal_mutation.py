@@ -124,7 +124,7 @@ class GoalAttemptRead[Reservation](ABC):
     def read_attempt(self, attempt_id: AttemptId) -> GoalStoppedAttempt[Reservation]: ...
 
 
-class GoalGenerationGrants[Reservation](GoalAttemptRead[Reservation], ABC):
+class GoalGenerationGrants[Reservation](GoalAttemptRead[Reservation]):
     @abstractmethod
     def reserve(
         self, goal_id: GoalId, expected_generation: int, *, ready_grant: str | None = None,

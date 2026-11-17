@@ -176,7 +176,7 @@ class UnreportedTools(ObservedTools):
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
+class ThreadIncarnation(JsonFlagRecord, WireValue):
     value_flag: ClassVar[str] = "--thread-incarnation"
     def hands_out_released_work(self) -> bool:
         """Whether work this actor released goes to an idle unit without a teammate turn."""

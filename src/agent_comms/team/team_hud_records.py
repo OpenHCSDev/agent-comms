@@ -202,7 +202,7 @@ class TeamOrderDetail(DisclosedRecord):
 
 
 @dataclass(frozen=True)
-class TeammateDetail(ToolResult, DisclosedRecord):
+class TeammateDetail(ToolResult):
     """A lazy disclosure; activity uses the existing bounded turn wire projection."""
 
     unit: Annotated[Teammate, DisclosureIdentity()]

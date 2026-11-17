@@ -266,7 +266,7 @@ class ClaudeHookProgram(ABC):
         return {"writer": cls.writer, "hooks": [cls.hook(command)]}
 
 
-class PermissionHookProgram(ClaudeHookProgram, ABC):
+class PermissionHookProgram(ClaudeHookProgram):
     """Claude Code blocks a permission event only on its blocking exit code."""
 
     @classmethod
@@ -280,7 +280,7 @@ class PermissionHookProgram(ClaudeHookProgram, ABC):
         cls.unbound(record)
 
 
-class ClaudeToolHookProgram(ClaudeHookProgram, ABC):
+class ClaudeToolHookProgram(ClaudeHookProgram):
     """A program Claude Code runs only on calls of the one tool it names."""
 
     tool: ClassVar[str]
@@ -301,7 +301,7 @@ class HookRefused(ToolRefusedError):
     """An owned hook refusal, rendered as a denial rather than a hook crash."""
 
 
-class BashRefusal(ClaudeToolHookProgram, PermissionHookProgram, ABC):
+class BashRefusal(ClaudeToolHookProgram, PermissionHookProgram):
     """A program that refuses a Bash command before it runs, for every reason it finds;
     each member says only what it refuses and why."""
 

@@ -46,7 +46,7 @@ class RecordedEventSeconds(FieldRepresentation):
         return FieldCodec.value_schema(float)
 
 
-class NullableEventSeconds(AcceptsNull, FieldRepresentation):
+class NullableEventSeconds(AcceptsNull):
     """A source clock may be explicitly unrecorded; units belong to its wire type."""
 
     units_per_second: ClassVar[int] = 1

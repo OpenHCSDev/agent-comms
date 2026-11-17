@@ -171,7 +171,7 @@ class PullRequestHead:
         return current
 
 
-class SourceCheckout(Checkout, ABC):
+class SourceCheckout(Checkout):
     """The nominal checkout capability a captured source needs to build its tree."""
 
     __slots__ = ()

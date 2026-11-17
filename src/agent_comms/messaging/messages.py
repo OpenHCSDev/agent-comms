@@ -918,7 +918,7 @@ class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole, decla
 
 
 @dataclass(frozen=True, slots=True)
-class MessageInput(MessageClockSource, Addressed, BusCapability, ResponseMessageSource):
+class MessageInput(MessageClockSource, Addressed, ResponseMessageSource):
     """The facts an input is keyed and written from: who, where, what text, which role.
 
     Attachments, reports and answers belong to Message; this is never a whole message

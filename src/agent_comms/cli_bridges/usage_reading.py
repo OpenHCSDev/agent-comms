@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import re
 import time
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Annotated
 
 from pydantic import Field, PlainSerializer, ValidateAs
@@ -31,7 +31,7 @@ class RateWindow(WireModel):
         return f'usage {self.used_percent:g}% {period}, resets {reset}'
 
 
-class RateLimitReading(DeclaredFamily, ABC, affix='RateLimitReading'):
+class RateLimitReading(DeclaredFamily, affix='RateLimitReading'):
     """A usage reading supplies its own display and need for operator attention."""
 
     @abstractmethod

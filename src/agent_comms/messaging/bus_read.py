@@ -34,19 +34,19 @@ from agent_comms.transport.tool_request import ThreadReadTool
 from agent_comms.transport.tool_result import ToolResult
 
 
-class BusRead[Result](ToolDeclaration, ABC):
+class BusRead[Result](ToolDeclaration):
     """One operation owns its arguments and its read; the boundary supplies authority."""
 
     @abstractmethod
     def apply(self, comms: Comms, caller: ReadAuthority) -> Result: ...
 
 
-class UiRead[Result](BusRead[Result], ABC):
+class UiRead[Result](BusRead[Result]):
     def read(self, comms: Comms) -> Result:
         return self.apply(comms, NoDisplaySelection())
 
 
-class CapturesTranscriptPage(UiRead, ABC):
+class CapturesTranscriptPage(UiRead):
     """A read whose answer is one captured transcript page: the page is the serving work,
     and the snapshot the wire carries is derived from it."""
 

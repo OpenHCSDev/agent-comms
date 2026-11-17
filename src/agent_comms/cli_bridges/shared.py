@@ -679,7 +679,7 @@ class Send[SendBridge: CliBridge](SendRequest, Operation[SendBridge]):
             partial(request.sent, bridge.comms)))
 
 
-class Delivery[DeliveryBridge: CliBridge](Operation[DeliveryBridge], ABC):
+class Delivery[DeliveryBridge: CliBridge](Operation[DeliveryBridge]):
     """Delivering this binding's bus messages to its harness until stopped, under its watch
     claim; `Inbox` and `Watch` differ in how they run it and on which bridges."""
 

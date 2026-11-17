@@ -22,7 +22,7 @@ What counts is the interpreter a process was actually invoked with, which is wha
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,7 +36,7 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import MalformedRecord
 
 
-class RecordedPointer(DeclaredFamily, ABC, affix="Pointer"):
+class RecordedPointer(DeclaredFamily, affix="Pointer"):
     """What a stored `.root-runtime.json` says about the runtime it would publish.
 
     Three answers, because two of them are not the same: a root that never published
@@ -186,7 +186,7 @@ class RuntimeRetention:
         return SweptRetirement(tuple(taken), tuple(failures), len(self.held))
 
 
-class RetirementOutcome(DeclaredFamily, ABC, affix="Retirement"):
+class RetirementOutcome(DeclaredFamily, affix="Retirement"):
     """What one install's retirement did, for its report."""
 
     @abstractmethod

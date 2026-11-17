@@ -7,7 +7,7 @@ recheck the canonical registry/SQLite snapshot under their operation's locks.
 from __future__ import annotations
 
 import os
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from agent_comms.registry.registry_document import RegistrySnapshot
 
 
-class NativeOwnerRegistry(ClaimGenerationRead, ABC):
+class NativeOwnerRegistry(ClaimGenerationRead):
     """The original locked namespace reads needed to capture local executable authority."""
 
     __slots__ = ()

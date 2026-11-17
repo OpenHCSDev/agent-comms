@@ -196,7 +196,7 @@ class OperatorOutcomes(ReadAuthority):
         return AllOutcomes()
 
 
-class DisplayCut(OperatorOutcomes, CapabilityUnion, ABC):
+class DisplayCut(OperatorOutcomes, CapabilityUnion):
     """The selected display cut, including the absence of a painted display."""
 
     __slots__ = ()
@@ -555,7 +555,7 @@ class ReadCursor:
             for key, value in self.conversations.items() if key.current(snapshot))
 
 
-class Conversation(DeclaredFamily, ABC, affix="Conversation"):
+class Conversation(DeclaredFamily, affix="Conversation"):
     family_discriminator = "kind"
     participants: tuple[ThreadIncarnation, ...] = ()
 
@@ -925,7 +925,7 @@ class DMDisplayBasis(RequestedDM):
         self.displayed.validate(self.viewer, snapshot, bus_identity)
 
 
-class MessageDisplayScope(DeclaredFamily, ABC, ProjectionSource, affix="DisplayScope"):
+class MessageDisplayScope(DeclaredFamily, ProjectionSource, affix="DisplayScope"):
     """Captured inclusion and its exact predicate on the bus capability tables."""
 
     def read_key(self, sender: str, target: str, snapshot: RegistryProvenance) -> Conversation:

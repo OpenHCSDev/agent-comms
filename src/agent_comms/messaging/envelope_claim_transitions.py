@@ -147,7 +147,7 @@ class AssignmentBinding(ProjectionSource):
 
 
 @dataclass(frozen=True)
-class ClaimScope(SubclassUnion, ABC, ProjectionSource, affix=""):
+class ClaimScope(SubclassUnion, ProjectionSource, affix=""):
     """What one acquisition belongs to; its member answers reuse, liveness and operation use."""
 
     @ClassFact
@@ -303,7 +303,13 @@ class ClaimProducer(ProjectionOutputs):
 
 
 @dataclass(frozen=True)
-class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, ClaimProducer, ProjectionSource, affix=""):
+class ClaimTransition(
+    ClaimIdentity,
+    SubclassUnion,
+    ClaimProducer,
+    ProjectionSource,
+    affix="",
+):
     """One original resource transition; its member declares what it changes."""
 
     max_resources: ClassVar[int] = 32

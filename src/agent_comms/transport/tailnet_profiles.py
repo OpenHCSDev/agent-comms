@@ -13,7 +13,7 @@ reply without a tailnet.
 from __future__ import annotations
 
 import time
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -25,7 +25,7 @@ from agent_comms.transport.tailnet_buses import PeerBus, TailnetBuses
 from agent_comms.transport.tool_result import ToolResult
 
 
-class AskedPeer(ToolResult, DeclaredFamily, ABC, affix="Peer"):
+class AskedPeer(ToolResult, DeclaredFamily, affix="Peer"):
     """What asking a peer for a UI profile came back with.
 
     Every outcome is a member, including the ones that answered nothing: a picker shows the

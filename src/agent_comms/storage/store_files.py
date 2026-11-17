@@ -57,7 +57,7 @@ if TYPE_CHECKING:
 DEFAULT_ISOLATION: Final = "DEFERRED"
 
 
-class LockMode(FlockMode, ABC):
+class LockMode(FlockMode):
     """Whether a store lock lets other holders in, and what its holder may do."""
 
     @abstractmethod

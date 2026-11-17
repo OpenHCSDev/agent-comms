@@ -189,7 +189,8 @@ class SeveralProjectThreads(TaggedRecordMember, ProjectThreadSelection):
 
 
 class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](
-    TaskRegistry[Thread], NativeOwnerRegistry, ABC,
+    TaskRegistry[Thread],
+    NativeOwnerRegistry,
 ):
     """Presence reads shared by the acquired document and its detached cut."""
 

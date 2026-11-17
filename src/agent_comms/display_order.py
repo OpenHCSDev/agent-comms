@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import ClassVar
 
 from agent_comms.messaging.display_sources import (
@@ -17,7 +17,7 @@ type ChannelOrders = ChannelOrderSource[type[ThreadSort], type[ChannelSort]]
 type ChannelDisplay = ChannelSortView[type[ChannelSort]]
 
 
-class DisplayOrder(TitledChoice, DeclaredChoice, ABC):
+class DisplayOrder(TitledChoice, DeclaredChoice):
     title: ClassVar[str]
 
     @classmethod

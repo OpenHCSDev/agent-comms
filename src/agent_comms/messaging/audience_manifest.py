@@ -77,7 +77,7 @@ class Audience(BusCapability):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AudiencedMessage(CarriesEnvelope, Message, Audience):
+class AudiencedMessage(CarriesEnvelope, Audience):
     """A prepared message and its frozen participants, with one content identity."""
 
     def __post_init__(self) -> None:

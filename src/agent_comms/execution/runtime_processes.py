@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,7 +12,7 @@ from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.nominal.declared_family import DeclaredFamily
 
 
-class RuntimeReference(DeclaredFamily, ABC, affix="Reference"):
+class RuntimeReference(DeclaredFamily, affix="Reference"):
     """What one path a process names says about the build it is using.
 
     A command and an import root ask the same question of a path, and asking it in two
@@ -149,7 +149,7 @@ class ForeignReference(HoldsNothing, RuntimeReference):
         return ()
 
 
-class RuntimeProcessOutcome(DeclaredFamily, ABC, affix="RuntimeProcess"):
+class RuntimeProcessOutcome(DeclaredFamily, affix="RuntimeProcess"):
     @abstractmethod
     def line(self) -> str: ...
 
@@ -187,7 +187,7 @@ class UnreadableRuntimeProcess(RuntimeProcessOutcome):
 
 
 @dataclass(frozen=True)
-class ReferencingRuntimeProcess(RuntimeProcessOutcome, ABC, declared_name=None):
+class ReferencingRuntimeProcess(RuntimeProcessOutcome, declared_name=None):
     """A process that named one path inside the installation.
 
     What that path holds and what it leaves undecided are the reference's answers, not
