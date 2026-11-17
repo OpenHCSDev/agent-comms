@@ -12,7 +12,12 @@ from typing import Annotated, Callable, ClassVar, Self
 
 
 from agent_comms.agent_events import CompactionEvent
-from agent_comms.execution.acp_failure import BackendDeliveryFailure
+from agent_comms.execution.acp_failure import (
+    BackendDeliveryFailure,
+    InputFailedUpdate,
+    RequestFailedUpdate,
+)
+from agent_comms.text_route_update import TextRouteUpdate
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.context_reading import ContextReading
 from agent_comms.execution.input_origin import InputOrigin, UnattributedInputOrigin
