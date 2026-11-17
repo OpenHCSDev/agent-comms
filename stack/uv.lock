@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.14.*"
 
 [manifest]
@@ -360,7 +360,7 @@ name = "cffi"
 version = "2.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
+    { name = "pycparser" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9e/ef/008a1939e372c06329a3fce4279c02f328488f3526744906eeec3da7ad5f/cffi-2.1.1.tar.gz", hash = "sha256:dd31f52ea1086513bb9df30f8fcee9b8918323ae067a3d5b78bc826a000712be", size = 530807, upload-time = "2026-08-03T21:21:18.939Z" }
 wheels = [
@@ -1260,8 +1260,8 @@ wheels = [
 
 [[package]]
 name = "python-introspect"
-version = "0.3.0"
-source = { git = "https://github.com/OpenHCSDev/python-introspect?branch=main#adc02dc63daa087de25847aa5a555d8d83369ffc" }
+version = "0.4.0"
+source = { git = "https://github.com/OpenHCSDev/python-introspect?branch=main#510657068f72e0b9e7b714f891430a318fb26e9b" }
 dependencies = [
     { name = "annotated-types" },
     { name = "metaclass-registry" },
@@ -1909,7 +1909,7 @@ wheels = [
 
 [[package]]
 name = "zmqruntime"
-version = "0.6.5"
+version = "0.6.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-types" },
@@ -1921,7 +1921,7 @@ dependencies = [
     { name = "pyzmq" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/42/b8/fed21fa56ddc7ea1e9d3c517fa54b8aea81cf0e5b8ca6086d477e0bb3de8/zmqruntime-0.6.5.tar.gz", hash = "sha256:b63cb6d3bd95d522e8db4213cd74a6ccb7058dc7d16bff756e08eb6585b2101b", size = 728551, upload-time = "2026-10-12T22:22:17.485Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/20/7e/e1c98ab8c240a912cc5abf4a9d4810020a448b09637f42b175a66b0cc9c8/zmqruntime-0.6.6.tar.gz", hash = "sha256:7d887e06bcac16de6da73dad3a0724ea1c7cfff0be63ed895b6704a7196a70be", size = 728548, upload-time = "2026-11-17T00:56:34.551Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/69/35/428582be6777f5c8be66bdd898597246e98d2cb674c412844d982e187121/zmqruntime-0.6.5-py3-none-any.whl", hash = "sha256:f27f91c4bca10f72985743ae53e05b1557c03380438d226f2714142cd127c76d", size = 99040, upload-time = "2026-10-12T22:22:16.116Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/1e/c0a609491b6b3cb0686bd80c7a41b6e2ece50a06dc293840045c8c8a4e1e/zmqruntime-0.6.6-py3-none-any.whl", hash = "sha256:8c9ab03a9ff4f6c1ca6f8a7ae54e4f48d36f8749a2fc5d1a7e54ff72b0c3a0eb", size = 99037, upload-time = "2026-11-17T00:56:32.838Z" },
 ]
