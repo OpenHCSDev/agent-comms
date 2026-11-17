@@ -3252,6 +3252,10 @@ class Assignment(TodoHolder):
 class OpenTodo:
     __slots__ = ()
 
+    @classmethod
+    def is_open(cls) -> bool:
+        return True
+
 
 class TodoState(DeclaredFamily, affix="TodoState"):
 
@@ -3297,19 +3301,13 @@ class TodoState(DeclaredFamily, affix="TodoState"):
 class OpenTodoState(OpenTodo, TodoState):
 
     @classmethod
-    def is_open(cls) -> bool:
-        return True
-
-    @classmethod
     def assign(cls, current, proposed, traced, actor):
         return current.assigned(proposed, traced, actor)
 
 
 class BlockedTodoState(OpenTodo, TodoState):
 
-    @classmethod
-    def is_open(cls) -> bool:
-        return True
+    pass
 
 
 class DoneTodoState(TodoState):
