@@ -8,7 +8,6 @@ import sys
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
@@ -17,6 +16,7 @@ from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.registry.registry_document import RegistryEntry
 from agent_comms.registry.registry_store import RegistryReadCounts
 from agent_comms.registry.thread_identity import OwnerIdentity
+from agent_comms.registry.threads import Thread
 from agent_comms.transport.owner_connection import OwnerConnection
 from agent_comms.transport.owner_requests import (
     OwnerRetiredReply,
@@ -35,10 +35,6 @@ from agent_comms.transport.runtime_server import (
     SocketClient,
 )
 from agent_comms.transport.tool_result import DeclaredReply, ToolResult
-
-if TYPE_CHECKING:
-    from agent_comms.registry.threads import Thread
-
 
 @dataclass(frozen=True)
 class OwnerAttachedReply(DeclaredReply):

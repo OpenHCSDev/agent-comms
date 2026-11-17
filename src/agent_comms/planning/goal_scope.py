@@ -8,10 +8,10 @@ from typing import (
 )
 
 from agent_comms.nominal.field_codec import GoalId, NullMember, SingleFieldValue
+from agent_comms.planning.goals import GoalDeclaration
 
 if TYPE_CHECKING:
     from agent_comms.planning.goal_history import RecordedGoalRevision
-    from agent_comms.planning.goals import GoalDeclaration
 
 
 class FailureKey(TypedDict, total=False):

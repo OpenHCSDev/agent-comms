@@ -61,12 +61,12 @@ from typing_extensions import TypeAliasType, TypeForm
 
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.json_schema import JsonScalar, JsonSchemaOwner
+from agent_comms.nominal.registration_inheritance import RegistrationInheritance
 from agent_comms.nominal.sealed import Sealed
 
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
-    from agent_comms.nominal.registration_inheritance import RegistrationInheritance
 
 T = TypeVar("T")
 

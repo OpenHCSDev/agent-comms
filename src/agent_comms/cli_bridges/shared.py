@@ -85,6 +85,7 @@ from agent_comms.cli_bridges.wire_models import WireModel
 from agent_comms.cli_verbs.declared_verb import DeclaredOptions
 from agent_comms.cli_verbs.send_request import SendRequest
 from agent_comms.comms import Comms, wire
+from agent_comms.coordination.assignment_store import AssignmentStore
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
@@ -162,7 +163,6 @@ from agent_comms_hooks.watch import SessionCommandError
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.claude_protocol import ReadResultObserved
-    from agent_comms.coordination.assignment_store import AssignmentStore
 
 
 class ReaderState:

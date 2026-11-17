@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
-from agent_comms.coordination.attempt_states import SucceededAttempt
+from agent_comms.coordination.attempt_states import SucceededAttempt, TerminalAttempt
 from agent_comms.coordination.errors import (
     IdentityConflict,
     CoordinationError,
@@ -16,6 +16,7 @@ from agent_comms.coordination.errors import (
 from agent_comms.coordination.execution_states import CompletedExecution
 from agent_comms.coordination.reason_codes import ReasonCode
 from agent_comms.coordination.schema import COORDINATION_SNAPSHOT_VERSION
+from agent_comms.coordination.session import CoordinationCapture, NativeCapture
 from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination.tables.attempts import (
     AttemptRecord,
@@ -44,11 +45,6 @@ from agent_comms.nominal.field_codec import (
     projected,
 )
 from agent_comms.nominal.lifecycle_capability import Active, Complete
-
-if TYPE_CHECKING:
-    from agent_comms.coordination.attempt_states import TerminalAttempt
-    from agent_comms.coordination.session import CoordinationCapture, NativeCapture
-
 
 @dataclass(frozen=True, slots=True)
 class RecoverySnapshot:
@@ -310,7 +306,6 @@ class RecoverySnapshot:
 
     def finish_publications(self, session, boundary: NativeCapture) -> None:
         """Release this one native attempt only when every original route settled."""
-        from agent_comms.coordination.tables.executions import CurrentExecutions
 
         if not all(row.lifecycle.is_published() for row in self.require_wire_responses()):
             return

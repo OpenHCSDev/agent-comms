@@ -5,10 +5,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+from agent_comms.execution.cursor_publication import CursorPublication
 from agent_comms.nominal.field_codec import AcpSessionId, RootId
 
 if TYPE_CHECKING:
-    from agent_comms.execution.cursor_publication import CursorPublication
     from agent_comms.execution.turn_runner import TurnRunner
 
 

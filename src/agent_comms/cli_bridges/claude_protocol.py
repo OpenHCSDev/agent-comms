@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Self
+from typing import Literal, Self
 from xml.etree import ElementTree
 
 from pydantic import (
@@ -55,6 +55,7 @@ from agent_comms.cli_bridges.shared import (
     MONITOR_FRAME,
     ConfirmedDelivery,
     ForeignMonitorFrame,
+    MonitorAttachment,
     MonitorFrame,
     MonitorIncomingFrame,
     MonitorObservation,
@@ -95,10 +96,6 @@ from agent_comms.transcript.transcript_events import (
     UserTranscript,
 )
 from agent_comms.transport.tool_declaration import ContextRows, one_line
-
-if TYPE_CHECKING:
-    from agent_comms.cli_bridges.shared import MonitorAttachment
-
 
 class ClaudeMonitorFrame(MonitorIncomingFrame):
     """Claude Monitor caps lines at 500 and joined batches at 3000 UTF-16 units, trims every

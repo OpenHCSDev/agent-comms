@@ -28,6 +28,7 @@ from agent_comms.agent_backend import (
     PlacedCompaction,
     RuntimeLocation,
 )
+from agent_comms.agent_events import AgentInfo
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.fresh_private_session import create_fresh_private_session
@@ -60,17 +61,15 @@ from agent_comms.execution.session_revision import (
 from agent_comms.execution.turn_inbox import InputContent
 from agent_comms.installer.native_package import SYSTEM_PROMPT
 from agent_comms.nominal.field_codec import AcpSessionId
-from agent_comms.pi_payloads import PiResponseData
+from agent_comms.pi_payloads import PiResponseData, StateData
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.team.rule_deal import SystemPromptDelivery
 
 if TYPE_CHECKING:
-    from agent_comms.agent_events import AgentInfo
     from agent_comms.comms import Comms
     from agent_comms.config_options import ConfigOptions
     from agent_comms.execution.owned_turn import TurnDelivery
     from agent_comms.execution.turn_runner import TurnRunner
-    from agent_comms.pi_payloads import StateData
     from agent_comms.registry.threads import Thread
 
 

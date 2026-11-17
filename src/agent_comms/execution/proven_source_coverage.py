@@ -22,6 +22,7 @@ from agent_comms.execution.historical_native_inputs import (
     HistoricalNativeInput,
     read_historical_native_inputs,
 )
+from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_input_record import (
     NumberNativeColumn,
     TextNativeColumn,
@@ -39,13 +40,12 @@ from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup
 from agent_comms.nominal.lifecycle_capability import Active
+from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.storage.private_path import FileIdentity, ObservedPath, PresentPath
 from agent_comms.waking.wake_policy import RecipientDecision
 
 if TYPE_CHECKING:
     from agent_comms.execution.cursor_owner import CursorOwner, CursorState
-    from agent_comms.execution.native_entries import NativeEvidenceScope
-    from agent_comms.registry.registry_privacy import RegistryPrivacy
 
 
 @dataclass(frozen=True)

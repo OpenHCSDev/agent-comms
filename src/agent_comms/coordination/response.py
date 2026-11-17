@@ -546,7 +546,6 @@ def _settle_fenced_response(
                     raise CoordinationError("no keyed bus acknowledgement; no resend authorized")
                 # This call created the durable dispatch barrier, and owns the
                 # only authorized first append while its final fence is locked.
-                from agent_comms.messaging.response_conversation import ResponseConversation
 
                 conversation = ResponseConversation.capture(bus, snapshot, obligation, boundary.privacy, registry_snapshot)
                 matched = bus.publisher._publish_keyed_response_unlocked(

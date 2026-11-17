@@ -10,8 +10,9 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Self
+from typing import Self
 
+from agent_comms.comms import Comms
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.planning.goal_actions import (
     CreateProblemGoalAction,
@@ -23,6 +24,8 @@ from agent_comms.planning.goal_actions import (
 )
 from agent_comms.planning.owner_requests import NewestOpenRequest
 from agent_comms.planning.phase_tasks import PhaseTask
+from agent_comms.planning.plan_phase_base import PlanPhase
+from agent_comms.planning.plan_reading import PlanReading
 from agent_comms.projects.checkouts import Checkout, CheckoutStart
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_sources import LocalRepositorySource
@@ -35,12 +38,6 @@ from agent_comms.registry.native_settings import NativeThreadDefaults
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.recorded_time import RecordedEventTime
-
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-    from agent_comms.planning.plan_phase_base import PlanPhase
-    from agent_comms.planning.plan_reading import PlanReading
-
 
 @dataclass(frozen=True)
 class WorkDispatch:

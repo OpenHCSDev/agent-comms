@@ -4,15 +4,11 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
+from agent_comms.execution.pi_commands import PiCommand
 from agent_comms.execution.pi_events import Response
 from agent_comms.execution.turn_item import PiRequestKey
 from agent_comms.nominal.sealed import Sealed
-
-if TYPE_CHECKING:
-    from agent_comms.execution.pi_commands import PiCommand
-
 
 @dataclass(frozen=True)
 class PendingRequest[Command: PiCommand]:

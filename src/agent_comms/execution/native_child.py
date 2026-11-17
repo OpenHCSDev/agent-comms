@@ -20,6 +20,7 @@ from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.native_turn_context import PublishedContext
 from agent_comms.execution.participant_identity import ParticipantIdentity
 from agent_comms.execution.pending_requests import PendingRequest
+from agent_comms.execution.pi_commands import ExtensionUiResponse, PiCommand
 from agent_comms.execution.pi_events import PiEvent
 from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.publication_measurements import PublicationMeasurements
@@ -28,12 +29,11 @@ from agent_comms.execution.session_revision import SessionRevision
 from agent_comms.execution.turn_context import Provenance, TurnContext
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.pi_payloads import PiResponseData, StateData
 from agent_comms.storage.private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
 
-    from agent_comms.execution.pi_commands import ExtensionUiResponse, PiCommand
-    from agent_comms.pi_payloads import PiResponseData, StateData
     from agent_comms.registry.threads import Thread
 
 

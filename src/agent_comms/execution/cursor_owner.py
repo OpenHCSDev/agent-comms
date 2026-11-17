@@ -16,6 +16,10 @@ from agent_comms.acp_extension import (
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import IdentityConflict, StaleFence
+from agent_comms.coordination.session import NativeCapture
+from agent_comms.coordination.tables.participants import OwnerGenerations
+from agent_comms.execution.historical_native_inputs import HistoricalNativeInput
+from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_input_owner import ParticipantOwner, RegistryOwner
 from agent_comms.execution.native_input_record import NativeInputReference
 from agent_comms.execution.native_runtime_input import (
@@ -24,7 +28,13 @@ from agent_comms.execution.native_runtime_input import (
     NativeRuntimeTable,
 )
 from agent_comms.execution.private_send_rules import RunningTurnRegistryCheck
-from agent_comms.execution.proven_source_coverage import SourceCoverage, SourcePrefix
+from agent_comms.execution.proven_source_coverage import (
+    CoverageInput,
+    NoInjectedInput,
+    ProvenSourceCoverage,
+    SourceCoverage,
+    SourcePrefix,
+)
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import InputId, RootId, ThreadLookup
 from agent_comms.registry.thread_identity import GenerationCounter
@@ -33,15 +43,6 @@ from agent_comms.registry.threads import NativeThread
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
-    from agent_comms.coordination.session import NativeCapture
-    from agent_comms.coordination.tables.participants import OwnerGenerations
-    from agent_comms.execution.historical_native_inputs import HistoricalNativeInput
-    from agent_comms.execution.native_entries import NativeEvidenceScope
-    from agent_comms.execution.proven_source_coverage import (
-        CoverageInput,
-        NoInjectedInput,
-        ProvenSourceCoverage,
-    )
 
 
 @dataclass(frozen=True)

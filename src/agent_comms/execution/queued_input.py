@@ -13,7 +13,8 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
-from agent_comms.acp_extension import InputStartedUpdate, QueueItem
+from agent_comms.acp_extension import InputStartedUpdate, QueueItem, QueueScope
+from agent_comms.comms import Comms
 from agent_comms.context_segments.wake import MessageDelivery
 from agent_comms.coordination.assignment_states import DeferredAssignment, DeliveredAssignment
 from agent_comms.coordination.cohort import pending_sealed_assignments
@@ -30,34 +31,31 @@ from agent_comms.execution.input_key import AcpInputKey, InputKey
 from agent_comms.execution.input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
 from agent_comms.execution.ordinary_turn_rules import MissingAcceptedInputCheck
 from agent_comms.execution.reservation_rules import ReservationRule, RuleCheck
-from agent_comms.execution.turn_context import TurnContext
+from agent_comms.execution.turn_context import TurnContext, UserRequestSegment
 from agent_comms.execution.turn_goal_permission import AcceptedGoalPermission, TurnGoalPermission
-from agent_comms.execution.turn_inbox import InputContent, InputRequest
+from agent_comms.execution.turn_inbox import InputContent, InputRequest, TurnInbox
 from agent_comms.execution.turn_input_source import (
     AcceptedFollowingInput,
     DeliveredFollowingInput,
     TurnAcceptance,
+    TurnInputSource,
 )
 from agent_comms.input_attempt import InputAttempt, ReservedInput
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.messages import Message
 from agent_comms.messaging.routing import ScheduledTurn
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId, InputId, RootId
 from agent_comms.planning.goals import GoalDeclaration, NoGoal
+from agent_comms.registry.registry_document import RegistryEntry, RegistrySnapshot
 from agent_comms.registry.thread_identity import ClaimedIdentity, ClaimScoped
 from agent_comms.registry.threads import Thread
+from agent_comms.transport.runtime_server import RuntimeServer
 
 if TYPE_CHECKING:
-    from agent_comms.acp_extension import QueueScope
-    from agent_comms.comms import Comms
     from agent_comms.execution.input_drain import DrainedSession, InputDrain
-    from agent_comms.execution.turn_inbox import TurnInbox
-    from agent_comms.execution.turn_input_source import TurnInputSource
     from agent_comms.execution.turn_runner import TurnRunner
-    from agent_comms.messaging.bus_publication import Delivered
-    from agent_comms.messaging.message_bus import MessageBus
-    from agent_comms.registry.registry_document import RegistryEntry, RegistrySnapshot
-    from agent_comms.transport.runtime_server import RuntimeServer
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -623,7 +621,6 @@ class InitialInput(QueuedInput):
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> None:
         """Own original reservation, dispatch and unbound retirement as one lifetime."""
-        from agent_comms.execution.turn_context import TurnContext, UserRequestSegment
 
         request = UserRequestSegment.capture(task)
         async with AsyncExitStack() as resources:

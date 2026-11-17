@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.coordination.errors import IdentityConflict, PublicationActivationBlocked
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.installer.native_package import (
@@ -26,7 +27,6 @@ from agent_comms.nominal.field_codec import RootId
 from agent_comms.storage.locked_store import RegistryFile
 
 if TYPE_CHECKING:
-    from agent_comms.execution.launch_runtime import LaunchRuntime
     from agent_comms.installer.active_route import CommsRoute
     from agent_comms.registry.threads import Thread
 

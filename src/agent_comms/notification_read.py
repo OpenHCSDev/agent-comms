@@ -5,8 +5,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
+from agent_comms.comms import Comms
 from agent_comms.messaging.message_notification import (
     NoNotificationWindow,
     NotificationPass,
@@ -17,10 +17,6 @@ from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.presentation import WireRevision
 from agent_comms.registry.activity import ObservedActivity
 from agent_comms.registry.registry_names import DeletedThread
-
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-
 
 @dataclass(frozen=True)
 class NotificationsRead:

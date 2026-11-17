@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from contextlib import AsyncExitStack
 from functools import partial
-from typing import TYPE_CHECKING
 
 from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 from metaclass_registry.mro_dispatch import MroDispatch, handles
@@ -28,11 +27,8 @@ from agent_comms.coordination.errors import Refused
 from agent_comms.execution.pi_vocabulary import ManualCompactionReason
 from agent_comms.execution.transcript_sources import UnreadTranscriptCursor
 from agent_comms.execution.turn_phase import CompactionPhase, PublishingPhase
+from agent_comms.execution.turn_runner import TurnRunner
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
-
-if TYPE_CHECKING:
-    from agent_comms.execution.turn_runner import TurnRunner
-
 
 class CompactionReply(MroDispatch):
     """The ACP reply to /compact for each outcome the backend reports."""

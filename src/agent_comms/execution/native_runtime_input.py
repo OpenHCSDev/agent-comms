@@ -10,7 +10,7 @@ import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 from agent_comms.coordination.errors import (
     IdentityConflict,
@@ -22,7 +22,11 @@ from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.participants import OwnerGenerations, Participants
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.execution.native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
-from agent_comms.execution.native_input_proof import NativeContextRecord, NativeInputLocation
+from agent_comms.execution.native_input_proof import (
+    NativeContextProof,
+    NativeContextRecord,
+    NativeInputLocation,
+)
 from agent_comms.execution.native_input_record import (
     NativeColumn,
     NativeInputContext,
@@ -82,10 +86,6 @@ from agent_comms.storage.typed_table import (
     sql_literal,
 )
 from agent_comms.transport.tool_denial import SelectedToolDenied
-
-if TYPE_CHECKING:
-    from agent_comms.execution.native_input_proof import NativeContextProof
-
 
 class NativeRuntimeTable(PrivateCoordinatorTable):
     """Capability identifying the native-runtime schema's declared tables."""
@@ -293,7 +293,6 @@ class NativeRuntimeInput(
         unrelated owner activity cannot revoke a prepared page. No counter or
         projection is persisted, and the read closes before presentation work.
         """
-        from agent_comms.coordination.tables.executions import ExecutionRecord
         from agent_comms.transcript.transcripts import TranscriptRead
 
         with TranscriptRead.publication_source(root) as db:

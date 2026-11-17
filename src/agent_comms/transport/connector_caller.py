@@ -14,7 +14,9 @@ from agent_comms.messaging.bus_publication import DirectorOrigin
 from agent_comms.messaging.read_basis import OperatorOutcomes
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RootId
 from agent_comms.planning.order_words import DirectiveText
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.registry.threads import ExternalThread
 from agent_comms.transport.request import ToolRequest, tool_field
 from agent_comms.transport.tool_caller import (
     ForkCaller,
@@ -75,8 +77,6 @@ class ThreadConnectorCaller(ConnectorCaller, ThreadCaller):
         the connector's grant is the authority, not a pre-existing registry entry.
         """
         if self.name not in comms.registry:
-            from agent_comms.projects.checkouts import Checkout
-            from agent_comms.registry.threads import ExternalThread
 
             comms.registry.declare(
                 ExternalThread(self.name, frozenset(), Checkout(comms.root))

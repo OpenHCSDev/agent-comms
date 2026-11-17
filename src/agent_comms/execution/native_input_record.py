@@ -11,17 +11,19 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Literal
 
-from agent_comms.coordination.assignment_states import TriagePendingAssignment
+from agent_comms.coordination.assignment_states import AssignmentState, TriagePendingAssignment
 from agent_comms.coordination.contracts import validate_execution_id
 from agent_comms.coordination.errors import IdentityConflict, UnrecordedNativeContext
 from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.participants import OwnerGenerations, OwnerRecord
 from agent_comms.coordination.tables.responses import ResponseObligation
+from agent_comms.execution.native_entries import MessageEntry, RecordedEntry, TranscriptProjection
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.native_integer import PositiveNativeIntegerBounds
 from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.transcript_routes import InputDisplay, NoDisplayText
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     AssignmentId,
@@ -40,21 +42,14 @@ from agent_comms.storage.typed_table import (
     TextStorage,
     sql_literal,
 )
+from agent_comms.transcript.transcript_events import TranscriptEvent
 
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
-    from agent_comms.coordination.assignment_states import AssignmentState
     from agent_comms.execution.cursor_owner import CursorOwner
     from agent_comms.execution.historical_native_inputs import HistoricalNativeInput
-    from agent_comms.execution.native_entries import (
-        MessageEntry,
-        RecordedEntry,
-        TranscriptProjection,
-    )
     from agent_comms.execution.native_runtime_input import NativeRuntimeInput
-    from agent_comms.messaging.message_reference import MessageReference
-    from agent_comms.transcript.transcript_events import TranscriptEvent
 
 
 class NativeInputPosition(DeclaredFamily, JsonShapeFamily, affix="NativePosition"):

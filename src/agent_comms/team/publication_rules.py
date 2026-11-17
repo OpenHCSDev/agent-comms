@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Self
 
+from agent_comms.comms import Comms
 from agent_comms.heartbeat_subjects import HeartbeatSubject, UnlandedHeadSubject
 from agent_comms.nominal.field_codec import PathText
 from agent_comms.planning.pull_requests import PullRequestLink
@@ -15,17 +16,16 @@ from agent_comms.projects.work_branches import CommitBase, WorkBranches
 from agent_comms.team.standing_rules import (
     DatedStandingRule,
     HeadLine,
+    HeartbeatFrame,
     HeldBranch,
     HeldOrderBranchRule,
     UndatedStandingRule,
 )
+from agent_comms.ui_model.teammate_state import TeammateState
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from agent_comms.comms import Comms
-    from agent_comms.team.standing_rules import HeartbeatFrame
-    from agent_comms.ui_model.teammate_state import TeammateState
 
 
 @dataclass(frozen=True)

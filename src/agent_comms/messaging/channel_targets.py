@@ -23,7 +23,7 @@ from agent_comms.errors import (
 from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
-from agent_comms.messaging.response_policy import DirectPolicy, MentionedPolicy
+from agent_comms.messaging.response_policy import DirectPolicy, MentionedPolicy, ResponsePolicy
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion
@@ -54,7 +54,6 @@ if TYPE_CHECKING:
         DMDisplayScope,
         MessageDisplayScope,
     )
-    from agent_comms.messaging.response_policy import ResponsePolicy
     from agent_comms.planning.goal_management import Goals
     from agent_comms.registry.catalog_document import CatalogAccess, CatalogDocument
     from agent_comms.registry.registry_document import (

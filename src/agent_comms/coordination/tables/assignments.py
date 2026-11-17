@@ -116,7 +116,6 @@ class WakeAssignment(
             or self.resolver_version != RESOLVER_VERSION
             or self.policy_version != POLICY_VERSION
         ):
-            from agent_comms.coordination.errors import IdentityConflict
 
             raise IdentityConflict("claim acceptance requires initial frozen decision")
 
@@ -129,7 +128,6 @@ class WakeAssignment(
             revision=self.revision,
         )
         if self != progress or self.lifecycle.mode != candidate.lifecycle.mode:
-            from agent_comms.coordination.errors import IdentityConflict
 
             raise IdentityConflict("accepted claim identity conflicts")
 

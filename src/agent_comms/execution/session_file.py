@@ -5,8 +5,9 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
+from agent_comms.agent_backend import AgentBackend, RuntimeLocation
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.unstarted_runtime import UnstartedRuntime
 from agent_comms.nominal.field_codec import (
@@ -16,10 +17,6 @@ from agent_comms.nominal.field_codec import (
     SubclassUnion,
     WireTransient,
 )
-
-if TYPE_CHECKING:
-    from agent_comms.agent_backend import AgentBackend, RuntimeLocation
-
 
 class SessionFile(SubclassUnion, affix="SessionFile"):
     """A registry transcript location, or no saved transcript yet."""

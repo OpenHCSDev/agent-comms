@@ -11,18 +11,14 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.pi_vocabulary import PendingStopReason, PiStopReason
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import JsonShapeFamily, JsonShapeMember
 from agent_comms.registry.thread_identity import ClaimedIdentity, GenerationCounter
-
-if TYPE_CHECKING:
-    from agent_comms.execution.native_session_reopen import NativeSessionIdentity
-
 
 class NativeClaimEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeClaim"):
     @abstractmethod

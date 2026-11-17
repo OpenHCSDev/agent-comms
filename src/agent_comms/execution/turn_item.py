@@ -9,6 +9,8 @@ from typing import (
 )
 
 from agent_comms.errors import RelationViolationError
+from agent_comms.messaging.channel_targets import NamedTarget
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import (
     Id128,
     NominalSpelling,
@@ -22,8 +24,6 @@ if TYPE_CHECKING:
     from agent_comms.coordination.session import NativeCapture
     from agent_comms.execution.transcript_routes import _SessionRoutes
     from agent_comms.execution.transcript_sources import ExternalTranscript
-    from agent_comms.messaging.channel_targets import NamedTarget
-    from agent_comms.messaging.message_reference import MessageReference
     from agent_comms.messaging.routing import Routing
 
 

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import ClassVar
 
-from agent_comms.coordination.errors import CoordinationError
+from agent_comms.coordination.errors import CoordinationError, IdentityConflict
 from agent_comms.coordination.vocabulary import CoordinatorVocabulary
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
@@ -205,7 +205,6 @@ class PassiveWake(NoSourceProof, WakePolicy):
 
 class BoundedTriageWake(Active, TriageSourceProof, WakePolicy):
     def require_not_triage(self) -> None:
-        from agent_comms.coordination.errors import IdentityConflict
         raise IdentityConflict("pending claim wake decision is not executable")
 
     @classmethod

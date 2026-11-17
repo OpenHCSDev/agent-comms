@@ -4,17 +4,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING
 
 from agent_comms.errors import NobodyOwedError
+from agent_comms.planning.goal_management import Goals
 from agent_comms.planning.orders import OwnerRequest
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
-
-if TYPE_CHECKING:
-    from agent_comms.planning.goal_management import Goals
-    from agent_comms.registry.registration import Registration
-    from agent_comms.registry.registry_document import RegistrySnapshot
-
 
 class HeartbeatDuty(ABC):
     """Whether a pass acts on what it observes. The board frame is written either way: it is a
