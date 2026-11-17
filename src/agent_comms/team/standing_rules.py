@@ -23,7 +23,7 @@ from agent_comms.coordination.service_passes import (
 from agent_comms.errors import RejectedEnforcementError, RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, ResidentMemory
 from agent_comms.execution.root_runtime import RootRuntimeStore
-from agent_comms.execution.turn_bound import LastTurns, RecentTurnsSince
+from agent_comms.execution.turn_bound import LastTurns
 from agent_comms.execution.turn_digests import OrderEditCountRead, TurnDigestRead
 from agent_comms.heartbeat_subjects import (
     AnswerSubject,
@@ -980,13 +980,11 @@ class HeartbeatFrame(TeamInputs):
         return {}
 
     def turns_for(self, comms: Comms, thread: Thread) -> tuple[TurnDigest, ...]:
-        """One original turn read covering this holder's review cuts and recent window."""
+        """Read only the recent window; order edits have their own bounded source queries."""
         identity = thread.incarnation
         if identity not in self._turns:
-            since = min((comms.goals.todos.unjudged_since(todo)
-                         for todo in self.holders.get(identity, ())), default=time.time())
             self._turns[identity] = TurnDigestRead(
-                comms.root, thread, RecentTurnsSince(since, recent=self.recent)).read().turns
+                comms.root, thread, self.recent).read().turns
         return self._turns[identity]
 
     def recent_turns(self, comms: Comms, thread: Thread) -> tuple[TurnDigest, ...]:
