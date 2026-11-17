@@ -11,11 +11,12 @@ import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.execution.backend import TurnSession
 from agent_comms.execution.coding_child import CodingChild, CodingChildMode
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.reservation_rules import ReservationRule, RuleCheck
@@ -29,7 +30,7 @@ from agent_comms.execution.turn_input_source import TurnInputSource
 from agent_comms.messaging.envelope_claim_transitions import ClaimOwner, FileClaimPath, WakeClaim
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord
 from agent_comms.nominal.lifecycle_capability import Executing
-from agent_comms.pi_payloads import StorageDenialToolDetails
+from agent_comms.pi_payloads import PiToolResult, StorageDenialToolDetails
 from agent_comms.planning.goal_waits import GoalWait
 from agent_comms.planning.goals import GoalDeclaration
 from agent_comms.projects.storage_projection import StorageProjection
@@ -45,12 +46,6 @@ from agent_comms.transport.native_tool_transport import (
 )
 from agent_comms.transport.native_tools import NativeToolDeclaration
 from agent_comms.transport.tool_denial import SelectedToolDenied, StorageDenied
-
-if TYPE_CHECKING:
-    from agent_comms.coordination.tables.assignments import WakeAssignment
-    from agent_comms.execution.backend import TurnSession
-    from agent_comms.pi_payloads import PiToolResult
-
 
 @dataclass(frozen=True, kw_only=True)
 class OrdinaryContextCheck(RuleCheck):

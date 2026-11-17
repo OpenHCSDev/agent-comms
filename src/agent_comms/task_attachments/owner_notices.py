@@ -13,7 +13,10 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from agent_comms.context_segments.wake import MessageDelivery
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.turn_context import ContextSegment
+from agent_comms.messaging.bus import BusReader
 from agent_comms.messaging.channel_targets import CommandTarget, CommsTag, NamedTarget, ThreadTarget
 from agent_comms.messaging.messages import (
     ConversationRole,
@@ -23,17 +26,14 @@ from agent_comms.messaging.messages import (
     NoticeRole,
 )
 from agent_comms.messaging.projection_source import ProducedRow
+from agent_comms.messaging.sending import Messaging
 from agent_comms.messaging.task_attachment import TaskAttachment
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.storage.typed_table import TypedTable
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.context_segments.wake import MessageDelivery
-    from agent_comms.execution.turn_context import ContextSegment
-    from agent_comms.messaging.bus import BusReader
-    from agent_comms.messaging.sending import Messaging
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.storage.typed_table import TypedTable
 
 
 @dataclass(frozen=True)

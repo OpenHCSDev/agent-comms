@@ -17,15 +17,14 @@ from dataclasses import (
     fields,
 )
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Literal,
-)
+from typing import Literal
 
+from agent_comms.comms import Comms
 from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.execution.child_process import Platform
 from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.messaging.message_reference import MessageReference
@@ -44,6 +43,7 @@ from agent_comms.registry.thread_identity import (
     ClaimScoped,
     RecordedThreadIncarnation,
 )
+from agent_comms.registry.threads import Thread
 from agent_comms.storage.locked_store import (
     DurableFile,
     PatternFile,
@@ -52,14 +52,8 @@ from agent_comms.storage.private_path import (
     PrivateDirectoryRole,
     PrivateFileRole,
 )
-from agent_comms.acp_extension import SelectedWriteSource
+from agent_comms.acp_extension import SelectedWriteAcceptedUpdate, SelectedWriteSource
 from agent_comms.storage.store_files import AtomicFile
-
-if TYPE_CHECKING:
-    from agent_comms.acp_extension import SelectedWriteAcceptedUpdate
-    from agent_comms.comms import Comms
-    from agent_comms.coordination.tables.assignments import WakeAssignment
-    from agent_comms.registry.threads import Thread
 
 _MAX_BYTES = 1024 * 1024
 
@@ -239,7 +233,6 @@ class SelectedWritePlans(DurableFile, PatternFile):
                 stream.flush()
                 os.fsync(stream.fileno())
                 Platform.current().sync_directory(self.directory)
-            from agent_comms.acp_extension import SelectedWriteAcceptedUpdate
 
             return SelectedWriteAcceptedUpdate(operation_id, source_seq, selected[0].assignment_id)
 

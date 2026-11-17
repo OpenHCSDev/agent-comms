@@ -21,6 +21,7 @@ from agent_comms.nominal.field_codec import (
     SingleFieldValue,
 )
 from agent_comms.nominal.text_digest import TextDigest
+from agent_comms.pi_payloads import UserMessage
 from agent_comms.storage.private_path import FileObservation, FileRevision
 from agent_comms.storage.typed_table import (
     Column,
@@ -35,7 +36,6 @@ if TYPE_CHECKING:
     from sqlite3 import Connection
 
     from agent_comms.execution.native_entries import TranscriptProjection
-    from agent_comms.pi_payloads import UserMessage
 
 
 class TranscriptRoutesRows(StoreRows):

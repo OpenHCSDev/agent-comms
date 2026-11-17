@@ -4,15 +4,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from agent_comms.nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_text import OneThreadName
-
-if TYPE_CHECKING:
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry.threads import Thread
-
+from agent_comms.registry.threads import Thread
 
 class RestartScope(ABC):
     """The scope owns the threads it selects from one registry snapshot."""

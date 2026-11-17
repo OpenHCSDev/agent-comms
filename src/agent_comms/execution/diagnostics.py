@@ -36,12 +36,12 @@ from agent_comms.nominal.field_codec import (
     TurnId,
     WireOmitDefault,
 )
+from agent_comms.registry.activity import DrainDiagnostic
 from agent_comms.storage.locked_store import PatternFile, RuntimeFile
 from agent_comms.storage.store_files import AtomicFile
 
 if TYPE_CHECKING:
     from agent_comms.execution.pi_events import Response
-    from agent_comms.registry.activity import DrainDiagnostic
     from agent_comms.registry.threads import Thread
 
 

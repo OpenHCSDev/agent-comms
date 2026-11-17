@@ -7,14 +7,14 @@ from textwrap import shorten
 from typing import TYPE_CHECKING
 
 from agent_comms.planning.orders import Todo, TodoStore
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from agent_comms.comms import Comms
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry.thread_identity import ThreadIncarnation
 
 
 @dataclass(frozen=True)

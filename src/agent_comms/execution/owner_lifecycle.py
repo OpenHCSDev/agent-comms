@@ -17,7 +17,6 @@ from contextlib import (
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import agent_comms.execution.worker
 from agent_comms.cli_verbs.cli_result import TargetEditResult
@@ -53,7 +52,9 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.active_route import resolve_comms_route
 from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.field_codec import InputId, RecordMember
+from agent_comms.planning.goal_management import Goals
 from agent_comms.registry.owner_release import OwnerReleaseStore
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
@@ -69,10 +70,6 @@ from agent_comms.transport.owner_requests import (
     StartOwnerRuntimeRequest,
     StopOwnerRuntimeRequest,
 )
-
-if TYPE_CHECKING:
-    from agent_comms.messaging.sending import Messaging
-    from agent_comms.planning.goal_management import Goals
 
 _LOG = logging.getLogger(__name__)
 

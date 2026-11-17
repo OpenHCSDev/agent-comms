@@ -17,12 +17,14 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import Self
 
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.transcript_sources import TranscriptSource
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.nominal.field_codec import ThreadLookup
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
 from agent_comms.team.meant_voice import BusVoice
 from agent_comms.team.rule_deal import (
@@ -33,14 +35,9 @@ from agent_comms.team.rule_deal import (
     Redeals,
     Voice,
 )
+from agent_comms.transport.native_tool_call import NativeToolCall
 from agent_comms.transport.tool_denial import SelectedToolDenied
 from agent_comms_hooks.skill import DeckReader, RulesOnly
-
-if TYPE_CHECKING:
-    from agent_comms.execution.transcript_sources import TranscriptSource
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.transport.native_tool_call import NativeToolCall
-
 
 class RulesUnread(SelectedToolDenied):
     """A Pi tool call refused until the thread has read its dealt rules and written its audit."""

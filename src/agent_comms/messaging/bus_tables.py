@@ -10,6 +10,7 @@ from itertools import batched
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.errors import RelationViolationError
+from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import (
     Addressed,
@@ -20,6 +21,7 @@ from agent_comms.messaging.messages import (
     MessageInput,
     MessageKind,
 )
+from agent_comms.messaging.read_basis import RepliesDisplayScope
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 from agent_comms.storage.typed_table import (
     Column,
@@ -33,8 +35,6 @@ from agent_comms.storage.typed_table import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.messaging.channel_targets import NamedTarget
-    from agent_comms.messaging.read_basis import RepliesDisplayScope
     from agent_comms.registry.registry_provenance import RegistryProvenance
 
 

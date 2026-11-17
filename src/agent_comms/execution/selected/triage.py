@@ -15,6 +15,7 @@ from typing import (
 )
 
 from agent_comms.coordination.assignment_states import (
+    AssignmentState,
     FailedAssignment,
     IgnoredAssignment,
     TriagePendingAssignment,
@@ -22,7 +23,10 @@ from agent_comms.coordination.assignment_states import (
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import WireOrigin
-from agent_comms.execution.selected.result import CoordinatedTurn
+from agent_comms.execution.native_input_proof import NativeContextProof
+from agent_comms.execution.native_input_record import TriageNativeExecution
+from agent_comms.execution.selected.result import CoordinatedTurn, publish_native_failure
+from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -38,14 +42,10 @@ if TYPE_CHECKING:
     from sqlite3 import Connection
 
     from agent_comms.coordinated_runtime import SelectedExecution
-    from agent_comms.coordination.assignment_states import AssignmentState
     from agent_comms.execution.historical_native_inputs import HistoricalNativeInput
-    from agent_comms.execution.native_input_proof import NativeContextProof
-    from agent_comms.execution.native_input_record import TriageNativeExecution
     from agent_comms.execution.native_runtime_input import NativeRuntimeInput
     from agent_comms.execution.private_send_stage import TriageNativeSend
     from agent_comms.execution.selected.participant import SelectedParticipant
-    from agent_comms.execution.selected.session import SelectedSession
     from agent_comms.private_send_claim import PrivateSendClaim
 
 
@@ -233,10 +233,6 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
         self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
         execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
     ) -> CoordinatedTurn | None:
-        from agent_comms.execution.selected.result import (
-            CoordinatedTurn,
-            publish_native_failure,
-        )
 
         sent = await Coordination.run_worker(partial(
             publish_native_failure, participant, input_id,

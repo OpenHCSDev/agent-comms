@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms.execution.image_input import ImageInput
 from agent_comms.execution.native_entries import (
@@ -21,11 +20,8 @@ from agent_comms.execution.native_entries import (
 )
 from agent_comms.execution.native_pi import read_tracked_input_commitment
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
+from agent_comms.execution.turn_inbox import StreamingInputPolicy
 from agent_comms.nominal.field_codec import FieldCodec
-
-if TYPE_CHECKING:
-    from agent_comms.execution.turn_inbox import StreamingInputPolicy
-
 
 def encode_request(
     text: str, *, streaming_behavior: type[StreamingInputPolicy] | None = None,

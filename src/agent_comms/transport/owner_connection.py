@@ -16,8 +16,10 @@ from typing import IO, TYPE_CHECKING, ClassVar, Self, cast
 
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.owner_protocol import OwnerLine
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.registry.registry_document import RegistryEntry
 from agent_comms.registry.thread_identity import OwnerIdentity, ThreadIncarnation
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.maintenance_barrier import MaintenanceHolder
@@ -26,8 +28,6 @@ from agent_comms.transport.jsonl_stream import JsonlStreamReader
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.execution.child_process import ProcessIdentity
-    from agent_comms.registry.registry_document import RegistryEntry
     from agent_comms.transport.runtime_request import RuntimeRequest
 
 

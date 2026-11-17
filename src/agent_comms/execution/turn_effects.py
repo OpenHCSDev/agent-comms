@@ -8,10 +8,11 @@ from typing import TYPE_CHECKING
 
 from acp.schema import PromptRequest
 
+from agent_comms.execution.session_lifecycle import SessionLifecycle
+from agent_comms.transport.runtime_server import RuntimeServer
+
 if TYPE_CHECKING:
-    from agent_comms.execution.session_lifecycle import SessionLifecycle
     from agent_comms.execution.turn_runner import TurnRunner
-    from agent_comms.transport.runtime_server import RuntimeServer
 
 
 class TurnEffects(ABC):

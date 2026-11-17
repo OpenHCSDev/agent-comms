@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import Annotated, Self
 
 from agent_comms.cli_bridges.harness_delivery_states import (
     MonitorEvidence,
@@ -18,6 +18,7 @@ from agent_comms.cli_bridges.harness_delivery_states import (
     UnconfirmedOutcome,
     UnrecordedMonitor,
 )
+from agent_comms.coordination.assignment_store import AssignmentStore
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.coordination.tables.assignments import WakeAssignment
@@ -39,10 +40,6 @@ from agent_comms.storage.typed_table import (
     TableSchema,
     TableSource,
 )
-
-if TYPE_CHECKING:
-    from agent_comms.coordination.assignment_store import AssignmentStore
-
 
 @dataclass(frozen=True, slots=True)
 class HarnessDelivery(RetainsChildren, NoDelete, CoordinatorRow, declared_name="harness_deliveries"):

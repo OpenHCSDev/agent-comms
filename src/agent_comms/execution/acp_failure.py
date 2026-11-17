@@ -13,7 +13,9 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, NoReturn
 
 from agent_comms.coordination.errors import Refused
+from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.pi_wire import PiDiagnostic
+from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.input_attempt import InputAttempt
 from agent_comms.messaging.delivery_presentation import DeliveryPresentation
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
@@ -32,8 +34,6 @@ if TYPE_CHECKING:
     from acp import RequestError
 
     from agent_comms.agent_events import Done, Error
-    from agent_comms.execution.controller import SessionUpdateSink
-    from agent_comms.execution.turn_failure import TurnFailure
     from agent_comms.execution.turn_input_source import OriginalTurnInput
     from agent_comms.input_disposition import InputDocument
     from agent_comms.pi_payloads import NativeMessageFailureSource

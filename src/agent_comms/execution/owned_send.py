@@ -5,7 +5,6 @@ from __future__ import annotations
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING
 
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import InputStartListener
@@ -25,6 +24,7 @@ from agent_comms.execution.reservation_rules import (
     RuleCheck,
 )
 from agent_comms.execution.send_outcome import AuthorityChangedSend, SendBoundary, SendOutcome
+from agent_comms.execution.turn_goal_permission import TurnGoalPermission
 from agent_comms.execution.turn_input_source import (
     OrdinaryOwnerCheck,
     OriginalTurnInput,
@@ -36,14 +36,9 @@ from agent_comms.messaging.envelope_claim_transitions import NativeClaim
 from agent_comms.nominal.field_codec import AcpSessionId, ClaimId, InputId, TurnId
 from agent_comms.planning.goal_attempts import GoalAttemptStore
 from agent_comms.planning.goal_waits import GoalWait
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
 from agent_comms.transport.tool_denial import SelectedToolDenied
-
-if TYPE_CHECKING:
-    from agent_comms.execution.turn_goal_permission import TurnGoalPermission
-    from agent_comms.registry.registry_document import RegistrySnapshot
-
-
 
 @dataclass(frozen=True, kw_only=True)
 class InputKeysCheck(RuleCheck):

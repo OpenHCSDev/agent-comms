@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
+from agent_comms.comms import Comms
 from agent_comms.execution.watch_passes import JoinedWatch
 from agent_comms.planning.orders import (
     PullRequests,
@@ -26,10 +26,6 @@ from agent_comms.projects.work_branches import (
     WorkBranchError,
     WorkBranches,
 )
-
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-
 
 @dataclass(frozen=True)
 class ClosedRepositoryObservation:

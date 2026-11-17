@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Type
+from typing import Annotated, Type
 
+from agent_comms.comms import Comms
 from agent_comms.coordination.tables.refusals import SendRefusal
 from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
 from agent_comms.messaging.message_reference import MessageReference
@@ -23,10 +24,6 @@ from agent_comms.transport.request import tool_field
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tool_request import PublishingTool, ThreadToolRequest
 from agent_comms_hooks import ToolRefusedError
-
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-
 
 @dataclass(frozen=True, kw_only=True)
 class SendTool(PublishingTool[ThreadCaller, MessagePublished]):

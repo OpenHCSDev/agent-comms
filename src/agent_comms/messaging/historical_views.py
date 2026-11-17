@@ -70,8 +70,9 @@ from agent_comms.nominal.field_codec import (
     SubclassUnion,
     TaggedRecordMember,
 )
-from agent_comms.presentation import WireRevision
+from agent_comms.presentation import BusPresentation, WireRevision
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
@@ -92,8 +93,6 @@ from agent_comms.transport.tool_result import ToolResult
 
 if TYPE_CHECKING:
     from agent_comms.history_views import HistoryViews
-    from agent_comms.presentation import BusPresentation
-    from agent_comms.registry.catalog_document import CatalogDocument
 
 
 @dataclass(frozen=True, slots=True)

@@ -13,7 +13,7 @@ from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.tables.assignments import WakeAssignment
@@ -27,6 +27,7 @@ from agent_comms.messaging.message_reference import (
     StreamBeginning,
 )
 from agent_comms.messaging.read_basis import ReadCursor
+from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.messaging.watched import Watched
 from agent_comms.nominal.field_codec import (
     NullMember,
@@ -34,13 +35,9 @@ from agent_comms.nominal.field_codec import (
     SingleFieldValue,
     SubclassUnion,
 )
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.storage.private_path import FileObservation, FileRevision
-
-if TYPE_CHECKING:
-    from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
-    from agent_comms.registry.registry_document import RegistrySnapshot
-
 
 @dataclass(frozen=True, slots=True)
 class TakenInputCursor(ReadCursor):

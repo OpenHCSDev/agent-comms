@@ -6,8 +6,9 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.coordination.session import CoordinationSession
@@ -16,10 +17,6 @@ from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage.typed_table import Column, Index
 from agent_comms_hooks import ToolRefusedError
-
-if TYPE_CHECKING:
-    from agent_comms.coordination.coordinator import Coordination
-
 
 @dataclass(frozen=True)
 class SendRefusal(CoordinatorRow):

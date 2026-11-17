@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.execution.pi_wire import PiReported
+from agent_comms.execution.turn_goal_permission import TurnGoalPermission
 from agent_comms.messaging.envelope_claim_transitions import (
     ExistingFileClaim,
     FileClaimPath,
@@ -23,6 +24,7 @@ from agent_comms.nominal.field_codec import (
     WireContext,
     WireOmitDefault,
 )
+from agent_comms.pi_payloads import PiToolResult
 from agent_comms.projects.shell_effects import (
     ShellOutput,
     WriteStorageEffect,
@@ -50,8 +52,6 @@ from agent_comms.transport.tool_declaration import (
 from agent_comms.transport.tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
-    from agent_comms.execution.turn_goal_permission import TurnGoalPermission
-    from agent_comms.pi_payloads import PiToolResult
     from agent_comms.team.pi_rule_gate import PiRuleGate
 
 

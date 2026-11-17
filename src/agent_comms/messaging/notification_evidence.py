@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, ClassVar
 from pydantic import JsonValue
 
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.notification_progress import DeliveryProgress
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.field_codec import (
     NullMember,
@@ -22,7 +23,6 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
     from agent_comms.messaging.bus_publication import Delivered
-    from agent_comms.messaging.notification_progress import DeliveryProgress
 
 
 class ConsumptionEvidence(ABC):

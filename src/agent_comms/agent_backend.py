@@ -25,12 +25,15 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.history_view import OwnHistory
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.pi_commands import NativeQuery
 from agent_comms.execution.pi_vocabulary import CompactionReason
 from agent_comms.execution.session_revision import NoSessionObservation, SessionObservation
 from agent_comms.execution.transcript_cursor_reads import TranscriptRuntime
+from agent_comms.execution.transcript_sources import TranscriptSource
 from agent_comms.execution.turn_inbox import InputContent
 from agent_comms.execution.turn_outcome import TurnOutcome
 from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMember
@@ -42,10 +45,7 @@ from agent_comms.team.rule_deal import DealDelivery
 from agent_comms.transport.tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from agent_comms.execution.agent_event import AgentEvent
-    from agent_comms.execution.launch_runtime import LaunchRuntime
     from agent_comms.execution.owned_turn import TurnDelivery
-    from agent_comms.execution.transcript_sources import TranscriptSource
     from agent_comms.execution.turn_runner import TurnRunner
     from agent_comms.registry.threads import Thread
 

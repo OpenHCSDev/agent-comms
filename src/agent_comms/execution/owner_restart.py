@@ -10,7 +10,6 @@ from __future__ import annotations
 import os
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING
 
 from agent_comms.coordination.errors import CoordinationError
 from agent_comms.errors import RelationViolationError
@@ -22,6 +21,7 @@ from agent_comms.execution.native_arguments import (
     LaunchArguments,
     LaunchBinary,
 )
+from agent_comms.execution.owner_cutover import OwnerCutover
 from agent_comms.execution.owner_lifecycle import (
     OwnerLifecycle,
     OwnerRestartResult,
@@ -30,15 +30,11 @@ from agent_comms.execution.owner_lifecycle import (
 from agent_comms.execution.restart_refusals import OwnerSelectionChangedRefusal
 from agent_comms.execution.restart_scope import AllOwners, RestartScope
 from agent_comms.registry.owner_release import OwnerCompletion
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_store import RegistryEdit
 from agent_comms.registry.thread_identity import ThreadAuthority
 from agent_comms.registry.threads import Thread
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
-
-if TYPE_CHECKING:
-    from agent_comms.execution.owner_cutover import OwnerCutover
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry.registry_store import RegistryEdit
-
 
 @dataclass(frozen=True)
 class OwnerRestartRequest:

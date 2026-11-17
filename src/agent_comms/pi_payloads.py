@@ -16,6 +16,7 @@ from pydantic import JsonValue
 
 from agent_comms import agent_events as events
 from agent_comms.execution.acp_failure import ExhaustedRetry, FailureSource, RecoveredRetry
+from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.annotation_disclosure import (
     PublicInstructionAnnotations,
     WithheldAnnotations,
@@ -71,7 +72,10 @@ from agent_comms.execution.turn_context import (
     TurnContext,
 )
 from agent_comms.execution.turn_failure import ModelRequestFailed, ProviderTransportFailed
+from agent_comms.execution.turn_goal_permission import TurnGoalPermission
 from agent_comms.execution.turn_item import CompactionChargeId, ProviderResponseId, UsageChargeId
+from agent_comms.execution.turn_phase import FailedPhase, TurnPhase
+from agent_comms.messaging.routing import Routing
 from agent_comms.messaging.send_result import CorrectionResult, CorrectionUnreported
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
@@ -140,14 +144,10 @@ class StrictFields(PiPayload):
         return super().decode_fields(value, decoded)
 
 if TYPE_CHECKING:
-    from agent_comms.execution.agent_event import AgentEvent
     from agent_comms.execution.backend import NativeSession, TurnSession
     from agent_comms.execution.native_entries import TranscriptProjection
     from agent_comms.execution.pi_events import AutoRetryEnd
     from agent_comms.execution.transcript_routes import SentTextDigest
-    from agent_comms.execution.turn_goal_permission import TurnGoalPermission
-    from agent_comms.execution.turn_phase import TurnPhase
-    from agent_comms.messaging.routing import Routing
 
 
 # A Pi payload field is omitted from the wire while it holds its default.
@@ -413,7 +413,6 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
     timestamp: PiField[ReportedTimestamp | PiOmitted] = PiOmitted()
 
     def turn_phase(self, phase: TurnPhase) -> TurnPhase:
-        from agent_comms.execution.turn_phase import FailedPhase
         return FailedPhase(error=self.error)
 
     def refine_model_request_failure(self, failure):

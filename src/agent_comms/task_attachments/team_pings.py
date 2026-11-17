@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.cli_bridges.harness_delivery_states import DeliveredOutcome, Outcome
+from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.heartbeat_subjects import HeartbeatSubject, TeamHistory
 from agent_comms.messaging.channel_targets import ThreadTarget
@@ -35,10 +36,12 @@ from agent_comms.nominal.field_codec import (
     ThreadLookup,
 )
 from agent_comms.nominal.text_digest import TextDigest
+from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.locked_store import DocumentChange, DurableFile, LockedStore, PatternFile
 from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
+from agent_comms.storage.typed_table import TypedTable
 from agent_comms.task_attachments.disclosure_text import (
     AccentTone,
     ViewHeading,
@@ -55,9 +58,6 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from agent_comms.cli_bridges.shared import CliBridge
-    from agent_comms.comms import Comms
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.storage.typed_table import TypedTable
 
 
 @dataclass(frozen=True)

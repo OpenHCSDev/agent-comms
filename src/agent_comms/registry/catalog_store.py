@@ -5,18 +5,15 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
+from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
+from agent_comms.registry.threads import Thread
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.store_files import CatalogTier, SingleFileStore
-
-if TYPE_CHECKING:
-    from agent_comms.messaging.activity_clocks import ActivityClocks
-    from agent_comms.registry.threads import Thread
-
 
 @dataclass(frozen=True, slots=True)
 class ChannelCatalog(SingleFileStore, ThreadOwnedState, CarriedDocument[CatalogDocument], CatalogTier):

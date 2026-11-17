@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
 
+from agent_comms.execution.native_child import (
+    BorrowedNative,
+    EmptyNative,
+    NativeChildState,
+    PiSessionChild,
+    RetainedNative,
+)
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.session_retention import NativeSessionRetention
 from agent_comms.execution.session_revision import SessionRevision, SessionRevisionUnavailable
-
-if TYPE_CHECKING:
-    from agent_comms.execution.native_child import NativeChildState, PiSessionChild
-
 
 class PersistentPiSession(
     NativeSessionRetention["PiSessionChild", "NativeChildState", NativeSessionIdentity],
@@ -17,7 +19,6 @@ class PersistentPiSession(
     """Serialize borrowing and retirement of one native session's actual child."""
 
     def __init__(self) -> None:
-        from agent_comms.execution.native_child import EmptyNative
 
         self.lock = asyncio.Lock()
         self.child_state: NativeChildState = EmptyNative()
@@ -27,7 +28,6 @@ class PersistentPiSession(
         return self.child_state.available
 
     async def open(self, launch, *, reuse, startup, watchdog) -> PiSessionChild:
-        from agent_comms.execution.native_child import BorrowedNative, EmptyNative, PiSessionChild
 
         key = (launch, launch.configuration.auth_revision())
         child = self.child_state.reuse(key) if reuse else None
@@ -50,7 +50,6 @@ class PersistentPiSession(
             return await self.child_state.context_for_input(thread, context)
 
     def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:
-        from agent_comms.execution.native_child import RetainedNative
 
         if not child.proc.alive():
             return False

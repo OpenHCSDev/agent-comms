@@ -24,13 +24,13 @@ from agent_comms.execution.private_send_rules import (
 )
 from agent_comms.execution.reservation_rules import ReservationViolationError
 from agent_comms.execution.turn_goal_permission import GoalPermission, OwnerGoalPermission
+from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.nominal.field_codec import GoalId, ThreadLookup
+from agent_comms.planning.goals import Goal
 from agent_comms.registry.task_registry import ClaimGenerationRead
 from agent_comms.registry.threads import NativeThread, Thread
 
 if TYPE_CHECKING:
-    from agent_comms.execution.turn_lease import TurnLeaseFence
-    from agent_comms.planning.goals import Goal
     from agent_comms.registry.registration import Registration
     from agent_comms.registry.registry_document import RegistrySnapshot
 

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.coordination.errors import IdentityConflict, CoordinationError
 from agent_comms.coordination.vocabulary import CoordinatorVocabulary
+from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.notification_progress import (
     CompletedProgress,
     ContextualProgress,
@@ -28,6 +29,7 @@ from agent_comms.nominal.lifecycle_capability import (
     Pending,
     Terminal,
 )
+from agent_comms.registry.recipient_activity import RecipientActivity
 from agent_comms.storage.typed_table import sql_literal
 from agent_comms.waking.source_proof_requirement import (
     ProvedByInput,
@@ -55,10 +57,8 @@ if TYPE_CHECKING:
     )
     from agent_comms.execution.native_input_record import TriageNativeExecution
     from agent_comms.messaging.bus_publication import Delivered
-    from agent_comms.messaging.frozen_recipient import FrozenRecipient
     from agent_comms.messaging.message_notification import MessageNotification
     from agent_comms.notification_assignment import AssignmentActivity
-    from agent_comms.registry.recipient_activity import RecipientActivity
 
 
 class UnengagedDefaults:

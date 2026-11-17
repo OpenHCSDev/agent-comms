@@ -10,6 +10,9 @@ from typing import TYPE_CHECKING, NoReturn
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.restart_refusals import OwnerMaintenancePendingRefusal
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.threads import Thread
+from agent_comms.storage.maintenance_barrier import MaintenanceState
 
 if TYPE_CHECKING:
     from agent_comms.execution.owner_lifecycle import (
@@ -22,9 +25,6 @@ if TYPE_CHECKING:
         StoppedOwnerBatch,
         StoppedOwnerFailure,
     )
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.registry.threads import Thread
-    from agent_comms.storage.maintenance_barrier import MaintenanceState
 
 
 class OwnerCutover(ABC):

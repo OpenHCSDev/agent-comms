@@ -5,11 +5,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, ClassVar
 
+from agent_comms.comms import Comms
+from agent_comms.planning.plan_reading import PlanReading
+from agent_comms.registry.threads import Thread
+
 if TYPE_CHECKING:
-    from agent_comms.comms import Comms
     from agent_comms.planning.plan_phase_base import PlanPhase
-    from agent_comms.planning.plan_reading import PlanReading
-    from agent_comms.registry.threads import Thread
 
 
 class PhaseTask(ABC):

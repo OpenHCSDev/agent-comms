@@ -5,23 +5,18 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING
 
 from acp.schema import AgentMessageChunk, TextContentBlock
 
-from agent_comms.acp_extension import TurnChangedUpdate, encode_updates
+from agent_comms.acp_extension import TranscriptSnapshotUpdate, TurnChangedUpdate, encode_updates
+from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.turn_lease import TurnState
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.ui_model.observation import ReadTranscript
-
-if TYPE_CHECKING:
-    from agent_comms.acp_extension import TranscriptSnapshotUpdate
-    from agent_comms.comms import Comms
-    from agent_comms.execution.controller import SessionUpdateSink
-
 
 @dataclass(frozen=True, kw_only=True)
 class TranscriptUpdate(DeclaredFamily, affix="TranscriptUpdate"):

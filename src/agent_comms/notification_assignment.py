@@ -11,7 +11,12 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, NoReturn
 
-from agent_comms.coordination.database import CoordinationStore, StoreFile
+from agent_comms.coordination.database import (
+    CoordinationStore,
+    InvalidStore,
+    MissingStore,
+    StoreFile,
+)
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import CurrentExecutions
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
@@ -31,6 +36,7 @@ from agent_comms.messaging.notification_evidence import (
 from agent_comms.messaging.notification_progress import (
     AssignmentProgress,
     AssignmentResponse,
+    DeliveryProgress,
     QueuedProgress,
     SentProgress,
     ShownToModelProgress,
@@ -39,6 +45,7 @@ from agent_comms.messaging.notification_progress import (
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, boundary_decoder
 from agent_comms.registry.notification_selection_read import NotificationSelectionRead
+from agent_comms.registry.recipient_activity import RecipientActivity
 from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_store import RegistryStore
@@ -49,11 +56,7 @@ from agent_comms.waking.wake_policy import RecipientDecision
 
 if TYPE_CHECKING:
 
-    from agent_comms.coordination.database import InvalidStore, MissingStore
     from agent_comms.messaging.message_notification import MessageNotification
-    from agent_comms.messaging.notification_progress import DeliveryProgress
-    from agent_comms.registry.registry_privacy import RegistryPrivacy
-    from agent_comms.registry.recipient_activity import RecipientActivity
 
 
 @dataclass(frozen=True)

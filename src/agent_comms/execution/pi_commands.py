@@ -16,6 +16,7 @@ from agent_comms import agent_events as events
 from agent_comms.execution.acp_failure import UnrecordedFailureSource
 from agent_comms.execution.child_process import BoundedRun
 from agent_comms.execution.image_input import ImageInput
+from agent_comms.execution.launch_runtime import RestartEnvironment
 from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_input_proof import NativeContextProof, NativeInputCommit
@@ -56,7 +57,6 @@ from agent_comms.transport.native_tool_transport import OwnerToolConnection
 
 if TYPE_CHECKING:
     from agent_comms.execution.backend import TurnSession
-    from agent_comms.execution.launch_runtime import RestartEnvironment
     from agent_comms.execution.pending_requests import PendingRequest
     from agent_comms.execution.pi_events import Response, ResponseOutcome
 

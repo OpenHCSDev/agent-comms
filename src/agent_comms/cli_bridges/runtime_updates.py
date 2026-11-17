@@ -23,6 +23,7 @@ from agent_comms.messaging.sending import Messaging
 from agent_comms.registry import activity
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.thread_identity import OfferedTools
+from agent_comms.registry.thread_status import ThreadStatus
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
 from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.transcript.external_transcript_rows import ExternalPage
@@ -37,7 +38,6 @@ if TYPE_CHECKING:
     from agent_comms.cli_bridges.shared import TranscriptBridge
     from agent_comms.comms import Comms
     from agent_comms.importing import ImportBuffer
-    from agent_comms.registry.thread_status import ThreadStatus
 
 
 @dataclass

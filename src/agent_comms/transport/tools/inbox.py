@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
+from agent_comms.comms import Comms
 from agent_comms.input_attempt import UnresolvedInputReference
 from agent_comms.messaging.agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
 from agent_comms.messaging.channel_targets import CommandTarget
@@ -23,10 +24,6 @@ from agent_comms.transport.tool_caller import ToolCaller
 from agent_comms.transport.tool_request import NativeToolRequest
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
-
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-
 
 @dataclass(frozen=True)
 class InboxPageRead(ToolResult):

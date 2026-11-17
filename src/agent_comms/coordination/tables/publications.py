@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
 from agent_comms.coordination.contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -18,6 +18,7 @@ from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.errors import RelationViolationError
+from agent_comms.messaging.bus import BusReader
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, MessageId, WireName
@@ -31,10 +32,6 @@ from agent_comms.storage.typed_table import (
     RetainsChildren,
     ValidatedInserts,
 )
-
-if TYPE_CHECKING:
-    from agent_comms.messaging.bus import BusReader
-
 
 @dataclass(frozen=True, slots=True)
 class PublicationIntents(

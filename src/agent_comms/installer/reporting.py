@@ -3,13 +3,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
+from agent_comms.installer.interpreter_operation import PhaseTiming
 from agent_comms.installer.refusals import InterpreterWorkerDied
-
-if TYPE_CHECKING:
-    from agent_comms.installer.interpreter_operation import PhaseTiming
-
 
 class InstallOutcome(ABC):
     @abstractmethod
