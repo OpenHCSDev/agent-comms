@@ -6,8 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
-from agent_comms.execution.acp_failure import NativeTurnError, ProviderQuotaFailure
+from agent_comms.acp_extension import decode_updates
+from agent_comms.execution.acp_failure import (
+    NativeTurnError,
+    ProviderQuotaFailure,
+    RequestFailedUpdate,
+)
 from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.execution.turn_input_source import NoTurnAcceptance

@@ -5,12 +5,13 @@ import json
 import pytest
 from acp import RequestError
 
-from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
+from agent_comms.acp_extension import decode_updates
 from agent_comms.execution.acp_failure import (
     ExhaustedRetry,
     ProviderConnectionFailure,
     ProviderQuotaFailure,
     RequestACPFailure,
+    RequestFailedUpdate,
     RequestFailure,
 )
 from agent_comms.execution.pi_events import NativeRetryEnd

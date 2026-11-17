@@ -29,7 +29,7 @@ from agent_comms.nominal.field_codec import (
     WireName,
     WireOmitDefault,
 )
-from agent_comms.text_route_update import TextRouteUpdate, encode_updates
+from agent_comms.text_route_update import AgentCommsUpdate, TextRouteUpdate, encode_updates
 
 if TYPE_CHECKING:
     from acp import RequestError
@@ -81,6 +81,12 @@ class DeliveryFailure(DeliveryPresentation, DeclaredFamily, affix="Failure"):
     @property
     @abstractmethod
     def description(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class InputFailedUpdate(AgentCommsUpdate):
+    text: str
+    failure: DeliveryFailure
 
 
 @dataclass(frozen=True)
@@ -214,6 +220,12 @@ class ACPFailure(DeliveryFailure):
 
 
 @dataclass(frozen=True)
+class RequestFailedUpdate(AgentCommsUpdate):
+    failure: ACPFailure
+    source: FailureSource = UnrecordedFailureSource()
+
+
+@dataclass(frozen=True)
 class RequestFailure:
     """Failure returned on the request, with whether its notification was sent."""
 
@@ -297,10 +309,6 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
     async def publish(self, client: SessionUpdateSink, session_id: str) -> NativeTurnOutcome:
         from acp.schema import AgentMessageChunk, TextContentBlock
 
-        from agent_comms.acp_extension import (
-            InputFailedUpdate,
-            RequestFailedUpdate,
-        )
 
         failure = self.request.failure
         accepted = await client.publish_update(
