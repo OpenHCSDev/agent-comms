@@ -1300,6 +1300,10 @@ class MetadataRecord(ClaudeRecord, ABC, declared_name=None):
     pass
 
 
+class FrameLink(MetadataRecord, declared_name="frame-link"):
+    """A harness artifact frame link; no model input, delivery claim or turn boundary."""
+
+
 class AttachmentPayload(OpenWire, ABC, affix=""):
 
     @abstractmethod
