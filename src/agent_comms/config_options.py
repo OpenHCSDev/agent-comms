@@ -181,10 +181,9 @@ class CatalogConfigOption(ConfigOption):
             if not self.waiters[catalog]:
                 del self.waiters[catalog]
 
-    async def display_choices(self, thread: CatalogSelection) -> list[CatalogChoice]:
-        """The editor lists the current value even when the catalog lacks it, so it can be replaced."""
+    async def display_choices(self, thread: CatalogSelection, *, current: str | None) -> list[CatalogChoice]:
+        """Keep the editor's current value, distinct from its discovery context, reachable."""
         choices = await self.choices(thread)
-        current = self.current_value(thread)
         if current in {choice.value for choice in choices}:
             return choices
         name = "Not configured" if current is None else f"{current} (unavailable)"

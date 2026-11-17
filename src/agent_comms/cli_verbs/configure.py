@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.cli_verbs.cli_command import ConfigurationCommand, TargetActionCommand
@@ -20,6 +20,12 @@ class ConfigureCliCommand(
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel, *, catalog):
         return (cls(name=thread.name),)
+
+    def catalog_selection(self, catalogs: ConfigOptions) -> object:
+        """Discover against this thread after applying the form's proposed changes."""
+        with Comms.client(catalogs.route) as comms:
+            selection = comms.threads.running_selection(self.name)
+            return self.configured(replace(selection.thread, model=selection.model))
 
     def apply(self, ctx: Comms) -> ThreadConfiguredResult:
         thread = ctx.registry.require(self.name)
