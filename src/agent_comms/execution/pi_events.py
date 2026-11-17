@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms import agent_events as events
+from agent_comms.agent_backend import ConvertedEvent, UnconvertedEvent
 from agent_comms.execution.acp_failure import UnrecordedFailureSource
 from agent_comms.execution.controller import ChoiceRequest, PermissionOptionId
 from agent_comms.execution.native_failure_reads import (
@@ -84,7 +85,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class PiEvent(OpenPayload, affix=""):
+class PiEvent(OpenPayload, ConvertedEvent, affix=""):
     """One declaration-owned record received by the Pi RPC channel."""
 
     ends: ClassVar[tuple[type[TurnPhase], ...]] = ()
@@ -111,15 +112,6 @@ class PiEvent(OpenPayload, affix=""):
 
     async def deliver_to(self, channel) -> None:
         await channel.deliver_event(self)
-
-    @classmethod
-    def known_kinds(cls):
-        return (cls.wire_kind(),)
-
-    @classmethod
-    def wire_kind(cls) -> str:
-        """The Pi ``type`` this member converts."""
-        return cls.declared_name
 
     def convert(self):
         return ()
@@ -204,12 +196,8 @@ class IgnoredDurableEvent(Opaque, DurablePiEvent):
 
 
 @dataclass(frozen=True)
-class UnknownPiEvent(UnknownPayload, NativePiEvent, DurablePiEvent):
+class UnknownPiEvent(UnknownPayload, UnconvertedEvent, NativePiEvent, DurablePiEvent):
     """Ignore unrecognized events; they do not prove permission to start input."""
-
-    @classmethod
-    def known_kinds(cls):
-        return ()
 
 
 @dataclass(frozen=True)

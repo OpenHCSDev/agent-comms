@@ -155,14 +155,8 @@ def test_new_thread_selection_requires_one_concrete_nominal_member(backend_decla
         scope.AgentBackend.seal()
 
 
-class _ProbeEvent(DeclaredFamily):
-    @classmethod
-    def wire_kind(cls):
-        return cls.declared_name
-
-    @classmethod
-    def known_kinds(cls):
-        return (cls.wire_kind(),)
+class _ProbeEvent(ab.ConvertedEvent, DeclaredFamily):
+    pass
 
 
 class AlphaProbe(_ProbeEvent):
@@ -173,10 +167,8 @@ class BetaProbe(_ProbeEvent):
     pass
 
 
-class FallbackProbe(_ProbeEvent):
-    @classmethod
-    def known_kinds(cls):
-        return ()
+class FallbackProbe(ab.UnconvertedEvent, _ProbeEvent):
+    pass
 
 
 def test_converter_family_must_cover_exactly_the_runtime_event_kinds():

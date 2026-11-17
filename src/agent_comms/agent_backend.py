@@ -33,7 +33,7 @@ from agent_comms.execution.session_revision import NoSessionObservation, Session
 from agent_comms.execution.transcript_cursor_reads import TranscriptRuntime
 from agent_comms.execution.turn_inbox import InputContent
 from agent_comms.execution.turn_outcome import TurnOutcome
-from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMember
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_payloads import PiResponseData
@@ -341,6 +341,28 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         problems = _event_family_problems(cls, family)
         if problems:
             raise BackendDeclarationError(f"{cls.__name__}: " + "; ".join(problems))
+
+
+class ConvertedEvent(FamilyMember):
+    """A member of a converter family: it converts the runtime events of the
+    kinds it names, by default the one its declared name spells."""
+
+    @classmethod
+    def wire_kind(cls) -> str:
+        """The runtime event kind this member converts."""
+        return cls.declared_name
+
+    @classmethod
+    def known_kinds(cls) -> tuple[str, ...]:
+        return (cls.wire_kind(),)
+
+
+class UnconvertedEvent(ConvertedEvent):
+    """The member a converter family selects for a kind no member converts: it names none."""
+
+    @classmethod
+    def known_kinds(cls) -> tuple[str, ...]:
+        return ()
 
 
 def _event_family_problems(backend: type, family: type[DeclaredFamily]) -> list[str]:
