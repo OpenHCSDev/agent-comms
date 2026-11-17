@@ -19,5 +19,14 @@ class NativeExecution(ABC):
 
 
 @dataclass(kw_only=True)
-class PackagedNativeExecution(NativeExecution):
+class RunsNativePackage:
+    """The verified native package an execution runs."""
+
+    __slots__ = ()
+
     native_package: VerifiedNativePackage
+
+
+@dataclass(kw_only=True)
+class PackagedNativeExecution(RunsNativePackage, NativeExecution):
+    pass

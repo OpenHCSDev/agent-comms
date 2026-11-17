@@ -244,11 +244,19 @@ class ChannelDisplayIdentity(TaggedRecordMember, DisplayIdentity):
     scope: ChannelDisplayScope
 
 
-@dataclass(frozen=True, slots=True)
-class DMDisplayIdentity(TaggedRecordMember, DisplayIdentity):
+@dataclass(frozen=True, kw_only=True)
+class RequestedDM:
+    """The root, project and peer a DM display was requested for."""
+
+    __slots__ = ()
+
     root_identity: tuple[int, int]
     project_path: Annotated[Path, PathText]
     requested_peer: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DMDisplayIdentity(RequestedDM, TaggedRecordMember, DisplayIdentity):
     peer: ThreadIncarnation
     scope: DMDisplayScope
 
@@ -364,13 +372,21 @@ class LineOutput:
         self.stream.flush()
 
 
-@dataclass(frozen=True, slots=True)
-class CursorRow:
-    """One actor's cursor on one (target, sender) key: the row `read_cursors` reads."""
+@dataclass(frozen=True)
+class ActorRoute:
+    """The actor reading and the target and sender of the conversation it reads."""
+
+    __slots__ = ()
 
     actor: str
     target: str
     sender: str
+
+
+@dataclass(frozen=True, slots=True)
+class CursorRow(ActorRoute):
+    """One actor's cursor on one (target, sender) key: the row `read_cursors` reads."""
+
     cursor: ConversationCursor
 
     @property
@@ -749,8 +765,8 @@ class DisplayBasis:
             raise DMScopeChanged("Display incarnation changed; refresh the displayed page.")
 
 
-@dataclass(frozen=True, slots=True)
-class DMDisplayBasis:
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DMDisplayBasis(RequestedDM):
     """Immutable identity/scope witness for one fetched human DM page.
 
     A page fetch is not proof that a UI painted it. The client must supply
@@ -758,9 +774,6 @@ class DMDisplayBasis:
     """
 
     root: str
-    root_identity: tuple[int, int]
-    project_path: Annotated[Path, PathText]
-    requested_peer: str
     viewer_identity: ThreadIncarnation
     viewer_names: frozenset[str]
     peer_identity: ThreadIncarnation

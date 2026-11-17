@@ -24,11 +24,12 @@ from pathlib import Path
 
 from agent_comms.cli_bridges.fd_readiness import ready
 from agent_comms.comms import wire
-from agent_comms.coordinated_runtime import SelectedExecution
+from agent_comms.coordinated_runtime import ExecutionRoot, SelectedExecution
 from agent_comms.coordination.errors import PublicationActivationBlocked
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.cursor_publication import CursorDelivery
+from agent_comms.execution.native_execution import RunsNativePackage
 from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.selected.result import CoordinatedTurn
 from agent_comms.installer.native_package import VerifiedNativePackage
@@ -41,14 +42,11 @@ _MAX_GO_WAIT_SECONDS = 120
 _GO = re.compile(r"GO (0|[1-9][0-9]{0,17})\Z")
 
 
-@dataclass(slots=True)
-class ForegroundOwner:
+@dataclass(slots=True, kw_only=True)
+class ForegroundOwner(ExecutionRoot, RunsNativePackage):
     """The registration belongs to this process and authorizes at most one GO."""
 
-    root: Path
-    wire_root_id: RootId
     name: str
-    native_package: VerifiedNativePackage
     _started: bool = field(default=False, init=False, repr=False)
 
     async def run_go(self, line: str) -> CoordinatedTurn | None:

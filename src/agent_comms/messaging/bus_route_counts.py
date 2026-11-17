@@ -14,7 +14,7 @@ from agent_comms.messaging.message_sender import PublicSender
 from agent_comms.messaging.messages import BusProjectionTables, BusRow, MessageInput, PublicRecord
 from agent_comms.messaging.page_traversal import PageTraversal
 from agent_comms.messaging.projection_source import ProducedRow
-from agent_comms.messaging.read_basis import ReadCursor
+from agent_comms.messaging.read_basis import ActorRoute, ReadCursor
 from agent_comms.messaging.routing import DeliveryScope
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.field_codec import ThreadLookup
@@ -96,10 +96,7 @@ class BusRouteKeys(BusProjectionTables):
 
 
 @dataclass(frozen=True)
-class RouteUnread(TypedRow):
-    actor: str
-    target: str
-    sender: str
+class RouteUnread(ActorRoute, TypedRow):
     count: int
 
 

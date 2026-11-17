@@ -484,9 +484,9 @@ def test_invalid_filters_and_reserved_channels(tmp_path):
         with pytest.raises(ValueError):
             comms.channels.create_tag(name)
     with pytest.raises(ValueError):
-        TagChannel("empty")
+        TagChannel(name="empty")
     with pytest.raises(ValueError):
-        TagChannel("#team", frozenset({"api", "ui"}))
+        TagChannel(name="#team", tags=frozenset({"api", "ui"}))
 
 
 def test_none_membership_and_independent_channel_order(tmp_path):
