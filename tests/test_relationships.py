@@ -26,17 +26,18 @@ from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
 from bus_history import read_history
 from conftest import installed_comms
+from agent_comms.registry.relationships import AddRelationshipEdit, UpdateRelationshipEdit, RemoveRelationshipEdit
 
 
 def add_peer(root, peer):
     wire(root).relationships.edit(
-        "owner", RelationshipEdit.member_named("add"), peer, f"Working with {peer}"
+        "owner", AddRelationshipEdit, peer, f"Working with {peer}"
     )
 
 
 def add_shared_peer(root, owner):
     other = "peer" if owner == "owner" else "owner"
-    wire(root).relationships.edit(owner, RelationshipEdit.member_named("add"), other, f"From {owner}")
+    wire(root).relationships.edit(owner, AddRelationshipEdit, other, f"From {owner}")
 
 
 def change_shared_peer(root, instruction):
@@ -70,11 +71,11 @@ def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkey
     reopened = wire(comms.root)
     original = reopened.relationships.collaborations("owner")[0]
     assert (
-        reopened.relationships.edit("owner", RelationshipEdit.member_named("add"), "peer", "ignored")
+        reopened.relationships.edit("owner", AddRelationshipEdit, "peer", "ignored")
         == original
     )
     updated = reopened.relationships.edit(
-        "peer", RelationshipEdit.member_named("update"), "owner", "Fixes"
+        "peer", UpdateRelationshipEdit, "owner", "Fixes"
     )
     assert updated.note == "Fixes" and updated.created_at == original.created_at
     assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("owner"))["collaborations"][0]["note"] == "Fixes"
@@ -82,11 +83,11 @@ def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkey
     invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "owner"}, caller=ThreadCaller("peer"))
     assert reopened.relationships.collaborations("owner") == ()
     assert reopened.relationships.collaborations("peer") == ()
-    assert reopened.relationships.edit("owner", RelationshipEdit.member_named("remove"), "peer") is None
+    assert reopened.relationships.edit("owner", RemoveRelationshipEdit, "peer") is None
     with pytest.raises(ValueError):
-        reopened.relationships.edit("owner", RelationshipEdit.member_named("update"), "peer")
+        reopened.relationships.edit("owner", UpdateRelationshipEdit, "peer")
     with pytest.raises(ValueError):
-        reopened.relationships.edit("owner", RelationshipEdit.member_named("add"), "owner")
+        reopened.relationships.edit("owner", AddRelationshipEdit, "owner")
 
 
 def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
@@ -111,7 +112,7 @@ def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
 
 def test_alias_and_persisted_thread_sort(tmp_path):
     comms = setup_wire(tmp_path)
-    comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "peer", "Review")
+    comms.relationships.edit("owner", AddRelationshipEdit, "peer", "Review")
     comms.relationships.set_order("owner", ChildrenRelationshipGroup, LastActivityThreadSort)
     comms.registry.rename("owner", "renamed")
     comms.registry.rename("peer", "reviewer")
@@ -155,7 +156,7 @@ def test_concurrent_opposite_adds_create_one_shared_pair(tmp_path):
 
 def test_concurrent_add_remove_never_leaves_one_sided_contact(tmp_path):
     comms = setup_wire(tmp_path)
-    comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "peer", "Before race")
+    comms.relationships.edit("owner", AddRelationshipEdit, "peer", "Before race")
     for _ in range(4):
         with ProcessPoolExecutor(max_workers=2) as pool:
             list(
@@ -181,7 +182,7 @@ def collaboration_rows(comms, owner="owner"):
 def test_deleted_peer_survives_unrelated_edit_and_explicit_remove(tmp_path):
     comms = setup_wire(tmp_path)
     original = comms.relationships.edit(
-        "owner", RelationshipEdit.member_named("add"), "peer", "Unfinished review notes"
+        "owner", AddRelationshipEdit, "peer", "Unfinished review notes"
     )
     comms.owners.stop("peer")
     comms.registry.remove("peer")
@@ -194,28 +195,28 @@ def test_deleted_peer_survives_unrelated_edit_and_explicit_remove(tmp_path):
 
     # The reported bug: an edit of a DIFFERENT edge must not garbage-collect
     # missing peers and their notes out of the durable state.
-    comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "child", "Another task")
+    comms.relationships.edit("owner", AddRelationshipEdit, "child", "Another task")
     comms.relationships.edit(
-        "owner", RelationshipEdit.member_named("update"), "child", "Updated other task"
+        "owner", UpdateRelationshipEdit, "child", "Updated other task"
     )
     reopened = wire(comms.root)
     persisted = {edge.peer: edge for edge in reopened.relationships.collaborations("owner")}
     assert persisted["peer"] == original
     missing = next(row for row in collaboration_rows(reopened) if row.target == "peer")
     assert not missing.available and missing.detail == original.note
-    assert reopened.relationships.edit("owner", RelationshipEdit.member_named("remove"), "peer") is None
-    assert reopened.relationships.edit("owner", RelationshipEdit.member_named("remove"), "peer") is None
+    assert reopened.relationships.edit("owner", RemoveRelationshipEdit, "peer") is None
+    assert reopened.relationships.edit("owner", RemoveRelationshipEdit, "peer") is None
     assert [edge.peer for edge in reopened.relationships.collaborations("owner")] == ["child"]
 
 
 def test_surviving_peer_can_end_unavailable_collaboration(tmp_path):
     comms = setup_wire(tmp_path)
-    comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "peer", "Work to remember")
+    comms.relationships.edit("owner", AddRelationshipEdit, "peer", "Work to remember")
     comms.owners.stop("owner")
     comms.registry.remove("owner")
     row = collaboration_rows(comms, "peer")[0]
     assert (row.target, row.available, row.detail) == ("owner", False, "Work to remember")
-    comms.relationships.edit("peer", RelationshipEdit.member_named("remove"), "owner")
+    comms.relationships.edit("peer", RemoveRelationshipEdit, "owner")
     assert collaboration_rows(comms, "peer") == ()
     assert json.loads((comms.root / "relationships.json").read_text())["collaborations"] == []
 
@@ -224,7 +225,7 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
     comms = setup_wire(tmp_path)
     old_peer = comms.registry.require("peer")
     original = comms.relationships.edit(
-        "owner", RelationshipEdit.member_named("add"), "peer", "Old incarnation's task"
+        "owner", AddRelationshipEdit, "peer", "Old incarnation's task"
     )
     comms.owners.stop("peer")
     comms.registry.remove("peer")
@@ -241,11 +242,11 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
             )
     assert collaboration_rows(comms, "peer") == ()
     # The new thread cannot erase its predecessor's note from the old peer list.
-    comms.relationships.edit("peer", RelationshipEdit.member_named("remove"), "owner")
+    comms.relationships.edit("peer", RemoveRelationshipEdit, "owner")
     assert comms.relationships.collaborations("owner") == (original,)
-    comms.relationships.edit("owner", RelationshipEdit.member_named("remove"), "peer")
+    comms.relationships.edit("owner", RemoveRelationshipEdit, "peer")
     new = comms.relationships.edit(
-        "owner", RelationshipEdit.member_named("add"), "peer", "Explicit new task"
+        "owner", AddRelationshipEdit, "peer", "Explicit new task"
     )
     assert new.peer_created != original.peer_created
     row = collaboration_rows(comms)[0]
@@ -256,11 +257,11 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
 def test_deleted_owner_edges_are_not_purged_or_inherited_by_new_owner(tmp_path):
     comms = setup_wire(tmp_path)
     original = comms.relationships.edit(
-        "owner", RelationshipEdit.member_named("add"), "peer", "Retained historical declaration"
+        "owner", AddRelationshipEdit, "peer", "Retained historical declaration"
     )
     comms.owners.stop("owner")
     comms.registry.remove("owner")
-    comms.relationships.edit("origin", RelationshipEdit.member_named("add"), "peer", "Independent work")
+    comms.relationships.edit("origin", AddRelationshipEdit, "peer", "Independent work")
     comms.registry.declare(
         NativeThread('owner', frozenset(), Checkout(tmp_path), created_at=original.owner_created + 1)
     )
@@ -268,7 +269,7 @@ def test_deleted_owner_edges_are_not_purged_or_inherited_by_new_owner(tmp_path):
     assert collaboration_rows(comms) == ()
     old_row = next(row for row in collaboration_rows(comms, "peer") if row.target == "owner")
     assert not old_row.available and old_row.detail == original.note
-    comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "peer", "New owner work")
+    comms.relationships.edit("owner", AddRelationshipEdit, "peer", "New owner work")
     stored = json.loads((comms.root / "relationships.json").read_text())["collaborations"]
     assert any(
         row["note"] == original.note and row["owner_created"] == original.owner_created
@@ -280,7 +281,7 @@ def test_deleted_owner_edges_are_not_purged_or_inherited_by_new_owner(tmp_path):
 def test_live_alias_resolves_but_deleted_alias_does_not_erase_note(tmp_path, monkeypatch):
     comms = setup_wire(tmp_path)
     comms.relationships.edit(
-        "owner", RelationshipEdit.member_named("add"), "peer", "Review before rename"
+        "owner", AddRelationshipEdit, "peer", "Review before rename"
     )
     monkeypatch.setenv("AGENT_COMMS_THREAD", "peer")
 
@@ -288,7 +289,7 @@ def test_live_alias_resolves_but_deleted_alias_does_not_erase_note(tmp_path, mon
     assert collaboration_rows(comms)[0].target == "reviewer"
     comms.owners.stop("reviewer")
     comms.registry.remove("reviewer")
-    comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "child")
+    comms.relationships.edit("owner", AddRelationshipEdit, "child")
     row = next(row for row in collaboration_rows(comms) if not row.available)
     assert row.target == "peer" and row.detail == "Review before rename"
 
@@ -298,7 +299,7 @@ def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path
     comms = setup_wire(tmp_path)
     peer = comms.registry.require("peer")
     comms.relationships.edit(
-        "owner", RelationshipEdit.member_named("add"), "peer", "Retained explicit contact"
+        "owner", AddRelationshipEdit, "peer", "Retained explicit contact"
     )
     comms.goals.update_goal("owner", SetGoalAction(text="Review with @peer"))
     comms.registry.rename("peer", "renamed-peer")

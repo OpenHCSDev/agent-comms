@@ -37,6 +37,7 @@ from agent_comms.storage.store_files import store_lock_path
 from agent_comms.transport.request import ToolRequest
 from agent_comms.transport.tool_caller import ThreadCaller
 from goal_owner_fixture import canonical_goal_wire
+from agent_comms.transport.tools.goals import CommsGoalTool
 
 
 class RegistryProbeBus(Bus, declared_name=None):
@@ -114,7 +115,7 @@ def standby(comms, reviewed_inputs=()):
 
 
 def test_standby_reads_replies_without_holding_registry(probed):
-    ToolRequest.member_named("comms_goal").invoke(probed, {
+    CommsGoalTool.invoke(probed, {
         "goal_id": probed.registry.require("owner").goal.require().id,
         "status": "standby", "progress": "Waiting for the child", "wait_for": ["child"],
     }, caller=ThreadCaller("owner"))

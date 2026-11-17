@@ -243,10 +243,17 @@ class BusWriterPhase(VirtualBusPhase):
     )
 
 
-class BusDeliveryReadersPhase(VirtualBusPhase):
-    """B1: delivery, wake, cursor and notification readers on ``seq``."""
+class BusReaderPhase(VirtualBusPhase, declared_name=None):
+    """A phase moving a reader of the old log onto the bus. Each comes after the writer,
+    since a reader cut over first reads a store nothing fills, and the deletion waits
+    for every one."""
 
     after = (BusWriterPhase,)
+
+
+class BusDeliveryReadersPhase(BusReaderPhase):
+    """B1: delivery, wake, cursor and notification readers on ``seq``."""
+
     evidence = PatternAbsent(
         OLD_LOG_READ,
         (
@@ -259,10 +266,9 @@ class BusDeliveryReadersPhase(VirtualBusPhase):
     )
 
 
-class BusHistoryReadersPhase(VirtualBusPhase):
+class BusHistoryReadersPhase(BusReaderPhase):
     """B2: history, presentation and transcript readers on ``seq``."""
 
-    after = (BusWriterPhase,)
     evidence = PatternAbsent(
         OLD_LOG_READ,
         (
@@ -279,13 +285,12 @@ class BusHistoryReadersPhase(VirtualBusPhase):
     )
 
 
-class BusCarryPhase(VirtualBusPhase):
+class BusCarryPhase(BusReaderPhase):
     """D: the one carry of the committed history into the bus database.
 
     Done once the JSONL history writer the carry read from is gone: the bus database is
     then the only store, and the finished carry is deleted rather than kept as evidence."""
 
-    after = (BusWriterPhase,)
     evidence = PathsAbsent(("src/agent_comms/wire_log.py",))
 
 
@@ -303,7 +308,7 @@ class BusActivityPhase(VirtualBusPhase):
 class BusDeletionPhase(VirtualBusPhase):
     """C: everything under the plan's "Deleted, not ported"."""
 
-    after = (BusDeliveryReadersPhase, BusHistoryReadersPhase, BusCarryPhase)
+    after = tuple(BusReaderPhase.__subclasses__())
     evidence = AllEvidence(
         (
             PathsAbsent(

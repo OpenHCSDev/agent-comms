@@ -29,6 +29,7 @@ from agent_comms.team.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, 
 from agent_comms.team.vibe_check import OverloadDegradation
 from conftest import maintenance_held
 from test_reconcile_stores import reconcile
+from agent_comms.team.team_heartbeat import TeamHeartbeat
 
 PREVIOUS_TAGS = {new: old for old, new in TeamVocabulary.tags.items()}
 PREVIOUS_KEYS = {new: old for old, new in TeamVocabulary.keys.items()}
@@ -114,7 +115,7 @@ def test_retained_packets_passes_and_channel_move_to_team_names(team_bus):
     store.unlink()
     passes = ServicePassStore.path_in(root)
     services = ServicePassStore.at(root)
-    services.failed("TeamHeartbeat", KeyError("original branch read failed"))
+    services.failed(TeamHeartbeat.__name__, KeyError("original branch read failed"))
     services.heartbeat_passed((teammate,), (teammate,))
     passes.write_text(json.dumps(previous(json.loads(passes.read_text()))))
     hud = TeamHud(

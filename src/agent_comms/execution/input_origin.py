@@ -52,7 +52,7 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
     ) -> None:
         pass
 
-    def require_human(self) -> 'HumanInputOrigin':
+    def require_human(self) -> HumanInputOrigin:
         raise RelationViolationError("Input lacks an original human author witness")
 
     def harness_sources(self) -> tuple[HarnessAttemptOrigin, ...]:

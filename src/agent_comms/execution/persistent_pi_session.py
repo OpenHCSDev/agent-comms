@@ -14,7 +14,7 @@ from agent_comms.execution.session_retention import NativeSessionRetention
 from agent_comms.execution.session_revision import SessionRevision, SessionRevisionUnavailable
 
 class PersistentPiSession(
-    NativeSessionRetention["PiSessionChild", "NativeChildState", NativeSessionIdentity],
+    NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity],
 ):
     """Serialize borrowing and retirement of one native session's actual child."""
 

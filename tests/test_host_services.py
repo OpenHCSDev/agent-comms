@@ -48,7 +48,7 @@ from agent_comms.installer.logs import InstallUnit
 from agent_comms.installer.upgrade import Stack
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
-from agent_comms.nominal.field_codec import Id128
+from agent_comms.nominal.field_codec import Id128, RecordProblems
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.locked_store import DocumentChange
@@ -531,7 +531,7 @@ def test_restart_refuses_a_connector_with_an_undecodable_store(connector_service
     service = connector_service
     type(service).stop_all((service,))
     service.store.path.write_text('{"not_a_grant": true}')
-    with pytest.raises(ServiceNotServingError, match="RecordProblems"):
+    with pytest.raises(ServiceNotServingError, match=RecordProblems.__name__):
         service.start_onto(Path(sys.executable))
         service.serves()
     with socket.socket() as refused:

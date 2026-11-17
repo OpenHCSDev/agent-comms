@@ -26,6 +26,7 @@ from agent_comms.registry.threads import ChosenModel, NativeThread, NextTurnConf
 from agent_comms.transport.request import ToolRequest
 from agent_comms.transport.tool_caller import ThreadCaller
 from conftest import installed_comms
+from agent_comms.transport.tools.goals import CommsGoalTool, CommsResumeGoalTool, CommsSetGoalTool
 
 
 @pytest.fixture
@@ -70,7 +71,7 @@ def test_goal_survives_rename_and_reregistration(comms, tmp_path):
     assert restored.model == DeclaredModel("test/model")
     assert restored.name == "renamed"
     comms.goals.update_goal("worker", PausedGoalAction())
-    tool = ToolRequest.member_named("comms_goal")
+    tool = CommsGoalTool
     with pytest.raises(ValueError):
         tool.invoke(comms, {"goal_id": goal.id, "status": "active", "progress": "late update"}, caller=ThreadCaller("worker"))
     replacement = comms.goals.update_goal("worker", SetGoalAction(text="New objective"))
@@ -164,7 +165,7 @@ def test_turn_scope_checks_original_scope_before_its_turn_correction(comms):
 def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(comms):
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish the release"))
     comms.goals.update_goal("worker", PausedGoalAction(progress="Paused after an uncertain turn"))
-    resume = ToolRequest.member_named("comms_resume_goal")
+    resume = CommsResumeGoalTool
 
     result = resume.invoke(
         comms, {"goal_id": goal.id, "progress": "Explicitly resumed by the user"}, caller=ThreadCaller("worker")
@@ -186,7 +187,7 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(comms):
 
 
 def test_agent_can_set_its_own_persistent_goal(comms):
-    tool = ToolRequest.member_named("comms_set_goal")
+    tool = CommsSetGoalTool
 
     result = tool.invoke(comms, {"text": "Verify the autonomous workflow"}, caller=ThreadCaller("worker"))
 

@@ -9,6 +9,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.registry.relationships import RelationshipEdit
 from test_relationships import setup_wire
+from agent_comms.registry.relationships import AddRelationshipEdit, UpdateRelationshipEdit
 
 
 @pytest.mark.parametrize("text", ["{", "[]", '{"version": 2}'])
@@ -18,18 +19,18 @@ def test_relationship_corruption_stays_strict(tmp_path, text):
     with pytest.raises(ValueError):
         comms.relationships.collaborations("owner")
     with pytest.raises(ValueError):
-        comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "peer")
+        comms.relationships.edit("owner", AddRelationshipEdit, "peer")
     assert comms.relationships.store.path.read_text() == text
 
 
 @pytest.mark.parametrize("stage", ["file_sync", "replace", "directory_sync"])
 def test_adopter_failure_restores_old_bytes_and_mode(tmp_path, monkeypatch, stage):
     comms = setup_wire(tmp_path)
-    comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "peer", "old")
+    comms.relationships.edit("owner", AddRelationshipEdit, "peer", "old")
     path = comms.relationships.store.path
 
     def mutate():
-        comms.relationships.edit("owner", RelationshipEdit.member_named("update"), "peer", "new")
+        comms.relationships.edit("owner", UpdateRelationshipEdit, "peer", "new")
 
     path.chmod(0o640)
     before = path.read_bytes()

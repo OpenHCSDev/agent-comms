@@ -36,6 +36,7 @@ from agent_comms.transport.request import ToolRequest
 from agent_comms.transport.tool_caller import ThreadCaller
 from conftest import installed_comms
 from test_locked_store import _hold_lock, event, process
+from agent_comms.transport.tools.goals import CommsGoalHistoryTool
 
 
 def _wire(tmp_path) -> Comms:
@@ -81,7 +82,7 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
     assert reopened.goals.goal_history("reviewer", OneGoal(first.id)) == entries[:5]
     assert reopened.goals.goal_history("reviewer", OneGoal(second.id)) == entries[4:]
 
-    result = ToolRequest.member_named("comms_goal_history").invoke(
+    result = CommsGoalHistoryTool.invoke(
         reopened, {"goal_id": FieldCodec.encode(first.id)}, caller=ThreadCaller("worker"),
     )
     assert [row["after"]["revision"] for row in result["history"] if row["after"]] == [

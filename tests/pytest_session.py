@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import os
-import tempfile
 from contextlib import ExitStack
-from pathlib import Path
 
 import pytest
 from xdist import is_xdist_worker
@@ -45,11 +43,12 @@ class TestSession(ExitStack):
         # This option is foreign pytest input. Supplied/controller-worker paths
         # keep pytest's explicit-basetemp contract; only its absent default is ours.
         if config.option.basetemp is None:
+            # pytest's own temp root numbers, locks and prunes each run (keeping
+            # tmp_path_retention_count); an explicit basetemp would turn that off and
+            # leave every run's tree behind. Only the root's location is ours.
             scratch = StorageRule().scratch_base
             scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
-            run = Path(tempfile.mkdtemp(prefix="pytest-", dir=scratch))
-            # Leave the factory a new child, not an existing directory to clear.
-            config.option.basetemp = str(run / "files")
+            os.environ["PYTEST_DEBUG_TEMPROOT"] = str(scratch)
 
     def confirm(self, session: pytest.Session) -> None:
         pass

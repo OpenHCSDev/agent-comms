@@ -18,7 +18,7 @@ from agent_comms.coordination.errors import (
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.native_runtime_input import NativeRuntimeTable
-from agent_comms.execution.transcript_sources import AssignedTranscriptSource, EarlierThan
+from agent_comms.execution.transcript_sources import AssignedTranscriptSource, EarlierThan, NativePiUnavailable
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.channels import AnyChannel
 from agent_comms.messaging.messages import Message
@@ -164,7 +164,7 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
     _path, _root_id, comms, initial, _people = _root(tmp_path, direct=direct)
     owner = comms.registry.snapshot().owner_identity('beta')
     diagnostic = StoppedDrainDiagnostic(
-        owner, 'NativePiUnavailable', 'Original outcome uncertain', recorded_at=1.0
+        owner, NativePiUnavailable.__name__, 'Original outcome uncertain', recorded_at=1.0
     )
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
     notice = next(item for item in comms.views.thread_presentations(('sender',)).require('sender').notifications
@@ -188,7 +188,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     root, _root_id, comms, _initial, _people = _root(tmp_path)
     owner = comms.registry.snapshot().owner_identity('beta')
     diagnostic = StoppedDrainDiagnostic(
-        owner, 'NativePiUnavailable', 'Original uncertain outcome', recorded_at=1.0
+        owner, NativePiUnavailable.__name__, 'Original uncertain outcome', recorded_at=1.0
     )
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
     message = comms.messaging.send_user_message(CommandTarget.named('#team'), 'Independent saved original',

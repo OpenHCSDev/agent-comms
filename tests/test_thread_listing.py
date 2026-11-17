@@ -63,7 +63,7 @@ class CountingConnection(LendingConnection):
 def counting_connections(monkeypatch: pytest.MonkeyPatch) -> None:
     """Every store connection is a CountingConnection: StoreContention names its factory at
     call time, and a thread's bus reader is reused, so this precedes the first open."""
-    monkeypatch.setattr(store_files, "LendingConnection", CountingConnection)
+    monkeypatch.setattr(store_files, LendingConnection.__name__, CountingConnection)
 
 
 def test_thread_listing_counts_outside_the_registry_lock(

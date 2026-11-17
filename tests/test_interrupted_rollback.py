@@ -72,7 +72,7 @@ class CarryingRoot:
     comms: Comms
 
     @classmethod
-    def prepared(cls, tmp_path: Path) -> "CarryingRoot":
+    def prepared(cls, tmp_path: Path) -> CarryingRoot:
         comms = prepare_native_comms(wire(tmp_path / "wire"))
         comms.registry.declare(NativeThread("worker", frozenset(), Checkout(tmp_path)))
         active_route_path().parent.mkdir(mode=0o700, parents=True)

@@ -191,3 +191,8 @@ keyword-binders = [
     # Query filters are encoded by their declared columns into bound SQL parameters.
     "agent_comms.storage.typed_table:TypedTable.select",
 ]
+# A family member spells itself by its declared_name, else by declared_words applied to
+# its class name minus its root's affix: NRA calls the rule instead of restating it.
+derived-spellings = [
+    { family = "agent_comms.nominal.declared_family:DeclaredFamily", rule = "agent_comms.nominal.declared_family:declared_words", affix = "affix", spelling = "declared_name" },
+]

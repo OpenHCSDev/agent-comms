@@ -622,10 +622,10 @@ async def test_watch_pass_logs_real_failures_with_tracebacks(connector, caplog):
     assert str(error.exc_info[1]) == "A real watch failure"
     assert error.exc_info[2] is not None
     failing, = ServicePassFailing.violations(wire(connector.root))
-    assert failing.watch == "FailingWatch"
+    assert failing.watch == FailingWatch.__name__
     stored = passes.read().failing["FailingWatch"]
     assert (failing.since, failing.error) == (stored.since, stored.error)
-    passes.passed("FailingWatch")
+    passes.passed(FailingWatch.__name__)
     assert passes.read().failing == {}
     assert ServicePassFailing.violations(wire(connector.root)) == ()
 
