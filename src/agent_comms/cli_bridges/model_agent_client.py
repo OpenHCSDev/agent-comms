@@ -131,7 +131,10 @@ class ChatEndpoint:
             "temperature": self.temperature,
         }).encode()
         request = urllib.request.Request(
-            self.url, data=payload, headers={"Content-Type": "application/json"})
+            self.url, data=payload, headers={
+                "Content-Type": "application/json",
+                "User-Agent": "agent-comms-model-agent",
+            })
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 raw = json.load(response)
