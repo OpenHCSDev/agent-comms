@@ -601,10 +601,15 @@ class HeldOrderLine(HolderProblemLine, declared_name=None):
     order: OrderId
 
 
-class HeadLine(StandingRule, declared_name=None):
-    """A rule about one pull request head: a verdict recorded on that head disposes its line."""
+@dataclass(frozen=True)
+class HeadRule(StandingRule, declared_name=None):
+    """A rule about one pull request head: the head a line names and a verdict answers."""
 
     request: PullRequestHead
+
+
+class HeadLine(HeadRule, declared_name=None):
+    """A rule about one pull request head: a verdict recorded on that head disposes its line."""
 
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
         return (HeadSubject(self.request),)
@@ -1076,10 +1081,8 @@ class HeldOrderDue(HeldOrderLine, DatedStandingRule, declared_name=None):
         return self.since.recorded_at("An order alarm")
 
 
-class HeadReviewRule(StandingRule, declared_name=None):
+class HeadReviewRule(HeadRule, declared_name=None):
     """A head verdict can answer this rule's review request."""
-
-    request: PullRequestHead
 
     @staticmethod
     def decided(store: TodoStore, request: PullRequestHead) -> bool:
@@ -1096,8 +1099,6 @@ class HeadReviewRule(StandingRule, declared_name=None):
 @dataclass(frozen=True)
 class HeadReviewCommands(HeadReviewRule, declared_name=None):
     """A review head supplies the common arguments accepted by the judge."""
-
-    request: PullRequestHead
 
     def command_values(self) -> Mapping[str, str]:
         return {"repo": self.request.repo.to_wire(), "pr": str(self.request.pr),
@@ -1270,7 +1271,6 @@ class OrderlessUnreviewedHead(UnreviewedHead):
 class StuckMerge(HeadLine, DatedStandingRule):
     """An armed head GitHub will not merge: approved, queued and going nowhere. One line per
     head, naming every block on it."""
-    request: PullRequestHead
     blocks: tuple[MergeBlock, ...] = field(compare=False)
     holders: tuple[ThreadIncarnation, ...] = field(default=(), compare=False)
 
@@ -1310,7 +1310,6 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
     StuckMerge's; every other open request linked to one of this teammate's orders is a
     board item. Another teammate's requests share the repositories, never this board; a
     request no open order links is OrderlessPullRequest's."""
-    request: PullRequestHead
     holders: tuple[ThreadIncarnation, ...] = field(compare=False)
     blocks: tuple[MergeBlock, ...] = field(compare=False)
     moved: float = field(compare=False)
