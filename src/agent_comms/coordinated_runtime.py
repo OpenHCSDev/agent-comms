@@ -58,11 +58,19 @@ class IndependentExecution(NativeExecution):
 
 
 @dataclass(kw_only=True)
-class SelectedExecution(PackagedNativeExecution, ConsidersSelectedWork):
-    max_attempts: ClassVar[int] = RetryableProviderFailure.max_retries + 1
+class ExecutionRoot:
+    """The private root a coordinated execution runs in and that root's wire id."""
+
+    __slots__ = ()
 
     root: Path
     wire_root_id: RootId
+
+
+@dataclass(kw_only=True)
+class SelectedExecution(ExecutionRoot, PackagedNativeExecution, ConsidersSelectedWork):
+    max_attempts: ClassVar[int] = RetryableProviderFailure.max_retries + 1
+
     owner_name: str
     opt_in: bool = True
     after_seq: int = 0
