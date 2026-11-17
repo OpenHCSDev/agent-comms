@@ -5,11 +5,12 @@ import socket
 import pytest
 
 from agent_comms.cli_verbs.configure import ConfigureCliCommand
+from agent_comms.agent_events import NativeMetadataObservation
 from agent_comms.config_options import CatalogChoice, ModelConfigOption, ThinkingLevelConfigOption
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_model import DeclaredModel, UndeclaredModel
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.transport.tools.sidebar import CommsPrepareTargetActionTool
 from agent_comms.ui_model.observation import (
@@ -21,20 +22,24 @@ from observation_pass_fixture import watched_pass
 
 
 @pytest.mark.parametrize("thread_type", [NativeThread, ExternalThread])
-async def test_configure_form_keeps_its_thread_context_and_observer(comms, tmp_path, monkeypatch, thread_type):
+@pytest.mark.parametrize("reported", [False, True])
+async def test_configure_form_keeps_its_thread_context_and_observer(comms, tmp_path, monkeypatch, thread_type, reported):
     project = Checkout(tmp_path)
-    thread = thread_type("settings-subject", frozenset(), project, model=DeclaredModel("test/old"))
+    model = DeclaredModel("test/old")
+    thread = thread_type("settings-subject", frozenset(), project, model=UndeclaredModel() if reported else model)
     comms.registry.declare(thread)
+    if reported:
+        comms.agents.observe_runtime_info(thread.name, NativeMetadataObservation(model=model))
     original = comms.registry.require(thread.name)
 
     async def models(option, selection):
         assert selection.project_path == project.path
-        assert selection.model == original.model
+        assert selection.model == model
         return [CatalogChoice("Old", "test/old"), CatalogChoice("New", "test/new")]
 
     async def thinking(option, selection):
         assert selection.project_path == project.path
-        assert selection.model == original.model
+        assert selection.model == model
         return [CatalogChoice("Default", None)]
 
     monkeypatch.setattr(ModelConfigOption, "discover", models)
