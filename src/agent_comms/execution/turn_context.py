@@ -86,16 +86,10 @@ class Provenance(DeclaredFamily, affix="Provenance", discovery_package="agent_co
         raise RelationViolationError("Source is not an original human input")
 
 
-@dataclass(frozen=True, kw_only=True)
-class Sha256Digest:
-    """The SHA-256 of a value's rendered bytes."""
-
-    sha256: str
-
-
-@dataclass(frozen=True, kw_only=True)
-class FileProvenance(Sha256Digest, Provenance):
+@dataclass(frozen=True)
+class FileProvenance(Provenance):
     path: str
+    sha256: str
 
     def public_description(self) -> str:
         return f"File {self.path} · SHA256 {self.sha256}"
@@ -200,9 +194,10 @@ class PreviewProvenance(Provenance):
         return (self.identity,)
 
 
-@dataclass(frozen=True, kw_only=True)
-class ResourceProvenance(Sha256Digest, Provenance):
+@dataclass(frozen=True)
+class ResourceProvenance(Provenance):
     path: str
+    sha256: str
     representation: str
 
     def public_description(self) -> str:
@@ -286,16 +281,11 @@ class ContextSources:
         return entries
 
 
-@dataclass(frozen=True, kw_only=True)
-class ProvenancedSegment:
-    """Which kind of context segment a value is and where its parts came from."""
-
+@dataclass(frozen=True)
+class SegmentManifest(ToolResult):
     kind: type[ContextSegment]
     provenance: tuple[Provenance, ...]
-
-
-@dataclass(frozen=True, kw_only=True)
-class SegmentManifest(ProvenancedSegment, Sha256Digest, ToolResult):
+    sha256: str
     utf8_bytes: int
     tokens: int
     contributors: tuple[SegmentManifest, ...] = ()
@@ -881,16 +871,19 @@ class ContextSegment(
 
 
 @dataclass(frozen=True, kw_only=True)
-class DigestedSpan(Sha256Digest):
+class DigestedSpan:
     """A byte range and its SHA-256: position + integrity in one declaration."""
 
     offset: int
     length: int
+    sha256: str
 
 
-@dataclass(frozen=True, kw_only=True)
-class ContributionCoordinates(ProvenancedSegment, DigestedSpan):
+@dataclass(frozen=True)
+class ContributionCoordinates(DigestedSpan):
     """Byte coordinates and proof in one owner's rendered public value."""
+    kind: type[ContextSegment]
+    provenance: tuple[Provenance, ...]
 
     def __post_init__(self):
         if not self.provenance or min(self.offset, self.length) < 0:
@@ -974,10 +967,11 @@ class UserInputSegment(SuppliedSegment, WireSources):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MeasuredNativeSegment(Sha256Digest, ContextSegment):
+class MeasuredNativeSegment(ContextSegment):
     """An SDK-owned input observation, not a second native message vocabulary."""
 
     tokens: int
+    sha256: str
     utf8_bytes: int
     contributors: tuple[SegmentManifest, ...] = ()
 

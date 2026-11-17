@@ -148,7 +148,7 @@ def annotation_source(tmp_path: Path) -> Iterator[AnnotationSource]:
         model = completed_label(store, requests[2], grant, 'fixture-answer')
         # Stored correction data tests precedence, not human/publication authority.
         correction = HumanLabel.correct(model, OtherSpan, author)
-        old_request = replace(requests[2], question=QuestionVersion(KindQuestion, 'b' * 64))
+        old_request = replace(requests[2], question=QuestionVersion(question=KindQuestion, sha256='b' * 64))
         completed_label(store, old_request, grant, 'fixture-old-question')
         other_version = replace(model.classifier, pin=model.classifier.pin + '-fixture-other')
         other_reference = MessageReference(2, MessageId.mint('stored-other-classifier-grant'))
@@ -162,7 +162,7 @@ def annotation_source(tmp_path: Path) -> Iterator[AnnotationSource]:
         unused_reference = MessageReference(3, MessageId.mint('stored-unused-grant'))
         unused_grant = replace(grant, subject=unused_reference)
         store.annotations.reserve(replace(other_usage,
-            question=QuestionVersion(KindQuestion, 'c' * 64), grant=unused_reference), unused_grant)
+            question=QuestionVersion(question=KindQuestion, sha256='c' * 64), grant=unused_reference), unused_grant)
         foreign_span = ContextSpan(segment.sha256, ContributionCoordinates.capture(
             ToolCatalogSegment, (UnattributedProvenance(),), 1, 't',
         ))

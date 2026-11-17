@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.coordination.work import CoordinationWork
-from agent_comms.execution.turn_context import ContextSpan, Sha256Digest
+from agent_comms.execution.turn_context import ContextSpan
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.thread_identity import ThreadIncarnation
@@ -38,9 +38,10 @@ class ClassifierVersion:
             raise ValueError("Classifier response did not use the pinned release")
 
 
-@dataclass(frozen=True, kw_only=True)
-class QuestionVersion(Sha256Digest):
+@dataclass(frozen=True)
+class QuestionVersion:
     question: type[SpanQuestion]
+    sha256: str
 
     @classmethod
     def current(cls, question: type[SpanQuestion], owner_rules: tuple[str, ...] = ()):

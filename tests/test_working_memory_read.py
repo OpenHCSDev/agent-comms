@@ -26,8 +26,8 @@ def test_readers_do_not_create_a_missing_store(tmp_path):
 
 
 def test_file_attribution_is_bounded_by_original_assembly_range():
-    first = FileProvenance("first-source", "1" * 64)
-    second = FileProvenance("second-source", "2" * 64)
+    first = FileProvenance(path="first-source", sha256="1" * 64)
+    second = FileProvenance(path="second-source", sha256="2" * 64)
     a = "Keep source A.\n"
     b = "Keep source B."
     ranges = (ContributionCoordinates.capture(SystemLayerSegment, (first,), 0, a),

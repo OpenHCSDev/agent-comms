@@ -384,7 +384,7 @@ def test_imported_historical_source_decodes_cold_and_rejects_other_provenance(tm
     path = codex_lines(tmp_path / "historical-source.jsonl", [codex_message("system", text)])
     raw = path.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
-    source = CodexRolloutProvenance(str(path), 0, len(raw), digest, 0)
+    source = CodexRolloutProvenance(path=str(path), offset=0, length=len(raw), sha256=digest, instruction=0)
     metadata = ImportedSessionMetadata(
         harness=CodexHarness, source_id="original", messages_seen=0, messages_imported=0,
         historical_instructions=(source,))
@@ -396,7 +396,7 @@ def test_imported_historical_source_decodes_cold_and_rejects_other_provenance(tm
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert isinstance(wire, dict)
-    wire["historical_instructions"] = [FieldCodec.encode(FileProvenance(str(path), digest))]
+    wire["historical_instructions"] = [FieldCodec.encode(FileProvenance(path=str(path), sha256=digest))]
     with pytest.raises(ValueError):
         FieldCodec.decode(ImportedSessionMetadata, wire)
 

@@ -89,7 +89,7 @@ def test_current_native89_shape_and_authenticated_file_read(tmp_path):
     original = PreviewProvenance(native, "a" * 64)
     path = tmp_path / "instruction.md"
     path.write_text("Original instruction π")
-    source = FileProvenance(str(path), hashlib.sha256(path.read_bytes()).hexdigest())
+    source = FileProvenance(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest())
     segment = system((original, source))
     # Native89 has no Core contributors or captured-value field. The existing
     # external decoder still accepts that precise current-preview projection.
@@ -360,7 +360,7 @@ def test_authored_sdk_observation_retains_read_identity_without_minting_native_p
 def test_cold_client_acquires_current_and_recorded_contributor_declarations():
     """Prevent producer-import order from changing RPC and manifest decoding."""
 
-    source = FileProvenance("/original/instructions/awareness.md", "a" * 64)
+    source = FileProvenance(path="/original/instructions/awareness.md", sha256="a" * 64)
     original = "Original awareness instruction"
     contributor = AwarenessSegment(
         provenance=(source,), instruction=InstructionFile(original, source), bus="bus", sources=())

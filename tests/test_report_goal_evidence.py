@@ -30,7 +30,7 @@ ORIGINAL = b"# Consensus\r\nAll thirteen editorial findings are delivered.\r\n"
 
 
 def provenance(path):
-    return FileProvenance(str(path), hashlib.sha256(path.read_bytes()).hexdigest())
+    return FileProvenance(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest())
 
 
 def claimed(source):
@@ -58,7 +58,7 @@ def binary(path, source):
 
 
 def relative(path, source):
-    return claimed(FileProvenance(path.name, source.sha256))
+    return claimed(FileProvenance(path=path.name, sha256=source.sha256))
 
 
 def unclaimed(path, source):
@@ -101,7 +101,7 @@ def test_report_completion_authenticates_content_before_transition(comms, tmp_pa
 def test_report_is_not_implementation_order_completion(comms, tmp_path, report_goal):
     path = tmp_path / "report.md"
     path.write_text("Delivered analysis, not an implemented fix")
-    claim = ReportClaim(FileProvenance(str(path), hashlib.sha256(path.read_bytes()).hexdigest()))
+    claim = ReportClaim(FileProvenance(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
     ProgressClaim.require_all((claim,), comms, tmp_path)
     policy = ProblemGoalOrder()
     for operation in (
