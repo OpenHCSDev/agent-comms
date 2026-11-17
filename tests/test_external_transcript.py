@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates, encode_updates
+from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.cli_bridges.cli_protocol import EarlierItems
 from agent_comms.cli_bridges.runtime_updates import FinishedItem
 from agent_comms.comms import wire
@@ -21,6 +21,7 @@ from agent_comms.messaging.watched import ChangeSignal, FileSource
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.text_route_update import encode_updates
 from agent_comms.transcript.external_transcript_rows import EarlierPage
 from agent_comms.transcript.transcript_drafts import NoDraft
 from agent_comms.transcript.transcript_events import (

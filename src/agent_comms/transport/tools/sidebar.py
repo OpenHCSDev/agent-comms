@@ -73,10 +73,8 @@ from agent_comms.registry.registry_document import (
     RegistrySlice,
     RegistrySnapshot,
 )
-from agent_comms.registry.relationships import (
-    SortableRelationshipGroup,
-    ThreadCommsSnapshot,
-)
+from agent_comms.registry.relationship_store import SortableRelationshipGroup
+from agent_comms.registry.relationships import ThreadCommsSnapshot
 from agent_comms.registry.thread_identity import ClaimedIdentity, ThreadIncarnation
 from agent_comms.registry.thread_management import (
     ImportDirectory,

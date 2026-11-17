@@ -71,6 +71,7 @@ from agent_comms.registry.registry_document import (
     RegistrySnapshot,
     RosterVisibility,
 )
+from agent_comms.registry.relationship_source import RelationshipSource
 from agent_comms.registry.shared_ledger import LedgerDocument
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
@@ -106,7 +107,6 @@ from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.collaboration_ledger import CollaborationLedger
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_names import DeletedThread
-from agent_comms.registry.relationships import RelationshipSource
 from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
 from agent_comms.registry.thread_presentation import (
     NoThreadPresentation,

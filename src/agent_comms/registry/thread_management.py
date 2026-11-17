@@ -61,7 +61,7 @@ from agent_comms.registry.native_settings import NativeThreadDefaults
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_names import RegistryNames
 from agent_comms.registry.registry_store import RegistryEdit
-from agent_comms.registry.relationships import RelationshipStore
+from agent_comms.registry.relationship_store import RelationshipStore
 from agent_comms.registry.thread_catalog import ThreadCatalog
 from agent_comms.registry.thread_identity import (
     AgentThreadRole,

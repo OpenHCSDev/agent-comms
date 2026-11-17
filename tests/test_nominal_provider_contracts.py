@@ -66,10 +66,10 @@ from agent_comms.presentation import ChannelView
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.execution.prompt_state import PromptState
 from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.relationship_source import RelationshipSource
 from agent_comms.registry.thread_reads import ThreadCheckoutSource, ThreadOwnerSource, ThreadOwnerStatus
 from agent_comms.registry.thread_status import ThreadStatus
 from agent_comms.registry.threads import Thread
-from agent_comms.registry.relationships import RelationshipSource
 
 
 @pytest.mark.parametrize("provider, contract", (

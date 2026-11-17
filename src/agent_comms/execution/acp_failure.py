@@ -29,6 +29,7 @@ from agent_comms.nominal.field_codec import (
     WireName,
     WireOmitDefault,
 )
+from agent_comms.text_route_update import TextRouteUpdate, encode_updates
 
 if TYPE_CHECKING:
     from acp import RequestError
@@ -299,8 +300,6 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
         from agent_comms.acp_extension import (
             InputFailedUpdate,
             RequestFailedUpdate,
-            TextRouteUpdate,
-            encode_updates,
         )
 
         failure = self.request.failure

@@ -11,7 +11,8 @@ from agent_comms.registry.threads import Thread
 
 from agent_comms import agent_events
 from agent_comms.context_segments.wake_values import WakeGoalContext
-from agent_comms.acp_extension import AgentCommsUpdate, LiveQueueScope, PromptRequest, QueueScope
+from agent_comms.text_route_update import AgentCommsUpdate
+from agent_comms.acp_extension import LiveQueueScope, PromptRequest, QueueScope
 from agent_comms.execution.input_drain import DrainedSession, InputDrain, OwnerSession
 from agent_comms.execution.session_lifecycle import SessionLifecycle
 from agent_comms.execution.acp import SdkSessionConnection

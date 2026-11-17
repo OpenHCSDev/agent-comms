@@ -5,13 +5,13 @@ from agent_comms.acp_extension import (
     ClaimBlockedFailure,
     InputFailedUpdate,
     decode_updates,
-    encode_updates,
 )
 from agent_comms.errors import (
     HumanClaimBlockedError,
     HumanSendRefusedError,
 )
 from agent_comms.messaging.delivery_failure import delivery_failure
+from agent_comms.text_route_update import encode_updates
 
 
 @pytest.mark.parametrize(

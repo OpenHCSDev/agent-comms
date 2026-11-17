@@ -15,7 +15,7 @@ from agent_comms.cli_bridges.shared import CliBridge, LineMonitorBridge
 from agent_comms.execution.acp import AcpSelectedWriteAuthority
 from agent_comms.execution.acp import CommsAgent
 from agent_comms.execution.acp import SdkSessionConnection
-from agent_comms.acp_extension import AgentCommsUpdate, LiveQueueScope, PromptRequest, QueueScope
+from agent_comms.acp_extension import LiveQueueScope, PromptRequest, QueueScope
 from agent_comms.agent_event_updates import AcpEventConsumer, AcpToolAction
 from agent_comms.agent_runtime import PublishesTranscript, ReadsHistory
 from agent_comms.channel_input_batch import InputBatch
@@ -89,6 +89,7 @@ from agent_comms.registry.registry_document import (
     RegistrySnapshot,
 )
 from agent_comms.registry.registry_names import RegistryNames
+from agent_comms.registry.relationship_source import RelationshipSource
 from agent_comms.registry.task_owner import TaskOwner
 from agent_comms.registry.task_registry import TaskRegistry
 from agent_comms.registry.thread_creation import ThreadCreationSource
@@ -99,7 +100,6 @@ from agent_comms.registry.threads import (
     Thread,
     ThreadProvenance,
 )
-from agent_comms.registry.relationships import RelationshipSource
 from agent_comms.registry.relationships import ThreadRelationships
 from agent_comms.messaging.response_policy import ResponsePolicy
 from agent_comms.registry.route_client import ActivityClient
@@ -113,6 +113,7 @@ from agent_comms.cli_bridges.runtime_updates import SessionFacts
 from agent_comms.execution.session_config_options import SessionConfigOptions
 from agent_comms.messaging.task_sources import ScopedTaskDeclaration
 from agent_comms.execution.tracked_turn import TrackedTurnSession
+from agent_comms.text_route_update import AgentCommsUpdate
 from agent_comms.transcript.transcript_events import TranscriptEvent
 from agent_comms.execution.transcript_routes import NoSentInputText
 from agent_comms.execution.transcript_routes import SentInputText

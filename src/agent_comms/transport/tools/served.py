@@ -10,6 +10,10 @@ from typing import Annotated, ClassVar
 
 from pydantic import JsonValue
 
+from agent_comms.registry.relationship_store import (
+    Collaboration,
+    GoalDerivedContact,
+)
 from agent_comms.transport.sync_answer import AwaitsWork
 from agent_comms.acp_extension import CoordinationChangedUpdate
 from agent_comms.cli_bridges.history import OfflineHistory
@@ -104,8 +108,6 @@ from agent_comms.registry.registry_document import (
     RegistrySnapshot,
 )
 from agent_comms.registry.relationships import (
-    Collaboration,
-    GoalDerivedContact,
     GoalMentionDiagnostic,
     RelationshipEdit,
     ThreadCommsSnapshot,

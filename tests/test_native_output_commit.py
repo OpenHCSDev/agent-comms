@@ -5,7 +5,6 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.acp_extension import (
-    AgentCommsUpdate,
     NativeOutputCommittedUpdate,
     NativeRoundCommittedUpdate,
 )
@@ -21,6 +20,7 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.text_route_update import AgentCommsUpdate
 from conftest import installed_comms
 
 

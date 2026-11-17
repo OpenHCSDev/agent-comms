@@ -12,7 +12,6 @@ from agent_comms import agent_events as events
 from agent_comms.acp_extension import (
     CompactionCommittedUpdate,
     TranscriptChangedUpdate,
-    encode_updates,
 )
 from agent_comms.agent_backend import (
     CompactionOutcome,
@@ -29,6 +28,8 @@ from agent_comms.execution.transcript_sources import UnreadTranscriptCursor
 from agent_comms.execution.turn_phase import CompactionPhase, PublishingPhase
 from agent_comms.execution.turn_runner import TurnRunner
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
+from agent_comms.text_route_update import encode_updates
+
 
 class CompactionReply(MroDispatch):
     """The ACP reply to /compact for each outcome the backend reports."""
