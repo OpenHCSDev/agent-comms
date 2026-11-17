@@ -6,23 +6,16 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.execution.turn_context import HistoricalInstructionProvenance
-from agent_comms.installer.harness_install import Harness
+from agent_comms.execution.imported_session_metadata import ImportObservation
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class ImportedConversation(ABC):
+class ImportedConversation(ImportObservation, ABC):
     """A session imported as a stopped thread: where it ran and the Pi session it becomes."""
 
-    harness: type[Harness]
-    source_id: str
     project: str
-    messages_seen: int
     title: ThreadText = NoThreadText()
-    truncated_messages: int = 0
-    notices: tuple[str, ...] = ()
-    historical_instructions: tuple[HistoricalInstructionProvenance, ...] = ()
 
     @property
     @abstractmethod

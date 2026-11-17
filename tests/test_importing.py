@@ -385,7 +385,9 @@ def test_imported_historical_source_decodes_cold_and_rejects_other_provenance(tm
     raw = path.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
     source = CodexRolloutProvenance(str(path), 0, len(raw), digest, 0)
-    metadata = ImportedSessionMetadata(CodexHarness, "original", 0, 0, 0, (), (source,))
+    metadata = ImportedSessionMetadata(
+        harness=CodexHarness, source_id="original", messages_seen=0, messages_imported=0,
+        historical_instructions=(source,))
     wire = FieldCodec.encode(metadata)
     completed = subprocess.run(
         (sys.executable, str(Path(__file__).with_name("historical_source_probe.py")),
