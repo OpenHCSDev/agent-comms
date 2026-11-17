@@ -21,6 +21,11 @@ class ConfigureCliCommand(
     def thread_bindings(cls, comms, thread, status, channel, *, catalog):
         return (cls(name=thread.name),)
 
+    def catalog_selection(self, catalogs: ConfigOptions) -> object:
+        """Discover against this thread after applying the form's proposed changes."""
+        with Comms.client(catalogs.route) as comms:
+            return self.configured(comms.registry.require(self.name))
+
     def apply(self, ctx: Comms) -> ThreadConfiguredResult:
         thread = ctx.registry.require(self.name)
         asyncio.run(ConfigOptions.configured().validate(self.configured(thread)))

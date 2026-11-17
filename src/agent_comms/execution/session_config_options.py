@@ -62,8 +62,8 @@ class SessionConfigOptions(ConfigurationChanges[ConfigOptions]):
         self.settings_in_use: dict[AcpSessionId, UseSettings] = {}
 
     async def describe(self, option: CatalogConfigOption, thread: CatalogSelection) -> SessionConfigOptionSelect:
-        choices = await option.display_choices(thread)
         configured = option.current_value(thread)
+        choices = await option.display_choices(thread, current=configured)
         return SessionConfigOptionSelect(
             id=FieldCodec.encode(type(option)), name=option.title,
             description=option.description, category=option.category, type="select",

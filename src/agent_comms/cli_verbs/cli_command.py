@@ -220,8 +220,13 @@ class CliCommand(
             if not entry.setting(TargetBound, False)
         )
 
+    def catalog_selection(self, catalogs: ConfigOptions) -> object:
+        """The context used to discover this command's field choices."""
+        return self
+
     async def prepare_fields(self, catalogs: ConfigOptions) -> tuple[TargetField, ...]:
-        return tuple([await item.prepare(catalogs, self) for item in self.editable_fields])
+        selection = self.catalog_selection(catalogs)
+        return tuple([await item.prepare(catalogs, selection) for item in self.editable_fields])
 
     def describe(self, comms: Comms, target: CommandTarget, project: Checkout) -> TargetAction:
 

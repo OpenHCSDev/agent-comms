@@ -144,7 +144,8 @@ class CatalogTargetField(ChoiceTargetField):
     async def prepare(self, catalogs: ConfigOptions,
                       selection: object) -> CatalogTargetField:
         catalog = catalogs.catalog_for(self.catalog)
-        options = await catalog.display_choices(cast(CatalogSelection, selection))
+        options = await catalog.display_choices(
+            cast(CatalogSelection, selection), current=self.choice_value(self.editor_default))
         return replace(self, options=tuple(options))
 
     def value_schema(self) -> dict[str, JsonValue]:
