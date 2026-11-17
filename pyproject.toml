@@ -185,5 +185,5 @@ keyword-binders = [
     "agent_comms.nominal.field_codec:FieldCodec.encode",
     "agent_comms.nominal.field_codec:FieldCodec.decode",
     # Query filters are encoded by their declared columns into bound SQL parameters.
-    "agent_comms.storage.typed_table:TypedRow.select",
+    "agent_comms.storage.typed_table:TypedTable.select",
 ]
