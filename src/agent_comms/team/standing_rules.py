@@ -408,15 +408,19 @@ class OwnerFlaggedStandingRule(StandingRule, declared_name=None):
         return True
 
 
-@dataclass(frozen=True)
-class RetiredStandingRule(DefaultExternalName, StandingRule):
-    """The rule a delivered heartbeat notice names after its declaration was deleted. Its line
-    is history: it scans nothing, is never urgent, and no verb disposes of it, so it is never
-    on the board. Deleting a rule therefore never makes a stored notice undecodable."""
+class NoVerbDisposes:
+    """No teammate verb disposes of this line, so it never goes on the board."""
 
     @classmethod
     def team_disposes(cls) -> bool:
         return False
+
+
+@dataclass(frozen=True)
+class RetiredStandingRule(NoVerbDisposes, DefaultExternalName, StandingRule):
+    """The rule a delivered heartbeat notice names after its declaration was deleted. Its line
+    is history: it scans nothing, is never urgent, and no verb disposes of it, so it is never
+    on the board. Deleting a rule therefore never makes a stored notice undecodable."""
 
     @classmethod
     def scan_observed(cls, comms: Comms,
@@ -435,12 +439,8 @@ class FamilyScan(StandingRule, declared_name=None):
     scan selects is never scanned a second time."""
 
 
-class CoreActsStandingRule(StandingRule, declared_name=None):
+class CoreActsStandingRule(NoVerbDisposes, StandingRule, declared_name=None):
     """Core's own enforce acts on this line, so no teammate verb disposes of it and it locks none."""
-
-    @classmethod
-    def team_disposes(cls) -> bool:
-        return False
 
 
 class IndependentStandingRule(StandingRule, declared_name=None):

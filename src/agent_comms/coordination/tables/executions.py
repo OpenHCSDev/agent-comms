@@ -34,7 +34,7 @@ from agent_comms.nominal.field_codec import (
     ThreadLookup,
     projected,
 )
-from agent_comms.registry.thread_text import AbsentText, GivenText, TextChoice
+from agent_comms.registry.thread_text import AbsentText, DefaultWhenAbsent, GivenText, TextChoice
 from agent_comms.storage.typed_table import (
     AccumulatingBits,
     Column,
@@ -216,10 +216,9 @@ class PointedAttempt(SingleFieldValue, PointerAttempt):
 
 
 @dataclass(frozen=True, slots=True)
-class NoPointedAttempt(IdlePointer, NullMember, PointerAttempt):
+class NoPointedAttempt(DefaultWhenAbsent, IdlePointer, NullMember, PointerAttempt):
 
-    def otherwise[Default](self, default: Default) -> Default:
-        return default
+    pass
 
 
 @dataclass(frozen=True, slots=True)

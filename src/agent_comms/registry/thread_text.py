@@ -55,13 +55,19 @@ class GivenText(SingleFieldValue, TextChoice):
         return (self.text,)
 
 
-class AbsentText(NullMember, TextChoice):
-    """The absent member: JSON null, and the reader's default."""
+class DefaultWhenAbsent:
+    """The absent member holds no value, so it answers the caller's default."""
 
     __slots__ = ()
 
     def otherwise[Default](self, default: Default) -> Default:
         return default
+
+
+class AbsentText(DefaultWhenAbsent, NullMember, TextChoice):
+    """The absent member: JSON null, and the reader's default."""
+
+    __slots__ = ()
 
     def require(self, missing: str) -> str:
         raise ValueError(missing)

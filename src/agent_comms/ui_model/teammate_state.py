@@ -42,6 +42,7 @@ from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.standing_rules import (
     FamilyScan,
     HeartbeatFrame,
+    NoVerbDisposes,
     ObservedTeammate,
     TeammateEvidence,
     UndatedStandingRule,
@@ -530,16 +531,18 @@ class DeliveredUnclosed(ReadyForApplication, NeedsTeamAttention, ConditionalStat
         )
 
 
-class AwaitingApplicationRun(ReadyForApplication, NeedsTeamAttention, TeammateState):
+class AwaitingApplicationRun(
+    NoVerbDisposes,
+    ReadyForApplication,
+    NeedsTeamAttention,
+    TeammateState,
+):
     """Installed merged orders wait on their holder's application run, so no teammate verb
     disposes of the line and it locks none. The line names only those orders; while the unit
     still writes source for another, that order's state is the unit's."""
 
     question = "installed. did its holder actually run it yet?"
     action = "its holder runs the application proof on the installed build; close it on its evidence"
-    @classmethod
-    def team_disposes(cls) -> bool:
-        return False
 
     @classmethod
     def derive(cls, source: TeammateObservation) -> Iterator[Self]:
