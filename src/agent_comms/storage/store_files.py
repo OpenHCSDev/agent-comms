@@ -85,8 +85,12 @@ class ExclusiveLock(ExclusiveFlock, LockMode):
         held.require_writer()
 
 
-class StoreLockBusyError(BlockingIOError, ContendedRead):
+class StoreLockBusyError(BlockingIOError, CoordinationReadUnavailable, ContendedRead):
     """A store lock exhausted its wait budget, with the observed holders."""
+
+    def __reduce__(self):
+        """The native OSError must be initialized through its holders constructor."""
+        return type(self), (self.holders,), self.__getstate__()
 
     holders: tuple[LockHolder, ...]
 

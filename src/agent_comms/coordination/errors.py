@@ -18,11 +18,15 @@ class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome
 class CommandFailure(Exception):  # noqa: N818 - capability, not an outcome
     """A failure a command reports to its caller as a failed result instead of crashing.
 
-    It crosses a worker's pipe as its class, args and state, never through a member's own
-    ``__init__``, whose parameters are not its args, and keeps its original cause."""
+    Default pipe reconstruction skips a member's narrowed ``__init__``. Native-layout
+    members restore through their own constructor and share the state and cause below."""
 
     def __reduce__(self):
-        return __newobj__, (type(self), *self.args), self.__dict__ | {"__cause__": self.__cause__}
+        return __newobj__, (type(self), *self.args), self.__getstate__()
+
+    def __getstate__(self):
+        """Carry the failure's original state and cause, including for native restorers."""
+        return self.__dict__ | {"__cause__": self.__cause__}
 
 
 class DrainUnavailable(DrainDeferred):
