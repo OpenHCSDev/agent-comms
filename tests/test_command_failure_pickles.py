@@ -23,7 +23,11 @@ def declared() -> list[type[CommandFailure]]:
     for module in pkgutil.walk_packages(agent_comms.__path__, f"{agent_comms.__name__}."):
         if ".skills." not in module.name:
             importlib.import_module(module.name)
-    return sorted(members(CommandFailure), key=lambda member: member.__qualname__)
+    # Native-layout members own reconstruction through their actual constructors;
+    # test_store_lock_transport exercises those with real held-lock failures.
+    return sorted((member for member in members(CommandFailure)
+                   if member.__reduce__ is CommandFailure.__reduce__),
+                  key=lambda member: member.__qualname__)
 
 
 @pytest.mark.parametrize("member", declared(), ids=lambda member: member.__qualname__)
