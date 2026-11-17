@@ -82,7 +82,7 @@ class PullRequestHead:
         problems: dict[str, str] = {}
         for candidate in candidates:
             try:
-                observed.append(cls.at(candidate.repo, pr))
+                observed.append(candidate.closed_or_open())
             except ToolRefusedError as refused:
                 problems |= MalformedRecord(str(refused)).located(
                     f'--repo {candidate.repo.to_wire()}', 'check access to this repository and pull request')
@@ -99,7 +99,8 @@ class PullRequestHead:
         read = repo.rest(
             f"pulls/{pr}",
             "--jq",
-            '.head.sha + " " + .base.ref + " " + (.draft | tostring) + " " + .state',
+            '.head.sha + " " + .base.ref + " " + (.draft | tostring) + " " + '
+            '(if .merged then "merged" else .state end)',
         )
         if read.returncode:
             raise ToolRefusedError(read.stderr.strip() or f"#{pr} could not be read.")
@@ -134,13 +135,7 @@ class PullRequestHead:
 
     def current(self) -> OpenPullRequestHead:
         """GitHub's read of the PR, refused unless the reviewed head is still its head."""
-        current = self.at(self.repo, self.pr)
-        if not current.holds(self.head):
-            raise ToolRefusedError(
-                f"#{self.pr} moved to {current.head[:9]} since {self.head} was reviewed; "
-                "review again."
-            )
-        return current
+        return self.at(self.repo, self.pr).require_head(self.head)
 
     def published_after(self, previous: PullRequestHead) -> OpenPullRequestHead:
         """Observe a known successful push; only its previous head may lag briefly."""
@@ -161,14 +156,14 @@ class PullRequestHead:
 
     def closed_or_open(self) -> ReadPullRequestHead:
         """GitHub's read in whatever state the PR is in, refused unless this is still its head:
-        a closed PR's head can only be dropped, so nothing here may arm or integrate it."""
+        closed-unmerged work may be dropped and merged work may be reviewed. Neither arms a merge."""
         head, base, *_ = self.forge_read(self.repo, self.pr).split()
-        current = ReadPullRequestHead(self.repo, self.pr, head, base=base)
-        if not current.holds(self.head):
-            raise ToolRefusedError(
-                f"#{self.pr} moved to {current.head[:9]} since {self.head} was reviewed; review again."
-            )
-        return current
+        return ReadPullRequestHead(self.repo, self.pr, head, base=base).require_head(self.head)
+
+    def for_review(self) -> ReadPullRequestHead:
+        """A source can be reviewed before or after merge, always at its current head."""
+        return ReadPullRequestHead.from_forge(
+            self.repo, self.pr, self.forge_read(self.repo, self.pr)).require_head(self.head)
 
 
 class SourceCheckout(Checkout):
@@ -822,6 +817,20 @@ class ReadPullRequestHead(PullRequestHead):
     """The head as GitHub reported it, with the base branch the same read named."""
 
     base: str = field(kw_only=True)
+
+    def require_head(self, reviewed: str) -> Self:
+        if not self.holds(reviewed):
+            raise ToolRefusedError(
+                f"#{self.pr} moved to {self.head[:9]} since {reviewed} was reviewed; review again.")
+        return self
+
+    @classmethod
+    def from_forge(cls, repo: RepositoryName, pr: int, response: str) -> ReadPullRequestHead:
+        """Decode GitHub's merged state separately from closed, unmerged work."""
+        head, base, draft, state = response.split()
+        if state == "merged":
+            return cls(repo, pr, head, base=base)
+        return OpenPullRequestHead.from_forge(repo, pr, response)
 
 
 class MergeArm(DeclaredFamily, affix="MergeArm"):

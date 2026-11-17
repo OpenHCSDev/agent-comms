@@ -100,8 +100,10 @@ def main():
             state = "open" if listed["kind"] in data["open_kinds"] else "closed"
             if "--jq" in arguments:
                 assert arguments[arguments.index("--jq") + 1] == (
-                    '.head.sha + " " + .base.ref + " " + (.draft | tostring) + " " + .state')
-                print(observed, listed["base"], str(listed["kind"] == "draft").lower(), state)
+                    '.head.sha + " " + .base.ref + " " + (.draft | tostring) + " " + '
+                    '(if .merged then "merged" else .state end)')
+                print(observed, listed["base"], str(listed["kind"] == "draft").lower(),
+                      "merged" if listed["kind"] == "merged" else state)
             else:
                 # The whole pull request document, as a pull_request event carries it.
                 print(json.dumps({"number": listed["number"], "state": state,

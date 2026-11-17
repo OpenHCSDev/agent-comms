@@ -31,6 +31,7 @@ from agent_comms.planning.orders import (
     ClosedListedPullRequest,
     DraftListedPullRequest,
     GrownHeadVerdict,
+    MergedListedPullRequest,
     HeadReviewed,
     HeadVerdict,
     LinkedHeadReview,
@@ -43,6 +44,7 @@ from agent_comms.planning.orders import (
     RecordPullRequest,
     RejectedHeadVerdict,
     ReviewedHeadVerdict,
+    SelectedClaimReviewer,
     StoredHeadReview,
     SupersededHeadVerdict,
     UnderReviewHeadVerdict,
@@ -54,6 +56,7 @@ from agent_comms.planning.pull_requests import (
     ConflictMergeBlock,
     FailedCheckMergeBlock,
     PullRequestLink,
+    PullRequestCommit,
 )
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.closed_pull_requests import ClosedPullRequestWatch
@@ -1531,6 +1534,47 @@ def test_another_teammates_linked_request_stays_off_the_orderless_board(head_bus
                       held.generation).record(comms.goals, todo.id)
     assert ready.pr not in {rule.request.pr for rule in
                             OrderlessPullRequest.scan_orderless(comms.goals, ProgressRead(()))}
+
+
+def test_merged_claim_can_be_reviewed_and_accepted_without_reopening(head_bus, claim_order):
+    comms, github, request = head_bus
+    claim_order("P2", pull_request=request.pr, head=request.head,
+                reviewer=SelectedClaimReviewer(comms.registry.require("colleague").incarnation))
+    claimed = comms.goals.todos.get("P2")
+    claim = claimed.order.claim
+    stamp = datetime.fromtimestamp(time.time() - 601, UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+    github.put(request.repo, MergedListedPullRequest(
+        request.pr, 'feature', request.head, stamp, 'main', reviewable_times=(stamp,),
+        merge=PullRequestCommit(request.head), merged=stamp))
+    other = RepositoryName("example", "other")
+    github.configure(other)
+    github.put(other, ClosedListedPullRequest(
+        request.pr, 'other', 'e' * 40, closed_at=stamp, updated=stamp,
+        base='main', reviewable_times=(stamp,)))
+    assert PullRequestHead.among((request.repo, other), request.pr, request.head) == request
+    for verdict, link in (
+        (UnderReviewHeadVerdict(), UnquotedHeadReview.of),
+        (ReviewedHeadVerdict(ACCEPTED),
+         lambda todo: LinkedHeadReview.of(todo, todo.order.edits[0])),
+    ):
+        before = comms.goals.todos.get("P2")
+        invoke(comms, request, verdict, OrderHeadReview.for_request((before,), request, link))
+        after = comms.goals.todos.get("P2")
+        assert after.order.claim == claim
+        assert after.holder_state == claimed.holder_state
+        assert after.order.id == claimed.order.id
+        assert after.revision == before.revision + 1
+        record = StoredHeadReview.head_reviews(comms.goals.todos, request)[0]
+        assert record.actor == claim.reviewer.identity(claimed)
+        assert record.request == request
+        assert record.verdict == verdict
+    assert not any(call[:2] in (("pr", "merge"), ("pr", "reopen")) for call in github.calls())
+    with pytest.raises(ToolRefusedError, match="no longer an open source"):
+        request.current()
+    records = StoredHeadReview.head_reviews(comms.goals.todos, request)
+    with pytest.raises(TodoError, match="moved to"):
+        invoke(comms, replace(request, head="f" * 40), UnderReviewHeadVerdict())
+    assert StoredHeadReview.head_reviews(comms.goals.todos, request) == records
 
 
 def test_only_a_discarding_verdict_may_decide_a_closed_head(head_bus):
