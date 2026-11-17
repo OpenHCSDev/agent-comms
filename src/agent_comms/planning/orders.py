@@ -3842,8 +3842,8 @@ class HeadVerdict(HeadReview, declared_name=None):
         return False
 
     def current_head(self, request: PullRequestHead) -> ReadPullRequestHead:
-        """The read this decision stands on: an open PR at the reviewed head."""
-        return request.current()
+        """Source decisions accept the exact current head before or after merge."""
+        return request.for_review()
 
     @classmethod
     def require_ok(cls, request: PullRequestHead) -> None:

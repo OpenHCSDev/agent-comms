@@ -74,6 +74,7 @@ from agent_comms.planning.order_runs import MechanicalOrderRun
 from agent_comms.planning.order_story import TeamStory
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
+    AssignedClaimReviewer,
     ClaimOrder,
     CorrectLinkTodo,
     CorrectMergedLinkTodo,
@@ -201,7 +202,7 @@ def test_stop_rejects_a_human_before_any_registry_change(comms, tmp_path):
 @pytest.fixture
 def claim_order(held_bus, github_cli):
     """Publish the real order and claim messages, using their retained identities."""
-    def claim(problem, *, pull_request=1, head="a" * 40):
+    def claim(problem, *, pull_request=1, head="a" * 40, reviewer=AssignedClaimReviewer()):
         todo = held_bus.goals.todos.get(problem)
         colleague = held_bus.registry.require("colleague").incarnation
         worker = held_bus.registry.require("worker").incarnation
@@ -214,7 +215,7 @@ def claim_order(held_bus, github_cli):
             reviewable_times=(),
         ))
         claimed = OrderClaim.for_order(todo, worker, PullRequestLink(todo.repo, pull_request), head,
-                                      "Review the published repair", (original.reference,))
+                                      "Review the published repair", (original.reference,), reviewer=reviewer)
         claimed = replace(claimed, message=replace(
             claimed.message, timestamp=time.time() - AwaitingTeam.seconds - 1))
         ClaimOrder(todo.revision, worker, todo.held().generation, claimed).record(
