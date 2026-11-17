@@ -178,3 +178,12 @@ durable-bases = [
     # Saved Pi session files: every entry Pi or Core wrote stays for the session's life.
     "agent_comms.execution.native_entries:RecordedEntry",
 ]
+# Functions that build a class handed to them only by field name, or never build it: a
+# class passed to one keeps its constructions when its fields become keyword-only.
+keyword-binders = [
+    # A class encodes as its declared name; a record decodes through construct(**values).
+    "agent_comms.nominal.field_codec:FieldCodec.encode",
+    "agent_comms.nominal.field_codec:FieldCodec.decode",
+    # Query filters are encoded by their declared columns into bound SQL parameters.
+    "agent_comms.storage.typed_table:TypedRow.select",
+]
