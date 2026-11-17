@@ -44,6 +44,7 @@ from agent_comms.team.standing_rules import (
 )
 from agent_comms.team.team_heartbeat import TeamObservation
 from agent_comms.team.team_hud import TeamFrame
+from agent_comms.transcript.external_transcript_rows import ExternalItemRow
 from agent_comms.transcript.transcript_events import ToolStartTranscript
 from agent_comms.ui_model.teammate_state import (
     AwaitingApplicationRun,
@@ -233,6 +234,36 @@ async def test_teammate_state_family_uses_real_records(
             for state in states
             if isinstance(state, expected)
         )
+
+
+def test_recent_heartbeat_reads_only_its_turn_window(held_bus, monkeypatch):
+    worker = held_bus.registry.require("worker").as_member(ExternalThread)
+    held_bus.registry.register(worker)
+    frame = capture_frame(held_bus, ProgressRead())
+    transcript = ExternalTranscript(held_bus.root, worker.incarnation)
+    since = time.time()
+    for index in range(6):
+        transcript.finish(
+            turn_id=NativeTurnId(f"turn-{index}"), item_id=NativeItemId(f"call-{index}"),
+            events=(ToolStartTranscript(
+                position=0, tool_call_id=ToolCallId(f"call-{index}"),
+                tool_name="read", timestamp=since + index),),
+        )
+    read_turns = []
+    events_in = ExternalItemRow.events_in
+
+    def read_events(row, connection):
+        read_turns.append(row.turn_id)
+        return events_in(row, connection)
+
+    monkeypatch.setattr(ExternalItemRow, "events_in", read_events)
+    turns = frame.recent_turns(held_bus, worker)
+    assert tuple(turn.turn_id for turn in turns) == ("turn-5", "turn-4")
+    assert read_turns == ["turn-5", "turn-4"]
+    assert frame.recent_turns(held_bus, worker) == turns
+    assert read_turns == ["turn-5", "turn-4"]
+    with transcript.reading() as stored:
+        assert stored.tool_call_count(since) == 6
 
 
 def test_started_turn_on_delivered_order_is_moving_not_stalled(held_bus):
