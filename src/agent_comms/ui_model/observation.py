@@ -2029,6 +2029,7 @@ class ObservationService:
 
     async def pass_once(self) -> None:
         """One wake: answer waiting reads, then observe once if a change is due."""
+        self.changed.clear()
         attempted: set[int] = set()
         await self.answer_pending(attempted)
         if self.observe_due and not self.closed:
@@ -2047,7 +2048,6 @@ class ObservationService:
             try:
                 while not self.closed:
                     await self.changed.wait()
-                    self.changed.clear()
                     await self.pass_once()
             finally:
                 self.retire()

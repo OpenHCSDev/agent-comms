@@ -21,6 +21,7 @@ from agent_comms.ui_model.observation import (
     ReadNotifications,
     RevisionObserved,
 )
+from observation_pass_fixture import watched_pass
 from test_coordinated_runtime import tmp_path  # noqa: F401
 from test_following_context_notifications import following_input, following_session
 from test_notification_recipient_window import frozen_window  # noqa: F401
@@ -69,7 +70,7 @@ async def test_open_notification_interest_refreshes_after_input_only_context(tmp
         proof = await case.verify()
         comms = claim.selected.comms
         with observing_notifications(comms, case.references) as (service, client):
-            await service.observe(set())
+            await watched_pass(service)
             before = notification_reply(client)
             old, = before.outcomes[case.references[0].seq, case.references[0].message_id]
             assert not old.state.is_consumed() and old.answer == UnansweredResponse()
@@ -77,7 +78,7 @@ async def test_open_notification_interest_refreshes_after_input_only_context(tmp
 
             case.acknowledge(proof)
 
-            await service.observe(set())
+            await watched_pass(service)
             after = notification_reply(client)
             assert coordinator_revision(comms) == coordinator
             assert after.revision.bus_changes == before.revision.bus_changes
@@ -88,7 +89,7 @@ async def test_open_notification_interest_refreshes_after_input_only_context(tmp
             current, = after.outcomes[case.references[0].seq, case.references[0].message_id]
             assert current.state.is_consumed() and current.state.at_ms == proof.committed_at_ms
             assert current.answer == UnansweredResponse()
-            await service.observe(set())
+            await watched_pass(service)
             assert not client.poll()
 
 
@@ -98,7 +99,7 @@ async def test_open_notification_interest_refreshes_after_reply_only_commit(
     comms, source = frozen_window
     reference = source.reference
     with observing_notifications(comms, (reference,)) as (service, client):
-        await service.observe(set())
+        await watched_pass(service)
         before = notification_reply(client)
         old, = before.outcomes[reference.seq, reference.message_id]
         assert old.answer == UnansweredResponse() and not old.state.is_consumed()
@@ -109,7 +110,7 @@ async def test_open_notification_interest_refreshes_after_reply_only_commit(
             "Independent answer", answers=(reference,),
         ).message
 
-        await service.observe(set())
+        await watched_pass(service)
         after = notification_reply(client)
         assert coordinator_revision(comms) == coordinator
         assert after.revision.registry == before.revision.registry
@@ -118,5 +119,5 @@ async def test_open_notification_interest_refreshes_after_reply_only_commit(
         current, = after.outcomes[reference.seq, reference.message_id]
         assert current.answer == AnsweredResponse(response.reference, response.at_ms)
         assert not current.state.is_consumed()
-        await service.observe(set())
+        await watched_pass(service)
         assert not client.poll()

@@ -110,6 +110,7 @@ from agent_comms.ui_model.teammate_state import (
 )
 from agent_comms.waking.wake_policy import PassiveWake
 from agent_comms_hooks.watch import WatchRecord
+from observation_pass_fixture import watched_pass
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
 from test_holder_standing_rules import publish, state_cards
 from test_unit_state import recorded_turn
@@ -881,13 +882,8 @@ async def test_team_page_reads_each_beats_frame_and_nothing_between(notification
     async def observed() -> tuple[TeamHudObserved, ...]:
         """One service pass, as run takes it: the service advances its own revision, and the
         board it prepares off the pass (in the task group only run enters) is awaited. The
-        pass's other results, such as RevisionObserved, are not the team page's. The watcher
-        wakes the pass, and a new revision is adopted only once the observer's gap since the
-        last settled pass has passed."""
-        loop = asyncio.get_running_loop()
-        await asyncio.sleep(max(0.0, service.settled_at + service.observe_gap - loop.time()))
-        service.observe_again()
-        await service.pass_once()
+        pass's other results, such as RevisionObserved, are not the team page's."""
+        await watched_pass(service)
         reading, = service.interest.observations.values()
         await asyncio.gather(*reading.preparation)
         sent = []
