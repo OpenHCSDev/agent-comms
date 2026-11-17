@@ -134,7 +134,7 @@ class PrivateNkLaunch(RootLaunch):
             raise PublicationActivationBlocked(
                 f"private owner launch needs this installation's prepared native package: {error}"
             ) from error
-        return cls(root, wire_root_id, package)
+        return cls(validated_root=root, wire_root_id=wire_root_id, native_package=package)
 
     def validate(self) -> VerifiedNativePackage:
         """Recheck the bus root while keeping this process's chosen native package.

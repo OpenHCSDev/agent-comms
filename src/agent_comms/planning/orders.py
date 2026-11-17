@@ -4760,17 +4760,23 @@ class ReviewedOrderRun(ApplicationOrderRun):
         return f"{OrderRun.merged_line(self, state)}, awaiting review"
 
 
-@dataclass(frozen=True)
-class ReopenTodo(RestoreHolderTodo, TodoOperation, StoryEvent):
-    """Correct mistaken completion without replacing the original work or goal."""
+@dataclass(frozen=True, kw_only=True)
+class CheckCorrection:
+    """An order's replacement check, how it was prepared, why it changed and when."""
 
     check: OrderCheck
-    review: ReviewedOrderRun
-    reason: str
-    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()), kw_only=True)
     preparation: Annotated[OrderCheckChange, WireTransient()] = field(
         default_factory=UnpreparedOrderCheck, kw_only=True, compare=False, repr=False,
     )
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReopenTodo(CheckCorrection, RestoreHolderTodo, TodoOperation, StoryEvent):
+    """Correct mistaken completion without replacing the original work or goal."""
+
+    review: ReviewedOrderRun
+    reason: str
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()), kw_only=True)
 
     def prepare(self, goals: ProblemGoals, current: Todo) -> Self:
         self.require_current(current)
@@ -4843,14 +4849,10 @@ class CorrectOrderTodo(TodoOperation, declared_name=None):
         """The order with this correction's part replaced; its state may change with it."""
 
 
-@dataclass(frozen=True)
-class CorrectCheckTodo(CorrectOrderTodo):
+@dataclass(frozen=True, kw_only=True)
+class CorrectCheckTodo(CheckCorrection, CorrectOrderTodo):
     """The teammate replaces a wrong check of an open order."""
     previous: OrderCheck
-    check: OrderCheck
-    preparation: Annotated[OrderCheckChange, WireTransient()] = field(
-        default_factory=UnpreparedOrderCheck, kw_only=True, compare=False, repr=False,
-    )
 
     def prepare(self, goals: ProblemGoals, current: Todo) -> Self:
         self.check.require_directory()

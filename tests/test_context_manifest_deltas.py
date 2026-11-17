@@ -61,7 +61,7 @@ def test_manifest_reads_the_original_recording_contract() -> None:
 
 def context(owner, path, count, turn):
     native = NativeSessionIdentity(PiSessionId('manifest-delta'), str(path / 'history.jsonl'))
-    provenance = (NativeProvenance(native, 1, 'a' * 64),)
+    provenance = (NativeProvenance(identity=native, request_generation=1, context_digest='a' * 64),)
     def segment(kind, text, sources=provenance, contributors=()):
         raw = text.encode()
         return SegmentManifest(kind=kind, provenance=sources, sha256=hashlib.sha256(raw).hexdigest(),
