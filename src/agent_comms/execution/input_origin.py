@@ -13,7 +13,7 @@ from agent_comms.execution.input_ingress import InputIngressContext, InputRegist
 from agent_comms.execution.input_key import InputKey, InputKeyText
 from agent_comms.execution.turn_context import Provenance
 from agent_comms.installer.harness_install import HarnessSession
-from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.message_reference import MessageReference, NoMessageReferences
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import RootId
 from agent_comms.planning.goals import GoalCheckpoint
@@ -39,9 +39,8 @@ class DeliveredInput(InputDelivery):
         return (self.reference,)
 
 
-class UndeliveredInput(InputDelivery):
-    def references(self) -> tuple[MessageReference, ...]:
-        return ()
+class UndeliveredInput(NoMessageReferences, InputDelivery):
+    pass
 
 
 class InputOrigin(DeclaredFamily, affix="InputOrigin"):

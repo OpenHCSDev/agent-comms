@@ -86,11 +86,17 @@ class AfterMessageStart(SingleFieldValue, InboxStart):
         return self.reference.seq
 
 
-class StreamBeginning(InboxStart, declared_name=None):
-    """Before the first message, there is no reference and the sequence is zero."""
+class NoMessageReferences:
+    """Carries no message reference, so there is nothing to load."""
+
+    __slots__ = ()
 
     def references(self) -> tuple[MessageReference, ...]:
         return ()
+
+
+class StreamBeginning(NoMessageReferences, InboxStart, declared_name=None):
+    """Before the first message, there is no reference and the sequence is zero."""
 
     def cursor(self) -> int:
         return 0
@@ -124,13 +130,10 @@ class FirstUnreadStart(NullMember, StreamBeginning):
 
 
 @dataclass(frozen=True, slots=True)
-class NewestUnreadStart(RecordMember, InboxStart):
+class NewestUnreadStart(NoMessageReferences, RecordMember, InboxStart):
     """A glance at the inbox: the newest unread page, paging older from there."""
 
     before: PageCursor = NewestCursor()
-
-    def references(self) -> tuple[MessageReference, ...]:
-        return ()
 
     def cursor(self) -> int:
         return 0
