@@ -13,8 +13,6 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-from _pytest.config import get_config
-
 import agent_comms
 from agent_comms.cli_verbs.declared_verb import DeclaredOptions
 from agent_comms.execution.child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
@@ -86,6 +84,9 @@ class TestSelection:
     def read(cls, checkout: Path) -> TestSelection:
         # Register pytest's built-in declarations without loading project plugins,
         # conftests or collection. Missing options belong to those declarations.
+        # Deferred import: pytest isn't shipped in the Android APK, and a top-level
+        # import pulls this whole path through load_declarations() on prewarm.
+        from _pytest.config import get_config
         defaults = get_config()
         with (checkout / "pyproject.toml").open("rb") as source:
             match tomllib.load(source):
