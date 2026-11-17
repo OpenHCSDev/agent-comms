@@ -67,7 +67,7 @@ async def until(predicate):
 
 
 @pytest.fixture
-async def publication(tmp_path):
+async def publication(tmp_path, pinned_native):
     comms = canonical_goal_wire(tmp_path / "wire")
     agent = canonical_agent(comms, auto_wake=False)
     client = GoalLog()
