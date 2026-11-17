@@ -52,7 +52,7 @@ def issue(comms, source, template, name, problem):
     return comms.goals.todos.get(problem)
 
 
-@pytest.fixture(params=tuple(state for state in TodoState.members_with(TodoState) if state.open))
+@pytest.fixture(params=tuple(state for state in TodoState.members_with(TodoState) if state.is_open()))
 def first_allocation(allocation_bus, request):
     comms, source, template = allocation_bus
     current = issue(comms, source, template, 'first', 'P41')

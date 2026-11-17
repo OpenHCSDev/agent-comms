@@ -379,7 +379,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
             if expected_error is None:
                 caller.invoke(close, copied)
                 saved = copied.goals.todos.get(problem)
-                assert saved.order.accepted and not saved.state.open
+                assert saved.order.accepted and not saved.state.is_open()
             else:
                 with pytest.raises(expected_error) as refusal:
                     caller.invoke(close, copied)
