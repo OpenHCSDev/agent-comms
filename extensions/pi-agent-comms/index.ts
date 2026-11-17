@@ -5,8 +5,9 @@
  * Python tool catalog. This adapter only translates the catalog into pi tools.
  */
 
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
+import { promisify } from "node:util";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
@@ -28,9 +29,22 @@ interface ToolDeclaration {
 const MAX_REPLY_BYTES = 64 * 1024 * 1024;
 
 interface ChildFailure {
-	code?: string;
+	code?: string | number;
 	status?: number | null;
 	stdout?: string;
+}
+
+function childFailure(error: unknown): never {
+	const failure = error as ChildFailure;
+	if (failure.code === "ENOBUFS" || failure.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
+		throw new Error(`agent-comms replied with more than ${MAX_REPLY_BYTES} bytes; the reply was refused whole`);
+	}
+	// Only a child that exited wrote a whole reply; never decode aborted or truncated stdout.
+	if ((typeof failure.status === "number" || typeof failure.code === "number") && failure.stdout) {
+		const parsed = JSON.parse(failure.stdout);
+		if (typeof parsed?.error === "string") throw new Error(parsed.error);
+	}
+	throw new Error(`agent-comms failed: ${error instanceof Error ? error.message : String(error)}`);
 }
 
 function run(args: string[], launchArguments: string[], timeout = 30_000): Record<string, unknown> {
@@ -42,16 +56,23 @@ function run(args: string[], launchArguments: string[], timeout = 30_000): Recor
 		});
 		return JSON.parse(stdout) as Record<string, unknown>;
 	} catch (error) {
-		const failure = error as ChildFailure;
-		if (failure.code === "ENOBUFS") {
-			throw new Error(`agent-comms replied with more than ${MAX_REPLY_BYTES} bytes; the reply was refused whole`);
-		}
-		// Only a child that exited wrote a whole reply; its stdout is Core's refusal.
-		if (typeof failure.status === "number" && failure.stdout) {
-			const parsed = JSON.parse(failure.stdout);
-			if (typeof parsed?.error === "string") throw new Error(parsed.error);
-		}
-		throw new Error(`agent-comms failed: ${error instanceof Error ? error.message : String(error)}`);
+		childFailure(error);
+	}
+}
+
+const executeFile = promisify(execFile);
+
+async function runTool(args: string[], launchArguments: string[], signal?: AbortSignal): Promise<Record<string, unknown>> {
+	try {
+		// Core owns each operation's time bound; Pi owns cancellation of this call.
+		const { stdout } = await executeFile(CLI, [...launchArguments, ...args], {
+			encoding: "utf-8",
+			maxBuffer: MAX_REPLY_BYTES,
+			signal,
+		});
+		return JSON.parse(stdout) as Record<string, unknown>;
+	} catch (error) {
+		childFailure(error);
 	}
 }
 
@@ -107,7 +128,7 @@ export default function (pi: ExtensionAPI) {
 				label: declaration.label,
 				description: declaration.description,
 				parameters: Type.Unsafe(declaration.parameters),
-				async execute(_id, params, _signal, _onUpdate, ctx) {
+				async execute(_id, params, signal, _onUpdate, ctx) {
 					if (declaration.name === "comms_model" && params.model != null) {
 						const selected = String(params.model).trim();
 						const separator = selected.indexOf("/");
@@ -132,10 +153,10 @@ export default function (pi: ExtensionAPI) {
 							}
 						}
 					}
-					const result = run([
+					const result = await runTool([
 						"tool", ...(currentThread ? ["--from", currentThread] : []),
 						"--tool", declaration.name, "--arguments", JSON.stringify(params),
-					], launchArguments);
+					], launchArguments, signal);
 					if (declaration.loads_tools) {
 						const selected = result.tools as { name: string }[];
 						pi.setActiveTools([...new Set([...pi.getActiveTools(), ...selected.map((tool) => tool.name)])]);

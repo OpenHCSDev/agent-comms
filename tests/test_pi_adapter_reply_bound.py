@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -39,7 +40,8 @@ try {
 """
 
 
-def drive(tmp_path: Path, cli: str) -> dict[str, object]:
+def drive(tmp_path: Path, cli: str, driver_source: str = DRIVER,
+          adapter: Path = ADAPTER) -> dict[str, object]:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     fake = bin_dir / "agent-comms"
@@ -51,10 +53,11 @@ def drive(tmp_path: Path, cli: str) -> dict[str, object]:
     hooks = tmp_path / "hooks.mjs"
     hooks.write_text(HOOKS)
     driver = tmp_path / "driver.mjs"
-    driver.write_text(DRIVER)
+    driver.write_text(driver_source)
     env = {k: v for k, v in os.environ.items() if not k.startswith("AGENT_COMMS")}
     env.update(PATH=f"{bin_dir}{os.pathsep}{env['PATH']}", CATALOG=str(catalog),
-               HOOKS_URL=hooks.as_uri(), ADAPTER_URL=ADAPTER.as_uri())
+               HOOKS_URL=hooks.as_uri(),
+               ADAPTER_URL=adapter.as_uri())
     done = subprocess.run(["node", str(driver)], env=env, capture_output=True, text=True,
                           timeout=60, check=True)
     return json.loads(done.stdout.strip().splitlines()[-1])
@@ -73,3 +76,22 @@ def test_a_reply_past_the_node_default_buffer_parses_whole(tmp_path: Path) -> No
 ])
 def test_an_unreadable_reply_names_its_failure(tmp_path: Path, cli: str, error: str) -> None:
     assert drive(tmp_path, cli) == {"error": error}
+
+
+def test_operation_can_outlive_the_former_adapter_deadline(tmp_path: Path) -> None:
+    answer = drive(tmp_path, """exec python3 -c 'import time; time.sleep(31); print("{}")'""")
+    assert answer == {"size": 2}
+
+
+def test_cancellation_is_responsive_and_never_decodes_partial_stdout(tmp_path: Path) -> None:
+    driver = DRIVER.replace(
+        'try {\n  const result',
+        'const controller = new AbortController();\n'
+        'setTimeout(() => controller.abort(), 100);\ntry {\n  const result',
+    ).replace('{}, undefined, undefined, {}', '{}, controller.signal, undefined, {}')
+    started = time.monotonic()
+    answer = drive(tmp_path, """exec python3 -c 'import sys,time; print("{\\\"error\\\": \\\"partial refusal\\\"}", flush=True); time.sleep(2); sys.exit(1)'""", driver)
+    elapsed = time.monotonic() - started
+    assert "aborted" in str(answer.get("error", "")).lower()
+    assert "partial refusal" not in str(answer)
+    assert elapsed < 1.5
