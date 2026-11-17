@@ -263,6 +263,15 @@ class RelationshipGroup(DeclaredFamily, affix="RelationshipGroup"):
     def build(cls, context: RelationshipContext) -> RelationshipGroup:
         return cls({entry.target: entry for entry in cls.supply(context)})
 
+    @classmethod
+    def is_group_type(cls, candidate: object) -> bool:
+        """Whether ``candidate`` is a class in this family — used by views that
+        store a group class in a widget's user-data slot and later ask whether
+        a given cell carries a group (vs an entry or None). Keeps callers from
+        restating the `isinstance(x, type) and issubclass(x, RelationshipGroup)`
+        pair at every site."""
+        return isinstance(candidate, type) and issubclass(candidate, cls)
+
     def selectable(self) -> tuple[SortableRelationshipGroup, ...]:
         return ()
 
