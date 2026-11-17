@@ -175,4 +175,6 @@ follow_untyped_imports = true
 durable-bases = [
     "agent_comms.storage.typed_table:DurableTables",
     "agent_comms.storage.locked_store:DurableFile",
+    # Saved Pi session files: every entry Pi or Core wrote stays for the session's life.
+    "agent_comms.execution.native_entries:RecordedEntry",
 ]
