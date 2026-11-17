@@ -2756,8 +2756,7 @@ class ReportedProblemOrder(DeliveredProblemOrder):
     line: ClassVar[str] = "Report returned"
 
     def installed_line(self, installed: InstalledBuild) -> str:
-        """A returned triage answer owes no install, so no build has a say in its words.
-        It already says so twice, in this line and in ``waiting_on_install``."""
+        """The order's own line is final: no installed build has a say in its words."""
         return self.line
 
     def require_close(self) -> None:
@@ -2774,18 +2773,19 @@ class ReportedProblemOrder(DeliveredProblemOrder):
 
 @dataclass(frozen=True, kw_only=True)
 class InstalledEvidence(CheckedProblemOrder, declared_name=None):
-    """Recorded application evidence, shared by delivered and merge-observed orders."""
+    """Recorded application evidence, shared by delivered and merge-observed orders.
+
+    Recorded evidence of the thing working is not a question for the current build. This
+    mixin sits first in the MRO of both installed members, so one `installed_line` answers
+    for the delivered and the merge-observed one. Without it the merge-observed order asked
+    the build and could report "Installed, waiting on install" the moment a later runtime
+    stopped containing the commit whose run was already witnessed."""
     works: str
     artifact: str
     line: ClassVar[str] = "Installed"
 
     def installed_line(self, installed: InstalledBuild) -> str:
-        """Recorded evidence of the thing working is not a question for the current build.
-
-        This mixin sits first in the MRO of both installed members, so one declaration
-        answers for the delivered and the merge-observed one. Without it the merge-observed
-        order asked the build and could report "Installed, waiting on install" the moment a
-        later runtime stopped containing the commit whose run was already witnessed."""
+        """The order's own line is final: no installed build has a say in its words."""
         return self.line
 
     @property
