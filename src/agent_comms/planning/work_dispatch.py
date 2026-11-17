@@ -15,16 +15,16 @@ from typing import TYPE_CHECKING, Self
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.planning.goal_actions import (
     CreateProblemGoalAction,
+    FiledProblem,
     GoalActionContext,
     OrderGoalAction,
+    ProblemOrder,
     ProblemOrderGoalAction,
 )
-from agent_comms.planning.orders import PendingProblemOrder
 from agent_comms.planning.owner_requests import NewestOpenRequest
 from agent_comms.planning.phase_tasks import PhaseTask
 from agent_comms.projects.checkouts import Checkout, CheckoutStart
 from agent_comms.projects.repo import Repo
-from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.repository_sources import LocalRepositorySource
 from agent_comms.projects.shell_effects import (
     AcquireRepositoryStorageEffect,
@@ -117,14 +117,10 @@ class ReusedWorkDispatch(WorkDispatch):
         return self.publish(comms, comms.registry.require(self.name))
 
 
-@dataclass(frozen=True)
-class CheckedPhaseTask(PhaseTask):
+@dataclass(frozen=True, kw_only=True)
+class CheckedPhaseTask(FiledProblem, ProblemOrder, PhaseTask):
     """An explicitly authored task; its order owns source, check, edits and run."""
 
-    problem: str
-    repo: RepositoryName
-    text: str
-    order: PendingProblemOrder
     review_seconds: float
     instruction = "Core assigns the declared checked task to a teammate and starts it"
 

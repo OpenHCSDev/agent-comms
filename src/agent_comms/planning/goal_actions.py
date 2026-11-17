@@ -619,11 +619,20 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemOrderGoalAction(
-    GoalAction[Goal], RuntimeInvocable, GoalStateOrder[Goal, GoalActionContext],
-):
+class ProblemOrder:
+    """The problem a goal action or task is about and the order it belongs to."""
+
     problem: str
     order: PendingProblemOrder
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProblemOrderGoalAction(
+    ProblemOrder,
+    GoalAction[Goal],
+    RuntimeInvocable,
+    GoalStateOrder[Goal, GoalActionContext],
+):
     request: OwnerRequestId
     review_at: EventTime
     assigner: ThreadIncarnation
@@ -748,10 +757,15 @@ class ReissuedOrderGoalAction(OrderGoalAction):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CreateProblemGoalAction(ProblemOrderGoalAction):
+class FiledProblem:
+    """The repository a problem is filed in and its authored text."""
+
     repo: RepositoryName
     text: str
 
+
+@dataclass(frozen=True, kw_only=True)
+class CreateProblemGoalAction(FiledProblem, ProblemOrderGoalAction):
     def reserve(self, ctx: GoalActionContext, generation: GoalId) -> None:
         ctx.goals.todos.create(self.problem, self.repo, self.text,
             creator=self.sender_teammate(ctx), owner=ctx.thread,

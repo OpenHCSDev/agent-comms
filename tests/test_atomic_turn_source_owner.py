@@ -30,6 +30,10 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
     comms = installed_comms(tmp_path)
     comms.registry.declare(NativeThread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     agent = CommsAgent(comms, auto_wake=False)
+    if goal_changed:
+        # A turn that starts with no goal keeps working when one is first assigned
+        # (a902cd73); only a replacement of the goal it started under is stale.
+        comms.goals.update_goal("owner", SetGoalAction(text="The goal this turn starts under"))
     await agent.sessions.bind_owned(comms.registry.require("owner"), AcpSessionId("owner-session"))
     turn = OwnedTurn(
         agent.turns, "owner-session", "owner", "new original input", acceptance=NoTurnAcceptance(),

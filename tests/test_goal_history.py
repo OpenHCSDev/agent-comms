@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import os
 from dataclasses import replace
 
 import pytest
@@ -31,6 +29,7 @@ from agent_comms.planning.goal_states import (
 )
 from agent_comms.planning.goals import NoGoal
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_tables import RegistryRowStore
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.store_files import ExclusiveLock
 from agent_comms.transport.request import ToolRequest
@@ -120,15 +119,12 @@ def test_existing_goal_seeds_only_current_observed_baseline(tmp_path):
 def test_crash_before_registry_write_does_not_expose_history_intent(tmp_path, monkeypatch):
     comms = _wire(tmp_path)
     current = comms.goals.update_goal("worker", SetGoalAction(text="Keep current"))
-    original_replace = os.replace
 
-    def failed_registry_write(source, destination, **directories):
-        if destination == comms.registry.store.path:
-            raise OSError("simulated registry write failure")
-        return original_replace(source, destination, **directories)
+    def failed_registry_write(self, *args, **kwargs):
+        raise OSError("simulated registry write failure")
 
     with monkeypatch.context() as patch:
-        patch.setattr(os, "replace", failed_registry_write)
+        patch.setattr(RegistryRowStore, "commit", failed_registry_write)
         with pytest.raises(OSError):
             comms.goals.update_goal(
                 "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(current.id)))
@@ -159,11 +155,13 @@ def test_crash_after_registry_write_reconciles_pending_history(tmp_path):
 def test_unjournaled_current_registry_change_is_labeled_observed_gap(tmp_path):
     comms = _wire(tmp_path)
     current = comms.goals.update_goal("worker", SetGoalAction(text="Known version"))
-    registry_path = comms.registry.store.path
-    raw = json.loads(registry_path.read_text())
-    raw["threads"]["worker"]["goal"]["text"] = "Unjournaled change"
-    raw["threads"]["worker"]["goal"]["revision"] = current.revision + 2
-    registry_path.write_text(json.dumps(raw))
+    with comms.registry.store.editing() as edit:
+        thread = edit.document.threads["worker"]
+        edit.document.threads["worker"] = replace(
+            thread,
+            goal=replace(current, text="Unjournaled change", revision=current.revision + 2),
+        )
+        edit.commit()
 
     reopened = wire(comms.root)
     entries = reopened.goals.goal_history("worker")
