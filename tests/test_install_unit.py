@@ -10,7 +10,9 @@ import pytest
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.launch import InstallRun
 from agent_comms.installer.logs import InstallLogs, InstallRunning, InstallUnit
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.request import InstallRequest
+from agent_comms.installer.target_tree import ScratchTree
 from agent_comms.nominal.field_codec import FieldCodec, Id128
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
@@ -177,8 +179,6 @@ def test_a_bootstrap_started_outside_its_target_tree_deletes_nothing(tmp_path, m
     """The bootstrap retires its scratch directory whole, so it must refuse a start from any
     directory but ``scratch/tree-<revision>``: from a checkout's root it deleted the checkout's
     parent, which took /home/user on 2026-11-02."""
-    from agent_comms.installer.refusals import UpgradeRefused
-    from agent_comms.installer.target_tree import ScratchTree
 
     checkout = tmp_path / "parent" / "checkout"
     checkout.mkdir(parents=True)

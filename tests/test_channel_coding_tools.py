@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent_comms.agent_events import ToolStart
 from agent_comms.comms import wire
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.execution.channel_coding_tools import CodingToolSocket
@@ -35,9 +36,13 @@ from agent_comms.pi_payloads import (
     ReportedParts,
 )
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.thread_identity import ReportedTools, ToolName
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.storage_room import NoRoomNeeded
-from agent_comms.transport.native_tools import CodingTool, NativeToolDeclaration
+from agent_comms.transport.native_tool_call import RefusedCodingCall
+from agent_comms.transport.native_tools import CodingTool, McpToolCall, NativeToolDeclaration
+from agent_comms.transport.tool_declaration import NoToolRecord, ToolDeclaration
+from agent_comms.transport.tool_denial import SelectedToolDenied
 from coding_owner_fixture import OwnerDouble
 
 
@@ -166,8 +171,6 @@ def test_coding_names_and_argument_types_come_from_declarations():
     ("mcp_fixture_echo_092c79e8f8", {"message": "ACCEPTANCE_ECHO"}),
 ])
 def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments):
-    from agent_comms.transport.native_tool_call import RefusedCodingCall
-    from agent_comms.transport.tool_denial import SelectedToolDenied
 
     call = NativeToolDeclaration.decode("bad-argument-shape", name, arguments)
     assert isinstance(call, RefusedCodingCall)
@@ -176,12 +179,6 @@ def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments)
 
 
 def test_an_offered_mcp_tool_decodes_as_its_call_and_an_unoffered_one_is_refused():
-    from agent_comms.registry.thread_identity import (
-        ReportedTools,
-        ToolName,
-    )
-    from agent_comms.transport.native_tool_call import RefusedCodingCall
-    from agent_comms.transport.native_tools import McpToolCall
 
     name, arguments = "mcp_fixture_echo_092c79e8f8", {"message": "ACCEPTANCE_ECHO"}
     offered = ReportedTools("pi-test", frozenset({ToolName("read"), ToolName(name)}))
@@ -194,8 +191,6 @@ def test_an_offered_mcp_tool_decodes_as_its_call_and_an_unoffered_one_is_refused
 
 
 def test_family_selector_is_denied_but_record_presentation_stays_readable():
-    from agent_comms.transport.tool_declaration import NoToolRecord, ToolDeclaration
-    from agent_comms.transport.tool_denial import SelectedToolDenied
 
     arguments = {"path": "x", "tool": "write"}
     with pytest.raises(SelectedToolDenied):
@@ -210,7 +205,6 @@ def test_family_selector_is_denied_but_record_presentation_stays_readable():
     ("write", {"path": "x", "content": "value"}, "Write x"),
 ])
 def test_pi_argument_fields_own_roundtrip_and_display(name, arguments, title):
-    from agent_comms.agent_events import ToolStart
 
     call = NativeToolDeclaration.decode("typed-argument-shape", name, arguments)
     assert call.arguments == arguments
@@ -321,7 +315,6 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(
 
     class Owner(OwnerDouble):
         async def allow(self, turn, round_number, call):
-            from agent_comms.transport.tool_denial import SelectedToolDenied
 
             answered.set()
             if refused:

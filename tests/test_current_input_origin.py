@@ -6,7 +6,17 @@ from pathlib import Path
 import pytest
 from acp.schema import TextContentBlock
 
-from agent_comms.acp_extension import QueuePromptRequest, decode_request, encode_request
+from agent_comms.acp_extension import (
+    AvailableQueueProjection,
+    LiveQueueScope,
+    NoQueueScope,
+    PendingQueueProjection,
+    QueueChangedUpdate,
+    QueuePromptRequest,
+    UnavailableQueueProjection,
+    decode_request,
+    encode_request,
+)
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.controller import (
     NO_CONTROLLER,
@@ -22,6 +32,7 @@ from agent_comms.execution.input_origin import (
     WireInputOrigin,
 )
 from agent_comms.execution.queued_input import QueuedInput
+from agent_comms.execution.turn_context import UserFollowupSegment, WireProvenance
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
@@ -30,7 +41,13 @@ from agent_comms.messaging.retained_task_facts import (
     CurrentHumanInputTaskFact,
     HumanInputTaskFact,
     InputTaskFact,
+    RetainedTaskFacts,
     retained_fact,
+)
+from agent_comms.messaging.task_sources import (
+    CorrectionTaskChange,
+    UserTaskDrop,
+    UserTaskSupersession,
 )
 from agent_comms.nominal.field_codec import (
     AcpSessionId,
@@ -87,14 +104,6 @@ def capture(comms):
 
 
 async def test_queue_observation_owns_capture_and_rejects_malformed_available_scope(live_owner):
-    from agent_comms.acp_extension import (
-        AvailableQueueProjection,
-        LiveQueueScope,
-        NoQueueScope,
-        PendingQueueProjection,
-        QueueChangedUpdate,
-        UnavailableQueueProjection,
-    )
     comms, agent = live_owner
     scope = await agent.inputs.queue_binding(AcpSessionId('beta'))
     assert scope == LiveQueueScope(
@@ -135,7 +144,6 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     row = stored_inputs(inputs.root).lookup(key)
     assert row.origin == origin and row.source_text == command.user_text
     assert len(stored_inputs(inputs.root).rows) == 1 and comms.bus.bus.revision() == before
-    from agent_comms.execution.turn_context import UserFollowupSegment
     queued = agent.inputs.state('beta').require_inbox().get_nowait()
     assert queued.input_id == command.input_id
     assert queued.content.text == 'User follow-up:\n' + command.user_text
@@ -297,13 +305,6 @@ async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope
 
 
 async def test_direct_human_input_pin_shares_original_source_lineage_without_replay(live_owner):
-    from agent_comms.execution.turn_context import WireProvenance
-    from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
-    from agent_comms.messaging.task_sources import (
-        CorrectionTaskChange,
-        UserTaskDrop,
-        UserTaskSupersession,
-    )
 
     comms, agent = live_owner
     origin = capture(comms)

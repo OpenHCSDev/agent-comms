@@ -2,6 +2,7 @@
 
 import pytest
 
+from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.execution.native_arguments import (
     InheritedArguments,
     NamedOption,
@@ -26,7 +27,6 @@ from agent_comms.registry.thread_model import (
 
 @pytest.mark.parametrize("selection", [None, "", "model", "/model", "provider/"])
 def test_selected_model_requires_a_complete_qualified_configuration(selection):
-    from agent_comms.coordination.errors import IdentityConflict
 
     with pytest.raises(IdentityConflict):
         SelectedModel.decode(selection)

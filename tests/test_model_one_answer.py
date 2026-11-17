@@ -80,8 +80,6 @@ def test_keep_request_preserves_the_existing_model_and_chosen_request_replaces_i
 
 def test_serving_root_reuses_catalog_across_read_loops_and_authentication_invalidates_it(tmp_path, monkeypatch):
     import asyncio
-    from agent_comms.cli_verbs.new import NewThreadCliCommand
-    from agent_comms.config_options import CatalogChoice
 
     comms = installed_comms(tmp_path / "wire")
     project = Checkout(tmp_path)

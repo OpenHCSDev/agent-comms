@@ -14,6 +14,7 @@ import tomli_w
 from agent_comms_project import AgentCommsProject, ClientTypeErrors
 from module_layers import MaterializedClients, OutgoingWire, Package, StackClient
 
+from agent_comms.cli_bridges.monitor import PauseSession
 from agent_comms.planning.orders import DraftListedPullRequest
 from agent_comms.projects.head_review import BaseSide, HeadSide, IntegrationInput, Side
 from github_fixture import GitHubFixture
@@ -237,7 +238,6 @@ def test_crosses_runtimes_matches_the_tree_that_declares_it(tmp_path: Path) -> N
 
 
 def test_crosses_runtimes_fails_on_a_renamed_session_field(tmp_path: Path) -> None:
-    from agent_comms.cli_bridges.monitor import PauseSession
 
     wire = OutgoingWire.at()
     base = wire_base(tmp_path, wire)
@@ -259,7 +259,6 @@ def test_crosses_runtimes_fails_on_a_renamed_session_field(tmp_path: Path) -> No
 
 
 def test_crosses_runtimes_missing_file_and_class_share_one_verdict(tmp_path: Path) -> None:
-    from agent_comms.cli_bridges.monitor import PauseSession
 
     wire = OutgoingWire.at()
     base = wire_base(tmp_path, wire)

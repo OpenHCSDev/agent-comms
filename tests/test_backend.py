@@ -9,6 +9,7 @@ import pytest
 
 import agent_comms.agent_events as ae
 import agent_comms.execution.backend as backend
+from agent_comms.execution.native_attestation import AttestationError, PendingAttestation
 from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.turn_inbox import (
     InputContent,
@@ -96,8 +97,6 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
 
 class TestNativeInputBinding:
     def test_only_original_response_can_promote_pending_attestation(self):
-        from agent_comms.execution.native_attestation import AttestationError, PendingAttestation
-        from agent_comms.execution.pi_rpc import PiRpcChannel
 
         pending = PendingAttestation()
         def response(identity, capability='pi-native-input-v1-live-only'):

@@ -17,6 +17,7 @@ from acp.schema import TextContentBlock
 
 import agent_comms.agent_events as ae
 import agent_comms.execution.backend as backend
+from agent_comms.config_options import ServiceTierConfigOption
 from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
@@ -30,13 +31,16 @@ from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenArguments
+from agent_comms.execution.pi_vocabulary import ServiceTier
+from agent_comms.execution.turn_phase import ToolRunningPhase
+from agent_comms.execution.turn_runner import parse_target
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.channels import AnyChannel
 from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, TurnId
 from agent_comms.pi_counts import PiCount
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.activity import ActivityState
+from agent_comms.registry.activity import Activity, ActivityState, ActivityStore
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
 from agent_comms.ui_model.observation import ReadTranscript, SubscribeTranscript
@@ -151,8 +155,6 @@ class TestHandlers:
     async def test_service_tier_menu_selection_and_readback(
         self, tmp_path: Path, session_project: Path, native_runtime_package,
     ):
-        from agent_comms.config_options import ServiceTierConfigOption
-        from agent_comms.execution.pi_vocabulary import ServiceTier
 
         agent = self._agent(tmp_path)
         try:
@@ -497,7 +499,6 @@ class TestFullHistory:
 class TestActivityLayer:
     def test_emit_and_read_current(self, wired):
 
-        from agent_comms.execution.turn_phase import ToolRunningPhase
 
         wired.registry.declare(NativeThread(
             "activity-owner", frozenset(), Checkout(wired.root),
@@ -530,7 +531,6 @@ class TestActivityLayer:
     def test_stale_activity_reads_idle(self, wired):
         import time as _time
 
-        from agent_comms.registry.activity import Activity
 
         wired.agents.activity.emit(
             Activity(thread="PR111", state=ActivityState.WORKING, detail="old",
@@ -539,7 +539,6 @@ class TestActivityLayer:
         assert wired.agents.activity_of("PR111", snapshot=wired.registry.snapshot()).state is ActivityState.IDLE
 
     def test_store_reads_the_latest_activity_of_exactly_the_requested_threads_after_reopen(self, tmp_path):
-        from agent_comms.registry.activity import Activity, ActivityStore
 
         store = ActivityStore(tmp_path)
         store.emit(Activity(thread="a", state=ActivityState.THINKING))
@@ -559,7 +558,6 @@ class TestTargetPrefix:
         ("@fixer", ("#all", "@fixer")),
     ])
     def test_prefix_names_the_target(self, text, target):
-        from agent_comms.execution.turn_runner import parse_target
 
         assert parse_target(text) == target
 

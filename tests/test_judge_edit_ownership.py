@@ -7,13 +7,14 @@ import pytest
 
 from agent_comms.errors import TodoError
 from agent_comms.nominal.field_codec import (
+    FieldCodec,
     GoalId,
     OrderId,
     ToolCallId,
 )
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.goals import ProblemGoalOrder
-from agent_comms.planning.order_words import StrikeReason
+from agent_comms.planning.order_words import StrikeReason, VerdictReason
 from agent_comms.planning.orders import (
     AcceptedVerdict,
     Assignment,
@@ -107,8 +108,6 @@ def test_an_edit_in_an_unknown_problems_checkout_joins_no_held_order(two_orders,
 
 
 def test_reading_a_stored_reason_never_flags_its_words(capsys):
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.planning.order_words import VerdictReason
 
     FieldCodec.decode(VerdictReason, "the store cutover happened before this verdict was written")
     assert capsys.readouterr().err == ""

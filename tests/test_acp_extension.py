@@ -5,8 +5,11 @@ import pytest
 from agent_comms.acp_extension import (
     AgentCommsUpdate,
     AvailableQueueProjection,
+    ClearQueueRequest,
+    CommsRequest,
     CompactionChangedUpdate,
     CompactionCommittedUpdate,
+    CompactRequest,
     ContextAnnotatedUpdate,
     CoordinationChangedUpdate,
     CursorAdvancedUpdate,
@@ -17,12 +20,18 @@ from agent_comms.acp_extension import (
     InputFailedUpdate,
     LiveQueueScope,
     McpClientAcknowledgementUpdate,
+    NativeOutputCommittedUpdate,
+    NativeRoundCommittedUpdate,
     NoQueueScope,
     PromptCancelledUpdate,
     QueueChangedUpdate,
     QueueItem,
+    QueuePromptRequest,
     RequestFailedUpdate,
     SelectedWriteAcceptedUpdate,
+    SelectedWriteRequest,
+    SendNowRequest,
+    SteerPromptRequest,
     TextNoticeUpdate,
     TextRouteUpdate,
     TranscriptChangedUpdate,
@@ -31,24 +40,31 @@ from agent_comms.acp_extension import (
     TurnChangedUpdate,
     UnavailableCursorObservation,
     UnidentifiedInputStarted,
+    decode_request,
     decode_updates,
+    encode_request,
     encode_updates,
 )
 from agent_comms.agent_events import CompactionStart
 from agent_comms.execution.acp_failure import ACPFailure, BackendDeliveryFailure
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.context_reading import UnmeasuredContext
+from agent_comms.execution.native_output import AssistantOutput, NativeRecordLocation
+from agent_comms.execution.native_record_file import PresentSessionCut
+from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.pi_wire import McpLiveAcknowledgement
 from agent_comms.execution.transcript_sources import NativeTranscriptCursor
 from agent_comms.execution.turn_context import (
     ContextManifest,
     NextContextTurn,
 )
+from agent_comms.execution.turn_item import NativeItemId
 from agent_comms.execution.turn_lease import (
     ActiveTurn,
     FinishedTurn,
     TurnState,
 )
+from agent_comms.messaging.sent_message import AssignedSourceIdentity
 from agent_comms.nominal.field_codec import (
     AcpSessionId,
     AssignmentId,
@@ -66,13 +82,14 @@ from agent_comms.registry.thread_identity import (
     RecordedThreadIncarnation,
 )
 from agent_comms.registry.threads import NativeThread
-from agent_comms.storage.private_path import MissingFile
+from agent_comms.storage.private_path import FileRevision, MissingFile
 from agent_comms.transcript.transcript_drafts import NoDraft
+from agent_comms.transcript.transcripts import NativeCommittedPrefix
 from agent_comms.transport.attachment_scope import LiveCursorScope
+from conftest import installed_comms
 
 
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
-    from conftest import installed_comms
     comms = installed_comms(tmp_path)
     comms.registry.declare(NativeThread('pilot', frozenset(), Checkout(tmp_path)))
     read = comms.transcripts.capture_page_read("pilot")
@@ -80,14 +97,6 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     queue_scope = LiveQueueScope(
         session_id=AcpSessionId("pilot"), claimed_identity=owner, owner=ProcessIdentity(123, 1),
     )
-    from agent_comms.acp_extension import NativeOutputCommittedUpdate, NativeRoundCommittedUpdate
-    from agent_comms.execution.native_output import AssistantOutput, NativeRecordLocation
-    from agent_comms.execution.native_session_reopen import PiSessionId
-    from agent_comms.execution.native_record_file import PresentSessionCut
-    from agent_comms.execution.turn_item import NativeItemId
-    from agent_comms.messaging.sent_message import AssignedSourceIdentity
-    from agent_comms.storage.private_path import FileRevision
-    from agent_comms.transcript.transcripts import NativeCommittedPrefix
     sample_path = tmp_path / "session.jsonl"
     sample_path.write_text("{}\n")
     committed = NativeCommittedPrefix(
@@ -177,17 +186,6 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
 
 
 def test_request_family_strict_boundary():
-    from agent_comms.acp_extension import (
-        ClearQueueRequest,
-        CommsRequest,
-        CompactRequest,
-        QueuePromptRequest,
-        SelectedWriteRequest,
-        SendNowRequest,
-        SteerPromptRequest,
-        decode_request,
-        encode_request,
-    )
 
     samples = (
         QueuePromptRequest("queue", True),

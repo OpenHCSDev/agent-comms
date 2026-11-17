@@ -7,7 +7,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.coordination.errors import DMPaintedBoundChanged, ReadAgain
+from agent_comms.coordination.errors import DMPaintedBoundChanged, DMScopeChanged, ReadAgain
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.messaging.message_page import (
@@ -16,6 +16,8 @@ from agent_comms.messaging.message_page import (
 )
 from agent_comms.messaging.page_traversal import PageCursor
 from agent_comms.messaging.read_basis import (
+    AllChannelDisplayScope,
+    AllConversation,
     ChannelConversation,
     ConversationCursor,
     DMConversation,
@@ -30,11 +32,13 @@ from agent_comms.messaging.read_ledger import (
     ReadLedger,
     ReadNotice,
 )
+from agent_comms.messaging.recorded_bus import NoRecordedBus, RecordedBus
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.presentation import ReadThrough
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.private_path import FileIdentity, ObservedPath
 from bus_record_fixture import prepare_native_comms
 
 
@@ -271,7 +275,6 @@ def test_shown_only_property_across_pages_modes_and_reopen(tmp_path, seed):
 
 
 def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
-    from agent_comms.messaging.read_basis import AllChannelDisplayScope
 
     class AlternateMessages(AllChannelDisplayScope):
         @property
@@ -313,7 +316,6 @@ def test_all_read_uses_one_watermark_without_sparse_sequences(tmp_path):
     comms.views.mark_user_view_read("#any", worktree=Checkout(tmp_path))
     snapshot = comms.registry.snapshot()
     seen = comms.bus.reads.cursor(viewer, snapshot)
-    from agent_comms.messaging.read_basis import AllConversation
     assert tuple(seen.conversations) == (AllConversation(),)
     assert seen.for_conversation(AllConversation()).high_water == messages[-1].seq
     assert all(message.seq in seen.for_conversation(ReadLedger.conversation(message, snapshot))
@@ -327,10 +329,6 @@ def test_all_read_uses_one_watermark_without_sparse_sequences(tmp_path):
 
 
 def test_recorded_bus_identity_is_one_member(tmp_path):
-    from agent_comms.coordination.errors import DMScopeChanged
-    from agent_comms.messaging.read_ledger import ReadDocument
-    from agent_comms.messaging.recorded_bus import NoRecordedBus, RecordedBus
-    from agent_comms.storage.private_path import FileIdentity, ObservedPath
 
     comms = prepared(tmp_path)
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name

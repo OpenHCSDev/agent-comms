@@ -28,6 +28,7 @@ from agent_comms.planning.goal_waits import GoalWait, GoalWaits
 from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from goal_owner_fixture import canonical_goal_wire
 from stored_inputs import stored_inputs
 
 
@@ -113,7 +114,6 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
 
 
 def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path):
-    from goal_owner_fixture import canonical_goal_wire
 
     comms = canonical_goal_wire(tmp_path)
     register(comms, "owner")

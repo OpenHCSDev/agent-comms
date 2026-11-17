@@ -8,6 +8,8 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
+from agent_comms.cli import CliInvocation
+from agent_comms.cli_verbs.install import InstallCliCommand
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import (
     NoProcess,
@@ -15,10 +17,13 @@ from agent_comms.execution.child_process import (
 )
 from agent_comms.installer.active_route import ActiveRoute, read_active_route, route_new_bus
 from agent_comms.installer.backup import bus_files
+from agent_comms.installer.interpreter_operation import InstallClock
 from agent_comms.installer.practice import PracticeCopy
+from agent_comms.installer.probes.harnesses import InstallResult
+from agent_comms.installer.upgrade import PracticeBus
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
-from agent_comms.nominal.field_codec import TurnId
+from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import NoTeamProject, RegisteredTeamProject
 from agent_comms.registry.registry_tables import RegistryRowStore
@@ -31,8 +36,10 @@ from agent_comms.storage.locked_store import (
     SQLiteFile,
 )
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.storage.store_files import SharedLock
 from agent_comms.team.config import GivenRepos
 from bus_record_fixture import prepare_native_comms
+from test_locked_store import _hold_lock, process
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -131,8 +138,6 @@ def test_the_rehearsal_copy_holds_the_registry_with_its_presence_rows(private_di
     # Installs of 8921dfdb refused twice, 2026-11-06: once no pending carry named
     # presence.json, the selected copy held registry.json alone, and the installed runtime's
     # owners probe on that copy raised "a declared thread has no presence row".
-    from agent_comms.installer.interpreter_operation import InstallClock
-    from agent_comms.installer.upgrade import PracticeBus
 
     root, _ = bus(private_directory)
     (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
@@ -150,7 +155,6 @@ def test_a_message_sent_while_the_bus_is_copied_preserves_one_database_cut(
     # its checkpoint's, so the copied checkpoint pointed past the end of the copied log.
     import threading
 
-    from agent_comms.cli import CliInvocation
     root, _ = bus(private_directory)
     (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
     bus_path = Bus.path_in(root)
@@ -178,8 +182,6 @@ def test_a_message_sent_while_the_bus_is_copied_preserves_one_database_cut(
 
 def test_install_report_encodes_its_registered_harnesses() -> None:
     # The live install printed nothing: its report's field type had no codec.
-    from agent_comms.installer.probes.harnesses import InstallResult
-    from agent_comms.nominal.field_codec import FieldCodec
 
     for config in (RegisteredTeamProject(()),
                    NoTeamProject()):
@@ -196,7 +198,6 @@ def _harnessless_home(directory: Path, monkeypatch) -> None:
 
 def test_an_install_on_a_bus_with_no_team_writes_no_team_config(private_directory, monkeypatch):
     # The laptop's install failed its last step: the flag default named this machine's colleague.
-    from agent_comms.cli_verbs.install import InstallCliCommand
 
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
@@ -208,7 +209,6 @@ def test_an_install_on_a_bus_with_no_team_writes_no_team_config(private_director
 
 def test_an_install_given_repos_founds_the_team_with_no_lead(private_directory, monkeypatch):
     # The team owns its board and repositories: founding it names no thread.
-    from agent_comms.cli_verbs.install import InstallCliCommand
 
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
@@ -224,9 +224,6 @@ def test_an_install_without_flags_keeps_native_team_and_parked_state(
 ):
     import multiprocessing
 
-    from agent_comms.cli_verbs.install import InstallCliCommand
-    from agent_comms.storage.store_files import SharedLock
-    from test_locked_store import _hold_lock, process
 
     root = (private_directory / "wire").resolve()
     root.mkdir(mode=0o700)
@@ -258,7 +255,6 @@ def test_an_install_without_flags_keeps_native_team_and_parked_state(
 def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(private_directory, capsys):
     # The laptop's install refused this read: rebuilding the copy's empty index sealed it
     # inside an open transaction, so the commit moved the file past its own seal.
-    from agent_comms.cli import CliInvocation
 
     root = private_directory / "wire"
     root.mkdir(mode=0o700)

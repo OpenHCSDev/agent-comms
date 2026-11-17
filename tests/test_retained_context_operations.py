@@ -1,5 +1,14 @@
 import sys
 
+from agent_comms.comms import wire
+from agent_comms.execution.queued_input import QueuedInput
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.messaging.retained_task_facts import InputTaskFact
+from agent_comms.planning.goals import Goal
+from test_acp_queue_contract import _owner
+from test_current_input_origin import Client, capture
+from test_task_decisions import saved_source
+
 """One original human-source workflow through the public CLI and file effects."""
 import json
 from pathlib import Path
@@ -31,9 +40,6 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     original_goal_id = GoalId.mint()
     import hashlib
 
-    from agent_comms.input_disposition import InputDispositions
-    from agent_comms.planning.goals import Goal
-    from test_task_decisions import saved_source
 
     saved = tmp_path / "original.jsonl"
     saved_source(saved)
@@ -127,7 +133,6 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     assert comms.registry.require(owner.name).turn_lease == NoTurnLease()
 
     # No semantic sidecar is needed for a new Comms instance to read the result.
-    from agent_comms.comms import wire
 
     reopened = wire(comms.root)
     restored = reopened.views.retained_context(owner.name)
@@ -136,10 +141,6 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
 
 async def original_input_consumer_journey(tmp_path, command):
     """Reuse the original ACP reservation fixture; never dispatch its inputs."""
-    from agent_comms.execution.queued_input import QueuedInput
-    from agent_comms.messaging.retained_task_facts import InputTaskFact
-    from test_acp_queue_contract import _owner
-    from test_current_input_origin import Client, capture
 
     comms, agent, _, _ = _owner(tmp_path)
     origin = capture(comms)
@@ -233,7 +234,6 @@ async def original_input_consumer_journey(tmp_path, command):
     assert wording not in destination.read_text() and replacement in destination.read_text()
     assert snapshot.retained.original_text_source(snapshot.retained.current_authored_sources(
         comms.registry.require("renamed-beta"), comms.registry.snapshot())[0].reference) == originals[0]
-    from agent_comms.comms import wire
     reopened = wire(comms.root)
     assert reopened.views.retained_context("renamed-beta").text() == (
         comms.views.retained_context("renamed-beta").text())

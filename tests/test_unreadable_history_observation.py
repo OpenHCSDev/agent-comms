@@ -16,6 +16,7 @@ from agent_comms.context_store import ContextRequest
 from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
     DeferredRead,
+    ReloadRequired,
     SchemaVersionError,
     StaleRevision,
     TranscriptChanged,
@@ -41,7 +42,9 @@ from agent_comms.ui_model.observation import (
     ReadBusy,
     ReadNotifications,
     ReadRefused,
+    ReadReload,
     ReadRequest,
+    ReadValue,
     SidebarObserved,
     SidebarPreparing,
     SidebarReading,
@@ -254,8 +257,6 @@ def test_a_reload_reads_afresh_once_and_answers_reload_only_when_its_bounds_stay
     """A read derives its bounds when it runs: one reload re-reads at once and answers its
     value; a read whose own bounds are stale reloads again, and that is its answer, after
     exactly two reads, never a pending wait on someone else's write."""
-    from agent_comms.coordination.errors import ReloadRequired
-    from agent_comms.ui_model.observation import ReadReload, ReadValue, UnreadableHistory
 
     reads = []
 

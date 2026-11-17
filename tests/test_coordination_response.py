@@ -46,7 +46,9 @@ from agent_comms.coordination.tables.executions import (
 from agent_comms.coordination.tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_origin import WireInputOrigin
 from agent_comms.execution.selected.source_batch import SelectedSource
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.publisher import ParticipantPublisher
 from agent_comms.nominal.field_codec import AssignmentId, InputId, RootId, ThreadLookup, TurnId
@@ -311,7 +313,6 @@ def test_stale_owner_and_conflicting_payload_cannot_publish(tmp_path: Path) -> N
 @pytest.mark.parametrize("change", ["finish", "stop", "pid", "pid_reuse", "turn", "recipient"])
 def test_response_requires_current_exact_live_turn(tmp_path, change):
     """No PID-only or omitted-witness path can turn SQL finality into publication."""
-    from agent_comms.coordination.errors import StaleFence
 
     case = _ready(tmp_path)
     try:
@@ -348,8 +349,6 @@ def test_response_requires_current_exact_live_turn(tmp_path, change):
 def test_response_answers_the_messages_its_turn_took_in(tmp_path: Path) -> None:
     from uuid import uuid4
 
-    from agent_comms.execution.input_origin import WireInputOrigin
-    from agent_comms.input_disposition import InputDispositions
 
     case = _ready(tmp_path, direct=True)
     try:

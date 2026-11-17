@@ -40,7 +40,8 @@ from agent_comms.messaging.messages import (
     ReplayedHolders,
     StoredHolders,
 )
-from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
+from agent_comms.messaging.retained_task_facts import ClaimTaskFact
+from agent_comms.nominal.field_codec import ClaimId, FieldCodec, InputId, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_status import RunningThreadStatus, StoppedThreadStatus
@@ -129,8 +130,6 @@ def test_existing_owner_allocates_nothing_and_never_invokes_builder(claims: Clai
     with claims.bus.reading() as reader:
         assert reader.resource_owner(resource) == owner
         assert dict(reader.claim_projection()) == {resource: owner}
-    from agent_comms.messaging.retained_task_facts import ClaimTaskFact
-    from agent_comms.nominal.field_codec import FieldCodec
 
     record = claims.bus.lookup(owner.seq)
     fact, = record.retained_task_facts()

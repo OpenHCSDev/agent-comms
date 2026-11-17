@@ -13,8 +13,10 @@ from multiprocessing import Pipe
 import pytest
 
 from agent_comms.cli_bridges.codex_connection import CodexConnection
+from agent_comms.cli_bridges.codex_protocol import RateLimitsResponse
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.cli_verbs.fork import ForkCliCommand
+from agent_comms.cli_verbs.heartbeat_delivery import HeartbeatDeliveryCliCommand
 from agent_comms.comms import Comms
 from agent_comms.coordination.errors import DeferredRead
 from agent_comms.coordination.service_passes import ServicePassStore
@@ -25,6 +27,7 @@ from agent_comms.errors import (
 )
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity
 from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.heartbeat_subjects import TeamHistory, TeammateSubject
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.bus_read import UiRead
 from agent_comms.messaging.channel_targets import TeammatesTag, ThreadTarget
@@ -32,25 +35,47 @@ from agent_comms.messaging.initial_origin import HumanOrigin
 from agent_comms.messaging.message_page import MessagePageRequest
 from agent_comms.messaging.messages import ConversationRole, InfoKind, Message
 from agent_comms.messaging.read_basis import DMDisplayScope
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec, OrderId
+from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.planning.orders import ProgressRead
+from agent_comms.planning.plan_phases import (
+    BusInterfacePhase,
+    DesignReconciledPhase,
+    OneOrderOwnerPhase,
+    RecordPlanePhase,
+    RetainedStorePhase,
+    ReviewQueuePhase,
+)
 from agent_comms.planning.todo_refusals import TeammateOccupied
 from agent_comms.presentation import NoRevision
 from agent_comms.projects.checkouts import Checkout, UnpushedHead
+from agent_comms.projects.head_review import PullRequestHead
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.work_branches import WorkBranchError
-from agent_comms.registry.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
+from agent_comms.registry.heartbeat_delivery import (
+    HeartbeatDelivery,
+    OffHeartbeatDelivery,
+    OnHeartbeatDelivery,
+)
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.thread_management import GivenTags
+from agent_comms.registry.thread_status import ArchivedThreadStatus
 from agent_comms.registry.threads import ForkThread, NativeThread, Thread
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.team_pings import (
     PublishedFacts,
     RulePing,
     TeamDecisions,
+    TeamDelivery,
     TeamUpdate,
     TeamUpdateNotice,
     TeamUpdateStore,
+    UnpublishedFacts,
+    WatchingAlarms,
 )
+from agent_comms.team.publication_rules import UnpushedBranch
 from agent_comms.team.standing_rules import (
+    OrderlessUnreviewedHead,
     ReviewTimerUp,
     ServicePassFailing,
     StandingRule,
@@ -58,14 +83,14 @@ from agent_comms.team.standing_rules import (
 )
 from agent_comms.team.team_heartbeat import TeamHeartbeat, TeamObservation
 from agent_comms.team.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, UnreadableUsage
-from agent_comms.team.team_hud_records import Teammate
+from agent_comms.team.team_hud_records import Teammate, TeamPhase
 from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.transcript.transcript_events import IncomingTranscript
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.reads import TeammateRead
 from agent_comms.transport.tools.served import invoke_tool
 from agent_comms.ui_model import observation
-from agent_comms.ui_model.hud_groups import PhasesDoneByPlanGroup
+from agent_comms.ui_model.hud_groups import IdleGroup, PhasesDoneByPlanGroup
 from agent_comms.ui_model.message_category import HeartbeatCategory, InboundCategory, all_categories
 from agent_comms.ui_model.observation import (
     ObservationService,
@@ -74,11 +99,19 @@ from agent_comms.ui_model.observation import (
     ReadRefused,
     TeamHudObserved,
 )
-from agent_comms.ui_model.teammate_state import Spinning, TeammateState, UrgentGroup
+from agent_comms.ui_model.teammate_state import (
+    Idle,
+    NoPendingClock,
+    PendingClock,
+    Spinning,
+    Stuck,
+    TeammateState,
+    UrgentGroup,
+)
 from agent_comms.waking.wake_policy import PassiveWake
 from agent_comms_hooks.watch import WatchRecord
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
-from test_holder_standing_rules import state_cards
+from test_holder_standing_rules import publish, state_cards
 from test_unit_state import recorded_turn
 
 pytest_plugins = ("test_holder_standing_rules",)
@@ -105,8 +138,6 @@ def notification_bus(held_bus, installed_runtime, monkeypatch, tmp_path):
 def test_heartbeat_delivery_preserves_membership_board_history_and_direct_messages(
     notification_bus: Comms, delivery: str, publications: int,
 ) -> None:
-    from agent_comms.cli_verbs.heartbeat_delivery import HeartbeatDeliveryCliCommand
-    from agent_comms.registry.heartbeat_delivery import HeartbeatDelivery
 
     comms = notification_bus
     original = comms.registry.require("colleague")
@@ -452,7 +483,6 @@ def test_hidden_tool_time_keeps_publication_display_facts(notification_bus):
 
 
 def test_unchanged_open_alarm_wakes_each_beat_until_a_recorded_action(notification_bus):
-    from test_holder_standing_rules import publish
 
     comms = notification_bus
     todo = comms.goals.todos.get("P1")
@@ -590,15 +620,6 @@ def test_failure_packet_follows_the_team_rename_alias(notification_bus):
 
 def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_bus):
     """Ready and done-but-held phases colleague; finished phases are one count per plan."""
-    from agent_comms.planning.plan_phases import (
-        BusInterfacePhase,
-        DesignReconciledPhase,
-        OneOrderOwnerPhase,
-        RecordPlanePhase,
-        RetainedStorePhase,
-        ReviewQueuePhase,
-    )
-    from agent_comms.team.team_hud_records import TeamPhase
 
     comms = notification_bus
     colleague = comms.registry.require("colleague").incarnation
@@ -631,10 +652,6 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
 
 
 def test_frame_keeps_original_ping_order_and_folded_idle_records(tmp_path):
-    from agent_comms.nominal.field_codec import OrderId
-    from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-    from agent_comms.ui_model.hud_groups import IdleGroup
-    from agent_comms.ui_model.teammate_state import Idle, NoPendingClock, PendingClock, Stuck
 
     now = time.time()
     idle = Teammate(
@@ -727,7 +744,6 @@ def test_recreated_watcher_retains_non_disposable_observation_without_nagging(no
     assert isinstance(unchanged.task, TeamUpdateNotice)
     assert aged(unchanged.task.handled) == aged(first.task.handled)
     assert lead_hud(comms).board == ()
-    from agent_comms.task_attachments.team_pings import WatchingAlarms
 
     section, = TeamFrame.current(comms, "colleague").alarms
     assert section.group is WatchingAlarms
@@ -823,7 +839,6 @@ def test_latest_observation_follows_the_team_rename_alias(notification_bus):
 
 
 def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification_bus, tmp_path):
-    from agent_comms.team.publication_rules import UnpushedBranch
 
     comms = notification_bus
     holder = comms.registry.require("worker").incarnation
@@ -968,8 +983,6 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
     import json
     from datetime import datetime
 
-    from agent_comms.cli_bridges.codex_protocol import RateLimitsResponse
-    from agent_comms.nominal.field_codec import FieldCodec
 
     reply = FieldCodec.decode(RateLimitsResponse, json.loads('''{
         "rateLimits": {"primary": {
@@ -989,9 +1002,6 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
 
 def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_evidence(notification_bus):
     comms = notification_bus
-    from agent_comms.projects.head_review import PullRequestHead
-    from agent_comms.projects.repository_name import RepositoryName
-    from agent_comms.team.standing_rules import OrderlessUnreviewedHead
 
     rules = tuple(OrderlessUnreviewedHead(
         request=PullRequestHead(RepositoryName.from_wire("OpenHCSDev/toad"), 100 + index, "a" * 40),
@@ -1012,7 +1022,6 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
     assert len(message.task.handled) == 12
     assert {entry.text for entry in message.task.board(comms)} == {rule.line() for rule in rules}
     assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12
-    from agent_comms.nominal.text_digest import TextDigest
 
     swapped = (*packet.handled[:-1], replace(packet.handled[-1], observation=TextDigest.of("other observation")))
     replacement = replace(packet, handled=swapped, waiting=swapped)
@@ -1023,7 +1032,6 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
 
 def test_failed_quiet_publication_retries_identical_display_until_committed(notification_bus):
     """A real SQLite refusal rolls back publication, not the disposable frame write."""
-    from agent_comms.task_attachments.team_pings import PublishedFacts
 
     comms = notification_bus
     first_hud = beat(comms)
@@ -1078,9 +1086,6 @@ def test_unsent_new_alert_remains_new_on_retry_without_resetting_its_age(notific
 
 
 def test_subject_evidence_is_shared_without_losing_each_pings_start(notification_bus):
-    from agent_comms.heartbeat_subjects import TeamHistory, TeammateSubject
-    from agent_comms.task_attachments.team_pings import TeamDelivery
-    from test_holder_standing_rules import publish
 
     comms = notification_bus
     owner = comms.registry.require("colleague").incarnation
@@ -1110,7 +1115,6 @@ def test_subject_evidence_is_shared_without_losing_each_pings_start(notification
 
 
 def test_retained_packet_without_display_witness_keeps_original_message_identity(notification_bus):
-    from agent_comms.task_attachments.team_pings import PublishedFacts, UnpublishedFacts
 
     comms = notification_bus
     hud = beat(comms)
@@ -1266,7 +1270,6 @@ def test_a_board_packet_files_under_heartbeats_while_the_owners_own_words_stay_i
 def test_an_archived_lead_keeps_its_board_and_the_pass_completes(notification_bus):
     """2026-11-02: from 14:49 every heartbeat pass died on 'Initial direct target must be visible'
     sending the archived colleague its packet, so no teammate had a board."""
-    from agent_comms.registry.thread_status import ArchivedThreadStatus
 
     comms = notification_bus
     comms.registry.register(comms.registry.require("colleague"), ArchivedThreadStatus())

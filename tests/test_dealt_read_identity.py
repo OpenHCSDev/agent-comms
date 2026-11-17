@@ -8,8 +8,10 @@ import json
 import sys
 from pathlib import Path
 
+from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.execution.context_reading import ContextUsage
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.projects.rule_probes import Probe
 from agent_comms.team.pi_rule_gate import PiRedeal
 from agent_comms.team.prompt_reads import (
     DealtRead,
@@ -18,9 +20,11 @@ from agent_comms.team.prompt_reads import (
 from agent_comms.team.rule_deal import (
     AuditDue,
     DealRecord,
+    MeantRecord,
     Open,
     OpenedReads,
     ReadSpan,
+    SessionAudit,
     StartedDeal,
     Unread,
 )
@@ -83,9 +87,6 @@ def test_a_refresh_passed_while_reading_the_deal_is_answered_by_it(team_bus):
 
 def test_his_question_quotes_the_written_audit_statement_and_asks():
     """He quotes what the session wrote and asks; he never narrates what it did."""
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.projects.rule_probes import Probe
-    from agent_comms.team.rule_deal import MeantRecord, SessionAudit
 
     flinch = FieldCodec.decode(Probe, {"probe": "flinch", "answer": "Yes: I ended turns on a wait.\nSecond line"})
     prior = FieldCodec.decode(Probe, {"probe": "prior", "prior": "I take his plan as the work.",
@@ -108,7 +109,6 @@ def transcript_line(kind, content):
 def test_the_ledger_reads_what_a_transcript_shows_the_session_did():
     import json
 
-    from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 
     said = lambda words: transcript_line("assistant", [{"type": "text", "text": words}])
     called = lambda call, tool: transcript_line(

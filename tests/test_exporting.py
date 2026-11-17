@@ -31,6 +31,7 @@ from agent_comms.messaging.messages import ClaimNoticeKind, InfoKind, Message
 from agent_comms.nominal.field_codec import ClaimId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.progress import CancellableWireExport, WireExportObserver
 from agent_comms_hooks import ToolRefusedError
 from bus_history import read_history
 
@@ -455,7 +456,6 @@ async def test_a_cancel_from_another_thread_stops_the_waiting_call_and_a_plain_o
     import asyncio
     import threading
 
-    from agent_comms.transport.progress import CancellableWireExport, WireExportObserver
 
     export = CancellableWireExport()
     waiting = asyncio.create_task(export.stopped())

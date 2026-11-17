@@ -8,6 +8,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.input_key import AcpInputKey, BusInputKey
 from agent_comms.execution.input_origin import DeliveredInput, UndeliveredInput, WireInputOrigin
 from agent_comms.input_attempt import (
@@ -108,8 +109,6 @@ def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:
 def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path: Path) -> None:
     import os
 
-    from agent_comms.comms import wire
-    from agent_comms.execution.child_process import ProcessIdentity
 
     comms = wire(tmp_path)
     comms.registry.declare(

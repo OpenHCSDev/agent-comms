@@ -18,7 +18,7 @@ from agent_comms.cli_bridges.cli_protocol import WATCH_LINE, CoreError
 from agent_comms.comms import wire
 from agent_comms.coordination.attempt_recovery import RecoveryMonitorCapability, VerifiedOwnerLoss
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.coordination.errors import RecoveryBlocked
+from agent_comms.coordination.errors import RecoveryBlocked, StaleFence, StaleRevision
 from agent_comms.coordination.execution_states import FailedExecution
 from agent_comms.coordination.reason_codes import GivenReasonCode
 from agent_comms.coordination.tables.attempts import ReplayFact
@@ -49,6 +49,7 @@ from agent_comms.storage.private_path import FileRevision
 from agent_comms.transport.owner_connection import socket_path
 from native_backend_fixture import native_backend_fixture
 from test_coordinated_runtime import _root
+from test_coordination_store import ready, started
 from test_native_failure_recovery import NativeSendHistory, UnknownHistory, release_native_input
 
 
@@ -317,8 +318,6 @@ def test_stop_of_previously_released_dead_owner_settles_without_replay(released_
 
 
 def test_unknown_settlement_is_atomic_on_existing_store(tmp_path):
-    from agent_comms.coordination.errors import StaleFence, StaleRevision
-    from test_coordination_store import ready, started
 
     with ready(tmp_path / "store.sqlite3") as store:
         _snapshot, fence = started(store)

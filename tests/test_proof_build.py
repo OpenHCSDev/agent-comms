@@ -76,6 +76,7 @@ from conftest import record_installed_runtime
 from github_fixture import GitHubFixture
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
+from test_todos import order, thread
 
 pytest_plugins = ("github_fixture",)
 
@@ -138,8 +139,6 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
     run, after_install, proof_build_checkouts, comms, tmp_path,
 ):
     fixture_goal_id = GoalId.mint()
-    from agent_comms.execution.launch_runtime import LaunchRuntime
-    from test_todos import order, thread
 
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
@@ -516,7 +515,6 @@ def test_a_delivered_order_asks_the_build_whether_its_install_is_still_owed(
     OrderDelivery.installation_commits knows which commits a delivery installs, and each
     CommitInstallation member owns the words for its answer. This is the merged order's
     control one member over, for the delivered member."""
-    from test_todos import order
 
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
@@ -554,7 +552,6 @@ def test_only_an_order_still_owed_an_install_lets_the_build_speak(
     is that same answer where the board reads it. InstalledEvidence sits first in the MRO of
     both installed members, so one declaration covers them.
     """
-    from test_todos import order
 
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms_hooks import ClaudeHookProgram
 from agent_comms_hooks.shell_commands import ConnectCommand
 from agent_comms_hooks.watch import (
@@ -51,7 +52,6 @@ def test_a_swapping_socket_that_never_answers_lets_the_program_answer_alone(
     endpoint.record_path.write_text(RECORD.to_json())
 
     # The claim is held by another process, as an installer holds it across its restart.
-    from agent_comms.cli_bridges.session_watch import WatchClaim
 
     claim = WatchClaim("session", bridge_home)
     context = multiprocessing.get_context("fork")

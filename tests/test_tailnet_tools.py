@@ -8,6 +8,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.transport.connector_caller import UiCaller, UiReadCaller
 from agent_comms.transport.core_access import LocalCoreAccess
 from agent_comms.transport.tailnet_buses import (
+    NamedHost,
     PeerBus,
     PeerHoldsBus,
     PeerOffline,
@@ -105,7 +106,6 @@ def test_a_typed_address_must_name_a_peer_core_already_reports():
     exactly what it exists to stop, so each member says which peer it means among Core's
     own and one guard covers both kinds.
     """
-    from agent_comms.transport.tailnet_buses import NamedHost
 
     peers = (PEER,)
     # Either spelling Tailscale itself uses resolves to the peer, not to the text.

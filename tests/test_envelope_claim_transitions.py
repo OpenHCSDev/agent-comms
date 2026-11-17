@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.messaging.bus import ClaimRecord
 from agent_comms.messaging.envelope_claim_transitions import (
     ClaimConflict,
@@ -30,7 +31,9 @@ from agent_comms.nominal.field_codec import (
     MessageId,
     TurnId,
 )
+from agent_comms.registry.thread_status import RunningThreadStatus
 from bus_record_fixture import RECIPIENT_LOOKUP, ROOT_ID
+from test_todos import thread
 
 G1 = ClaimId("a" * 32)
 G2 = ClaimId("b" * 32)
@@ -47,11 +50,8 @@ def append_transition(bus, transition):
 
 
 def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence(comms, tmp_path):
-    from test_todos import thread
 
     _, resource, _ = resources(tmp_path)
-    from agent_comms.execution.child_process import ProcessIdentity
-    from agent_comms.registry.thread_status import RunningThreadStatus
 
     comms.registry.declare(replace(thread("owner", comms.root, 2.0),
                                    process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())

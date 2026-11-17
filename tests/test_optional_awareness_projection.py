@@ -13,6 +13,7 @@ from agent_comms.context_segments.optional_awareness import ProjectionUnavailabl
 from agent_comms.coordination.assignment_states import (
     EngagedAssignment,
     FullPendingAssignment,
+    PassiveAssignment,
     TriagePendingAssignment,
 )
 from agent_comms.coordination.cohort_schema import (
@@ -24,6 +25,7 @@ from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import WireOrigin
+from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.selected.source_batch import SelectedSource
 from agent_comms.messaging.bus_publication import Delivered
@@ -392,8 +394,6 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
 ) -> None:
     """Real frozen wire and SQLite lifecycle; projection cannot create permission."""
 
-    from agent_comms.coordination.assignment_states import PassiveAssignment
-    from agent_comms.coordination.tables.responses import ResponseObligation
 
     comms, store, index, root_id = _root(tmp_path)
     try:

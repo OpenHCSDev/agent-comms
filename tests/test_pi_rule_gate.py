@@ -37,6 +37,7 @@ from agent_comms.team.rule_deal import (
     OffDealMode,
     Owed,
     OwnerWordsAnswer,
+    RefreshDeal,
     RuleGateSettings,
     SessionAudit,
     StartedDeal,
@@ -331,7 +332,6 @@ def test_every_refusal_opens_with_why_its_deal_was_dealt(peer_deal):
     why it was dealt instead of diagnosing the gate (rules/spine.md)."""
     import re
 
-    from agent_comms.team.rule_deal import RefreshDeal, StartedDeal
 
     bash = call("bash", {"command": "ls"})
     peer_deal.start()

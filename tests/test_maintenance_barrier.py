@@ -1,5 +1,25 @@
 import sys
 
+from agent_comms.cli import CliInvocation
+from agent_comms.cli_bridges.runtime_updates import (
+    AppendDraftItem,
+    StartedItem,
+    TextDraft,
+    ThreadOutput,
+)
+from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.participant_store import ParticipantStore
+from agent_comms.coordination.session import CoordinationSession
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.owner_cutover import MaintainedOwnerCutover, PreserveOwnerRuntime
+from agent_comms.execution.restart_refusals import OwnerMaintenancePendingRefusal
+from agent_comms.execution.turn_phase import ModelWaitPhase
+from agent_comms.messaging.bus import Bus
+from agent_comms.planning.goal_attempts import GoalAttemptStore
+from agent_comms.registry.activity import ActivityState, ActivityStore
+from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.transcript.transcript_events import AssistantTranscript
+
 """Provider-free disposable checks of the default-off maintenance claim seam."""
 
 
@@ -19,8 +39,8 @@ from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
-from agent_comms.nominal.field_codec import FieldCodec, TurnId
-from agent_comms.nominal.lifecycle_capability import Executing
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId
+from agent_comms.nominal.lifecycle_capability import Executing, Pending
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import NativeThread
@@ -100,7 +120,6 @@ def test_phase_owner_is_default_off_and_clear_is_exact(tmp_path: Path) -> None:
 
 
 def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> None:
-    from agent_comms.execution.owner_cutover import MaintainedOwnerCutover, PreserveOwnerRuntime
 
     class ScratchCutover(MaintainedOwnerCutover):
         def require_selection(self, snapshot, owners):
@@ -114,11 +133,9 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
     cutover = ScratchCutover()
     cutover.maintenance_hold = hold
     cutover.require_restart_phase(comms.owners)
-    from agent_comms.execution.restart_refusals import OwnerMaintenancePendingRefusal
 
     with pytest.raises(OwnerMaintenancePendingRefusal) as refused:
         PreserveOwnerRuntime().require_restart_phase(comms.owners)
-    from agent_comms.nominal.lifecycle_capability import Pending
 
     assert refused.value.queue_state().items_with(Pending, refused.value)
     comms.owners.maintenance.clear(hold)
@@ -354,9 +371,6 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
 
 def test_activity_updates_runtime_state_without_publication_while_draining(tmp_path: Path, capsys) -> None:
     """Derived activity remains writable; maintenance still holds new bus publication."""
-    from agent_comms.cli import CliInvocation
-    from agent_comms.messaging.bus import Bus
-    from agent_comms.registry.activity import ActivityState, ActivityStore
 
     def cli(*argv: str) -> tuple[int, str]:
         code = CliInvocation().invoke(['--root', str(tmp_path), *argv], sys.stdout)
@@ -382,15 +396,6 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
     turn_turn_id = NativeTurnId('turn')
     from functools import partial
 
-    from agent_comms.cli_bridges.runtime_updates import (
-        AppendDraftItem,
-        StartedItem,
-        TextDraft,
-        ThreadOutput,
-    )
-    from agent_comms.execution.turn_phase import ModelWaitPhase
-    from agent_comms.storage.recorded_time import RecordedEventTime
-    from agent_comms.transcript.transcript_events import AssistantTranscript
 
     comms = wire(tmp_path)
     comms.registry.declare(NativeThread('cli', frozenset(), Checkout(tmp_path)))
@@ -433,10 +438,6 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
 def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path: Path, monkeypatch) -> None:
     """The installer stops only its owners; the connector, bridges and forks keep running, so the
     registry itself refuses their writes during a hold, and the holder's own writes still land."""
-    from agent_comms.coordination.errors import IdentityConflict
-    from agent_comms.coordination.participant_store import ParticipantStore
-    from agent_comms.coordination.session import CoordinationSession
-    from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
 
     comms = wire(tmp_path)
     comms.registry.declare(NativeThread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
@@ -466,7 +467,6 @@ def test_a_carried_store_write_is_refused_to_all_but_the_maintenance_holder(tmp_
     """Every file an installation carries gates its writers through its kind, CarriedWriter:
     a bridge's transcript or a fork's todo write during a hold is refused instead of
     changing a file the install's carry check compares, and the holder still writes."""
-    from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
 
     comms = wire(tmp_path)
     todos = comms.goals.todos
@@ -488,9 +488,6 @@ def test_the_goal_ledger_refuses_other_writers_once_the_drained_hold_is_retarget
     """Install 11 rolled back on "Carries changed files no step names: goal_attempts.sqlite3":
     the ledger committed for a non-holder after the install captured the bus. Draining owners
     still settle their turns in it; once retargeted, only the holder commits."""
-    from agent_comms.execution.launch_runtime import LaunchRuntime
-    from agent_comms.nominal.field_codec import GoalId
-    from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
 
     comms = wire(tmp_path)
     ledger = comms.goals.open_goal_store()
@@ -511,9 +508,6 @@ def test_a_ledger_created_after_the_drain_is_refused_and_leaves_no_file(
         tmp_path: Path, monkeypatch) -> None:
     """Creation publishes the ledger by link before any store transaction exists, so it asks
     the same drain-settled policy its writes inherit, and the carry check meets no new file."""
-    from agent_comms.execution.launch_runtime import LaunchRuntime
-    from agent_comms.planning.goal_attempts import GoalAttemptStore
-    from agent_comms.storage.maintenance_barrier import HOLDER_NONCE
 
     comms = wire(tmp_path)
     directory = GoalAttemptStore.directory_in(comms.root)

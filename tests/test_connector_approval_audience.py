@@ -7,11 +7,14 @@ import time
 
 import pytest
 
+from agent_comms.registry.service_sender import ServiceSender
 from agent_comms.transport.connector import (
     ApprovalAudience,
+    ApprovalSender,
     PublicAudience,
     TailnetAudience,
 )
+from agent_comms.transport.connector_caller import CALLER
 from agent_comms.transport.connector_store import (
     AuthorizationQuery,
     ClaudeCallback,
@@ -78,9 +81,6 @@ def test_the_connector_speaks_as_itself_not_as_an_agent() -> None:
     `CALLER` is still right for what a granted token acts as. The connector is a service and
     declares its own identity before publishing, as `installer (service)` already does.
     """
-    from agent_comms.registry.service_sender import ServiceSender
-    from agent_comms.transport.connector import ApprovalSender
-    from agent_comms.transport.connector_caller import CALLER
 
     assert issubclass(ApprovalSender, ServiceSender)
     assert ApprovalSender.sender == "connector" != CALLER.name

@@ -11,11 +11,13 @@ from agent_comms.execution.tool_results import (
     ToolDiff,
     tool_result_content,
 )
-from agent_comms.pi_payloads import PiToolResult
+from agent_comms.pi_payloads import PiToolResult, PublishedMessageToolDetails, ToolResultMessage
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transcript.transcript_events import SentTranscript
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tool_declaration import ToolDeclaration
+from agent_comms.transport.tools.served import invoke_tool
 from bus_history import read_history
 from conftest import installed_comms, transcript_records
 
@@ -59,9 +61,6 @@ def test_native_edit_evidence(name, native, ok, expected):
 
 
 def test_successful_send_preserves_original_publication_in_live_and_saved_content(tmp_path):
-    from agent_comms.pi_payloads import PublishedMessageToolDetails, ToolResultMessage
-    from agent_comms.transcript.transcript_events import SentTranscript
-    from agent_comms.transport.tools.served import invoke_tool
 
     comms = installed_comms(tmp_path / "wire")
     comms.registry.declare(NativeThread('sender', frozenset(), Checkout(tmp_path)))

@@ -36,6 +36,7 @@ from agent_comms.planning.orders import (
 )
 from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.projects.head_review import HeadReviewOrder, PullRequestHead
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.registry.threads import ExternalThread, ForkThread
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.team_pings import RulePing
@@ -327,9 +328,6 @@ def test_review_scope_requires_the_actual_registered_birth(board_review):
 
 
 def test_unreviewed_head_line_names_each_verb_once_and_every_argument() -> None:
-    from agent_comms.projects.head_review import PullRequestHead
-    from agent_comms.projects.repository_name import RepositoryName
-    from agent_comms.team.standing_rules import OrderlessUnreviewedHead
 
     head = "a" * 40
     line = OrderlessUnreviewedHead(request=PullRequestHead(RepositoryName.from_wire("o/r"), 7, head), due_at=0).line()

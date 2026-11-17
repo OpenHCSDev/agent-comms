@@ -16,6 +16,7 @@ from agent_comms.ui_model.observation import (
     ConnectionClosed,
     ObservationProcess,
     ObserveSidebar,
+    ServiceReported,
     SidebarResult,
 )
 from bus_record_fixture import prepare_native_comms
@@ -90,7 +91,6 @@ def test_retiring_a_peer_ends_its_relay_while_the_connector_is_still_connecting(
 def test_an_ended_observation_reports_its_own_cause() -> None:
     """The service's traceback is reported as itself; a plain close reports the relay's recorded
     end, and waiting on the relay never rewrites that end as a retirement."""
-    from agent_comms.ui_model.observation import ServiceReported
 
     peer = TestConnectorSource(Endpoint(URL("http://127.0.0.1:9/mcp")), Credential("token")).observation_peer()
     try:

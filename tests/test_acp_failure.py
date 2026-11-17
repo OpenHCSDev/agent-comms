@@ -7,12 +7,22 @@ from acp import RequestError
 
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates, encode_updates
 from agent_comms.execution.acp_failure import (
+    ExhaustedRetry,
     ProviderConnectionFailure,
     ProviderQuotaFailure,
     RequestACPFailure,
     RequestFailure,
 )
-from agent_comms.input_attempt import InputAttempt
+from agent_comms.execution.pi_events import NativeRetryEnd
+from agent_comms.execution.pi_wire import PiDiagnostic
+from agent_comms.execution.turn_failure import (
+    ModelRequestFailed,
+    ProviderRetryExhausted,
+    ProviderTransportFailed,
+)
+from agent_comms.execution.turn_output import TurnOutput
+from agent_comms.input_attempt import InputAttempt, NotSentInput, StartedInput
+from agent_comms.nominal.field_codec import FieldCodec
 
 
 @pytest.mark.parametrize("wrap", [
@@ -43,7 +53,6 @@ def test_disposition_derives_from_shared_input_owner(state):
 
 
 def test_public_not_sent_and_ambiguous_unknown_do_not_invent_binding():
-    from agent_comms.input_attempt import NotSentInput
     failure = RequestFailure.from_error(RequestError(-32603, "Preflight failed", {"inputStatus": "not_sent"})).failure
     assert failure.input_state is NotSentInput
     assert failure.input_disposition == "Not sent"
@@ -72,7 +81,6 @@ def test_provider_shapes_preserve_reason_without_granting_input_authority(payloa
 
 
 def test_only_original_root_metadata_owns_disposition_and_reported_failure():
-    from agent_comms.input_attempt import NotSentInput
     nested = {"error": {"reason": "Provider refused", "inputStatus": "not_sent"}}
     assert RequestFailure.from_error(RequestError(-32603, "Internal error", nested)).failure.input_state is None
     original = RequestFailure(RequestACPFailure(-32603, "Original preflight refusal", NotSentInput), True)
@@ -93,7 +101,6 @@ def test_encoded_provider_text_cannot_supply_original_root_disposition():
 
 
 def test_reported_failure_detail_is_not_reinterpreted_as_provider_json():
-    from agent_comms.input_attempt import StartedInput
     detail = '{"message" : "Internal error", "details" : [ "verbatim reported failure" ]}'
     request_failure = RequestFailure(RequestACPFailure(-32603, detail, StartedInput), True)
     assert RequestFailure.from_error(RequestError(-32603, "Internal error", request_failure.error_data())) == request_failure
@@ -107,12 +114,6 @@ def test_provider_array_order_and_unknown_json_text_survive():
 
 
 def test_declared_provider_retry_exhaustion_owns_execution_retry_classification():
-    from agent_comms.execution.acp_failure import ExhaustedRetry
-    from agent_comms.execution.turn_failure import (
-    ModelRequestFailed,
-    ProviderRetryExhausted,
-)
-    from agent_comms.execution.turn_output import TurnOutput
 
     ordinary = TurnOutput(failure=ModelRequestFailed("quota"))
     assert type(ordinary.declared_failure) is ModelRequestFailed
@@ -123,8 +124,6 @@ def test_declared_provider_retry_exhaustion_owns_execution_retry_classification(
     )
     assert type(transient.declared_failure) is ProviderRetryExhausted
 
-    from agent_comms.execution.pi_wire import PiDiagnostic
-    from agent_comms.execution.turn_failure import ProviderTransportFailed
 
     transport = PiDiagnostic.from_wire({
         "type": "provider_transport_failure",
@@ -144,8 +143,6 @@ def test_declared_provider_retry_exhaustion_owns_execution_retry_classification(
 
 @pytest.mark.parametrize("failure_type", [RequestACPFailure, ProviderConnectionFailure, ProviderQuotaFailure])
 def test_every_failure_action_uses_native_retry_end_not_text_claims(failure_type):
-    from agent_comms.execution.pi_events import NativeRetryEnd
-    from agent_comms.nominal.field_codec import FieldCodec
     event = NativeRetryEnd.from_wire({
         "type": "native_retry_end",
         "success": False,

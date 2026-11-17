@@ -5,6 +5,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from agent_comms.comms import wire
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.input_key import BusInputKey
 from agent_comms.execution.transcript_sources import ExternalTranscript
@@ -12,7 +15,13 @@ from agent_comms.input_disposition import InputDispositionRow, InputDispositions
 from agent_comms.registry.owner_release import OwnerReleaseStore
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.storage.maintenance_barrier import MaintenanceNotHeldError
-from agent_comms.storage.typed_table import HeldBusFile
+from agent_comms.storage.typed_table import (
+    FiledSchema,
+    HeldBusFile,
+    SchemaRevision,
+    TableSchema,
+    UnfiledSchema,
+)
 from conftest import maintenance_held
 
 
@@ -132,12 +141,6 @@ def test_in_memory_schema_checks_remember_nothing():
     record: one remembered entry per read was an unbounded set on the reader path."""
     import sqlite3
 
-    from agent_comms.storage.typed_table import (
-        FiledSchema,
-        SchemaRevision,
-        TableSchema,
-        UnfiledSchema,
-    )
 
     connection = sqlite3.connect(":memory:")
     before = len(FiledSchema.verified_schemas)
@@ -155,9 +158,6 @@ def test_an_opening_that_found_its_schema_declared_does_not_read_the_catalog_aga
     stored object to learn whether the file has a schema at all, after the same file and
     schema version had already been found equal to the declaration. A schema changed in
     place is another version, and that opening reads the catalog again."""
-    from agent_comms.comms import wire
-    from agent_comms.coordination.coordinator import Coordination
-    from agent_comms.coordination.database import CoordinationStore
 
     root = tmp_path / "bus"
     root.mkdir()

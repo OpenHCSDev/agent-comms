@@ -39,10 +39,13 @@ from agent_comms.pi_payloads import AssistantMessage, ReportedParts
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.storage_room import NoRoomNeeded
+from agent_comms.team.pi_rule_gate import PiRuleGate, RulesUnread
+from agent_comms.team.rule_deal import AuditDue, StartedDeal
 from agent_comms.transport.native_tool_call import DuplicateToolCallIdentity, SelectedToolBusy
 from agent_comms.transport.native_tool_transport import OwnerToolConnection
 from agent_comms.transport.native_tools import NativeToolDeclaration
 from agent_comms.transport.tool_denial import SelectedToolDenied
+from agent_comms_hooks.skill import DeckReader
 from coding_owner_fixture import OwnerDouble
 
 
@@ -381,9 +384,6 @@ async def test_a_dealt_rule_gate_refuses_the_selected_write_before_its_owner_act
 ) -> None:
     """The selected write rides the shared gated transport: an unread deal refuses it before
     the owner callback could claim or write anything."""
-    from agent_comms.team.pi_rule_gate import PiRuleGate, RulesUnread
-    from agent_comms.team.rule_deal import AuditDue, StartedDeal
-    from agent_comms_hooks.skill import DeckReader
 
     gate = PiRuleGate(tmp_path / "scratch", tmp_path)
     gate.deal(DeckReader, AuditDue(()), StartedDeal())

@@ -28,7 +28,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.registry.registry_privacy import PrivateRegistry
-from agent_comms.registry.registry_tables import EditTables
+from agent_comms.registry.registry_tables import EditTables, TurnChange
 from agent_comms.registry.shared_ledger import SharedLedger
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.thread_status import (
@@ -432,7 +432,6 @@ class TestCurrentThread:
 def test_an_edit_that_removes_a_thread_retires_its_turn_row(tmp_path: Path) -> None:
     """A turn row exists exactly while its thread's row names it: removing the thread retires
     the turn in the same commit, and a thread that never leased leaves nothing to retire."""
-    from agent_comms.registry.registry_tables import TurnChange
 
     registry = Registration(RegistryFile.path_in(tmp_path))
     for name in ("a", "b"):

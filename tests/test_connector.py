@@ -36,10 +36,12 @@ from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.watch_passes import WatchPass
 from agent_comms.host_services.connector import ConnectorService
 from agent_comms.installer.backup import StoreBackup
+from agent_comms.messaging.agent_inbox import SecondsWait, TakenInputAfter
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_identity import BusIdentityStore
 from agent_comms.messaging.bus_read import UiRead
 from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
+from agent_comms.messaging.exporting import EverythingScope, FullLimit, JsonlFormat
 from agent_comms.messaging.send_result import MessagePublished
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RecordProblems, RootId
 from agent_comms.projects.checkouts import Checkout
@@ -73,6 +75,7 @@ from agent_comms.transport.connector import (
 )
 from agent_comms.transport.connector_caller import (
     CALLER,
+    ActingFork,
     GrantRefusedError,
     ReadOnlyConnectorCaller,
     ScopedUiCaller,
@@ -118,11 +121,12 @@ from agent_comms.transport.mcp import (
     ToolsCallReply,
     ToolsCallResult,
 )
-from agent_comms.transport.progress import WireExportObserver
+from agent_comms.transport.progress import CancellableWireExport, WireExportObserver
 from agent_comms.transport.request import ToolCall, ToolRequest
 from agent_comms.transport.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
 from agent_comms.transport.tool_request import ReadTool
 from agent_comms.transport.tools.channels import ChannelListing, CommsChannelsTool
+from agent_comms.transport.tools.inbox import CommsInboxTool
 from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.transport.tools.send import CommsSendTool
 from agent_comms.transport.tools.served import (
@@ -131,6 +135,10 @@ from agent_comms.transport.tools.served import (
     invoke_tool,
 )
 from agent_comms.transport.tools.sidebar import (
+    CommsConversationPageTool,
+    CommsConversationRevisionTool,
+    CommsExportWireTool,
+    CommsLatestSequenceTool,
     CommsUserSendTool,
     ServedRoot,
 )
@@ -1276,7 +1284,6 @@ async def test_a_ui_reads_one_conversation_page_the_same_locally_and_remotely(
     client, comms, local_core
 ):
     """The UI's page request answers in process and through tools/call with one record."""
-    from agent_comms.transport.tools.sidebar import CommsConversationPageTool
 
     comms.registry.declare(NativeThread(CALLER.name, frozenset(), Checkout(comms.root)))
     sent = comms.messaging.send_user_message(
@@ -1301,10 +1308,6 @@ async def test_a_ui_checks_a_conversation_for_changes_the_same_locally_and_remot
     """A revision is what the UI keeps and sends back with its next check, so it must come
     back from the connector as the same record, channel or DM, and settle once nothing
     changed. The latest-sequence bound travels the same way."""
-    from agent_comms.transport.tools.sidebar import (
-    CommsConversationRevisionTool,
-    CommsLatestSequenceTool,
-)
 
     comms.registry.declare(NativeThread(CALLER.name, frozenset({"comms"}), Checkout(comms.root)))
     comms.messaging.send_user_message(
@@ -1331,8 +1334,6 @@ async def test_an_inbox_read_after_its_place_the_same_locally_and_remotely(
 ):
     """An inbox read crosses the connector with its place and its wait, and
     answers what a local read answers."""
-    from agent_comms.messaging.agent_inbox import SecondsWait, TakenInputAfter
-    from agent_comms.transport.tools.inbox import CommsInboxTool
 
     comms.registry.declare(NativeThread(CALLER.name, frozenset(), Checkout(comms.root)))
     first = comms.messaging.send(CALLER.name, "worker", "first").message
@@ -1348,8 +1349,6 @@ async def test_an_inbox_read_after_its_place_the_same_locally_and_remotely(
 
 def test_every_session_is_told_how_to_take_its_own_name() -> None:
     """The fork argument's description survives its union type, so each session sees it."""
-    from agent_comms.transport.connector_caller import ActingFork
-    from agent_comms.transport.tools.send import CommsSendTool
 
     fork = FieldCodec.record_schema(CommsSendTool, ActingFork)["properties"]["fork"]
     assert "Your own name on the bus" in fork["description"]
@@ -1358,7 +1357,6 @@ def test_every_session_is_told_how_to_take_its_own_name() -> None:
 
 async def test_connector_reports_the_root_its_core_serves(client, comms):
     """A remote UI keys its observation by the served root, read through the same tools/call."""
-    from agent_comms.messaging.bus_identity import BusIdentityStore
 
     minted = BusIdentityStore.minted_for(comms.root.resolve())
     headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
@@ -1381,7 +1379,6 @@ async def test_two_buses_at_one_path_do_not_answer_as_one_bus(tmp_path):
     On 2026-11-07 a session read another machine's bus through a second connector and took
     that bus's thread of its own name for itself; nothing it could ask disagreed.
     """
-    from agent_comms.messaging.bus_identity import BusIdentityStore
 
     one, other = tmp_path / "one", tmp_path / "other"
     for root in (one, other):
@@ -1402,7 +1399,6 @@ async def test_two_buses_at_one_path_do_not_answer_as_one_bus(tmp_path):
 async def test_a_connector_names_its_bus_at_the_handshake(client, comms):
     """A client that learns which bus it reached from a tool call learns it after reading
     something. The one thing that differs between two connectors is said before anything."""
-    from agent_comms.messaging.bus_identity import BusIdentityStore
 
     minted = BusIdentityStore.minted_for(comms.root.resolve())
     headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
@@ -1423,8 +1419,6 @@ async def test_a_connector_names_its_bus_at_the_handshake(client, comms):
 async def test_a_call_that_asks_for_progress_streams_it_then_its_reply(client, store, comms, tmp_path):
     """MCP progress: a tools/call carrying a progress token is answered as server-sent events,
     the export's progress notices first and its reply last."""
-    from agent_comms.messaging.exporting import EverythingScope, FullLimit, JsonlFormat
-    from agent_comms.transport.tools.sidebar import CommsExportWireTool
 
     prepare_native_comms(comms)
     namespace = comms.registry.store.privacy().namespace
@@ -1469,7 +1463,6 @@ def test_a_call_meta_reads_its_declared_key_from_an_open_object(meta, streamed):
 
 async def test_a_cancel_reaches_the_running_call_it_names(connector):
     """notifications/cancelled stops the observed call with that request id and no other."""
-    from agent_comms.transport.progress import CancellableWireExport
 
     named, other = CancellableWireExport(), CancellableWireExport()
     connector.observed["export-1"] = named

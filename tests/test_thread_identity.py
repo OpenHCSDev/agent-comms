@@ -6,12 +6,15 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.acp_extension import LiveQueueScope
 from agent_comms.comms import wire
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
 )
+from agent_comms.execution.queued_input import QueuedInputContext
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_lease import (
     FinishedTurnFence,
@@ -44,6 +47,7 @@ from agent_comms.registry.thread_text import (
 )
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.transport.attachment_scope import LiveCursorScope
 from bus_record_fixture import OWNER_LOOKUP
 from conftest import installed_comms
 
@@ -199,9 +203,6 @@ def test_identity_codec_and_counter_domain_are_not_parallel_registries():
 
 
 def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
-    from agent_comms.transport.attachment_scope import LiveCursorScope
-    from agent_comms.acp_extension import LiveQueueScope
-    from agent_comms.execution.queued_input import QueuedInputContext
 
     registry = registry_with_owner(tmp_path)
     snapshot = registry.snapshot()
@@ -247,7 +248,6 @@ def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
 
 
 def test_coordination_assignment_generation_is_independent_of_registry_process(tmp_path):
-    from agent_comms.coordination.coordinator import Coordination
 
     registry = registry_with_owner(tmp_path)
     initial = registry.snapshot().owner_identity("owner")

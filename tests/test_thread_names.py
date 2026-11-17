@@ -1,4 +1,46 @@
 """One registry answer turns wanted text into a free thread name."""
+import agent_comms.transport.runtime_requests as runtime
+from agent_comms.acp_extension import CoordinationChangedUpdate
+from agent_comms.context_store import BeforeContextManifest, ContextManifestCursor
+from agent_comms.display_order import ThreadSort
+from agent_comms.execution.context_prior import ContextStoreIdentity
+from agent_comms.history_views import RetiredViews
+from agent_comms.messaging.channels import Channel
+from agent_comms.messaging.historical_views import (
+    AllHistoricalSenders,
+    HistoricalSenders,
+    NamedHistoricalSender,
+)
+from agent_comms.nominal.field_codec import ContextStoreId, FieldCodec, ThreadLookup
+from agent_comms.presentation import WireRevision
+from agent_comms.registry.registry_document import (
+    FoundProjectThread,
+    NoProjectThread,
+    ProjectThreadSelection,
+    RegistrySlice,
+    RegistrySnapshot,
+)
+from agent_comms.registry.relationships import ChildrenRelationshipGroup, ThreadCommsSnapshot
+from agent_comms.transport.tools.sidebar import (
+    ClearQueueQueueAction,
+    CommsChannelTool,
+    CommsContextInspectionTool,
+    CommsHistoricalThreadsTool,
+    CommsOwnerRequestTool,
+    CommsQueueActionTool,
+    CommsRegistrySliceTool,
+    CommsRegistryTool,
+    CommsRetiredViewsTool,
+    CommsSessionThreadTool,
+    CommsSetRelationshipOrderTool,
+    CommsThreadConfigurationTool,
+    CommsThreadRelationshipsTool,
+    CommsWireRevisionTool,
+    ContextInspectionRead,
+    HistoricalThreadsRead,
+    RelationshipOrdered,
+    SendNowQueueAction,
+)
 from conftest import ui_core_read
 import os
 from pathlib import Path
@@ -79,9 +121,6 @@ def test_a_thread_corrects_its_own_title_without_renaming(tmp_path):
 
 def test_a_remote_ui_reads_the_registry_with_its_renames(tmp_path):
     """The registry Core answers survives the wire: a rename's alias still resolves remotely."""
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry.registry_document import RegistrySnapshot
-    from agent_comms.transport.tools.sidebar import CommsRegistryTool
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
@@ -102,9 +141,6 @@ def test_a_remote_ui_reads_the_registry_with_its_renames(tmp_path):
 def test_a_ui_reads_whether_a_channel_takes_input_through_core(tmp_path):
     """A channel answers as its own family member across the codec, so a remote composer reads
     the same read_only a local one does."""
-    from agent_comms.messaging.channels import Channel
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.transport.tools.sidebar import CommsChannelTool
 
     comms = wire(tmp_path / "wire")
     for name in ("#all", "#any"):
@@ -115,13 +151,6 @@ def test_a_ui_reads_whether_a_channel_takes_input_through_core(tmp_path):
 
 def test_a_ui_session_finds_its_project_thread_through_core(tmp_path):
     """Core resolves the project path on its own host, and the selection arrives as itself."""
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry.registry_document import (
-        FoundProjectThread,
-        NoProjectThread,
-        ProjectThreadSelection,
-    )
-    from agent_comms.transport.tools.sidebar import CommsSessionThreadTool
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
@@ -136,9 +165,6 @@ def test_a_ui_session_finds_its_project_thread_through_core(tmp_path):
 
 def test_a_ui_reads_a_threads_configuration_through_core(tmp_path):
     """The status a DM shows is Core's configuration answer, the same across the codec."""
-    from agent_comms.acp_extension import CoordinationChangedUpdate
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.transport.tools.sidebar import CommsThreadConfigurationTool
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
@@ -149,9 +175,6 @@ def test_a_ui_reads_a_threads_configuration_through_core(tmp_path):
 
 def test_a_ui_asks_core_which_open_views_lost_their_source(tmp_path):
     """A deleted thread and an unknown channel are retired; the answer crosses the codec."""
-    from agent_comms.history_views import RetiredViews
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.transport.tools.sidebar import CommsRetiredViewsTool
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
@@ -177,16 +200,6 @@ def test_a_received_registry_answers_membership_under_its_aliases(tmp_path):
 
 def test_a_ui_reads_and_orders_relationships_through_core(tmp_path):
     """A thread sidebar's relationship reads and its ordering write cross as themselves."""
-    from agent_comms.display_order import ThreadSort
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.presentation import WireRevision
-    from agent_comms.registry.relationships import ChildrenRelationshipGroup, ThreadCommsSnapshot
-    from agent_comms.transport.tools.sidebar import (
-        CommsSetRelationshipOrderTool,
-        CommsThreadRelationshipsTool,
-        CommsWireRevisionTool,
-        RelationshipOrdered,
-    )
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
@@ -203,12 +216,6 @@ def test_a_ui_reads_and_orders_relationships_through_core(tmp_path):
 
 def test_a_queue_action_request_crosses_as_itself():
     """A remote UI names the original recipient and the action; Core reaches the owner."""
-    from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
-    from agent_comms.transport.tools.sidebar import (
-        ClearQueueQueueAction,
-        CommsQueueActionTool,
-        SendNowQueueAction,
-    )
 
     lookup = ThreadLookup.mint()
     for action in (SendNowQueueAction, ClearQueueQueueAction):
@@ -218,18 +225,6 @@ def test_a_queue_action_request_crosses_as_itself():
 
 def test_a_ui_reads_a_threads_context_through_core(tmp_path):
     """A context explorer's reads cross as themselves; the owner and saved reads are declared."""
-    import agent_comms.transport.runtime_requests as runtime
-    from agent_comms.context_store import (
-        BeforeContextManifest,
-        ContextManifestCursor,
-    )
-    from agent_comms.execution.context_prior import ContextStoreIdentity
-    from agent_comms.nominal.field_codec import ContextStoreId, FieldCodec
-    from agent_comms.transport.tools.sidebar import (
-        CommsContextInspectionTool,
-        CommsOwnerRequestTool,
-        ContextInspectionRead,
-    )
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))
@@ -245,16 +240,6 @@ def test_a_ui_reads_a_threads_context_through_core(tmp_path):
 
 def test_a_ui_lists_historical_identities_through_core(tmp_path):
     """Every sender is null and one sender is its name, so neither needs a None flag."""
-    from agent_comms.messaging.historical_views import (
-        AllHistoricalSenders,
-        HistoricalSenders,
-        NamedHistoricalSender,
-    )
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.transport.tools.sidebar import (
-        CommsHistoricalThreadsTool,
-        HistoricalThreadsRead,
-    )
 
     assert FieldCodec.encode(AllHistoricalSenders(), HistoricalSenders) is None
     assert FieldCodec.decode(HistoricalSenders, "alice") == NamedHistoricalSender("alice")
@@ -266,9 +251,6 @@ def test_a_ui_lists_historical_identities_through_core(tmp_path):
 
 def test_a_ui_reads_a_renamed_thread_from_a_registry_slice(tmp_path):
     """The slice a remote UI reads answers under the old name and carries no other thread."""
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry.registry_document import RegistrySlice
-    from agent_comms.transport.tools.sidebar import CommsRegistrySliceTool
 
     comms = wire(tmp_path / "wire")
     _declare(comms, "worker", str(tmp_path))

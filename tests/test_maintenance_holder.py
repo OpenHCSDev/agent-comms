@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import (
@@ -125,7 +126,6 @@ async def test_async_recovery_borrows_registry_without_blocking_event_loop(tmp_p
 
 
 async def test_concurrent_request_claims_do_not_change_each_others_permissions(tmp_path):
-    from agent_comms.coordination.coordinator import Coordination
 
     barrier = MaintenanceBarrier(RegistryFile.path_in(tmp_path))
     held = barrier.begin(MaintenanceOperator.current())

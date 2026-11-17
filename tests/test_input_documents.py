@@ -9,7 +9,16 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.execution.input_key import AcpInputKey, BusInputKey, InputKey, InputKeyText
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_key import (
+    AcpInputKey,
+    BusInputKey,
+    InputKey,
+    InputKeyText,
+    OwnedBusInputKey,
+    PublicInputKeyText,
+    TurnInputKey,
+)
 from agent_comms.execution.reported_turn import ReportedTurn
 from agent_comms.input_attempt import (
     BoundUnknownInput,
@@ -24,8 +33,13 @@ from agent_comms.input_attempt import (
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, TurnId
 from agent_comms.nominal.lifecycle_capability import Unresolved
+from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.registration import Registration
+from agent_comms.registry.thread_identity import (
+    RecordedThreadIncarnation,
+    UnrecordedThreadIncarnation,
+)
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.locked_store import RegistryFile
 from stored_inputs import insert_inputs, stored_inputs
@@ -132,7 +146,6 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
     comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path)))
     entry = comms.registry.snapshot().entry('worker')
     store = InputDispositions(tmp_path)
-    from agent_comms.nominal.text_digest import TextDigest
 
     saved = FieldCodec.encode(
         BoundUnknownInput(
@@ -193,8 +206,6 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
 def test_original_native_user_receipts_include_group_and_corrected_final_only(tmp_path):
     import os
 
-    from agent_comms.execution.child_process import ProcessIdentity
-    from agent_comms.registry.registration import Registration
 
     registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread('worker', frozenset(), Checkout(tmp_path), created_at=123.0, process_identity=ProcessIdentity.capture(os.getpid())))
@@ -286,8 +297,6 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
 
 
 def test_owned_bus_input_keeps_its_original_recipient_birth() -> None:
-    from agent_comms.execution.input_key import OwnedBusInputKey
-    from agent_comms.registry.thread_identity import UnrecordedThreadIncarnation
 
     row = ReservedInput(
         OwnedBusInputKey(7, 10.0), 7, "owner", 4, "owner", "original input",
@@ -395,7 +404,6 @@ def test_incomplete_sent_evidence_is_rejected_without_overwriting_history(tmp_pa
 
 
 def test_reserved_input_is_queued_only_for_its_own_owner_claim_and_text():
-    from agent_comms.nominal.text_digest import TextDigest
 
     reserved = ReservedInput(X_KEY, None, "owner", 1, "owner", "original")
     bound = reserved.bind(
@@ -492,7 +500,6 @@ def test_stored_row_declaration_owns_the_schema(tmp_path):
 def test_input_key_members_keep_the_stored_and_public_text_forms(tmp_path):
     from typing import Annotated
 
-    from agent_comms.execution.input_key import OwnedBusInputKey, PublicInputKeyText, TurnInputKey
 
     input_id = InputId("a" * 32)
     cases = (

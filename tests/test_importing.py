@@ -40,7 +40,7 @@ from agent_comms.cli_bridges.history import (
 )
 from agent_comms.cli_bridges.opencode import OpenCodeConnection, OpenCodeServer
 from agent_comms.cli_bridges.opencode_parts import SavedMessage
-from agent_comms.cli_bridges.opencode_protocol import Session
+from agent_comms.cli_bridges.opencode_protocol import OpenCodeStream, Session
 from agent_comms.cli_bridges.runtime_updates import FinishedItem, TurnEnded
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
@@ -793,13 +793,11 @@ class FakeOpenCode(OpenCodeConnection):
         return self.saved
 
     async def status(self) -> TurnEnded:
-        from agent_comms.cli_bridges.runtime_updates import TurnEnded
 
         return TurnEnded()
 
 
 def test_opencode_server_reads_all_messages_including_the_users() -> None:
-    from agent_comms.cli_bridges.opencode_protocol import OpenCodeStream
 
     connection = FakeOpenCode([
         opencode_message("user", "user", [{"type": "text", "text": "Live prompt"}]),
@@ -821,7 +819,6 @@ def test_opencode_server_reads_all_messages_including_the_users() -> None:
 
 
 def test_opencode_server_leaves_out_what_the_user_reverted() -> None:
-    from agent_comms.cli_bridges.opencode_protocol import OpenCodeStream
 
     connection = FakeOpenCode([
         opencode_message("user", "user", [{"type": "text", "text": "Kept prompt"}]),

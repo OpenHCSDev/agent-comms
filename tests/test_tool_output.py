@@ -21,6 +21,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.transport.tools.served import invoke_tool
+from goal_owner_fixture import canonical_goal_wire
 from stored_inputs import insert_inputs, stored_inputs
 
 OWNER_INPUT_KEY = AcpInputKey(InputId.mint())
@@ -50,7 +51,6 @@ def seed_unknown(comms, count, text):
 
 @pytest.fixture
 def inbox_comms(root):
-    from goal_owner_fixture import canonical_goal_wire
 
     comms = canonical_goal_wire(root)
     for name in ("a", "b"):

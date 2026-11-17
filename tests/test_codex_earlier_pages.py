@@ -8,16 +8,18 @@ from aiohttp import web
 
 from agent_comms.cli_bridges.cli_protocol import WATCH_LINE, EarlierItems
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
-from agent_comms.cli_bridges.codex_protocol import BusClientId
+from agent_comms.cli_bridges.codex_protocol import BusClientId, BusInput, ItemsPage
+from agent_comms.cli_bridges.harness_delivery_states import AcceptedOutcome
 from agent_comms.cli_bridges.runtime_updates import ThreadOutput
 from agent_comms.cli_bridges.shared import Binding, StoredBinding, Watch
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.execution.transcript_sources import EarlierThan, Through
+from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import MessageId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.transcript.external_transcript_rows import ExternalItemRow
+from agent_comms.transcript.external_transcript_rows import EarlierPage, ExternalItemRow
 from conftest import installed_comms
 
 
@@ -126,7 +128,6 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
 
 
 async def test_rearmed_same_cursor_is_a_new_watch_request(tmp_path):
-    from agent_comms.cli_bridges.codex_protocol import ItemsPage
     comms = wire(tmp_path / 'root')
     comms.registry.declare(NativeThread('cli', frozenset(), Checkout(tmp_path)))
     transcript = comms.transcripts.external('cli')
@@ -156,8 +157,6 @@ async def test_rearmed_same_cursor_is_a_new_watch_request(tmp_path):
 
 
 def test_hidden_page_items_keep_import_events_but_own_no_visible_events(tmp_path):
-    from agent_comms.cli_bridges.codex_protocol import BusInput, ItemsPage
-    from agent_comms.transcript.external_transcript_rows import EarlierPage
     page = ItemsPage.model_validate({'data': [{
         'turnId': 't', 'completedAtMs': 1000,
         'item': {'type': 'userMessage', 'id': 'bus',
@@ -174,8 +173,6 @@ def test_hidden_page_items_keep_import_events_but_own_no_visible_events(tmp_path
 
 async def test_draining_server_gets_the_same_turn_after_reconnecting(tmp_path):
     """Codex refuses a turn while draining and asks for it again; the input is delivered, not lost."""
-    from agent_comms.cli_bridges.harness_delivery_states import AcceptedOutcome
-    from agent_comms.messaging.messages import InfoKind, Message
 
     turns = []
 

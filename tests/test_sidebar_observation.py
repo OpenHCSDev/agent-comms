@@ -31,6 +31,12 @@ from agent_comms.registry.thread_status import (
     StoppedThreadStatus,
 )
 from agent_comms.registry.threads import NativeThread
+from agent_comms.ui_model.observation import (
+    NoSidebarResult,
+    ObserveSidebar,
+    SidebarObserved,
+    SidebarRowsChanged,
+)
 from agent_comms.ui_model.sidebar import ChannelRowModel, SidebarModel
 from agent_comms.ui_model.unread import ExactUnread, UnobservedUnread
 
@@ -258,9 +264,6 @@ def test_a_changed_sidebar_crosses_as_its_changed_rows_and_rebuilds_whole(comms,
     from collections import OrderedDict
     from dataclasses import replace
 
-    from agent_comms.ui_model.observation import (
-        NoSidebarResult, ObserveSidebar, SidebarObserved, SidebarRowsChanged,
-    )
 
     declare_reference("first", RunningThreadStatus())
     declare_reference("second", RunningThreadStatus())

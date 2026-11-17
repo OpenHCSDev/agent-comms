@@ -32,6 +32,8 @@ from agent_comms.nominal.field_codec import PathText
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, UserThreadRole
 from agent_comms.registry.threads import NativeThread
+from agent_comms.waking.wake_candidate_index import WakeCandidateIndex
+from agent_comms.waking.wake_policy import BoundedTriageWake, FullWake
 from bus_record_fixture import prepare_native_comms
 from conftest import accept_initial
 
@@ -139,8 +141,6 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     )
     # The actual publisher, candidate scan and foreground acceptor must all wake Bob,
     # while Alice is the direct addressee and Bob may contribute if relevant.
-    from agent_comms.waking.wake_candidate_index import WakeCandidateIndex
-    from agent_comms.waking.wake_policy import BoundedTriageWake, FullWake
 
     expected = {"alice": FullWake, "bob": BoundedTriageWake}
     for name, mode in expected.items():

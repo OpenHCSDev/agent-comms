@@ -40,6 +40,7 @@ from agent_comms.cli_bridges.runtime_updates import (
     FinishedItem,
     FinishedTurn,
     HiddenItem,
+    ReplyingThreadOutput,
     RuntimeUpdate,
 )
 from agent_comms.cli_bridges.shared import (
@@ -59,6 +60,7 @@ from agent_comms.cli_bridges.shared import (
 )
 from agent_comms.comms import wire
 from agent_comms.coordination.assignment_states import DeferredAssignment, DeliveredAssignment
+from agent_comms.coordination.cohort import pending_sealed_assignments
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import CoordinationReadUnavailable
@@ -85,6 +87,7 @@ from agent_comms.messaging.messages import AlertKind, InfoKind, Message, NoticeR
 from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.nominal.field_codec import FieldCodec, InputId
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.storage.maintenance_barrier import (
@@ -943,7 +946,6 @@ async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
 
 @pytest.mark.asyncio
 async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_path):
-    from agent_comms.coordination.cohort import pending_sealed_assignments
 
     comms, root_id, lookup = native_viewer(tmp_path)
     with coordination(comms) as store:
@@ -1125,8 +1127,6 @@ async def test_confirmed_human_direct_request_receives_one_reply(bridge, reply_e
 
 def test_independent_sessions_share_the_delivered_message_reply_policy(comms, tmp_path):
     """Storage colleague and peer follow the same original-message reply policy."""
-    from agent_comms.cli_bridges.runtime_updates import ReplyingThreadOutput
-    from agent_comms.registry.registry_document import RegisteredTeamProject
 
     colleague, teammate = (comms.registry.declare(ExternalThread(
         name, frozenset(), Checkout(tmp_path))) for name in ("colleague", "teammate"))

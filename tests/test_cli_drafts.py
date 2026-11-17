@@ -1,6 +1,7 @@
 """The shared owner reconstructs prefixes, not the CLI decoders or the database."""
 import pytest
 
+from agent_comms.cli_bridges.codex_protocol import ItemEntry, ReasoningItem
 from agent_comms.cli_bridges.runtime_updates import (
     ActiveItem,
     AllTurnsEnded,
@@ -146,7 +147,6 @@ def test_ending_one_turn_preserves_other_live_prefixes(tmp_path):
 
 def test_paragraph_identity_not_arrival_order_owns_summary_joining(tmp_path):
     t_turn_id = NativeTurnId('t')
-    from agent_comms.cli_bridges.codex_protocol import ReasoningItem
 
     output = _output(tmp_path)
     accumulator = ParagraphDraft.from_parts(
@@ -233,7 +233,6 @@ def test_completion_keeps_its_original_clock_for_every_start_time(tmp_path, star
     ({'startedAtMs': 1500}, RecordedEventTime, 1.5),
 ])
 def test_wire_start_decoder_selects_time_state(wire, state, expected):
-    from agent_comms.cli_bridges.codex_protocol import ItemEntry
 
     entry = ItemEntry(turnId='t', item={'type': 'agentMessage', 'id': 'a', 'text': 'epoch'},
                       completedAtMs=2000, **wire)
@@ -251,7 +250,6 @@ def test_capture_requires_a_real_recorded_timestamp(invalid):
 def test_wire_start_decoder_keeps_strict_integer_input(invalid):
     from pydantic import ValidationError
 
-    from agent_comms.cli_bridges.codex_protocol import ItemEntry
 
     with pytest.raises(ValidationError):
         ItemEntry(turnId='t', item={'type': 'agentMessage', 'id': 'a', 'text': 'invalid'},

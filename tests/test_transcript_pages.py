@@ -7,13 +7,16 @@ from datetime import UTC, datetime
 import pytest
 
 from agent_comms.acp_extension import TranscriptSnapshotUpdate
+from agent_comms.cli_verbs.register import RegisterCliCommand
 from agent_comms.coordination.errors import TranscriptChanged
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.transcript_sources import (
+    AssignedSourceCursor,
     EarlierThan,
     LaterThan,
     NativeTranscriptCursor,
     Through,
+    TranscriptCursor,
     WireTranscriptCursor,
 )
 from agent_comms.execution.turn_item import (
@@ -31,6 +34,7 @@ from agent_comms.registry.thread_text import (
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.storage.private_path import FileIdentity, MissingFile
 from agent_comms.transcript.transcript_events import AssistantTranscript
+from agent_comms.transcript.transcripts import NoNativeTranscriptCursor
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.transport.tools.served import invoke_tool
@@ -234,7 +238,6 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
 
 
 def test_wire_cursor_keeps_the_furthest_committed_native_prefix_within_it():
-    from agent_comms.execution.transcript_sources import AssignedSourceCursor
 
     wire_at = AssignedSourceCursor("root", RecordedThreadIncarnation("recipient", 1.0), 5).at
     cursor = WireTranscriptCursor("a.jsonl", 900, wire_at(5), file=MissingFile())
@@ -248,10 +251,6 @@ def test_wire_cursor_keeps_the_furthest_committed_native_prefix_within_it():
 
 
 def test_never_started_native_child_keeps_no_native_cursor_and_no_read_mark(tmp_path):
-    from agent_comms.cli_verbs.register import RegisterCliCommand
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.execution.transcript_sources import TranscriptCursor
-    from agent_comms.transcript.transcripts import NoNativeTranscriptCursor
 
     path = tmp_path / "parent.jsonl"
     transcript(path, 3)

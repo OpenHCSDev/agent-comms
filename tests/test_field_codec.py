@@ -8,7 +8,9 @@ import pytest
 from pydantic import BaseModel, JsonValue
 from typing_extensions import TypeForm
 
+import agent_comms
 from agent_comms.execution.turn_item import NativeItemId
+from agent_comms.messaging.bus_source_page import AddressedPage, SourcePage
 from agent_comms.messaging.messages import (
     ConversationRole,
     InfoKind,
@@ -22,9 +24,15 @@ from agent_comms.messaging.messages import (
 )
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
+    AcceptsNull,
+    DeclaredFieldPlan,
     DeclaredWireType,
     FieldCodec,
+    FieldPlan,
+    FieldRepresentation,
     FlagDirective,
+    GitCommitText,
+    HexDigits,
     Id128,
     Id128Text,
     InlineRecord,
@@ -34,9 +42,12 @@ from agent_comms.nominal.field_codec import (
     MalformedRecord,
     MessageId,
     NullMember,
+    OrderId,
+    OrderIdText,
     PathText,
     RecordedTimestamp,
     RecordMember,
+    RecordProblems,
     ReportExclude,
     RootId,
     SnapshotExclude,
@@ -60,8 +71,12 @@ from agent_comms.nominal.field_codec import (
     compile_decoder,
     projected,
 )
+from agent_comms.nominal.text_digest import TextDigest
+from agent_comms.registry.registry_privacy import PrivateRegistry
 from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.typed_table import Column, TextStorage, TypedTable
 from agent_comms.transcript.transcript_events import ToolStartTranscript
+from agent_comms.transport.tool_declaration import ToolDeclaration
 from conftest import transcript_records
 
 
@@ -192,7 +207,6 @@ def test_record_exclusion_uses_the_selected_plan_and_refuses_conflicting_claims(
 
 
 def test_field_plan_discovers_a_new_flag_without_changing_the_selector() -> None:
-    from agent_comms.nominal.field_codec import DeclaredFieldPlan
 
     class ProbeDirective(FlagDirective):
         pass
@@ -214,7 +228,6 @@ def test_field_plan_discovers_a_new_flag_without_changing_the_selector() -> None
 
 
 def test_field_plan_refuses_an_unclaimed_representation() -> None:
-    from agent_comms.nominal.field_codec import FieldPlan
 
     class UnclaimedPath(PathText):
         field_plan = FieldPlan  # The base has no registered field claim.
@@ -459,7 +472,6 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary() -> No
     import sqlite3
     from pathlib import Path
 
-    from agent_comms.storage.typed_table import Column, TextStorage, TypedTable
 
     class HexInteger(TextRepresentation):
         @classmethod
@@ -637,7 +649,6 @@ def test_scalar_dispatch_keeps_representation_and_exact_type_contracts() -> None
     import math
     from typing import Literal
 
-    from agent_comms.nominal.field_codec import AcceptsNull, FieldRepresentation
 
     class NullableInteger(AcceptsNull, FieldRepresentation):
 
@@ -846,8 +857,6 @@ def test_member_cannot_write_a_second_family_discriminator() -> None:
 
 
 def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments() -> None:
-    from agent_comms.transcript.transcript_events import ToolStartTranscript
-    from agent_comms.transport.tool_declaration import ToolDeclaration
 
     arguments: dict[str, JsonValue] = {"to": "receiver", "body": "hello"}
     event = transcript_records.event(
@@ -1009,14 +1018,12 @@ class _SavedRow:
 def test_refused_record_data_raises_the_declared_error(wire: dict[str, JsonValue], refusal: str) -> None:
     with pytest.raises(MalformedRecord) as raised:
         FieldCodec.decode(_SavedRow, wire)
-    from agent_comms.nominal.field_codec import RecordProblems
 
     assert type(raised.value) is RecordProblems
     assert len(raised.value.problems) == 1
 
 
 def test_record_reports_missing_unknown_and_malformed_siblings_together() -> None:
-    from agent_comms.nominal.field_codec import RecordProblems
 
     with pytest.raises(RecordProblems) as raised:
         FieldCodec.decode(_SavedRow, {"path": 7, "at": 1.5, "extra": 0})
@@ -1024,7 +1031,6 @@ def test_record_reports_missing_unknown_and_malformed_siblings_together() -> Non
 
 
 def test_declaration_bug_passes_through_a_data_boundary_as_type_error() -> None:
-    from agent_comms.messaging.bus_source_page import SourcePage
 
     @dataclass(frozen=True, kw_only=True)
     class TwoRepresentations(SourcePage):
@@ -1035,9 +1041,6 @@ def test_declaration_bug_passes_through_a_data_boundary_as_type_error() -> None:
 
 
 def test_identity_and_digest_text_is_one_rule_at_every_reader(tmp_path: Path) -> None:
-    from agent_comms.messaging.bus_source_page import AddressedPage
-    from agent_comms.nominal.text_digest import TextDigest
-    from agent_comms.registry.registry_privacy import PrivateRegistry
 
     minted = ThreadLookup.mint()
     root_id = RootId.mint()
@@ -1113,7 +1116,6 @@ def test_nominal_ids_roundtrip_preserves_wire_schema_and_refuses_wrong_kind() ->
 
 @pytest.mark.parametrize("count", (1, 9, 17))
 def test_hex_spelling_derives_new_lengths_from_the_declaration(count: int) -> None:
-    from agent_comms.nominal.field_codec import HexDigits
 
     class DeclaredHex(HexDigits):
         digits = count
@@ -1128,7 +1130,6 @@ def test_hex_spelling_derives_new_lengths_from_the_declaration(count: int) -> No
 
 
 def test_hex_commit_spelling_keeps_its_bounded_length_contract() -> None:
-    from agent_comms.nominal.field_codec import GitCommitText
 
     class InheritedCommit(GitCommitText):
         pass
@@ -1142,7 +1143,6 @@ def test_hex_commit_spelling_keeps_its_bounded_length_contract() -> None:
 
 
 def test_order_identity_owns_minting_and_wire_spelling() -> None:
-    from agent_comms.nominal.field_codec import OrderId, OrderIdText
 
     order = OrderId.mint()
     assert type(order) is OrderId
@@ -1211,7 +1211,6 @@ def test_every_declared_field_type_resolves() -> None:
     import pkgutil
     from dataclasses import fields, is_dataclass
 
-    import agent_comms
 
     declarations: set[type] = set()
     pending: list[object] = []
@@ -1298,7 +1297,6 @@ def test_a_decoder_registered_after_a_lookup_is_not_invisible_to_it():
     what separates this from the annotation-metadata caches beside it: those read nothing
     that changes.
     """
-    from agent_comms.nominal.field_codec import ValueDecoder
 
     class Later:
         pass
@@ -1313,7 +1311,6 @@ def test_a_decoder_registered_after_a_lookup_is_not_invisible_to_it():
 
 def test_a_compiled_decoder_lookup_is_compiled_once():
     """Twice for one annotation is the same tuple, not a second MRO walk."""
-    from agent_comms.nominal.field_codec import ValueDecoder
 
     class Looked:
         pass
@@ -1327,7 +1324,6 @@ def test_an_unknown_field_hint_walks_each_record_type_once() -> None:
     printing one such decode failure held Toad's UI thread until it was killed."""
     from dataclasses import make_dataclass
 
-    from agent_comms.nominal.field_codec import RecordProblems
 
     level = make_dataclass("Level24", [("leaf", int)], frozen=True)
     for depth in range(23, -1, -1):

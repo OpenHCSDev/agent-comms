@@ -14,6 +14,7 @@ from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from bus_record_fixture import prepare_native_comms
+from test_coordinated_runtime import _root
 
 
 @pytest.fixture
@@ -30,7 +31,6 @@ class FakeClient(SessionUpdateSink):
 @asynccontextmanager
 async def canonical_delivery_owner(root, *, direct=False):
     """Only model execution is supplied by tests; routing and persistence are real."""
-    from test_coordinated_runtime import _root
 
     _path, root_id, comms, initial, people = _root(root, direct=direct)
     owner = CommsAgent(

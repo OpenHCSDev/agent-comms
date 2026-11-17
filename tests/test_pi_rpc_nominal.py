@@ -11,6 +11,10 @@ import pytest
 import agent_comms.execution.pi_commands as commands
 import agent_comms.execution.pi_events as pi
 import agent_comms.execution.turn_failure as failures
+from agent_comms.execution.child_process import BoundedRun
+from agent_comms.execution.native_child import PiChild
+from agent_comms.execution.native_evidence_read import PrivateEvidenceRead
+from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_session_prepare import NativeSessionPreparation
 from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.pi_wire import AnonymousRequest, RequestId
@@ -25,6 +29,7 @@ from agent_comms.execution.turn_phase import (
     ToolRunningPhase,
     TurnPhase,
 )
+from agent_comms.execution.turn_watchdog import ModelWait, UnboundedWait
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord
 from agent_comms.transport.native_tool_transport import OwnerToolConnection
 from native_response_fixture import native_response_session
@@ -58,10 +63,6 @@ def test_new_excursion_declares_both_transitions_without_dispatch_edits():
 
 
 def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
-    from agent_comms.execution.turn_watchdog import (
-    ModelWait,
-    UnboundedWait,
-)
 
     bounded, unbounded = ModelWait(), UnboundedWait()
     stalled = PromptAcceptancePhase().stalled()
@@ -184,8 +185,6 @@ async def test_correlation_handles_out_of_order_ids_and_anonymous_commands():
 async def test_pending_response_registers_each_child_exchange_once(tmp_path, anonymous):
     import sys
 
-    from agent_comms.execution.child_process import BoundedRun
-    from agent_comms.execution.native_child import PiChild
 
     responder = """import json, sys
 for line in sys.stdin:
@@ -237,8 +236,6 @@ def test_strict_native_decoding_cannot_check_malformed_rows(row):
 
 
 def test_private_evidence_refuses_duplicate_keys():
-    from agent_comms.execution.native_evidence_read import PrivateEvidenceRead
-    from agent_comms.execution.native_failures import NativePiUnavailable
 
     with pytest.raises(NativePiUnavailable):
         PrivateEvidenceRead._decode_row(b'{"type":"session","type":"message"}\n')
