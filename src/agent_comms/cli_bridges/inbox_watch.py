@@ -60,7 +60,7 @@ from agent_comms.package_stamp import STAMP
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from agent_comms.transport.connector_profile import BearerSecret
-from agent_comms.transport.connector_store import ConnectorStore, digest
+from agent_comms.transport.connector_store import ConnectorStore, ExpiresAt, digest
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools.inbox import CommsInboxTool
 
@@ -94,18 +94,13 @@ class WatchTicket(ABC):
         return self
 
 
-@dataclass(frozen=True)
-class ArmedTicket(WatchTicket):
+@dataclass(frozen=True, kw_only=True)
+class ArmedTicket(ExpiresAt, WatchTicket):
     """What comms_watch hands the model: good for one minute, in the connector's memory, so a
     restart forgets it and the model asks again, as it would once the minute passed."""
 
-    expires_at: float
-
     seconds: ClassVar[int] = 60
     opened_on = "an armed ticket"
-
-    def live(self, now: float) -> bool:
-        return self.expires_at > now
 
 
 @dataclass(frozen=True)

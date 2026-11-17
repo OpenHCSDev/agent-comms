@@ -3618,7 +3618,17 @@ class StoreRows:
     __slots__ = ()
 
 
-class TypedStore(WalStore, TableSchema):
+class TablesDeclareSchema:
+    """Its schema rows are the TypedTable members of its tables marker."""
+
+    tables: ClassVar[type[StoreRows]]
+
+    @classmethod
+    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
+        return TypedTable.members_with(cls.tables)
+
+
+class TypedStore(TablesDeclareSchema, WalStore, TableSchema):
     """One owner-only SQLite file whose schema its TypedTable rows declare.
 
     Members name the file and their rows' marker, and inherit DurableStore or DerivedStore.
@@ -3627,17 +3637,12 @@ class TypedStore(WalStore, TableSchema):
     writer reconciles it as the member's kind of file does.
     """
 
-    tables: ClassVar[type[StoreRows]]
     root: Path
 
     @PublishedProperty
     def path(self) -> Path:
         """This store's file: its root and its declared name, joined once for the store."""
         return self.path_in(self.root)
-
-    @classmethod
-    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
-        return TypedTable.members_with(cls.tables)
 
     @classmethod
     @abstractmethod

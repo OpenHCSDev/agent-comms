@@ -49,11 +49,15 @@ class RecipientLimit(SingleFieldValue):
         return {"type": "integer", "minimum": cls.minimum, "maximum": cls.maximum}
 
 
-class RecipientCursor(SubclassUnion, affix=""):
-    """Select frozen, lookup-ordered positions before expensive evidence acquisition."""
+class RecipientPositions(ABC):
+    """Which recipient positions of a delivery this reader sees."""
 
     @abstractmethod
     def positions(self, source: Delivered) -> range: ...
+
+
+class RecipientCursor(RecipientPositions, SubclassUnion, affix=""):
+    """Select frozen, lookup-ordered positions before expensive evidence acquisition."""
 
 
 @dataclass(frozen=True)
@@ -84,11 +88,8 @@ class AfterRecipient(RecordMember, RecipientCursor):
         return range(start, len(source.recipients))
 
 
-class OutcomeViewer(ABC):
+class OutcomeViewer(RecipientPositions, ABC):
     """Who reads a delivery window decides which of its outcomes are shown."""
-
-    @abstractmethod
-    def positions(self, source: Delivered) -> range: ...
 
     def visible_reads(
         self, displayed_to: tuple[ThreadIncarnation, ...], source: RecordedBusIdentity
