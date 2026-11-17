@@ -9,6 +9,7 @@ from functools import partial
 from acp.schema import SessionInfoUpdate
 
 from agent_comms.acp_extension import ContextAnnotatedUpdate, encode_updates
+from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.tables.annotations import SpanAnnotationsRow
@@ -19,6 +20,7 @@ from agent_comms.coordination.working_memory_annotations import (
 from agent_comms.execution.annotation_disclosure import DisclosureWithheld
 from agent_comms.execution.working_memory_disclosure import DisclosureState
 from agent_comms.messaging.working_memory_policy import AnnotationPolicy
+from agent_comms.transport.runtime_server import RuntimeServer
 from agent_comms.working_memory.working_memory_labels import QuestionVersion
 from agent_comms.working_memory.working_memory_questions import KindQuestion
 from agent_comms.working_memory.working_memory_requests import (
@@ -29,8 +31,8 @@ from agent_comms.working_memory.working_memory_requests import (
 
 
 class AnnotationWorker:
-    def __init__(self, comms, runtime, effects, policy: AnnotationPolicy):
-        self.comms, self.runtime, self.effects, self.policy = comms, runtime, effects, policy
+    def __init__(self, comms: Comms, runtime: RuntimeServer, policy: AnnotationPolicy):
+        self.comms, self.runtime, self.policy = comms, runtime, policy
         self.tasks: set[asyncio.Task] = set()
 
     def observe(self, session_id, manifest, values):

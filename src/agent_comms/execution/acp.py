@@ -364,7 +364,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self.use_unstable_protocol = use_unstable_protocol
         self._runtime = RuntimeServer(self)
 
-        self.annotations = AnnotationWorker(comms, self._runtime, self, AnnotationPolicy.configured())
+        self.annotations = AnnotationWorker(comms, self._runtime, AnnotationPolicy.configured())
         self.cursors = CursorPublication(comms, self._runtime)
         self.turns = TurnRunner(
             comms,
