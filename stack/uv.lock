@@ -493,7 +493,7 @@ wheels = [
 [[package]]
 name = "formbridge"
 version = "0.2.1"
-source = { git = "https://github.com/OpenHCSDev/formbridge.git?branch=main#9aa9340071270abc608700dceb729774b2c7d7f0" }
+source = { git = "https://github.com/OpenHCSDev/formbridge.git?branch=main#c725b559c4ac0548567c496d87c38b5a2ac9b4a3" }
 dependencies = [
     { name = "annotated-types" },
     { name = "docutils" },
