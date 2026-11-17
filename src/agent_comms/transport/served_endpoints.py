@@ -106,12 +106,33 @@ class NothingTailnetOnly(ProfileOffer):
     port: int
     served: tuple[ServedEndpoint, ...]
 
+    DEFAULT_SERVE_PORT = 10000
+    """Port the suggested `tailscale serve` command uses: not 443/8443 (the usual Funnel
+    ports) so the suggestion doesn't collide with existing public serves."""
+
     def refusal(self) -> str:
+        suggest_port = self._free_suggest_port()
         return (f"No tailnet-only endpoint serves 127.0.0.1:{self.port}"
                 + (f"; served instead: {', '.join(e.label() for e in self.served)}"
                    if self.served else " and tailscale serves nothing in front of it")
-                + ". Serve it to the tailnet (tailscale serve --bg --https=PORT"
+                + f". Serve it to the tailnet (tailscale serve --bg --https={suggest_port}"
                   f" http://127.0.0.1:{self.port}), or mint a profile with grant-ui.")
+
+    def _free_suggest_port(self) -> int:
+        """`DEFAULT_SERVE_PORT` when it is free, otherwise the next whole thousand that is.
+        Avoids suggesting a port that already hosts a public Funnel entry."""
+        from urllib.parse import urlparse
+        taken: set[int] = set()
+        for endpoint in self.served:
+            parsed = urlparse(endpoint.target.url)
+            if parsed.port is not None:
+                taken.add(parsed.port)
+            elif parsed.scheme == "https":
+                taken.add(443)
+        port = self.DEFAULT_SERVE_PORT
+        while port in taken:
+            port += 1000
+        return port
 
 
 class ServedEndpoints(ProbedCommand):
