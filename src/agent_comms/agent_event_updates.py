@@ -21,7 +21,6 @@ from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms import agent_events as events
 from agent_comms.acp_extension import (
-    AgentCommsUpdate,
     CompactionChangedUpdate,
     GoalChangedUpdate,
     McpClientAcknowledgementUpdate,
@@ -29,8 +28,6 @@ from agent_comms.acp_extension import (
     NativeRoundCommittedUpdate,
     PromptCancelledUpdate,
     TextNoticeUpdate,
-    TextRouteUpdate,
-    encode_updates,
 )
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.context_reading import ContextUsage, UnsizedContext
@@ -41,6 +38,11 @@ from agent_comms.execution.turn_effects import TurnEffects
 from agent_comms.messaging.routing import MessageRoute, NoMessageRoute
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.planning.goal_events import GoalChanged
+from agent_comms.text_route_update import (
+    AgentCommsUpdate,
+    TextRouteUpdate,
+    encode_updates,
+)
 from agent_comms.transcript.transcript_updates import TranscriptUpdate
 from agent_comms.transcript.transcripts import NativeCommittedPrefix
 from agent_comms.transport.tool_declaration import (

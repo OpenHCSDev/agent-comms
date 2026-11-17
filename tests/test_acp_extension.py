@@ -3,7 +3,6 @@
 import pytest
 
 from agent_comms.acp_extension import (
-    AgentCommsUpdate,
     AvailableQueueProjection,
     ClearQueueRequest,
     CommsRequest,
@@ -33,7 +32,6 @@ from agent_comms.acp_extension import (
     SendNowRequest,
     SteerPromptRequest,
     TextNoticeUpdate,
-    TextRouteUpdate,
     TranscriptChangedUpdate,
     TranscriptDraftUpdate,
     TranscriptSnapshotUpdate,
@@ -43,7 +41,6 @@ from agent_comms.acp_extension import (
     decode_request,
     decode_updates,
     encode_request,
-    encode_updates,
 )
 from agent_comms.agent_events import CompactionStart
 from agent_comms.execution.acp_failure import ACPFailure, BackendDeliveryFailure
@@ -83,6 +80,11 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.private_path import FileRevision, MissingFile
+from agent_comms.text_route_update import (
+    AgentCommsUpdate,
+    TextRouteUpdate,
+    encode_updates,
+)
 from agent_comms.transcript.transcript_drafts import NoDraft
 from agent_comms.transcript.transcripts import NativeCommittedPrefix
 from agent_comms.transport.attachment_scope import LiveCursorScope

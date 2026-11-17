@@ -10,6 +10,7 @@ from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.relationship_store import SortableRelationshipGroup
 from agent_comms.registry.relationships import (
     ChildrenRelationshipGroup,
     CollaboratingRelationshipGroup,
@@ -17,7 +18,6 @@ from agent_comms.registry.relationships import (
     OutboundRelationshipGroup,
     ParentRelationshipGroup,
     RelationshipEdit,
-    SortableRelationshipGroup,
 )
 from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_text import ForkedParent, NoParent

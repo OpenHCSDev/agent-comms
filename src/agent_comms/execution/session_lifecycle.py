@@ -29,7 +29,7 @@ from acp.schema import (
 from pydantic import JsonValue
 
 from agent_comms import agent_events as events
-from agent_comms.acp_extension import CoordinationChangedUpdate, GoalChangedUpdate, encode_updates
+from agent_comms.acp_extension import CoordinationChangedUpdate, GoalChangedUpdate
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
 from agent_comms.coordination.coordinator import Coordination
@@ -70,6 +70,7 @@ from agent_comms.registry.thread_status import ActiveThreadPresence
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.team.pi_rule_gate import PiRedeal
+from agent_comms.text_route_update import encode_updates
 from agent_comms.transcript.transcript_updates import TranscriptReplay
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.transport.runtime_requests import (

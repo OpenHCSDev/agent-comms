@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from acp import RequestError
 
-from agent_comms.acp_extension import RequestFailedUpdate, decode_updates, encode_updates
+from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
 from agent_comms.execution.acp_failure import (
     ACPFailure,
     ProviderConnectionFailure,
@@ -33,6 +33,7 @@ from agent_comms.pi_payloads import (
     RequestBytes,
     UnrecognizedTransportStage,
 )
+from agent_comms.text_route_update import encode_updates
 
 FIXTURE = Path(__file__).with_name("fixtures") / "native_provider_transport_1011.json"
 

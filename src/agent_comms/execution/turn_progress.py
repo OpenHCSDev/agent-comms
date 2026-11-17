@@ -9,7 +9,7 @@ from acp.schema import AgentMessageChunk, TextContentBlock
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms import agent_events as events
-from agent_comms.acp_extension import LiveQueueScope, TranscriptChangedUpdate, encode_updates
+from agent_comms.acp_extension import LiveQueueScope, TranscriptChangedUpdate
 from agent_comms.agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
@@ -25,6 +25,7 @@ from agent_comms.messaging.messages import AlertKind, NoticeRole
 from agent_comms.messaging.send_result import SendResult
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.registry.thread_identity import ClaimedIdentity
+from agent_comms.text_route_update import encode_updates
 from agent_comms.transcript.transcript_updates import TurnTranscriptUpdate
 
 

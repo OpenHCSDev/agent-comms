@@ -10,7 +10,6 @@ from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import Annotated, Callable, ClassVar, Self
 
-from acp.schema import AgentMessageChunk, TextContentBlock
 
 from agent_comms.agent_events import CompactionEvent
 from agent_comms.execution.acp_failure import (
@@ -34,7 +33,6 @@ from agent_comms.execution.turn_context import ContextManifest
 from agent_comms.execution.turn_inbox import SendNow, TurnInbox
 from agent_comms.execution.turn_lease import TurnState
 from agent_comms.input_attempt import InputAttempt
-from agent_comms.messaging.routing import MessageRoute, NoMessageRoute
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     AcpSessionId,
@@ -51,6 +49,7 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.planning.goal_presentation import GoalExecutionControls, GoalSnapshot
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ClaimedIdentity, ThreadIncarnation
+from agent_comms.text_route_update import AgentCommsUpdate, UpdateBatch
 from agent_comms.transcript.transcript_drafts import NoDraft
 from agent_comms.transcript.transcripts import (
     LivePageSource,
@@ -65,24 +64,6 @@ from agent_comms.transport.tool_result import ToolResult
 from agent_comms.working_memory.working_memory_labels import ModelLabel
 
 
-class AgentCommsUpdate(DeclaredFamily, affix="Update"):
-    """One declared fact; member identity supplies its wire discriminator."""
-
-    def for_session(self, session_id: AcpSessionId) -> AgentCommsUpdate:
-        return self
-
-    def matches_turn(self, turn: ReportedTurnState) -> bool:
-        return True
-
-    def acp_chunk(self) -> AgentMessageChunk:
-        """Carry this declared observation in its original empty ACP envelope."""
-        return AgentMessageChunk(
-            session_update="agent_message_chunk",
-            content=TextContentBlock(type="text", text=""),
-            field_meta=encode_updates(self),
-        )
-
-
 @dataclass(frozen=True)
 class ContextAnnotatedUpdate(AgentCommsUpdate):
     context: ContextManifest
@@ -92,11 +73,6 @@ class ContextAnnotatedUpdate(AgentCommsUpdate):
 @dataclass(frozen=True)
 class TurnChangedUpdate(AgentCommsUpdate):
     state: TurnState
-
-
-@dataclass(frozen=True)
-class TextRouteUpdate(AgentCommsUpdate):
-    route: MessageRoute | NoMessageRoute = NoMessageRoute()
 
 
 @dataclass(frozen=True)
@@ -121,11 +97,6 @@ class InputFailedUpdate(AgentCommsUpdate):
 
 
 @dataclass(frozen=True)
-class UpdateBatch:
-    updates: tuple[AgentCommsUpdate, ...]
-
-
-@dataclass(frozen=True)
 class UpdateMetadata:
     """An ACP ``_meta`` object carrying one batch of Comms updates."""
 
@@ -142,10 +113,6 @@ class GoalSnapshotReply(ToolResult, GoalSnapshot):
 
     execution: Annotated[GoalExecutionControls, WireName("goalExecution")]
     meta: Annotated[UpdateMetadata, WireName("_meta")]
-
-
-def encode_updates(*updates: AgentCommsUpdate) -> dict:
-    return {"agentComms": FieldCodec.encode(UpdateBatch(updates))}
 
 
 def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:

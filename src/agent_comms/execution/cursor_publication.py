@@ -20,7 +20,6 @@ from agent_comms.acp_extension import (
     CursorAdvancedUpdate,
     CursorEnvelope,
     UnavailableCursorObservation,
-    encode_updates,
 )
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
@@ -33,6 +32,7 @@ from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.publisher import ResponseWrites
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId
 from agent_comms.registry.privacy_reads import CursorMetadataRead
+from agent_comms.text_route_update import encode_updates
 from agent_comms.transport.attachment_scope import CursorScope
 from agent_comms.transport.runtime_server import RuntimeServer
 

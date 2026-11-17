@@ -5,7 +5,7 @@ import json
 import pytest
 from acp import RequestError
 
-from agent_comms.acp_extension import RequestFailedUpdate, decode_updates, encode_updates
+from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
 from agent_comms.execution.acp_failure import (
     ExhaustedRetry,
     ProviderConnectionFailure,
@@ -23,6 +23,7 @@ from agent_comms.execution.turn_failure import (
 from agent_comms.execution.turn_output import TurnOutput
 from agent_comms.input_attempt import InputAttempt, NotSentInput, StartedInput
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.text_route_update import encode_updates
 
 
 @pytest.mark.parametrize("wrap", [

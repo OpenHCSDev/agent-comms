@@ -8,7 +8,7 @@ from functools import partial
 
 from acp.schema import SessionInfoUpdate
 
-from agent_comms.acp_extension import ContextAnnotatedUpdate, encode_updates
+from agent_comms.acp_extension import ContextAnnotatedUpdate
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
@@ -20,6 +20,7 @@ from agent_comms.coordination.working_memory_annotations import (
 from agent_comms.execution.annotation_disclosure import DisclosureWithheld
 from agent_comms.execution.working_memory_disclosure import DisclosureState
 from agent_comms.messaging.working_memory_policy import AnnotationPolicy
+from agent_comms.text_route_update import encode_updates
 from agent_comms.transport.runtime_server import RuntimeServer
 from agent_comms.working_memory.working_memory_labels import QuestionVersion
 from agent_comms.working_memory.working_memory_questions import KindQuestion

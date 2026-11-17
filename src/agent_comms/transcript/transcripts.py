@@ -32,21 +32,15 @@ from agent_comms.execution.native_output import NativeRecordLocation
 from agent_comms.execution.native_record_file import RecordsCut, SessionCut
 from agent_comms.execution.native_runtime_input import PublishedReplyRevision
 from agent_comms.execution.native_session_files import NativeSessionFiles
-from agent_comms.execution.transcript_cursor_reads import (
-    MarksSourceRead,
-    TranscriptRuntime,
-)
 from agent_comms.execution.transcript_routes import TranscriptRoutes
 from agent_comms.execution.transcript_sources import (
     AssignedTranscriptSource,
     AtFrontier,
     ExternalTranscript,
-    FileTranscriptCursor,
     LatestPage,
     LiveAssignedTranscriptSource,
     NativeTranscript,
     NativeTranscriptCursor,
-    NoWireFrontier,
     PageLimit,
     PagePosition,
     Through,
@@ -101,10 +95,8 @@ from agent_comms.registry.thread_text import ThreadParent, ThreadText
 from agent_comms.registry.threads import Thread, ThreadProvenance
 from agent_comms.registry.view_unread import TranscriptReadState
 from agent_comms.storage.private_path import (
-    FileIdentity,
     FileObservation,
     FileRevision,
-    MissingFile,
 )
 from agent_comms.transcript.transcript_drafts import TranscriptDraft
 from agent_comms.transcript.transcript_events import (
@@ -114,26 +106,6 @@ from agent_comms.transcript.transcript_events import (
 )
 
 _LOG = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class NoNativeTranscriptCursor(FileTranscriptCursor):
-    """A thread owns no native read mark, even while showing an inherited source."""
-
-    source: RuntimeLocation = field(kw_only=True)
-    offset: int = 0
-    wire: WireFrontier = field(default_factory=NoWireFrontier)
-    file: FileIdentity | MissingFile = field(kw_only=True)
-
-    @property
-    def session_file(self) -> str | None:
-        return self.source.read_key
-
-    def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor:
-        return replace(self, wire=frontier)
-
-    def mark_read(self, reads: MarksSourceRead[SessionCut], viewer: str, runtime: TranscriptRuntime) -> None:
-        """There is no painted native transcript to acknowledge."""
 
 
 @dataclass(frozen=True)

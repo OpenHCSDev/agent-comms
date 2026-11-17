@@ -33,8 +33,8 @@ from agent_comms.registry.thread_text import (
 )
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.storage.private_path import FileIdentity, MissingFile
+from agent_comms.transcript.no_native_transcript_cursor import NoNativeTranscriptCursor
 from agent_comms.transcript.transcript_events import AssistantTranscript
-from agent_comms.transcript.transcripts import NoNativeTranscriptCursor
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.transport.tools.served import invoke_tool

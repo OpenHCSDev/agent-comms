@@ -24,7 +24,6 @@ from agent_comms.acp_extension import (
     UnidentifiedInputStarted,
     decode_updates,
     encode_request,
-    encode_updates,
 )
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
@@ -50,6 +49,7 @@ from agent_comms.registry.thread_identity import (
     RecordedThreadIncarnation,
 )
 from agent_comms.registry.threads import NativeThread
+from agent_comms.text_route_update import encode_updates
 from agent_comms.transport.attachment_scope import LiveCursorScope
 from bus_record_fixture import prepare_native_comms
 from stored_inputs import stored_inputs

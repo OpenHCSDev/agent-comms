@@ -19,7 +19,6 @@ from agent_comms.acp_extension import (
     PromptRequest,
     QueueChangedUpdate,
     QueueScope,
-    encode_updates,
 )
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
@@ -101,6 +100,7 @@ from agent_comms.storage.maintenance_barrier import (
     MaintenancePhase,
     MaintenanceStatus,
 )
+from agent_comms.text_route_update import encode_updates
 from agent_comms.transport.owner_requests import OwnerRetiredReply, StopOwnerRuntimeRequest
 from agent_comms.transport.runtime_server import RuntimeServer
 

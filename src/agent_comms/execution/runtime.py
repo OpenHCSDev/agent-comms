@@ -21,7 +21,7 @@ from acp.schema import (
     ToolCallUpdate,
 )
 
-from agent_comms.acp_extension import decode_updates, encode_updates
+from agent_comms.acp_extension import decode_updates
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import Refused
 from agent_comms.execution.controller import ACP_PERMISSION_TIMEOUT_SECONDS, PermissionOutcome
@@ -35,6 +35,7 @@ from agent_comms.execution.owner_protocol import (
 )
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, MalformedRecord
 from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.text_route_update import encode_updates
 from agent_comms.transport.owner_connection import (
     CapturedOwner,
     NoControllerToken,
