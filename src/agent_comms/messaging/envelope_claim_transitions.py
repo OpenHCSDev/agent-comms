@@ -213,13 +213,19 @@ class NativeClaim(RecordMember, RecordedScope):
     input_id: InputId
 
 
-@dataclass(frozen=True)
-class WakeClaim(RecordMember, RecordedScope):
-    """A selected N/K execution bound into the durable resource-claim row."""
+@dataclass(frozen=True, kw_only=True)
+class SourceMessage:
+    """The bus root and the message, by sequence and id, a record was made from."""
 
     wire_root_id: RootId
     source_seq: int
     source_message_id: MessageId
+
+
+@dataclass(frozen=True, kw_only=True)
+class WakeClaim(SourceMessage, RecordMember, RecordedScope):
+    """A selected N/K execution bound into the durable resource-claim row."""
+
     wake_assignment_id: Annotated[AssignmentId, WireName("wake_claim_id")]
     wake_revision: int
     recipient_lookup: ThreadLookup

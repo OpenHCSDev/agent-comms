@@ -2749,11 +2749,8 @@ class MergedDeliveredProblemOrder(DeliveredProblemOrder, MergedProblemOrder):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ReportedProblemOrder(DeliveredProblemOrder):
-    """A triage answer is complete when returned, with no fictitious installation."""
-
-    delivery: ReportDelivery
-    line: ClassVar[str] = "Report returned"
+class OwesNoInstall:
+    """An order that owes no installation: it reports its own line, closes as it is and waits on no build."""
 
     def installed_line(self, installed: InstalledBuild) -> str:
         """The order's own line is final: no installed build has a say in its words."""
@@ -2762,17 +2759,25 @@ class ReportedProblemOrder(DeliveredProblemOrder):
     def require_close(self) -> None:
         pass
 
-    def observed_merges(
-        self, repo: Repo, source: PullRequestSource
-    ) -> tuple[MergedProblemOrder, ...]:
-        return ()
-
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return ()
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstalledEvidence(CheckedProblemOrder, declared_name=None):
+class ReportedProblemOrder(OwesNoInstall, DeliveredProblemOrder):
+    """A triage answer is complete when returned, with no fictitious installation."""
+
+    delivery: ReportDelivery
+    line: ClassVar[str] = "Report returned"
+
+    def observed_merges(
+        self, repo: Repo, source: PullRequestSource
+    ) -> tuple[MergedProblemOrder, ...]:
+        return ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class InstalledEvidence(OwesNoInstall, CheckedProblemOrder, declared_name=None):
     """Recorded application evidence, shared by delivered and merge-observed orders.
 
     Recorded evidence of the thing working is not a question for the current build. This
@@ -2783,10 +2788,6 @@ class InstalledEvidence(CheckedProblemOrder, declared_name=None):
     works: str
     artifact: str
     line: ClassVar[str] = "Installed"
-
-    def installed_line(self, installed: InstalledBuild) -> str:
-        """The order's own line is final: no installed build has a say in its words."""
-        return self.line
 
     @property
     def accepted(self) -> bool:
@@ -2801,12 +2802,6 @@ class InstalledEvidence(CheckedProblemOrder, declared_name=None):
         if (works, artifact) != (self.works, self.artifact):
             raise TodoError("The order already records different installed evidence.")
         return self
-
-    def require_close(self) -> None:
-        pass
-
-    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
-        return ()
 
 
 @dataclass(frozen=True, kw_only=True)

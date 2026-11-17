@@ -32,6 +32,7 @@ from agent_comms.execution.native_runtime_input import NativeRuntimeInput, Nativ
 from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.selected.triage import SelectedTriage
 from agent_comms.execution.transcript_sources import NativeTranscript
+from agent_comms.messaging.envelope_claim_transitions import SourceMessage
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -49,10 +50,12 @@ from agent_comms.storage.typed_table import TypedRow
 
 
 @dataclass(frozen=True, kw_only=True)
-class HistoricalNativeInput(NativeInputRecord, DeclaredFamily, affix="HistoricalNativeInput"):
-    wire_root_id: RootId
-    source_seq: int
-    source_message_id: MessageId
+class HistoricalNativeInput(
+    SourceMessage,
+    NativeInputRecord,
+    DeclaredFamily,
+    affix="HistoricalNativeInput",
+):
     assignment_id: Annotated[AssignmentId, WireName("claim_id")]
     execution: NativeInputExecution
     input_id: InputId

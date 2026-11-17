@@ -77,6 +77,7 @@ from agent_comms.planning.goal_records import GoalRecords
 from agent_comms.planning.goal_scope import AllGoals, GoalScope, OneGoal
 from agent_comms.planning.goal_snapshots import GoalSnapshots
 from agent_comms.planning.goal_states import PauseSource
+from agent_comms.planning.goal_wait_recovery import OwnerWaitRead
 from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goal_waits import GoalWait, StandbyReview
 from agent_comms.planning.goals import Goal, GoalDeclaration
@@ -101,21 +102,20 @@ from agent_comms.registry.threads import NativeThread, Thread
 _LOG = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class GoalExecutionSource(
+    OwnerWaitRead,
     GoalStateProjection[GoalExecutionControls, PauseSource],
     GoalFailureProjection[GoalExecutionControls, FailedTurnEvidence],
-    GoalGenerationProjection[GoalExecutionControls], GoalWaitProjection[GoalExecutionControls],
+    GoalGenerationProjection[GoalExecutionControls],
+    GoalWaitProjection[GoalExecutionControls],
     GoalTurnProjection[GoalExecutionControls, ActiveTurn],
 ):
     """One read's original owners; never persisted or used as launch authority."""
 
     goal: Goal
-    wait: GoalWait
     generation: Generation
     evidence: GoalFailureEvidence[FailedTurnEvidence]
-    owner: Thread
-    snapshot: RegistrySnapshot
     agents: ActivityAnswers
     turns: Mapping[StoredTurnRecord, TurnDeclaration]
 
