@@ -881,8 +881,18 @@ class ResolvedLock(BaseModel):
 
     def refresh_arguments(self) -> tuple[str, ...]:
         """``uv lock`` arguments moving every branch-tracking package to its branch head while
-        the release and revision pins stay: what the installer and every CI sync run first."""
-        return tuple(argument for name in self.tracked() for argument in ("--upgrade-package", name))
+        the release and revision pins stay: what the installer and every CI sync run first.
+
+        Each tracked name is paired with ``--refresh-package`` because on a git-branch source
+        ``--upgrade-package`` alone re-resolves against uv's local git clone cache, not the
+        remote; without the refresh the "tracks main" contract is a lie once uv has cached a
+        prior ref. 2026-11-17: an install saw Toad at an older main head than GitHub's because
+        uv's git cache was stale, and the resolved Toad/agent-comms pair crashed the client
+        imports probe at ``ClientImportsProbe.run`` (``agent_session.py`` line 14)."""
+        return tuple(
+            argument for name in self.tracked()
+            for argument in ("--upgrade-package", name, "--refresh-package", name)
+        )
 
     def tracked_requirements(self, excluded: frozenset[str] = frozenset()) -> tuple[str, ...]:
         """The same packages as requirements naming their branch, for installers outside this lock.
