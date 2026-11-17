@@ -74,6 +74,7 @@ from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import MemoryUse, StorageRule, UnitStorage
 from agent_comms.projects.work_branches import (
     BranchDifference,
+    RepositoryBranch,
     SourceGrowth,
     UnparsedSource,
     WorkBranchError,
@@ -676,11 +677,8 @@ class HeldBranchRule(HolderProblemLine, UndatedStandingRule, FamilyScan, declare
 
 
 @dataclass(frozen=True)
-class RepositoryBranchRule(HeldBranchRule, declared_name=None):
+class RepositoryBranchRule(RepositoryBranch, HeldBranchRule, declared_name=None):
     """A rule about one named branch of a held order's repository."""
-
-    repository: RepositoryName
-    branch: str
 
 
 @dataclass(frozen=True)
