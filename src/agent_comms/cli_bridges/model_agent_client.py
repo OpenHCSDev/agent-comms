@@ -21,6 +21,9 @@ import urllib.request
 from abc import abstractmethod
 from dataclasses import dataclass
 
+import os
+from pathlib import Path
+
 from agent_comms.comms import Comms
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.installer.active_route import resolve_comms_route
@@ -147,10 +150,13 @@ class ModelAgent:
 
     name: str
     endpoint: ChatEndpoint
+    root: Path
 
     async def run(self) -> None:
-        route = resolve_comms_route()
-        with LaunchRoot.from_path(route.root).selected():
+        # Select the LaunchRoot BEFORE resolving the route: resolve_comms_route(None)
+        # falls back to LaunchRoot.current(), which requires a selection already in scope.
+        with LaunchRoot.from_path(self.root).selected():
+            route = resolve_comms_route(self.root)
             comms = Comms(route)
             print(f"[model-agent] watching {self.name!r} -> "
                   f"{self.endpoint.url} ({self.endpoint.model})", flush=True)
@@ -176,6 +182,11 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--timeout", type=float, default=90.0,
                         help="HTTP request timeout in seconds")
+    parser.add_argument("--root", type=Path,
+                        default=Path(os.environ.get(LaunchRoot.environment_name,
+                                                    Path.home() / ".agent-comms")),
+                        help=(f"Comms bus root; defaults to ${LaunchRoot.environment_name} "
+                              "or ~/.agent-comms"))
     args = parser.parse_args()
     agent = ModelAgent(
         name=args.name,
@@ -183,6 +194,7 @@ def main() -> None:
             url=args.endpoint, model=args.model, max_tokens=args.max_tokens,
             temperature=args.temperature, timeout=args.timeout,
         ),
+        root=args.root.expanduser().absolute(),
     )
     try:
         asyncio.run(agent.run())
