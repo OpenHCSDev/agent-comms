@@ -86,7 +86,7 @@ def recorded(segments):
 
 def test_current_native89_shape_and_authenticated_file_read(tmp_path):
     native = identity(tmp_path)
-    original = PreviewProvenance(native, "a" * 64)
+    original = PreviewProvenance(identity=native, context_digest="a" * 64)
     path = tmp_path / "instruction.md"
     path.write_text("Original instruction π")
     source = FileProvenance(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest())
@@ -173,7 +173,7 @@ async def test_core_context_socket_reads_without_native_session_or_preview(
 
 def test_captured_sdk_value_is_original_and_public_only(tmp_path):
     native = identity(tmp_path)
-    source = NativeProvenance(native, 3, "a" * 64)
+    source = NativeProvenance(identity=native, request_generation=3, context_digest="a" * 64)
     messages = ({"role": "assistant", "content": [
         {"type": "thinking", "thinking": "PRIVATE_REASONING"},
         {"type": "text", "text": "Public original answer"}], "stopReason": "stop"},)
@@ -205,7 +205,7 @@ def test_captured_sdk_value_is_original_and_public_only(tmp_path):
 @pytest.mark.asyncio
 async def test_recorded_child_reads_exact_value_not_root_or_other_request(tmp_path):
     native = identity(tmp_path)
-    provenance = (NativeProvenance(native, 1, "a" * 64),
+    provenance = (NativeProvenance(identity=native, request_generation=1, context_digest="a" * 64),
                   JournalProvenance(native.session_file, ("original-entry",)))
     child = system(provenance).measured_manifest()
     sibling = replace(child, sha256="b" * 64, captured_text=("Sibling text",))
@@ -257,7 +257,7 @@ async def test_recorded_child_reads_exact_value_not_root_or_other_request(tmp_pa
 @pytest.mark.asyncio
 async def test_complete_recorded_root_uses_one_acquired_result(tmp_path):
     native = identity(tmp_path)
-    provenance = (NativeProvenance(native, 1, "a" * 64),
+    provenance = (NativeProvenance(identity=native, request_generation=1, context_digest="a" * 64),
                   JournalProvenance(native.session_file, ("original-entry",)))
     messages = tuple({"role": "user", "content": f"Original message {n}"} for n in range(1000))
     raw = json.dumps(list(messages), separators=(",", ":")).encode()
@@ -295,7 +295,7 @@ async def test_complete_recorded_root_uses_one_acquired_result(tmp_path):
 @pytest.mark.asyncio
 async def test_mixed_recorded_root_merges_capture_and_verified_parts_once(tmp_path):
     native = identity(tmp_path)
-    provenance = (NativeProvenance(native, 1, "a" * 64),
+    provenance = (NativeProvenance(identity=native, request_generation=1, context_digest="a" * 64),
                   JournalProvenance(native.session_file, ("original-entry",)))
     message = {"role": "user", "content": "Original journal message"}
     raw = json.dumps([message], separators=(",", ":")).encode()
@@ -328,7 +328,7 @@ async def test_mixed_recorded_root_merges_capture_and_verified_parts_once(tmp_pa
 def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path):
     comms = context_comms(tmp_path)
     owner = comms.registry.require("Alice")
-    captured = replace(recorded((system((NativeProvenance(identity(tmp_path), 1, "a" * 64),))
+    captured = replace(recorded((system((NativeProvenance(identity=identity(tmp_path), request_generation=1, context_digest="a" * 64),))
                                  .measured_manifest(),)), thread=owner.incarnation)
     captured = replace(captured, segments=(replace(captured.segments[0],
                                                   captured_text=("Original request system",)),))
@@ -347,14 +347,14 @@ def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path
 
 def test_authored_sdk_observation_retains_read_identity_without_minting_native_proof(tmp_path):
     native = identity(tmp_path)
-    preview = PreviewProvenance(native, "a" * 64)
+    preview = PreviewProvenance(identity=native, context_digest="a" * 64)
     original = system((preview, JournalProvenance(native.session_file, ("entry",)))).measured_manifest()
     assert original.sources.native_identity() == native
     assert original.sources.journal_entries() == ("entry",)
     assert not any(isinstance(source, NativeProvenance) for source in original.provenance)
     with pytest.raises(ValueError):
         replace(original, provenance=(*original.provenance,
-            PreviewProvenance(replace(native, session_id="other"), "b" * 64))).sources.native_identity()
+            PreviewProvenance(identity=replace(native, session_id="other"), context_digest="b" * 64))).sources.native_identity()
 
 
 def test_cold_client_acquires_current_and_recorded_contributor_declarations():

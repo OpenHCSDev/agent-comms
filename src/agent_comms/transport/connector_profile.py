@@ -195,12 +195,18 @@ class ReachedRoute(TaggedRecordMember, EndpointRoute):
 
 
 @dataclass(frozen=True)
-class UiCredential:
-    """The one returned secret and immutable issuance facts, not client-side authority."""
+class UiGrant:
+    """Which UI grant was issued, for which bus root, and when it expires."""
 
     grant_id: UiGrantId
     namespace: RootId
     expires_at: float
+
+
+@dataclass(frozen=True)
+class UiCredential(UiGrant):
+    """The one returned secret and immutable issuance facts, not client-side authority."""
+
     token: BearerSecret = field(repr=False)
 
 
@@ -238,10 +244,7 @@ class UiConnectionProfile:
 
 
 @dataclass(frozen=True)
-class UiGrantSummary:
+class UiGrantSummary(UiGrant):
     """Safe console output: the credential itself exists only in the private profile."""
 
-    grant_id: UiGrantId
-    namespace: RootId
-    expires_at: float
     profile: Annotated[Path, PathText]

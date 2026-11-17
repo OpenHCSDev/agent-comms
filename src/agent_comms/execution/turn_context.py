@@ -170,34 +170,34 @@ class JournalProvenance(Provenance):
         return (self,)
 
 
-@dataclass(frozen=True)
-class NativeProvenance(Provenance):
+@dataclass(frozen=True, kw_only=True)
+class NativeContextSource:
+    """A provenance naming the one native session whose context digest it observed."""
+
     identity: NativeSessionIdentity
-    request_generation: int
     context_digest: str
+
+    def native_identities(self) -> tuple[NativeSessionIdentity, ...]:
+        """SDK identity for checking a read, never permission to start input."""
+        return (self.identity,)
+
+
+@dataclass(frozen=True, kw_only=True)
+class NativeProvenance(NativeContextSource, Provenance):
+    request_generation: int
 
     def public_description(self) -> str:
         return (f"Native request {self.identity.session_id} · generation {self.request_generation} "
                 f"· context {self.context_digest}")
 
-    def native_identities(self) -> tuple[NativeSessionIdentity, ...]:
-        return (self.identity,)
 
-
-@dataclass(frozen=True)
-class PreviewProvenance(Provenance):
-    identity: NativeSessionIdentity
-    context_digest: str
-
+@dataclass(frozen=True, kw_only=True)
+class PreviewProvenance(NativeContextSource, Provenance):
     def public_description(self) -> str:
         return f"Current native preview {self.identity.session_id} · context {self.context_digest}"
 
     def preview_observations(self) -> tuple[PreviewProvenance, ...]:
         return (self,)
-
-    def native_identities(self) -> tuple[NativeSessionIdentity, ...]:
-        """SDK identity for checking a read, never permission to start input."""
-        return (self.identity,)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -295,10 +295,16 @@ class ProvenancedSegment:
 
 
 @dataclass(frozen=True, kw_only=True)
-class SegmentManifest(ProvenancedSegment, Sha256Digest, ToolResult):
-    utf8_bytes: int
+class SegmentMeasurement:
+    """A context segment's size in UTF-8 bytes and estimated tokens, and the segments it was assembled from."""
+
     tokens: int
+    utf8_bytes: int
     contributors: tuple[SegmentManifest, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class SegmentManifest(SegmentMeasurement, ProvenancedSegment, Sha256Digest, ToolResult):
     captured_text: Annotated[tuple[str, ...], WireOmitDefault()] = ()
     source_spans: Annotated[
         tuple[ContributionCoordinates, ...], WireOmitDefault()
@@ -974,12 +980,8 @@ class UserInputSegment(SuppliedSegment, WireSources):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MeasuredNativeSegment(Sha256Digest, ContextSegment):
+class MeasuredNativeSegment(SegmentMeasurement, Sha256Digest, ContextSegment):
     """An SDK-owned input observation, not a second native message vocabulary."""
-
-    tokens: int
-    utf8_bytes: int
-    contributors: tuple[SegmentManifest, ...] = ()
 
     @abstractmethod
     def provider_value(self): ...
@@ -1337,14 +1339,20 @@ class ObservedDispatchRequest(SingleFieldValue, DispatchRequest):
     request_id: PiRequestKey
 
 
-@dataclass(frozen=True)
-class ContextManifest:
+@dataclass(frozen=True, kw_only=True)
+class ContextRequestIdentity:
+    """Which thread incarnation, turn and counter a context request was recorded for, and its dispatch request."""
+
     thread: ThreadIncarnation
     turn: ContextTurn
-    segments: tuple[SegmentManifest, ...]
     counter: str
     request_id: Annotated[DispatchRequest, WireOmitDefault()] = field(
         default_factory=UnobservedDispatchRequest)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextManifest(ContextRequestIdentity):
+    segments: tuple[SegmentManifest, ...]
 
     @property
     def public_text_recorded(self) -> bool:
@@ -1415,21 +1423,16 @@ class ContextRecording(ABC):
         return MappingProxyType({})
 
 
-@dataclass(frozen=True)
-class RecordedContextIdentity:
+@dataclass(frozen=True, kw_only=True)
+class RecordedContextIdentity(ContextRequestIdentity):
     """The request identity shared by storage and restored context records."""
 
-    thread: ThreadIncarnation
-    turn: ContextTurn
-    counter: str
-    request_id: Annotated[DispatchRequest, WireOmitDefault()] = field(
-        default_factory=UnobservedDispatchRequest)
     recording_turn: Annotated[int, WireOmitDefault()] = 1
 
     def with_segments(
         self, segments: tuple[RecordedSegmentManifest, ...],
     ) -> RecordedContextManifest:
-        return RecordedContextManifest(self.thread, self.turn, self.counter, segments=segments,
+        return RecordedContextManifest(thread=self.thread, turn=self.turn, counter=self.counter, segments=segments,
             request_id=self.request_id, recording_turn=self.recording_turn)
 
 

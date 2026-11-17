@@ -107,12 +107,12 @@ class GoalRecords(GoalWaitRecovery, GoalWorkSource):
             unknown[pending.key] = pending
             eligible.add(pending.key)
         return GoalInputReview(
-            captured.snapshot,
-            thread,
-            captured.wait,
-            captured.turn,
-            through_seq,
-            targets,
-            tuple(sorted(unknown.values(), key=lambda row: row.order)),
-            frozenset(eligible),
+            snapshot=captured.snapshot,
+            owner=thread,
+            wait=captured.wait,
+            turn=captured.turn,
+            through_seq=through_seq,
+            targets=targets,
+            unknown=tuple(sorted(unknown.values(), key=lambda row: row.order)),
+            eligible_keys=frozenset(eligible),
         )

@@ -541,7 +541,7 @@ class CommsOrderCheckTool(CommsTodoTool):
     why: Annotated[str, *tool_field("Why the recorded check was wrong")]
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
-        return CorrectCheckTodo(todo.revision, actor, self.why,
+        return CorrectCheckTodo(expected_revision=todo.revision, actor=actor, reason=self.why,
                                 previous=todo.order.check, check=self.check)
 
 
