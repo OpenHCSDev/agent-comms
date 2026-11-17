@@ -8,6 +8,8 @@ from functools import partial
 
 import pytest
 from acp.schema import SessionInfoUpdate
+from agent_comms.execution.native_child import PiChild
+from agent_comms.execution.pi_durable_backend import PiDurableBackend
 from delivery_owner_fixture import canonical_agent
 from goal_owner_fixture import canonical_goal_wire
 from pydantic import BaseModel
@@ -231,8 +233,6 @@ async def test_idle_retirement_never_acquires_an_unloaded_session(publication):
 
 
 async def test_idle_retirement_uses_the_backend_contract_and_respects_a_held_turn(publication):
-    from agent_comms.execution.native_child import PiChild
-    from agent_comms.execution.pi_durable_backend import PiDurableBackend
 
     comms, agent, session, _client = publication
     backend = PiDurableBackend()

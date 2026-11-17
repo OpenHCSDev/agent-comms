@@ -7,7 +7,11 @@ from types import MappingProxyType
 import pytest
 from metaclass_registry import DuplicateRegistryKeyError
 
+from agent_comms.execution.acp_failure import ACPFailure
+from agent_comms.execution.native_input_record import NativeInputExecution
+from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.nominal.declared_family import DeclaredFamily, DeclaredOrder, RegisteredFamily
+from agent_comms.planning.orders import FoundProgress
 
 
 class SampleFamily(DeclaredFamily, affix="Case"):
@@ -175,10 +179,6 @@ def test_independent_families_and_inherited_names_are_derived():
 
 
 def test_ordered_family_views_have_one_declaration_module():
-    from agent_comms.execution.acp_failure import ACPFailure
-    from agent_comms.execution.native_input_record import NativeInputExecution
-    from agent_comms.execution.turn_failure import TurnFailure
-    from agent_comms.planning.orders import FoundProgress
 
     for family in (TurnFailure, FoundProgress, ACPFailure, NativeInputExecution):
         assert {member.__module__ for member in family.members_with(family)} == {family.__module__}

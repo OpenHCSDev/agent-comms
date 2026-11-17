@@ -12,17 +12,26 @@ from agent_comms.cli_bridges.harness_delivery_states import DeliveredOutcome, Ob
 from agent_comms.comms import wire
 from agent_comms.coordination.assignment_states import (
     CompletedAssignment,
+    DeferredAssignment,
     DeliveredAssignment,
     EngagedAssignment,
     IgnoredAssignment,
 )
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.coordination.errors import DMScopeChanged, SchemaVersionError
+from agent_comms.coordination.errors import (
+    DMScopeChanged,
+    HistoricalSourceChanged,
+    SchemaVersionError,
+)
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.input_origin import WireInputOrigin
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.historical_views import HistoricalDisplay
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_evidence import AllOutcomes
 from agent_comms.messaging.notification_progress import (
     AnsweredProgress,
@@ -31,15 +40,30 @@ from agent_comms.messaging.notification_progress import (
     ConsumedDelivery,
     DeliveryProgress,
     HarnessConsumedProgress,
+    IgnoredProgress,
     QueuedProgress,
+    SelectedConsumedProgress,
+    SentProgress,
+    ShownToModelProgress,
+    TakenProgress,
     UnansweredResponse,
     WorkingTakenProgress,
 )
+from agent_comms.messaging.notification_reads import RecordedNotificationRead
 from agent_comms.messaging.read_basis import ReadCursor
 from agent_comms.messaging.read_ledger import ReadLedger
-from agent_comms.nominal.field_codec import InputId, MessageId, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, InputId, MessageId, TurnId
+from agent_comms.notification_assignment import (
+    AssignmentActivity,
+    AssignmentActivityEvidence,
+    AssignmentContextEvidence,
+    NotShownContextEvidence,
+)
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.activity import ActivityState, ObservedActivity, ReadyDrainReadiness
+from agent_comms.registry.agent_activity import LiveRecipientActivity
 from agent_comms.registry.recipient_activity import (
+    RecipientActivity,
     RecordedRecipientActivity,
     UnavailableRecipientActivity,
 )
@@ -50,7 +74,7 @@ from agent_comms.registry.thread_identity import (
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.waking.wake_policy import FullWake
 from bus_record_fixture import prepare_native_comms
-from conftest import publish_initial
+from conftest import accept_initial, declare_test_bus, publish_initial
 from transcript_record_fixture import transcript_record
 
 SENDER = "sender"  # the notification carries its sender's lookup; these tests read progress only
@@ -152,7 +176,6 @@ def test_harness_consumption_survives_human_display(archived_notification):
 
 
 def test_native_context_commit_is_consumed():
-    from agent_comms.notification_assignment import AssignmentContextEvidence
 
     progress = AssignmentContextEvidence.from_columns(2_000).progress(pending_at_ms=1_000, queued=False)
     unshown = AssignmentContextEvidence.from_columns(None).progress(pending_at_ms=1_000, queued=False)
@@ -168,11 +191,6 @@ def test_response_evidence_rejects_mixed_sql_columns():
 
 
 def test_unshown_assignment_resolves_running_turn_as_timed_queue():
-    from agent_comms.messaging.notification_progress import QueuedProgress, SentProgress
-    from agent_comms.notification_assignment import (
-        AssignmentActivityEvidence,
-        NotShownContextEvidence,
-    )
 
     pending = AssignmentActivityEvidence(
         False, None, NotShownContextEvidence(), UnansweredResponse()
@@ -201,8 +219,6 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     old, _live, _source, messages, root_id = archived_notification
     recipient, = old.bus.bus.delivery(messages[0].seq).recipients
     assignment = EngagedAssignment.build(FullWake(), "authored-execution", "sender")
-    from agent_comms.messaging.notification_progress import ShownToModelProgress
-    from agent_comms.notification_assignment import AssignmentActivity
 
     activity = AssignmentActivity(
         triage_inflight=False,
@@ -232,19 +248,6 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
 def test_sent_recipient_progresses_through_durable_consumption_and_answer(archived_notification):
     old, _live, _source, messages, root_id = archived_notification
     recipient, = old.bus.bus.delivery(messages[0].seq).recipients
-    from agent_comms.messaging.message_reference import MessageReference
-    from agent_comms.messaging.notification_progress import (
-        IgnoredProgress,
-        QueuedProgress,
-        SelectedConsumedProgress,
-        SentProgress,
-        ShownToModelProgress,
-        TakenProgress,
-        WorkingTakenProgress,
-    )
-    from agent_comms.notification_assignment import AssignmentActivity
-    from agent_comms.registry.activity import ActivityState, ObservedActivity, ReadyDrainReadiness
-    from agent_comms.registry.agent_activity import LiveRecipientActivity
 
     sent_activity = AssignmentActivity(
         triage_inflight=False,
@@ -353,9 +356,6 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
 
 
 def test_delivered_assignment_uses_its_recorded_conversation_response(archived_notification):
-    from agent_comms.coordination.assignment_states import DeferredAssignment
-    from agent_comms.coordination.coordinator import Coordination
-    from conftest import accept_initial
 
     old, _live, _source, messages, root_id = archived_notification
     original = messages[0]
@@ -384,9 +384,6 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
     import os
     from uuid import uuid4
 
-    from agent_comms.execution.child_process import ProcessIdentity
-    from agent_comms.execution.input_origin import WireInputOrigin
-    from agent_comms.input_disposition import InputDispositions
 
     owner = old.registry.require("agent")
     old.registry.register(
@@ -434,12 +431,8 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
 def test_recorded_response_resolution_keeps_other_collective_lifecycles(
     archived_notification,
 ):
-    from agent_comms.coordination.assignment_states import DeferredAssignment
-    from agent_comms.coordination.coordinator import Coordination
-    from conftest import accept_initial
 
     old, _live, _source, _messages, root_id = archived_notification
-    from conftest import declare_test_bus
     declare_test_bus(old, channels=("team",))
     for name in ("sender", "reader", "agent"):
         old.registry.register(
@@ -475,8 +468,6 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
 
 
 def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry.recipient_activity import RecipientActivity
 
     old, live, source, messages, _root_id = archived_notification
     old.registry.declare(old.registry.require("agent").as_member(ExternalThread))
@@ -503,8 +494,6 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
     assert archived.label == "Sent" and not archived.displayed_to
     # The root-free recorded operation reads the same archive, not today's live evidence,
     # and a key that is no longer attached refuses instead of falling back to live reads.
-    from agent_comms.coordination.errors import HistoricalSourceChanged
-    from agent_comms.messaging.notification_reads import RecordedNotificationRead
 
     recorded, = RecordedNotificationRead((messages[0].reference,), source.key).read(live).outcomes[
         messages[0].seq, messages[0].message_id

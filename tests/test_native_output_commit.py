@@ -9,11 +9,12 @@ from agent_comms.acp_extension import (
     NativeOutputCommittedUpdate,
     NativeRoundCommittedUpdate,
 )
+from agent_comms.agent_events import NativeRoundCommitted
 from agent_comms.coordination.errors import TranscriptChanged
 from agent_comms.execution.native_output import AssistantOutput, ToolOutput
 from agent_comms.execution.pi_events import NativeOutputCommitted, PiEvent
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.execution.transcript_sources import Through
+from agent_comms.execution.transcript_sources import NativeTranscript, Through
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     ToolCallId,
@@ -107,13 +108,11 @@ def test_sdk_emits_scoped_marker_after_original_append(pinned_native, tmp_path):
     markers = json.loads(result.stdout)
     assert [type(PiEvent.from_wire(marker).output) for marker in markers[:-1]] == [AssistantOutput, ToolOutput, ToolOutput]
 
-    from agent_comms.agent_events import NativeRoundCommitted
 
     ended = tuple(PiEvent.from_wire(markers[-1]).convert())
     assert len(ended) == 1 and isinstance(ended[0], NativeRoundCommitted)
     assert ended[0].location.session_entry_end == markers[-2]['sessionEntryEnd']
 
-    from agent_comms.execution.transcript_sources import NativeTranscript
 
     assert NativeTranscript(ended[0].location.path).committed_output_cut(
         ended[0].location).offset == markers[-2]['sessionEntryEnd']

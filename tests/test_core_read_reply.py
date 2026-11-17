@@ -6,8 +6,15 @@ from queue import SimpleQueue
 from threading import Event, Thread
 
 from agent_comms.comms import wire
-from agent_comms.nominal.field_codec import MalformedRecord
-from agent_comms.transport.tools.sidebar import CommsChannelTool
+from agent_comms.nominal.field_codec import AcpSessionId, MalformedRecord
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import NativeThread
+from agent_comms.transcript.transcripts import NotifiedThreadPresentation
+from agent_comms.transport.tools.sidebar import (
+    CommsChannelTool,
+    CommsRegistrySliceTool,
+    CommsThreadPresentationTool,
+)
 import pytest
 
 from agent_comms.ui_model.observation import (
@@ -16,6 +23,7 @@ from agent_comms.ui_model.observation import (
     LocalRouteObservation,
     ObservationProcess,
     ObserverUnattached,
+    UnencodableReply,
 )
 
 
@@ -102,10 +110,6 @@ async def test_a_thread_presentation_read_decodes_across_the_child(tmp_path):
     """Core serves a thread presentation as the published NotifiedThreadPresentation. On
     2026-11-10 the read declared the parent ThreadPresentation, so the reply's notifications and
     read_identity were refused as unknown fields on every local Toad read."""
-    from agent_comms.projects.checkouts import Checkout
-    from agent_comms.registry.threads import NativeThread
-    from agent_comms.transcript.transcripts import NotifiedThreadPresentation
-    from agent_comms.transport.tools.sidebar import CommsThreadPresentationTool
 
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread("presented", frozenset(), Checkout(tmp_path)))
@@ -119,11 +123,6 @@ async def test_an_unencodable_reply_fails_its_own_read_and_the_child_keeps_answe
     """On 2026-11-10 Toad asked a registry slice with an AcpSessionId among its thread names; the
     reply's str-typed ``asked`` could not be encoded, and the whole child died with every UI
     read in flight. The caller gets the failure now, and the next read is still answered."""
-    from agent_comms.nominal.field_codec import AcpSessionId
-    from agent_comms.projects.checkouts import Checkout
-    from agent_comms.registry.threads import NativeThread
-    from agent_comms.transport.tools.sidebar import CommsRegistrySliceTool
-    from agent_comms.ui_model.observation import UnencodableReply
 
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread("sliced", frozenset(), Checkout(tmp_path)))

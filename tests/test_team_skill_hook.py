@@ -42,12 +42,21 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.rule_probes import Probe
+from agent_comms.registry.heartbeat_delivery import OffHeartbeatDelivery
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import ForkThread, NativeThread
 from agent_comms.storage.recorded_time import RecordedEventTime
-from agent_comms.task_attachments.team_pings import RulePing, TeamDecisions, TeamUpdate
+from agent_comms.task_attachments.team_pings import (
+    AlarmGroup,
+    NewAlarms,
+    ParkedAlarms,
+    RulePing,
+    TeamDecisions,
+    TeamUpdate,
+    TeamUpdateStore,
+)
 from agent_comms.team.package import TeamPackage
 from agent_comms.team.pattern_sources import PostmortemFailure
 from agent_comms.team.rule_deal import (
@@ -73,6 +82,9 @@ from agent_comms.team.standing_rules import (
     ReviewTimerUp,
 )
 from agent_comms.transport.mcp import AnsweredCall
+from agent_comms.transport.tool_caller import ThreadCaller
+from agent_comms.transport.tools.orders import CommsTodoListTool
+from agent_comms.transport.tools.send import CommsSendTool
 from agent_comms.ui_model.teammate_state import AwaitingTeam
 from agent_comms_hooks.board import (
     BoardEntry,
@@ -422,8 +434,6 @@ def test_rules_carrying_his_words_flag_their_board_lines():
 def test_a_tool_call_prints_only_new_rows_naming_its_session(
         notification_bus, tmp_path, monkeypatch):
     """Retained observations and the one Core delivery owner; publication stays muted."""
-    from agent_comms.registry.heartbeat_delivery import OffHeartbeatDelivery
-    from agent_comms.task_attachments.team_pings import TeamUpdateStore
 
     comms = notification_bus
     comms.threads.set_heartbeat_delivery("colleague", OffHeartbeatDelivery)
@@ -475,10 +485,6 @@ def test_a_verb_reply_carries_the_new_rows_naming_its_caller(notification_bus):
     """P1213: a cloud session acting through ``fork`` has no hook that knows its name, so its
     own verbs carry its rows, beside the reply and never inside it: the structured reply stays
     the declared result remote cores decode. A row prints once; a read carries no board."""
-    from agent_comms.task_attachments.team_pings import TeamUpdateStore
-    from agent_comms.transport.tool_caller import ThreadCaller
-    from agent_comms.transport.tools.orders import CommsTodoListTool
-    from agent_comms.transport.tools.send import CommsSendTool
 
     comms = notification_bus
     colleague = comms.registry.require("colleague").incarnation
@@ -514,10 +520,6 @@ def test_a_busy_core_writer_never_fails_a_verb_that_landed(notification_bus):
     never comes back as a failure, and the rows stay unstamped for the next call."""
     import sqlite3
 
-    from agent_comms.coordination.database import CoordinationStore
-    from agent_comms.task_attachments.team_pings import TeamUpdateStore
-    from agent_comms.transport.tool_caller import ThreadCaller
-    from agent_comms.transport.tools.send import CommsSendTool
 
     comms = notification_bus
     colleague = comms.registry.require("colleague").incarnation
@@ -1093,7 +1095,6 @@ def test_turns_that_changed_nothing_are_held_up_against_what_the_session_wrote(
 
 def test_rows_waiting_on_a_stopped_thread_leave_the_main_view():
     """2026-11-04: the Pi units are stopped until Nov 9; their rows filled NEW and STILL OPEN."""
-    from agent_comms.task_attachments.team_pings import AlarmGroup, NewAlarms, ParkedAlarms
 
     since = RecordedEventTime(1.0)
     worker = TeammateSubject(RecordedThreadIncarnation("worker", 1.0))

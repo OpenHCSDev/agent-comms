@@ -34,6 +34,7 @@ from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.execution.persistent_pi_session import PersistentPiSession
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repo import Repo
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
@@ -207,7 +208,6 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
     root, project, config = (tmp_path / name for name in ("wire", "project", "config"))
     root.mkdir(mode=0o700)
     project.mkdir(mode=0o700)
-    from agent_comms.projects.repo import Repo
     Repo.git(project, 'init', '--quiet')
     config.mkdir(mode=0o700)
     session = create_fresh_private_session(tmp_path / "sessions", worktree=project).path

@@ -5,6 +5,8 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.errors import UnknownChannelError, UnregisteredThreadError
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.launch_runtime import ThreadLaunch
 from agent_comms.messaging.channel_targets import CommandTarget, DeclaredTag
 from agent_comms.messaging.channels import AllChannel, BuiltinChannelView
 from agent_comms.messaging.messages import InfoKind, Message
@@ -16,10 +18,10 @@ from agent_comms.registry.thread_text import (
     ForkedParent,
     GivenThreadText,
 )
-from agent_comms.registry.threads import NativeThread
+from agent_comms.registry.threads import NativeThread, current_thread
 from agent_comms.storage.locked_store import RegistryFile
 from bus_history import read_history
-from conftest import installed_comms
+from conftest import declare_test_bus, installed_comms
 
 
 @pytest.fixture
@@ -27,8 +29,6 @@ def chat(comms):
     """ci/docs join the declared tags; PR111 is owned by this actual process."""
     import os
 
-    from agent_comms.execution.child_process import ProcessIdentity
-    from conftest import declare_test_bus
 
     return declare_test_bus(comms, channels=("ci", "docs"), threads=(
         NativeThread('PR111', frozenset({'ci'}), Checkout(Path('/tmp/wt1')), process_identity=ProcessIdentity.capture(os.getpid())),
@@ -191,8 +191,6 @@ class TestPresence:
 
 class TestCurrentThreadEnvironment:
     def test_current_thread_decodes_its_launch_record(self, monkeypatch, tmp_path):
-        from agent_comms.execution.launch_runtime import ThreadLaunch
-        from agent_comms.registry.threads import current_thread
 
         monkeypatch.setenv(ThreadLaunch.variable("name"), "me")
         monkeypatch.setenv(ThreadLaunch.variable("worktree"), str(tmp_path))

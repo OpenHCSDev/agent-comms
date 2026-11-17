@@ -34,6 +34,7 @@ from agent_comms.coordination.attempt_states import (
     SucceededAttempt,
 )
 from agent_comms.coordination.coordinator import StandaloneCoordination
+from agent_comms.coordination.database import ReadableStore
 from agent_comms.coordination.errors import (
     IdentityConflict,
     CoordinationError,
@@ -69,8 +70,12 @@ from agent_comms.coordination.tables.executions import (
 from agent_comms.coordination.tables.publications import (
     PublicationIntents,
 )
+from agent_comms.coordination.tables.recovery import RecoveryAudit
 from agent_comms.execution.selected.source_batch import SelectedSource
 from agent_comms.execution.turn_failure import ProviderRetryExhausted
+from agent_comms.messaging.audience_manifest import freeze_audience
+from agent_comms.messaging.bus import PrivateRecord
+from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, SnapshotExclude
 from agent_comms.storage.typed_table import SQLiteForeignKeys
@@ -79,6 +84,7 @@ from agent_comms.waking.wake_policy import (
     FullWake,
     MessageAudience,
     PassiveWake,
+    WakeDecision,
     WakePolicy,
 )
 from bus_record_fixture import OWNER_LOOKUP, RECIPIENT_LOOKUP, SENDER_LOOKUP, UNRELATED_LOOKUP
@@ -94,11 +100,6 @@ def store(path: Path) -> StandaloneCoordination:
 
 
 def wire_source(db: StandaloneCoordination, assignment_id: AssignmentId, original: Message, mode: WakePolicy) -> SelectedSource:
-    from agent_comms.execution.selected.source_batch import SelectedSource
-    from agent_comms.messaging.audience_manifest import freeze_audience
-    from agent_comms.messaging.bus import PrivateRecord
-    from agent_comms.messaging.frozen_recipient import FrozenRecipient
-    from agent_comms.waking.wake_policy import WakeDecision
 
     audience = freeze_audience(original, (FrozenRecipient(SENDER_LOOKUP, "Owner"),),
                                "0" * 64, sender_lookup=OWNER_LOOKUP,
@@ -160,7 +161,6 @@ def started(db: StandaloneCoordination) -> tuple[str, OwnerFence]:
 
 
 def final_evidence(db: StandaloneCoordination, fence: OwnerFence, pointer_revision: int = 1) -> OwnerFence:
-    from agent_comms.coordination.owner_fence import OwnerFence
 
     assert isinstance(fence, OwnerFence)
     result = db.advance(
@@ -496,7 +496,6 @@ def test_coordinator_family_rebuild_preserves_declared_schema_and_execution(db_p
 
 
 def test_settled_snapshot_encodes_recovery_kind_separately_from_table(db_path: Path) -> None:
-    from agent_comms.coordination.tables.recovery import RecoveryAudit
 
     with store(db_path) as db:
         db.participants.register(SENDER_LOOKUP, committed=True)
@@ -1231,7 +1230,6 @@ def test_public_read_exception_releases_transaction_and_mutators_reuse_it(db_pat
 
 
 def test_observation_rolls_back_failed_reads_and_preserves_schema_disposition(db_path: Path) -> None:
-    from agent_comms.coordination.database import ReadableStore
 
     with store(db_path) as writer:
         writer.participants.register(SENDER_LOOKUP, committed=True)

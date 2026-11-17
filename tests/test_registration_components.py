@@ -21,6 +21,7 @@ from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
 from agent_comms.storage.locked_store import DocumentChange, RegistryFile
+from test_locked_store import assert_writer_excluded
 
 
 def owner(path):
@@ -124,7 +125,6 @@ def test_new_thread_field_has_no_second_registry_decoder_roster(tmp_path, *, thr
 
 @pytest.mark.skipif(os.name != "posix", reason="nonblocking shared flock acceptance")
 def test_current_cut_excludes_writer_and_releases_for_later_metadata(tmp_path):
-    from test_locked_store import assert_writer_excluded
     registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(owner(tmp_path))
     other = RegistryStore(registry.store.path)

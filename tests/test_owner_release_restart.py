@@ -11,6 +11,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.child_process import NoProcess, ProcessIdentity
 from agent_comms.execution.launch_runtime import RestoredRuntime
 from agent_comms.execution.owner_cutover import PreserveOwnerRuntime
 from agent_comms.execution.owner_lifecycle import OwnerLifecycle, OwnerRestartSelection
@@ -58,10 +59,6 @@ def hosted_owner(tmp_path, monkeypatch):
 
 
 def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
-    from agent_comms.execution.child_process import (
-        NoProcess,
-        ProcessIdentity,
-    )
 
     comms = wire(tmp_path / "wire")
     declared = comms.registry.declare(NativeThread('worker', frozenset(), Checkout(tmp_path)))

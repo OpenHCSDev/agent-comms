@@ -23,6 +23,7 @@ from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.pi_wire import PiUsage
 from agent_comms.execution.turn_failure import BackendFailed, FailedTurnResolution
+from agent_comms.execution.turn_item import ProviderResponseId
 from agent_comms.nominal.field_codec import AttemptId, GoalId, MalformedRecord, RetryDecisionId
 from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.planning.attempt_resolution import OperatorStopped, RetryDecision
@@ -341,7 +342,6 @@ def test_provider_reported_responses_are_attributed_once_and_survive_reopen(stor
     second = PiUsage.from_wire(
         {"input": 40, "output": 10, "totalTokens": 50, "cost": {"total": 0.2}})
 
-    from agent_comms.execution.turn_item import ProviderResponseId
 
     first_response, second_response = ProviderResponseId("resp-a"), ProviderResponseId("resp-b")
     permit.record_provider_usage(store, first_response, first)

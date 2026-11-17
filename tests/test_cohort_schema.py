@@ -13,7 +13,9 @@ from agent_comms.coordination.cohort_schema import CohortDeliveries, CohortTable
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.tables.participants import Participants
+from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, ThreadLookup
+from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.storage.typed_table import SQLiteJournalMode
 from bus_record_fixture import OWNER_LOOKUP, RECIPIENT_LOOKUP, SENDER_LOOKUP
 
@@ -285,8 +287,6 @@ def test_delivery_kind_carry_preserves_consistent_rows_and_refuses_disagreement(
 ) -> None:
     from cutover.carry_cohort_delivery_kind import CohortDeliveryKind
 
-    from agent_comms.errors import RelationViolationError
-    from agent_comms.storage.locked_store import LiveFilesRequest
 
     path = CoordinationStore.path_in(private_comms.root)
     with Coordination(str(path)) as store:

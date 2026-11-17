@@ -24,7 +24,10 @@ from agent_comms.registry.thread_status import (
     RunningThreadStatus,
     StoppedThreadStatus,
 )
+from agent_comms.registry.thread_text import ForkedParent
 from agent_comms.registry.threads import NativeThread
+from agent_comms.team.pi_rule_gate import PiRedeal
+from agent_comms.team.rule_deal import StartedDeal
 from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
@@ -85,9 +88,6 @@ def test_external_projection_preserves_event_clocks_or_refuses_unknown(source, s
 def test_check_roots_contain_new_child_allocations_and_actual_rule_publication(
     source: Comms, scratch_root: Path,
 ):
-    from agent_comms.registry.thread_text import ForkedParent
-    from agent_comms.team.pi_rule_gate import PiRedeal
-    from agent_comms.team.rule_deal import StartedDeal
 
     source_policy = source.registry.storage_rule
     scratches = []

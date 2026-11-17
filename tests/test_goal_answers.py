@@ -18,6 +18,7 @@ from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.owned_turn import TurnGoalAccount
 from agent_comms.execution.owner_protocol import OwnerFailure
 from agent_comms.execution.pi_wire import PiUsage
+from agent_comms.execution.turn_item import ProviderResponseId
 from agent_comms.execution.turn_terminal import (
     EndedWithoutResult,
     OperatorStopped,
@@ -86,7 +87,6 @@ def test_clear_during_original_or_origin_turn_does_not_block_missing_goal(
 @pytest.mark.parametrize("clear_goal", [False, True])
 def test_provider_usage_follows_the_declared_goal(copied_goal_bus, original_goal, clear_goal):
     comms = copied_goal_bus
-    from agent_comms.execution.turn_item import ProviderResponseId
 
     response_id = ProviderResponseId("resp-a")
     usage = PiUsage.from_wire({"input": 3, "output": 2, "totalTokens": 5})

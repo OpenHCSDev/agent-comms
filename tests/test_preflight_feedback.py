@@ -1,6 +1,7 @@
 """Failure diagnostics and durable delivery projection remain independent authorities."""
 import pytest
 
+from agent_comms.execution.acp_failure import ACPFailure
 from agent_comms.execution.input_key import AcpInputKey
 from agent_comms.execution.turn_failure import (
     InputIdUnavailable,
@@ -9,8 +10,8 @@ from agent_comms.execution.turn_failure import (
     PromptSendFailed,
 )
 from agent_comms.execution.turn_output import TurnOutput
-from agent_comms.input_attempt import NotSentInput, ReservedInput
-from agent_comms.input_disposition import InputDocument
+from agent_comms.input_attempt import BoundUnknownInput, NotSentInput, ReservedInput, SentInput
+from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.nominal.field_codec import InputId, TurnId
 from stored_inputs import stored_inputs
 
@@ -48,9 +49,6 @@ def test_delivery_projection_requires_complete_homogeneous_actual_rows():
 
 
 def test_post_dispatch_failure_preserves_bound_uncertainty(tmp_path):
-    from agent_comms.execution.acp_failure import ACPFailure
-    from agent_comms.input_attempt import BoundUnknownInput, SentInput
-    from agent_comms.input_disposition import InputDispositions
 
     store = InputDispositions(tmp_path)
     store.record(PARTIAL_WRITE_KEY, seq=None, owner='owner', claim_scope=1,

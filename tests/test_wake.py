@@ -31,7 +31,7 @@ from agent_comms.messaging.wake import (
     resolve_wake,
     resolve_wake_cohort,
 )
-from agent_comms.nominal.field_codec import ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, ThreadLookup
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import (
     AgentThreadRole,
@@ -234,7 +234,6 @@ def test_system_control_must_be_explicit_not_guessed_from_body_or_ack_type() -> 
     assert decide(direct, members=MEMBERS[:1], control=SystemControl) == (
         WakeDecision(SENDER_LOOKUP, MessageAudience.DIRECT, PassiveWake())
     )
-    from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 
     assert FieldCodec.decode(type[MessageControl], "system_control") is SystemControl
     with pytest.raises(MalformedRecord):

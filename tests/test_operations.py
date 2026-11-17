@@ -26,6 +26,7 @@ from agent_comms.messaging.messages import QuestionKind
 from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_counts import PiCount
+from agent_comms.pi_native_backend import PiSessionFile
 from agent_comms.presentation import CountedInbox, CountedRead, UncountedRead
 from agent_comms.projects.checkouts import (
     Checkout,
@@ -436,7 +437,6 @@ class TestLedgerOps:
     def test_recent_transcript_is_bounded_and_ordered(self, wired: Comms, tmp_path: Path) -> None:
         import json
 
-        from agent_comms.pi_native_backend import PiSessionFile
 
         path = tmp_path / "large-session.jsonl"
         with path.open("w") as stream:

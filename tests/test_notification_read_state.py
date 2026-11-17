@@ -21,6 +21,16 @@ from agent_comms.messaging.bus_read import (
 from agent_comms.messaging.bus_read import BusRead, OwnerScopedRead, UiRead
 from agent_comms.messaging.message_notification import NotificationPass
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.notification_progress import (
+    ActiveDelivery,
+    DeliveryRank,
+    SelectedConsumedProgress,
+    SendingProgress,
+    SentProgress,
+    SettledDelivery,
+    ShownToModelProgress,
+    WaitingDelivery,
+)
 from agent_comms.messaging.notification_reads import (
     LiveNotificationRead,
     NotificationRead,
@@ -379,16 +389,6 @@ def test_first_revision_requires_reads_even_for_unchanged_empty_stores():
 
 
 def test_notification_rank_overrides_follow_the_mro_without_changing_parent_ranks():
-    from agent_comms.messaging.notification_progress import (
-        ActiveDelivery,
-        DeliveryRank,
-        SelectedConsumedProgress,
-        SendingProgress,
-        SentProgress,
-        SettledDelivery,
-        ShownToModelProgress,
-        WaitingDelivery,
-    )
 
     assert SentProgress(100).rank() == DeliveryRank.position_of(WaitingDelivery)
     assert ShownToModelProgress(100).rank() == DeliveryRank.position_of(SettledDelivery)

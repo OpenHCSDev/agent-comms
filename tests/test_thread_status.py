@@ -9,9 +9,12 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.cli_verbs.tools import ToolsCliCommand
 from agent_comms.comms import wire
+from agent_comms.coordination.errors import StaleRevision
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.child_process import NoProcess, ProcessIdentity
+from agent_comms.execution.pi_vocabulary import ServiceTier
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.presentation import CountedRead, ThreadView
@@ -19,6 +22,8 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.activity import Activity, ActivityState
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
+from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_presentation import SessionDisconnected
 from agent_comms.registry.thread_status import (
     ArchivedThreadStatus,
     ConnectedThreadStatus,
@@ -34,7 +39,10 @@ from agent_comms.registry.thread_status import (
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread, OwnerLifecycleControl
 from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.transport.request import ToolRequest
 from agent_comms.transport.tool_caller import ThreadCaller
+from agent_comms.transport.tools.served import CommsStartTool, invoke_tool
+from agent_comms.ui_model.status import ThreadStatusModel
 from conftest import installed_comms
 
 
@@ -166,8 +174,6 @@ def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_pat
 
 @pytest.mark.parametrize("status", [StoppedThreadStatus(), ArchivedThreadStatus()])
 def test_inactive_owner_survives_a_refused_viewer(tmp_path, status):
-    from agent_comms.registry.thread_presentation import SessionDisconnected
-    from agent_comms.ui_model.status import ThreadStatusModel
 
     comms = wire(tmp_path)
     comms.registry.register(NativeThread('owner', frozenset(), Checkout(tmp_path)), status)
@@ -201,10 +207,6 @@ def test_presence_owns_roster_membership_and_self_rename(status, listed, rename)
 
 @pytest.mark.parametrize("status", [RunningThreadStatus(), IdleThreadStatus()])
 def test_tier_only_tool_changes_next_catalog_without_changing_active_request(tmp_path, status):
-    from agent_comms.cli_verbs.tools import ToolsCliCommand
-    from agent_comms.execution.pi_vocabulary import ServiceTier
-    from agent_comms.registry.thread_model import DeclaredModel
-    from agent_comms.transport.tools.served import invoke_tool
 
     comms = wire(tmp_path)
     comms.registry.declare(NativeThread("colleague", frozenset(), Checkout(tmp_path)))
@@ -235,9 +237,6 @@ def test_tier_only_tool_changes_next_catalog_without_changing_active_request(tmp
 
 
 def test_roster_and_controls_keep_archived_threads_dormant():
-    from agent_comms.execution.child_process import NoProcess
-    from agent_comms.transport.request import ToolRequest
-    from agent_comms.transport.tools.served import CommsStartTool
 
     archived = ArchivedThreadStatus()
     assert archived.restored() == archived
@@ -252,7 +251,6 @@ def test_roster_and_controls_keep_archived_threads_dormant():
 
 
 def test_batch_source_rename_keeps_the_original_registry_fence(comms):
-    from agent_comms.coordination.errors import StaleRevision
 
     comms.registry.register(
         NativeThread('alpha', frozenset(), Checkout(comms.root), process_identity=ProcessIdentity.capture(os.getpid())),

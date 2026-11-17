@@ -6,13 +6,24 @@ from unittest.mock import patch
 
 import pytest
 
+from agent_comms.coordination.errors import StaleFence
+from agent_comms.errors import RelationViolationError
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.presence import PresenceChange, PresenceRows
 from agent_comms.registry.registration import Registration
-from agent_comms.registry.registry_document import InvalidRegistryDocument
+from agent_comms.registry.registry_document import (
+    InvalidRegistryDocument,
+    RegistryDocument,
+    StoredThreadRow,
+    ThreadRows,
+)
 from agent_comms.registry.registry_store import RegistryStore
-from agent_comms.registry.registry_tables import EditTables, RegistryRowStore
+from agent_comms.registry.registry_tables import EditTables, RegistryRowStore, RegistryThreads
+from agent_comms.registry.thread_creation import CreationIdentityCollisionError
+from agent_comms.registry.thread_identity import UserThreadRole
 from agent_comms.registry.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.row_mapping import RowMapping
@@ -95,7 +106,6 @@ def test_retained_registry_keeps_wal_rows_and_revision_ignores_checkpoints(tmp_p
     lambda store: store.snapshot_with_authority(),
 ])
 def test_dependent_selection_refuses_changed_authority_without_repeating_its_effect(tmp_path, select):
-    from agent_comms.coordination.errors import StaleFence
 
     registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread("worker", frozenset(), Checkout(tmp_path)))
@@ -115,7 +125,6 @@ def test_dependent_selection_refuses_changed_authority_without_repeating_its_eff
 def test_an_entry_fence_ignores_other_threads_writes_but_not_its_own(tmp_path):
     # A start that clears its own triage input fences on its own entry: heartbeats of
     # every other live owner used to stale the whole-registry cut before it could write.
-    from agent_comms.coordination.errors import StaleFence
 
     registry = Registration(RegistryFile.path_in(tmp_path))
     registry.register(NativeThread("worker", frozenset(), Checkout(tmp_path)))
@@ -134,9 +143,6 @@ def test_an_entry_fence_ignores_other_threads_writes_but_not_its_own(tmp_path):
             pass
 
 def test_missing_registry_version_is_rejected_without_rewriting_the_file(tmp_path):
-    from agent_comms.errors import RelationViolationError
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry.registry_document import RegistryDocument
 
     path = RegistryFile.path_in(tmp_path)
     raw = FieldCodec.encode(RegistryDocument())
@@ -164,7 +170,6 @@ def test_malformed_replacement_never_serves_stale_success(tmp_path):
 
 
 def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
-    from agent_comms.registry.registry_document import RegistryDocument
 
     path = RegistryFile.path_in(tmp_path)
     writer = Registration(path)
@@ -215,7 +220,6 @@ def thread_rows_wire(tmp_path):
 
 @pytest.mark.parametrize("view", [lambda rows: rows, lambda rows: rows.copy(), lambda rows: rows.freeze()])
 def test_reading_thread_rows_reuses_their_existing_wire_values(thread_rows_wire, view):
-    from agent_comms.registry.registry_document import ThreadRows
 
     wire = thread_rows_wire
     rows = view(ThreadRows.from_wire(wire))
@@ -229,9 +233,6 @@ def test_reading_thread_rows_reuses_their_existing_wire_values(thread_rows_wire,
 def test_assigning_and_removing_thread_rows_changes_only_the_written_rows(thread_rows_wire):
     from dataclasses import replace
 
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry.registry_document import ThreadRows
-    from agent_comms.registry.thread_text import GivenThreadText
 
     wire = thread_rows_wire
     rows = ThreadRows.from_wire(wire)
@@ -245,8 +246,6 @@ def test_assigning_and_removing_thread_rows_changes_only_the_written_rows(thread
 
 
 def test_thread_rows_keep_their_owned_wire_form_at_the_codec_boundary(thread_rows_wire, monkeypatch):
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry.registry_document import StoredThreadRow, ThreadRows
 
     def decoded(_row):
         raise AssertionError("encoding stored thread rows decoded a declaration")
@@ -256,8 +255,6 @@ def test_thread_rows_keep_their_owned_wire_form_at_the_codec_boundary(thread_row
 
 
 def test_popping_a_thread_row_does_not_remove_it_when_decoding_fails(thread_rows_wire):
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry.registry_document import ThreadRows
 
     malformed = {**thread_rows_wire["first"], FieldCodec.record_key(Thread, "tags"): 42}
     rows = ThreadRows.from_wire({"first": malformed})
@@ -270,8 +267,6 @@ def test_popping_a_thread_row_does_not_remove_it_when_decoding_fails(thread_rows
 def test_thread_row_copies_share_decodes_without_sharing_writes(thread_rows_wire):
     from dataclasses import replace
 
-    from agent_comms.registry.registry_document import ThreadRows
-    from agent_comms.registry.thread_text import GivenThreadText
 
     rows = ThreadRows.from_wire(thread_rows_wire)
     edit, frozen = rows.copy(), rows.freeze()
@@ -292,8 +287,6 @@ def test_thread_row_copies_share_decodes_without_sharing_writes(thread_rows_wire
 def test_birth_index_survives_copies_rename_and_removal_without_a_row_walk(thread_rows_wire, monkeypatch):
     from dataclasses import replace
 
-    from agent_comms.registry.registry_document import ThreadRows
-    from agent_comms.registry.thread_creation import CreationIdentityCollisionError
 
     rows = ThreadRows.from_wire(thread_rows_wire)
     first, second = rows["first"], rows["second"]
@@ -326,7 +319,6 @@ def test_birth_index_survives_copies_rename_and_removal_without_a_row_walk(threa
 def test_birth_errors_stay_local_and_a_row_replacement_repairs_the_index(thread_rows_wire):
     from dataclasses import replace
 
-    from agent_comms.registry.registry_document import ThreadRows
 
     rows = ThreadRows.from_wire({"bad": {"name": "bad", "not": "a thread"}})
     with pytest.raises(InvalidRegistryDocument):
@@ -340,10 +332,6 @@ def test_birth_errors_stay_local_and_a_row_replacement_repairs_the_index(thread_
 def test_captures_and_row_commits_visit_only_changed_keys(tmp_path, monkeypatch):
     from dataclasses import replace
 
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry.registry_tables import RegistryThreads
-    from agent_comms.registry.thread_text import GivenThreadText
-    from agent_comms.storage.row_mapping import RowMapping
 
     registry = Registration(RegistryFile.path_in(tmp_path))
     for name in ("first", "second"):
@@ -369,7 +357,6 @@ def test_captures_and_row_commits_visit_only_changed_keys(tmp_path, monkeypatch)
 
 
 def test_a_changed_revision_is_checked_as_a_whole(tmp_path):
-    from agent_comms.errors import RelationViolationError
 
     path = RegistryFile.path_in(tmp_path)
     registry = Registration(path)
@@ -391,7 +378,6 @@ def test_a_changed_revision_is_checked_as_a_whole(tmp_path):
 
 
 def test_a_reused_revision_still_finds_its_user_thread(tmp_path):
-    from agent_comms.registry.thread_identity import UserThreadRole
 
     path = RegistryFile.path_in(tmp_path)
     writer = Registration(path)

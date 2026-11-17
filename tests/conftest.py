@@ -30,17 +30,26 @@ import fixture_git  # noqa: F401
 import goal_owner_fixture
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import Comms, wire
+from agent_comms.coordination.cohort import sealed_cohort_assignments
+from agent_comms.coordination.cohort_foreground import AcceptsDeliveries
+from agent_comms.execution.child_process import SystemdUserManager
 from agent_comms.execution.cursor_publication import CursorDelivery
+from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.launch_runtime import LaunchRuntime, RestartEnvironment
-from agent_comms.execution.native_entries import NativeEvidenceScope, SessionEntry
+from agent_comms.execution.native_entries import MessageEntry, NativeEvidenceScope, SessionEntry
+from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.pi_durable_backend import PiDurableBackend
+from agent_comms.execution.turn_failure import TurnFailure
+from agent_comms.installer.deal_prompt import DealPrompt
+from agent_comms.installer.logs import InstallLogs
 from agent_comms.installer.native_package import (
     VerifiedNativePackage,
     pinned_location,
     pinned_native_package,
 )
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
-from agent_comms.installer.runtime_resolution import RuntimeResolution
+from agent_comms.installer.probes.packages import CommitRecord, GitRecord, PackageRecord
+from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
 from agent_comms.messaging.bus import Bus, BusRecord
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.channel_targets import CommandTarget
@@ -53,10 +62,13 @@ from agent_comms.messaging.messages import (
     MessageRole,
 )
 from agent_comms.messaging.publisher import InitialWrites, ParticipantPublisher
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec, RecordedTimestamp
 from agent_comms.pi_payloads import PiMessage
+from agent_comms.planning.goal_attempts import GoalAttemptStore
+from agent_comms.planning.goal_ledger import FailedTurnEvidence
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_model import DeclaredModel
@@ -69,7 +81,7 @@ from agent_comms.storage.maintenance_barrier import (
     MaintenanceHolder,
     MaintenanceOperator,
 )
-from agent_comms.storage.typed_table import TypedTable
+from agent_comms.storage.typed_table import TypedTable, sql_literal
 from agent_comms.team.order import Team
 from agent_comms.team.pi_rule_gate import PiRedeal, PiRuleGate
 from agent_comms.team.rule_deal import ReadSpan, RuleDeal, SessionAudit, StartedDeal
@@ -79,8 +91,10 @@ from agent_comms.transport.tool_caller import PeerCaller
 from agent_comms.ui_model.observation import LocalRouteObservation, ObservationProcess
 from agent_comms.transport.tool_declaration import NoToolRecord, ToolDeclaration
 from agent_comms_hooks.watch import WatchRecord
+from bus_record_fixture import prepare_native_comms
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
+from worker_hosts import TestWorkerHosts
 
 pytest_plugins = (goal_owner_fixture.__name__, "github_fixture", "owner_socket_fixture", "pytest_session")
 
@@ -89,7 +103,6 @@ class TranscriptRecords:
     """Fixed test time, projected through each record's declared constructor."""
 
     def __init__(self) -> None:
-        from agent_comms.nominal.field_codec import RecordedTimestamp
 
         self.timestamp = RecordedTimestamp("2026-10-01T00:00:00.000Z")
 
@@ -100,16 +113,12 @@ class TranscriptRecords:
         return declaration(timestamp=self.timestamp, **facts)
 
     def message(self, payload: dict[str, JsonValue], **coordinates: JsonValue) -> dict[str, JsonValue]:
-        from agent_comms.execution.native_entries import MessageEntry
-        from agent_comms.pi_payloads import PiMessage
 
         entry = self.entry(MessageEntry, message=PiMessage.from_wire(payload), **coordinates)
         encoded = FieldCodec.decode(dict[str, JsonValue], entry.to_wire())
         return {**encoded, "message": payload}
 
     def session(self, id: str, **coordinates: JsonValue) -> SessionEntry:
-        from agent_comms.execution.native_entries import SessionEntry
-        from agent_comms.execution.native_session_reopen import PiSessionId
 
         return self.entry(SessionEntry, id=FieldCodec.decode(PiSessionId, id), **coordinates)
 
@@ -196,8 +205,6 @@ def accept_initial(bus: MessageBus, root_id: str, seq: int, store) -> tuple:
     """
     from concurrent.futures import ThreadPoolExecutor
 
-    from agent_comms.coordination.cohort import sealed_cohort_assignments
-    from agent_comms.coordination.cohort_foreground import AcceptsDeliveries
 
     recipients = bus.bus.delivery(seq).recipients
     if recipients:
@@ -247,7 +254,6 @@ def pytest_sessionstart(session: pytest.Session) -> None:
             f"toad's bin/toad-test-env --agent-comms {root}, or `uv pip install -e {root}`.")
     if session.config.option.collectonly:
         return
-    from agent_comms.projects.checkouts import Checkout
 
     Checkout(Path(__file__).resolve().parents[1]).prepare()
 
@@ -288,7 +294,6 @@ def manager_socket(tmp_path: Path):
 def user_manager(manager_socket: Path, monkeypatch: pytest.MonkeyPatch):
     """Admit a private manager socket through the real selection boundary. Only the OS
     account record is substituted; no Core manager method is replaced."""
-    from agent_comms.execution.child_process import SystemdUserManager
 
     account = pwd.getpwuid(os.getuid())
     monkeypatch.setattr(pwd, "getpwuid", lambda uid: pwd.struct_passwd(
@@ -310,7 +315,6 @@ def durable_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def source_reads() -> Iterator[NativeEvidenceScope]:
-    from agent_comms.execution.native_entries import NativeEvidenceScope
 
     with NativeEvidenceScope() as scope:
         yield scope
@@ -318,7 +322,6 @@ def source_reads() -> Iterator[NativeEvidenceScope]:
 
 @pytest.fixture
 def cursor_delivery(source_reads: NativeEvidenceScope) -> CursorDelivery:
-    from agent_comms.execution.cursor_publication import CursorDelivery
 
     return CursorDelivery(source_reads=source_reads)
 
@@ -382,8 +385,6 @@ def test_uv(monkeypatch: pytest.MonkeyPatch) -> Path:
 @pytest.fixture(scope="session")
 def native_runtime_package(pinned_native: Path) -> VerifiedNativePackage:
     """The running interpreter's artifact, qualified by the real installer before tests."""
-    from agent_comms.installer.deal_prompt import DealPrompt
-    from agent_comms.installer.native_package import VerifiedNativePackage
 
     package = VerifiedNativePackage.qualify(pinned_native)
     DealPrompt.prepare()
@@ -396,7 +397,6 @@ def _test_worker_hosts_stop_with_the_test(request: pytest.FixtureRequest) -> Ite
     if "tmp_path" not in request.fixturenames:
         yield
         return
-    from worker_hosts import TestWorkerHosts
 
     hosts = TestWorkerHosts(request.getfixturevalue("tmp_path"))
     yield
@@ -406,7 +406,6 @@ def _test_worker_hosts_stop_with_the_test(request: pytest.FixtureRequest) -> Ite
 @pytest.fixture(autouse=True)
 def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
     """A test borrows neither a live owner nor the developer's credential directories."""
-    from agent_comms.execution.launch_root import LaunchRoot
 
     with LaunchRoot.unstarted().selected():
         for name in _MANAGED_RUNTIME_ENVIRONMENT:
@@ -436,7 +435,6 @@ def without_mutation_guards(db: sqlite3.Connection, table: type[TypedTable]) -> 
 @pytest.fixture
 def scratch_root(durable_home: Path) -> Path:
     """The test's own agent-scratch, derived from the storage rule under the test's HOME."""
-    from agent_comms.projects.storage_rules import StorageRule
 
     root = StorageRule().scratch_base / "pytest" / "check-root"
     root.mkdir(parents=True)
@@ -460,12 +458,9 @@ def private_directory() -> Iterator[Path]:
 @pytest.fixture
 def private_comms(private_directory: Path) -> Iterator[Comms]:
     """Install one isolated SQLite bus; native consumers acquire their own package."""
-    from bus_record_fixture import prepare_native_comms
 
     root = private_directory / "wire"
     comms = prepare_native_comms(wire(root))
-    from agent_comms.execution.launch_root import LaunchRoot
-    from agent_comms.installer.logs import InstallLogs
 
     try:
         with LaunchRoot.from_path(root).selected():
@@ -482,8 +477,6 @@ def root(tmp_path: Path) -> Path:
 @pytest.fixture
 def configured_repository(durable_home: Path, github_cli) -> Callable[[Comms, *tuple[Repo, ...]], Team]:
     """Declare the temporary colleague on its bus and use its real plan-bearing checkout."""
-    from agent_comms.projects.repo import Repo
-    from agent_comms.team.order import Team
 
     repository = Repo.of(Path(__file__).resolve().parents[1])
 
@@ -511,9 +504,6 @@ def installed_runtime(
     durable_home: Path, tmp_path: Path, interpreter_build: RecordedInterpreterBuild,
 ) -> LaunchRuntime:
     """A temporary installation record, executable and pointer, never the real home."""
-    from agent_comms.installer.probes.packages import CommitRecord, GitRecord, PackageRecord
-    from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
-    from agent_comms.projects.repo import Repo
 
     repository = Repo.of(Path(__file__).resolve().parents[1])
     packages = {}
@@ -536,7 +526,6 @@ def record_installed_runtime(runtime: Path, resolution: RuntimeResolution) -> La
     A later record re-points the pointer, as a reinstall does, so fixtures that each install
     a build can share one HOME.
     """
-    from agent_comms.execution.launch_runtime import LaunchRuntime
 
     (runtime / 'bin').mkdir(parents=True)
     (runtime / 'bin/python').symlink_to(sys.executable)
@@ -577,10 +566,6 @@ def ledger_one_failure_short(root: Path) -> Path:
     install must carry before any opening accepts it."""
     from contextlib import closing
 
-    from agent_comms.execution.turn_failure import TurnFailure
-    from agent_comms.planning.goal_ledger import FailedTurnEvidence
-    from agent_comms.planning.goal_attempts import GoalAttemptStore
-    from agent_comms.storage.typed_table import sql_literal
 
     directory = root / GoalAttemptStore.root_directory
     directory.mkdir(mode=0o700)
@@ -598,7 +583,6 @@ def ledger_one_failure_short(root: Path) -> Path:
 def installed_comms(root: Path) -> Comms:
     """A root as the installer leaves it: its bus exists before any reader opens it. A test
     bus of a few megabytes declares no storage floor; tests of the floor declare their own."""
-    from agent_comms.projects.storage_rules import StorageRule
 
     Bus.install(Bus.path_in(root))
     StorageRule(floor_gib=0).prepare_isolated(root)
@@ -618,7 +602,6 @@ def bus(tmp_path: Path) -> Bus:
 
 @pytest.fixture
 def thread_registration(tmp_path_factory: pytest.TempPathFactory) -> Registration:
-    from agent_comms.registry.registration import Registration
     return Registration(RegistryFile.path_in(tmp_path_factory.mktemp('thread-registration')))
 
 

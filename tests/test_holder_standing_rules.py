@@ -58,7 +58,11 @@ from agent_comms.nominal.field_codec import (
     TurnId,
 )
 from agent_comms.planning.goal_actions import (
+    ActiveGoalAction,
+    ChokeholdPausedGoalAction,
+    CompliedGoalAction,
     CreateProblemGoalAction,
+    OwnerInvocable,
     ReissuedOrderGoalAction,
     SetGoalAction,
 )
@@ -82,6 +86,7 @@ from agent_comms.planning.orders import (
     ReleaseTodo,
     ResumeClaimOrder,
     TodoConflict,
+    WithdrawTodo,
 )
 from agent_comms.planning.owner_requests import NewestOpenRequest, RequestDirective
 from agent_comms.planning.problem_findings import ExpectedProblem
@@ -108,7 +113,7 @@ from agent_comms.team.standing import (
 from agent_comms.team.standing_rules import OwedAnswer, StandingRule
 from agent_comms.team.team_heartbeat import TeamHeartbeat
 from agent_comms.team.team_hud import TeamFrame
-from agent_comms.team.vibe_check import ChokeholdUnanswered, VibeCheckUnanswered
+from agent_comms.team.vibe_check import ChokeholdUnanswered, VibeCheck, VibeCheckUnanswered
 from agent_comms.transport.connector import ConnectorSendTool
 from agent_comms.transport.connector_caller import DirectorCaller
 from agent_comms.transport.tool_caller import ForkCaller, NoThreadCaller, PeerCaller, ThreadCaller
@@ -779,7 +784,6 @@ def test_a_refusal_lists_the_asks_still_inside_their_answer_window(held_bus, tmp
 def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
     """The board already states an owed answer and locks the verbs on it; a vibe check saying it
     again on a second channel restated one fact, so no degraded sign carries it."""
-    from agent_comms.team.vibe_check import VibeCheck
 
     ask = publish(held_bus, "worker", "colleague", time.time() - AwaitingTeam.seconds - 1)
     frame = capture_frame(held_bus, ProgressRead())
@@ -1211,12 +1215,6 @@ async def test_a_compliant_answer_resumes_a_held_teammate_whose_attempt_was_inte
     """A held teammate whose last attempt failed refuses a status-only resume; the chokehold's
     release continues its generation the way a fresh order does, so one such teammate neither stays
     paused nor stops the release of the others (the heartbeat died on it, 2026-10-21 22:43)."""
-    from agent_comms.planning.goal_actions import (
-        ActiveGoalAction,
-        ChokeholdPausedGoalAction,
-        CompliedGoalAction,
-        OwnerInvocable,
-    )
 
     await blocked_holder(held_bus, goal_turn_owners)
     held_bus.goals.update_goal("worker", ChokeholdPausedGoalAction())
@@ -1230,13 +1228,6 @@ async def test_a_compliant_answer_resumes_a_held_teammate_whose_attempt_was_inte
 def test_a_compliant_answer_resumes_a_held_teammate_whose_problems_closed_during_the_hold(held_bus):
     """The heartbeat died on every pass from 13:08 on 2026-10-24: a teammate whose problems were
     withdrawn while the chokehold held it refused the release, so no teammate after it resumed."""
-    from agent_comms.planning.goal_actions import (
-        ChokeholdPausedGoalAction,
-        CompliedGoalAction,
-        OwnerInvocable,
-    )
-    from agent_comms.planning.order_words import StrikeReason
-    from agent_comms.planning.orders import ReleaseTodo, WithdrawTodo
 
     held_bus.goals.update_goal("worker", ChokeholdPausedGoalAction())
     colleague = held_bus.registry.require("colleague").incarnation

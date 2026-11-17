@@ -18,6 +18,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.locked_store import SQLiteFile
+from journal_binding_cases import concurrent_bindings
 
 
 @pytest.mark.parametrize('error,expected', [
@@ -137,7 +138,6 @@ print('opened', flush=True)
 @pytest.mark.parametrize('conflicting', [False, True])
 def test_concurrent_initial_binding_preserves_one_identity(
         tmp_path, conflicting, bus):
-    from journal_binding_cases import concurrent_bindings
 
     first = Binding(root=str(tmp_path), owner=RecordedThreadIncarnation('viewer', 1.0),
                     thread='external-session', start=Binding.bus_head(str(tmp_path)))

@@ -2,10 +2,15 @@
 
 import socket
 
+from agent_comms.messaging.message_notification import (
+    CapturedNotificationWindow,
+    NoNotificationWindow,
+)
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.ui_model.observation import (
     ObservationService,
     ObserveSidebar,
+    ReadAnswered,
     ServiceEnd,
     SidebarResult,
     ViewerEnd,
@@ -33,11 +38,6 @@ async def test_sidebar_interest_and_its_answer_cross_the_encoded_channel(comms):
 
 def test_every_read_answer_crosses_the_encoded_channel_as_itself() -> None:
     """A read answers with a declared member, so the viewer receives the same answer."""
-    from agent_comms.messaging.message_notification import (
-        CapturedNotificationWindow,
-        NoNotificationWindow,
-    )
-    from agent_comms.ui_model.observation import ReadAnswered
 
     service_socket, viewer_socket = socket.socketpair()
     with ServiceEnd(service_socket.detach()) as service_end, ViewerEnd(viewer_socket.detach()) as viewer:

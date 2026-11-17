@@ -7,12 +7,15 @@ import pytest
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.execution.channel_coding_tools import CodingToolSocket
+from agent_comms.execution.queued_input import InitialInput
 from agent_comms.execution.selected.tool_broker import verify_sent_full_input
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.transport.native_tool_call import AwaitingClaim, ExecutingCall, SelectedToolBusy
 from agent_comms.transport.native_tools import NativeToolDeclaration
 from agent_comms.transport.tool_denial import SelectedToolDenied
 from agent_comms_hooks import ToolRefusedError
+from conftest import answer_rules
+from native_backend_fixture import native_backend_fixture
 
 
 def reply(error: Exception) -> str:
@@ -78,9 +81,6 @@ async def test_owned_native_edit_of_a_missing_file_returns_the_refusal(
     import asyncio
     import json
 
-    from agent_comms.execution.queued_input import InitialInput
-    from conftest import answer_rules
-    from native_backend_fixture import native_backend_fixture
 
     async with native_backend_fixture(tmp_path, package=native_runtime_package) as saved:
         await saved.author_history()

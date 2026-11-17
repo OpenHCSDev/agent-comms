@@ -11,6 +11,8 @@ from acp.schema import TextContentBlock
 
 import agent_comms.agent_events as events
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
+from agent_comms.comms import wire
+from agent_comms.execution.acp import CommsClient
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
@@ -47,8 +49,6 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(
     # The real private boundary disallows volatile or symlinked roots.
     import tempfile
 
-    from agent_comms.execution.acp import CommsClient
-    from agent_comms.comms import wire
 
     with tempfile.TemporaryDirectory(prefix="l0b-headless-", dir="/var/tmp") as owned:
         base = Path(owned)

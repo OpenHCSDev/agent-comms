@@ -12,6 +12,7 @@ from yarl import URL
 
 from agent_comms.nominal.field_codec import FieldCodec, RootId
 from agent_comms.transport.connector_profile import (
+    MCP_PATH,
     BearerSecret,
     HttpsMcpEndpoint,
     UiConnectionProfile,
@@ -98,7 +99,6 @@ def test_a_held_profile_pointing_anywhere_but_mcp_is_not_openable(tmp_path, monk
     """
     import time
 
-    from agent_comms.transport.connector_profile import MCP_PATH
 
     monkeypatch.setattr(HeldUiProfiles, "directory", classmethod(lambda cls: tmp_path))
     live = time.time() + 3600

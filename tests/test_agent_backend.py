@@ -12,7 +12,11 @@ from types import SimpleNamespace
 import pytest
 
 import agent_comms.agent_backend as ab
-from agent_comms.execution.native_arguments import NativeArguments
+from agent_comms.errors import RelationViolationError
+from agent_comms.execution.acp import CommsAgent
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.native_arguments import GivenArguments, GivenBinary, NativeArguments
+from agent_comms.execution.persistent_pi_session import PersistentPiSession
 from agent_comms.execution.pi_durable_backend import PiDurableBackend
 from agent_comms.execution.session_file import NoSessionFile, RegistrySessionLocation
 from agent_comms.execution.turn_inbox import (
@@ -242,11 +246,6 @@ def test_cli_registry_reads_do_not_load_the_pi_runtime(tmp_path):
 
 @pytest.mark.asyncio
 async def test_runner_obtains_one_backend_per_session_from_the_thread_declaration(comms):
-    from agent_comms.execution.acp import CommsAgent
-    from agent_comms.errors import RelationViolationError
-    from agent_comms.execution.child_process import ProcessIdentity
-    from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
-    from agent_comms.execution.persistent_pi_session import PersistentPiSession
 
     agent = CommsAgent(
         comms, auto_wake=False, agent_bin=GivenBinary("pi"),

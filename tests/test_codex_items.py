@@ -5,23 +5,49 @@ from agent_comms.cli_bridges.codex_protocol import (
     BusClientId,
     BusInput,
     ForeignClientId,
+    FunctionOutputItem,
+    ItemEntry,
     ItemsPage,
+    ItemStream,
     NoClientId,
+    ResumedThread,
+    RpcNotification,
+    SendOutputItem,
+    TextInput,
+    ToolText,
     UserItem,
 )
+from agent_comms.cli_bridges.runtime_updates import (
+    ActiveItem,
+    DraftItem,
+    FinishedItem,
+    FinishedTurn,
+    RuntimeUpdate,
+    TextDraft,
+    ThreadOutput,
+    TurnEnded,
+    TurnStarted,
+)
+from agent_comms.comms import wire
 from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
+from agent_comms.execution.turn_phase import ModelWaitPhase, ToolRunningPhase
 from agent_comms.nominal.field_codec import MessageId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread
-from agent_comms.transcript.transcript_events import UserTranscript
+from agent_comms.storage.recorded_time import UnrecordedEventTime
+from agent_comms.transcript.transcript_events import (
+    AssistantTranscript,
+    ToolEndTranscript,
+    ToolStartTranscript,
+    UserTranscript,
+)
+from agent_comms.transport.native_tools import BashTool
 
 
 def _output(tmp_path):
-    from agent_comms.cli_bridges.runtime_updates import ThreadOutput
-    from agent_comms.comms import wire
 
     comms = wire(tmp_path)
     comms.registry.declare(ExternalThread('cli', frozenset(), Checkout(tmp_path)))
@@ -68,19 +94,6 @@ def test_client_id_boundary_retains_its_member_through_item_use(wire, decoded):
 
 def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
     t1_turn_id = NativeTurnId('t1')
-    from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
-    from agent_comms.cli_bridges.runtime_updates import (
-        ActiveItem,
-        FinishedItem,
-        FinishedTurn,
-        TurnStarted,
-    )
-    from agent_comms.execution.turn_phase import (
-        ModelWaitPhase,
-        ToolRunningPhase,
-    )
-    from agent_comms.transcript.transcript_events import ToolEndTranscript, ToolStartTranscript
-    from agent_comms.transport.native_tools import BashTool
 
     stream = ItemStream("th")
     output = _output(tmp_path)
@@ -131,8 +144,6 @@ def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
 
 
 def test_attaching_reports_the_status_codex_gives_its_thread():
-    from agent_comms.cli_bridges.codex_protocol import ResumedThread
-    from agent_comms.cli_bridges.runtime_updates import TurnEnded, TurnStarted
 
     def resumed(status):
         return ResumedThread.model_validate({"thread": {"id": "th", "status": status}})
@@ -142,8 +153,6 @@ def test_attaching_reports_the_status_codex_gives_its_thread():
 
 
 def test_deltas_require_start_and_finish_retires_the_assembly(tmp_path):
-    from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
-    from agent_comms.transcript.transcript_events import AssistantTranscript
 
     stream = ItemStream("th")
     output = _output(tmp_path)
@@ -174,15 +183,6 @@ def test_deltas_require_start_and_finish_retires_the_assembly(tmp_path):
 
 def test_coalescing_preserves_completion_and_unrelated_updates():
     t_turn_id = NativeTurnId('t')
-    from agent_comms.cli_bridges.runtime_updates import (
-        DraftItem,
-        FinishedItem,
-        RuntimeUpdate,
-        TextDraft,
-        TurnEnded,
-    )
-    from agent_comms.storage.recorded_time import UnrecordedEventTime
-    from agent_comms.transcript.transcript_events import AssistantTranscript
 
     first = DraftItem(
         t_turn_id,
@@ -212,14 +212,6 @@ def test_coalescing_preserves_completion_and_unrelated_updates():
 
 def test_function_outputs_keep_wire_fields_and_source_clocks_in_page_and_live_decoding(tmp_path):
     turn_turn_id = NativeTurnId('turn')
-    from agent_comms.cli_bridges.codex_protocol import (
-        FunctionOutputItem,
-        ItemStream,
-        RpcNotification,
-        SendOutputItem,
-    )
-    from agent_comms.cli_bridges.runtime_updates import FinishedItem
-    from agent_comms.transcript.transcript_events import ToolEndTranscript
 
     for name, item_type in (("comms_send", SendOutputItem), ("other_tool", FunctionOutputItem)):
         payload = {"type": "functionCallOutput", "id": "out", "name": name, "output": "result"}
@@ -276,7 +268,6 @@ def test_function_output_names_remain_required_and_strict():
 
 
 def test_shared_tool_input_and_text_display_preserve_external_shapes():
-    from agent_comms.cli_bridges.codex_protocol import ItemEntry, TextInput, ToolText
 
     assert TextInput(text="visible").display == ToolText(text="visible").display == "visible"
     for payload in (

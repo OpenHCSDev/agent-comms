@@ -6,6 +6,7 @@ import sqlite3
 
 import pytest
 
+from agent_comms.cli_verbs.cli_commands import ThreadCreatedResult
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import (
     NoProcess,
@@ -25,7 +26,6 @@ def test_process_field_keeps_null_or_exact_record(process, wire):
 
 @pytest.mark.parametrize("process", [NoProcess(), ProcessIdentity(123, 456)])
 def test_thread_creation_result_carries_the_process_state(process):
-    from agent_comms.cli_verbs.cli_commands import ThreadCreatedResult
 
     result = ThreadCreatedResult("worker", process)
     assert FieldCodec.decode(ThreadCreatedResult, FieldCodec.encode(result)) == result

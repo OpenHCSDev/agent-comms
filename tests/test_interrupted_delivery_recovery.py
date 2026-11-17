@@ -11,6 +11,7 @@ from agent_comms.coordination.assignment_states import DeferredAssignment, FullP
 from agent_comms.coordination.cohort import pending_sealed_assignments
 from agent_comms.coordination.cohort_foreground import AcceptsDeliveries
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.execution.queued_input import DeliveredInput
 from agent_comms.input_attempt import NotSentInput
 from agent_comms.nominal.field_codec import InputId, TurnId
@@ -112,7 +113,6 @@ async def test_empty_delivery_recovery_does_not_wait_for_sql_writer(tmp_path):
 
 
 async def test_recovery_without_paused_assignments_is_read_only(tmp_path):
-    from agent_comms.coordination.database import CoordinationStore
 
     comms, agent, root_id, session_id = _session(tmp_path)
     owner = comms.registry.require("beta")

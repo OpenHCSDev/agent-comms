@@ -63,6 +63,7 @@ from agent_comms.planning.problem_findings import ExpectedProblem
 from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.projects.change_report import FileLine
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.slop import (
     DeclarationDerivation,
     DeleteCopyDerivation,
@@ -87,6 +88,7 @@ from agent_comms.transport.tools.orders import (
 from agent_comms.transport.tools.served import CommsHistoryTool
 from agent_comms_hooks import ToolRefusedError
 from test_held_problem_orders import merge_two_commit_fix
+from test_holder_standing_rules import publish
 from test_todos import order, thread
 
 pytest_plugins = ("test_held_problem_orders",)
@@ -143,7 +145,6 @@ def test_delivery_report_refuses_a_flat_status_memo():
 
 def test_a_delivery_records_the_repository_its_pull_request_lives_in(held_team):
     """An order in one repo can be delivered by a pull request in another (Core order, Textual PR)."""
-    from agent_comms.projects.repository_name import RepositoryName
 
     ctx = held_team
     comms = ctx.comms
@@ -835,7 +836,6 @@ def test_closed_problem_refuses_a_check_correction_and_writes_nothing(held_team)
 
 
 def test_say_without_answers_answers_the_targets_open_asks(held_team, capsys):
-    from test_holder_standing_rules import publish
 
     ctx = held_team
     comms = ctx.comms

@@ -1,5 +1,26 @@
 """A thread's context menu crosses the connector as its own records."""
 
+from agent_comms.cli_verbs.cli_commands import (
+    TagRenamedResult,
+    TargetReadResult,
+    ThreadArchivedResult,
+    ThreadPinnedResult,
+    ThreadStoppedResult,
+    ThreadTagsResult,
+    ViewDeletedResult,
+)
+from agent_comms.cli_verbs.cli_result import TargetEditResult
+from agent_comms.cli_verbs.read_target import ReadTargetCliCommand
+from agent_comms.comms import wire
+from agent_comms.execution.owner_lifecycle import OwnerStartResult
+from agent_comms.messaging.channel_management import TagChangeResult
+from agent_comms.messaging.channels import Channel
+from agent_comms.transport.tools.sidebar import (
+    CommsPrepareTargetActionTool,
+    CommsTargetActionsTool,
+    CommsTargetEditTool,
+    TargetActionsRead,
+)
 from conftest import ui_core_read
 from pathlib import Path
 
@@ -9,6 +30,7 @@ from agent_comms.cli_verbs.archive import ArchiveCliCommand
 from agent_comms.cli_verbs.cli_command import (
     PreparedTargetAction,
     TargetAction,
+    TargetBatchResult,
     TargetEdit,
     TargetSelection,
 )
@@ -57,20 +79,6 @@ def test_a_prepared_action_offers_the_choices_it_was_prepared_with():
 
 
 def test_every_action_result_crosses_by_shape_and_keeps_its_cli_form():
-    from agent_comms.cli_verbs.cli_command import TargetBatchResult
-    from agent_comms.cli_verbs.cli_commands import (
-        TagRenamedResult,
-        TargetReadResult,
-        ThreadArchivedResult,
-        ThreadPinnedResult,
-        ThreadStoppedResult,
-        ThreadTagsResult,
-        ViewDeletedResult,
-    )
-    from agent_comms.cli_verbs.cli_result import TargetEditResult
-    from agent_comms.execution.owner_lifecycle import OwnerStartResult
-    from agent_comms.messaging.channel_management import TagChangeResult
-    from agent_comms.messaging.channels import Channel
 
     answer = TargetEditResult | Channel
     for result in (ThreadStoppedResult("w"), ThreadArchivedResult("w"),
@@ -85,15 +93,6 @@ def test_every_action_result_crosses_by_shape_and_keeps_its_cli_form():
 def test_a_ui_lists_and_applies_a_menu_action_through_core(tmp_path):
     """A channel's menu and its edit go through the same core.call a remote UI sends, and both
     answers arrive as themselves."""
-    from agent_comms.cli_verbs.cli_result import TargetEditResult
-    from agent_comms.cli_verbs.read_target import ReadTargetCliCommand
-    from agent_comms.comms import wire
-    from agent_comms.messaging.channels import Channel
-    from agent_comms.transport.tools.sidebar import (
-        CommsTargetActionsTool,
-        CommsTargetEditTool,
-        TargetActionsRead,
-    )
 
     comms = wire(tmp_path / "wire")
     project = Checkout(tmp_path)
@@ -112,11 +111,6 @@ def test_a_ui_lists_and_applies_a_menu_action_through_core(tmp_path):
 
 def test_an_opened_action_is_prepared_through_core(tmp_path):
     """Opening an action, or editing it, asks Core for the choices it offers."""
-    from agent_comms.comms import wire
-    from agent_comms.transport.tools.sidebar import (
-    CommsPrepareTargetActionTool,
-    CommsTargetActionsTool,
-)
 
     comms = wire(tmp_path / "wire")
     project = Checkout(tmp_path)

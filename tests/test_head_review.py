@@ -91,6 +91,7 @@ from agent_comms.task_attachments.team_pings import (
 from agent_comms.team import judge, order
 from agent_comms.team.publication_rules import ClosedUnmergedPullRequest
 from agent_comms.team.standing_rules import (
+    ChurningPullRequest,
     HeadReviewTimerUp,
     IdlePullRequest,
     LinkedUnreviewedHead,
@@ -1552,8 +1553,6 @@ def test_a_request_still_red_a_day_after_it_opened_churns_however_often_it_moved
     reads its age from when it opened, and only a red required check counts."""
     import math
 
-    from agent_comms.planning.pull_requests import FailedCheckMergeBlock
-    from agent_comms.team.standing_rules import ChurningPullRequest
 
     now = time.time()
     pushed = datetime.fromtimestamp(now - 60, UTC).strftime('%Y-%m-%dT%H:%M:%SZ')

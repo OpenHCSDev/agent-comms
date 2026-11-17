@@ -6,6 +6,10 @@ import os
 
 import pytest
 
+from agent_comms.coordination.attempt_start import AttemptStart
+from agent_comms.coordination.attempt_states import SucceededAttempt
+from agent_comms.coordination.owner_fence import prepare_fence_token
+from agent_comms.coordination.tables.executions import AcpOrigin
 from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
 from agent_comms.comms import wire
@@ -19,6 +23,7 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.tool_caller import ThreadCaller
 from bus_record_fixture import prepare_native_comms
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from test_coordination_store import final_evidence
 
 tmp_path = private_root_fixture
 
@@ -54,11 +59,6 @@ def cursor_envelope(metadata):
 
 @pytest.mark.parametrize("managed", [False, True])
 def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, managed):
-    from agent_comms.coordination.attempt_start import AttemptStart
-    from agent_comms.coordination.attempt_states import SucceededAttempt
-    from agent_comms.coordination.owner_fence import prepare_fence_token
-    from agent_comms.coordination.tables.executions import AcpOrigin
-    from test_coordination_store import final_evidence
 
     comms, _ = _private_comms(tmp_path)
     lookup = comms.registry.require("beta").incarnation.lookup

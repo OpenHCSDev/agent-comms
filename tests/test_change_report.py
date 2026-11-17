@@ -20,6 +20,7 @@ from agent_comms.messaging.messages import (
     QuestionKind,
 )
 from agent_comms.messaging.read_basis import NamedViewer
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.projects.change_report import ChangedFact, ChangeReport, FileLine, OrderRoots
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repository_name import RepositoryName
@@ -135,7 +136,6 @@ class TestChangeReportKind:
         )
 
     def test_missing_fields_are_named_in_the_refusal(self):
-        from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 
         with pytest.raises(MalformedRecord):
             FieldCodec.decode(ChangeReport, {"branch": "main"})
@@ -164,7 +164,6 @@ class TestKindDeclarations:
             stored.report.require_references_exist(OrderRoots(Path(), NoTeamProject()))
 
     def test_kind_selector_resolves_once(self):
-        from agent_comms.nominal.field_codec import FieldCodec
 
         assert MessageKind.member_named("change-report") is ChangeReportKind
         assert FieldCodec.decode(type[MessageKind], "alert") is AlertKind

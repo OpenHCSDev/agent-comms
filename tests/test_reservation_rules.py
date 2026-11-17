@@ -7,7 +7,12 @@ import pytest
 from agent_comms.execution.input_key import AcpInputKey
 from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
-from agent_comms.execution.session_revision import SessionRevision
+from agent_comms.execution.session_revision import (
+    MissingInputProofRevision,
+    PresentInputProofRevision,
+    SessionRevision,
+    SessionRevisionUnavailable,
+)
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.nominal.field_codec import FieldCodec, InputId, TurnId
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
@@ -20,11 +25,6 @@ SECOND_KEY = AcpInputKey(InputId.mint())
 def test_session_observation_preserves_source_and_distinguishes_unreadable_proof(tmp_path):
     import sqlite3
 
-    from agent_comms.execution.session_revision import (
-        MissingInputProofRevision,
-        PresentInputProofRevision,
-        SessionRevisionUnavailable,
-    )
 
     session = tmp_path / "session.jsonl"
     session.write_text("{}\n")

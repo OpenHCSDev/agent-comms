@@ -4,6 +4,8 @@ import os
 import subprocess
 import sys
 
+from agent_comms.execution.worker import OWNER_NICENESS
+
 
 def _priority_after_lowering(start: int) -> int:
     script = (
@@ -18,7 +20,6 @@ def _priority_after_lowering(start: int) -> int:
 
 
 def test_owner_lowers_its_priority_to_background():
-    from agent_comms.execution.worker import OWNER_NICENESS
 
     assert _priority_after_lowering(0) == OWNER_NICENESS
 

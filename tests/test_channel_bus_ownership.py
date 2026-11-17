@@ -4,10 +4,14 @@ from contextlib import AsyncExitStack
 from dataclasses import replace
 
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.acp import CommsAgent
+from agent_comms.execution.owned_turn import OwnedTurn
 from agent_comms.execution.turn_input_source import NoTurnAcceptance
 from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_evidence import AllOutcomes
 from agent_comms.messaging.notification_progress import SentProgress
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.waking.wake_policy import BoundedTriageWake
 from bus_history import read_history
@@ -43,8 +47,6 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
 def test_channel_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa: F811
     import json
 
-    from agent_comms.messaging.message_reference import MessageReference
-    from agent_comms.nominal.field_codec import FieldCodec
 
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
     observer = comms.registry.require("alpha")
@@ -71,9 +73,6 @@ def test_channel_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
 async def test_natural_owned_turn_prepares_observer_pointer_without_native_start(
     tmp_path, native_runtime_package,
 ):  # noqa: F811
-    from agent_comms.execution.acp import CommsAgent
-    from agent_comms.execution.owned_turn import OwnedTurn
-    from agent_comms.nominal.field_codec import AcpSessionId
     
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
     agent = CommsAgent(comms, auto_wake=False)

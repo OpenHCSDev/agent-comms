@@ -10,6 +10,7 @@ from agent_comms.coordination.assignment_states import (
     FullPendingAssignment,
     TriagePendingAssignment,
 )
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.tables.executions import NoPointedExecution
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.errors import RelationViolationError
@@ -30,7 +31,7 @@ from agent_comms.registry.thread_status import (
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
 from bus_record_fixture import prepare_native_comms
-from conftest import installed_comms
+from conftest import accept_initial, installed_comms
 
 
 def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity(tmp_path):
@@ -132,8 +133,6 @@ def test_catalog_restore_preserves_current_preferences_and_historical_channels(t
 def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     tmp_path, repair_existing
 ):
-    from agent_comms.coordination.coordinator import Coordination
-    from conftest import accept_initial
 
     old, current = wire(tmp_path / "old"), prepare_native_comms(wire(tmp_path / "current"))
     live = NativeThread('live', frozenset({'comms'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
@@ -192,7 +191,6 @@ def test_public_restoration_declares_participant_without_native_authority(tmp_pa
     old, current = wire(tmp_path / "old"), wire(tmp_path / "current")
     old.registry.declare(NativeThread('missing', frozenset({'comms'}), Checkout(tmp_path)))
     assert current.registry.restore_stopped(old.registry.snapshot(), ("missing",)) == ("missing",)
-    from agent_comms.coordination.coordinator import Coordination
     with Coordination(str(current.root / "coordination.sqlite3")) as store:
         assert store.participants.get(current.registry.require("missing").incarnation.lookup).committed
     assert not current.registry.store.rows.namespace()

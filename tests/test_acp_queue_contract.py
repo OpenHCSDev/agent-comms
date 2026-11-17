@@ -9,12 +9,15 @@ import pytest
 from acp import RequestError
 from acp.schema import TextContentBlock
 
+from agent_comms.channel_input_batch import SingleInputBatch
 from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import (
+    AvailableQueueProjection,
     IdentifiedInputStarted,
     InputDeliveryChangedUpdate,
     LiveQueueScope,
     QueueChangedUpdate,
+    QueueItem,
     QueuePromptRequest,
     SteerPromptRequest,
     UnavailableQueueProjection,
@@ -26,12 +29,21 @@ from agent_comms.acp_extension import (
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.execution.input_key import AcpInputKey
-from agent_comms.execution.queued_input import QueuedInput, QueuedInputContext
+from agent_comms.execution.input_key import AcpInputKey, BusInputKey
+from agent_comms.execution.queued_input import AcceptedTurn, QueuedInput, QueuedInputContext
 from agent_comms.execution.runtime import present_session
 from agent_comms.execution.transcript_routes import NoDisplayText
-from agent_comms.input_attempt import ReservedInput
+from agent_comms.execution.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
+from agent_comms.execution.turn_inbox import ClearQueuedInputs, SendNow
+from agent_comms.execution.turn_input_source import (
+    NoInputDependency,
+    NoTurnAcceptance,
+    OwnerOriginalInput,
+    RoutedOriginalInput,
+)
+from agent_comms.input_attempt import ReservedInput, StartedInput
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId, TurnId
+from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import (
     ClaimedIdentity,
@@ -156,11 +168,6 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
     (17, "x" * 4096),
 ], ids=["long-unicode", "many-inputs", "large-total"])
 async def test_queue_preview_preserves_long_input_identity_body_and_actions(tmp_path, count, text):
-    from agent_comms.acp_extension import AvailableQueueProjection, QueueItem
-    from agent_comms.execution.turn_inbox import (
-        ClearQueuedInputs,
-        SendNow,
-    )
 
     agent, inbox = held_owner(tmp_path)
     requests = [QueuePromptRequest(text) for _ in range(count)]
@@ -233,21 +240,6 @@ async def test_ending_a_drained_session_leaves_no_state_for_it(tmp_path):
 
 
 async def test_original_queued_and_routed_starts_own_their_input_identity(tmp_path):
-    from agent_comms.channel_input_batch import SingleInputBatch
-    from agent_comms.execution.input_key import BusInputKey
-    from agent_comms.execution.queued_input import AcceptedTurn
-    from agent_comms.execution.turn_goal_permission import (
-        InactiveGoalPermission,
-        TurnGoalPermission,
-    )
-    from agent_comms.execution.turn_input_source import (
-        NoInputDependency,
-        NoTurnAcceptance,
-        OwnerOriginalInput,
-        RoutedOriginalInput,
-    )
-    from agent_comms.input_attempt import StartedInput
-    from agent_comms.nominal.text_digest import TextDigest
 
     _, agent, incarnation, generation = _owner(tmp_path)
     input_id, native_id = InputId.mint(), InputId.mint()

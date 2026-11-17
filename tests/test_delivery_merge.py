@@ -21,6 +21,7 @@ from agent_comms.planning.pull_requests import (
     PullRequestCommit,
     UnmergedDeliveryMerge,
 )
+from agent_comms.projects.work_branches import WorkBranches
 
 
 def test_delivery_integration_members_keep_their_data_through_the_only_codec():
@@ -61,7 +62,6 @@ def test_pr_merge_record_requires_both_the_source_head_and_checked_merge():
 
 
 def test_draft_query_row_preserves_membership_without_review_or_git_reads(tmp_path):
-    from agent_comms.projects.work_branches import WorkBranches
 
     original = DraftListedPullRequest(44, 'fix/draft', 'c' * 40,
         updated='2026-10-19T12:00:01Z', base='main',

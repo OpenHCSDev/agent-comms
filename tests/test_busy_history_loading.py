@@ -15,13 +15,18 @@ from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import UnrecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
-from agent_comms.transport.tools.reads import TranscriptPageRead
+from agent_comms.transport.tools.reads import OwnerGoalRead, TranscriptPageRead
 from agent_comms.ui_model.observation import (
     LocalRouteObservation,
+    NothingAnswered,
     ObservationProcess,
+    ObservationService,
     ReadBusy,
     ReadNotifications,
+    ReadOwnerOperation,
+    ReadRefused,
     ReadTranscript,
+    RevisionObserved,
 )
 
 
@@ -161,7 +166,6 @@ def test_observer_start_failure_releases_both_real_pipe_endpoints(comms, monkeyp
 def test_viewer_reset_with_unread_observations_ends_the_service(comms):
     import multiprocessing
 
-    from agent_comms.ui_model.observation import ObservationService, RevisionObserved
 
     connection, viewer = multiprocessing.get_context("spawn").Pipe()
     with connection, viewer:
@@ -175,7 +179,6 @@ def test_viewer_reset_with_unread_observations_ends_the_service(comms):
 async def test_peer_write_failure_retires_once_and_cancels_owner_reads(comms):
     import multiprocessing
 
-    from agent_comms.ui_model.observation import NothingAnswered, ObservationService, ReadRefused
 
     connection, viewer = multiprocessing.get_context("spawn").Pipe()
     with connection, viewer:
@@ -198,8 +201,6 @@ async def test_peer_write_failure_retires_once_and_cancels_owner_reads(comms):
 async def test_owner_reply_uses_the_same_peer_retirement(comms):
     import multiprocessing
 
-    from agent_comms.transport.tools.reads import OwnerGoalRead
-    from agent_comms.ui_model.observation import ObservationService, ReadOwnerOperation
 
     connection, viewer = multiprocessing.get_context("spawn").Pipe()
     with connection, viewer:
@@ -228,7 +229,6 @@ async def test_awaited_notifications_then_immediate_close_retires_successfully(c
 def test_local_pipe_corruption_is_not_peer_retirement(comms):
     import multiprocessing
 
-    from agent_comms.ui_model.observation import NothingAnswered, ObservationService, ReadRefused
 
     connection, viewer = multiprocessing.get_context("spawn").Pipe()
     with connection, viewer:

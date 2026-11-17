@@ -30,24 +30,37 @@ from agent_comms.coordination.cohort_schema import (
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.coordination.response import prepare_fenced_response, publish_fenced_response
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.errors import RelationViolationError
+from agent_comms.messaging.audience_manifest import freeze_audience
+from agent_comms.messaging.bus import PrivateRecord
 from agent_comms.messaging.exporting import (
     ChannelScope,
     FullLimit,
     JsonlFormat,
 )
+from agent_comms.messaging.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.message_page import PageBounds
 from agent_comms.messaging.messages import InfoKind, Message
+from agent_comms.messaging.wake import OrdinaryControl
 from agent_comms.nominal.field_codec import AssignmentId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, UserThreadRole
 from agent_comms.registry.thread_status import ArchivedThreadStatus
 from agent_comms.registry.threads import NativeThread
-from agent_comms.waking.wake_policy import BoundedTriageWake, FullWake, MessageAudience
+from agent_comms.waking.wake_policy import (
+    BoundedTriageWake,
+    FullWake,
+    MessageAudience,
+    NoWakeDecision,
+    WakeDecision,
+)
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
 from conftest import accept_initial, declare_test_bus, publish_initial
+from test_coordination_response import _ready
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="private initial bus requires POSIX owner/directory durability"
@@ -231,12 +244,6 @@ def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Pat
 
 def test_no_wake_observer_cannot_gain_legacy_claim_after_seal(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
-    from agent_comms.messaging.audience_manifest import freeze_audience
-    from agent_comms.messaging.bus import PrivateRecord
-    from agent_comms.messaging.frozen_recipient import FrozenRecipient
-    from agent_comms.messaging.mentions import ThreadMention
-    from agent_comms.messaging.wake import OrdinaryControl
-    from agent_comms.waking.wake_policy import NoWakeDecision, WakeDecision
 
     # A historical committed cohort retains its no-wake decision after an upgrade.
     sent = comms.bus.bus.append(lambda seq, db: PrivateRecord.from_message(
@@ -274,8 +281,6 @@ def test_wrong_native_namespace_rejected_before_sql(tmp_path: Path) -> None:
 
 
 def test_keyed_response_replay_after_initial_row_and_receipt_backed_page(tmp_path: Path) -> None:
-    from agent_comms.coordination.response import prepare_fenced_response, publish_fenced_response
-    from test_coordination_response import _ready
 
     case = _ready(tmp_path, direct=True)
     try:

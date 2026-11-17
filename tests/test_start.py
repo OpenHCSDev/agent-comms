@@ -13,6 +13,7 @@ from agent_comms.projects.shell_effects import AllocateStorageEffect
 from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.owner_connection import socket_path
 from agent_comms.transport.tool_caller import NoThreadCaller
 from agent_comms.transport.tool_denial import StorageDenied
 from agent_comms.transport.tools.served import invoke_tool
@@ -20,7 +21,6 @@ from agent_comms.transport.tools.served import invoke_tool
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner fixture")
 async def test_real_stopped_owner_with_large_checkout_starts_through_shared_agent_tool(tmp_path, monkeypatch, pinned_native):
-    from agent_comms.transport.owner_connection import socket_path
 
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "pi")

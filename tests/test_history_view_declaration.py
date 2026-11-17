@@ -6,7 +6,9 @@ from agent_comms.messaging.read_basis import ChannelDisplayScope, NoDisplaySelec
 from agent_comms.nominal.field_codec import TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.typed_table import TypedRow
 from conftest import installed_comms
+from test_coordinated_runtime import _root
 
 
 class ReviewHistory(HistoryView):
@@ -48,7 +50,6 @@ def test_new_history_case_owns_both_source_interpretations_without_reader_dispat
 
 
 def test_viewer_snapshot_exposes_actual_active_channel_participant(tmp_path):
-    from test_coordinated_runtime import _root
 
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     lease = comms.agents.begin_turn("beta", TurnId('2863939642c6213365179d5204d162ce')).turn_lease
@@ -67,7 +68,6 @@ def test_joined_declarations_decode_one_sql_snapshot_and_reject_foreign_columns(
 
     import pytest
 
-    from agent_comms.storage.typed_table import TypedRow
 
     @dataclass(frozen=True)
     class Label(TypedRow):

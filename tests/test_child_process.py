@@ -15,18 +15,22 @@ from pathlib import Path
 
 import pytest
 
+import agent_comms
 from agent_comms.execution.child_process import (
     STOP_GRACE_SECONDS,
     AttachedChild,
     BoundedRun,
     ChildOutcome,
     ChildRetirementFailed,
+    DetachedExitOutcome,
     DiesWithLauncherLifetime,
     ExitedOutcome,
+    FailedToStartOutcome,
     ForcedStopOutcome,
     GroupMember,
     IdentityMismatchError,
     ObservedProcess,
+    ParentLifeline,
     Platform,
     ProcessIdentity,
     ResidentManager,
@@ -199,7 +203,6 @@ def test_synchronous_run_collects_both_streams_and_returncode(tmp_path: Path) ->
 
 
 def test_child_imports_the_checkout_its_parent_imported(tmp_path: Path) -> None:
-    import agent_comms
 
     # No inherited import path: only the owner can point the child at this checkout,
     # not the editable install's .pth, which may name another worktree.
@@ -229,7 +232,6 @@ def test_grandchild_import_path_holds_one_copy_of_the_checkout(tmp_path: Path) -
         (sys.executable, "-c", report), timeout=60, cwd=tmp_path, env=environment
     )
     assert result.returncode == 0, result.stderr
-    import agent_comms
 
     root = str(Path(agent_comms.__file__).resolve().parents[1])
     assert result.stdout.decode().strip().split(os.pathsep).count(root) == 1
@@ -364,7 +366,6 @@ def test_new_outcome_is_derived_and_field_encoded() -> None:
 
 @pytest.mark.asyncio
 async def test_exec_failure_is_reported_by_real_exec_boundary(tmp_path: Path) -> None:
-    from agent_comms.execution.child_process import FailedToStartOutcome
 
     result = await BoundedRun.run((str(tmp_path / "missing-executable"),), timeout=2)
     assert isinstance(result.outcome, FailedToStartOutcome)
@@ -374,7 +375,6 @@ async def test_exec_failure_is_reported_by_real_exec_boundary(tmp_path: Path) ->
 async def test_parent_lifeline_loss_releases_real_sqlite_reader(tmp_path: Path) -> None:
     import sqlite3
 
-    from agent_comms.execution.child_process import ParentLifeline
 
     if sys.platform == "win32":
         pytest.skip("Recovery gateway uses POSIX peer sockets and inherited descriptors")
@@ -585,7 +585,6 @@ async def test_discard_stderr_drains_past_transport_capacity_to_real_eof():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("exit_delay", (.1, STOP_GRACE_SECONDS + .1))
 async def test_parent_process_reaps_but_observation_cannot_claim_exit_code(exit_delay: float) -> None:
-    from agent_comms.execution.child_process import DetachedExitOutcome
 
     child = SpawnedProcess.launch((sys.executable, "-c",
                                   "import sys,time; time.sleep(float(sys.argv[1])); sys.exit(7)",

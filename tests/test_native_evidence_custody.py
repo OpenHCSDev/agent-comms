@@ -149,7 +149,6 @@ def test_physical_lock_budget_closes_refused_descriptor(tmp_path):
 def test_consumer_work_cannot_spend_physical_lock_resource(tmp_path):
     import time
 
-    from agent_comms.storage.store_files import StoreLockContention, _store_lock
     resource = StoreLockContention(.025)
     with _store_lock(tmp_path / 'first', ExclusiveLock(), resource):
         time.sleep(.04)

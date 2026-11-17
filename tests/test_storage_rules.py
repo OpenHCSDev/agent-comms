@@ -10,6 +10,7 @@ from typing import Annotated
 
 import pytest
 
+from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.cli_verbs.cli_commands import AddCheckoutOperation
 from agent_comms.cli_verbs.goal_checkout import GoalCheckoutCliCommand
 from agent_comms.cli_verbs.select_checkout import SelectCheckoutCliCommand
@@ -819,7 +820,6 @@ def test_a_thread_writes_its_own_linked_worktree_without_a_goal_or_order(
 def test_the_read_path_is_a_declared_verb_not_a_clone():
     """`git clone` was refused under every path, so a reader concluded another repository could
     not be read at all; the team project already holds those checkouts and nothing named it."""
-    from agent_comms.cli_verbs.cli_command import CliCommand
 
     command = CliCommand.member_named('repositories')
     assert command.declared_name == 'repositories'

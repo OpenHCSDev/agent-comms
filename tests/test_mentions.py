@@ -19,7 +19,8 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
-from agent_comms.transport.tool_caller import NoThreadCaller
+from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.transport.tools.served import invoke_tool
 from bus_history import read_history
 from conftest import installed_comms
 
@@ -182,7 +183,6 @@ def test_completion_uses_the_model_syntax_at_the_cursor():
 
 
 def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
-    from agent_comms.messaging.messages import AlertKind
 
     comms = installed_comms(tmp_path)
     for name in ("sender", "owner"):
@@ -199,7 +199,6 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
 def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch):
     from functools import partial
 
-    from agent_comms.transport.tool_caller import ThreadCaller
     from agent_comms.transport.tools.served import invoke_tool
 
     invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
@@ -230,7 +229,6 @@ def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch)
 
 
 def test_targeted_inbox_returns_mentions_and_advances_only_own_cursor(comms, tmp_path):
-    from agent_comms.transport.tools.served import invoke_tool
 
     for name in ("alpha", "beta"):
         comms.registry.declare(NativeThread(name, frozenset({'team'}), Checkout(tmp_path)))
@@ -250,7 +248,6 @@ def test_targeted_inbox_returns_mentions_and_advances_only_own_cursor(comms, tmp
 def test_inbox_rejects_an_empty_target(tmp_path):
     import pytest
 
-    from agent_comms.transport.tools.served import invoke_tool
 
     comms = wire(tmp_path)
     comms.registry.declare(NativeThread('beta', frozenset({'team'}), Checkout(tmp_path)))
