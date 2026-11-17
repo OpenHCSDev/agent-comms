@@ -747,10 +747,10 @@ class RuleGateSettings(ConfigurationRecord):
     required_reads: Annotated[type[RuleCheckPolicy], RegisteredClassChoices(RuleCheckPolicy),
                               Description("Require reading the supplied rules and papers")] = RequiredRuleCheckPolicy
     audit: Annotated[type[RuleCheckPolicy], RegisteredClassChoices(RuleCheckPolicy),
-                     Description("Require a written audit; off keeps rules, papers and refreshes")] = RequiredRuleCheckPolicy
+                     Description("Require a written audit; off keeps rules, papers and refreshes")] = OffRuleCheckPolicy
     audit_confirmation: Annotated[type[RuleCheckPolicy], RegisteredClassChoices(RuleCheckPolicy),
                                   WireName("confirmation"),
-                            Description("Ask did you mean it after an audit; ignored when audit is off")] = RequiredRuleCheckPolicy
+                            Description("Ask did you mean it after an audit; ignored when audit is off")] = OffRuleCheckPolicy
     read_batch: Annotated[int, Ge(1),
                           Description("Files opened together before answering the audit")] = 5
     owner_prompts: Annotated[int, Ge(1),
