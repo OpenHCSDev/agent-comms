@@ -881,7 +881,12 @@ async def test_team_page_reads_each_beats_frame_and_nothing_between(notification
     async def observed() -> tuple[TeamHudObserved, ...]:
         """One service pass, as run takes it: the service advances its own revision, and the
         board it prepares off the pass (in the task group only run enters) is awaited. The
-        pass's other results, such as RevisionObserved, are not the team page's."""
+        pass's other results, such as RevisionObserved, are not the team page's. Like run, a
+        pass clears the due flag it answers, and a new revision is adopted only once the
+        observer's gap since the last settled pass has passed."""
+        loop = asyncio.get_running_loop()
+        await asyncio.sleep(max(0.0, service.settled_at + service.observe_gap - loop.time()))
+        service.observe_due = False
         await service.observe(set())
         reading, = service.interest.observations.values()
         await asyncio.gather(*reading.preparation)
