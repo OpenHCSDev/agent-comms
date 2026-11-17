@@ -30,13 +30,21 @@ from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import Thread
 
 
-@dataclass(frozen=True, slots=True)
-class GoalWaitReview:
-    """The existing registry, turn and wait observed before reading reply history."""
+@dataclass(frozen=True, kw_only=True)
+class OwnerWaitRead:
+    """A registry snapshot, the goal owner's thread in it, and that goal's wait, read together."""
+
+    __slots__ = ()
 
     snapshot: RegistrySnapshot
     owner: Thread
     wait: GoalWait
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GoalWaitReview(OwnerWaitRead):
+    """The existing registry, turn and wait observed before reading reply history."""
+
     turn: TurnLease
 
     @staticmethod
