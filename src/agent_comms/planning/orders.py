@@ -4601,7 +4601,7 @@ class DroppedVerdict(GitSettledVerdict):
 
 
 @dataclass(frozen=True)
-class SendBackVerdict(ToolCallVerdict, CitedStrike, StoryEvent):
+class SendBackVerdict(ToolCallVerdict, CitedStrike):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
 

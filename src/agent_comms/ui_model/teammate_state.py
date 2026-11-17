@@ -448,7 +448,7 @@ class AwaitingTeam(NeedsTeamAttention, TeammateState, declared_name="awaiting_te
         )
 
 
-class Stuck(NeedsTeamAttention, PendingWorkState, TeammateState):
+class Stuck(NeedsTeamAttention, PendingWorkState):
     seconds: ClassVar[int] = 20 * 60
     question = "is it doing work, or letting work accumulate?"
     action = "inspect its last turn and restart only known-safe work"
@@ -467,7 +467,7 @@ class Stuck(NeedsTeamAttention, PendingWorkState, TeammateState):
         )
 
 
-class Spinning(NeedsTeamAttention, PendingWorkState, TeammateState):
+class Spinning(NeedsTeamAttention, PendingWorkState):
     question = "same failure again. why would the next rerun be different?"
     action = "read the failed approach and change it before another rerun"
 
@@ -493,7 +493,7 @@ class Spinning(NeedsTeamAttention, PendingWorkState, TeammateState):
         )
 
 
-class StalledOnNothing(NeedsTeamAttention, PendingWorkState, TeammateState):
+class StalledOnNothing(NeedsTeamAttention, PendingWorkState):
     question = "its turn ended with nothing queued. stalled on what, exactly?"
     action = "resume its work or give it the missing next step"
 
@@ -506,7 +506,7 @@ class StalledOnNothing(NeedsTeamAttention, PendingWorkState, TeammateState):
         )
 
 
-class ReviewDue(UrgentPresentation, ConditionalState, TeammateState):
+class ReviewDue(UrgentPresentation, ConditionalState):
     """The frame's review rounds require the teammate even while the unit keeps working."""
 
     question = "its review timer is up. what did it actually do?"
@@ -517,7 +517,7 @@ class ReviewDue(UrgentPresentation, ConditionalState, TeammateState):
         return bool(source.review_timers)
 
 
-class DeliveredUnclosed(ReadyForApplication, NeedsTeamAttention, ConditionalState, TeammateState):
+class DeliveredUnclosed(ReadyForApplication, NeedsTeamAttention, ConditionalState):
     question = "delivered and still open. why isn't it closed?"
     action = "install the merge or close with the working application evidence"
 
@@ -554,7 +554,7 @@ class AwaitingApplicationRun(
             yield cls(source.thread.incarnation, awaiting, source.presence, source)
 
 
-class Moving(ConditionalState, TeammateState):
+class Moving(ConditionalState):
     hud_group = InProgressGroup
     question = "it's moving. toward the order, or somewhere else?"
     action = "let it continue"
@@ -564,7 +564,7 @@ class Moving(ConditionalState, TeammateState):
         return bool(source.todos)
 
 
-class Idle(ConditionalState, TeammateState):
+class Idle(ConditionalState):
     question = "nothing to do. why is it idle?"
     action = "give it the next useful order"
 
