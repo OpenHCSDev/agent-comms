@@ -39,6 +39,7 @@ from agent_comms.storage.typed_table import (
     SharedFileTables,
     StoreRows,
     TableSchema,
+    TablesDeclareSchema,
     TypedTable,
 )
 
@@ -387,16 +388,10 @@ class PresenceHeader(PresenceTables, TypedTable):
     revision: Annotated[int, Column(check="revision > 0")]
 
 
-class RegistryFamily(SharedFileTables, DurableTables):
+class RegistryFamily(TablesDeclareSchema, SharedFileTables, DurableTables):
     """One table family beside the registry's rows in its file, judged apart from them and
     from each other: a change to one family's schema never refuses a reader of another, and
     a new registry file creates every member."""
-
-    tables: ClassVar[type[StoreRows]]
-
-    @classmethod
-    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
-        return TypedTable.members_with(cls.tables)
 
 
 class PresenceSchema(RegistryFamily):

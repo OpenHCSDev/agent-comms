@@ -89,11 +89,18 @@ class GrantLifetime:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ExpiringGrant(GrantLifetime):
+class ExpiresAt:
+    """Good until a wall-clock time: live while that time is still ahead."""
+
     expires_at: float
 
     def live(self, now: float) -> bool:
         return self.expires_at > now
+
+
+@dataclass(frozen=True, kw_only=True)
+class ExpiringGrant(ExpiresAt, GrantLifetime):
+    pass
 
 
 @dataclass(frozen=True)
