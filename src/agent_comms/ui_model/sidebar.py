@@ -63,6 +63,17 @@ class ThreadRowModel(ThreadReferenceIdentity):
         return self.status.with_disconnection(
             self, lambda: replace(self, label=shown.label, summary=shown.summary, status=status))
 
+    def tooltip(self, *, pinned: bool = False, pending_detail: str | None = None) -> str:
+        """The thread's hover tooltip: name, current detail, unread detail, pin, model texts.
+        Both backends ask this method; before it existed, the TUI assembled the same lines
+        inline at the row widget while Qt showed only the title."""
+        detail = pending_detail if pending_detail is not None else self.summary
+        lines: list[str | None] = [self.name, detail, self.unread.detail]
+        if pinned:
+            lines.append("Pinned in this channel")
+        lines.extend(self.model.texts())
+        return "\n".join(line for line in lines if line)
+
     @classmethod
     def of(cls, person: ThreadView, unread: UnreadPresentation) -> ThreadRowModel:
         presentation = person.presentation
