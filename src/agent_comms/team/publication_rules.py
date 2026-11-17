@@ -10,7 +10,6 @@ from agent_comms.heartbeat_subjects import HeartbeatSubject, UnlandedHeadSubject
 from agent_comms.nominal.field_codec import PathText
 from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.projects.checkouts import UnpushedHead
-from agent_comms.projects.head_review import PullRequestHead
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.work_branches import CommitBase, WorkBranches
 from agent_comms.team.standing_rules import (
@@ -80,7 +79,6 @@ class EmptyPullRequest(HeldOrderBranchRule):
 class ClosedUnmergedPullRequest(HeadLine, DatedStandingRule):
     """Closing a request does not land its patches or authorize throwing them away."""
 
-    request: PullRequestHead
     closed_at: float
     commits: tuple[str, ...]
     base: CommitBase

@@ -59,7 +59,6 @@ from agent_comms.planning.owner_requests import OwnerRequestId
 from agent_comms.planning.plan_phase_base import PlanPhase
 from agent_comms.planning.plan_reading import PlanReading
 from agent_comms.planning.work_dispatch import ReusedWorkDispatch, WorkDispatch
-from agent_comms.projects.head_review import PullRequestHead
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.registry.registry_document import RegistrySnapshot
@@ -431,7 +430,6 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
     only the verdicts its claimed order takes, the same as every linked head line."""
 
     problem: str
-    request: PullRequestHead
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
