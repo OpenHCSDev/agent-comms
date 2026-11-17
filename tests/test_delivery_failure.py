@@ -3,13 +3,13 @@ import pytest
 from agent_comms.acp_extension import (
     BackendDeliveryFailure,
     ClaimBlockedFailure,
-    InputFailedUpdate,
     decode_updates,
 )
 from agent_comms.errors import (
     HumanClaimBlockedError,
     HumanSendRefusedError,
 )
+from agent_comms.execution.acp_failure import InputFailedUpdate
 from agent_comms.messaging.delivery_failure import delivery_failure
 from agent_comms.text_route_update import encode_updates
 

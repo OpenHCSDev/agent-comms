@@ -12,13 +12,7 @@ from typing import Annotated, Callable, ClassVar, Self
 
 
 from agent_comms.agent_events import CompactionEvent
-from agent_comms.execution.acp_failure import (
-    ACPFailure,
-    BackendDeliveryFailure,
-    DeliveryFailure,
-    FailureSource,
-    UnrecordedFailureSource,
-)
+from agent_comms.execution.acp_failure import BackendDeliveryFailure
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.context_reading import ContextReading
 from agent_comms.execution.input_origin import InputOrigin, UnattributedInputOrigin
@@ -88,12 +82,6 @@ class TranscriptChangedUpdate(AgentCommsUpdate):
 class ClaimBlockedFailure(BackendDeliveryFailure):
     """A human claim held the input; presented as every delivery failure is, a refusal that
     restores the draft. Toad's 62e938ce deleted delivery_blocked: a lock no state leaves."""
-
-
-@dataclass(frozen=True)
-class InputFailedUpdate(AgentCommsUpdate):
-    text: str
-    failure: DeliveryFailure
 
 
 @dataclass(frozen=True)
@@ -632,12 +620,6 @@ def decode_request(metadata: object = None, **expanded) -> CommsRequest:
     if extension is None:
         return QueuePromptRequest()
     return FieldCodec.decode(CommsMetadata, extension).request
-
-
-@dataclass(frozen=True)
-class RequestFailedUpdate(AgentCommsUpdate):
-    failure: ACPFailure
-    source: FailureSource = UnrecordedFailureSource()
 
 
 @dataclass(frozen=True)

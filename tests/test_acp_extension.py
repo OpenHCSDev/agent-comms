@@ -16,7 +16,6 @@ from agent_comms.acp_extension import (
     GoalChangedUpdate,
     IdentifiedInputStarted,
     InputDeliveryChangedUpdate,
-    InputFailedUpdate,
     LiveQueueScope,
     McpClientAcknowledgementUpdate,
     NativeOutputCommittedUpdate,
@@ -26,7 +25,6 @@ from agent_comms.acp_extension import (
     QueueChangedUpdate,
     QueueItem,
     QueuePromptRequest,
-    RequestFailedUpdate,
     SelectedWriteAcceptedUpdate,
     SelectedWriteRequest,
     SendNowRequest,
@@ -43,7 +41,12 @@ from agent_comms.acp_extension import (
     encode_request,
 )
 from agent_comms.agent_events import CompactionStart
-from agent_comms.execution.acp_failure import ACPFailure, BackendDeliveryFailure
+from agent_comms.execution.acp_failure import (
+    ACPFailure,
+    BackendDeliveryFailure,
+    InputFailedUpdate,
+    RequestFailedUpdate,
+)
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.context_reading import UnmeasuredContext
 from agent_comms.execution.native_output import AssistantOutput, NativeRecordLocation
