@@ -25,6 +25,7 @@ import os
 from pathlib import Path
 
 from agent_comms.comms import Comms
+from agent_comms.conversational_slop import ResponseContext, SlopVerdict, verify_all
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.installer.active_route import resolve_comms_route
 from agent_comms.messaging.messages import InfoKind
@@ -146,11 +147,20 @@ class ChatEndpoint:
 
 @dataclass(frozen=True, slots=True)
 class ModelAgent:
-    """A bus thread whose replies come from one HTTP chat endpoint."""
+    """A bus thread whose replies come from one HTTP chat endpoint.
+
+    When ``rejection_k > 1``, each inbound message is answered by generating that many
+    candidates and running each through the structural verifier suite. The first
+    verifier-clean candidate wins; if none are clean the candidate with the highest
+    structural_reward is sent with a one-line footer naming the triggered verifiers,
+    so slop is visible on the bus instead of hidden behind rejection.
+    """
 
     name: str
     endpoint: ChatEndpoint
     root: Path
+    rejection_k: int = 1
+    verifier_context: ResponseContext = ResponseContext()
 
     async def run(self) -> None:
         # Select the LaunchRoot BEFORE resolving the route: resolve_comms_route(None)
@@ -159,16 +169,52 @@ class ModelAgent:
             route = resolve_comms_route(self.root)
             comms = Comms(route)
             print(f"[model-agent] watching {self.name!r} -> "
-                  f"{self.endpoint.url} ({self.endpoint.model})", flush=True)
+                  f"{self.endpoint.url} ({self.endpoint.model}) "
+                  f"k={self.rejection_k}", flush=True)
             loop = asyncio.get_running_loop()
             async for message in comms.watch(self.name):
                 print(f"[model-agent] {message.sender} -> {self.name}: "
                       f"{len(message.body)} chars", flush=True)
-                reply = await loop.run_in_executor(None, self.endpoint.call, message.body)
-                rendered = reply.display()
+                reply, rendered = await self._best_reply(loop, message.body)
                 comms.messaging.send(self.name, message.sender, rendered, InfoKind)
                 print(f"[model-agent] replied to {message.sender} with "
                       f"{type(reply).__name__}: {len(rendered)} chars", flush=True)
+
+    async def _best_reply(self, loop: asyncio.AbstractEventLoop,
+                          body: str) -> tuple[ModelReply, str]:
+        """Return (reply-member, text-to-send).
+
+        Single-pass (k=1): the reply's display() goes straight through.
+        Multi-pass (k>1): generate k candidates, pick the first verifier-clean one. If
+        none are clean, pick the highest-structural-reward candidate and append a
+        one-line footer naming what fired so the slop is loud on the bus.
+        """
+        if self.rejection_k <= 1:
+            reply = await loop.run_in_executor(None, self.endpoint.call, body)
+            return reply, reply.display()
+
+        best: tuple[ModelReply, SlopVerdict] | None = None
+        for attempt in range(self.rejection_k):
+            reply = await loop.run_in_executor(None, self.endpoint.call, body)
+            if not isinstance(reply, ChatCompletion):
+                # Transport/decode failures don't get rejection-sampled; a pod that is
+                # 500ing will 500 every candidate, so return the first non-success
+                # immediately with its display() text.
+                return reply, reply.display()
+            verdict = verify_all(reply.content, self.verifier_context)
+            print(f"[model-agent]   candidate {attempt + 1}/{self.rejection_k}: "
+                  f"reward={verdict.structural_reward:.2f} triggered={verdict.triggered}",
+                  flush=True)
+            if verdict.passed:
+                return reply, reply.display()
+            if best is None or verdict.structural_reward > best[1].structural_reward:
+                best = (reply, verdict)
+
+        assert best is not None  # k > 1 means we entered the loop at least once
+        reply, verdict = best
+        footer = (f"\n\n> _rejection-sampled {self.rejection_k}×, best reward "
+                  f"{verdict.structural_reward:.2f}; triggered {verdict.triggered}_")
+        return reply, reply.display() + footer
 
 
 def main() -> None:
@@ -187,7 +233,17 @@ def main() -> None:
                                                     Path.home() / ".agent-comms")),
                         help=(f"Comms bus root; defaults to ${LaunchRoot.environment_name} "
                               "or ~/.agent-comms"))
+    parser.add_argument("--rejection-k", type=int, default=1,
+                        help=("Generate K candidates per inbound message and send the "
+                              "first verifier-clean one. k=1 (default) disables sampling."))
     args = parser.parse_args()
+    # The bridge declares no tools to the endpoint, so the verifier should fire on
+    # any <tool_call> in a candidate. token_budget mirrors max_tokens so a truncated
+    # candidate (ran out of tokens) trips LengthRunawayVerifier.
+    verifier_context = ResponseContext(
+        tools_declared=False,
+        token_budget=args.max_tokens,
+    )
     agent = ModelAgent(
         name=args.name,
         endpoint=ChatEndpoint(
@@ -195,6 +251,8 @@ def main() -> None:
             temperature=args.temperature, timeout=args.timeout,
         ),
         root=args.root.expanduser().absolute(),
+        rejection_k=max(args.rejection_k, 1),
+        verifier_context=verifier_context,
     )
     try:
         asyncio.run(agent.run())
