@@ -170,6 +170,10 @@ module = ["xdist.*"]
 follow_untyped_imports = true
 
 [tool.nominal-refactor-advisor]
+# The class whose construction builds each service from the services it hands it: those
+# constructor arguments are the service layering, and code a service loads reads nothing
+# only a service built on it loads.
+composition-roots = ["agent_comms.comms:Comms"]
 # Rows and files nothing else can rebuild: a field-shape move on a class reaching one of
 # these refuses unless the plan carries the stored values.
 durable-bases = [
