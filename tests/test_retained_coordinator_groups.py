@@ -67,16 +67,22 @@ def retaining_coordinator(
     )
 
 
-@dataclass(frozen=True)
-class HarnessSource:
+@dataclass(frozen=True, kw_only=True)
+class RetainedSource:
+    """A retained source: the standalone store a rebuild copies, the claims it holds and its path."""
+
     store: StandaloneCoordination
-    deliveries: tuple[HarnessDelivery, ...]
-    parts: tuple[HarnessObservedPart, ...]
     claims: tuple[WakeAssignment, ...]
 
     @property
     def path(self) -> Path:
         return self.store.session.path
+
+
+@dataclass(frozen=True, kw_only=True)
+class HarnessSource(RetainedSource):
+    deliveries: tuple[HarnessDelivery, ...]
+    parts: tuple[HarnessObservedPart, ...]
 
 
 @pytest.fixture
@@ -116,8 +122,8 @@ def harness_source(tmp_path: Path) -> Iterator[HarnessSource]:
                 part.insert(db)
         # Keep the original post-handoff state and revision, not a reconstructed
         # initial claim or a transition performed while materializing the copy.
-        yield HarnessSource(store, deliveries, parts,
-                            (store.assignments.get(claim.assignment_id),))
+        yield HarnessSource(store=store, deliveries=deliveries, parts=parts,
+                            claims=(store.assignments.get(claim.assignment_id),))
 
 
 @pytest.mark.parametrize('selected_index', (0, 1), ids=('existing-claim', 'no-claim'))
@@ -180,15 +186,9 @@ def test_retained_harness_conflict_refuses_without_publication(
     assert CoordinationStore.digest(harness_source.path) == before
 
 
-@dataclass(frozen=True)
-class NativeGroupSource:
-    store: StandaloneCoordination
+@dataclass(frozen=True, kw_only=True)
+class NativeGroupSource(RetainedSource):
     native: tuple[NativeRuntimeInput, ...]
-    claims: tuple[WakeAssignment, ...]
-
-    @property
-    def path(self) -> Path:
-        return self.store.session.path
 
 
 @pytest.fixture
@@ -222,7 +222,7 @@ def native_group_source(tmp_path: Path) -> Iterator[NativeGroupSource]:
                 row.execution.record_sources(db, row.input_id, members)
         # These are original reserved SQL groups, not actual native admission or
         # a running practice root. No provider or native process is started.
-        yield NativeGroupSource(store, native, claims)
+        yield NativeGroupSource(store=store, native=native, claims=claims)
 
 
 @pytest.mark.parametrize('seed,keys,selected_index,claim_count,execution_ids', (
