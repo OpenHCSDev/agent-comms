@@ -992,7 +992,7 @@ def subagent_bridge(durable_home: Path, fork_bus: tuple[Comms, SourceRepository,
 
 
 @pytest.fixture
-def subagent_hook(subagent_bridge: ClaudeBridge, tmp_path: Path) -> "tuple[Comms, partial[str]]":
+def subagent_hook(subagent_bridge: ClaudeBridge, tmp_path: Path) -> tuple[Comms, partial[str]]:
     return subagent_bridge.comms, partial(
         resident_stdout, subagent_bridge, transcript=tmp_path / "colleague-session.jsonl",
         agent_id="a1", agent_type="general-purpose")

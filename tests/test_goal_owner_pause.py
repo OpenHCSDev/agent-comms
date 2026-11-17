@@ -17,6 +17,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.request import ToolRequest
 from agent_comms.transport.tool_caller import ThreadCaller
+from agent_comms.transport.tools.goals import CommsGoalTool, CommsResumeGoalTool
 
 
 def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path):
@@ -32,9 +33,9 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path):
     assert reopened.registry.require("worker").goal.state.pause_source.declared_name == "owner"
     assert reopened.views.list_threads()[0].thread.goal.state.pause_source.declared_name == "owner"
     with pytest.raises(ValueError):
-        ToolRequest.member_named("comms_goal").invoke(reopened, {"goal_id": goal.id, "status": "active", "progress": "4/50"}, caller=ThreadCaller("worker"))
+        CommsGoalTool.invoke(reopened, {"goal_id": goal.id, "status": "active", "progress": "4/50"}, caller=ThreadCaller("worker"))
     with pytest.raises(ValueError):
-        ToolRequest.member_named("comms_resume_goal").invoke(reopened, {"goal_id": goal.id, "progress": "I should continue"}, caller=ThreadCaller("worker"))
+        CommsResumeGoalTool.invoke(reopened, {"goal_id": goal.id, "progress": "I should continue"}, caller=ThreadCaller("worker"))
     assert reopened.registry.require("worker").goal == paused
     active = reopened.goals.update_goal(
         "worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))), actor=OwnerInvocable

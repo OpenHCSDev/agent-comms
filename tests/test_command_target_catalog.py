@@ -28,7 +28,7 @@ from agent_comms.execution.pi_vocabulary import ServiceTier
 from agent_comms.messaging.channel_targets import (
     CommandTarget,
     IncarnationThreadTarget,
-    ProjectTarget,
+    ProjectTarget, UnregisteredThreadError,
 )
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout, LaunchCheckout
@@ -62,7 +62,7 @@ class RecordingShower(ResultShower):
 def test_batch_completed_result_round_trips_with_its_command_result_type(target):
     original = TargetBatchResult((
         TargetCompleted(target, StopCliCommand(name="first"), ThreadStoppedResult("first")),
-        TargetFailed(target, "UnregisteredThreadError", "Thread 'missing' is not registered."),
+        TargetFailed(target, UnregisteredThreadError.__name__, "Thread 'missing' is not registered."),
     ))
     decoded = FieldCodec.decode(TargetBatchResult, FieldCodec.encode(original))
     assert decoded == original

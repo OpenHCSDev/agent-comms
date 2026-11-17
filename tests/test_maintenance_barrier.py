@@ -169,7 +169,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     comms.registry.declare(NativeThread("waiting", frozenset(), Checkout(tmp_path)))
     control = gate
     first = control.begin(MaintenanceOperator.current())
-    assert first.phase == MaintenancePhase.member_named("draining") and first.generation == 1
+    assert first.phase == DrainingPhase and first.generation == 1
     assert MaintenanceBarrier(comms.registry.store.path).read() == first
     with pytest.raises(RelationViolationError):
         comms.agents.begin_turn("owner", TurnId('f39592393ef0859cb196a52693d2cea0'))
@@ -182,19 +182,19 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     assert not comms.owners.start_many(("owner",))[0].launched
     with pytest.raises(RelationViolationError, match="under maintenance"):
         comms.owners.start_many(("waiting",))
-    second = control.advance(first, MaintenancePhase.member_named("paused"))
+    second = control.advance(first, PausedPhase)
     assert second.generation == 2
     with pytest.raises(RelationViolationError):
-        control.advance(first, MaintenancePhase.member_named("paused"))
+        control.advance(first, PausedPhase)
     with pytest.raises(ValueError):
-        control.advance(second, MaintenancePhase.member_named("ready"))
+        control.advance(second, ReadyPhase)
     with pytest.raises(RelationViolationError):
         Registration(comms.registry.store.path).lease_local_turn(
             "owner", TurnId('e272deecde720ffc773d7a6a81adabbc')
         )
     assert control.advance(
-        second, MaintenancePhase.member_named("installing")
-    ).phase == MaintenancePhase.member_named("installing")
+        second, InstallingPhase
+    ).phase == InstallingPhase
 
 
 @pytest.mark.parametrize("generation", [True, 1.0, "1", -1, 0, 1, 2])
@@ -209,9 +209,9 @@ def test_state_generation_requires_exact_matching_positive_int(
     state["generation"] = generation
     gate.state_path.write_text(json.dumps(state))
     if type(generation) is int and generation == 1:
-        assert gate.read().phase == MaintenancePhase.member_named("ready")
+        assert gate.read().phase == ReadyPhase
         with gate.allow_input() as hold:
-            assert hold.phase == MaintenancePhase.member_named("ready")
+            assert hold.phase == ReadyPhase
     else:
         with pytest.raises(RelationViolationError):
             gate.read()

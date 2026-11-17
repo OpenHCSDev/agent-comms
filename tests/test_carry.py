@@ -61,6 +61,7 @@ from agent_comms.storage.maintenance_barrier import (
 )
 from conftest import ledger_one_failure_short
 from native_backend_fixture import NativeBackendFixture, native_backend_fixture
+from agent_comms.planning.goal_ledger import StorageUncertainError
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -480,7 +481,7 @@ def test_a_command_line_that_dies_before_answering_refuses_with_its_own_error():
     """Install 14: the outgoing runtime's stop crashed opening its ledger and printed nothing;
     the refusal names the crash instead of an empty document."""
     died = CliOutput(1, "", "StorageUncertainError: Unsupported goal attempt schema")
-    with pytest.raises(CliUndecodableError, match="StorageUncertainError"):
+    with pytest.raises(CliUndecodableError, match=StorageUncertainError.__name__):
         died.answer(TargetBatchResult)
 
 

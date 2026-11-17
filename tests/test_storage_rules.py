@@ -38,7 +38,7 @@ from agent_comms.projects.repository_sources import LocalRepositorySource
 from agent_comms.projects.shell_effects import (
     CreateCheckoutStorageEffect,
     RemoveCheckoutStorageEffect,
-    shell_storage_effects,
+    shell_storage_effects, ForbiddenStorageEffect, BuildStorageEffect, AllocateStorageEffect, ForbiddenRepositoryStorageEffect, WriteStorageEffect,
 )
 from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.projects.storage_rules import (
@@ -64,6 +64,7 @@ from agent_comms.team.standing_rules import StorageHomeMissing
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tool_denial import SelectedToolDenied, StorageDenied
 from source_revision_fixture import SourceRepository
+from agent_comms.cli_verbs.repositories import RepositoriesCliCommand
 
 
 def test_isolated_policy_is_durable_and_preserves_existing_private_limits(tmp_path: Path):
@@ -750,25 +751,25 @@ def test_the_clone_refusal_names_every_step_that_creates_an_allocation(tmp_path,
 
 
 @pytest.mark.parametrize('command,kind', [
-    ('python3.14.7 -m venv env', 'ForbiddenStorageEffect'),
-    ('python /scripts/build_runtime.py', 'BuildStorageEffect'),
-    ('python -m pip install package', 'AllocateStorageEffect'),
-    ('uv pip install package', 'AllocateStorageEffect'),
-    ('npm ci', 'AllocateStorageEffect'),
-    ('ffmpeg -i input output', 'AllocateStorageEffect'),
-    ('git -C repo worktree add --detach extra origin/main', 'ForbiddenRepositoryStorageEffect'),
-    ('git worktree remove --force extra', 'ForbiddenRepositoryStorageEffect'),
-    ('git worktree move extra elsewhere', 'ForbiddenRepositoryStorageEffect'),
-    ('git -C ../other--P3 reset --hard', 'WriteStorageEffect'),
-    ('pip install --help\nmkdir target', 'WriteStorageEffect'),
-    ('mkdir -p target', 'WriteStorageEffect'),
-    ('cp source target', 'WriteStorageEffect'),
-    ("cat <<'PY'\ngit clone remote target\nPY\nmkdir target", 'WriteStorageEffect'),
-    ("echo '<<' 'EOF'\npython -m venv env", 'ForbiddenStorageEffect'),
-    ("cat <<'A' <<'B'\ngit clone remote target\nA\nuv sync\nB\nmkdir target", 'WriteStorageEffect'),
-    ("echo 'git clone remote target'\nmkdir target", 'WriteStorageEffect'),
-    ("python -c 'import sys\nprint(\"<<\")'\nmkdir target", 'WriteStorageEffect'),
-    ('echo "first\nsecond" > target', 'WriteStorageEffect'),
+    ('python3.14.7 -m venv env', ForbiddenStorageEffect.__name__),
+    ('python /scripts/build_runtime.py', BuildStorageEffect.__name__),
+    ('python -m pip install package', AllocateStorageEffect.__name__),
+    ('uv pip install package', AllocateStorageEffect.__name__),
+    ('npm ci', AllocateStorageEffect.__name__),
+    ('ffmpeg -i input output', AllocateStorageEffect.__name__),
+    ('git -C repo worktree add --detach extra origin/main', ForbiddenRepositoryStorageEffect.__name__),
+    ('git worktree remove --force extra', ForbiddenRepositoryStorageEffect.__name__),
+    ('git worktree move extra elsewhere', ForbiddenRepositoryStorageEffect.__name__),
+    ('git -C ../other--P3 reset --hard', WriteStorageEffect.__name__),
+    ('pip install --help\nmkdir target', WriteStorageEffect.__name__),
+    ('mkdir -p target', WriteStorageEffect.__name__),
+    ('cp source target', WriteStorageEffect.__name__),
+    ("cat <<'PY'\ngit clone remote target\nPY\nmkdir target", WriteStorageEffect.__name__),
+    ("echo '<<' 'EOF'\npython -m venv env", ForbiddenStorageEffect.__name__),
+    ("cat <<'A' <<'B'\ngit clone remote target\nA\nuv sync\nB\nmkdir target", WriteStorageEffect.__name__),
+    ("echo 'git clone remote target'\nmkdir target", WriteStorageEffect.__name__),
+    ("python -c 'import sys\nprint(\"<<\")'\nmkdir target", WriteStorageEffect.__name__),
+    ('echo "first\nsecond" > target', WriteStorageEffect.__name__),
 ])
 def test_program_decoders_preserve_command_shapes(tmp_path, command, kind):
     effects = shell_storage_effects(command, tmp_path)
@@ -821,5 +822,5 @@ def test_the_read_path_is_a_declared_verb_not_a_clone():
     """`git clone` was refused under every path, so a reader concluded another repository could
     not be read at all; the team project already holds those checkouts and nothing named it."""
 
-    command = CliCommand.member_named('repositories')
+    command = RepositoriesCliCommand
     assert command.declared_name == 'repositories'

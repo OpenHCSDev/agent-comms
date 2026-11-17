@@ -26,7 +26,7 @@ def test_sqlite_connections_have_one_owner():
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
             if (path == CONNECTION_OWNER and isinstance(node, ast.ImportFrom)
-                    and any(name.name == "CoordinationStore" for name in node.names)):
+                    and any(name.name == CoordinationStore.__name__ for name in node.names)):
                 concrete_dependencies.append(f"{path.relative_to(PACKAGE)}:{node.lineno}")
             if (
                 path != CONNECTION_OWNER

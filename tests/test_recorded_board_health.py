@@ -57,7 +57,7 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
     old_completion = time.time() - 3600
     services.update(lambda passes: DocumentChange.to(replace(
         passes, teammate_completed=passes.teammate_completed | {owner: old_completion})))
-    services.failed('TeamHeartbeat', KeyError('original branch read failed'))
+    services.failed(TeamHeartbeat.__name__, KeyError('original branch read failed'))
     failure = services.read().failing['TeamHeartbeat']
     hud = ThreadCaller('colleague').invoke(CommsHudTool(), comms)
     load = ThreadCaller('colleague').invoke(CommsTeamLoadTool(), comms)
@@ -76,7 +76,7 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
     assert len(edits.edits) == 1 and edits.edits[0].id == ToolCallId('parent-edit-0')
     assert services.read().failing['TeamHeartbeat'] == failure
     assert services.read().teammate_completed[owner] == old_completion
-    services.failed('TeamHeartbeat', ValueError('newest failure'))
+    services.failed(TeamHeartbeat.__name__, ValueError('newest failure'))
     assert services.read().failing['TeamHeartbeat'].since == failure.since
     assert 'newest failure' in TeamFrame.current(comms, 'colleague').frame[0]
     published_before = tuple((path, path.read_bytes()) for path in TeamFrame.matching_in(comms.root))
@@ -150,7 +150,7 @@ def test_failing_watch_does_not_make_a_fresh_heartbeat_stale(published_board):
 def test_missing_frame_reports_recorded_failure_without_fabricating_a_board(fork_bus):
     comms, _, _ = fork_bus
     services = ServicePassStore.at(comms.root)
-    services.failed('TeamHeartbeat', KeyError('no readable publication'))
+    services.failed(TeamHeartbeat.__name__, KeyError('no readable publication'))
     with pytest.raises(ToolRefusedError) as refused:
         TeamFrame.current(comms, 'colleague')
     lines = str(refused.value).splitlines()

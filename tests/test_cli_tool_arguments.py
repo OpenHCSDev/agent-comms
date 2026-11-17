@@ -20,6 +20,7 @@ from agent_comms.transport.native_tools import (
     ReadTool,
     WriteTool,
 )
+from agent_comms.coordination.errors import ReadAgain
 
 
 @pytest.mark.parametrize('name,arguments,tool', [
@@ -127,7 +128,7 @@ def test_overlapping_alias_groups_cannot_silently_choose_an_owner(argument_famil
         with pytest.raises(ValueError, match="Ambiguous CLI tool name 'Read'.*CliReadArguments.*OverlappingRead"):
             argument_family.CliToolArguments.decode(sent, arguments)
     arguments = {'file_path': 'owner.py'}
-    sent = argument_family.ToolCall('unique', 'ReadAgain', arguments)
+    sent = argument_family.ToolCall('unique', ReadAgain.__name__, arguments)
     assert argument_family.CliToolArguments.decode(sent, arguments).tool == ReadTool(
         call_id='unique', path='owner.py',
     )

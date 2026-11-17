@@ -25,6 +25,7 @@ from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.transport.request import ToolRequest
 from agent_comms.transport.tool_caller import ThreadCaller
 from conftest import installed_comms
+from agent_comms.transport.tools.goals import CommsGoalTool
 
 
 def _owner(tmp_path):
@@ -60,7 +61,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
         assert comms.goals.goal_history("worker", OneGoal(original.id)) == before_history
 
     with pytest.raises(ValueError):
-        ToolRequest.member_named("comms_goal").invoke(
+        CommsGoalTool.invoke(
             comms,
             {"goal_id": original.id, "status": "blocked", "progress": " \t "}, caller=ThreadCaller("worker"),
         )

@@ -1077,8 +1077,8 @@ def _race(target: Callable[..., None], *arguments: tuple) -> list[str]:
 
 
 @pytest.mark.parametrize("shared_token, outcomes", [
-    (False, ["Applied", "StaleRevision"]),
-    (True, ["AlreadyApplied", "Applied"]),
+    (False, ["Applied", StaleRevision.__name__]),
+    (True, [AlreadyApplied.__name__, "Applied"]),
 ], ids=["distinct-tokens", "same-prepared-token"])
 def test_concurrent_start_claims_the_pointer_once(db_path: Path, shared_token, outcomes) -> None:
     ready(db_path).close()
