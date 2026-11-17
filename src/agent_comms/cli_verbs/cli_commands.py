@@ -31,6 +31,7 @@ from agent_comms.execution.turn_context import (
     ContributionCoordinates,
     Provenance,
     ProviderContext,
+    Sha256Digest,
     TurnContext,
 )
 from agent_comms.importing import ThreadImported
@@ -364,10 +365,9 @@ class CoreContextInspection(ContextInspectionInput, CliResult):
     native_error: str
 
 
-@dataclass(frozen=True)
-class NativeSourceSpans:
+@dataclass(frozen=True, kw_only=True)
+class NativeSourceSpans(Sha256Digest):
     segment: int
-    sha256: str
     spans: tuple[ContributionCoordinates, ...]
 
 
