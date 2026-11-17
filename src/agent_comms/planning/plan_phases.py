@@ -827,13 +827,17 @@ class TeamAwarenessPhase(TeamNativePhase, declared_name=None):
     after = (SkillPhase, BusDeletionPhase, InheritanceCleanupPhase, TransitionScaffoldingPhase)
 
 
-class OneHolderPerWorktreePhase(TeamAwarenessPhase):
+class TeamIncidentPhase(TeamAwarenessPhase, declared_name=None):
+    """An incident the fleet raises from Core alone; the replay phase raises every one."""
+
+
+class OneHolderPerWorktreePhase(TeamIncidentPhase):
     """One holder per worktree, refused at order time."""
 
     evidence = ClassDeclared(SharedWorktreeRefusal, ("src/agent_comms",))
 
 
-class DriftOverlapRulesPhase(TeamAwarenessPhase):
+class DriftOverlapRulesPhase(TeamIncidentPhase):
     """Drift and overlap as standing rules."""
 
     evidence = AllEvidence(
@@ -844,31 +848,31 @@ class DriftOverlapRulesPhase(TeamAwarenessPhase):
     )
 
 
-class SpinningTeammatePhase(TeamAwarenessPhase, declared_name="spinning_unit"):
+class SpinningTeammatePhase(TeamIncidentPhase, declared_name="spinning_unit"):
     """Spinning as a TeammateState member."""
 
     evidence = ClassDeclared(SpinningTeammate, ("src/agent_comms",))
 
 
-class UnpushedWorkPhase(TeamAwarenessPhase):
+class UnpushedWorkPhase(TeamIncidentPhase):
     """Unpushed work as a standing rule."""
 
     evidence = ClassDeclared(UnpushedBranch, ("src/agent_comms",))
 
 
-class EmptyPullRequestPhase(TeamAwarenessPhase):
+class EmptyPullRequestPhase(TeamIncidentPhase):
     """Empty PRs as a standing rule."""
 
     evidence = ClassDeclared(EmptyPullRequest, ("src/agent_comms",))
 
 
-class DeliveryReviewPhase(TeamAwarenessPhase):
+class DeliveryReviewPhase(TeamIncidentPhase):
     """Review is triggered by delivery."""
 
     evidence = ClassDeclared(DeliveredHeadReview, ("src/agent_comms",))
 
 
-class LostToolsPhase(TeamAwarenessPhase):
+class LostToolsPhase(TeamIncidentPhase):
     """Lost tools are a bus fact."""
 
     evidence = ClassDeclared(LostTools, ("src/agent_comms",))
@@ -877,15 +881,7 @@ class LostToolsPhase(TeamAwarenessPhase):
 class TeamReplayPhase(TeamAwarenessPhase, declared_name="fleet_replay"):
     """Replaying the copied fleet state raises each incident from Core alone, once each, with no script."""
 
-    after = (
-        OneHolderPerWorktreePhase,
-        DriftOverlapRulesPhase,
-        SpinningTeammatePhase,
-        UnpushedWorkPhase,
-        EmptyPullRequestPhase,
-        DeliveryReviewPhase,
-        LostToolsPhase,
-    )
+    after = tuple(TeamIncidentPhase.__subclasses__())
     evidence = FunctionDeclared("test_replay_raises_each_incident_once", ("tests",))
 
 
