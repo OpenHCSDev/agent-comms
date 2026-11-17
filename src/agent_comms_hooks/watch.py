@@ -274,7 +274,7 @@ class SwappingSession(AbsentSession, HeldSocketWatch):
         program.absent(record, NoSessionBridge(self.endpoint.thread))
 
 
-class SessionHookProgram(ClaudeHookProgram, ABC):
+class SessionHookProgram(ClaudeHookProgram):
     """The boundary reads once, sends to the existing session, and prints its answer."""
 
     @classmethod

@@ -251,7 +251,7 @@ class RegisteredRoots(SourceRoots):
         return repositories[0].checkout
 
 
-class CitedRepository(DeclaredFamily, ABC, affix="Repository"):
+class CitedRepository(DeclaredFamily, affix="Repository"):
     """The repository a file:line belongs to, carried by the citation itself; a declared
     family, so its members compare as the records they are."""
 

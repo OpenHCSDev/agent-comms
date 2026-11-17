@@ -520,7 +520,7 @@ class AnsweredSubagent(SubagentProgress):
 
 
 @dataclass(frozen=True)
-class OwedProgress(SubagentProgress, ABC):
+class OwedProgress(SubagentProgress):
     """It is mid-turn: its next record is owed since ``at``."""
 
     at: float

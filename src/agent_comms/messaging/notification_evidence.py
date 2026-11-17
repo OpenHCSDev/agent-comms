@@ -88,7 +88,7 @@ class AfterRecipient(RecordMember, RecipientCursor):
         return range(start, len(source.recipients))
 
 
-class OutcomeViewer(RecipientPositions, ABC):
+class OutcomeViewer(RecipientPositions):
     """Who reads a delivery window decides which of its outcomes are shown."""
 
     def visible_reads(

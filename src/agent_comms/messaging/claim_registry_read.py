@@ -1,6 +1,6 @@
 """Original acquired-registry callbacks used to validate resource claims."""
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Iterable, Iterator
 
 from agent_comms.registry.presence_reads import PresenceThread
@@ -8,7 +8,7 @@ from agent_comms.registry.task_registry import ClaimGenerationRead
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 
 
-class ClaimRegistryRead[Owner: PresenceThread](ClaimGenerationRead, ABC):
+class ClaimRegistryRead[Owner: PresenceThread](ClaimGenerationRead):
     __slots__ = ()
 
     @abstractmethod

@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from abc import (
-    ABC,
-    abstractmethod,
-)
+from abc import abstractmethod
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from functools import partial
@@ -14,7 +11,7 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.storage.watch_phase import WatchPhase
 
 
-class Watch(AsyncWork, WatchPhase, DeclaredFamily, ABC):
+class Watch(AsyncWork, WatchPhase, DeclaredFamily):
     """Observe, then apply the result while the bus is open.
 
     A hold is waited out on the service's own loop, where its stop cancels the wait. Waiting

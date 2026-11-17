@@ -13,7 +13,6 @@ from agent_comms.nominal.field_codec import (
     DefaultExternalName,
     ExternalName,
     FieldCodec,
-    FieldRepresentation,
 )
 from agent_comms.nominal.lifecycle_capability import Failed, LifecycleCapability, Successful
 from agent_comms.pi_counts import PiCount, UnreportedCount
@@ -286,7 +285,7 @@ class NoThinkingOverride(ThinkingChoice):
         raise refusal
 
 
-class ThinkingLevelValue(AcceptsNull, FieldRepresentation):
+class ThinkingLevelValue(AcceptsNull):
 
     @classmethod
     def decode(cls, value: object) -> type[ThinkingChoice]:

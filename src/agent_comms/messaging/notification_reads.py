@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass, field
 
 from agent_comms.comms import Comms
@@ -21,7 +21,7 @@ from agent_comms.notification_read import NotificationsRead
 
 
 @dataclass(frozen=True)
-class NotificationRead(UiRead[NotificationWindow], ABC):
+class NotificationRead(UiRead[NotificationWindow]):
     references: tuple[MessageReference, ...]
     after: RecipientCursor = field(default_factory=FirstRecipient, kw_only=True)
     limit: RecipientLimit = field(default_factory=RecipientLimit, kw_only=True)

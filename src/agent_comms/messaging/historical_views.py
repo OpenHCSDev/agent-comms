@@ -256,7 +256,7 @@ class ChannelHistory(HistoryView):
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
+class ChannelDisplayHistory(ConversationHistoryView):
     channel: Channel
     viewer: DisplayViewer = AnonymousViewer()
 
@@ -470,7 +470,7 @@ class HistorySource(MessageHistory, HistoryReferenceSource):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class HistoricalMessage(CarriesEnvelope, Message):
+class HistoricalMessage(CarriesEnvelope):
     source: HistorySource
     source_order: int
     sender_created_at: float | None

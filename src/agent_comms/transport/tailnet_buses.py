@@ -12,7 +12,7 @@ reply without a tailnet.
 from __future__ import annotations
 
 import json
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -63,7 +63,7 @@ class ProbedPeer:
     """
 
 
-class PeerBus(DeclaredFamily, ABC, affix="Peer"):
+class PeerBus(DeclaredFamily, affix="Peer"):
     """What a probe found on one peer.
 
     Every peer gets a member, including the ones that answered nothing: a peer left out of
