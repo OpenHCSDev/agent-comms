@@ -246,6 +246,74 @@ class MissingCertaintyBlockVerifier(SlopVerifier):
         return VerifierResult(passed=True)
 
 
+class HallucinatedTheoremVerifier(SlopVerifier):
+    """Fires on any theorem/corollary/proposition/lemma citation that doesn't exist.
+
+    run28-sft cited "Thm 4.1" in a code review probe; paper1 has no Theorem 4.1 (its
+    section 4 theorems are 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.11, 4.13, 4.14, 4.17,
+    4.20 — no 4.1). Fake theorem numbers in Certainty bases undermine the whole
+    grounding contract: a basis citing nonexistent authority is worse than no basis.
+
+    Catches: Theorem N.M, Thm N.M, Corollary N.M, Cor N.M, Proposition N.M, Prop N.M,
+    Lemma N.M. The known-good set is extracted from both papers in
+    agent_comms/team/paper/; any citation outside that set triggers.
+    """
+
+    declared_name = "hallucinated_theorem"
+
+    # Catalog extracted from paper/semantic-completeness/*.md and paper/less-is-harder/*.md
+    # 2026-11-17. Regenerate with:
+    #   cd src/agent_comms/team/paper && \
+    #     grep -ohE '(Theorem|Corollary|Proposition|Lemma) [0-9]+\.[0-9]+' \
+    #     semantic-completeness/*.md less-is-harder/*.md | sort -u
+    KNOWN: ClassVar[frozenset[str]] = frozenset({
+        "Corollary 2.12", "Corollary 2.15", "Corollary 3.1", "Corollary 4.10",
+        "Corollary 4.12", "Corollary 4.15", "Corollary 4.19", "Corollary 6.16",
+        "Corollary 6.17", "Corollary 6.2", "Corollary 6.27", "Corollary 6.3",
+        "Corollary 6.30", "Corollary 6.40", "Corollary 6.49", "Corollary 6.50",
+        "Corollary 8.5",
+        "Lemma 1.1", "Lemma 2.9", "Lemma 6.33", "Lemma 6.34",
+        "Lemma 7.5", "Lemma 7.6",
+        "Proposition 2.11", "Proposition 2.14", "Proposition 3.1", "Proposition 3.3",
+        "Proposition 4.1", "Proposition 4.16", "Proposition 4.18", "Proposition 4.2",
+        "Proposition 4.3", "Proposition 4.9", "Proposition 5.1", "Proposition 6.18",
+        "Proposition 6.25", "Proposition 6.26", "Proposition 6.28", "Proposition 6.38",
+        "Proposition 6.42", "Proposition 6.45", "Proposition 6.48", "Proposition 7.8",
+        "Theorem 2.2", "Theorem 2.6", "Theorem 3.2", "Theorem 4.11", "Theorem 4.13",
+        "Theorem 4.14", "Theorem 4.17", "Theorem 4.2", "Theorem 4.20", "Theorem 4.27",
+        "Theorem 4.3", "Theorem 4.4", "Theorem 4.5", "Theorem 4.6", "Theorem 4.7",
+        "Theorem 4.8", "Theorem 5.1", "Theorem 6.1", "Theorem 6.15", "Theorem 6.22",
+        "Theorem 6.23", "Theorem 6.24", "Theorem 6.29", "Theorem 6.32", "Theorem 6.35",
+        "Theorem 6.39", "Theorem 6.41", "Theorem 6.43", "Theorem 6.5", "Theorem 6.6",
+        "Theorem 6.7", "Theorem 6.9", "Theorem 7.7", "Theorem 8.1",
+    })
+
+    # "Thm 4.6" and "Theorem 4.6" are the same citation.
+    _ABBREV: ClassVar[dict[str, str]] = {
+        "Thm": "Theorem",
+        "Cor": "Corollary",
+        "Prop": "Proposition",
+    }
+    PATTERN: ClassVar[re.Pattern] = re.compile(
+        r"\b(Theorem|Thm|Corollary|Cor|Proposition|Prop|Lemma)\s+(\d+\.\d+)\b"
+    )
+
+    @classmethod
+    def check(cls, response: str, context: ResponseContext) -> VerifierResult:
+        hits: list[str] = []
+        for match in cls.PATTERN.finditer(response):
+            kind = cls._ABBREV.get(match.group(1), match.group(1))
+            full = f"{kind} {match.group(2)}"
+            if full not in cls.KNOWN:
+                hits.append(match.group(0))
+        if hits:
+            return VerifierResult(
+                passed=False,
+                detail=f"citations not in paper1/paper4 catalog: {hits}",
+            )
+        return VerifierResult(passed=True)
+
+
 class ForbiddenPhraseVerifier(SlopVerifier):
     """Fires on any scenario-supplied forbid phrase appearing in the response.
 
@@ -268,6 +336,7 @@ class ForbiddenPhraseVerifier(SlopVerifier):
 VERIFIERS: tuple[type[SlopVerifier], ...] = (
     ChatbotPreambleVerifier,
     HallucinatedToolCallVerifier,
+    HallucinatedTheoremVerifier,
     ForbiddenPhraseVerifier,
     LengthRunawayVerifier,
     MissingCertaintyBlockVerifier,
