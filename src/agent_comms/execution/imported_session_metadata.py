@@ -10,17 +10,25 @@ from agent_comms.installer.harness_install import Harness
 from agent_comms.nominal.field_codec import WireName
 
 
-@dataclass(frozen=True, slots=True)
-class ImportedSessionMetadata:
-    """Original saved import observation; references grant reading, never execution."""
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ImportObservation:
+    """What an imported session was when it was read: where it ran, its id, and the
+    messages seen, cut and noted. A saved import keeps it, so `harness` is stored as
+    `format`."""
 
     harness: Annotated[type[Harness], WireName("format")]
     source_id: str
     messages_seen: int
-    messages_imported: int
-    truncated_messages: int
-    notices: tuple[str, ...]
+    truncated_messages: int = 0
+    notices: tuple[str, ...] = ()
     historical_instructions: tuple[HistoricalInstructionProvenance, ...] = ()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ImportedSessionMetadata(ImportObservation):
+    """Original saved import observation; references grant reading, never execution."""
+
+    messages_imported: int
 
     @classmethod
     def sources_for_owner(cls, registry, owner):
