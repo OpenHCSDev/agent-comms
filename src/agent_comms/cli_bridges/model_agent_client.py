@@ -180,8 +180,12 @@ class ModelAgent:
                       f"{len(message.body)} chars", flush=True)
                 reply, rendered = await self._best_reply(loop, message.body)
                 comms.messaging.send(self.name, message.sender, rendered, InfoKind)
+                # Success types log a char count; failure types log their reply content
+                # inline so the daemon stdout shows WHAT failed without a bus check.
+                suffix = (f"{len(rendered)} chars" if isinstance(reply, ChatCompletion)
+                          else reply.display())
                 print(f"[model-agent] replied to {message.sender} with "
-                      f"{type(reply).__name__}: {len(rendered)} chars", flush=True)
+                      f"{type(reply).__name__}: {suffix}", flush=True)
 
     async def _best_reply(self, loop: asyncio.AbstractEventLoop,
                           body: str) -> tuple[ModelReply, str]:
