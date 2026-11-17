@@ -63,9 +63,11 @@ from agent_comms.team.rule_deal import (
     AuditDue,
     CompactedDeal,
     OffDealMode,
+    OffRuleCheckPolicy,
     Owed,
     OwnerWordsAnswer,
     ReadSpan,
+    RequiredRuleCheckPolicy,
     RuleGateSettings,
     SessionAudit,
     StartedDeal,
@@ -851,6 +853,7 @@ def test_the_full_audit_and_the_owners_words_open_the_gate(capsys, tmp_path, tea
     transcript.write_text(json.dumps({"type": "user", "message": {"content": words[0]}}) + "\n")
     start = DeckStart.decode(hook_record(transcript, "SessionStart"))
     start.take(team_bus, team_binding)
+    start.configure(RuleGateSettings(audit=RequiredRuleCheckPolicy, audit_confirmation=OffRuleCheckPolicy))  # this test is about the audit, which defaults off
     start.prepare(DeckReader(), AuditDue(words), StartedDeal())
     for source in DeckReader.sources():
         read_whole(transcript, source.resolve(), comms=team_bus, binding=team_binding)
@@ -880,7 +883,9 @@ def test_every_tool_but_read_waits_for_each_dealt_rule_file_then_its_audit(
     audit may be written until it answers every dealt rule."""
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
-    assert DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    assert start.take(team_bus, team_binding)
+    start.configure(RuleGateSettings(audit=RequiredRuleCheckPolicy, audit_confirmation=OffRuleCheckPolicy))  # the audit defaults off
     parts = list(dealt_sources(transcript))
     assert set(parts) == {source.resolve() for source in DeckReader.sources()}
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}, comms=team_bus, binding=team_binding))
@@ -910,6 +915,7 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
     start = DeckStart.decode(hook_record(transcript, "SessionStart"))
     words = ("Read the rules.\nThen write the audit.",)
     start.prepare(DeckReader(), AuditDue(words), StartedDeal())
+    start.configure(RuleGateSettings(audit=RequiredRuleCheckPolicy, audit_confirmation=OffRuleCheckPolicy))  # the audit defaults off
     reasons = []
     for attempt, tool in enumerate(("Bash", "Edit"), 1):
         gated(transcript, tool, {"file_path": str(transcript), "command": "true"}, comms=team_bus, binding=team_binding).judge()

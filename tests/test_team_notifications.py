@@ -645,10 +645,10 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
     assert done_by_plan.heading() == "PHASES DONE BY PLAN · 1"
     # A plan with nothing left to do leaves the board, and the done counts fold to a heading.
     assert BusInterfacePhase.plan not in {record.plan for record in done_by_plan.records}
-    assert BusInterfacePhase.declared_name not in "\n".join(hud.hud_text(time.time()))
+    assert BusInterfacePhase.display_label() not in "\n".join(hud.hud_text(time.time()))
     assert not PhasesDoneByPlanGroup.table_lines(table.folded_lines() for table in done_by_plan.tables)
     rendered = "\n".join(hud.hud_text(time.time()))
-    assert all(phase.declared_name in rendered for phase in (RecordPlanePhase, ReviewQueuePhase))
+    assert all(phase.display_label() in rendered for phase in (RecordPlanePhase, ReviewQueuePhase)), rendered
 
 
 def test_frame_keeps_original_ping_order_and_folded_idle_records(tmp_path):

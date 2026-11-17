@@ -57,7 +57,7 @@ def unavailable_plan() -> tuple[type[PlanPhase], ...]:
 
 def test_explicit_unplanned_reason_needs_no_plan_acquisition():
     reason = "This repair keeps the order tool usable before the planned work resumes."
-    assert UnplannedPhase.order_refusals(unavailable_plan, reason) == ()
+    assert UnplannedPhase.order_refusals(unavailable_plan, reason) is None
 
 
 @pytest.mark.parametrize("reason", ("", "A short reason"))
@@ -68,10 +68,10 @@ def test_missing_unplanned_reason_still_requires_plan_evidence(reason):
 
 def test_ready_phases_refuse_an_order_with_no_phase_or_reason():
     assert UnplannedPhase.order_refusals(lambda: (BusWriterPhase,), "") == (
-        f"Plan phases are ready: {BusWriterPhase.declared_name}. "
-        "Name a phase, or provide an explicit unplanned_reason of 8+ words.",)
-    assert UnplannedPhase.order_refusals(lambda: (), "") == ()
+        f"Plan phases are ready: {BusWriterPhase.display_label()}. "
+        "Name a phase, or provide an explicit unplanned_reason of 8+ words.")
+    assert UnplannedPhase.order_refusals(lambda: (), "") is None
 
 
 def test_a_named_plan_phase_needs_no_unrelated_plan_acquisition():
-    assert BusWriterPhase.order_refusals(unavailable_plan, "") == ()
+    assert BusWriterPhase.order_refusals(unavailable_plan, "") is None

@@ -447,10 +447,11 @@ def test_roster_expression_answers_preserve_admitted_syntax(
 
 
 def test_roster_relation_is_exempt_only_below_the_family_by_qualified_name(tmp_path):
+    family = PlanPhase.__module__
     reading = main_of(tmp_path, {
-        "src/agent_comms/planning/plan_phases.py": "class PlanPhase:\n    pass\n",
+        f"src/{family.replace('.', '/')}.py": "class PlanPhase:\n    pass\n",
         "src/decoy.py": "class PlanPhase:\n    pass\n",
-        "src/phases.py": "from agent_comms.planning.plan_phases import PlanPhase\n"
+        "src/phases.py": f"from {family} import PlanPhase\n"
                          "from decoy import PlanPhase as Spoofed\n"
                          "class A:\n    pass\nclass B:\n    pass\n"
                          "class Real(PlanPhase):\n    after = (A, B)\n"
