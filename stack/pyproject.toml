@@ -39,7 +39,9 @@ agent-comms = { path = "..", editable = true }
 formbridge = { git = "https://github.com/OpenHCSDev/formbridge.git", branch = "main" }
 metaclass-registry = { git = "https://github.com/OpenHCSDev/metaclass-registry", branch = "main" }
 nominal-refactor-advisor = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor", branch = "main" }
+pycodify = { git = "https://github.com/OpenHCSDev/pycodify", branch = "main" }
 python-introspect = { git = "https://github.com/OpenHCSDev/python-introspect", branch = "main" }
 batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", branch = "main" }
 textual = { git = "https://github.com/OpenHCSDev/textual.git", branch = "main" }
 ui-theme = { git = "https://github.com/OpenHCSDev/ui-theme.git", branch = "main" }
+zmqruntime = { git = "https://github.com/OpenHCSDev/ZMQRuntime.git", branch = "main" }
