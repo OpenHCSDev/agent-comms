@@ -55,7 +55,7 @@ class FileClaimDenied(ClaimTransitionError, ToolRefusedError):
     """Invalid file input is both a claim error and an explicit tool refusal."""
 
 
-class ClaimConflict(ClaimTransitionError):  # noqa: N818 - domain-specific losing result
+class ClaimConflict(ClaimTransitionError, ToolRefusedError):  # noqa: N818 - domain-specific losing result
     """A synchronous losing transition; never queue or retry it automatically."""
 
     def __init__(self, existing: ClaimOwner):

@@ -1,6 +1,7 @@
 """Normal coding policies use existing claims; no provider or user work is touched."""
 
 
+import asyncio
 import json
 import os
 import secrets
@@ -221,6 +222,57 @@ def _request(socket, id, name, args):
         json.dumps({"token": socket.listener.token, "call_id": id, "name": name, "arguments": args}) + "\n"
     ).encode()
 
+
+
+@pytest.mark.asyncio
+async def test_conflicting_edit_returns_holder_refusal_over_owner_socket(
+        tmp_path, tool_listener, undealt_gate):
+    work = tmp_path / "work"
+    work.mkdir()
+    target = work / "shared.py"
+    target.write_text("original\n")
+    comms = wire(tmp_path / "wire")
+    for name in ("holder", "editor"):
+        comms.registry.declare(replace(
+            NativeThread(name, frozenset(), Checkout(work)),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ))
+    resource = ExistingFileClaim(target)
+    held = acquire(comms, "holder", TurnId.mint(), resource, work)
+
+    class Owner(OwnerDouble):
+        async def allow(self, turn, round_number, call):
+            acquire(comms, "editor", TurnId.mint(), resource, work)
+            raise AssertionError("conflicting edit must not be allowed")
+
+    tmp_path.chmod(0o700)
+    socket = CodingToolSocket(
+        tool_listener(tmp_path, secrets.token_hex(32)), Owner(), undealt_gate, pid=os.getpid())
+    socket.turn = SimpleNamespace(launch=SimpleNamespace(root=comms.root))
+    arguments = {"path": str(target), "edits": [{"oldText": "original", "newText": "changed"}]}
+    socket.announce(AssistantMessage(content=ReportedParts((
+        ToolCallContent(id="conflict", name="edit", arguments=arguments),
+    ))))
+    socket.tool_started(ToolExecutionStart(
+        tool_call_id=ReportedText("conflict"), tool_name=ReportedText("edit"), args=arguments))
+    await socket.start()
+    reader, writer = await asyncio.open_unix_connection(str(socket.listener.address))
+    try:
+        writer.write(_request(socket, "conflict", "edit", arguments))
+        await writer.drain()
+        async with asyncio.timeout(5):
+            response = json.loads(await reader.readline())
+        assert response == {"ok": False, "error": "Resource already claimed by 'holder'"}
+        socket.tool_finished(ToolExecutionEnd(
+            tool_call_id=ReportedText("conflict"), tool_name=ReportedText("edit"),
+            is_error=ReportedFlag(True)), InputId.mint())
+        socket.assert_complete()
+        assert comms.bus.bus.claim_projection()[held.resource] == held
+        assert target.read_text() == "original\n"
+    finally:
+        writer.close()
+        await writer.wait_closed()
+        await socket.close()
 
 
 @pytest.mark.asyncio
