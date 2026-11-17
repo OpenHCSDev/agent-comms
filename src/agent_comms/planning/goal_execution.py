@@ -38,9 +38,6 @@ class GoalExecution(DeclaredFamily, GoalExecutionDisplay[Goal], affix="Execution
     @abstractmethod
     def validate_goal(self, goal: GoalCheckpoint) -> None: ...
 
-    @abstractmethod
-    def heading(self, revision: int) -> str: ...
-
 
 @dataclass(frozen=True)
 class BoundGoalExecution(GoalExecution, declared_name=None):

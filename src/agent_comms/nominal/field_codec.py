@@ -2897,7 +2897,7 @@ class FieldCodec(MroDispatch, Sealed):
             entry.add_argument(parser, groups)
 
     @classmethod
-    def decode_arguments(cls, target: type[T], arguments: object) -> T:
+    def decode_arguments(cls, target: type[T], arguments: argparse.Namespace) -> T:
         """Argparse contributes only raw input; field plans own its conversion."""
         raw = vars(arguments)
         return cls.decode_record(target, {

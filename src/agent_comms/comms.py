@@ -114,9 +114,6 @@ class Comms(
     def bus(self) -> MessageBus:
         return MessageBus(self.root, self.registry, OwnerPublisher)
 
-    def activity_store(self) -> AgentActivity:
-        return AgentActivity(self.root, self.registry)
-
     def watched_reader(self, name: str) -> ThreadIncarnation:
         with Comms.client(self.route) as comms:
             return comms.registry.require(name).incarnation
