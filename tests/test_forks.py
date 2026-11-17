@@ -173,6 +173,11 @@ def fork_bus(tmp_path, configured_repository, monkeypatch):
         order=replace(order, id=OrderId.mint()),
         request=request.id,
     )
+    # A hold binds its holder through the goal it was made under (74982f5f): the
+    # product creates both in one `update_goal`, so the fixture gives "retained" it too.
+    comms.goals.update_goal(
+        "retained", SetGoalAction(text="Hold the parent problem", goal_id=retained_goal_id)
+    )
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
     # The forks run in colleague's Claude session: one no hook registered takes colleague as parent.
