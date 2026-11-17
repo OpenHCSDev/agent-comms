@@ -130,8 +130,16 @@ class ChatEndpoint:
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
         }).encode()
+        # Cloudflare's WAF fingerprints `Python-urllib/*` as a bot and returns 1010
+        # against the RunPod proxy; a plausible agent UA passes. 2026-11-17: this was
+        # the 403 Tristan hit on his first successful attach.
         request = urllib.request.Request(
-            self.url, data=payload, headers={"Content-Type": "application/json"})
+            self.url, data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "agent-comms-model-agent/1.0",
+            },
+        )
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 raw = json.load(response)
