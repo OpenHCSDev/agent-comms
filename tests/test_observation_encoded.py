@@ -15,6 +15,7 @@ from agent_comms.ui_model.observation import (
     SidebarResult,
     ViewerEnd,
 )
+from observation_pass_fixture import watched_pass
 
 
 async def test_sidebar_interest_and_its_answer_cross_the_encoded_channel(comms):
@@ -25,7 +26,7 @@ async def test_sidebar_interest_and_its_answer_cross_the_encoded_channel(comms):
         try:
             viewer.send(wanted)
             service.receive()
-            await service.observe(set())
+            await watched_pass(service)
             answers = []
             while viewer.poll():
                 answers.append(viewer.recv())
