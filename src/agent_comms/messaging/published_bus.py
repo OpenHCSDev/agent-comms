@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -29,7 +29,7 @@ class BusResources(ActivitySource):
         yield self.bus.activity_clocks()
 
 
-class PublishedBus[Writes](BusResources, ABC):
+class PublishedBus[Writes](BusResources):
     """The live resources; historical clients add their own independent data."""
 
     @abstractmethod

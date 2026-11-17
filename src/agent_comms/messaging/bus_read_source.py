@@ -1,6 +1,6 @@
 """The existing bus snapshot and unread-count operations presentation consumes."""
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
 
@@ -10,7 +10,7 @@ from agent_comms.messaging.read_basis import DisplayViewer
 from agent_comms.messaging.read_selection import CapturedSelection
 
 
-class BusReadSource(BusResources, ABC):
+class BusReadSource(BusResources):
     __slots__ = ()
 
     @abstractmethod

@@ -11,7 +11,6 @@ from agent_comms.messaging.display_sources import (
     SentHistorySource,
 )
 from agent_comms.nominal.declared_choice import DeclaredChoice, TitledChoice
-from agent_comms.nominal.declared_family import DeclaredFamily
 
 type ChannelOrders = ChannelOrderSource[type[ThreadSort], type[ChannelSort]]
 type ChannelDisplay = ChannelSortView[type[ChannelSort]]
@@ -29,7 +28,7 @@ class DisplayOrder(TitledChoice, DeclaredChoice):
     def store_channel_order(cls, channels: ChannelOrders, channel: str | None) -> type[DisplayOrder]: ...
 
 
-class ThreadSort(DisplayOrder, DeclaredFamily, affix="ThreadSort"):
+class ThreadSort(DisplayOrder, affix="ThreadSort"):
     """Newest chosen clock, then creation time and case-folded name."""
 
     @classmethod
@@ -87,7 +86,7 @@ class LastActivityThreadSort(ThreadSort):
         return activity
 
 
-class ChannelSort(DisplayOrder, DeclaredFamily, affix="ChannelSort"):
+class ChannelSort(DisplayOrder, affix="ChannelSort"):
     """Pins partition every order; builtins keep their declared order in each partition."""
 
     @classmethod

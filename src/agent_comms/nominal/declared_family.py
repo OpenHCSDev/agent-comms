@@ -166,7 +166,7 @@ class FamilyMember(ABC):
     family_root: ClassVar[type[DeclaredFamily]]
 
 
-class DeclaredFamily(FamilyMember, ABC, metaclass=FamilyMeta):
+class DeclaredFamily(FamilyMember, metaclass=FamilyMeta):
     """A family root owns one registry; names and capability views derive from members.
 
     Declare a root with ``affix=\"Scope\"`` (or omit it for unstripped names).
