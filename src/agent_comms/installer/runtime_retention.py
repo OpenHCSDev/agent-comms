@@ -28,7 +28,7 @@ from pathlib import Path
 
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.root_runtime import RootRuntimeStore
-from agent_comms.execution.runtime_processes import RuntimeProcesses
+from agent_comms.execution.runtime_processes import HoldsNothing, RuntimeProcesses
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.building_runtime import BuildingRuntime
 from agent_comms.installer.runtime_resolution import RuntimeResolution
@@ -75,14 +75,8 @@ class NamedPointer(RecordedPointer):
 
 
 @dataclass(frozen=True)
-class AbsentPointer(RecordedPointer):
+class AbsentPointer(HoldsNothing, RecordedPointer):
     """No record at all, which is a complete answer: nothing was published here."""
-
-    def held(self) -> frozenset[Path]:
-        return frozenset()
-
-    def unread(self) -> tuple[str, ...]:
-        return ()
 
 
 @dataclass(frozen=True)

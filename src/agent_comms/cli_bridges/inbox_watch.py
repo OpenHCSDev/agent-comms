@@ -178,7 +178,7 @@ class WatchTickets:
 
     def issued(self, thread: str, issuer: URL) -> InboxWatchUrl:
         now = time.time()
-        ticket = ArmedTicket(thread, now + ArmedTicket.seconds)
+        ticket = ArmedTicket(thread=thread, expires_at=now + ArmedTicket.seconds)
         token = BearerSecret(secrets.token_urlsafe(32))
         self.held = {key: held for key, held in self.held.items() if held.live(now)}
         self.held[digest(token)] = ticket

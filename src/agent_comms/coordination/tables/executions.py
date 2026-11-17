@@ -174,11 +174,19 @@ class PointedExecution(GivenText, PointerExecution):
         validate_execution_id(self.text)
 
 
-@dataclass(frozen=True, slots=True)
-class NoPointedExecution(AbsentText, PointerExecution):
+@dataclass(frozen=True)
+class IdlePointer:
+    """The pointer of an idle owner: SQL NULL, naming nothing."""
+
+    __slots__ = ()
 
     def is_pointed(self) -> bool:
         return False
+
+
+@dataclass(frozen=True, slots=True)
+class NoPointedExecution(IdlePointer, AbsentText, PointerExecution):
+    pass
 
 
 class PointerAttempt(SubclassUnion, affix="Attempt"):
@@ -207,10 +215,7 @@ class PointedAttempt(SingleFieldValue, PointerAttempt):
 
 
 @dataclass(frozen=True, slots=True)
-class NoPointedAttempt(NullMember, PointerAttempt):
-
-    def is_pointed(self) -> bool:
-        return False
+class NoPointedAttempt(IdlePointer, NullMember, PointerAttempt):
 
     def otherwise[Default](self, default: Default) -> Default:
         return default

@@ -57,9 +57,18 @@ class RecipientCursor(SubclassUnion, affix=""):
 
 
 @dataclass(frozen=True)
-class FirstRecipient(NullMember, RecipientCursor):
+class EveryRecipient:
+    """Sees every recipient position of a delivery."""
+
+    __slots__ = ()
+
     def positions(self, source: Delivered) -> range:
         return range(len(source.recipients))
+
+
+@dataclass(frozen=True)
+class FirstRecipient(EveryRecipient, NullMember, RecipientCursor):
+    pass
 
 
 @dataclass(frozen=True)
@@ -97,11 +106,8 @@ class OutcomeViewer(ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class AllOutcomes(OutcomeViewer):
+class AllOutcomes(EveryRecipient, OutcomeViewer):
     """An unscoped reader sees every recipient's outcome and every human read."""
-
-    def positions(self, source: Delivered) -> range:
-        return range(len(source.recipients))
 
     def sees_direct_read(self, source: Delivered) -> bool:
         return True

@@ -120,16 +120,24 @@ class ThreadParent(SubclassUnion, TextChoice, affix="Parent"):
         return name in self.names()
 
 
-@dataclass(frozen=True, slots=True)
-class ForkedParent(GivenText, ThreadParent):
+@dataclass(frozen=True)
+class OneThreadName:
+    """Names exactly one thread, given as its text."""
+
+    __slots__ = ()
+
     text: str
+
+    def names(self) -> tuple[str, ...]:
+        return (self.text,)
+
+
+@dataclass(frozen=True, slots=True)
+class ForkedParent(OneThreadName, GivenText, ThreadParent):
     own_history = ForkOwnHistory()
 
     def is_forked(self) -> bool:
         return True
-
-    def names(self) -> tuple[str, ...]:
-        return (self.text,)
 
     def kept_in(self, names: Collection[str]) -> ThreadParent:
         return self if self.text in names else NoParent()
