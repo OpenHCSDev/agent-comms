@@ -743,7 +743,7 @@ class RuleGateSettings(ConfigurationRecord):
     """One session's editable rule policy; read and audit evidence is not configuration."""
 
     mode: Annotated[type[DealMode], RegisteredClassChoices(DealMode),
-                    Description("Refresh schedule; off disables all checks and automatic refreshes")] = FullDealMode
+                    Description("Refresh schedule; off disables all checks and automatic refreshes")] = CompactionDealMode
     required_reads: Annotated[type[RuleCheckPolicy], RegisteredClassChoices(RuleCheckPolicy),
                               Description("Require reading the supplied rules and papers")] = RequiredRuleCheckPolicy
     audit: Annotated[type[RuleCheckPolicy], RegisteredClassChoices(RuleCheckPolicy),
