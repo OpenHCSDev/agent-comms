@@ -248,7 +248,7 @@ async def test_conflicting_edit_returns_holder_refusal_over_owner_socket(
     tmp_path.chmod(0o700)
     socket = CodingToolSocket(
         tool_listener(tmp_path, secrets.token_hex(32)), Owner(), undealt_gate, pid=os.getpid())
-    socket.turn = object()
+    socket.turn = SimpleNamespace(launch=SimpleNamespace(root=comms.root))
     arguments = {"path": str(target), "edits": [{"oldText": "original", "newText": "changed"}]}
     socket.announce(AssistantMessage(content=ReportedParts((
         ToolCallContent(id="conflict", name="edit", arguments=arguments),
@@ -263,6 +263,10 @@ async def test_conflicting_edit_returns_holder_refusal_over_owner_socket(
         async with asyncio.timeout(5):
             response = json.loads(await reader.readline())
         assert response == {"ok": False, "error": "Resource already claimed by 'holder'"}
+        socket.tool_finished(ToolExecutionEnd(
+            tool_call_id=ReportedText("conflict"), tool_name=ReportedText("edit"),
+            is_error=ReportedFlag(True)), InputId.mint())
+        socket.assert_complete()
         assert comms.bus.bus.claim_projection()[held.resource] == held
         assert target.read_text() == "original\n"
     finally:
