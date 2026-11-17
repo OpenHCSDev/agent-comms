@@ -212,11 +212,17 @@ class SourceGrowth:
 
 
 @dataclass(frozen=True)
-class BranchDifference:
-    """One branch against an immutable origin/main cut, shared by its consumers."""
+class RepositoryBranch:
+    """One named branch of one repository: the key a branch difference and every rule about that branch share."""
 
     repository: RepositoryName
     branch: str
+
+
+@dataclass(frozen=True)
+class BranchDifference(RepositoryBranch):
+    """One branch against an immutable origin/main cut, shared by its consumers."""
+
     head: str
     moved_at: float
     main: str
