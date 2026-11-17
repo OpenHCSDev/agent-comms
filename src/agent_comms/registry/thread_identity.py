@@ -369,16 +369,21 @@ class ForkIdentity(RecordedThreadIncarnation):
         return (self, *self.authority.represented_owners)
 
 
+@dataclass(eq=False, frozen=True)
+class ActsForAnyCreator:
+    """Maintains any creator's shared work under its own identity."""
+
+    def acts_for(self, creator: ThreadIncarnation) -> bool:
+        return True
+
+
 @dataclass(frozen=True, eq=False)
-class PeerIdentity(RecordedThreadIncarnation):
+class PeerIdentity(ActsForAnyCreator, RecordedThreadIncarnation):
     """An independent collaborator can maintain shared orders under its own identity.
 
     Channel tags confer no privilege, and a retired creator does not orphan shared work.
     Storage selection remains explicit; the recorded incarnation names who acted.
     """
-
-    def acts_for(self, creator: ThreadIncarnation) -> bool:
-        return True
 
 
 class BirthlessIncarnation(
@@ -431,7 +436,7 @@ class UnrecordedThreadIncarnation(BirthlessIncarnation):
 
 
 @dataclass(frozen=True)
-class CoreWatcherIncarnation(BirthlessIncarnation):
+class CoreWatcherIncarnation(ActsForAnyCreator, BirthlessIncarnation):
     """Core records objective check failures and reissues unheld work under its own identity.
 
     It is not a thread and cannot represent a holder or answer its inputs.
@@ -440,10 +445,6 @@ class CoreWatcherIncarnation(BirthlessIncarnation):
     WIRE_BIRTH: ClassVar[float] = -2.0
 
     def hands_out_released_work(self) -> bool:
-        return True
-
-    def acts_for(self, creator: ThreadIncarnation) -> bool:
-        """Core maintains shared work, but owns no colleague's assignment or receipts."""
         return True
 
     @classmethod

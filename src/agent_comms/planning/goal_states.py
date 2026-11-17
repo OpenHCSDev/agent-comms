@@ -239,18 +239,23 @@ class BlockedState(GoalState, FromOpenGoal, declared_name=None):
 
 
 @dataclass(frozen=True)
-class BlockedGoal(BlockedState):
+class StatedBlockReason:
+    """Blocked for a stated reason, which is the reason it gives."""
+
     block_reason: str
 
+    @property
+    def reason(self) -> str:
+        return self.block_reason
+
+
+@dataclass(frozen=True)
+class BlockedGoal(StatedBlockReason, BlockedState):
     def __post_init__(self) -> None:
         reason = self.block_reason
         if (type(reason) is not str or not reason.strip() or reason != reason.strip()
                 or len(reason) > 1024):
             raise ValueError("A blocked goal requires a bounded explicit reason.")
-
-    @property
-    def reason(self) -> str:
-        return self.block_reason
 
 
 @dataclass(frozen=True)

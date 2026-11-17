@@ -114,14 +114,19 @@ class PointerReference(RuntimeReference):
 
 
 @dataclass(frozen=True)
-class ForeignReference(RuntimeReference):
-    """A path outside the installation, which holds none of its builds."""
+class HoldsNothing:
+    """Holds no build paths and leaves nothing unread."""
 
     def held(self) -> frozenset[Path]:
         return frozenset()
 
     def unread(self) -> tuple[str, ...]:
         return ()
+
+
+@dataclass(frozen=True)
+class ForeignReference(HoldsNothing, RuntimeReference):
+    """A path outside the installation, which holds none of its builds."""
 
     def describes(self) -> str:
         return "a path outside the installation"

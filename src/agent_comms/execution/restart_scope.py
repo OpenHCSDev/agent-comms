@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms.nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.registry.thread_text import OneThreadName
 
 if TYPE_CHECKING:
     from agent_comms.registry.registry_document import RegistrySnapshot
@@ -44,11 +45,8 @@ class RestartTarget(SubclassUnion, RestartScope, affix="Owner"):
 
 
 @dataclass(frozen=True)
-class OneOwner(SingleFieldValue, NamedRestart, RestartTarget):
-    text: str
-
-    def names(self) -> tuple[str, ...]:
-        return (self.text,)
+class OneOwner(OneThreadName, SingleFieldValue, NamedRestart, RestartTarget):
+    pass
 
 
 @dataclass(frozen=True)

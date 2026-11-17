@@ -21,7 +21,7 @@ from agent_comms.planning.goal_execution import (
 )
 from agent_comms.planning.goal_execution_snapshot import GoalExecutionSnapshot
 from agent_comms.planning.goal_ledger import FailedTurnEvidence
-from agent_comms.planning.goal_states import PauseSource
+from agent_comms.planning.goal_states import PauseSource, StatedBlockReason
 from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goals import Goal, GoalCheckpoint, GoalDeclaration
 
@@ -136,12 +136,8 @@ class StandbyExecution(ActiveExecution, WaitingExecution):
 
 
 @dataclass(frozen=True)
-class RetryableBlockExecution(BlockedExecution, RetryableExecution):
-    block_reason: str
-
-    @property
-    def reason(self) -> str:
-        return self.block_reason
+class RetryableBlockExecution(StatedBlockReason, BlockedExecution, RetryableExecution):
+    pass
 
 
 @dataclass(frozen=True)
