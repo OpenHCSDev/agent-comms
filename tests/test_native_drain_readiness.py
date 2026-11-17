@@ -18,12 +18,13 @@ from agent_comms.registry.thread_identity import (
     OwnerIdentity,
     RecordedThreadIncarnation,
 )
+from agent_comms.execution.turn_failure import NativePiTerminalFailure
 
 
 def test_native_warning_keeps_fresh_notifications_and_active_paint_available():
     owner = OwnerIdentity(RecordedThreadIncarnation('receiver', 1.0), 2)
     diagnostic = NativeInputDrainDiagnostic(
-        owner, 'NativePiTerminalFailure', 'known provider failure', recorded_at=1.0
+        owner, NativePiTerminalFailure.__name__, 'known provider failure', recorded_at=1.0
     )
     event = Activity('receiver', ActivityState.IDLE, diagnostic=diagnostic)
     acquired = ObservedActivity.acquire(event, owner)

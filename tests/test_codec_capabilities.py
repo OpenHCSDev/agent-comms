@@ -269,7 +269,7 @@ def test_external_null_members_and_nullable_names_use_their_declarations():
         ending: type[PiStopReason] | None
 
     assert NullableName.from_wire({"ending": None}).ending is None
-    known = PiStopReason.member_named("stop")
+    known = StopStopReason
     assert NullableName.from_wire({"ending": "stop"}).ending is known
     resolved = FieldCodec.decode_external(type[PiStopReason], "stop", {})
     assert FieldCodec.decode_resolved(type[PiStopReason], resolved) is known

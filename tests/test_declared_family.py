@@ -12,6 +12,7 @@ from agent_comms.execution.native_input_record import NativeInputExecution
 from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.nominal.declared_family import DeclaredFamily, DeclaredOrder, RegisteredFamily
 from agent_comms.planning.orders import FoundProgress
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 
 
 class SampleFamily(DeclaredFamily, affix="Case"):
@@ -221,7 +222,7 @@ def test_attachment_names_decode_in_a_process_that_never_imported_their_module()
     assert result.stdout.split() == ["agent_comms.task_attachments.team_pings"]
 
 
-@pytest.mark.parametrize("table", ["HarnessDelivery", "HarnessObservedPart"])
+@pytest.mark.parametrize("table", [HarnessDelivery.__name__, HarnessObservedPart.__name__])
 def test_stored_schema_text_is_the_same_whichever_bridge_imports_first(table):
     """The Claude and Codex bridges register HarnessSession members in opposite orders."""
     def ddl(first: str, second: str) -> str:

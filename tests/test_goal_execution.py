@@ -49,6 +49,7 @@ from agent_comms.storage.maintenance_barrier import MaintenanceOperator
 from agent_comms.transport.tool_caller import ToolCaller
 from agent_comms.transport.tools.goals import CommsGoalHistoryTool
 from goal_owner_fixture import GoalTurnOwners
+from agent_comms.coordination.errors import PublicationActivationBlocked
 
 
 @pytest.fixture
@@ -254,7 +255,7 @@ async def test_turn_refused_by_coordination_is_resumable_not_blocked(execution_b
     """
     comms = execution_bus
     async with turn_on(comms) as turn:
-        with pytest.raises(NativeTurnError, match="PublicationActivationBlocked"):
+        with pytest.raises(NativeTurnError, match=PublicationActivationBlocked.__name__):
             await turn.run_native()
     assert isinstance(comms.goals.goal_execution("worker"), RunnableExecution)
     assert failure_count(comms) == 0

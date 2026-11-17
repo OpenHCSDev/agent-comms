@@ -39,7 +39,7 @@ from agent_comms.installer.upgrade import (
     Upgrade,
 )
 from agent_comms.messaging.history_result import ChannelHistoryPageResult
-from agent_comms.messaging.messages import Message, TeamUpdatePosition
+from agent_comms.messaging.messages import Message, TeamUpdatePosition, ThreadLookup
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout, ScratchCheckout
 from agent_comms.projects.storage_rules import StorageRule
@@ -49,6 +49,8 @@ from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage.typed_table import ReconciledFile
 from conftest import declare_test_bus, publish_initial
+from agent_comms.installer.core_stamp import WheelStamp
+from agent_comms.package_stamp import CheckoutStamp
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 
@@ -125,7 +127,7 @@ def test_runtime_producer_digests_ignore_foreign_source(installed_home, tmp_path
     declared = '    teammate_lookup: ThreadLookup\n    indexes = (Index(("teammate_lookup", "seq")),)\n'
     text = source.read_text()
     assert text.count(declared) == 1
-    source.write_text(text.replace(declared, declared.replace("ThreadLookup", "str")))
+    source.write_text(text.replace(declared, declared.replace(ThreadLookup.__name__, "str")))
     environment = {**installed_home, "PYTHONPATH": str(foreign / "src")}
     with InstallCommands() as commands:
         commands.probe(PrepareProducerDigestsProbe(), runtime.interpreter, cwd=home,
@@ -149,11 +151,11 @@ print(json.dumps({'source': agent_comms.__file__, 'stamp': type(STAMP).__name__,
 """
     own = json.loads(subprocess.check_output(
         [runtime.interpreter, "-I", "-c", read], env=installed_home, text=True))
-    assert own["stamp"] == "WheelStamp"
+    assert own["stamp"] == WheelStamp.__name__
     assert own["computed"] == own["read"] == own["stamped"]
     reviewed = json.loads(subprocess.check_output(
         [runtime.interpreter, "-P", "-c", read], cwd=foreign, env=environment, text=True))
-    assert reviewed["stamp"] == "CheckoutStamp"
+    assert reviewed["stamp"] == CheckoutStamp.__name__
     assert Path(reviewed["source"]).is_relative_to(foreign)
     assert reviewed["computed"] == reviewed["read"]
     assert {name for name, digest in own["read"].items()
