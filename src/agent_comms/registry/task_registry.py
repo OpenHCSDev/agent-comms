@@ -15,5 +15,5 @@ class ClaimGenerationRead(ABC):
     def claim_generation(self, name: str) -> int: ...
 
 
-class TaskRegistry[Owner: TaskOwner](ClaimGenerationRead, RegistryNames[Owner], ABC):
+class TaskRegistry[Owner: TaskOwner](RegistryNames[Owner], ClaimGenerationRead, ABC):
     __slots__ = ()
