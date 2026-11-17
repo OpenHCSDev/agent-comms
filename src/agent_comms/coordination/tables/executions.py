@@ -156,11 +156,15 @@ class SystemOrigin(ClaimlessOrigin):
     pass
 
 
-class PointerExecution(SubclassUnion, TextChoice, affix="Execution"):
-    """The execution an owner's pointer names: its id, or SQL NULL while the owner is idle."""
+class OwnerPointer(ABC):
+    """What an owner's pointer names, or SQL NULL while the owner is idle."""
 
     @abstractmethod
     def is_pointed(self) -> bool: ...
+
+
+class PointerExecution(OwnerPointer, SubclassUnion, TextChoice, affix="Execution"):
+    """The execution an owner's pointer names: its id, or SQL NULL while the owner is idle."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,11 +193,8 @@ class NoPointedExecution(IdlePointer, AbsentText, PointerExecution):
     pass
 
 
-class PointerAttempt(SubclassUnion, affix="Attempt"):
+class PointerAttempt(OwnerPointer, SubclassUnion, affix="Attempt"):
     """The attempt an owner's pointer names: its ordinal, or SQL NULL while the owner is idle."""
-
-    @abstractmethod
-    def is_pointed(self) -> bool: ...
 
     @abstractmethod
     def otherwise[Default](self, default: Default) -> int | Default: ...
