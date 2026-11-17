@@ -188,10 +188,6 @@ class NativeEntry(TaggedPayload, RecordedEntry, DeclaredFamily, affix="Entry"):
     def original_id(self) -> str:
         return str(self.id.require_present())
 
-    @property
-    def annotation_id(self) -> FreshNativeId | NoEntryId:
-        return NoEntryId()
-
     def routing_in(self, routes: _SessionRoutes) -> Routing:
         return self.id.routing_in(routes)
 

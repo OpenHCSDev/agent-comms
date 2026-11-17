@@ -201,9 +201,6 @@ class InstallDue(UndatedStandingRule, FamilyScan):
         """An already-launched merge needs no second attempt."""
         return self.action
 
-    def enforce(self, comms: Comms) -> None:
-        """Due is a disposition: the teammate's `order install` launches."""
-
     def line(self) -> str:
         oldest = RecordedEventTime(min(merge.at for merge in self.merges)).stamp()
         landing = ", ".join(f"#{row.number} {row.branch}" for row in self.landing) or "none"

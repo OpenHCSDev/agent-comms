@@ -255,9 +255,6 @@ class BackToModel(WatchEnd):
 
     exit_code = 1
 
-    async def settled(self, watch: InboxSocket) -> WatchEnd:
-        return self
-
 
 @dataclass(frozen=True)
 class WatchReplaced(BackToModel, WatchDropped):

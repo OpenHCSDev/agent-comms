@@ -594,7 +594,7 @@ class Options:
             Binding.add_arguments(command, operation.binding_session, operation.binding_request)
             operation.add_arguments(command)
             command.set_defaults(operation=operation)
-        arguments = parser.parse_args(namespace=CliArguments())
+        arguments: CliArguments = parser.parse_args(namespace=CliArguments())
         arguments.operation = arguments.operation.from_arguments(arguments)
         arguments.binding = arguments.binding_thread.request.from_arguments(arguments, bridge_type)
         return cls(**{declared.name: vars(arguments)[key]
