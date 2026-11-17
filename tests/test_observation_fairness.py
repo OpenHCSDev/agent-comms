@@ -24,6 +24,7 @@ from agent_comms.ui_model.observation import (
     TeamHudReading,
     ThreadReading,
 )
+from observation_pass_fixture import watched_pass
 
 
 class EndlessReading(ReadingObservation):
@@ -82,12 +83,12 @@ async def test_completed_thread_read_waits_for_changed_revision(comms):
         service.interest.observations = {CountedThreadReading: reading}
         try:
             for _ in range(3):
-                await service.observe(set())
+                await watched_pass(service)
                 assert reading.read_count == 1
                 assert not service.changed.is_set()
             comms.channels.create_tag("revision-changed")
             for _ in range(3):
-                await service.observe(set())
+                await watched_pass(service)
                 assert reading.read_count == 2
                 assert not service.changed.is_set()
         finally:

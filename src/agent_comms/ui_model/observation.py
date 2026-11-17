@@ -2027,6 +2027,15 @@ class ObservationService:
             await asyncio.sleep(ReadBusy.retry_seconds)
             self.changed.set()
 
+    async def pass_once(self) -> None:
+        """One wake: answer waiting reads, then observe once if a change is due."""
+        self.changed.clear()
+        attempted: set[int] = set()
+        await self.answer_pending(attempted)
+        if self.observe_due and not self.closed:
+            self.observe_due = False
+            await self.observe(attempted)
+
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
         # Request and watcher defects belong to the service process boundary;
@@ -2039,12 +2048,7 @@ class ObservationService:
             try:
                 while not self.closed:
                     await self.changed.wait()
-                    self.changed.clear()
-                    attempted: set[int] = set()
-                    await self.answer_pending(attempted)
-                    if self.observe_due and not self.closed:
-                        self.observe_due = False
-                        await self.observe(attempted)
+                    await self.pass_once()
             finally:
                 self.retire()
                 loop.remove_reader(self.connection.fileno())
