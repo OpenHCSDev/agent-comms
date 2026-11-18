@@ -72,6 +72,7 @@ def installed_pair(tmp_path: Path, test_uv: Path) -> Iterator[InstalledPair]:
         for path, revision in ((live.path, old), (staged, new)):
             core = FixtureProject(path, CorePackage.distribution, "fixture_core")
             core.write("value = 'editable core'\n", (f"{plugin.name}=={plugin.version}",))
+            Repo.git(path, "init", "-q")
             stack = path / "stack"
             stack.mkdir()
             (stack / "pyproject.toml").write_text(tomli_w.dumps({

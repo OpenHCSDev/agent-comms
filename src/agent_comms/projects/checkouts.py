@@ -40,6 +40,7 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.projects.git_errors import GitCommandError, UnavailableCommitError
 from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_environment import RepositoryEnvironment
 
 
 class CheckoutHoldsWorkError(ValueError):
@@ -224,9 +225,8 @@ class Checkout(SingleFieldValue, PresentMember):
 
     @property
     def test_environment(self) -> Path:
-        """The interpreter prefix every order names for this tree's tests. Install syncs the
-        live checkout's from the lock it moves to; nothing else writes it."""
-        return self.path / ".venv"
+        """All worktrees use the Git repository's one test prefix."""
+        return RepositoryEnvironment.of(self.path).prefix
 
     def resolved(self, *, strict: bool = False) -> Self:
         """Resolve this recorded path without imposing launch qualification."""

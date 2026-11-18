@@ -32,6 +32,7 @@ from agent_comms.planning.problem_number import ProblemNumber
 from agent_comms.projects.checkouts import Checkout, RepositoryReads
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_environment import RepositoryEnvironment
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.repository_storage import RepositoryStorage
 from agent_comms.projects.work_branches import WorkBranches
@@ -751,8 +752,12 @@ class StorageRule(RoomAllocation, DurableFile, ThreadCheckoutSource[Thread], Rep
             'your only scratch dir is '
             f'{self.roots_of(thread).scratch}/. '
             f'Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}: '
-            "install syncs agent-comms' from the lock it installs; nothing writes the others. "
-            'Never create a venv, never uv sync or pip install into a shared one, never write '
+            "install syncs agent-comms' from the lock it installs. "
+            f'For another repository, use agent-comms {RepositoryEnvironment.sync_verb} '
+            f'--from {thread.name} --project-thread PROJECT_THREAD '
+            '--checkout SOURCE_WORKTREE --requirements COMMITTED_FILE; '
+            'all its worktrees share one prefix and sync waits for the test lease. '
+            'Never create a private venv or run ad-hoc uv sync/pip into a shared one, never write '
             '.artifacts, never git clone. A shared interpreter missing a declared dependency '
             'means its lock is wrong or its sync is stale: relock at the owner or say which '
             'interpreter is stale, never install around it. '
