@@ -125,10 +125,16 @@ class ChatEndpoint:
     temperature: float = 0.7
     timeout: float = 90.0
 
-    def call(self, body: str) -> ModelReply:
+    def call(self, messages: list[dict]) -> ModelReply:
+        """Send the full message list and decode one reply.
+
+        `messages` carries the conversation state: a list of `{"role": "user"|"assistant",
+        "content": "..."}` dicts in turn order. Ownership of the history is the caller's;
+        the endpoint is stateless by design (an HTTP chat completion has no session).
+        """
         payload = json.dumps({
             "model": self.model,
-            "messages": [{"role": "user", "content": body}],
+            "messages": messages,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
         }).encode()
@@ -171,6 +177,10 @@ class ModelAgent:
     async def run(self) -> None:
         # Select the LaunchRoot BEFORE resolving the route: resolve_comms_route(None)
         # falls back to LaunchRoot.current(), which requires a selection already in scope.
+        # Per-sender conversation history lives on this run's stack: a dict keyed by
+        # sender name, each value a list of the chat-completions messages exchanged with
+        # that sender. Without this every turn is a one-shot and the model has no sense
+        # of continuity (Tristan, 2026-11-18, live probe).
         with LaunchRoot.from_path(self.root).selected():
             route = resolve_comms_route(self.root)
             comms = Comms(route)
@@ -179,11 +189,17 @@ class ModelAgent:
                   f"{self.endpoint.url} ({self.endpoint.model}) "
                   f"k={self.rejection_k} start={type(start).__name__}", flush=True)
             loop = asyncio.get_running_loop()
+            histories: dict[str, list[dict]] = {}
             async for message in comms.watch(self.name, after=start):
+                history = histories.setdefault(message.sender, [])
+                history.append({"role": "user", "content": message.body})
                 print(f"[model-agent] {message.sender} -> {self.name}: "
-                      f"{len(message.body)} chars", flush=True)
-                reply, rendered = await self._best_reply(loop, message.body)
+                      f"{len(message.body)} chars (turn {len(history) // 2 + 1})",
+                      flush=True)
+                reply, rendered = await self._best_reply(loop, history)
                 comms.messaging.send(self.name, message.sender, rendered, InfoKind)
+                if isinstance(reply, ChatCompletion):
+                    history.append({"role": "assistant", "content": reply.content})
                 # Success types log a char count; failure types log their reply content
                 # inline so the daemon stdout shows WHAT failed without a bus check.
                 suffix = (f"{len(rendered)} chars" if isinstance(reply, ChatCompletion)
@@ -211,7 +227,7 @@ class ModelAgent:
         return AfterMessageStart(page.page.messages[-1].reference)
 
     async def _best_reply(self, loop: asyncio.AbstractEventLoop,
-                          body: str) -> tuple[ModelReply, str]:
+                          messages: list[dict]) -> tuple[ModelReply, str]:
         """Return (reply-member, text-to-send).
 
         Single-pass (k=1): the reply's display() goes straight through.
@@ -220,12 +236,12 @@ class ModelAgent:
         one-line footer naming what fired so the slop is loud on the bus.
         """
         if self.rejection_k <= 1:
-            reply = await loop.run_in_executor(None, self.endpoint.call, body)
+            reply = await loop.run_in_executor(None, self.endpoint.call, messages)
             return reply, reply.display()
 
         best: tuple[ModelReply, SlopVerdict] | None = None
         for attempt in range(self.rejection_k):
-            reply = await loop.run_in_executor(None, self.endpoint.call, body)
+            reply = await loop.run_in_executor(None, self.endpoint.call, messages)
             if not isinstance(reply, ChatCompletion):
                 # Transport/decode failures don't get rejection-sampled; a pod that is
                 # 500ing will 500 every candidate, so return the first non-success
