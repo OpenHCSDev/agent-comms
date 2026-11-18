@@ -8,9 +8,10 @@ Run with this checkout's source on the path and the older interpreter as the arg
 This checkout builds a scratch bus, sends a human DM and an agent channel message that carry
 files, and a send with none. It then encodes what an older client reads: the DM's
 conversation page, the channel's history page, the recipient's inbox and the file-free send
-request. The older interpreter decodes each one with its own installed agent_comms (no
-PYTHONPATH) and prints the bodies it read. The script exits non-zero unless every decode
-succeeds, keeps every body, and ran on an agent_comms outside this checkout.
+request. The older interpreter runs tools/old_reader_decode.py, which decodes each one with
+its own installed agent_comms (no PYTHONPATH) and prints the bodies it read. The script
+exits non-zero unless every decode succeeds, keeps every body, and ran on an agent_comms
+outside this checkout.
 """
 
 from __future__ import annotations
@@ -41,23 +42,6 @@ from agent_comms.transport.tools.served import (
     ServedCommsUserSendTool,
 )
 from agent_comms.transport.tools.sidebar import CommsUserSendTool
-
-DECODE = """
-import json, sys
-import agent_comms
-from agent_comms.messaging.history_result import ChannelHistoryPageResult
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.transport.tools.inbox import CommsInboxTool
-from agent_comms.transport.tools.sidebar import CommsConversationPageTool, CommsUserSendTool
-page, history, inbox, request = json.load(sys.stdin)
-print(json.dumps([
-    agent_comms.__file__,
-    [m.body for m in FieldCodec.decode(CommsConversationPageTool.result_type(), page).messages],
-    [m.body for m in FieldCodec.decode(ChannelHistoryPageResult, history).messages],
-    [m.body for m in FieldCodec.decode(CommsInboxTool.result_type(), inbox).messages],
-    FieldCodec.decode(CommsUserSendTool, request).body,
-]))
-"""
 
 EXPECTED = (
     ["a DM with a file", "a DM without one"],
@@ -105,9 +89,10 @@ def published(root: Path) -> list[object]:
 def main(older: str) -> int:
     with tempfile.TemporaryDirectory() as scratch:
         records = published(Path(scratch) / "bus")
-    environment = {name: value for name, value in os.environ.items() if name != "PYTHONPATH"}
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
     decoded = subprocess.run(
-        [older, "-c", DECODE],
+        [older, str(Path(__file__).with_name("old_reader_decode.py"))],
         input=json.dumps(records),
         capture_output=True,
         text=True,
