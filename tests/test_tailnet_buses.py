@@ -15,10 +15,13 @@ from agent_comms.transport.tailnet_buses import (
     PeerWithoutBus,
     TailnetBuses,
     TailnetPeer,
+    TailnetSelf,
 )
 
 STATUS = {
-    "Self": {"HostName": "laptop", "TailscaleIPs": ["100.98.83.32"], "Online": True},
+    "Self": {"HostName": "laptop", "DNSName": "laptop.tail553874.ts.net.",
+             "TailscaleIPs": ["100.98.83.32"], "Online": True, "UserID": 12345},
+    "User": {"12345": {"LoginName": "user@example.com"}},
     "Peer": {
         "nodekey:b": {"HostName": "desktop", "TailscaleIPs": ["100.124.133.120", "fd7a::1"],
                       "Online": True},
@@ -74,3 +77,9 @@ def test_every_peer_gets_the_member_that_says_what_it_answered():
 def test_a_peer_with_no_address_is_named_rather_than_dropped():
     assert isinstance(TailnetBuses.found(TailnetPeer("ghost", "", True), 0, ""), PeerOffline)
     assert TailnetPeer.reached({"TailscaleIPs": ["fd7a::1"]}) == "", "no IPv4 to reach it on"
+
+
+def test_this_machine_reads_its_own_identity_from_the_same_status():
+    me = TailnetSelf.from_status(STATUS)
+    assert me.dns_name == "laptop.tail553874.ts.net"
+    assert me.owner_login == "user@example.com"
