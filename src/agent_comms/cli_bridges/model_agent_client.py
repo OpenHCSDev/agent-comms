@@ -16,17 +16,19 @@ import argparse
 import asyncio
 import json
 import sys
+from contextlib import ExitStack
 from functools import partial
 import urllib.error
 import urllib.request
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import os
 from pathlib import Path
 
 from agent_comms.comms import Comms
 from agent_comms.conversational_slop import ResponseContext, SlopVerdict, verify_all
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.installer.active_route import resolve_comms_route
 from agent_comms.messaging.agent_inbox import TakenInputStart
@@ -177,6 +179,7 @@ class ModelAgent:
     skip_backlog: bool = True
     verifier_context: ResponseContext = ResponseContext()
     channels: frozenset[str] = frozenset()
+    takeover: bool = False
 
     async def run(self) -> None:
         # Select the LaunchRoot BEFORE resolving the route: resolve_comms_route(None)
@@ -189,39 +192,72 @@ class ModelAgent:
             route = resolve_comms_route(self.root)
             comms = Comms(route)
             await self._register(comms)
-            start = self._initial_start(comms)
-            print(f"[model-agent] watching {self.name!r} -> "
-                  f"{self.endpoint.url} ({self.endpoint.model}) "
-                  f"k={self.rejection_k} start={type(start).__name__}", flush=True)
-            loop = asyncio.get_running_loop()
-            histories: dict[str, list[dict]] = {}
-            async for message in comms.watch(self.name, after=start):
-                history = histories.setdefault(message.sender, [])
-                history.append({"role": "user", "content": message.body})
-                print(f"[model-agent] {message.sender} -> {self.name}: "
-                      f"{len(message.body)} chars (turn {len(history) // 2 + 1})",
-                      flush=True)
-                reply, rendered = await self._best_reply(loop, history)
-                comms.messaging.send(self.name, message.sender, rendered, InfoKind)
-                if isinstance(reply, ChatCompletion):
-                    history.append({"role": "assistant", "content": reply.content})
-                # Success types log a char count; failure types log their reply content
-                # inline so the daemon stdout shows WHAT failed without a bus check.
-                suffix = (f"{len(rendered)} chars" if isinstance(reply, ChatCompletion)
-                          else reply.display())
-                print(f"[model-agent] replied to {message.sender} with "
-                      f"{type(reply).__name__}: {suffix}", flush=True)
+            with ExitStack() as endpoint:
+                # Bound as Delivery.start binds a CLI bridge (cli_bridges/shared.py): connected,
+                # with this process, until it leaves. A declared thread with no process is
+                # "no bridge" on the bus however fast its replies come back.
+                await comms.bus.when_open(lambda: endpoint.enter_context(
+                    comms.registry.external_process(
+                        self.name, ProcessIdentity.capture(os.getpid()))))
+                await self._serve(comms)
+
+    async def _serve(self, comms: Comms) -> None:
+        """Answer every message where it was asked: a channel post in its channel, a DM in
+        the DM (`Message.exact_reply_target`). The bridge used to DM every answer back, so a
+        channel @mention was answered somewhere nobody in the channel looked."""
+        start = self._initial_start(comms)
+        print(f"[model-agent] watching {self.name!r} -> "
+              f"{self.endpoint.url} ({self.endpoint.model}) "
+              f"k={self.rejection_k} start={type(start).__name__}", flush=True)
+        loop = asyncio.get_running_loop()
+        histories: dict[str, list[dict]] = {}
+        async for message in comms.watch(self.name, after=start):
+            history = histories.setdefault(message.sender, [])
+            history.append({"role": "user", "content": message.body})
+            print(f"[model-agent] {message.sender} -> {self.name}: "
+                  f"{len(message.body)} chars (turn {len(history) // 2 + 1})",
+                  flush=True)
+            reply, rendered = await self._best_reply(loop, history)
+            comms.messaging.send(self.name, message.exact_reply_target, rendered, InfoKind)
+            if isinstance(reply, ChatCompletion):
+                history.append({"role": "assistant", "content": reply.content})
+            # Success types log a char count; failure types log their reply content
+            # inline so the daemon stdout shows WHAT failed without a bus check.
+            suffix = (f"{len(rendered)} chars" if isinstance(reply, ChatCompletion)
+                      else reply.display())
+            print(f"[model-agent] replied to {message.sender} with "
+                  f"{type(reply).__name__}: {suffix}", flush=True)
 
     async def _register(self, comms: Comms) -> None:
-        """Declare this thread before watching or sending from it, as `Watch.register` does
-        (cli_bridges/shared.py): an unregistered name has no inbox to watch and no sender to
-        send as, so every reply raised UnregisteredThreadError (Tristan, 2026-11-18: "it shodl
-        autoregister"). A name already registered keeps its identity and channels."""
-        if comms.registry.snapshot().taken(self.name):
-            return
-        thread = ExternalThread(self.name, self.channels, Checkout(Path.cwd()))
+        """Declare this thread as a CLI endpoint in its channels before watching or sending.
+
+        An unregistered name has no inbox and no sender (Tristan, 2026-11-18: "it shodl
+        autoregister"). A name held by another kind of thread, such as a stopped fork, is not an
+        endpoint: the channel delivers nothing to it and the bridge cannot hold it, so the bridge
+        stops unless it was started to take the name over (comms_serve_model replace=true), and
+        then deletes that stopped declaration first; a live one refuses its deletion. An existing
+        endpoint keeps its identity and joins any requested channel it is missing."""
+        snapshot = comms.registry.snapshot()
+        if snapshot.taken(self.name):
+            current = comms.registry.require(self.name)
+            if isinstance(current, ExternalThread):
+                if self.channels <= current.tags:
+                    return
+                thread = replace(current, tags=current.tags | self.channels)
+            elif self.takeover:
+                await comms.bus.when_open(partial(comms.threads.delete, self.name))
+                print(f"[model-agent] deleted the stopped {type(current).__name__} declaration "
+                      f"of {self.name!r} to take the name over", flush=True)
+                thread = ExternalThread(self.name, self.channels, Checkout(Path.cwd()))
+            else:
+                print(f"[model-agent] {self.name!r} is a {type(current).__name__} thread, not a "
+                      "CLI endpoint; restart with --takeover (comms_serve_model replace=true) to "
+                      "replace it", flush=True)
+                raise SystemExit(2)
+        else:
+            thread = ExternalThread(self.name, self.channels, Checkout(Path.cwd()))
         await comms.bus.when_open(partial(comms.registry.declare, thread))
-        print(f"[model-agent] registered {self.name!r} in {sorted(self.channels)}", flush=True)
+        print(f"[model-agent] registered {self.name!r} in {sorted(thread.tags)}", flush=True)
 
     def _initial_start(self, comms: Comms) -> InboxStart:
         """Where the first inbox read begins.
@@ -313,8 +349,10 @@ def main() -> None:
                               "skips the backlog: a fresh daemon connect answers only messages "
                               "that arrive after it starts, since it doesn't own what it forwards."))
     parser.add_argument("--channels", default="",
-                        help=("Comma-separated channels a new thread joins on first registration, "
-                              "e.g. '#model_test'. An already-registered thread keeps its own."))
+                        help=("Comma-separated channels the thread joins, e.g. '#model_test'."))
+    parser.add_argument("--takeover", action="store_true",
+                        help=("Delete a stopped non-endpoint thread holding --name (a fork, a "
+                              "stopped native thread) and declare this endpoint in its place."))
     args = parser.parse_args()
     # The bridge declares no tools to the endpoint, so the verifier should fire on
     # any <tool_call> in a candidate. token_budget mirrors max_tokens so a truncated
@@ -335,6 +373,7 @@ def main() -> None:
         verifier_context=verifier_context,
         channels=frozenset(name.strip().lstrip("#") for name in args.channels.split(",")
                            if name.strip().lstrip("#")),
+        takeover=args.takeover,
     )
     try:
         asyncio.run(agent.run())

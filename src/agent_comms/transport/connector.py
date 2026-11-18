@@ -226,18 +226,20 @@ class ConnectorServeModelTool(ConnectorTool, declared_name="comms_serve_model"):
         "Put an OpenAI-compatible chat model on the bus as a thread, by starting "
         "agent-comms-model-agent on the bus host. Messages to the thread go to the endpoint and "
         "its replies come back on the bus. One bridge per name: calling again for a live name "
-        "keeps it unless replace is true (use replace when the endpoint URL changed). Returns "
+        "keeps it unless replace is true (use replace when the endpoint URL changed, or to take "
+        "the name over from a stopped thread that is not a bridge, such as a fork). Returns "
         "the bridge's process and log path. Changes the bus."
     )
     name: Annotated[str, *tool_field("Thread name the model answers as, e.g. rl2")]
     endpoint: Annotated[str, *tool_field("OpenAI-compatible chat/completions URL")]
     model: Annotated[str, *tool_field("Model id the endpoint serves, e.g. rl2")]
     channels: Annotated[str, *tool_field(
-        "Comma-separated channels a new thread joins, e.g. #model_test")] = ""
+        "Comma-separated channels the thread joins, e.g. #model_test")] = ""
     max_tokens: Annotated[int, *tool_field(
         "Reply token budget; leave room for long thinking")] = 12000
     replace: Annotated[bool, *tool_field(
-        "Stop a live bridge for this name and start a new one")] = False
+        "Stop a live bridge for this name and start a new one; a stopped non-bridge thread "
+        "of this name is deleted so the bridge can hold it")] = False
 
     state_directory: ClassVar[str] = "model-agents"
 
@@ -257,7 +259,7 @@ class ConnectorServeModelTool(ConnectorTool, declared_name="comms_serve_model"):
             sys.executable, "-m", "agent_comms.cli_bridges.model_agent_client",
             "--name", self.name, "--endpoint", self.endpoint, "--model", self.model,
             "--max-tokens", str(self.max_tokens), "--channels", self.channels,
-            "--root", str(comms.root),
+            "--root", str(comms.root), *(("--takeover",) if self.replace else ()),
         )
         with log.open("ab") as output:
             child = SpawnedProcess.launch(
