@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
-from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
@@ -17,6 +16,7 @@ from agent_comms.execution.context_reading import ContextUsage
 from agent_comms.execution.launch_runtime import CallingThreadUnavailable, ThreadLaunch
 from agent_comms.execution.native_entries import CompactionEntry, ModelChangeEntry
 from agent_comms.execution.pi_vocabulary import HighThinkingLevel
+from agent_comms.execution.runtime_observations import AgentInfo, ContextUsageObservation
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.history_views import CallingThreadTarget, NamedThreadTarget
 from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget, ThreadTarget

@@ -17,6 +17,7 @@ from agent_comms.execution.acp_failure import FailedNativeTurnOutcome, NativeTur
 from agent_comms.execution.diagnostics import record_request_progress, record_terminal_failure
 from agent_comms.execution.native_turn_context import ContextObserved
 from agent_comms.execution.publication_measurements import PublicationMeasurements
+from agent_comms.execution.runtime_observations import AgentEventConsumer, NativeMetadataObservation
 from agent_comms.execution.turn_failure import ModelRequestFailed, NoTurnFailure, TurnFailure
 from agent_comms.execution.turn_lease import TurnState
 from agent_comms.execution.turn_phase import NativePhaseChanged, PublishingPhase
@@ -40,7 +41,7 @@ class TurnEventPublication(MroDispatch):
 
 
 
-class TurnProgress(events.AgentEventConsumer[Comms]):
+class TurnProgress(AgentEventConsumer[Comms]):
     def __init__(
         self,
         *,
@@ -212,12 +213,12 @@ class TurnProgress(events.AgentEventConsumer[Comms]):
             ), owner=self.thread.require_process()),
         )
 
-    async def before_native_metadata(self, event: events.NativeMetadataObservation) -> None:
+    async def before_native_metadata(self, event: NativeMetadataObservation) -> None:
         session_file = event.session_file
         if session_file:
             await self.turn.attach_native_session(session_file)
 
-    async def after_native_metadata(self, event: events.NativeMetadataObservation) -> None:
+    async def after_native_metadata(self, event: NativeMetadataObservation) -> None:
         await self.sessions.observe_native_configuration(self.session_id, self.thread_name, event)
 
     @handles(events.ToolEnd)

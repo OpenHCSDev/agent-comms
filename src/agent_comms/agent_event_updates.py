@@ -33,6 +33,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.context_reading import ContextUsage, UnsizedContext
 from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_output import NativeRecordLocation
+from agent_comms.execution.runtime_observations import ContextInfo
 from agent_comms.execution.tool_results import tool_result_content
 from agent_comms.execution.turn_effects import TurnEffects
 from agent_comms.messaging.routing import MessageRoute, NoMessageRoute
@@ -224,8 +225,8 @@ class AcpEventConsumer(MroDispatch):
             ),
         )
 
-    @handles(events.ContextInfo)
-    async def on_context_info(self, event: events.ContextInfo) -> None:
+    @handles(ContextInfo)
+    async def on_context_info(self, event: ContextInfo) -> None:
         await self.dispatch(event.context_size.reading(event.context_used))
 
     @handles(ContextUsage)

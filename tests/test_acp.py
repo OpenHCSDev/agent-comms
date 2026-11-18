@@ -32,6 +32,11 @@ from agent_comms.execution.context_reading import ContextUsage, UnmeasuredContex
 from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenArguments
 from agent_comms.execution.pi_vocabulary import ServiceTier
+from agent_comms.execution.runtime_observations import (
+    AgentInfo,
+    ContextInfo,
+    ContextUsageObservation,
+)
 from agent_comms.execution.turn_phase import ToolRunningPhase
 from agent_comms.execution.turn_runner import parse_target
 from agent_comms.messaging.channel_targets import CommandTarget
@@ -123,17 +128,17 @@ class TestHandlers:
         session = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         session_id = FieldCodec.decode(AcpSessionId, session.session_id)
         agent._comms.agents.observe_runtime_info(
-            "proj", ae.ContextUsageObservation(context_used=PiCount.from_wire(38723))
+            "proj", ContextUsageObservation(context_used=PiCount.from_wire(38723))
         )
         agent._comms.agents.observe_runtime_info(
-            "proj", ae.AgentInfo(model=DeclaredModel('test/model'), context_size=PiCount.from_wire(272000))
+            "proj", AgentInfo(model=DeclaredModel('test/model'), context_size=PiCount.from_wire(272000))
         )
         reopened = canonical_agent(wire(agent._comms.root), auto_wake=False)
         assert facts((await reopened.sessions.metadata("proj", session_id=session_id)), CoordinationChangedUpdate)[
             0
         ].context_usage == ContextUsage(38723, 272000)
         agent._comms.agents.observe_runtime_info(
-            "proj", ae.ContextInfo(context_used=PiCount.from_wire(None), context_size=PiCount.from_wire(272000))
+            "proj", ContextInfo(context_used=PiCount.from_wire(None), context_size=PiCount.from_wire(272000))
         )
         assert (
             facts((await reopened.sessions.metadata("proj", session_id=session_id)), CoordinationChangedUpdate)[0].context_usage

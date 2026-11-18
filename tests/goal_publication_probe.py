@@ -6,6 +6,8 @@ from typing import get_type_hints
 
 importlib.import_module(sys.argv[1])
 
+from agent_comms.execution.runtime_observations import AgentEventConsumer
+
 from agent_comms.planning.goals import GoalUnavailable
 from agent_comms.registry.threads import Thread
 
@@ -41,7 +43,7 @@ assert get_type_hints(GoalUnavailable.heading)["execution"]
 assert get_type_hints(Thread.wake_context)["goals"]
 assert get_type_hints(RunnableExecution.apply_toggle)["change"]
 assert get_type_hints(agent_events.InputStarted.captured)["inputs"]
-assert get_type_hints(agent_events.AgentEventConsumer.__init__)["comms"]
+assert get_type_hints(AgentEventConsumer.__init__)["comms"]
 assert get_type_hints(agent_events.Notice.acp_updates)["return"]
 assert get_type_hints(GoalWait.visit_group)["agents"]
 assert get_type_hints(GoalRecords)["registry"]

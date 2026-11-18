@@ -28,7 +28,6 @@ from agent_comms.agent_backend import (
     PlacedCompaction,
     RuntimeLocation,
 )
-from agent_comms.agent_events import AgentInfo
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.fresh_private_session import create_fresh_private_session
@@ -47,6 +46,7 @@ from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.persistent_pi_session import (
     PersistentPiSession as PersistentPiSession,
 )
+from agent_comms.execution.runtime_observations import AgentInfo
 from agent_comms.execution.transcript_sources import NativeTranscript
 from agent_comms.execution.pi_commands import Compact, NativeQuery
 from agent_comms.execution.pi_events import NativePiEvent

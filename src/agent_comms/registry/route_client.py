@@ -11,10 +11,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Self
 
-from agent_comms.agent_events import RuntimeInfoObservation
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.root_runtime import RootRuntime
 from agent_comms.execution.runtime_info_source import RuntimeInfoSource
+from agent_comms.execution.runtime_observations import RuntimeInfoObservation
 from agent_comms.installer.active_route import CommsRoute
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.registration import Registration

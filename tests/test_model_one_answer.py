@@ -9,9 +9,9 @@ import pytest
 from agent_comms.cli_verbs.new import NewThreadCliCommand
 from agent_comms.cli_verbs.target_fields import TargetField
 from agent_comms.execution.acp import CommsAgent
-from agent_comms.agent_events import NativeMetadataObservation
 from agent_comms.config_options import CatalogChoice, ModelConfigOption
 from agent_comms.execution.native_arguments import NativeArguments
+from agent_comms.execution.runtime_observations import NativeMetadataObservation
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_configuration import ThreadConfiguration
