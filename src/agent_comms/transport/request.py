@@ -291,7 +291,8 @@ class CoreAccess(ABC):
     def call[R: ToolResult](self, request: ToolRequest[R]) -> R:
         """The request's declared result, from whichever Core this access reaches."""
 
-    @abstractmethod
     def serves(self, request_type: type[ToolRequest]) -> bool:
-        """Whether this Core answers `request_type`: a Core in this process serves every request
-        it declares; across a connector, the tools that connector exposes to this caller."""
+        """Whether this Core answers `request_type`. A Core in this process serves every request
+        it declares; a Core across a connector (`RemoteCoreAccess`) answers from the tools that
+        connector exposes to this caller."""
+        return True
