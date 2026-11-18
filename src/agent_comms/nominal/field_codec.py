@@ -2879,9 +2879,11 @@ class FieldCodec(MroDispatch, Sealed):
         )
 
     @classmethod
-    def compile_comparison(cls, record: type) -> None:
-        """Prepare the same declared field view that record comparisons execute."""
-        _member_decoders[record].compile_comparison(set())
+    def compile_comparison(cls, record: type, *others: type) -> None:
+        """Prepare the declared comparison views, sharing nested records across the batch."""
+        compiled: set[object] = set()
+        for declaration in (record, *others):
+            _member_decoders[declaration].compile_comparison(compiled)
 
     @classmethod
     def encode_document(cls, value: object, declared: object) -> object:

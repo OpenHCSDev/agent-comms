@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 import pytest
 
 from agent_comms.heartbeat_subjects import TeamHistory
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.goal_states import (
@@ -46,13 +47,14 @@ def test_rule_lookup_validates_a_declaration_cut_once(monkeypatch):
     # Discovery can introduce declarations; settle its resulting generation before counting.
     StandingRule.acquire_declarations()
     calls = []
-    compile_comparison = StandingRule.compiled_comparison.__func__
+    declarations = DeclaredFamily._member_declarations.__func__
 
     def counted(cls):
-        calls.append(cls)
-        return compile_comparison(cls)
+        if cls is StandingRule:
+            calls.append(cls)
+        return declarations(cls)
 
-    monkeypatch.setattr(StandingRule, "compiled_comparison", classmethod(counted))
+    monkeypatch.setattr(DeclaredFamily, "_member_declarations", classmethod(counted))
     for _ in range(20):
         assert StandingRule.recorded_member(RequestStalled.declared_name) is RequestStalled
     assert calls == []
@@ -70,7 +72,7 @@ def test_rule_lookup_validates_a_declaration_cut_once(monkeypatch):
 
     try:
         assert StandingRule.recorded_member(NewObservedRule.declared_name) is NewObservedRule
-        assert NewObservedRule in calls
+        assert StandingRule in calls
         calls.clear()
         assert StandingRule.recorded_member(NewObservedRule.declared_name) is NewObservedRule
         assert calls == []
@@ -92,6 +94,45 @@ def test_rule_lookup_validates_a_declaration_cut_once(monkeypatch):
             StandingRule.recorded_member(InvalidObservedRule.declared_name)
     finally:
         InvalidObservedRule.withdraw()
+
+
+def test_late_nested_rule_member_revalidates_comparison():
+    class NestedObservation(DeclaredFamily):
+        pass
+
+    @dataclass(frozen=True)
+    class KnownObservation(NestedObservation):
+        count: int
+
+    @dataclass(frozen=True)
+    class NestedObservedRule(UndatedStandingRule):
+        observed: NestedObservation
+
+        @classmethod
+        def scan_observed(cls, comms, observed, frame):
+            return ()
+
+        def line(self):
+            return "nested observation"
+
+    class UnownedNestedValue:
+        pass
+
+    try:
+        assert StandingRule.recorded_member(NestedObservedRule.declared_name) is NestedObservedRule
+
+        @dataclass(frozen=True)
+        class LaterObservation(NestedObservation):
+            value: UnownedNestedValue
+
+        try:
+            with pytest.raises(TypeError, match="UnownedNestedValue"):
+                StandingRule.recorded_member(NestedObservedRule.declared_name)
+        finally:
+            LaterObservation.withdraw()
+    finally:
+        NestedObservedRule.withdraw()
+        KnownObservation.withdraw()
 
 
 @pytest.mark.parametrize("state, reason", (

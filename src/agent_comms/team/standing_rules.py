@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields
-from functools import cache, cached_property
+from functools import cached_property
 from itertools import combinations
 from pathlib import Path
 from subprocess import TimeoutExpired
@@ -246,14 +246,10 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
     def _compared_members(cls: type[StandingRule]) -> tuple[type[DeclaredFamily], ...]:
         """Validate the acquired declarations once, and again when membership changes."""
         members = super(StandingRule, cls)._member_declarations()
-        for member in members:
-            cast(type[StandingRule], member).compiled_comparison()
+        if members:
+            FieldCodec.compile_comparison(members[0], *members[1:])
         return members
 
-    @classmethod
-    @cache
-    def compiled_comparison(cls) -> None:
-        FieldCodec.compile_comparison(cls)
     @classmethod
     def team_disposes(cls) -> bool:
         return True
