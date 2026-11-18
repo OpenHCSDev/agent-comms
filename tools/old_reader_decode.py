@@ -12,16 +12,17 @@ import sys
 
 import agent_comms
 from agent_comms.messaging.history_result import ChannelHistoryPageResult
+from agent_comms.messaging.message_page import MessagePage
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.transport.tools.inbox import CommsInboxTool
-from agent_comms.transport.tools.sidebar import CommsConversationPageTool, CommsUserSendTool
+from agent_comms.transport.tools.inbox import InboxPageRead
+from agent_comms.transport.tools.sidebar import CommsUserSendTool
 
 
 def main() -> None:
     page, history, inbox, request = json.load(sys.stdin)
-    decoded_page = FieldCodec.decode(CommsConversationPageTool.result_type(), page)
+    decoded_page = FieldCodec.decode(MessagePage, page)
     decoded_history = FieldCodec.decode(ChannelHistoryPageResult, history)
-    decoded_inbox = FieldCodec.decode(CommsInboxTool.result_type(), inbox)
+    decoded_inbox = FieldCodec.decode(InboxPageRead, inbox)
     print(
         json.dumps(
             [
