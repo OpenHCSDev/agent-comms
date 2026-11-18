@@ -314,6 +314,60 @@ class HallucinatedTheoremVerifier(SlopVerifier):
         return VerifierResult(passed=True)
 
 
+class HallucinatedSectionVerifier(SlopVerifier):
+    """Fires on paper section citations where the section doesn't exist.
+
+    run29-sft cited "Paper1 §4: 2008 is the first release year" on a Python history
+    question. §4 of paper1 exists (it's "Incomplete Inheritance Forces Code into
+    Workarounds") but it says nothing about Python's release year — the section
+    number was being used as fake authority on an unrelated topic. The theorem
+    verifier catches fake theorem NUMBERS but not fake section citations.
+
+    This verifier catches: `paper1 §N`, `paper 1 §N`, `paper4 §N`, bare `§N` where
+    N is outside the known section range for the named paper. Bare `§N` with no
+    paper qualifier is treated as paper1 (the implicit default in team rules).
+
+    Does NOT check content — a model can still cite §4 of paper1 and say the
+    wrong thing about it. Content hallucination needs a gold-statement lookup.
+    """
+
+    declared_name = "hallucinated_section"
+
+    # Real sections per paper, extracted from
+    #   grep -oE '^## [0-9]+(\.[0-9]+)?' */semantic-completeness-*.md */less-is-harder-*.md
+    # paper1 (semantic-completeness) has top-level sections 1-7; paper4
+    # (less-is-harder) has 1-12. Subsections like §4.3 are valid when the
+    # parent section exists — currently just permit anything starting with a
+    # valid top-level number, since sub-section numbering can grow.
+    PAPER1_TOP: ClassVar[frozenset[str]] = frozenset({"1", "2", "3", "4", "5", "6", "7"})
+    PAPER4_TOP: ClassVar[frozenset[str]] = frozenset(
+        {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"},
+    )
+
+    PATTERN: ClassVar[re.Pattern] = re.compile(
+        r"\b(?P<paper>[Pp]aper\s*(?P<pnum>[14]))?\s*§\s*(?P<section>\d+(?:\.\d+)?)",
+    )
+
+    @classmethod
+    def check(cls, response: str, context: ResponseContext) -> VerifierResult:
+        hits: list[str] = []
+        for match in cls.PATTERN.finditer(response):
+            section = match.group("section")
+            top = section.split(".")[0]
+            # Default to paper1 when no paper is named (team rules' implicit default).
+            paper = match.group("pnum") or "1"
+            if paper == "1" and top not in cls.PAPER1_TOP:
+                hits.append(match.group(0))
+            elif paper == "4" and top not in cls.PAPER4_TOP:
+                hits.append(match.group(0))
+        if hits:
+            return VerifierResult(
+                passed=False,
+                detail=f"section citations outside paper range: {hits}",
+            )
+        return VerifierResult(passed=True)
+
+
 class ForbiddenPhraseVerifier(SlopVerifier):
     """Fires on any scenario-supplied forbid phrase appearing in the response.
 
@@ -337,6 +391,7 @@ VERIFIERS: tuple[type[SlopVerifier], ...] = (
     ChatbotPreambleVerifier,
     HallucinatedToolCallVerifier,
     HallucinatedTheoremVerifier,
+    HallucinatedSectionVerifier,
     ForbiddenPhraseVerifier,
     LengthRunawayVerifier,
     MissingCertaintyBlockVerifier,
