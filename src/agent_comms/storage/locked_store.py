@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, closing, contextmanager, nullcontext
+from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cache, cached_property, partial
 from importlib import import_module
@@ -371,8 +372,8 @@ class JsonDocument(RootFile, ABC, Generic[T]):
             lambda present: decode(FieldCodec.parse(source.content)), self.empty,
         )
 
-    def _read_captured(
-        self, capture: Callable[[], DocumentBytes], decode: Callable[[DocumentBytes], T],
+    def _read_captured[Captured](
+        self, capture: Callable[[], Captured], decode: Callable[[Captured], T],
     ) -> T:
         try:
             return decode(capture())
@@ -1226,6 +1227,10 @@ class DecodedDocument[T](DocumentBytes):
 
     value: T
 
+    def detached(self) -> T:
+        """Readers own their value; the captured source keeps its comparison evidence."""
+        return deepcopy(self.value)
+
 
 class CopyingStore(RootFile, RankedStoreLock, declared_name=None):
     """Capture dependent documents together; release their guards before decoding."""
@@ -1249,25 +1254,27 @@ class CopyingStore(RootFile, RankedStoreLock, declared_name=None):
 class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, declared_name=None):
     """Document changes own their write guard, independent of path construction."""
 
-    def _cached_value(self, revision: FileObservation, obtain: Callable[[], T]) -> T:
+    def _cached_value(
+        self, revision: FileObservation, obtain: Callable[[], DecodedDocument[T]],
+    ) -> DecodedDocument[T]:
         cached = _read_cache.get(self.path)
         if cached is not None and cached.revision == revision:
-            return cast(T, cached.value)
+            return cast(DecodedDocument[T], cached)
         return obtain()
 
-    def _decode_source(self, source: DocumentBytes) -> T:
-        value = self._decode_capture(source)
-        _read_cache[self.path] = DecodedDocument(source.revision, source.content, value)
-        return value
+    def _decode_source(self, source: DocumentBytes) -> DecodedDocument[T]:
+        decoded = DecodedDocument(source.revision, source.content, self.read_copied(source))
+        _read_cache[self.path] = decoded
+        return decoded
 
-    def _decode_retained(self, source: DocumentBytes) -> T:
+    def _decode_retained(self, source: DocumentBytes) -> DecodedDocument[T]:
         return source.revision.either(
             lambda revision: self._cached_value(revision, partial(self._decode_source, source)),
-            self.empty,
+            lambda: DecodedDocument(source.revision, source.content, self.empty()),
         )
 
-    def _read_current(self) -> T:
-        return self._read_captured(lambda: self._copy_sources(self)[0], self._decode_retained)
+    def _read_current(self) -> DecodedDocument[T]:
+        return self._decode_retained(self._copy_sources(self)[0])
 
     def read(self) -> T:
         try:
@@ -1275,7 +1282,10 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
         except FileNotFoundError:
             _read_cache.pop(self.path, None)
             return self.empty()
-        return self._cached_value(revision, self._read_current)
+        return self._read_captured(
+            lambda: self._cached_value(revision, self._read_current),
+            lambda captured: captured.detached(),
+        )
 
     def _publish_unlocked(self, value: T) -> None:
         _read_cache.pop(self.path, None)
@@ -1283,13 +1293,13 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
 
     def replace_if_changed(self, value: T) -> None:
         """Compare and replace one current cut; an equal value leaves its file alone."""
-        def apply(current: T) -> None:
-            if current != value:
+        def apply(current: DecodedDocument[T]) -> None:
+            if current.value != value:
                 self._publish_unlocked(value)
 
         self.change_current(
             self._capture_unlocked,
-            lambda source: nullcontext(self._read_captured(lambda: source, self._decode_retained)),
+            lambda source: nullcontext(self._decode_retained(source)),
             apply,
         )
 

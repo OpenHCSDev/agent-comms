@@ -8,6 +8,7 @@ import os
 import stat
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Annotated
 
 import pytest
@@ -129,6 +130,23 @@ def test_replacement_input_is_not_the_decoded_published_value(tmp_path):
     store.replace_if_changed(supplied)
     assert store.read() == TransientDocument("published")
     assert store.read() != supplied
+
+
+@pytest.mark.parametrize("replace_with_empty", (True, False))
+def test_conditional_replace_ignores_reader_mutation(tmp_path: Path, replace_with_empty: bool) -> None:
+    store = RuntimeInfoStore(tmp_path / "document.json")
+    persisted = RuntimeInfoDocument({"first": AgentRuntimeInfo(thread="first", timestamp=1.0)})
+    store.replace(persisted)
+    store.read().observations.clear()
+    before = DocumentBytes.capture(store.path)
+    wanted = RuntimeInfoDocument() if replace_with_empty else persisted
+
+    store.replace_if_changed(wanted)
+
+    actual = store.read_copied(DocumentBytes.capture(store.path))
+    assert actual == wanted
+    if not replace_with_empty:
+        assert DocumentBytes.capture(store.path) == before
 
 
 def observation(thread="goal"):
