@@ -123,6 +123,9 @@ class CallClaim(ABC):  # noqa: B024 - shared rejection; leaves override valid tr
     async def consume(self, call: NativeToolCall, action: Callable[[], Awaitable[None]]) -> None:
         raise SelectedToolDenied("Native tool request was already consumed; outcome may be UNKNOWN")
 
+    async def execute(self, call: NativeToolCall, action: Callable[[], Awaitable[dict[str, object]]]) -> dict[str, object]:
+        raise SelectedToolDenied("Native tool execution needs an unused owner authorization")
+
     def finish(
         self, call: NativeToolCall, is_error: bool, coordination_path: Path,
         input_id: InputId, round_number: int,
@@ -172,12 +175,20 @@ class UnstartedClaim(NoSlotClaim):
     succeeded_without_claim = "Native tool succeeded after its preflight was refused"
 
 
-class AuthorizedCall(CallClaim):
+class ClaimedCall(CallClaim):
+    """A consumed slot owes one terminal; this state grants no owner execution."""
+
     def finish(
         self, call: NativeToolCall, is_error: bool, coordination_path: Path,
         input_id: InputId, round_number: int,
     ) -> None:
         call.commit_terminal(is_error, coordination_path, input_id, round_number)
+
+
+class AuthorizedCall(ClaimedCall):
+    async def execute(self, call: NativeToolCall, action: Callable[[], Awaitable[dict[str, object]]]) -> dict[str, object]:
+        call.progress.claim_scope = ClaimedCall()
+        return await action()
 
 
 class UncertainClaim(CallClaim):
@@ -261,6 +272,15 @@ class NativeToolCall(ABC):
             self.progress.started.set()  # Wake other waiters; they must fail state validation.
             raise
 
+    async def execute(self, action: Callable[[], Awaitable[dict[str, object]]]) -> dict[str, object]:
+        self.progress.observation.require(Executing, ToolNotExecuting())
+        try:
+            return await self.progress.claim_scope.execute(self, action)
+        except (asyncio.CancelledError, TimeoutError):
+            self.progress.observation = UncertainCall()
+            self.progress.claim_scope = UncertainClaim()
+            raise
+
     def finish(
         self, name: str, is_error: bool | None, coordination_path: Path,
         input_id: InputId, round_number: int,
@@ -283,6 +303,9 @@ class NativeToolCall(ABC):
 
 @dataclass(frozen=True)
 class CodingCall(NativeToolCall):
+    async def owner_reply(self, execute: Callable[[str, dict[str, object]], Awaitable[dict[str, object]]]) -> dict[str, object]:
+        raise SelectedToolDenied("This tool executes in the SDK, not in Core")
+
     def published_goal(self, result: PiToolResult, permission: TurnGoalPermission) -> None:
         """Coding output is not a goal publication, even if its text resembles one."""
 

@@ -153,7 +153,7 @@ export default function (pi: ExtensionAPI) {
 							}
 						}
 					}
-					const result = await runTool([
+					const result = managed ? await ctx.ownerTools.execute(_id, declaration.name, params, signal) : await runTool([
 						"tool", ...(currentThread ? ["--from", currentThread] : []),
 						"--tool", declaration.name, "--arguments", JSON.stringify(params),
 					], launchArguments, signal);

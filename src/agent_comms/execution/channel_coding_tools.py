@@ -12,6 +12,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from agent_comms.cli_bridges.cli_protocol import CoreError
+from agent_comms.cli_support.cli_failures import CLI_FAILURES
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
@@ -28,6 +30,7 @@ from agent_comms.execution.selected.tool_broker import consume_selected_slot, ve
 from agent_comms.execution.turn_goal_permission import TurnGoalPermission
 from agent_comms.execution.turn_input_source import TurnInputSource
 from agent_comms.messaging.envelope_claim_transitions import ClaimOwner, FileClaimPath, WakeClaim
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord
 from agent_comms.nominal.lifecycle_capability import Executing
 from agent_comms.pi_payloads import PiToolResult, StorageDenialToolDetails
@@ -45,7 +48,10 @@ from agent_comms.transport.native_tool_transport import (
     UnboundToolTransport,
 )
 from agent_comms.transport.native_tools import NativeToolDeclaration
+from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tool_denial import SelectedToolDenied, StorageDenied
+from agent_comms.transport.tools.served import invoke_tool
+
 
 @dataclass(frozen=True, kw_only=True)
 class OrdinaryContextCheck(RuleCheck):
@@ -126,6 +132,17 @@ class CodingToolOwner(CodingChild, ABC):
     @property
     @abstractmethod
     def goal_permission(self) -> TurnGoalPermission: ...
+
+    async def execute_tool(self, name: str, arguments: dict[str, object]) -> dict[str, object]:
+        """Use this bound caller in a worker-owned client, without another interpreter."""
+        def invoke() -> dict[str, object]:
+            with Comms.client(self.comms.route) as comms:
+                return invoke_tool(comms, name, arguments, caller=ThreadCaller(self.owner_name))
+
+        try:
+            return await Coordination.run_worker(invoke)
+        except CLI_FAILURES as error:
+            raise SelectedToolDenied(CoreError.from_exception(error).error) from error
 
     async def reserve_room(self, call: CodingCall) -> RoomReservation:
         registry = self.comms.registry
@@ -221,6 +238,23 @@ class CodingToolMode(CodingChildMode):
             turn, ownership, self.owner, PiRuleGate.of(self.owner.comms, self.owner.thread))
 
 
+class CodingToolOperation(DeclaredFamily, ABC):
+    @abstractmethod
+    async def reply(self, socket: CodingToolSocket, call: CodingCall) -> dict[str, object]: ...
+
+
+@dataclass(frozen=True)
+class AuthorizeTool(CodingToolOperation, declared_name="authorize"):
+    async def reply(self, socket: CodingToolSocket, call: CodingCall) -> dict[str, object]:
+        return await socket.authorize_call(call)
+
+
+@dataclass(frozen=True)
+class ExecuteTool(CodingToolOperation, declared_name="execute"):
+    async def reply(self, socket: CodingToolSocket, call: CodingCall) -> dict[str, object]:
+        return await call.execute(lambda: call.owner_reply(socket.owner.execute_tool))
+
+
 @dataclass(frozen=True)
 class CodingToolRequest:
     """The native coding socket's object-valued call, not a Codex rollout item."""
@@ -229,6 +263,7 @@ class CodingToolRequest:
     call_id: str
     name: str
     arguments: object
+    operation: CodingToolOperation = AuthorizeTool()
 
     def authenticate(self, expected_token: str, offered: OfferedTools) -> CodingCall:
         if self.token != expected_token:
@@ -248,14 +283,17 @@ class CodingToolSocket(GatedToolTransport[CodingCall]):
     def decode_call(self, call_id: object, name: object, arguments: object) -> CodingCall:
         return NativeToolDeclaration.decode(call_id, name, arguments, self.owner.offered)
 
-    def decode_request(self, raw: bytes) -> CodingCall:
+    def request(self, raw: bytes) -> CodingToolRequest:
         if not raw.endswith(b"\n") or len(raw) > self.max_request:
             raise SelectedToolDenied("Coding request incomplete or oversized")
         try:
             request = FieldCodec.decode(CodingToolRequest, FieldCodec.parse(raw))
         except MalformedRecord as error:
             raise SelectedToolDenied("Coding request is not authenticated") from error
-        return request.authenticate(self.listener.token, self.owner.offered)
+        return request
+
+    def decode_request(self, raw: bytes) -> CodingCall:
+        return self.request(raw).authenticate(self.listener.token, self.owner.offered)
 
     async def allow(self, round_number: int, call: CodingCall) -> None:
         # The owner rechecks authority after its unlocked room wait. The
@@ -284,7 +322,9 @@ class CodingToolSocket(GatedToolTransport[CodingCall]):
 
     async def handle_request(self, raw: bytes) -> dict[str, object]:
         try:
-            return await super().handle_request(raw)
+            request = self.request(raw)
+            call = self.calls.call_for(request.authenticate(self.listener.token, self.owner.offered))
+            return await request.operation.reply(self, call)
         except StorageDenied as denial:
             return {"ok": False, "error": str(denial),
                     "details": StorageDenialToolDetails(str(denial)).to_wire()}

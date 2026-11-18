@@ -371,6 +371,9 @@ class ToolTransport(Generic[Call]):
 
     async def handle_request(self, raw: bytes) -> dict[str, object]:
         call = self.calls.call_for(self.decode_request(raw))
+        return await self.authorize_call(call)
+
+    async def authorize_call(self, call: Call) -> dict[str, object]:
         await call.authorize(
             lambda: self.judged_allow(self.calls.identity_for(call).round_number, call))
         return {"ok": True}
