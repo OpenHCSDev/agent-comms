@@ -227,6 +227,15 @@ class DeclaredFamily(FamilyMember, metaclass=FamilyMeta):
         """Ordinary families may group several declarations in one module."""
 
     @classmethod
+    def _acquire_named_declarations(cls, name: object) -> None:
+        """Ordinary names require the family's complete declaration scope."""
+        cls._member_declarations()
+
+    @classmethod
+    def _named_member(cls, name: object) -> type[DeclaredFamily]:
+        return cls.__registry__[cast(Hashable, name)]
+
+    @classmethod
     def acquire_declarations(cls) -> None:
         """Acquire through this family's declaration owner before taking its store lock."""
         cls._member_declarations()
@@ -238,13 +247,11 @@ class DeclaredFamily(FamilyMember, metaclass=FamilyMeta):
 
     @classmethod
     def member_named(cls, name: object) -> type[Self]:
-        # Resolution acquires declarations the same way members_with does. A family whose
-        # declarations arrive from a producer package (tool_declaration imports `tools` here)
-        # would otherwise answer UnknownFamilyMember for a name that is merely not imported yet,
-        # and for_name turns that miss into an UndeclaredTool terminal.
-        cls._member_declarations()
+        # Acquire through the name's declaration owner before lookup: a producer's own
+        # errors must not be misreported as an unknown member.
+        cls._acquire_named_declarations(name)
         try:
-            member = cls.__registry__[cast(Hashable, name)]
+            member = cls._named_member(name)
         except (KeyError, TypeError):
             raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}") from None
         if not issubclass(member, cls):
@@ -327,12 +334,35 @@ class DeclaredFamily(FamilyMember, metaclass=FamilyMeta):
         return root.members_with(root).index(cls)
 
 
-class ModuleMembers(FamilyMember):
+class AcquiredMembers(FamilyMember):
+    """Name lookup uses the scope already acquired by its declaration owner, not a second discovery."""
+
+    @classmethod
+    def _named_member(cls, name: object) -> type[DeclaredFamily]:
+        return dict.__getitem__(cls.family_root.__registry__, cast(Hashable, name))
+
+
+class ModuleMembers(AcquiredMembers):
     """A family whose declared names select exactly one Python module each."""
 
     @staticmethod
     def module_stem(name: str) -> str:
         return name.replace("-", "_")
+
+    @classmethod
+    def _acquire_named_declarations(cls, name: object) -> None:
+        """The validated name selects its producer module; enumeration still discovers all."""
+        if not isinstance(name, str) or not cls.module_stem(name).isidentifier():
+            return
+        package = cls.family_root.__registry_config__.discovery_package
+        if not package:
+            raise TypeError(f"{cls.family_root.__name__} requires a declaration package")
+        module = f"{package}.{cls.module_stem(name)}"
+        try:
+            import_module_preserving_root_logging(module)
+        except ModuleNotFoundError as error:
+            if error.name != module:
+                raise
 
     @classmethod
     def validate_module_name(cls) -> None:
