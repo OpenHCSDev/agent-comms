@@ -11,6 +11,7 @@ from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from agent_comms.planning.goals import OrderCheck
 from agent_comms.planning.held_orders import HeldOrders
+from agent_comms.planning.order_words import PlainText
 from agent_comms.planning.orders import (
     CommitDelivery,
     DoneTodoState,
@@ -18,6 +19,7 @@ from agent_comms.planning.orders import (
     PendingProblemOrder,
     ReportDelivery,
     ReportedProblemOrder,
+    RequirementChangeScope,
     TodoStore,
     TriageScope,
 )
@@ -43,7 +45,10 @@ from source_revision_fixture import SourceRepository
 from test_todos import order
 
 
-@pytest.mark.parametrize('scope', (TriageScope(), FIX_SCOPE))
+@pytest.mark.parametrize('scope', (
+    TriageScope(), FIX_SCOPE,
+    RequirementChangeScope(FIX_SCOPE.shape, PlainText("The owner changed the required introduction")),
+))
 def test_scope_round_trips_through_the_actual_order_file(tmp_path, scope, source_repository):
     document = OrderFile(order=replace(order(source_repository), scope=scope),
                          defect='The teammate was given a fix without a declared parent',
@@ -104,8 +109,8 @@ def test_held_orders_recall_holder_problem_scope_and_last_edit_from_the_store(
               ('Classify the failing source',), owner='triager')
     held = HeldOrders.of(TodoStore(private_comms.root), private_comms.registry.snapshot())
     assert sorted(hold.recalled() for hold in held.live) == [
-        'triager P2 triage: Classify the failing source',
-        'worker P1 fix: Then stop and report; no src edit before it',
+        f'triager P2 {TriageScope.display_label()}: Classify the failing source',
+        f'worker P1 {FIX_SCOPE.display_label()}: Then stop and report; no src edit before it',
     ]
 
 
@@ -126,6 +131,8 @@ def test_triage_returns_its_report_without_fictitious_installation(comms, source
 @pytest.mark.parametrize('scope,wrong_delivery', (
     (TriageScope(), CommitDelivery(commit='a' * 40, delivered_commit='a' * 40)),
     (FIX_SCOPE, ReportDelivery(report='Classification is not an implementation')),
+    (RequirementChangeScope(FIX_SCOPE.shape, PlainText("The owner changed the required introduction")),
+     ReportDelivery(report='A changed requirement still needs an implementation')),
 ))
 def test_scope_accepts_only_its_declared_delivery_at_native_decode(comms, scope, wrong_delivery, source_repository):
     caller, current = assigned(comms, scope, source_repository)
