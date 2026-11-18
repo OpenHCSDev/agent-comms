@@ -52,6 +52,23 @@ class TailnetPeer:
         return next((address for address in addresses if ":" not in address), "")
 
 
+@dataclass(frozen=True, slots=True)
+class TailnetSelf:
+    """This machine's own tailnet identity, from ``tailscale status --json --self``."""
+
+    dns_name: str
+    owner_login: str
+
+    @classmethod
+    def from_status(cls, status: Mapping[str, Any]) -> TailnetSelf:
+        node = status["Self"]
+        user_id = str(node["UserID"])
+        return cls(
+            dns_name=node["DNSName"].rstrip("."),
+            owner_login=status["User"][user_id]["LoginName"],
+        )
+
+
 class ProbedPeer:
     """A member a tailnet probe can report.
 
@@ -220,11 +237,19 @@ class TailnetBuses(ProbedCommand):
         return PeerHoldsBus(peer, len(threads))
 
     @classmethod
-    def peers(cls) -> tuple[TailnetPeer, ...]:
+    def _status(cls) -> Mapping[str, Any]:
         status, output = cls.run(cls.status_command())
         if status != 0:
             raise RuntimeError(output.strip() or "Tailscale status did not answer")
-        return TailnetPeer.listed(json.loads(output))
+        return json.loads(output)
+
+    @classmethod
+    def this_machine(cls) -> TailnetSelf:
+        return TailnetSelf.from_status(cls._status())
+
+    @classmethod
+    def peers(cls) -> tuple[TailnetPeer, ...]:
+        return TailnetPeer.listed(cls._status())
 
     @classmethod
     def probe(cls, peer: TailnetPeer) -> PeerBus:
