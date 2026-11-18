@@ -34,6 +34,7 @@ from agent_comms.storage.typed_table import TypedTable
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
+    from agent_comms.registry.threads import Thread
 
 
 @dataclass(frozen=True)
@@ -66,7 +67,24 @@ class GoalWakeNotice(OwnerNotice, declared_name="goal_wake"):
     kick rides the Ready edge the session's own stop hook already sits on, as a bus message the
     watch reader delivers and the owner sees on the bus, not Core's heartbeat and not a local
     stop-block a bridged harness drops. It lands as his own line; the hook stops sending it after
-    a few turns in a row that changed nothing, so an idle session goes quiet instead of spinning."""
+    a few turns in a row that changed nothing, so an idle session goes quiet instead of spinning.
+    The bus sends the same kick when the owner's UI sets, resumes or edits a goal the bus holds
+    for a CLI, so an idle CLI starts on it as it would on a nudge."""
+
+    @staticmethod
+    def reasons(thread: Thread) -> tuple[str, ...]:
+        """Why `thread`'s goal holds its turn open; only an active goal does."""
+        return tuple(reason for goal in thread.goal for reason in goal.held_stop())
+
+    @classmethod
+    def send(cls, messaging: Messaging, thread: Thread, reasons: tuple[str, ...]) -> None:
+        cls().publish(messaging, ThreadTarget(thread.name), "\n".join(reasons))
+
+    @classmethod
+    def wake(cls, messaging: Messaging, thread: Thread) -> None:
+        """Kick `thread` while its goal holds the turn open."""
+        if reasons := cls.reasons(thread):
+            cls.send(messaging, thread, reasons)
 
 
 @dataclass(frozen=True)

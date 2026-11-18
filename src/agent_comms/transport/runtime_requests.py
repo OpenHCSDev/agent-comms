@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     ClassVar,
 )
@@ -18,9 +20,17 @@ from agent_comms.execution.turn_context import (
     RecordedContextTurn,
     SegmentManifest,
 )
-from agent_comms.nominal.field_codec import GoalId, WireName
-from agent_comms.planning.goal_actions import GoalAction
+from agent_comms.acp_extension import GoalSnapshotReply, UpdateMetadata
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, WireName
+from agent_comms.planning.goal_actions import (
+    EditGoalAction,
+    GoalAction,
+    GoalPrecondition,
+    OwnerInvocable,
+    SetGoalAction,
+)
 from agent_comms.planning.goal_scope import AllGoals, OneGoal
+from agent_comms.planning.goals import Goal, GoalDeclaration, GoalRevision
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
@@ -34,8 +44,13 @@ from agent_comms.transport.tools.sidebar import (
     QueueAction,
     SendNowQueueAction,
 )
+from agent_comms.task_attachments.owner_notices import GoalWakeNotice
+from agent_comms.transport.tool_result import DeclaredReply
 from agent_comms.working_memory.working_memory_labels import ClassifierVersion, ModelLabel
 from agent_comms.working_memory.working_memory_questions import SpanAnswer
+
+if TYPE_CHECKING:
+    from agent_comms.comms import Comms
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -123,18 +138,47 @@ class DismissHistoricalInputsRuntimeRequest(AttachedResultRuntimeRequest):
 class GoalHistoryRuntimeRequest(AttachedResultRuntimeRequest):
     goal_id: OneGoal | AllGoals = AllGoals()
 
+    def held_by_bus(self, comms: Comms, thread: Thread) -> object:
+        return FieldCodec.encode(comms.goals.recorded_history(thread.name, self.goal_id))
 
-class GoalSnapshotResultRuntimeRequest(
-    AttachedResultRuntimeRequest,
-    declared_name=None,
-):
-    pass
+
+@dataclass(frozen=True)
+class GoalReply(DeclaredReply):
+    goal: Goal
+
+
+class HeldGoalChange(AttachedResultRuntimeRequest, declared_name=None):
+    """An owner's UI change to the goal the bus holds for a CLI: Core writes it as the owner,
+    fenced to the incarnation the UI read, then wakes the CLI through its inbox while the goal
+    is active, as a nudge does."""
+
+    @abstractmethod
+    def held_action(self, thread: Thread) -> GoalAction: ...
+
+    @abstractmethod
+    def held_reply(self, comms: Comms, goal: GoalDeclaration) -> DeclaredReply: ...
+
+    def held_by_bus(self, comms: Comms, thread: Thread) -> object:
+        goal = comms.goals.update_born_goal(
+            thread.incarnation, self.held_action(thread), actor=OwnerInvocable)
+        GoalWakeNotice.wake(comms.messaging, comms.registry.require(thread.name))
+        return self.held_reply(comms, goal).to_wire()
+
+
+class GoalSnapshotResultRuntimeRequest(HeldGoalChange, declared_name=None):
+    def held_reply(self, comms: Comms, goal: GoalDeclaration) -> DeclaredReply:
+        return GoalSnapshotReply.from_snapshot(comms.goals.goal_snapshot(self.thread), UpdateMetadata.of())
 
 
 @dataclass(frozen=True, kw_only=True)
 class GoalRevisionRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None):
     goal_id: GoalId
     expected_revision: int
+
+    def held_precondition(self, thread: Thread) -> GoalPrecondition:
+        """The goal revision the UI saw, as the native owner fences it."""
+        goal = thread.goal.require_checkpoint(GoalRevision(self.goal_id, self.expected_revision))
+        return GoalPrecondition(goal_id=OneGoal(self.goal_id), expected_checkpoint=goal.captured)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -150,12 +194,17 @@ class GoalTextRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None):
 class EditGoalRuntimeRequest(
     GoalTextRuntimeRequest, GoalRevisionRuntimeRequest, GoalSnapshotResultRuntimeRequest
 ):
-    pass
+    def held_action(self, thread: Thread) -> GoalAction:
+        return EditGoalAction(text=self.text, expect=self.held_precondition(thread))
 
 
 @dataclass(frozen=True, kw_only=True)
 class UpdateGoalRuntimeRequest(GoalRevisionRuntimeRequest, GoalSnapshotResultRuntimeRequest):
     status: type[GoalAction]
+
+    def held_action(self, thread: Thread) -> GoalAction:
+        self.status.require_owner_control()
+        return self.status(expect=self.held_precondition(thread))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -164,8 +213,12 @@ class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
-    pass
+class SetGoalRuntimeRequest(GoalTextRuntimeRequest, HeldGoalChange):
+    def held_action(self, thread: Thread) -> GoalAction:
+        return SetGoalAction(text=self.text)
+
+    def held_reply(self, comms: Comms, goal: GoalDeclaration) -> DeclaredReply:
+        return GoalReply(goal.require())
 
 
 @dataclass(frozen=True, kw_only=True)

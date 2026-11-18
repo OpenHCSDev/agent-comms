@@ -21,7 +21,6 @@ from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.cli_bridges.shared import Binding
 from agent_comms.comms import Comms
-from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.task_attachments.owner_notices import GoalWakeNotice
@@ -230,10 +229,9 @@ class StopHook(ClaudeTranscriptHook):
         # reader delivers and the owner sees on the bus — not a local stop-block a bridged
         # harness drops, and not Core's heartbeat. It stops after idle_turns_asked turns in a row
         # that changed nothing, so an idle session goes quiet instead of spinning.
-        held = tuple(reason for goal in thread.goal for reason in goal.held_stop())
+        held = GoalWakeNotice.reasons(thread)
         if held and self.idle_turns < self.idle_turns_asked:
-            GoalWakeNotice().publish(
-                cast(Messaging, self.comms.messaging), ThreadTarget(thread.name), "\n".join(held))
+            GoalWakeNotice.send(cast(Messaging, self.comms.messaging), thread, held)
         if reasons := (*deaf, *self.deferred()):
             self.output.line(json.dumps({"decision": "block", "reason": "\n".join(reasons)}))
 

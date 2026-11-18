@@ -5,6 +5,7 @@ import dataclasses
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Annotated, ClassVar
 
@@ -434,11 +435,15 @@ class ServedCommsOwnerRequestTool(HumanToolRequest[OwnerAnswered], CommsOwnerReq
     """Serving CommsOwnerRequestTool."""
 
     def answered(self, comms: Comms) -> OwnerAnswered:
-        thread = comms.registry.require(self.owner.name)
+        snapshot = comms.registry.snapshot()
+        thread = snapshot.require(self.owner.name)
         if thread.incarnation != self.owner:
             raise ValueError("Selected thread incarnation changed")
-        return OwnerAnswered(FieldCodec.decode(JsonValue, OwnerConnection.exchange_at(
-            comms.root, thread, self.request)))
+        exchange = partial(OwnerConnection.exchange_at, comms.root, thread, self.request)
+        answer = thread.answering_binding(thread.owner_binding(snapshot)).select_answer(
+            unowned=exchange, native=exchange,
+            held=partial(self.request.held_by_bus, comms, thread))
+        return OwnerAnswered(FieldCodec.decode(JsonValue, answer()))
 
 
 class ServedCommsMoveThreadProjectTool(HumanToolRequest[ProjectChangeResult], CommsMoveThreadProjectTool):

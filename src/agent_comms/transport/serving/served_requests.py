@@ -40,13 +40,13 @@ from agent_comms.messaging.bus_read import OwnerReadRuntimeRequest, OwnerScopedR
 from agent_comms.nominal.field_codec import FieldCodec, WireValue
 from agent_comms.pi_payloads import NativeContextData
 from agent_comms.planning.goal_history import RecordedGoalHistory
-from agent_comms.planning.goals import Goal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
 from agent_comms.transport.owner_connection import NoControllerToken, OwnerConnection
 from agent_comms.transport.project_request import ProjectRuntimeRequest
 from agent_comms.transport.runtime_requests import (
+    GoalReply,
     CancelRuntimeRequest,
     ClearQueueRuntimeRequest,
     CompactRuntimeRequest,
@@ -127,11 +127,6 @@ class QueueActionReply(DeclaredReply):
 
     Undeclared as a record, the codec could not encode it: every send_now and clear_queue ran,
     then closed without its reply, and Toad showed a steer that worked as "outcome unknown"."""
-
-
-@dataclass(frozen=True)
-class GoalReply(DeclaredReply):
-    goal: Goal
 
 
 @dataclass(frozen=True)

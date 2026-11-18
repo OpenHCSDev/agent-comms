@@ -4,22 +4,28 @@ import asyncio
 from dataclasses import dataclass, replace
 
 from agent_comms.cli_support.named import NamedCliCommand
+from agent_comms.cli_support.thread_bound import ThreadBoundCliCommand
 from agent_comms.cli_verbs.cli_command import ConfigurationCommand, TargetActionCommand
 from agent_comms.cli_verbs.cli_commands import ThreadConfiguredResult
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
-from agent_comms.registry.threads import NextTurnConfiguration
+from agent_comms.registry.threads import NativeOwnerCommand, NextTurnConfiguration, Thread
 
 
 @dataclass(frozen=True, kw_only=True)
 class ConfigureCliCommand(
-    NamedCliCommand, NextTurnConfiguration, ConfigurationCommand, TargetActionCommand[ThreadConfiguredResult], declared_name="configure"
+    NamedCliCommand, NextTurnConfiguration, NativeOwnerCommand, ThreadBoundCliCommand, ConfigurationCommand,
+    TargetActionCommand[ThreadConfiguredResult], declared_name="configure"
 ):
+    """Next-turn settings are a native owner's: `ThreadManagement.set_thread_configuration`
+    writes a `NativeThread`, and its catalogs are its native runtime's. An external CLI picks
+    its own model, so no menu offers this form for it (comms_model is native-only too)."""
+
     help = "Set a thread's model, thinking level, or service tier for its next turn"
 
     @classmethod
-    def thread_bindings(cls, comms, thread, status, channel, *, catalog):
-        return (cls(name=thread.name),)
+    def thread_binding(cls, thread: Thread) -> ConfigureCliCommand:
+        return cls(name=thread.name)
 
     def catalog_selection(self, catalogs: ConfigOptions) -> object:
         """Discover against this thread after applying the form's proposed changes."""
