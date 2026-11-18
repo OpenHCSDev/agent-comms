@@ -71,6 +71,34 @@ from agent_comms.storage.typed_table import TableSchema
 
 
 @dataclass(frozen=True)
+class RegistryTurnRead(Mapping[StoredTurnRecord, TurnDeclaration]):
+    """The guarded registry and turn wires that actually supply each row's answer."""
+
+    snapshot: RegistrySnapshot
+    rows: Mapping[TurnIdentity, JsonValue]
+    held: tuple[StoredTurnRecord, ...]
+    _decoded: dict[StoredTurnRecord, TurnDeclaration] = field(default_factory=dict,
+                                                            init=False, compare=False)
+
+    @cached_property
+    def members(self) -> frozenset[StoredTurnRecord]:
+        return frozenset(self.held)
+
+    def __getitem__(self, record: StoredTurnRecord) -> TurnDeclaration:
+        if record not in self.members:
+            raise KeyError(record)
+        if record not in self._decoded:
+            self._decoded[record] = self.snapshot.current_turn(record).read_held(record, self.rows)
+        return self._decoded[record]
+
+    def __iter__(self) -> Iterator[StoredTurnRecord]:
+        return iter(self.held)
+
+    def __len__(self) -> int:
+        return len(self.members)
+
+
+@dataclass(frozen=True)
 class AuthorizedCapture:
     """One guarded read of the registry: its committed rows and the authority that allowed it."""
 
@@ -509,14 +537,14 @@ class RegistryStore(
         source, = self._copy_sources(self)
         return self._decode_snapshot(source)
 
-    def read_turns(self, held: tuple[StoredTurnRecord, ...]) -> tuple[TurnDeclaration, ...]:
+    def capture_turns(self, held: tuple[StoredTurnRecord, ...]) -> Mapping[StoredTurnRecord, TurnDeclaration]:
         """Read the named turns' rows under the guard that excludes their retirement, then
         decode after release."""
         with self.guarded_read():
             registry = self._capture_unlocked()
             turns = self.rows.turn_wires(tuple(record.identity for record in held))
         decoded = self._decode_snapshot(registry)
-        return tuple(decoded.current_turn(record).read_held(record, turns) for record in held)
+        return RegistryTurnRead(decoded, turns, tuple(dict.fromkeys(held)))
 
     def prepare_native_root(self) -> PrivateRegistry:
         """Commit this store's namespace before preparing runtime tables outside its writer."""

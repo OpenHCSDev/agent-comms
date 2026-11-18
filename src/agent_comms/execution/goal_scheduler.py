@@ -11,7 +11,7 @@ from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import GoalAttemptError, GoalRefused, RelationViolationError
-from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity, join_retirement
 from agent_comms.execution.input_drain import InputDrain, OwnerSession, WakeScheduleCheck
 from agent_comms.execution.reservation_rules import ReservationViolationError
 from agent_comms.execution.session_lifecycle import SessionLifecycle
@@ -26,6 +26,7 @@ from agent_comms.planning.goal_actions import (
     RetryGoalAction,
     SetGoalAction,
 )
+from agent_comms.planning.goal_events import GoalChange
 from agent_comms.planning.goal_presentation import GoalPublicationSnapshot, UnpublishedGoalSnapshot
 from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.planning.goals import Goal, GoalDeclaration, GoalRevision
@@ -62,12 +63,20 @@ class GoalSessionPublication:
         return self.snapshot.standby()
 
 
+@dataclass(frozen=True)
+class GoalPublicationRequest:
+    name: str
+    previous: GoalPublicationSnapshot
+    result: asyncio.Future[GoalChange]
+
+
 class GoalScheduler:
     def __init__(self, comms: Comms, effects: TurnEffects):
         self.comms = comms
         self.effects = effects
         self.pending_goal_origins: dict[str, GoalId] = {}
         self.publications: dict[AcpSessionId, GoalSessionPublication] = {}
+        self.goal_reads: list[GoalPublicationRequest] = []
 
     def publication(self, session_id: AcpSessionId) -> GoalSessionPublication:
         return self.publications.setdefault(session_id, GoalSessionPublication())
@@ -238,13 +247,39 @@ class GoalScheduler:
             if not request.needed(record.snapshot):
                 return
             thread_name = self.sessions.require(session_id)
-            event = await Coordination.run_worker(partial(
-                self.comms.goals.goal_changed, thread_name, record.snapshot,
-            ))
+            event = await self.read_goal_change(thread_name, record.snapshot)
             # Failed delivery leaves the published snapshot unchanged.
             record.snapshot = await event.publish(
                 AcpEventConsumer(self.effects, session_id, self.effects._runtime).dispatch, record.snapshot
             )
+
+    async def read_goal_change(
+        self, name: str, previous: GoalPublicationSnapshot,
+    ) -> GoalChange:
+        """Join ready readers only after their owner admission and publication lock.
+
+        Starting the drain on the event loop groups already-ready requests. A reader
+        still waiting for its lock enters a later cut; no old cut crosses that lock.
+        """
+        result = asyncio.get_running_loop().create_future()
+        self.goal_reads.append(GoalPublicationRequest(name, previous, result))
+        if len(self.goal_reads) == 1:
+            self.effects._runtime.background(self.read_goal_changes())
+        return await join_retirement(result)
+
+    async def read_goal_changes(self) -> None:
+        requests, self.goal_reads = tuple(self.goal_reads), []
+        try:
+            events = await Coordination.run_worker(partial(
+                self.comms.goals.goal_changes,
+                tuple((request.name, request.previous) for request in requests),
+            ))
+        except BaseException as error:
+            for request in requests:
+                request.result.set_exception(error)
+        else:
+            for request, event in zip(requests, events, strict=True):
+                request.result.set_result(event)
 
     def observe_root(
         self, document: RegistryDocument, owners: Iterable[OwnerSession], paths: frozenset[Path],

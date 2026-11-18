@@ -344,10 +344,15 @@ class GoalWaits(ThreadOwnedState, DurableStore, GoalWakeFile):
 
     def resolve(self, goal: GoalDeclaration) -> GoalWait:
         with self.snapshot() as db:
-            for row in StoredGoalWaitRow.select(
-                db, where="{goal_id} = ?", parameters=(goal.active().reported_id(),),
-            ):
-                return row.wait
+            return self.resolve_in(db, goal)
+
+    @staticmethod
+    def resolve_in(db: Connection, goal: GoalDeclaration) -> GoalWait:
+        """One keyed wait from the caller's admitted source cut."""
+        for row in StoredGoalWaitRow.select(
+            db, where="{goal_id} = ?", parameters=(goal.active().reported_id(),),
+        ):
+            return row.wait
         return NoGoalWait()
 
     @staticmethod
