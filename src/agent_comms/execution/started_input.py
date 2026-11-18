@@ -38,10 +38,9 @@ class StartedInput:
                for stored in map(document.rows.get, self.keys)):
             await inputs.emit_input_delivery_changed(session_id)
         session = AcpSessionId(session_id)
-        await inputs.runtime.publish_update(
-            session_id=session_id, update=(await self.acceptance.started_update(
-                self, inputs, session, row, scope,
-            )).acp_chunk(),
+        await inputs.runtime.publish_facts(
+            await self.acceptance.started_update(self, inputs, session, row, scope),
+            session_id=session_id,
         )
         self.acceptance.release(inputs, session)
         await inputs.emit_queue_state(session_id)

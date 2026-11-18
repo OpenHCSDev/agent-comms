@@ -22,6 +22,7 @@ from agent_comms.execution.provider_records import (
     CodedProviderDiagnosticError,
     CodelessProviderDiagnosticError,
 )
+from agent_comms.execution.session_updates import encode_updates
 from agent_comms.execution.turn_failure import (
     ModelRequestFailed,
     ProviderTransportFailed,
@@ -34,7 +35,6 @@ from agent_comms.pi_payloads import (
     RequestBytes,
     UnrecognizedTransportStage,
 )
-from agent_comms.text_route_update import encode_updates
 
 FIXTURE = Path(__file__).with_name("fixtures") / "native_provider_transport_1011.json"
 

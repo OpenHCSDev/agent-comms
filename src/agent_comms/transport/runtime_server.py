@@ -48,6 +48,7 @@ from agent_comms.planning.command import Command
 from agent_comms.registry.registry_document import RegistryEntry
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.private_path import PrivateSocketRole
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from agent_comms.transport.owner_connection import socket_path
 from agent_comms.transport.runtime_request import (
     AttachedResultRuntimeRequest,
@@ -64,7 +65,7 @@ if TYPE_CHECKING:
 _LOG = logging.getLogger(__name__)
 
 
-class UnboundClient(SessionUpdateSink):
+class UnboundClient(AcpUpdateSink):
     async def publish_update(self, *, session_id: AcpSessionId, update: BaseModel) -> bool:
         raise RuntimeError("An unbound client cannot publish session updates")
 
@@ -93,7 +94,7 @@ class ClientPermissionResponse(ClientLine):
             pending.set_result(self.outcome)
 
 
-class SocketClient(Controller, SessionUpdateSink):
+class SocketClient(Controller, AcpUpdateSink):
     def __init__(self, writer: asyncio.StreamWriter):
         self.writer = writer
         transport = writer.transport
@@ -212,7 +213,7 @@ class SessionClients(dict[AcpSessionId, set[SocketClient]]):
                 return
 
 
-class RuntimeServer(SessionUpdateSink):
+class RuntimeServer(AcpUpdateSink):
     def __init__(self, agent: CommsAgent):
         self.agent = agent
         self.server: asyncio.Server | None = None

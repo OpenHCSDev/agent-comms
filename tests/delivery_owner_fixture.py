@@ -7,11 +7,11 @@ import pytest
 
 from agent_comms.execution.acp import CommsAgent
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.native_arguments import GivenBinary
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import AcpSessionId
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from bus_record_fixture import prepare_native_comms
 from test_coordinated_runtime import _root
@@ -23,7 +23,7 @@ def qualified_owner_launch(native_runtime_package: VerifiedNativePackage) -> Ret
     return RetainedOwnerLaunch.configured(GivenBinary(str(native_runtime_package.cli)))
 
 
-class FakeClient(SessionUpdateSink):
+class FakeClient(AcpUpdateSink):
     async def publish_update(self, **kwargs):
         return True
 

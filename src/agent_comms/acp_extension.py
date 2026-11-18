@@ -17,6 +17,7 @@ from agent_comms.execution.acp_failure import (
     InputFailedUpdate,
     RequestFailedUpdate,
 )
+from agent_comms.execution.session_updates import AgentCommsUpdate, UpdateBatch
 from agent_comms.text_route_update import TextRouteUpdate
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.context_reading import ContextReading
@@ -48,7 +49,6 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.planning.goal_presentation import GoalExecutionControls, GoalSnapshot
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ClaimedIdentity, ThreadIncarnation
-from agent_comms.text_route_update import AgentCommsUpdate, UpdateBatch
 from agent_comms.transcript.transcript_drafts import NoDraft
 from agent_comms.transcript.transcripts import (
     LivePageSource,

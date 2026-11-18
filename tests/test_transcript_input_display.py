@@ -7,7 +7,6 @@ import pytest
 from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
-from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_entries import TranscriptProjection
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.transcript_routes import (
@@ -21,6 +20,7 @@ from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.pi_payloads import PiMessage, UserMessage
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID
 from conftest import installed_comms, transcript_records
 
@@ -118,7 +118,7 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
     destinations = []
     destination = AcpSessionId("input-display-destination")
 
-    class Client(SessionUpdateSink):
+    class Client(AcpUpdateSink):
         async def publish_update(self, *, session_id, update):
             destinations.append(session_id)
             updates.append(update)

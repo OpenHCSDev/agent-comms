@@ -13,7 +13,7 @@ from agent_comms.registry.threads import Thread
 
 from agent_comms import agent_events
 from agent_comms.context_segments.wake_values import WakeGoalContext
-from agent_comms.text_route_update import AgentCommsUpdate
+from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.acp_extension import LiveQueueScope, PromptRequest, QueueScope
 from agent_comms.execution.input_drain import DrainedSession, InputDrain, OwnerSession
 from agent_comms.execution.session_lifecycle import SessionLifecycle
@@ -59,7 +59,7 @@ assert issubclass(PrivateSendClaim, FollowingPromptBoundary)
 assert issubclass(TrackedTurnSession, FollowingTurnSource)
 assert get_type_hints(TrackedTurnSession.__init__)["execution"] is NativeExecution
 assert get_type_hints(TrackedTurnSession.execute)["prompt_send_boundary"] is FollowingPromptBoundary
-assert get_type_hints(AgentCommsUpdate.acp_chunk)["return"]
+assert get_type_hints(SessionUpdateSink.publish_facts)["return"] is bool
 assert get_type_hints(QueueScope.start_revision)["inputs"] is QueuePublication
 assert get_type_hints(LiveQueueScope.start_revision)["inputs"] is QueuePublication
 assert get_type_hints(PromptRequest.publish_acceptance)["inputs"] is QueuePublication

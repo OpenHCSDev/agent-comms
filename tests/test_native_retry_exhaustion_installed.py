@@ -12,11 +12,11 @@ from agent_comms.execution.acp_failure import (
     ProviderQuotaFailure,
     RequestFailedUpdate,
 )
-from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.execution.turn_input_source import NoTurnAcceptance
 from agent_comms.pi_native_backend import PiNativeBackend
 from agent_comms.pi_payloads import NativeMessageFailureSource
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from delivery_owner_fixture import canonical_agent
 
 RATE_LIMIT = "Too many requests for this provider"
@@ -84,7 +84,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
     agent = canonical_agent(private_comms, agent_bin=GivenBinary(launcher), agent_args=GivenArguments(tuple(arguments)), auto_wake=True)
     updates = []
 
-    class Client(SessionUpdateSink):
+    class Client(AcpUpdateSink):
         async def publish_update(self, session_id, update):
             updates.append(update)
             return True

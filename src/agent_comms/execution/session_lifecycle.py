@@ -45,6 +45,7 @@ from agent_comms.execution.session_config_options import SessionConfigOptions
 from agent_comms.execution.session_effects import SessionEffects
 from agent_comms.execution.session_owner_reads import OwnedSessionLifetime
 from agent_comms.execution.session_reads import SessionClient, SessionConfigurationSource
+from agent_comms.execution.session_updates import encode_updates
 from agent_comms.execution.turn_input_source import NoTurnAcceptance
 from agent_comms.nominal.field_codec import (
     AcpSessionId,
@@ -70,7 +71,6 @@ from agent_comms.registry.thread_status import ActiveThreadPresence
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.team.pi_rule_gate import PiRedeal
-from agent_comms.text_route_update import encode_updates
 from agent_comms.transcript.transcript_updates import TranscriptReplay
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.transport.runtime_requests import (

@@ -53,6 +53,10 @@ from agent_comms.execution.native_output import AssistantOutput, NativeRecordLoc
 from agent_comms.execution.native_record_file import PresentSessionCut
 from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.pi_wire import McpLiveAcknowledgement
+from agent_comms.execution.session_updates import (
+    AgentCommsUpdate,
+    encode_updates,
+)
 from agent_comms.execution.transcript_sources import NativeTranscriptCursor
 from agent_comms.execution.turn_context import (
     ContextManifest,
@@ -83,11 +87,7 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.private_path import FileRevision, MissingFile
-from agent_comms.text_route_update import (
-    AgentCommsUpdate,
-    TextRouteUpdate,
-    encode_updates,
-)
+from agent_comms.text_route_update import TextRouteUpdate
 from agent_comms.transcript.transcript_drafts import NoDraft
 from agent_comms.transcript.transcripts import NativeCommittedPrefix
 from agent_comms.transport.attachment_scope import LiveCursorScope

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, NoReturn
 from agent_comms.coordination.errors import Refused
 from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.pi_wire import PiDiagnostic
+from agent_comms.execution.session_updates import AgentCommsUpdate
 from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.input_attempt import InputAttempt
 from agent_comms.messaging.delivery_presentation import DeliveryPresentation
@@ -29,7 +30,7 @@ from agent_comms.nominal.field_codec import (
     WireName,
     WireOmitDefault,
 )
-from agent_comms.text_route_update import AgentCommsUpdate, TextRouteUpdate, encode_updates
+from agent_comms.text_route_update import TextRouteUpdate
 
 if TYPE_CHECKING:
     from acp import RequestError
@@ -307,21 +308,12 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
         )
 
     async def publish(self, client: SessionUpdateSink, session_id: str) -> NativeTurnOutcome:
-        from acp.schema import AgentMessageChunk, TextContentBlock
-
-
         failure = self.request.failure
-        accepted = await client.publish_update(
+        accepted = await client.publish_facts(
+            TextRouteUpdate(), RequestFailedUpdate(failure, self.source),
+            *((InputFailedUpdate(self.failed_input_text, failure),)
+              if self.failed_input_text else ()),
             session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(
-                    TextRouteUpdate(), RequestFailedUpdate(failure, self.source),
-                    *((InputFailedUpdate(self.failed_input_text, failure),)
-                      if self.failed_input_text else ()),
-                ),
-            ),
         )
         return replace(self, request=replace(self.request, notification_published=accepted))
 

@@ -7,7 +7,6 @@ import pytest
 from acp.schema import SessionNotification
 
 from agent_comms.coordination.errors import Refused
-from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.input_key import AcpInputKey
 from agent_comms.input_attempt import StartedInput
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId
@@ -22,6 +21,7 @@ from agent_comms.planning.goal_states import (
     PausedGoal,
 )
 from agent_comms.planning.goals import Goal
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from compaction_loopback import LoopbackProvider
 from native_backend_fixture import native_backend_fixture
 from stored_inputs import stored_inputs
@@ -45,7 +45,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
         first_chunk, continued = asyncio.Event(), asyncio.Event()
         updates = []
 
-        class Client(SessionUpdateSink):
+        class Client(AcpUpdateSink):
             async def publish_update(self, session_id, update):
                 value = SessionNotification(session_id=session_id, update=update).update.model_dump(
                     by_alias=True, exclude_none=True,

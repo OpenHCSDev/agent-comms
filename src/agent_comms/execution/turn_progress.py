@@ -5,7 +5,6 @@ from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from functools import partial
 
-from acp.schema import AgentMessageChunk, TextContentBlock
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms import agent_events as events
@@ -26,7 +25,6 @@ from agent_comms.messaging.messages import AlertKind, NoticeRole
 from agent_comms.messaging.send_result import SendResult
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.registry.thread_identity import ClaimedIdentity
-from agent_comms.text_route_update import encode_updates
 from agent_comms.transcript.transcript_updates import TurnTranscriptUpdate
 
 
@@ -337,14 +335,7 @@ class TurnProgress(AgentEventConsumer[Comms]):
         ))
         checkpoint = await Coordination.run_worker(partial(
             self.comms.transcripts.transcript_checkpoint, self.thread_name))
-        await self.runtime.publish_update(
-            session_id=self.session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(
-                    TranscriptChangedUpdate(checkpoint)
-                ),
-            ),
+        await self.runtime.publish_facts(
+            TranscriptChangedUpdate(checkpoint), session_id=self.session_id,
         )
         terminal.outcome.raise_if_failed()

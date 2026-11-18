@@ -6,8 +6,9 @@ from collections.abc import Awaitable, Callable
 from acp.schema import PermissionOption, RequestPermissionResponse, ToolCallUpdate
 from pydantic import JsonValue
 
-from agent_comms.execution.controller import Controller, SessionUpdateSink
+from agent_comms.execution.controller import Controller
 from agent_comms.nominal.field_codec import AcpSessionId
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 
 
 class SessionConfigurationSource[Proxy](ABC):
@@ -35,7 +36,7 @@ class OwnedObservation(SessionIdentity):
     async def observe_live(self, observe: Callable[[], Awaitable[object]]) -> None: ...
 
 
-class SessionClient(Controller, SessionUpdateSink):
+class SessionClient(Controller, AcpUpdateSink):
     """The attached client keeps its controller, update and permission operations."""
 
     @abstractmethod

@@ -38,6 +38,7 @@ from agent_comms.execution.runtime_observations import (
     RuntimeInfoObservation,
 )
 from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
+from agent_comms.execution.session_updates import AgentCommsUpdate
 from agent_comms.execution.turn_context import (
     CoordinationSegment,
     PeerState,
@@ -118,7 +119,6 @@ from agent_comms.cli_bridges.runtime_updates import SessionFacts
 from agent_comms.execution.session_config_options import SessionConfigOptions
 from agent_comms.messaging.task_sources import ScopedTaskDeclaration
 from agent_comms.execution.tracked_turn import TrackedTurnSession
-from agent_comms.text_route_update import AgentCommsUpdate
 from agent_comms.transcript.transcript_events import TranscriptEvent
 from agent_comms.execution.transcript_routes import NoSentInputText
 from agent_comms.execution.transcript_routes import SentInputText

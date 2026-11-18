@@ -29,7 +29,6 @@ from agent_comms.coordination.errors import Refused
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.context_reading import ContextUsage, UnmeasuredContext
-from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenArguments
 from agent_comms.execution.pi_vocabulary import ServiceTier
 from agent_comms.execution.runtime_observations import (
@@ -48,6 +47,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.activity import Activity, ActivityState, ActivityStore
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from agent_comms.ui_model.observation import ReadTranscript, SubscribeTranscript
 from conftest import installed_comms
 from delivery_owner_fixture import canonical_agent
@@ -57,7 +57,7 @@ def facts(metadata, kind):
     return tuple((f for f in decode_updates(metadata) if isinstance(f, kind)))
 
 
-class RecordingClient(SessionUpdateSink):
+class RecordingClient(AcpUpdateSink):
     """A client that keeps every session update the agent publishes to it."""
 
     def __init__(self):

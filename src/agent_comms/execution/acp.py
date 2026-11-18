@@ -35,7 +35,6 @@ from acp.agent.connection import AgentSideConnection
 from acp.connection import StreamEvent
 from acp.core import DEFAULT_STDIO_BUFFER_LIMIT_BYTES
 from acp.schema import (
-    AgentMessageChunk,
     ClientCapabilities,
     Implementation,
     InitializeResponse,
@@ -106,6 +105,7 @@ from agent_comms.execution.selected.write_plan import SelectedWritePlans
 from agent_comms.execution.session_effects import SessionEffects
 from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from agent_comms.execution.session_reads import SessionClient
+from agent_comms.execution.session_updates import encode_updates
 from agent_comms.execution.turn_effects import TurnEffects
 from agent_comms.execution.turn_runner import RELAY_PREFIX, TurnRunner
 from agent_comms.installer.active_route import ActiveRoute
@@ -123,7 +123,6 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.registry.activity import FailedWakeDiagnostic
 from agent_comms.registry.thread_identity import OwnerIdentity
 from agent_comms.registry.threads import Thread
-from agent_comms.text_route_update import encode_updates
 from agent_comms.transport.owner_connection import socket_path
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.transport.runtime_server import RuntimeServer
@@ -578,13 +577,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self, session_id: AcpSessionId, name: str, client: SessionUpdateSink,
     ) -> None:
         """Let a subscriber identify its owner before potentially long replay."""
-        await client.publish_update(
+        await client.publish_metadata(
             session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=await self.sessions.metadata(name, session_id=session_id),
-            ),
+            metadata=await self.sessions.metadata(name, session_id=session_id),
         )
 
     def _debug_log(self, message: str) -> None:

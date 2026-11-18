@@ -33,9 +33,9 @@ from agent_comms.execution.owner_protocol import (
     OwnerUpdate,
     UnannouncedOwner,
 )
+from agent_comms.execution.session_updates import encode_updates
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, MalformedRecord
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.text_route_update import encode_updates
 from agent_comms.transport.owner_connection import (
     CapturedOwner,
     NoControllerToken,
