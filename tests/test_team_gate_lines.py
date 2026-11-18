@@ -1,6 +1,7 @@
 """Only a heartbeat line the team can dispose of locks its writing verbs."""
 
 from dataclasses import replace
+from pickle import dumps
 
 from agent_comms.heartbeat_subjects import TeamHistory, TeammateSubject
 from agent_comms.installer.build_identity import (
@@ -39,9 +40,11 @@ def test_alarm_encoding_preserves_occurrence_evidence_and_json_ownership():
                  subjects=(TeammateSubject(TEAMMATE),), since=RecordedEventTime(10.0)),
     )
     for alarm in alarms:
+        process_packet = dumps(alarm)
         original = FieldCodec.encode_record(alarm)
         first = FieldCodec.encode(alarm)
         assert first == original
+        assert dumps(alarm) == process_packet
         assert FieldCodec.encode(FieldCodec.decode(Ping, first)) == original
         assert FieldCodec.encode(FieldCodec.decode(type(alarm), first)) == original
         first["subjects"].clear()

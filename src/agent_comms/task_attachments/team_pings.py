@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from copy import deepcopy
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
@@ -101,6 +101,10 @@ class Ping(TaggedRecordMember, DeclaredFamily, affix="Ping"):
     @classmethod
     def schema(cls) -> dict[str, object]:
         return StructuralRepresentation.schema_for(cls)
+
+    def __getstate__(self) -> dict[str, object]:
+        """Process packets carry the declared occurrence, never its derived JSON cache."""
+        return {item.name: getattr(self, item.name) for item in fields(self)}
 
     @staticmethod
     def stored_threads(threads: tuple[ThreadIncarnation, ...]) -> tuple[str, ...]:
