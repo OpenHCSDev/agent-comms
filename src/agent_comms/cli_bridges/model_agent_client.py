@@ -210,21 +210,31 @@ class ModelAgent:
     def _initial_start(self, comms: Comms) -> InboxStart:
         """Where the first inbox read begins.
 
-        Default (skip_backlog): read the current inbox once to find its tail and start past it.
+        Default (skip_backlog): walk the current inbox to its actual tail and start past it.
         A daemon connecting fresh should answer messages that arrive next, not replay everything
         the thread has accumulated — the model-agent bridge doesn't mark messages taken, so
         without this every reconnect replays the full inbox and fires the model on history that
         was already handled by whoever was there before.
+
+        An earlier version read only the first `inbox_at` page and used its last message as the
+        tail, which broke on multi-page backlogs: pages 2+ still got replayed (Tristan,
+        2026-11-18: "connecting creates a backlog again"). Now paginate until InboxPage.remaining
+        is zero, so the start sits past every currently-undelivered message.
 
         With skip_backlog=False, falls back to TakenInputStart() for the classic replay-everything
         behavior.
         """
         if not self.skip_backlog:
             return TakenInputStart()
-        page = comms.bus.inbox_at(self.name, comms.registry.snapshot(), after=TakenInputStart())
-        if not page.page.messages:
-            return TakenInputStart()
-        return AfterMessageStart(page.page.messages[-1].reference)
+        snap = comms.registry.snapshot()
+        start: InboxStart = TakenInputStart()
+        while True:
+            page = comms.bus.inbox_at(self.name, snap, after=start)
+            if not page.page.messages:
+                return start
+            start = AfterMessageStart(page.page.messages[-1].reference)
+            if page.remaining == 0:
+                return start
 
     async def _best_reply(self, loop: asyncio.AbstractEventLoop,
                           messages: list[dict]) -> tuple[ModelReply, str]:
