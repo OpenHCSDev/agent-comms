@@ -45,6 +45,10 @@ class CoordinationCapture:
         """An omitted capture is obtained from the session's declared storage family."""
         return session.settlement_capture()
 
+    def can_settle_publications(self, snapshot: RecoverySnapshot) -> bool:
+        """Ordinary settlement cannot discard a frozen response."""
+        return not snapshot.publication_intents
+
     def release_resources(self, snapshot: RecoverySnapshot, outcome: TerminalAttempt) -> None:
         """Standalone attempts have no native file claims."""
 

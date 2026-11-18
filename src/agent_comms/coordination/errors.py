@@ -82,6 +82,10 @@ class CoordinationError(RuntimeError, DrainUnavailable, CommandFailure):
     """Base class for fail-loud coordinator errors."""
 
 
+class ResponseNotDispatched(CoordinationError):
+    """A frozen response has no durable permission for its first append."""
+
+
 class DeferredRead(Exception):  # noqa: N818 - capability, not an outcome
     """A read refused only for now, for currentness or contention; retrying may answer it."""
 

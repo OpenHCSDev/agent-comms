@@ -242,7 +242,7 @@ class RecoverySnapshot:
     ) -> None:
         db = session._connection
         execution, attempt = self.execution, self.attempt
-        if self.publication_intents:
+        if not boundary.can_settle_publications(self):
             raise CoordinationError("publication requires bus-keyed acknowledgement resolution")
         if (
             attempt is None

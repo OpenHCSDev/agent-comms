@@ -15,9 +15,10 @@ from typing import TYPE_CHECKING, Self
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
-    IdentityConflict,
     CoordinationError,
+    IdentityConflict,
     RecoveryBlocked,
+    ResponseNotDispatched,
     StaleFence,
     StaleRevision,
     UnrecordedNativeContext,
@@ -26,7 +27,7 @@ from agent_comms.coordination.reason_codes import GivenReasonCode, NoDetail
 from agent_comms.coordination.recovery_states import DeferredRecovery, FailedRecovery
 from agent_comms.coordination.response import PublicationAppendDispatches
 from agent_comms.coordination.results import Applied
-from agent_comms.coordination.session import NativeCapture
+from agent_comms.coordination.session import CoordinationCapture, NativeCapture
 from agent_comms.coordination.snapshot import RecoverySnapshot
 from agent_comms.coordination.tables.attempts import AttemptRecord
 from agent_comms.coordination.tables.executions import CurrentExecutions
@@ -219,7 +220,7 @@ class ReleasedOwnerLoss(VerifiedOwnerLoss):
 
 
 @dataclass(frozen=True, slots=True)
-class VerifiedAttemptOwnerLoss(VerifiedOwnerLoss):
+class VerifiedAttemptOwnerLoss(VerifiedOwnerLoss, CoordinationCapture):
     attempt: AttemptRecord = field(kw_only=True)
 
     def abandon(self, recovery_cls: type[RecoveryMonitorCapability], store: Coordination,
@@ -228,8 +229,6 @@ class VerifiedAttemptOwnerLoss(VerifiedOwnerLoss):
         snapshot = store.get(execution_id)
         attempt = snapshot.attempt
         assert attempt is not None  # Required by the release observer.
-        if bool(snapshot.publication_intents):
-            raise CoordinationError("UNKNOWN abandonment cannot resolve frozen publication")
         self.require_native_exit()
         return recovery_cls(store, _grant=_MONITOR_GRANT).terminalize_dead_attempt(
             execution_id,
@@ -249,6 +248,23 @@ class VerifiedAttemptOwnerLoss(VerifiedOwnerLoss):
                 observed_at_ms=int(time.time() * 1000),
             ),
         )
+
+    @contextmanager
+    def acquire(self, session) -> Iterator[Self]:
+        """Carry acquired owner loss through the original settlement boundary."""
+        if session is not self._store.session or not self.issued_for(self._store):
+            raise RecoveryBlocked("settlement requires this acquired owner loss")
+        with self.boundary.acquire(session):
+            self.require_native_exit()
+            yield self
+
+    def can_settle_publications(self, snapshot: RecoverySnapshot) -> bool:
+        if not self.owns(self._store, snapshot.require_attempt()):
+            raise RecoveryBlocked("publication failure requires this exact released owner")
+        return PublicationAppendDispatches.unattempted(self._store, self.boundary.bus, snapshot)
+
+    def release_resources(self, snapshot: RecoverySnapshot, outcome) -> None:
+        self.boundary.release_resources(snapshot, outcome)
 
     def owns(self, store: Coordination, attempt: AttemptRecord) -> bool:
         """Only this acquired, unexpired observer attests the original attempt."""
@@ -287,11 +303,15 @@ class DispatchedOwnerLoss(VerifiedAttemptOwnerLoss):
 
     def settle(self, recovery_cls, store: Coordination, execution_id: str, owner) -> None:
         self.require_native_exit()
-        PublicationAppendDispatches.resolve_retained(
-            store, self.boundary.bus, self.boundary,
-            owner_lookup=owner.incarnation.lookup,
-            execution_id=execution_id,
-        )
+        try:
+            PublicationAppendDispatches.resolve_retained(
+                store, self.boundary.bus, self.boundary,
+                owner_lookup=owner.incarnation.lookup,
+                execution_id=execution_id,
+            )
+        except ResponseNotDispatched:
+            self.abandon(recovery_cls, store, execution_id)
+            return
         pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
         if pointer.unresolved:
             execution_id = pointer.execution_id.require("the owner pointer names no execution")
@@ -514,7 +534,7 @@ class RecoveryMonitorCapability:
         store = self._store
         if not owner_loss.issued_for(store):
             raise RecoveryBlocked("monitor requires an observed release of this exact owner")
-        with store.session.settlement(owner_loss.boundary) as boundary:
+        with store.session.settlement(owner_loss) as boundary:
             db = store.session._connection
             snapshot = store.get(execution_id)
             attempt = snapshot.attempt
@@ -548,7 +568,7 @@ class RecoveryMonitorCapability:
                 updated_at_ms=now,
                 reason_code=evidence.reason_code,
             )
-            unresolved = bool(snapshot.publication_intents)
+            unresolved = not boundary.can_settle_publications(snapshot)
             if (attempt.lifecycle.backend_done or evidence.backend_done) and not unresolved:
                 store.get(execution_id).settle(
                     store.session, outcome, evidence.reason_code, boundary
