@@ -78,6 +78,7 @@ from agent_comms.messaging.revision_views import (
     NotificationsView,
     RegistrationsView,
     RevisionView,
+    RosterView,
     SidebarBasisView,
     SidebarView,
     StatusView,
@@ -103,7 +104,13 @@ from agent_comms.notification_read import (
 )
 from agent_comms.planning.goal_presentation import GoalExecutionControls
 from agent_comms.planning.goal_waits import GoalWaits
-from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState, WireRevision
+from agent_comms.presentation import (
+    CoordinationSnapshot,
+    NoRevision,
+    ReadState,
+    ThreadView,
+    WireRevision,
+)
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.work_branches import WorkBranchError
 from agent_comms.registry.activity import ObservedActivity
@@ -812,8 +819,8 @@ class NoSidebarCut(HeldSidebarCut):
 class SidebarCutAt(HeldSidebarCut):
     """A cut and the revision it was read at. A revision that moved none of its counted stores,
     and a registry that moved only turns and presence, moved what the rows read: activity, goals,
-    relationships and turns. The rows are derived again over the same counts, without reopening
-    the bus, recounting unread or reading native transcripts."""
+    relationships and turns. Changed roster sources refresh the rows over the same counts,
+    without reopening the bus, recounting unread or reading native transcripts."""
 
     cut: SidebarCut
     revision: WireRevision
@@ -826,7 +833,7 @@ class SidebarCutAt(HeldSidebarCut):
         if not registry.moved_turns_alone(self.cut.registry):
             return stage.read_cut(request, comms, revision)
         stage.held = held = SidebarCutAt(replace(self.cut, registry=registry), revision)
-        return request._answer(revision, partial(held.cut.snapshot, comms.views))
+        return request._answer(revision, partial(stage.snapshot, held.cut, comms, revision))
 
 
 class SidebarReadStage:
@@ -836,6 +843,8 @@ class SidebarReadStage:
 
     def __init__(self) -> None:
         self.held: HeldSidebarCut = NoSidebarCut()
+        self.roster_revision: ReadState = NoRevision()
+        self.rows: tuple[ThreadView, ...] = ()
 
     def read(
         self, request: ObserveSidebar, comms: Comms, revision: WireRevision
@@ -848,9 +857,16 @@ class SidebarReadStage:
         def read() -> CoordinationSnapshot:
             cut = comms.views.viewer_cut(request.worktree, request.visibility)
             self.held = SidebarCutAt(cut, revision)
-            return cut.snapshot(comms.views)
+            return self.snapshot(cut, comms, revision)
 
         return request._answer(revision, read)
+
+    def snapshot(self, cut: SidebarCut, comms: Comms, revision: WireRevision) -> CoordinationSnapshot:
+        """A count-only change reuses rows acquired under their original source revision."""
+        if revision.changed_since(RosterView(), self.roster_revision):
+            rows = ThreadView.roster(cut.registry, comms.agents, comms.goals, cut.visibility)
+            self.rows, self.roster_revision = rows, revision
+        return cut.present(comms.root, self.rows)
 
     def advance(self, reading: SidebarReading, snapshot: CoordinationSnapshot) -> None:
         """A full read waits for a changed source or its native-index watcher."""
