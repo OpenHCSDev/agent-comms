@@ -5,6 +5,7 @@ import pytest
 from agent_comms.errors import HumanSendRefusedError, UnregisteredThreadError
 from agent_comms.messaging.channel_targets import (
     CommandTarget,
+    ContentChange,
     IncarnationThreadTarget,
     NamedTarget,
 )
@@ -39,8 +40,8 @@ def test_named_targets_share_count_changes_and_human_read_contracts(named_target
     snapshot = comms.registry.snapshot()
     catalog = comms.channels.catalog.read()
     activity = comms.bus.bus.activity_clocks()
-    assert direct.changed_threads(snapshot.threads, snapshot, catalog, activity) == ("cli",)
-    assert frozenset(channel.changed_threads(snapshot.threads, snapshot, catalog, activity)) == {
+    assert direct.changed_threads(snapshot.threads, snapshot, catalog, activity) == (ContentChange("cli"),)
+    assert {change.name for change in channel.changed_threads(snapshot.threads, snapshot, catalog, activity)} == {
         "sender", "Alice", "Bob", "cli",
     }
 
@@ -101,4 +102,3 @@ def test_retained_dm_refuses_a_removed_birth_at_every_selection_boundary(tmp_pat
         DMDisplayHistory.revision(comms.views, target, UnobservedConversation(), worktree=worktree)
     with pytest.raises(UnregisteredThreadError):
         comms.views.history_page(target, viewer=NamedViewer(viewer.name))
-

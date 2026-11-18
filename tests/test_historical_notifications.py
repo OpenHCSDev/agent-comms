@@ -232,7 +232,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
         activity=activity,
         updated_at_ms=1,
     )
-    assert recorded.label.startswith(f"{ConsumedDelivery.label} ") and not recorded.state.working
+    assert recorded.label.startswith(f"{ConsumedDelivery.label} ") and not recorded.state.is_working()
     assert recorded.state.detail == ""
     live = assignment.notification(
         recipient,
@@ -241,7 +241,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
         activity=activity,
         updated_at_ms=1,
     )
-    assert live.label.startswith(f"{ConsumedDelivery.label} ") and not live.state.working
+    assert live.label.startswith(f"{ConsumedDelivery.label} ") and not live.state.is_working()
     assert live.state.detail == ""
 
 
