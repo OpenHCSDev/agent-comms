@@ -437,8 +437,8 @@ class ActivityStore(ThreadOwnedState, DerivedStore):
                      active: frozenset[str] = frozenset()) -> ActivityCapture[Activity]:
         threads = tuple(dict.fromkeys(threads))
         with self.snapshot() as db:
-            latest = {row.thread: row for thread in threads
-                      for row in ActivityRow.stream(db, thread=thread)}
+            latest = {row.thread: row for row in ActivityRow.stream_keys(
+                db, tuple({"thread": thread} for thread in threads))}
         now = time.time()
         return ActivityCapture(
             {thread: self._observed(thread, latest, active=thread in active, now=now)

@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from copy import deepcopy
+from dataclasses import dataclass, field, fields, replace
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
@@ -31,8 +33,11 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     HudExclude,
+    MalformedRecord,
     OrderId,
     PublicationExclude,
+    StructuralRepresentation,
+    TaggedRecordMember,
     ThreadLookup,
 )
 from agent_comms.nominal.text_digest import TextDigest
@@ -67,7 +72,7 @@ class OrderKey:
 
 
 @dataclass(frozen=True)
-class Ping(DeclaredFamily, affix="Ping"):
+class Ping(TaggedRecordMember, DeclaredFamily, affix="Ping"):
     """One heartbeat line: the work it asks for, what disposes of it, and when it began.
 
     ``since`` is carried from the previous packet while the observation is unchanged, so a
@@ -79,6 +84,27 @@ class Ping(DeclaredFamily, affix="Ping"):
     subjects: tuple[HeartbeatSubject, ...] = field(default=(), compare=False, kw_only=True)
     since: EventTime = field(default_factory=UnrecordedEventTime, compare=False, kw_only=True)
     threads: tuple[str, ...] = field(default=(), compare=False, kw_only=True)
+
+    @cached_property
+    def _encoded_record(self) -> dict[str, object]:
+        # This frozen occurrence owns its text, source subjects and clock. Equal
+        # pings may carry different evidence; never share this cache by equality.
+        return FieldCodec.encode_record(self)
+
+    @classmethod
+    def encode(cls, value: Ping) -> object:
+        if not isinstance(value, cls):
+            raise MalformedRecord(f"Expected {cls.__name__} record")
+        # Encoded JSON is caller-owned, so mutation cannot alter later answers.
+        return deepcopy(value._encoded_record)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return StructuralRepresentation.schema_for(cls)
+
+    def __getstate__(self) -> dict[str, object]:
+        """Process packets carry the declared occurrence, never its derived JSON cache."""
+        return {item.name: getattr(self, item.name) for item in fields(self)}
 
     @staticmethod
     def stored_threads(threads: tuple[ThreadIncarnation, ...]) -> tuple[str, ...]:

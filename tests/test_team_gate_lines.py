@@ -1,16 +1,20 @@
 """Only a heartbeat line the team can dispose of locks its writing verbs."""
 
+from dataclasses import replace
+from pickle import dumps
+
 from agent_comms.heartbeat_subjects import TeamHistory, TeammateSubject
 from agent_comms.installer.build_identity import (
     InstalledCommitInstallation,
     MissingCommitInstallation,
     RecordedBuildIdentity,
 )
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.planning.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.storage.recorded_time import RecordedEventTime
-from agent_comms.task_attachments.team_pings import RulePing, TeammatePing
+from agent_comms.task_attachments.team_pings import Ping, RulePing, TeammatePing
 from agent_comms.team.standing_rules import OrderlessUnreviewedHead
 from agent_comms.ui_model.teammate_state import (
     AwaitingApplicationRun,
@@ -27,6 +31,30 @@ TEAMMATE = RecordedThreadIncarnation("teammate", 1.0)
 def teammate_line(state: type[TeammateState], since: float) -> TeammatePing:
     return TeammatePing(TEAMMATE, state, (), (), TextDigest.of(state.question), text=state.question,
                     subjects=(TeammateSubject(TEAMMATE),), since=RecordedEventTime(since))
+
+
+def test_alarm_encoding_preserves_occurrence_evidence_and_json_ownership():
+    alarms = (
+        teammate_line(DeliveredUnclosed, 10.0),
+        RulePing(OrderlessUnreviewedHead, TextDigest.of("review"), text="Read the exact head",
+                 subjects=(TeammateSubject(TEAMMATE),), since=RecordedEventTime(10.0)),
+    )
+    for alarm in alarms:
+        process_packet = dumps(alarm)
+        original = FieldCodec.encode_record(alarm)
+        first = FieldCodec.encode(alarm)
+        assert first == original
+        assert dumps(alarm) == process_packet
+        assert FieldCodec.encode(FieldCodec.decode(Ping, first)) == original
+        assert FieldCodec.encode(FieldCodec.decode(type(alarm), first)) == original
+        first["subjects"].clear()
+        first.clear()
+        assert FieldCodec.encode(alarm) == original
+        changed = replace(alarm, text="Different evidence", since=RecordedEventTime(22.0))
+        assert changed == alarm
+        assert FieldCodec.encode(changed) == FieldCodec.encode_record(changed)
+        assert FieldCodec.encode(changed) != original
+        assert FieldCodec.encode(alarm) == original
 
 
 def test_only_team_disposable_stale_lines_lock_the_verbs(comms):
