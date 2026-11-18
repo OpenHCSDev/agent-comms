@@ -35,6 +35,10 @@ class ActivityView(RevisionView):
     """Participant activity, including ownership, work and timed expiry."""
 
 
+class RosterView(ActivityView):
+    """Thread rows: registration, activity, runtime information and goal execution."""
+
+
 class StatusView(StatusSourced, ActivityView):
     """Activity, assignments and bus reads supply thread status.
 
@@ -50,7 +54,7 @@ class SidebarBasisView(RevisionView):
     turns and presence (RegistrySnapshot.moved_turns_alone), which a store revision cannot say."""
 
 
-class SidebarView(ActivityView, SidebarBasisView):
+class SidebarView(RosterView, SidebarBasisView):
     """Every store the sidebar reads: its cut, then activity, goals and relationships for its
     rows. Coordination and CLI transcripts feed no sidebar row."""
 

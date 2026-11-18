@@ -249,8 +249,8 @@ class OpenThreadPresentations(ThreadPresentations):
 @dataclass(frozen=True)
 class SidebarCut:
     """What one sidebar read takes under the bus cut: the registry and catalog it read and
-    every count over them. Activity, goals and relationships are read for the rows outside it,
-    so a revision that moved none of the cut's stores derives the rows again over the same cut.
+    every count over them. Thread rows are acquired separately under their roster revision
+    and combined with this cut; a count-only change leaves those row sources intact.
     """
 
     registry: RegistrySnapshot
@@ -265,11 +265,15 @@ class SidebarCut:
     visibility: RosterVisibility
 
     def snapshot(self, views: HistoryViews) -> CoordinationSnapshot:
+        return self.present(views.root, ThreadView.roster(
+            self.registry, views.agents, views.goals, self.visibility))
+
+    def present(self, root: Path, rows: Iterable[ThreadView]) -> CoordinationSnapshot:
+        """Combine acquired thread rows with this cut's current counts and channel clocks."""
         snapshot = CoordinationSnapshot.capture(
-            views.root, self.registry, self.catalog, views.agents, self.channels, self.sent,
-            self.messages, goals=views.goals, unread=self.unread,
-            channel_unread=self.channel_unread, visibility=self.visibility,
-            read_marker_notice=self.notice,
+            root, self.registry, self.catalog, rows, self.channels, self.sent,
+            self.messages, unread=self.unread, channel_unread=self.channel_unread,
+            visibility=self.visibility, read_marker_notice=self.notice,
         )
         return replace(snapshot, thread_unread={**snapshot.thread_unread, **self.thread_unread})
 

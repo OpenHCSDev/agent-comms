@@ -40,13 +40,14 @@ from agent_comms.messaging.read_selection import CapturedSelection
 from agent_comms.messaging.recorded_bus import NoRecordedBus, RecordedBusIdentity
 from agent_comms.messaging.revision_views import (
     ActivityView,
+    AssignmentEvidenceView,
     BusSourceView,
     ExternalTranscriptsView,
-    AssignmentEvidenceView,
     HumanReadEvidenceView,
     NotificationsView,
     RegistrationsView,
     RevisionView,
+    RosterView,
     SidebarBasisView,
     SidebarView,
     StatusSourced,
@@ -196,8 +197,9 @@ class BusPresentation:
                 self.registry, self.catalog, self.bus.reads, NamedViewer(viewer), activity,
             )
             snapshot = CoordinationSnapshot.capture(
-                self._path.parent, basis.registry, basis.catalog, self.agents, basis.channels,
-                {}, {}, goals=self.goals, unread={}, channel_unread={}, visibility=visibility,
+                self._path.parent, basis.registry, basis.catalog,
+                ThreadView.roster(basis.registry, self.agents, self.goals, visibility), basis.channels,
+                {}, {}, unread={}, channel_unread={}, visibility=visibility,
                 read_marker_notice=basis.document.notice,
             )
         return replace(
@@ -450,15 +452,13 @@ class CoordinationSnapshot:
     @classmethod
     def capture(
         cls, root: Path, registry: RegistrySnapshot, catalog: CatalogDocument,
-        agents: AgentActivity, declarations: Channels,
+        rows: Iterable[ThreadView], declarations: Channels,
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
-        goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot, ActivityAnswers], unread: Mapping[str, int], channel_unread: Mapping[str, int],
+        unread: Mapping[str, int], channel_unread: Mapping[str, int],
         visibility: RosterVisibility, read_marker_notice: ReadNotice = NoReadNotice(),
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
-        threads = OrderedDict((view.thread.name, view) for view in ThreadView.roster(
-            registry, agents, goals, visibility,
-        ))
+        threads = OrderedDict((view.thread.name, view) for view in rows)
         activities = {name: view.activity for name, view in threads.items()}
         return cls(
             channels=OrderedDict((view.channel.name, view) for view in ChannelView.roster(
@@ -600,7 +600,7 @@ class WireRevision(ReadState, ToolResult):
     ]
     goal_execution: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: GoalWakeFile.watched_paths_in(views.root), *StatusSourced.views(), SidebarView),
+        *revision_source(lambda views: GoalWakeFile.watched_paths_in(views.root), *StatusSourced.views(), RosterView),
     ]
     relationships: Annotated[
         tuple[FileRevision, ...],
