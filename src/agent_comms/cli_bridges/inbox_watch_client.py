@@ -35,7 +35,6 @@ from aiohttp import (
 from aiohttp.helpers import get_env_proxy_for_url
 from yarl import URL
 
-from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.claude_transcript import (
     WATCH_DEFERRED,
     WATCH_REPLACED,
@@ -47,15 +46,14 @@ from agent_comms.cli_bridges.claude_transcript import (
     ReconnectsAlone,
     ReconnectUrl,
     RunningClaude,
+    WatchedDelivery,
 )
 from agent_comms.cli_bridges.harness_delivery_states import PrintLedgerId
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.execution.launch_runtime import RunningSource
 from agent_comms.messaging.bus import Bus
-from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.watched import FileSource
-from agent_comms.nominal.field_codec import FieldCodec
 
 
 class PrintLedger:
@@ -534,11 +532,11 @@ class InboxSocket:
         """Inline when one Monitor batch holds it, otherwise one notice naming its whole body.
         The ledger is written first: a freeze between it and the print leaves a message the bus
         never replays, never one the session saw twice."""
-        message = FieldCodec.decode(Delivered, FieldCodec.parse(frame))
-        _, line = ClaudeMonitorFrame.of_wire(message).event(self.exports)
-        self.ledger.record(message.reference)
+        delivery = WatchedDelivery.parsed(frame)
+        _, line = delivery.frame.event(self.exports)
+        self.ledger.record(delivery.message.reference)
         print(line, flush=True)
-        await socket.send_str(PrintedNow(printed=(message.reference,)).line())
+        await socket.send_str(PrintedNow(printed=(delivery.message.reference,)).line())
         await asyncio.sleep(self.batch_gap_seconds)
 
     async def publishing(self, socket: ClientWebSocketResponse) -> None:

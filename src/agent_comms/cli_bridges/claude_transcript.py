@@ -7,10 +7,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import BinaryIO, ClassVar, Literal, Self
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, Literal, Self
 
 from agent_comms.cli_bridges.claude_protocol import (
     CLAUDE_RECORD,
+    ClaudeMonitorFrame,
     ClaudeRecord,
     ClaudeSession,
     SubagentProgress,
@@ -29,9 +30,15 @@ from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.cli_bridges.session_ledger import SessionLedger
 from agent_comms.cli_bridges.shared import WireReference
 from agent_comms.cli_bridges.wire_models import WireModel
+from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.messaging.message_files import MessageFile
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.nominal.field_codec import StoredSessionId
+from agent_comms.messaging.messages import Message
+from agent_comms.nominal.field_codec import FieldCodec, StoredSessionId
 from agent_comms.registry.thread_text import NamedSession, NoThreadText, ThreadText
+
+if TYPE_CHECKING:
+    from agent_comms.comms import Comms
 
 
 class SubagentMeta(WireModel):
@@ -158,6 +165,36 @@ class ReconnectUrl(WireModel):
 
     def line(self) -> str:
         return self.model_dump_json()
+
+
+@dataclass(frozen=True)
+class WatchedDelivery:
+    """What a watch socket pushes for one message: the message with the files it carries, read
+    together and encoded whole, so the server's evidence and the client's printed event are
+    built from the same frame and cannot disagree on its parts."""
+
+    message: Delivered
+    files: tuple[MessageFile, ...]
+
+    @classmethod
+    def read(cls, comms: Comms, messages: Iterable[Message]) -> tuple[Self, ...]:
+        """These messages with their files, from one files read for all of them."""
+        messages = tuple(messages)
+        files = comms.messaging.files.of(message.reference for message in messages)
+        return tuple(cls(message, tuple(file for file in files if file.message == message.reference))
+                     for message in messages)
+
+    @classmethod
+    def parsed(cls, line: str) -> Self:
+        return FieldCodec.decode(cls, FieldCodec.parse(line))
+
+    def line(self) -> str:
+        return FieldCodec.compact(FieldCodec.encode(self))
+
+    @property
+    def frame(self) -> ClaudeMonitorFrame:
+        """How a Claude session's Monitor shows it, files named after the body."""
+        return ClaudeMonitorFrame(self.message, self.files)
 
 
 class WatchReportFields(WireModel):
