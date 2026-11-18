@@ -53,6 +53,15 @@ MAX_SEND_REQUEST_BYTES = MAX_MESSAGE_FILE_TEXT + 1024 * 1024
 text and a megabyte for the rest of the request."""
 
 
+def require_file_name(name: str) -> None:
+    """A file's name names one file and no directory: 1 to 255 characters, its own last path
+    part, not only dots, and no backslash or NUL."""
+    if not name.strip() or len(name) > MAX_FILE_NAME_LENGTH:
+        raise ValueError("A file name is 1 to 255 characters.")
+    if PurePath(name).name != name or not name.strip(".") or "\\" in name or "\0" in name:
+        raise ValueError("A file name names no directory.")
+
+
 @dataclass(frozen=True, slots=True)
 class FileUpload:
     """One file a sender attaches: its name, its MIME type and its bytes as base64."""
@@ -62,10 +71,7 @@ class FileUpload:
     data: str
 
     def __post_init__(self) -> None:
-        if not self.name.strip() or len(self.name) > MAX_FILE_NAME_LENGTH:
-            raise ValueError("A file name is 1 to 255 characters.")
-        if any(character in self.name for character in "/\\\0") or self.name in {".", ".."}:
-            raise ValueError("A file name names no directory.")
+        require_file_name(self.name)
         if not MIME_TYPE.fullmatch(self.mime_type):
             raise ValueError(f"Unsupported file type: {self.mime_type!r}")
         if len(self.data) > MAX_MESSAGE_FILE_TEXT:
@@ -124,6 +130,9 @@ class MessageFile:
     mime_type: Annotated[str, WireName("mimeType")]
     size: int
     sha256: str
+
+    def __post_init__(self) -> None:
+        require_file_name(self.name)
 
     @property
     def mention(self) -> str:
