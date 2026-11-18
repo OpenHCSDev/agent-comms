@@ -3,6 +3,7 @@ from __future__ import annotations
 import heapq
 import shutil
 import string
+import re
 from abc import (
     ABC,
     abstractmethod,
@@ -614,24 +615,44 @@ class CommitSelection:
 
 
 class CommitMessages:
-    """Every captured message in one lowered text, so naming a token is one search of it.
+    """One captured message index shared by all problem lookups in this graph.
 
-    A regex per message cost 137 ms per order on 34,816 commits, in Python, every heartbeat
-    pass; one `find` over this text costs about 2.5 ms and the text is built once per pass."""
+    ASCII words have exact postings. Literal phrases use the same captured text and
+    boundary rule; neither reader asks Git again or changes the captured messages.
+    """
 
     word: ClassVar[frozenset[str]] = frozenset(string.ascii_lowercase + string.digits + "_")
+    words: ClassVar[re.Pattern[str]] = re.compile(f"[{''.join(sorted(word))}]+")
 
     def __init__(self, commits: tuple[GitCommit, ...]) -> None:
-        lowered = tuple(commit.message.lower() for commit in commits)
-        self.text = "\n".join(lowered)
+        self.lowered = tuple(commit.message.lower() for commit in commits)
         self.shas = tuple(commit.sha for commit in commits)
-        self.starts = tuple(accumulate((len(message) + 1 for message in lowered), initial=0))
         self._named: dict[str, frozenset[str]] = {}
 
+    @cached_property
+    def text(self) -> str:
+        return "\n".join(self.lowered)
+
+    @cached_property
+    def starts(self) -> tuple[int, ...]:
+        return tuple(accumulate((len(message) + 1 for message in self.lowered), initial=0))
+
+    @cached_property
+    def word_names(self) -> dict[str, frozenset[str]]:
+        """The declared boundary alphabet supplies the words, never a problem-ID grammar."""
+        names: dict[str, set[str]] = {}
+        for sha, message in zip(self.shas, self.lowered):
+            for match in self.words.finditer(message):
+                names.setdefault(match[0], set()).add(sha)
+        return {word: frozenset(shas) for word, shas in names.items()}
+
     def naming(self, token: str) -> frozenset[str]:
-        """The commits whose message has this token on its own, in any case."""
+        """The commits whose message has this literal token on its own, in any case."""
+        token = token.lower()
         if token not in self._named:
-            self._named[token] = frozenset(self._occurrences(token.lower()))
+            self._named[token] = (self.word_names.get(token, frozenset())
+                                  if self.words.fullmatch(token)
+                                  else frozenset(self._occurrences(token)))
         return self._named[token]
 
     def _occurrences(self, token: str) -> Iterator[str]:
@@ -646,15 +667,34 @@ class CommitMessages:
             at = self.text.find(token, self.starts[message + 1])
 
 
+@dataclass(frozen=True)
+class CommitWalk:
+    """One selected commit order and its positions, shared by all message filters."""
+
+    records: tuple[GitCommit, ...]
+
+    def __iter__(self) -> Iterator[GitCommit]:
+        return iter(self.records)
+
+    @cached_property
+    def positions(self) -> dict[str, int]:
+        return {commit.sha: position for position, commit in enumerate(self.records)}
+
+    def naming(self, shas: frozenset[str]) -> Iterator[GitCommit]:
+        positions = self.positions
+        return (self.records[position] for position in sorted(
+            positions[sha] for sha in shas if sha in positions))
+
+
 class CommitFilter(ABC):
     """Which commits of a captured newest-first walk a reader wants."""
 
     @abstractmethod
-    def commits(self, history: CheckoutHistory, walk: tuple[GitCommit, ...]) -> Iterator[GitCommit]: ...
+    def commits(self, history: CheckoutHistory, walk: CommitWalk) -> Iterator[GitCommit]: ...
 
 
 class EveryCommit(CommitFilter):
-    def commits(self, history: CheckoutHistory, walk: tuple[GitCommit, ...]) -> Iterator[GitCommit]:
+    def commits(self, history: CheckoutHistory, walk: CommitWalk) -> Iterator[GitCommit]:
         return iter(walk)
 
 
@@ -664,9 +704,9 @@ class CommitsNaming(CommitFilter):
 
     token: str
 
-    def commits(self, history: CheckoutHistory, walk: tuple[GitCommit, ...]) -> Iterator[GitCommit]:
+    def commits(self, history: CheckoutHistory, walk: CommitWalk) -> Iterator[GitCommit]:
         naming = history.messages.naming(self.token)
-        return (commit for commit in walk if commit.sha in naming)
+        return walk.naming(naming)
 
 
 class CheckoutHistory:
@@ -682,7 +722,7 @@ class CheckoutHistory:
         self._ancestry: dict[frozenset[str], int] = {}
         self._remote_selections: dict[str, int] = {}
         self._bases: dict[int, tuple[str, ...]] = {}
-        self._walks: dict[CommitSelection, tuple[GitCommit, ...]] = {}
+        self._walks: dict[CommitSelection, CommitWalk] = {}
 
     @cached_property
     def repository(self) -> Repo:
@@ -808,7 +848,7 @@ class CheckoutHistory:
                 ref for ref in self.references("refs/remotes/") if ref != tracking))
         return (self.ancestors(head) & ~self._remote_selections[tracking]).bit_count()
 
-    def walk(self, selection: CommitSelection) -> tuple[GitCommit, ...]:
+    def walk(self, selection: CommitSelection) -> CommitWalk:
         """Traverse each selection once; problem filters share the resulting commit order."""
         if selection not in self._walks:
             seen = self.ancestors(*selection.excluded)
@@ -832,7 +872,7 @@ class CheckoutHistory:
                     if parent in self.graph and not seen & self.bit(parent):
                         heapq.heappush(pending, (-self.graph[parent].at, sequence, parent))
                         sequence += 1
-            self._walks[selection] = tuple(commits)
+            self._walks[selection] = CommitWalk(tuple(commits))
         return self._walks[selection]
 
     @cached_property

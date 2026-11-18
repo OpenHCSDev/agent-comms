@@ -136,10 +136,10 @@ def test_the_review_timer_comes_back_every_window_until_delivery(held):
     todo = comms.goals.todos.get('P1')
     first, window = 1000.0, todo.review_window
     assert window == first - todo.order.checked().at.recorded_at('An order')
-    assert todo.timer_up(first - 1) == ()
-    assert todo.timer_up(first) == (RecordedEventTime(first),)
-    assert todo.timer_up(first + window - 1) == (RecordedEventTime(first),)
-    assert todo.timer_up(first + 2 * window + 1) == (RecordedEventTime(first + 2 * window),)
+    assert todo.timer_up(first - 1) is None
+    assert todo.timer_up(first) == RecordedEventTime(first)
+    assert todo.timer_up(first + window - 1) == RecordedEventTime(first)
+    assert todo.timer_up(first + 2 * window + 1) == RecordedEventTime(first + 2 * window)
     assert todo.reissued_review(5000.0) == RecordedEventTime(5000.0 + window)
 
 

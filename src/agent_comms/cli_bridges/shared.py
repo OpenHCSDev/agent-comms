@@ -158,7 +158,6 @@ from agent_comms.storage.typed_table import (
     WriterOwnedResource,
     WriterOwnedStore,
 )
-from agent_comms.task_attachments.team_pings import TeamUpdate
 from agent_comms.transcript.transcript_publication import PublishesToBus, WaitsOnBusyStore
 from agent_comms_hooks.watch import SessionCommandError
 
@@ -1372,14 +1371,6 @@ class CliBridge(
 
     async def prepare_delivery(self) -> None:
         """A transport may prepare its harness after the operation bound its reader."""
-
-    async def deliver_board(self, update: TeamUpdate, message: Message) -> type[Outcome]:
-        """Every transport honors the packet's wake decision; passive display is not input."""
-        return await update.wake(self, message)
-
-    async def wake(self, message: Message) -> type[Outcome]:
-        """The packet already owns its HUD text; every harness receives that original message."""
-        return await self.deliver(message)
 
     async def accept(self, message: Message) -> None:
         """Before its durable begin the message is held, never skipped: a store busy while the

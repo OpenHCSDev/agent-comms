@@ -204,15 +204,15 @@ class RouteCounts(ABC):
 
     _requests = f'''requests AS NOT MATERIALIZED (
         SELECT recipient.key AS actor,row.seq,row.target,row.sender
-        FROM route_keys AS route
-        CROSS JOIN actor_targets AS target ON target.target=route.target
-        CROSS JOIN recipients AS recipient ON recipient.key=target.actor
-        CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.target=route.target
-            AND row.sender=route.sender AND row.sender_lookup IS route.sender_lookup
-            AND row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
+        FROM recipients AS recipient
         CROSS JOIN "{ReceivedSource.declared_name}" AS addressed
-            ON addressed.lookup=recipient.value AND addressed.seq=row.seq
+            ON addressed.lookup=recipient.value
                 AND {ReadCursor.above_floor("addressed.seq", "recipient.key", "''")}
+        CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.seq=addressed.seq
+            AND row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
+        CROSS JOIN route_keys AS route ON route.target=row.target
+            AND route.sender=row.sender AND route.sender_lookup IS row.sender_lookup
+        CROSS JOIN actor_targets AS target ON target.actor=recipient.key AND target.target=row.target
         CROSS JOIN addressed_since AS viewer ON viewer.name=recipient.key
         LEFT JOIN aliases AS alias ON alias.name=row.sender
         WHERE row.timestamp>=max(route.since,viewer.since)
