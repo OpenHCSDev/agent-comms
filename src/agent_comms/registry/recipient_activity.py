@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from dataclasses import dataclass
 
 from agent_comms.messaging.assignment_notice import AssignmentNotice
@@ -10,6 +12,9 @@ from agent_comms.messaging.notification_progress import (
     TakenProgress,
 )
 from agent_comms.nominal.declared_family import DeclaredFamily
+
+if TYPE_CHECKING:
+    from agent_comms.registry.thread_identity import ThreadIncarnation
 
 
 class RecipientActivity(
@@ -22,7 +27,7 @@ class RecipientActivity(
     def turn_started_by(self, updated_at_ms: int) -> bool:
         return False
 
-    def displayed_recipient(self, notification, source, reads, document, snapshot):
+    def displayed_recipient(self, notification, source, reads, document, snapshot) -> tuple[ThreadIncarnation, ...]:
         return reads.displayed_recipient(
             source, notification.recipient_identity, snapshot, document=document
         )
@@ -48,7 +53,7 @@ class RecipientActivity(
 class RecordedRecipientActivity(RecipientActivity):
     """Durable history supplies no current process, readiness or inbox check."""
 
-    def displayed_recipient(self, notification, source, reads, document, snapshot):
+    def displayed_recipient(self, notification, source, reads, document, snapshot) -> tuple[ThreadIncarnation, ...]:
         return reads.historical_displayed_recipient(
             source.message, notification.recipient_identity, snapshot, document=document
         )

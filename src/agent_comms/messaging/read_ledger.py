@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import json
 from abc import abstractmethod
 from collections.abc import (
@@ -43,6 +45,9 @@ from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.private_path import ObservedPath
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
+
+if TYPE_CHECKING:
+    from agent_comms.registry.thread_identity import ThreadIncarnation
 
 
 class ReadNotice(SubclassUnion, affix="ReadNotice"):
@@ -196,7 +201,7 @@ class ReadLedger(MarksTranscriptRead, SingleFileStore, Sealed, ThreadOwnedState,
 
     def displayed_recipient(
         self, original: Delivered, recipient, snapshot: RegistrySnapshot, *, document=None
-    ):
+    ) -> tuple[ThreadIncarnation, ...]:
         """Return recorded human display evidence for this exact frozen recipient.
 
         Processing, assignment acceptance and a reply cannot grant this fact.
@@ -208,7 +213,7 @@ class ReadLedger(MarksTranscriptRead, SingleFileStore, Sealed, ThreadOwnedState,
 
     def historical_displayed_recipient(
         self, message, recipient, snapshot: RegistryProvenance, *, document=None
-    ):
+    ) -> tuple[ThreadIncarnation, ...]:
         """Read this archive's human paint ledger, never an original CLI ACK.
 
         HistoryArchive does not copy the source's read ledger. Its new ledger
@@ -222,15 +227,18 @@ class ReadLedger(MarksTranscriptRead, SingleFileStore, Sealed, ThreadOwnedState,
             self, message, snapshot, document=document
         )
 
-    def displayed_incarnation(self, message, incarnation, snapshot, *, document):
+    def displayed_incarnation(self, message, incarnation, snapshot, *, document) -> tuple[RecordedThreadIncarnation, ...]:
+        """Who displayed this message, as the display-evidence family answers it everywhere:
+        a tuple of readers (here zero or one). Every `read_effect` / `displayed_recipient_effect`
+        returns this shape and `MessageNotification.displayed_to` carries it on the wire."""
         conversation = self.conversation(message, snapshot)
         document = (self.read_conversation(incarnation.name, conversation, snapshot)
                     if document is None else document)
         if message.seq in document.for_conversation(
             incarnation.name, conversation, snapshot, ObservedPath.at(Bus.path_in(self.path.parent))
         ):
-            return incarnation
-        return None
+            return (incarnation,)
+        return ()
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         """Drop a deleted viewer's reads and every read of its deleted transcript.

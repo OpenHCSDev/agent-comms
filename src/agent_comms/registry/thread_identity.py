@@ -704,7 +704,7 @@ class ThreadRole(
         thread: Thread,
         snapshot: RegistryProvenance,
         document: ReadDocument | None,
-    ) -> object:
+    ) -> tuple[ThreadIncarnation, ...]:
         """Only a human recipient's display records a read."""
 
     @classmethod
@@ -764,7 +764,7 @@ class AutomatedThreadRole(ThreadRole):
         thread: Thread,
         snapshot: RegistryProvenance,
         document: ReadDocument | None,
-    ) -> object:
+    ) -> tuple[ThreadIncarnation, ...]:
         return ()
 
     @classmethod
@@ -852,7 +852,7 @@ class UserThreadRole(NonExecutingThreadRole, ThreadRole):
         thread: Thread,
         snapshot: RegistryProvenance,
         document: ReadDocument | None,
-    ) -> object:
+    ) -> tuple[ThreadIncarnation, ...]:
         return reads.displayed_incarnation(message, thread.incarnation, snapshot, document=document)
 
     @classmethod
