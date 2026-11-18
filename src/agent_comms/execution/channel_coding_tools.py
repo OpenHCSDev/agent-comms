@@ -20,7 +20,6 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.execution.backend import TurnSession
 from agent_comms.execution.coding_child import CodingChild, CodingChildMode
-from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.reservation_rules import ReservationRule, RuleCheck
 from agent_comms.execution.selected.claim import (
@@ -137,7 +136,7 @@ class CodingToolOwner(CodingChild, ABC):
     async def execute_tool(self, name: str, arguments: dict[str, object]) -> dict[str, object]:
         """Use this bound caller in a worker-owned client, without another interpreter."""
         def invoke() -> dict[str, object]:
-            with LaunchRoot.from_path(self.comms.root).selected(), Comms.client(self.comms.route) as comms:
+            with Comms.client(self.comms.route) as comms:
                 return invoke_tool(comms, name, arguments, caller=ThreadCaller(self.owner_name))
 
         try:

@@ -131,7 +131,7 @@ async def test_managed_native_send_uses_its_existing_owner_once(tmp_path, tool_l
         assert len(messages) == 1
         assert messages[0].sender == "sender"
         assert messages[0].body == args["body"]
-        assert messages[0].id == result["id"]
+        assert messages[0].message_id == result["id"]
     finally:
         if child.returncode is None:
             child.kill()

@@ -54,17 +54,18 @@ export class OwnerToolConnection {
     return other instanceof OwnerToolConnection && this.#path === other.#path && this.#token === other.#token;
   }
 
-  request(payload, maxRequest, maxResponse) {
+  request(payload, maxRequest, maxResponse, signal) {
     const request = Buffer.from(JSON.stringify({ ...payload, token: this.#token }) + "\n", "utf8");
     if (request.length > maxRequest) throw new Error("Native tool request exceeds bound");
-    return requestOwnerTool(this.#path, request, maxResponse);
+    return requestOwnerTool(this.#path, request, maxResponse, signal);
   }
 
-  async execute(callId, name, args) {
+  async execute(callId, name, args, signal) {
     const response = await this.request(
       { call_id: callId, name, arguments: args, operation: { kind: "execute" } },
       1024 * 1024,
       64 * 1024 * 1024,
+      signal,
     );
     if (response?.ok !== true) throw new Error(response?.error ?? "Core tool execution failed.");
     if (!response.result || typeof response.result !== "object" || Array.isArray(response.result)) {
@@ -74,8 +75,9 @@ export class OwnerToolConnection {
   }
 }
 
-export function requestOwnerTool(path, request, maxResponse) {
+export function requestOwnerTool(path, request, maxResponse, signal) {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new ToolNotStarted());
     const socket = createConnection(path);
     const chunks = [];
     let receivedBytes = 0;
@@ -87,6 +89,8 @@ export function requestOwnerTool(path, request, maxResponse) {
       socket.destroy();
       reject(new failure());
     };
+    signal?.addEventListener("abort", fail, { once: true });
+    socket.once("close", () => signal?.removeEventListener("abort", fail));
     socket.once("error", fail);
     socket.once("connect", () => {
       failure = ToolOutcomeUnknown;

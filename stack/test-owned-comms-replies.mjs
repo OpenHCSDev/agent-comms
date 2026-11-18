@@ -10,12 +10,18 @@ const path = join(directory, "socket");
 const large = { text: "x".repeat(2_000_000) };
 const answers = [{ ok: true, result: large }, { ok: false, error: "original Core failure" }, { ok: true, result: null }];
 let requests = 0;
+const cancellation = new AbortController();
 const server = createServer(socket => socket.once("data", bytes => {
   const request = JSON.parse(bytes);
   assert.equal(request.call_id, `call-${requests}`);
   assert.equal(request.token, "f".repeat(64));
   assert.deepEqual(request.operation, { kind: "execute" });
-  const reply = Buffer.from(JSON.stringify(answers[requests++]) + "\n");
+  const answer = answers[requests++];
+  if (requests === 4) {
+    cancellation.abort();
+    return;
+  }
+  const reply = Buffer.from(JSON.stringify(answer) + "\n");
   for (let offset = 0; offset < reply.length; offset += 8192) socket.write(reply.subarray(offset, offset + 8192));
   socket.end();
 }));
@@ -26,7 +32,9 @@ try {
   await assert.rejects(owner.execute("call-1", "comms_example", {}), /original Core failure/);
   await assert.rejects(owner.execute("call-2", "comms_example", {}), ToolOutcomeUnknown);
   await assert.rejects(OwnerToolConnection.unavailable.execute("missing", "comms_example", {}), ToolNotStarted);
-  assert.equal(requests, 3, "No failed or uncertain execution was retried");
+  await assert.rejects(owner.execute("call-3", "comms_example", {}, cancellation.signal), ToolOutcomeUnknown);
+  await assert.rejects(owner.execute("never-written", "comms_example", {}, cancellation.signal), ToolNotStarted);
+  assert.equal(requests, 4, "No failed or uncertain execution was retried");
 } finally {
   await new Promise(resolve => server.close(resolve));
   await rm(directory, { recursive: true, force: true });

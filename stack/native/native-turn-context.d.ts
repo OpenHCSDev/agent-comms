@@ -33,7 +33,7 @@ export declare class SystemLayerSegment {
 export interface OwnerToolConnection {
     request(payload: Record<string, unknown>, maxRequest: number,
             maxResponse: number): Promise<{ok?: boolean; error?: string}>;
-    execute(callId: string, name: string, args: Record<string, unknown>): Promise<Record<string, unknown>>;
+    execute(callId: string, name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>>;
 }
 export interface OwnerToolEndpoint { path: string; token: string; }
 export declare class AllowedTools {
