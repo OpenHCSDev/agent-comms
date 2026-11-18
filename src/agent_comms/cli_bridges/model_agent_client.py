@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import json
 import sys
+from functools import partial
 import urllib.error
 import urllib.request
 from abc import abstractmethod
@@ -32,6 +33,8 @@ from agent_comms.messaging.agent_inbox import TakenInputStart
 from agent_comms.messaging.message_reference import AfterMessageStart, InboxStart
 from agent_comms.messaging.messages import InfoKind
 from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.threads import ExternalThread
 
 
 class ModelReply(DeclaredFamily, affix="Reply"):
@@ -173,6 +176,7 @@ class ModelAgent:
     rejection_k: int = 1
     skip_backlog: bool = True
     verifier_context: ResponseContext = ResponseContext()
+    channels: frozenset[str] = frozenset()
 
     async def run(self) -> None:
         # Select the LaunchRoot BEFORE resolving the route: resolve_comms_route(None)
@@ -184,6 +188,7 @@ class ModelAgent:
         with LaunchRoot.from_path(self.root).selected():
             route = resolve_comms_route(self.root)
             comms = Comms(route)
+            await self._register(comms)
             start = self._initial_start(comms)
             print(f"[model-agent] watching {self.name!r} -> "
                   f"{self.endpoint.url} ({self.endpoint.model}) "
@@ -206,6 +211,17 @@ class ModelAgent:
                           else reply.display())
                 print(f"[model-agent] replied to {message.sender} with "
                       f"{type(reply).__name__}: {suffix}", flush=True)
+
+    async def _register(self, comms: Comms) -> None:
+        """Declare this thread before watching or sending from it, as `Watch.register` does
+        (cli_bridges/shared.py): an unregistered name has no inbox to watch and no sender to
+        send as, so every reply raised UnregisteredThreadError (Tristan, 2026-11-18: "it shodl
+        autoregister"). A name already registered keeps its identity and channels."""
+        if comms.registry.snapshot().taken(self.name):
+            return
+        thread = ExternalThread(self.name, self.channels, Checkout(Path.cwd()))
+        await comms.bus.when_open(partial(comms.registry.declare, thread))
+        print(f"[model-agent] registered {self.name!r} in {sorted(self.channels)}", flush=True)
 
     def _initial_start(self, comms: Comms) -> InboxStart:
         """Where the first inbox read begins.
@@ -296,6 +312,9 @@ def main() -> None:
                         help=("Replay every untaken message in the inbox on connect. Default "
                               "skips the backlog: a fresh daemon connect answers only messages "
                               "that arrive after it starts, since it doesn't own what it forwards."))
+    parser.add_argument("--channels", default="",
+                        help=("Comma-separated channels a new thread joins on first registration, "
+                              "e.g. '#model_test'. An already-registered thread keeps its own."))
     args = parser.parse_args()
     # The bridge declares no tools to the endpoint, so the verifier should fire on
     # any <tool_call> in a candidate. token_budget mirrors max_tokens so a truncated
@@ -314,6 +333,8 @@ def main() -> None:
         rejection_k=max(args.rejection_k, 1),
         skip_backlog=not args.include_backlog,
         verifier_context=verifier_context,
+        channels=frozenset(name.strip().lstrip("#") for name in args.channels.split(",")
+                           if name.strip().lstrip("#")),
     )
     try:
         asyncio.run(agent.run())
