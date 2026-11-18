@@ -874,7 +874,19 @@ class CheckoutHistory:
         commit only one side reaches; only those few candidates are tested, never the whole
         shared history.
         """
-        tips = (self.resolve(left), self.resolve(right))
+        # Acquired immutable ids already name the objects in this cut. Ref names
+        # still resolve through its captured refs before Git answers the pair.
+        tips = tuple(revision if revision in self.required and Repo.full_commit.fullmatch(revision)
+                     else self.resolve(revision) for revision in (left, right))
+        try:
+            bases = tuple(Repo.git(self.checkout.common_dir, "merge-base", "--all", *tips).splitlines())
+        except GitCommandError as error:
+            if not error.unrelated_history():
+                raise
+            return ()
+        if len(bases) < 2:
+            return bases
+        # Several best bases retain the established timestamp and contender order.
         common = self.ancestors(tips[0]) & self.ancestors(tips[1])
         if common not in self._bases:
             candidates = dict.fromkeys((*tips, *(
