@@ -6,12 +6,12 @@ from contextlib import AsyncExitStack
 import pytest
 
 from agent_comms.execution.acp import CommsAgent
-from agent_comms.agent_events import AgentInfo
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.owned_turn import OwnedTurn
+from agent_comms.execution.runtime_observations import AgentInfo, NativeSessionPathObservation
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_input_source import NoTurnAcceptance
 from agent_comms.execution.turn_lease import NoTurnLease
@@ -58,7 +58,7 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
             native_file = tmp_path / "observed-native.jsonl"
             native_file.write_text('{"type":"session","version":3,"id":"observed-native"}\n')
             saved = str(native_file)
-            await turn.progress.before_native_metadata(AgentInfo(session_file=saved))
+            await turn.progress.before_native_metadata(AgentInfo(session_file=NativeSessionPathObservation.from_native(saved)))
             assert turn.registry_owner is not initial
             assert turn.thread.session_file == RegistrySessionLocation.from_path(saved, comms.root)
             assert turn.progress.thread is turn.thread

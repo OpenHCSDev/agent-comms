@@ -9,6 +9,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination.errors import StaleRevision
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.session_updates import encode_updates
 from agent_comms.execution.transcript_sources import (
     LatestPage,
     TurnDraftPublication,
@@ -21,7 +22,6 @@ from agent_comms.messaging.watched import ChangeSignal, FileSource
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.text_route_update import encode_updates
 from agent_comms.transcript.external_transcript_rows import EarlierPage
 from agent_comms.transcript.transcript_drafts import NoDraft
 from agent_comms.transcript.transcript_events import (

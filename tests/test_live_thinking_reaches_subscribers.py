@@ -8,6 +8,7 @@ import asyncio
 from contextlib import AsyncExitStack
 
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from delivery_owner_fixture import canonical_agent, reply_turn_finished
 from native_backend_fixture import native_backend_fixture
 
@@ -22,7 +23,7 @@ async def test_bus_turn_thinking_and_reply_reach_a_subscribed_viewer_live(tmp_pa
             viewer = canonical_agent(comms, auto_wake=False)
             received = []
 
-            class Viewer:
+            class Viewer(AcpUpdateSink):
                 async def publish_update(self, session_id, update):
                     received.append(update.model_dump(mode="json", by_alias=True, exclude_none=True))
                     return True

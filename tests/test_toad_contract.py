@@ -9,13 +9,13 @@ from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
 from agent_comms.agent_event_updates import AcpEventConsumer, Routed, RoutedTurnEventConsumer
 from agent_comms.agent_events import Chunk
 from agent_comms.comms import wire
-from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenBinary
 from agent_comms.messaging.routing import MessageRoute
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.text_route_update import TextRouteUpdate
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 
 
 @pytest.mark.asyncio
@@ -41,7 +41,7 @@ async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path, consumer
 
     updates = []
 
-    class Client(SessionUpdateSink):
+    class Client(AcpUpdateSink):
         async def publish_update(self, session_id, update):
             assert session_id == "worker"
             updates.append(update.model_dump(by_alias=True, exclude_none=True))

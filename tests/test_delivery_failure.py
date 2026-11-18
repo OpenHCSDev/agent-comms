@@ -10,8 +10,8 @@ from agent_comms.errors import (
     HumanSendRefusedError,
 )
 from agent_comms.execution.acp_failure import InputFailedUpdate
+from agent_comms.execution.session_updates import encode_updates
 from agent_comms.messaging.delivery_failure import delivery_failure
-from agent_comms.text_route_update import encode_updates
 
 
 @pytest.mark.parametrize(

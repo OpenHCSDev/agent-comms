@@ -2,7 +2,6 @@
 
 import asyncio
 
-from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
 from agent_comms.comms import wire
 from agent_comms.execution import restart_queue
@@ -10,6 +9,7 @@ from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.native_arguments import GivenBinary
 from agent_comms.execution.restart_queue import PendingRestart, RestartedRestart
 from agent_comms.execution.restart_scope import OwnersNamed
+from agent_comms.execution.runtime_observations import AgentInfo, ContextUsageObservation
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.messaging.routing import NoTurnRouting
 from agent_comms.nominal.field_codec import FieldCodec, TurnId

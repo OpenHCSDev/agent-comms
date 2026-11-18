@@ -16,6 +16,7 @@ from agent_comms.execution.acp_failure import (
 )
 from agent_comms.execution.pi_events import NativeRetryEnd
 from agent_comms.execution.pi_wire import PiDiagnostic
+from agent_comms.execution.session_updates import encode_updates
 from agent_comms.execution.turn_failure import (
     ModelRequestFailed,
     ProviderRetryExhausted,
@@ -24,7 +25,6 @@ from agent_comms.execution.turn_failure import (
 from agent_comms.execution.turn_output import TurnOutput
 from agent_comms.input_attempt import InputAttempt, NotSentInput, StartedInput
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.text_route_update import encode_updates
 
 
 @pytest.mark.parametrize("wrap", [

@@ -6,16 +6,15 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from functools import partial
 
-from acp.schema import AgentMessageChunk, TextContentBlock
 
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, TurnChangedUpdate
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.session_updates import encode_updates
 from agent_comms.execution.turn_lease import TurnState
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AcpSessionId
-from agent_comms.text_route_update import encode_updates
 from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.ui_model.observation import ReadTranscript
 
@@ -34,13 +33,8 @@ class TurnTranscriptUpdate(TranscriptUpdate):
     async def publish(
         self, session_id: AcpSessionId, client: SessionUpdateSink,
     ) -> None:
-        await client.publish_update(
-            session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(TurnChangedUpdate(self.state)),
-            ),
+        await client.publish_facts(
+            TurnChangedUpdate(self.state), session_id=session_id,
         )
 
 
@@ -67,11 +61,4 @@ class TranscriptReplay:
         destination: SessionUpdateSink,
     ) -> None:
         metadata = await Coordination.run_worker(partial(encode_updates, snapshot))
-        await destination.publish_update(
-            session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=metadata,
-            ),
-        )
+        await destination.publish_metadata(session_id=session_id, metadata=metadata)

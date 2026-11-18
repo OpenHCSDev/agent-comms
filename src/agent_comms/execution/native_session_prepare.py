@@ -16,6 +16,7 @@ from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.native_startup import NativeStartup
 from agent_comms.execution.participant_identity import ParticipantIdentity
 from agent_comms.execution.prompt_state import PreparedSession
+from agent_comms.execution.runtime_observations import AgentInfo
 from agent_comms.execution.session_retention import NativeSessionRetention
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.pi_payloads import StateData
@@ -50,7 +51,7 @@ class NativeSessionPreparation(NativeSession):
         session_directory: Path,
         environment: dict[str, str],
         session_file: str,
-        observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
+        observe: Callable[[StateData, AgentInfo], Awaitable[None]],
     ) -> StateData:
         async with persistent.lock:
             return await cls.open_acquired(persistent, agent_bin, agent_args,
@@ -62,7 +63,7 @@ class NativeSessionPreparation(NativeSession):
         cls, persistent: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity], agent_bin: str, agent_args: Sequence[str], *,
         package: VerifiedNativePackage, worktree: str, root: Path, owner: ParticipantIdentity, session_directory: Path,
         environment: dict[str, str], session_file: str,
-        observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
+        observe: Callable[[StateData, AgentInfo], Awaitable[None]],
     ) -> StateData:
         """Keep the session's child owned through launch, observation and retention."""
         launch = await Coordination.run_worker(partial(

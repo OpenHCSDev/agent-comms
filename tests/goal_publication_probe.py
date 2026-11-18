@@ -6,12 +6,14 @@ from typing import get_type_hints
 
 importlib.import_module(sys.argv[1])
 
+from agent_comms.execution.runtime_observations import AgentEventConsumer
+
 from agent_comms.planning.goals import GoalUnavailable
 from agent_comms.registry.threads import Thread
 
 from agent_comms import agent_events
 from agent_comms.context_segments.wake_values import WakeGoalContext
-from agent_comms.text_route_update import AgentCommsUpdate
+from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.acp_extension import LiveQueueScope, PromptRequest, QueueScope
 from agent_comms.execution.input_drain import DrainedSession, InputDrain, OwnerSession
 from agent_comms.execution.session_lifecycle import SessionLifecycle
@@ -41,7 +43,7 @@ assert get_type_hints(GoalUnavailable.heading)["execution"]
 assert get_type_hints(Thread.wake_context)["goals"]
 assert get_type_hints(RunnableExecution.apply_toggle)["change"]
 assert get_type_hints(agent_events.InputStarted.captured)["inputs"]
-assert get_type_hints(agent_events.AgentEventConsumer.__init__)["comms"]
+assert get_type_hints(AgentEventConsumer.__init__)["comms"]
 assert get_type_hints(agent_events.Notice.acp_updates)["return"]
 assert get_type_hints(GoalWait.visit_group)["agents"]
 assert get_type_hints(GoalRecords)["registry"]
@@ -57,7 +59,7 @@ assert issubclass(PrivateSendClaim, FollowingPromptBoundary)
 assert issubclass(TrackedTurnSession, FollowingTurnSource)
 assert get_type_hints(TrackedTurnSession.__init__)["execution"] is NativeExecution
 assert get_type_hints(TrackedTurnSession.execute)["prompt_send_boundary"] is FollowingPromptBoundary
-assert get_type_hints(AgentCommsUpdate.acp_chunk)["return"]
+assert get_type_hints(SessionUpdateSink.publish_facts)["return"] is bool
 assert get_type_hints(QueueScope.start_revision)["inputs"] is QueuePublication
 assert get_type_hints(LiveQueueScope.start_revision)["inputs"] is QueuePublication
 assert get_type_hints(PromptRequest.publish_acceptance)["inputs"] is QueuePublication

@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import (
@@ -19,6 +18,7 @@ from agent_comms.execution.context_reading import ContextUsage, UnmeasuredContex
 from agent_comms.execution.launch_runtime import CallingThreadUnavailable
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
+from agent_comms.execution.runtime_observations import AgentInfo, ContextUsageObservation
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.messaging.messages import HandoffKind, InfoKind, Message
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, TurnId

@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import AsyncExitStack
 from functools import partial
 
-from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
+from acp.schema import PromptResponse
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms import agent_events as events
@@ -24,11 +24,11 @@ from agent_comms.agent_event_updates import TurnEventConsumer
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import Refused
 from agent_comms.execution.pi_vocabulary import ManualCompactionReason
+from agent_comms.execution.session_updates import encode_updates
 from agent_comms.execution.transcript_sources import UnreadTranscriptCursor
 from agent_comms.execution.turn_phase import CompactionPhase, PublishingPhase
 from agent_comms.execution.turn_runner import TurnRunner
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
-from agent_comms.text_route_update import encode_updates
 
 
 class CompactionReply(MroDispatch):
@@ -108,12 +108,8 @@ async def _compact_started(runner, session_id, thread_name, instructions):
                 events.CompactionEnd, events.CompactionAbort, ManualCompactionReason)
             await consumer.dispatch(completion)
         await completion.transcript_changed(partial(
-            runner.runtime.publish_update,
+            runner.runtime.publish_metadata,
             session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(TranscriptChangedUpdate(UnreadTranscriptCursor())),
-            ),
+            metadata=encode_updates(TranscriptChangedUpdate(UnreadTranscriptCursor())),
         ))
         return outcome

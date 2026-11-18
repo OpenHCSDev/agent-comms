@@ -43,6 +43,7 @@ from agent_comms.execution.pi_commands import (
 from agent_comms.execution.pi_events import CancelledUiChoice, DialogUiRequest, ExtensionUiChoice
 from agent_comms.execution.queued_input import InitialInput
 from agent_comms.execution.reservation_rules import ReservationRule, ReservationViolationError
+from agent_comms.execution.runtime_observations import AgentEventConsumer, AgentInfo
 from agent_comms.execution.session_lifecycle import SessionLifecycle
 from agent_comms.execution.session_owner_reads import SessionTaskOwner
 from agent_comms.execution.turn_context import SegmentManifest
@@ -253,11 +254,11 @@ class TurnRunner(OwnedTurnRunner):
         return current
 
     async def observe_selected_preparation(
-        self, session_id: AcpSessionId, thread: Thread, state: StateData, info: events.AgentInfo,
+        self, session_id: AcpSessionId, thread: Thread, state: StateData, info: AgentInfo,
     ) -> None:
         """Publish this attested saved owner through the shared info consumer."""
         state.model.require_selection(thread.model)
-        await events.AgentEventConsumer(comms=self.comms, thread_name=thread.name).dispatch(info)
+        await AgentEventConsumer(comms=self.comms, thread_name=thread.name).dispatch(info)
         await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(info)
 
     async def inspect_context(self, session_id: AcpSessionId, thread: Thread) -> NativeContextData:

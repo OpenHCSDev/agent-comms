@@ -5,8 +5,8 @@ import socket
 import pytest
 
 from agent_comms.cli_verbs.configure import ConfigureCliCommand
-from agent_comms.agent_events import NativeMetadataObservation
 from agent_comms.config_options import CatalogChoice, ModelConfigOption, ThinkingLevelConfigOption
+from agent_comms.execution.runtime_observations import NativeMetadataObservation
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout

@@ -7,9 +7,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.execution.session_updates import AgentCommsUpdate, encode_updates
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     AcpSessionId,
@@ -83,6 +84,20 @@ ACP_PERMISSION_TIMEOUT_SECONDS = 14.0
 
 
 class SessionUpdateSink(ABC):
+    async def publish_facts(
+        self, *updates: AgentCommsUpdate, session_id: AcpSessionId,
+    ) -> bool:
+        """Encode the original facts once; the transport owns their envelope."""
+        return await self.publish_metadata(
+            session_id=session_id, metadata=encode_updates(*updates),
+        )
+
+    @abstractmethod
+    async def publish_metadata(
+        self, *, session_id: AcpSessionId, metadata: dict[str, JsonValue],
+    ) -> bool:
+        """Publish already encoded facts without encoding or observing them again."""
+
     @abstractmethod
     async def publish_update(self, *, session_id: AcpSessionId, update: BaseModel) -> bool:
         """True when someone accepted the update."""
@@ -146,6 +161,11 @@ class NoController(UncontrolledController, SessionUpdateSink):
 
     def departed(self, runtime: RuntimeServer, session_id: AcpSessionId) -> bool:
         return True
+
+    async def publish_metadata(
+        self, *, session_id: AcpSessionId, metadata: dict[str, JsonValue],
+    ) -> bool:
+        return False
 
     async def publish_update(self, *, session_id: AcpSessionId, update: BaseModel) -> bool:
         return False

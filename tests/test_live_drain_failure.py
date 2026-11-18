@@ -3,8 +3,7 @@
 
 import asyncio
 import json
-import os
-import shutil
+from contextlib import closing
 import sqlite3
 import time
 from dataclasses import replace
@@ -14,7 +13,7 @@ import pytest
 
 from agent_comms.execution.acp import CommsAgent
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.execution.drain_failures import drain_failures
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
@@ -55,21 +54,21 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
     comms, agent, *_ = owned_session
     path = comms.root / "coordination.sqlite3"
     saved = tmp_path / "current-schema.sqlite3"
-    shutil.copy2(path, saved)
+    CoordinationStore.copy_file(path, saved)
     if broken == "missing":
         path.unlink()
-        with Coordination(path):
+        with closing(sqlite3.connect(path)):
             pass
     else:
-        with sqlite3.connect(path) as db:
-            db.execute("DROP TABLE claim_batch_members")
-    with sqlite3.connect(path) as db:
+        with closing(sqlite3.connect(path)) as db:
+            db.execute("DROP TABLE participants")
+    with closing(sqlite3.connect(path)) as db:
         broken_schema = db.execute("SELECT name, sql FROM sqlite_master ORDER BY name").fetchall()
     try:
         agent.inputs.ensure_live_drain(AcpSessionId("beta"))
         await until(lambda: agent.inputs.state(AcpSessionId("beta")).observation_watcher is not None)
         await until(
-            lambda: owner_view(comms).activity.readiness.source_diagnostic().holds_event_current
+            lambda: owner_view(comms).activity.readiness.source_diagnostic().holds_event_current()
         )
         failed = owner_view(comms)
         diagnostic = failed.activity.readiness.source_diagnostic()
@@ -87,7 +86,7 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         observed = comms.agents.activity.current("beta", active=True)
         await asyncio.sleep(1.3)
         assert comms.agents.activity.current("beta", active=True) == observed
-        with sqlite3.connect(path) as db:
+        with closing(sqlite3.connect(path)) as db:
             assert db.execute("SELECT name, sql FROM sqlite_master ORDER BY name").fetchall() == broken_schema
         # Age and an unrelated turn may not turn this persistent failure into Ready.
         comms.agents.activity.emit(
@@ -100,9 +99,10 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         comms.agents.finish_turn(lease)
         assert owner_view(comms).presentation.status.details == (diagnostic.summary,)
         # An explicit operator restores the actual current schema; readers do no repair.
-        os.replace(saved, path)
+        CoordinationStore.copy_file(saved, path)
+        CoordinationStore.publish_change(path)
         await until(
-            lambda: not owner_view(comms).activity.readiness.source_diagnostic().holds_event_current
+            lambda: not owner_view(comms).activity.readiness.source_diagnostic().holds_event_current()
         )
         assert not owner_view(comms).presentation.status.details
         recovered = comms.agents.activity.current("beta", active=True)
@@ -124,7 +124,7 @@ async def test_successful_drain_clears_failure_during_active_turn(tmp_path, owne
         async with drain_failures(comms, "beta", owner):
             await agent.inputs.drain_inbox(AcpSessionId("beta"))
         current = owner_view(comms)
-        assert not current.activity.readiness.source_diagnostic().holds_event_current
+        assert not current.activity.readiness.source_diagnostic().holds_event_current()
         assert current.thread.executing
         assert current.presentation.status.is_working()
         assert not current.presentation.status.details
@@ -148,10 +148,10 @@ async def test_restarted_observer_recovers_retained_diagnostic(tmp_path, kind, o
     comms.agents.set_drain_diagnostic(
         "beta", owner, kind(owner, "OSError", "previous observation failed", recorded_at=1.0),
     )
-    assert owner_view(comms).activity.readiness.source_diagnostic().holds_event_current
+    assert owner_view(comms).activity.readiness.source_diagnostic().holds_event_current()
     try:
         agent.inputs.ensure_live_drain(AcpSessionId("beta"))
-        await until(lambda: not owner_view(comms).activity.readiness.source_diagnostic().holds_event_current)
+        await until(lambda: not owner_view(comms).activity.readiness.source_diagnostic().holds_event_current())
         assert not owner_view(comms).presentation.status.details
         await agent.inputs.state(AcpSessionId("beta")).observer.stop()
         # A new consumer gets its first read even while the shared root is idle.
@@ -176,7 +176,7 @@ async def test_settled_observer_recovers_another_path_failure(tmp_path, owned_se
         # This is the existing failed-wake notification. Unchanged input stores
         # must not make a settled observer skip the actual recovery read.
         agent.inputs.wake_observer(AcpSessionId("beta"))
-        await until(lambda: not owner_view(comms).activity.readiness.source_diagnostic().holds_event_current)
+        await until(lambda: not owner_view(comms).activity.readiness.source_diagnostic().holds_event_current())
         assert not owner_view(comms).presentation.status.details
     finally:
         await agent.shutdown()
@@ -204,7 +204,7 @@ async def test_successful_earlier_drain_preserves_newer_error(tmp_path, recurs, 
         assert retained.recorded_at == newer.recorded_at
         async with drain_failures(comms, "beta", owner):
             await agent.inputs.drain_inbox(AcpSessionId("beta"))
-        assert not owner_view(comms).activity.readiness.source_diagnostic().holds_event_current
+        assert not owner_view(comms).activity.readiness.source_diagnostic().holds_event_current()
     finally:
         await agent.shutdown()
 

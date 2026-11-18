@@ -10,6 +10,7 @@ import pytest
 from acp.schema import SessionInfoUpdate
 from agent_comms.execution.native_child import PiChild
 from agent_comms.execution.pi_durable_backend import PiDurableBackend
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from delivery_owner_fixture import canonical_agent
 from goal_owner_fixture import canonical_goal_wire
 from pydantic import BaseModel
@@ -18,7 +19,6 @@ from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
 from agent_comms.cli_bridges.runtime_updates import ThreadOutput
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.input_drain import UnreadRegistry
 from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_phase import IdlePhase, ToolRunningPhase
@@ -40,7 +40,7 @@ from agent_comms.storage.locked_store import GoalWakeFile, RegistryFile
 
 
 @dataclass
-class GoalLog(SessionUpdateSink):
+class GoalLog(AcpUpdateSink):
     published: list[tuple[str, GoalChangedUpdate]] = field(default_factory=list)
 
     async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:

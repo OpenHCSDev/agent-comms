@@ -20,7 +20,6 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.comms import wire
-from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.launch_runtime import RestoredRuntime
 from agent_comms.execution.native_input_record import TriageNativeExecution
 from agent_comms.execution.owner_cutover import PreserveOwnerRuntime
@@ -32,6 +31,7 @@ from agent_comms.nominal.lifecycle_capability import Executing
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from bus_history import read_history
 from bus_record_fixture import configure_local_native, prepare_native_comms, start_source_owner
 
@@ -188,7 +188,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
     )
     facts = []
 
-    class Client(SessionUpdateSink):
+    class Client(AcpUpdateSink):
         async def publish_update(self, **kwargs):
             notification = SessionNotification.model_validate(kwargs)
             facts.extend(decode_updates(notification.update.field_meta))

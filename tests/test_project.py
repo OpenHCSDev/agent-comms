@@ -11,9 +11,9 @@ from acp import RequestError
 
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
 from agent_comms.comms import wire
-from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from delivery_owner_fixture import canonical_agent
 
 
@@ -29,7 +29,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(
     session = FieldCodec.decode(AcpSessionId, (await agent.new_session(str(old))).session_id)
     updates = []
 
-    class Client:
+    class Client(AcpUpdateSink):
         async def publish_update(self, **kwargs):
             updates.append(kwargs["update"])
             return True
@@ -68,7 +68,7 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path, native_run
     session = FieldCodec.decode(AcpSessionId, (await owner.new_session(str(old))).session_id)
     proxies, updates = [], [[], []]
 
-    class Client(SessionUpdateSink):
+    class Client(AcpUpdateSink):
         def __init__(self, values):
             self.values = values
 

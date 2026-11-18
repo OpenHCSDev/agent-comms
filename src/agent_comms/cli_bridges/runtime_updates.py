@@ -12,9 +12,9 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.agent_events import RuntimeInfoObservation
 from agent_comms.cli_bridges.cli_protocol import EarlierItems
 from agent_comms.execution.provider_records import ProviderDiagnosticError
+from agent_comms.execution.runtime_observations import RuntimeInfoObservation
 from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId, NoSourceTurn, TurnItem
 from agent_comms.execution.turn_phase import FailedPhase, IdlePhase, ModelWaitPhase, TurnPhase

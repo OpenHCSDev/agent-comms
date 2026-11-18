@@ -28,11 +28,11 @@ from agent_comms.coordination.errors import DeferredRead
 from agent_comms.execution.cursor_owner import CommittedCursorOwner, CursorOwner, CursorState
 from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.publication_measurements import PublicationMeasurements
+from agent_comms.execution.session_updates import encode_updates
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.publisher import ResponseWrites
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId
 from agent_comms.registry.privacy_reads import CursorMetadataRead
-from agent_comms.text_route_update import encode_updates
 from agent_comms.transport.attachment_scope import CursorScope
 from agent_comms.transport.runtime_server import RuntimeServer
 

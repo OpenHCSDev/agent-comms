@@ -33,16 +33,17 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.context_reading import ContextUsage, UnsizedContext
 from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_output import NativeRecordLocation
+from agent_comms.execution.runtime_observations import ContextInfo
+from agent_comms.execution.session_updates import (
+    AgentCommsUpdate,
+    encode_updates,
+)
 from agent_comms.execution.tool_results import tool_result_content
 from agent_comms.execution.turn_effects import TurnEffects
 from agent_comms.messaging.routing import MessageRoute, NoMessageRoute
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.planning.goal_events import GoalChanged
-from agent_comms.text_route_update import (
-    AgentCommsUpdate,
-    TextRouteUpdate,
-    encode_updates,
-)
+from agent_comms.text_route_update import TextRouteUpdate
 from agent_comms.transcript.transcript_updates import TranscriptUpdate
 from agent_comms.transcript.transcripts import NativeCommittedPrefix
 from agent_comms.transport.tool_declaration import (
@@ -132,13 +133,8 @@ class AcpEventConsumer(MroDispatch):
                 location,
             )
         )
-        await self.client.publish_update(
-            session_id=self.session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(update(identity)),
-            ),
+        await self.client.publish_facts(
+            update(identity), session_id=self.session_id,
         )
 
     @handles(GoalChanged)
@@ -224,8 +220,8 @@ class AcpEventConsumer(MroDispatch):
             ),
         )
 
-    @handles(events.ContextInfo)
-    async def on_context_info(self, event: events.ContextInfo) -> None:
+    @handles(ContextInfo)
+    async def on_context_info(self, event: ContextInfo) -> None:
         await self.dispatch(event.context_size.reading(event.context_used))
 
     @handles(ContextUsage)
@@ -243,13 +239,8 @@ class AcpEventConsumer(MroDispatch):
     @handles(events.CompactionEvent)
     async def on_compaction(self, event: events.CompactionEvent) -> None:
         await self.agent.turns.observe_compaction(self.session_id, event)
-        await self.client.publish_update(
-            session_id=self.session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(CompactionChangedUpdate(event)),
-            ),
+        await self.client.publish_facts(
+            CompactionChangedUpdate(event), session_id=self.session_id,
         )
 
     @handles(events.Done)
@@ -259,13 +250,8 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(events.PromptCancelled)
     async def on_cancelled(self, event):
-        await self.client.publish_update(
-            session_id=self.session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(PromptCancelledUpdate(event.input_state)),
-            ),
+        await self.client.publish_facts(
+            PromptCancelledUpdate(event.input_state), session_id=self.session_id,
         )
 
 
@@ -279,15 +265,9 @@ class TurnEventConsumer(AcpEventConsumer):
             partial(self.agent.turns.owns_turn, self.session_id, self.turn_id)
         ):
             return
-        await self.client.publish_update(
+        await self.client.publish_facts(
+            McpClientAcknowledgementUpdate(self.turn_id, event.acknowledgement),
             session_id=self.session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(
-                    McpClientAcknowledgementUpdate(self.turn_id, event.acknowledgement)
-                ),
-            ),
         )
 
 

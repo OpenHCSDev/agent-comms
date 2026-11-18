@@ -5,7 +5,6 @@ from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from functools import partial
 
-from acp.schema import AgentMessageChunk, TextContentBlock
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms import agent_events as events
@@ -17,6 +16,7 @@ from agent_comms.execution.acp_failure import FailedNativeTurnOutcome, NativeTur
 from agent_comms.execution.diagnostics import record_request_progress, record_terminal_failure
 from agent_comms.execution.native_turn_context import ContextObserved
 from agent_comms.execution.publication_measurements import PublicationMeasurements
+from agent_comms.execution.runtime_observations import AgentEventConsumer, NativeMetadataObservation
 from agent_comms.execution.turn_failure import ModelRequestFailed, NoTurnFailure, TurnFailure
 from agent_comms.execution.turn_lease import TurnState
 from agent_comms.execution.turn_phase import NativePhaseChanged, PublishingPhase
@@ -25,7 +25,6 @@ from agent_comms.messaging.messages import AlertKind, NoticeRole
 from agent_comms.messaging.send_result import SendResult
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.registry.thread_identity import ClaimedIdentity
-from agent_comms.text_route_update import encode_updates
 from agent_comms.transcript.transcript_updates import TurnTranscriptUpdate
 
 
@@ -40,7 +39,7 @@ class TurnEventPublication(MroDispatch):
 
 
 
-class TurnProgress(events.AgentEventConsumer[Comms]):
+class TurnProgress(AgentEventConsumer[Comms]):
     def __init__(
         self,
         *,
@@ -212,12 +211,10 @@ class TurnProgress(events.AgentEventConsumer[Comms]):
             ), owner=self.thread.require_process()),
         )
 
-    async def before_native_metadata(self, event: events.NativeMetadataObservation) -> None:
-        session_file = event.session_file
-        if session_file:
-            await self.turn.attach_native_session(session_file)
+    async def before_native_metadata(self, event: NativeMetadataObservation) -> None:
+        await event.session_file.attach(self.turn.attach_native_session)
 
-    async def after_native_metadata(self, event: events.NativeMetadataObservation) -> None:
+    async def after_native_metadata(self, event: NativeMetadataObservation) -> None:
         await self.sessions.observe_native_configuration(self.session_id, self.thread_name, event)
 
     @handles(events.ToolEnd)
@@ -336,14 +333,7 @@ class TurnProgress(events.AgentEventConsumer[Comms]):
         ))
         checkpoint = await Coordination.run_worker(partial(
             self.comms.transcripts.transcript_checkpoint, self.thread_name))
-        await self.runtime.publish_update(
-            session_id=self.session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(
-                    TranscriptChangedUpdate(checkpoint)
-                ),
-            ),
+        await self.runtime.publish_facts(
+            TranscriptChangedUpdate(checkpoint), session_id=self.session_id,
         )
         terminal.outcome.raise_if_failed()

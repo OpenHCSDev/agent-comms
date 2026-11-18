@@ -17,9 +17,9 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.agent_backend import PlacedCompaction
 from agent_comms.comms import wire
+from agent_comms.execution.session_updates import encode_updates
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_counts import PiCount
-from agent_comms.text_route_update import encode_updates
 from delivery_owner_fixture import canonical_agent
 
 PLACED = PlacedCompaction("summary", PiCount.from_wire(1200))

@@ -22,12 +22,12 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.agent_events import CompactionEnd
 from agent_comms.comms import wire
-from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.launch_runtime import RestartEnvironment
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.execution.pi_vocabulary import ManualCompactionReason
 from agent_comms.execution.queued_input import InitialInput
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from agent_comms.transport.owner_connection import socket_path
 from delivery_owner_fixture import canonical_agent
 
@@ -200,7 +200,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch, n
         )
         updates = []
 
-        class Client(SessionUpdateSink):
+        class Client(AcpUpdateSink):
             async def publish_update(self, **kwargs):
                 updates.append(kwargs["update"].model_dump(by_alias=True))
                 return True
@@ -213,7 +213,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch, n
         )
         attached_facts = []
 
-        class AttachedClient(SessionUpdateSink):
+        class AttachedClient(AcpUpdateSink):
             async def publish_update(self, **kwargs):
                 attached_facts.extend(decode_updates(kwargs["update"].field_meta))
                 return True

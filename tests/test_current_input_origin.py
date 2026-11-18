@@ -23,7 +23,6 @@ from agent_comms.execution.controller import (
     CancelledOutcome,
     Controller,
     PermissionOutcome,
-    SessionUpdateSink,
 )
 from agent_comms.execution.input_key import AcpInputKey
 from agent_comms.execution.input_origin import (
@@ -72,11 +71,12 @@ from agent_comms.planning.goals import (
 )
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from stored_inputs import stored_inputs
 from test_acp_queue_contract import _owner
 
 
-class Client(Controller, SessionUpdateSink):
+class Client(Controller, AcpUpdateSink):
     def require_current(self, authority, session_id) -> None:
         return None
 

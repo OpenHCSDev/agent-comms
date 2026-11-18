@@ -21,7 +21,6 @@ from pydantic import (
     model_validator,
 )
 
-from agent_comms.agent_events import TranscriptModelUsage
 from agent_comms.cli_bridges.cli_protocol import (
     Declared,
     HistoryRecord,
@@ -68,6 +67,7 @@ from agent_comms.cli_bridges.shared import (
 )
 from agent_comms.cli_bridges.tool_calls import CliToolArguments, ToolCall
 from agent_comms.cli_bridges.wire_models import WireModel
+from agent_comms.execution.runtime_observations import TranscriptModelUsage
 from agent_comms.execution.turn_item import (
     NamedSourceTurn,
     NativeItemId,

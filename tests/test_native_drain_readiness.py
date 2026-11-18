@@ -37,7 +37,7 @@ def test_native_warning_keeps_fresh_notifications_and_active_paint_available():
     idle = acquired.presentation('receiver')
     assert idle.status.details == (diagnostic.summary,)
     successor = replace(owner, generation=3)
-    assert not ObservedActivity.acquire(event, successor).readiness.source_diagnostic().holds_event_current
+    assert not ObservedActivity.acquire(event, successor).readiness.source_diagnostic().holds_event_current()
 
 
 @pytest.mark.parametrize('kind', [UnavailableDrainDiagnostic, StoppedDrainDiagnostic])

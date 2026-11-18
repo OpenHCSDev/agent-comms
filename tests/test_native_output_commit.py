@@ -13,6 +13,7 @@ from agent_comms.coordination.errors import TranscriptChanged
 from agent_comms.execution.native_output import AssistantOutput, ToolOutput
 from agent_comms.execution.pi_events import NativeOutputCommitted, PiEvent
 from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.session_updates import AgentCommsUpdate
 from agent_comms.execution.transcript_sources import NativeTranscript, Through
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -20,7 +21,6 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.text_route_update import AgentCommsUpdate
 from conftest import installed_comms
 
 

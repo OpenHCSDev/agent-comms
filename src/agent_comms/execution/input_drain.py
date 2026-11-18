@@ -61,6 +61,7 @@ from agent_comms.execution.session_tasks import (
     TurnTask,
     WatchingObservationTask,
 )
+from agent_comms.execution.session_updates import encode_updates
 from agent_comms.execution.turn_context import TurnContext, UserFollowupSegment
 from agent_comms.execution.turn_inbox import (
     ClearQueuedInputs,
@@ -100,7 +101,6 @@ from agent_comms.storage.maintenance_barrier import (
     MaintenancePhase,
     MaintenanceStatus,
 )
-from agent_comms.text_route_update import encode_updates
 from agent_comms.transport.owner_requests import OwnerRetiredReply, StopOwnerRuntimeRequest
 from agent_comms.transport.runtime_server import RuntimeServer
 
@@ -1432,18 +1432,16 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
     async def emit_queue_state(
         self, session_id: AcpSessionId, *, client: SessionUpdateSink | None = None,
     ) -> None:
-        await (client or self.runtime).publish_update(
-            session_id=session_id,
-            update=(await self.queue_state(session_id)).acp_chunk(),
+        await (client or self.runtime).publish_facts(
+            await self.queue_state(session_id), session_id=session_id,
         )
 
     async def emit_input_delivery_changed(
         self, session_id: AcpSessionId, *,
         client: SessionUpdateSink | None = None,
     ) -> None:
-        await (client or self.runtime).publish_update(
-            session_id=session_id,
-            update=InputDeliveryChangedUpdate().acp_chunk(),
+        await (client or self.runtime).publish_facts(
+            InputDeliveryChangedUpdate(), session_id=session_id,
         )
 
     def input_keys(self, session_id: AcpSessionId) -> frozenset[InputKey]:

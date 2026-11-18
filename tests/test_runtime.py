@@ -24,7 +24,6 @@ from agent_comms.acp_extension import (
 from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.input_key import BusInputKey
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.native_arguments import GivenBinary
@@ -37,6 +36,7 @@ from agent_comms.execution.owner_protocol import (
 )
 from agent_comms.execution.runtime import RuntimeConnection, present_session
 from agent_comms.execution.session_file import RegistrySessionLocation
+from agent_comms.execution.session_updates import encode_updates
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.messaging.bus_read import OwnerReadRuntimeRequest
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, RootId
@@ -44,7 +44,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.storage.private_path import PrivateSocketRole
-from agent_comms.text_route_update import encode_updates
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from agent_comms.transport.attachment_scope import LiveCursorScope
 from agent_comms.transport.owner_connection import (
     CapturedOwner,
@@ -221,7 +221,7 @@ async def test_subscription_replay_uses_requested_alias(
     client = canonical_agent(comms, auto_wake=False)
     updates = []
 
-    class Client:
+    class Client(AcpUpdateSink):
         async def publish_update(self, session_id, update):
             updates.append((session_id, update.model_dump(mode="json", by_alias=True, exclude_none=True)))
             return True
@@ -289,7 +289,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     client = canonical_agent(comms, auto_wake=False)
     updates = []
 
-    class Client(SessionUpdateSink):
+    class Client(AcpUpdateSink):
         async def publish_update(self, *, session_id, update):
             updates.append((session_id, update.model_dump(mode="json", by_alias=True, exclude_none=True)))
             return True

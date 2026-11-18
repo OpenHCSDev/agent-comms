@@ -7,11 +7,11 @@ import pytest
 from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import Refused
-from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.planning.goal_actions import OwnerInvocable, PausedGoalAction, SetGoalAction
 from agent_comms.planning.goal_execution import GoalExecution
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from delivery_owner_fixture import canonical_agent
 
 
@@ -34,7 +34,7 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch, na
     paused = comms.goals.update_goal(session, PausedGoalAction(), actor=OwnerInvocable)
     updates = []
 
-    class Client(SessionUpdateSink):
+    class Client(AcpUpdateSink):
         async def publish_update(self, session_id, update):
             updates.append(update.model_dump(mode="json", by_alias=True, exclude_none=True))
             return True

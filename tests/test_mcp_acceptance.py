@@ -36,7 +36,7 @@ from agent_comms.cli_verbs.rule_gate import RuleGateCliCommand
 from agent_comms.comms import wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.child_process import SpawnedProcess
-from agent_comms.execution.controller import NO_CONTROLLER, SessionUpdateSink
+from agent_comms.execution.controller import NO_CONTROLLER
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
@@ -46,6 +46,7 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.team.pi_rule_gate import PiRedeal
 from agent_comms.team.rule_deal import OffDealMode
+from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX PTY acceptance")
@@ -450,7 +451,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
 
                 owner_turn_ended = asyncio.Event()
 
-                class Audit(SessionUpdateSink):
+                class Audit(AcpUpdateSink):
                     """The owner's passive log; it outlives any attachment, so it also sees
                     the turn end after the controlling attachment is gone."""
 
@@ -466,7 +467,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                                 owner_turn_ended.set()
                         return True
 
-                class Attachment(SessionUpdateSink):
+                class Attachment(AcpUpdateSink):
                     async def publish_update(self, session_id, update):
                         nonlocal attachment_turn
                         update = update.model_dump(mode="json", by_alias=True, exclude_none=True)

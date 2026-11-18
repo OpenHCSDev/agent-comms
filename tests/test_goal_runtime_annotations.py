@@ -32,7 +32,13 @@ from agent_comms.execution.goal_scheduler import GoalScheduler
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit
 from agent_comms.execution.input_drain import InputDrain
 from agent_comms.execution.native_entries import ImportedSessionWriter
+from agent_comms.execution.runtime_observations import (
+    AgentEventConsumer,
+    NativeMetadataObservation,
+    RuntimeInfoObservation,
+)
 from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
+from agent_comms.execution.session_updates import AgentCommsUpdate
 from agent_comms.execution.turn_context import (
     CoordinationSegment,
     PeerState,
@@ -113,7 +119,6 @@ from agent_comms.cli_bridges.runtime_updates import SessionFacts
 from agent_comms.execution.session_config_options import SessionConfigOptions
 from agent_comms.messaging.task_sources import ScopedTaskDeclaration
 from agent_comms.execution.tracked_turn import TrackedTurnSession
-from agent_comms.text_route_update import AgentCommsUpdate
 from agent_comms.transcript.transcript_events import TranscriptEvent
 from agent_comms.execution.transcript_routes import NoSentInputText
 from agent_comms.execution.transcript_routes import SentInputText
@@ -235,8 +240,8 @@ def test_generation_failure_read_names_its_stored_row() -> None:
      agent_events.InputStarted, *agent_events.InputStarted.__subclasses__(),
      agent_events.InputRefused, *agent_events.InputRefused.__subclasses__(),
      agent_events.Done, agent_events.CompactionEvent, agent_events.CompactionEnd,
-     agent_events.TextEvent, agent_events.Notice, agent_events.RuntimeInfoObservation,
-     agent_events.NativeMetadataObservation, agent_events.AgentEventConsumer,
+     agent_events.TextEvent, agent_events.Notice, RuntimeInfoObservation,
+     NativeMetadataObservation, AgentEventConsumer,
      TurnProgress, ActivityClient,
      (task_scope := get_type_hints(Thread.task_scope.fget)["return"]),
      *task_scope.members_with(task_scope),
@@ -296,14 +301,14 @@ def test_turn_execution_projection_contract_resolves(declaration: type[TurnDecla
 
 
 def test_event_recording_keeps_the_captured_client_type() -> None:
-    client = agent_events.AgentEventConsumer.__type_params__[0]
-    assert get_type_hints(agent_events.AgentEventConsumer.__init__)["comms"] is client
+    client = AgentEventConsumer.__type_params__[0]
+    assert get_type_hints(AgentEventConsumer.__init__)["comms"] is client
     source = get_origin(client.__bound__)
     assert source is not None and issubclass(ActivityClient, source)
     assert get_type_hints(ActivityClient)["agents"] is get_type_hints(ActivityClient.activity_store)["return"]
-    assert get_args(client.__bound__) == (agent_events.RuntimeInfoObservation,)
+    assert get_args(client.__bound__) == (RuntimeInfoObservation,)
     assert any(
-        get_origin(base) is agent_events.AgentEventConsumer and get_args(base) == (Comms,)
+        get_origin(base) is AgentEventConsumer and get_args(base) == (Comms,)
         for base in TurnProgress.__orig_bases__
     )
 

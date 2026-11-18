@@ -31,6 +31,7 @@ from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.input_key import AcpInputKey, BusInputKey
 from agent_comms.execution.queued_input import AcceptedTurn, QueuedInput, QueuedInputContext
 from agent_comms.execution.runtime import present_session
+from agent_comms.execution.session_updates import encode_updates
 from agent_comms.execution.transcript_routes import NoDisplayText
 from agent_comms.execution.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 from agent_comms.execution.turn_inbox import ClearQueuedInputs, SendNow
@@ -49,7 +50,6 @@ from agent_comms.registry.thread_identity import (
     RecordedThreadIncarnation,
 )
 from agent_comms.registry.threads import NativeThread
-from agent_comms.text_route_update import encode_updates
 from agent_comms.transport.attachment_scope import LiveCursorScope
 from bus_record_fixture import prepare_native_comms
 from stored_inputs import stored_inputs

@@ -15,6 +15,7 @@ message also fail the turn, carrying ``errorMessage`` and typed diagnostics.
 
 from __future__ import annotations
 
+from agent_comms.execution.runtime_observations import ContextInfo
 from agent_comms.execution.stats_callbacks import WatchdogSessionRead
 
 import asyncio
@@ -394,8 +395,8 @@ class NativeSession(MroDispatch, WatchdogSessionRead[ProgressWatchdog, StatsRequ
             pass
         await self.native.shutdown()
 
-    def context_info(self) -> events.ContextInfo:
-        return events.ContextInfo(
+    def context_info(self) -> ContextInfo:
+        return ContextInfo(
             context_used=self.usage.used,
             context_size=self.usage.size,
         )
