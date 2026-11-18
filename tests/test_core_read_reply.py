@@ -143,6 +143,7 @@ async def test_a_thread_read_is_served_by_the_child_and_never_kills_it(tmp_path)
     and the UI restarted it on its next read. The child serves ReadTool, the family the UI routes
     on, and keeps answering after the thread read."""
     from agent_comms.transport.tools.reads import TranscriptPageRead
+    from agent_comms.ui_model.observation import ObserverProcessDied
 
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread("paged", frozenset(), Checkout(tmp_path)))
@@ -151,8 +152,7 @@ async def test_a_thread_read_is_served_by_the_child_and_never_kills_it(tmp_path)
         try:
             await asyncio.to_thread(process.read_from_thread, page)
         except Exception as refused:
-            print('THREAD READ REFUSED ->', type(refused).__name__, str(refused)[:200])  # the thread may have no transcript yet: refused, not fatal
-            assert "is not a member of CoreRead" not in str(refused), refused
+            assert not isinstance(refused, ObserverProcessDied), refused
         after = CoreReadOperation(str(comms.root), CommsThreadPresentationTool(thread="paged"))
         assert isinstance(await asyncio.to_thread(process.read_from_thread, after),
                           NotifiedThreadPresentation)
