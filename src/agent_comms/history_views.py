@@ -56,6 +56,7 @@ from agent_comms.messaging.notification_evidence import (
     RecipientLimit,
 )
 from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
+from agent_comms.messaging.revision_views import ActivityView
 from agent_comms.messaging.sent_message import AssignedSourceIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, PresenceExclude, WireForm
@@ -305,12 +306,12 @@ class HistoryViews(RelationshipSource):
     ) -> dict[str, ObservedActivity | DeletedThread]:
         """The named threads' activity as of one observer revision.
 
-        Every notification request and every thread read asks; each revision captures
-        a name once, so a busy bus opens the activity and room stores once per
-        revision instead of once per reader. A busy row turning idle with age moves
+        Every notification request and thread read shares this capture until an
+        activity source changes. Unrelated bus and read-mark writes leave it intact.
+        A busy row turning idle with age moves
         no revision field, so the capture also ends when its own expiry passes."""
         held, capture = self.captured_activity
-        if held != revision or capture.expired():
+        if revision.changed_since(ActivityView(), held) or capture.expired():
             capture = ActivityCapture.empty()
         wanted = tuple(names)
         if missing := set(wanted) - capture.activity.keys():
