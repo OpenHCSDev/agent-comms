@@ -1,10 +1,13 @@
 """Read real persisted notification assignments without scheduling a model."""
 from dataclasses import replace
 
+from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.human_read_cut import HumanReadCut
+from agent_comms.messaging.message_notification import MessageNotification
 from agent_comms.messaging.notification_evidence import AllOutcomes
 from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.nominal.field_codec import TurnId
-from agent_comms.notification_assignment import NotificationSelection
+from agent_comms.notification_assignment import NotificationAssignment, NotificationSelection
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.activity import ActivityState
@@ -32,6 +35,27 @@ def test_new_reader_has_no_fabricated_receipts(tmp_path):  # noqa: F811
     comms = installed_comms(root)
     comms.registry.declare(NativeThread('reader', frozenset(), Checkout(tmp_path)))
     assert comms.views.thread_presentations(('reader',)).require('reader').notifications == ()
+
+
+def test_human_display_stays_captured_until_the_next_notification_pass(tmp_path):  # noqa: F811
+    root, _root_id, comms, _initial, _people = _root(tmp_path)
+    human = comms.messaging.user_identity(Checkout(tmp_path))
+    message = comms.messaging.send('beta', human.name, 'A direct human read').message
+    source = comms.bus.bus.delivery(message.seq)
+    assigned = NotificationAssignment.read(
+        root, NotificationSelection.of(AllOutcomes(), (source,)))
+    cut = HumanReadCut(root)
+    key = message.seq, message.message_id
+    before = MessageNotification.delivery_window(cut, comms.registry, assigned)
+    assert before.outcomes[key] == ()
+
+    comms.bus.mark_read_through(
+        human.name, message.seq, target=CommandTarget.named('beta'))
+    retained = MessageNotification.delivery_window(cut, comms.registry, assigned)
+    assert retained == before
+    refreshed = MessageNotification.delivery_window(HumanReadCut(root), comms.registry, assigned)
+    row, = refreshed.outcomes[key]
+    assert row.displayed_to and row.recipient_identity.recipient_lookup == human.incarnation.lookup
 
 
 def test_live_turn_never_presents_ready_between_activity_events(tmp_path):  # noqa: F811

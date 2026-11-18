@@ -98,12 +98,12 @@ def test_read_request_requires_both_fields_and_page_reader_owns_evidence(tmp_pat
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     anonymous = comms.views.presentation.channel_page("#team")
     assert isinstance(anonymous.selection, NoDisplaySelection)
-    assert not anonymous.selection.has_evidence
+    assert not anonymous.selection.has_evidence()
     with pytest.raises(DMPaintedBoundChanged):
         comms.views.mark_page_read(anonymous, worktree=Checkout(tmp_path))
     named = comms.views.presentation.channel_page("#team", viewer=NamedViewer(viewer))
     assert named.selection.scope.require_displayed().viewer == viewer
-    assert named.selection.has_evidence
+    assert named.selection.has_evidence()
     assert not read_message(comms, viewer, message)
     with pytest.raises(TypeError):
         ReadThrough(message.seq)

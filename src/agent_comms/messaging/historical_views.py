@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from functools import cache, partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import Self
 
 from agent_comms.coordination.errors import DMScopeChanged, HistoricalSourceChanged
 from agent_comms.errors import UnregisteredThreadError
@@ -25,6 +25,7 @@ from agent_comms.messaging.display_references import (
     MessageHistory,
     ReferenceContext,
 )
+from agent_comms.messaging.human_read_cut import HumanReadCut
 from agent_comms.messaging.message_notification import MessageNotification, NotificationWindow
 from agent_comms.messaging.message_page import (
     NEWEST_PAGE,
@@ -74,6 +75,7 @@ from agent_comms.presentation import BusPresentation, WireRevision
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.catalog_store import ChannelCatalog
+from agent_comms.registry.history_read_source import HistoryReadSource
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_provenance import RegistryProvenance
@@ -91,10 +93,6 @@ from agent_comms.storage.private_path import (
 from agent_comms.storage.store_files import SingleFileStore, SourceTier, StoreOwner
 from agent_comms.transport.tool_result import ToolResult
 
-if TYPE_CHECKING:
-    from agent_comms.history_views import HistoryViews
-
-
 @dataclass(frozen=True, slots=True)
 class HistoricalSelection(TaggedRecordMember, SelectedDisplay):
     displayed: HistoricalDisplay
@@ -107,7 +105,7 @@ class HistoricalSelection(TaggedRecordMember, SelectedDisplay):
             bus_identity=self.displayed.displayed.bus_identity,
         )
 
-    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
+    def acknowledge(self, views: HistoryReadSource, page: MessagePage, *, worktree: Checkout) -> None:
         self.displayed.acknowledge(views.bus.history, views.registry)
 
     def select_evidence(self, selected: frozenset[int]) -> Self:
@@ -215,14 +213,14 @@ class ConversationHistoryView(HistoryView):
     """Historical views that present conversation content, not owner state."""
 
     @classmethod
-    def revision(cls, views: HistoryViews, target: NamedTarget,
+    def revision(cls, views: HistoryReadSource, target: NamedTarget,
                  earlier: ConversationObservation,
                  *, worktree: Checkout) -> ConversationRevision:
         return earlier.capture(
             views.revision(), partial(cls._read_revision, views, target, worktree))
 
     @classmethod
-    def _read_revision(cls, views: HistoryViews, target: NamedTarget,
+    def _read_revision(cls, views: HistoryReadSource, target: NamedTarget,
                        worktree: Checkout) -> ConversationRevision:
         viewer = views.messaging.user_identity(worktree)
         document, catalog, stores = views.registry.store.read_pair_observed(
@@ -238,7 +236,7 @@ class ConversationHistoryView(HistoryView):
 
     @classmethod
     @abstractmethod
-    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
+    def _selection(cls, views: HistoryReadSource, snapshot: RegistrySnapshot, catalog: CatalogDocument,
                    viewer: Thread, target: NamedTarget, worktree: Checkout,
                    history_revision: FileObservation) -> DisplayIdentity: ...
 
@@ -260,7 +258,7 @@ class ChannelDisplayHistory(ConversationHistoryView):
     viewer: DisplayViewer = AnonymousViewer()
 
     @classmethod
-    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
+    def _selection(cls, views: HistoryReadSource, snapshot: RegistrySnapshot, catalog: CatalogDocument,
                    viewer: Thread, target: NamedTarget, worktree: Checkout,
                    history_revision: FileObservation) -> ChannelDisplayIdentity:
         with views.bus.opened_activity() as activity:
@@ -293,7 +291,7 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
     worktree: Checkout
 
     @classmethod
-    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
+    def _selection(cls, views: HistoryReadSource, snapshot: RegistrySnapshot, catalog: CatalogDocument,
                    viewer: Thread, target: NamedTarget, worktree: Checkout,
                    history_revision: FileObservation) -> DMDisplayIdentity:
         name = target.selected_name(snapshot)
@@ -457,7 +455,7 @@ class HistorySource(MessageHistory, HistoryReferenceSource):
             references,
             partial(
                 MessageNotification.recorded_delivery_window,
-                root,
+                HumanReadCut(root),
                 self.provenance,
                 viewer=viewer,
                 after=after,

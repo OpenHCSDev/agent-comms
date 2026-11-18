@@ -14,6 +14,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.messaging.human_read_cut import HumanReadCut
 from agent_comms.messaging.message_notification import MessageNotification
 from agent_comms.messaging.notification_evidence import (
     AfterRecipient,
@@ -77,8 +78,8 @@ def test_acquired_rows_and_proofs_are_exact_bounded_subset_without_rewriting_ori
     assert {row.recipient_lookup for row, _activity in bounded.rows} == selected
     assert bounded.sources[0] is source
     assert source.recipients is frozen
-    full_window = MessageNotification.delivery_window(comms.root, comms.registry, full)
-    bounded_window = MessageNotification.delivery_window(comms.root, comms.registry, bounded)
+    full_window = MessageNotification.delivery_window(HumanReadCut(comms.root), comms.registry, full)
+    bounded_window = MessageNotification.delivery_window(HumanReadCut(comms.root), comms.registry, bounded)
     key = source.message.seq, source.message.message_id
     assert bounded_window.outcomes[key] == tuple(
         row for row in full_window.outcomes[key] if row.recipient_identity.recipient_lookup in selected)
@@ -204,7 +205,7 @@ def test_independent_reply_changes_retained_evidence_without_claiming_context(
                                     "An independent answer", answers=(source.message.reference,)).message
     assert NotificationAssignment.changed((before,), AssignmentSource(comms.root)) == (before,)
     after = NotificationAssignment.read(comms.root, selection)
-    window = MessageNotification.delivery_window(comms.root, comms.registry, after)
+    window = MessageNotification.delivery_window(HumanReadCut(comms.root), comms.registry, after)
     row, = window.outcomes[source.message.seq, source.message.message_id]
     assert row.answer == AnsweredResponse(response.reference, response.at_ms)
     assert not row.state.is_consumed()
@@ -234,7 +235,7 @@ def test_independent_reply_without_any_claim_is_retained_without_context_or_read
     assert after.rows == () and not after.consumption
     assert after.responses[recipient.recipient_lookup, message.reference] == AnsweredResponse(
         response.reference, response.at_ms)
-    window = MessageNotification.delivery_window(comms.root, comms.registry, after)
+    window = MessageNotification.delivery_window(HumanReadCut(comms.root), comms.registry, after)
     row, = window.outcomes[message.seq, message.message_id]
     assert row.answer == AnsweredResponse(response.reference, response.at_ms) and row.changed
     assert not row.state.is_consumed() and not row.displayed_to

@@ -66,6 +66,7 @@ from agent_comms.messaging.message_notification import (
 )
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_evidence import OwnerOutcomes
+from agent_comms.messaging.notification_source import NotificationSource
 from agent_comms.messaging.page_traversal import HistorySourceKey
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.messaging.routing import TurnRouting
@@ -79,10 +80,7 @@ from agent_comms.nominal.field_codec import (
     WireName,
     projected,
 )
-from agent_comms.notification_assignment import (
-    AssignmentSource,
-    NotificationSelection,
-)
+from agent_comms.notification_assignment import NotificationSelection
 from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
@@ -417,7 +415,7 @@ class TranscriptSourceWindow:
     sent_sources: tuple[Delivered, ...]
 
     def presentation(
-        self, ordinary: ThreadPresentation, assignments: AssignmentSource,
+        self, ordinary: ThreadPresentation, assignments: NotificationSource,
         *, snapshot: RegistrySnapshot | None = None,
     ) -> AcquiredThreadPresentation:
         """Project incoming and sent outcomes from this one acquired source window."""
@@ -427,7 +425,7 @@ class TranscriptSourceWindow:
         viewer = OwnerOutcomes.of(self.read.identity.thread.incarnation)
         notification_read = assignments.read_assignments(NotificationSelection.of(viewer, sources))
         projected = MessageNotification.delivery_window(
-            transcripts.root, transcripts.registry, notification_read, snapshot=snapshot)
+            assignments, transcripts.registry, notification_read, snapshot=snapshot)
         incoming = tuple(
             replace(notification, message=source.envelope)
             for source in self.sources

@@ -12,6 +12,7 @@ from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.messaging.message_notification import NotificationPass
 from agent_comms.messaging.notification_reads import LiveNotificationRead
+from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.notification_assignment import AssignmentSource
 from agent_comms.input_disposition import ScopedInputDispositions
 from agent_comms.notification_read import NotificationsRead
@@ -112,6 +113,7 @@ def test_assignment_row_changes_attribute_only_their_view(
                AssignmentSource.registry.func.__code__)
     input_snapshot = ScopedInputDispositions.connection.func.__code__
     input_opens: list[ScopedInputDispositions] = []
+    ledger_reads: list[ReadLedger] = []
     calls: dict[CodeType, int] = dict.fromkeys(getters, 0)
 
     def count_acquisition(frame: FrameType, event: str, argument: object) -> None:
@@ -119,6 +121,9 @@ def test_assignment_row_changes_attribute_only_their_view(
             calls[frame.f_code] += 1
         if event == "call" and frame.f_code is input_snapshot:
             input_opens.append(frame.f_locals["self"])
+        if (event == "call" and frame.f_code is ReadLedger.read.__code__
+                and isinstance(frame.f_locals["self"], ReadLedger)):
+            ledger_reads.append(frame.f_locals["self"])
 
     prior = sys.getprofile()
     sys.setprofile(count_acquisition)
@@ -130,6 +135,7 @@ def test_assignment_row_changes_attribute_only_their_view(
         sys.setprofile(prior)
     assert tuple(calls.values()) == (1, 1, 0)
     assert len(input_opens) == 1
+    assert len(ledger_reads) == 1
     with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
         input_opens[0].connection.execute("SELECT 1")
     revision = comms.views.revision()
