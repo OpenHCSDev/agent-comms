@@ -1,5 +1,7 @@
 """One pass's repository cut against worktrees that appear or vanish while it reads."""
 import subprocess
+import re
+from itertools import product
 from pathlib import Path
 
 import pytest
@@ -7,6 +9,9 @@ import pytest
 import fixture_git
 from agent_comms.projects.checkouts import (
     Checkout,
+    CommitMessages,
+    CommitsNaming,
+    GitCommit,
     RepositoryReads,
 )
 from agent_comms.projects.git_errors import FailedGitCommand
@@ -86,3 +91,43 @@ def test_retention_checks_refs_and_worktree_heads(main: Path, change: str) -> No
         assert following is original
     else:
         assert following.refs != before_refs or following.heads != before_heads
+
+
+def test_indexed_commit_words_and_literal_phrases_keep_the_boundary_contract():
+    texts = ("P1 first; XP1 P1x _P1 P12", "p1\nrefs P3", "ÉP1é; İ P1-P3", "punctuation-only !",
+             "a_1 -- a a-a a\n1", "P1 P1 P3", "", "final")
+    commits = tuple(GitCommit(str(i), (), float(i), text) for i, text in enumerate(texts))
+    messages = CommitMessages(commits)
+    tokens = {"P1", "p1", "P12", "XP1", "_P1", "P3", "P1-P3", "refs P3", "!", "É", "İ"}
+    tokens.update("".join(chars) for length in range(1, 4)
+                  for chars in product("aA_1- é", repeat=length))
+    for token in tokens:
+        expected = frozenset(commit.sha for commit in commits if re.search(
+            r"(?<![a-z0-9_])" + re.escape(token.lower()) + r"(?![a-z0-9_])", commit.message.lower()))
+        assert messages.naming(token) == expected, token
+    assert messages.naming("P1") is messages.naming("p1")
+
+
+def test_message_filters_preserve_each_selected_walk_and_old_capture(main):
+    git(main, "commit", "--allow-empty", "-m", "P1 first")
+    base = git(main, "rev-parse", "HEAD")
+    git(main, "checkout", "-b", "side")
+    git(main, "commit", "--allow-empty", "-m", "P3 side")
+    git(main, "checkout", "main")
+    git(main, "commit", "--allow-empty", "-m", "P1 main")
+    git(main, "merge", "--no-ff", "side", "-m", "P12 merge")
+    history = Checkout(main).read()
+    for refs, excluded, first_parent in (
+        (("main",), (), False), (("side", "main"), (), False),
+        (("main",), (base,), False), (("main",), (), True),
+    ):
+        walk = tuple(history.commits(refs, *excluded, first_parent=first_parent))
+        for token in ("P1", "p3", "P12", "P400"):
+            expected = tuple(commit for commit in walk if re.search(
+                r"(?<![a-z0-9_])" + token.lower() + r"(?![a-z0-9_])", commit.message.lower()))
+            assert tuple(history.commits(refs, *excluded, selected=CommitsNaming(token),
+                                        first_parent=first_parent)) == expected
+    before = tuple(history.commits(("main",), selected=CommitsNaming("P1")))
+    git(main, "commit", "--allow-empty", "-m", "P1 later")
+    assert tuple(history.commits(("main",), selected=CommitsNaming("P1"))) == before
+    assert len(tuple(Checkout(main).read().commits(("main",), selected=CommitsNaming("P1")))) == len(before) + 1

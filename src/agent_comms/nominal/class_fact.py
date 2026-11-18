@@ -43,7 +43,8 @@ class ClassFact[Owner, Value]:
         self.slot = f"_{name.lstrip('_')}_derived"
 
     def __get__(self, instance: object, owner: type[Owner]) -> Value:
-        if self.slot not in owner.__dict__ or not owner.__dict__[self.slot].current():
-            setattr(owner, self.slot, DerivedFact(Declarations.generation, self.derive(owner)))
-        fact: DerivedFact[Value] = owner.__dict__[self.slot]
+        fact: DerivedFact[Value] | None = owner.__dict__.get(self.slot)
+        if fact is None or not fact.current():
+            fact = DerivedFact(Declarations.generation, self.derive(owner))
+            setattr(owner, self.slot, fact)
         return fact.value

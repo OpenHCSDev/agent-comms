@@ -7,16 +7,17 @@ subject actions dispose of requests, never a delivery setting or publication att
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import Annotated, ClassVar, Self
 
 from agent_comms.cli_bridges.harness_delivery_states import DeliveredOutcome, Outcome
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.delivers_input import DeliversInput
 from agent_comms.heartbeat_subjects import HeartbeatSubject, TeamHistory
 from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.message_reference import MessageReference
@@ -29,6 +30,7 @@ from agent_comms.messaging.messages import (
 )
 from agent_comms.messaging.projection_source import ProducedRow
 from agent_comms.messaging.task_callbacks import TeamObservation
+from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -58,12 +60,6 @@ from agent_comms.team.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.ui_model.message_category import HeartbeatCategory, MessageCategory
 from agent_comms.ui_model.teammate_state import AwaitingTeam, TeammateState
 from agent_comms_hooks.board import BoardEntry
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-
-    from agent_comms.cli_bridges.shared import CliBridge
-
 
 @dataclass(frozen=True)
 class OrderKey:
@@ -102,9 +98,15 @@ class Ping(TaggedRecordMember, DeclaredFamily, affix="Ping"):
     def schema(cls) -> dict[str, object]:
         return StructuralRepresentation.schema_for(cls)
 
+    @ClassFact
+    @staticmethod
+    def _occurrence_fields(cls: type[Ping]) -> tuple[str, ...]:
+        """Each concrete dataclass owns the fields its process packet carries."""
+        return tuple(item.name for item in fields(cls))
+
     def __getstate__(self) -> dict[str, object]:
         """Process packets carry the declared occurrence, never its derived JSON cache."""
-        return {item.name: getattr(self, item.name) for item in fields(self)}
+        return {name: getattr(self, name) for name in self._occurrence_fields}
 
     @staticmethod
     def stored_threads(threads: tuple[ThreadIncarnation, ...]) -> tuple[str, ...]:
@@ -377,11 +379,11 @@ class TeamUpdate(OwnerNotice, TeamObservation, PingLines, declared_name=None):
         return tuple(ping.board_entry() for ping in self.open_pings(history)
                      if ping.addresses(reader) and not ping.parked(stopped))
 
-    async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
-        return await bridge.deliver_board(self, message)
+    async def delivered_by(self, bridge: DeliversInput[Message], message: Message) -> type[Outcome]:
+        return await self.wake(bridge, message)
 
     @abstractmethod
-    async def wake(self, bridge: CliBridge, message: Message) -> type[Outcome]:
+    async def wake(self, bridge: DeliversInput[Message], message: Message) -> type[Outcome]:
         """The packet's wake decision is the same on every harness."""
 
     def require_target(self, target: str, registry: RegistrySnapshot) -> None:
@@ -446,7 +448,7 @@ class TeamUpdateNotice(TeamUpdate, declared_name="team_notice"):
     def should_publish(self, facts: PublishedFacts, previous: tuple[TeamUpdate, ...]) -> bool:
         return not any(packet.publication == facts for packet in previous)
 
-    async def wake(self, bridge: CliBridge, message: Message) -> type[Outcome]:
+    async def wake(self, bridge: DeliversInput[Message], message: Message) -> type[Outcome]:
         """The current display has no unresolved request that needs model input."""
         return DeliveredOutcome
 
@@ -459,8 +461,8 @@ class TeamDecisions(TeamUpdate, declared_name="team_decisions"):
     waiting: tuple[Ping, ...]
     role = ConversationRole()
 
-    async def wake(self, bridge: CliBridge, message: Message) -> type[Outcome]:
-        return await bridge.wake(message)
+    async def wake(self, bridge: DeliversInput[Message], message: Message) -> type[Outcome]:
+        return await bridge.deliver(message)
 
     def new_pings(self) -> tuple[Ping, ...]:
         return self.decisions
