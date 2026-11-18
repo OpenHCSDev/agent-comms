@@ -94,6 +94,7 @@ from agent_comms.registry.thread_model import (
     UnselectedModel,
 )
 from agent_comms.registry.thread_presentation import (
+    BusHeldThreadOwnerBinding,
     ThreadOwnerBinding,
     ThreadPresentation,
     UnavailableThreadOwnerBinding,
@@ -294,6 +295,11 @@ class ThreadProvenance(TaggedThreadSource):
     backend: Annotated[
         type[AgentBackend], WireOmitDefault(), RegistrationPolicy(InheritPrevious)
     ] = field(default_factory=NewThreadBackend.selected)
+
+    def answering_binding(self, lease: ThreadOwnerBinding) -> ThreadOwnerBinding:
+        """Who answers this thread's owner reads and requests, given its registry lease: the
+        lease itself (a live native runtime, or nobody), unless the thread kind says otherwise."""
+        return lease
 
     @cached_property
     def runtime(self) -> RuntimeLocation:
@@ -894,6 +900,10 @@ class ExternalThread(Thread):
 
     def registered_status(self, requested: ThreadStatus) -> ThreadStatus:
         return requested.external_registered(self, time.time())
+
+    def answering_binding(self, lease: ThreadOwnerBinding) -> ThreadOwnerBinding:
+        """No native runtime serves a CLI; the bus holds its goal and wakes it."""
+        return BusHeldThreadOwnerBinding()
 
     def presentation(self, status: ThreadStatus, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:

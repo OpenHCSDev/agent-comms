@@ -632,7 +632,11 @@ class ServedInputDeliveryRead(OwnedRead, InputDeliveryRead):
 
 
 class ServedOwnerGoalRead(OwnerLiveRead, OwnerGoalRead):
-    """Serving the goal snapshot from the live native owner, with the turn it read."""
+    """Serving the goal snapshot from the live native owner, with the turn it read; an
+    external CLI's goal is the bus's own, read with no native turn."""
+
+    def held(self, comms: Comms, owner: ThreadIncarnation) -> GoalSnapshotReply:
+        return GoalSnapshotReply.from_snapshot(comms.goals.goal_snapshot(owner.name), UpdateMetadata.of())
 
     async def owned(self, ctx: AttachedRuntimeRequestContext) -> GoalSnapshotReply:
         snapshot = await Coordination.run_worker(

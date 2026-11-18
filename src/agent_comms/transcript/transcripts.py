@@ -90,7 +90,7 @@ from agent_comms.registry.registry_provenance import RegistryProvenance
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.registry_tables import RegistryRowRevision
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.registry.thread_presentation import ThreadPresentation
+from agent_comms.registry.thread_presentation import ThreadOwnerBinding, ThreadPresentation
 from agent_comms.registry.thread_text import ThreadParent, ThreadText
 from agent_comms.registry.threads import Thread, ThreadProvenance
 from agent_comms.registry.view_unread import TranscriptReadState
@@ -449,6 +449,13 @@ class NotifiedThreadPresentation(ThreadPresentation):
 
     notifications: tuple[MessageNotification, ...] = field(default=())
     read_identity: TranscriptReadIdentity | None = field(default=None)
+
+    def answering_binding(self) -> ThreadOwnerBinding:
+        """The read thread's kind decides who answers over the published lease (an external
+        CLI's goal is the bus's), so the wire carries only the lease every viewer decodes."""
+        if self.read_identity is None:
+            return super().answering_binding()
+        return self.read_identity.thread.answering_binding(self.binding)
 
     def same_observation(self, other: ThreadPresentation) -> bool:
         """Equal view and turn evidence, not merely equal global store revisions.

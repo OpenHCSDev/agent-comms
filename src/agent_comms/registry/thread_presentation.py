@@ -259,11 +259,14 @@ class ThreadOwnerBinding(
 ):
     """A projection of the registry lease, never an alternative owner store."""
 
-    def select_read[Result](
-        self, unavailable: Callable[[], Result], live: Callable[[], Result],
+    def select_answer[Result](
+        self, *, unowned: Callable[[], Result], native: Callable[[], Result],
+        held: Callable[[], Result],
     ) -> Callable[[], Result]:
-        """This acquired binding selects the unavailable reader without probing again."""
-        return unavailable
+        """Who answers an owner read or request for this binding, chosen without probing
+        again: a live native runtime, the bus for an owner whose state the bus holds, or
+        nobody (the native owner is not running)."""
+        return unowned
 
     def replaces(self, original: LiveThreadOwnerBinding) -> bool:
         return False
@@ -290,7 +293,24 @@ class ThreadOwnerBinding(
 
 @dataclass(frozen=True, slots=True)
 class UnavailableThreadOwnerBinding(ThreadOwnerBinding):
-    pass
+    """A native thread whose owner is not running: no runtime answers for it."""
+
+
+@dataclass(frozen=True, slots=True)
+class BusHeldThreadOwnerBinding(ThreadOwnerBinding, declared_name=None):
+    """An external CLI's thread. No native runtime serves it; the bus holds its owner state
+    (its goal), answers for it, and wakes the CLI through its inbox.
+
+    Who answers is the thread kind's (`Thread.answering_binding`), read beside the published
+    lease, so this member never crosses the wire: a viewer decodes the registry lease it has
+    always decoded ("unavailable" for a CLI), and a client that predates this member keeps
+    reading every presentation (the codec refuses an unknown member)."""
+
+    def select_answer[Result](
+        self, *, unowned: Callable[[], Result], native: Callable[[], Result],
+        held: Callable[[], Result],
+    ) -> Callable[[], Result]:
+        return held
 
 
 @dataclass(frozen=True, slots=True)
@@ -298,10 +318,11 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
     owner: OwnerIdentity
     process: ProcessIdentity
 
-    def select_read[Result](
-        self, unavailable: Callable[[], Result], live: Callable[[], Result],
+    def select_answer[Result](
+        self, *, unowned: Callable[[], Result], native: Callable[[], Result],
+        held: Callable[[], Result],
     ) -> Callable[[], Result]:
-        return live
+        return native
 
     def native_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         return ordinary
@@ -362,6 +383,11 @@ class ThreadPresentation(ThreadStatusDisplay, ToolResult):
     @property
     def read_identity(self) -> TranscriptReadIdentity | None:
         return None
+
+    def answering_binding(self) -> ThreadOwnerBinding:
+        """Who answers this thread's owner reads and requests. Without a read thread, the
+        published registry lease says."""
+        return self.binding
 
     def published(self) -> ThreadPresentation:
         """The value a viewer may receive: this presentation itself."""

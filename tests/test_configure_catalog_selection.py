@@ -12,21 +12,21 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel, UndeclaredModel
 from agent_comms.registry.threads import ExternalThread, NativeThread
-from agent_comms.transport.tools.sidebar import CommsPrepareTargetActionTool
+from agent_comms.transport.tools.sidebar import CommsPrepareTargetActionTool, CommsTargetActionsTool
 from agent_comms.ui_model.observation import (
     CoreReadAnswered, CoreReadOperation, ObservationService, ReadNotifications,
     ServiceEnd, ViewerEnd,
 )
 from agent_comms.messaging.notification_reads import LiveNotificationRead
+from conftest import ui_core_read
 from observation_pass_fixture import watched_pass
 
 
-@pytest.mark.parametrize("thread_type", [NativeThread, ExternalThread])
 @pytest.mark.parametrize("reported", [False, True])
-async def test_configure_form_keeps_its_thread_context_and_observer(comms, tmp_path, monkeypatch, thread_type, reported):
+async def test_configure_form_keeps_its_thread_context_and_observer(comms, tmp_path, monkeypatch, reported):
     project = Checkout(tmp_path)
     model = DeclaredModel("test/old")
-    thread = thread_type("settings-subject", frozenset(), project, model=UndeclaredModel() if reported else model)
+    thread = NativeThread("settings-subject", frozenset(), project, model=UndeclaredModel() if reported else model)
     comms.registry.declare(thread)
     if reported:
         comms.agents.observe_runtime_info(thread.name, NativeMetadataObservation(model=model))
@@ -70,3 +70,22 @@ async def test_configure_form_keeps_its_thread_context_and_observer(comms, tmp_p
         finally:
             service.retire()
             comms.views.transcript_reads.close()
+
+
+def test_only_a_native_owner_is_offered_next_turn_settings(comms, tmp_path, monkeypatch):
+    """Configure writes a NativeThread and discovers its native runtime's catalogs. An external
+    CLI (a bridged Claude Code reporting "claude-opus-5-5", which no native provider/model
+    spelling decodes) is not offered the form whose choices could only fail to load."""
+    project = Checkout(tmp_path)
+    native = comms.registry.declare(NativeThread(
+        "native-subject", frozenset(), project, model=DeclaredModel("test/old")))
+    cli = comms.registry.declare(ExternalThread("cli-subject", frozenset(), project))
+    comms.agents.observe_runtime_info(cli.name, NativeMetadataObservation(model=DeclaredModel("claude-opus-5-5")))
+
+    def offered(thread) -> list[str]:
+        menu = ui_core_read(comms, CommsTargetActionsTool(
+            project=project, targets=CommandTarget.arguments((thread.name,), project)))
+        return [action.declaration.declared_name for action in menu.actions]
+
+    assert "configure" in offered(native)
+    assert "configure" not in offered(cli)

@@ -5,6 +5,7 @@ from abc import (
     ABC,
     abstractmethod,
 )
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 from typing import cast
@@ -72,10 +73,11 @@ class OwnerScopedRead[Result: ToolResult = ToolResult](
             OwnerIdentityChangedError("Wire root disappeared before the read.")
         ).identity
         thread = self.require_recipient(cut.snapshot, owner)
-        binding = thread.owner_binding(cut.snapshot)
-        read = binding.select_read(
-            partial(self.unavailable_answer, comms, owner, cut),
-            partial(self.live_answer, comms, owner),
+        binding = thread.answering_binding(thread.owner_binding(cut.snapshot))
+        read = binding.select_answer(
+            unowned=partial(self.retained_answer, self.unavailable, comms, owner, cut),
+            native=partial(self.live_answer, comms, owner),
+            held=partial(self.retained_answer, self.held, comms, owner, cut),
         )
         result = await read()
         current = await Coordination.run_worker(comms.registry.snapshot)
@@ -84,13 +86,14 @@ class OwnerScopedRead[Result: ToolResult = ToolResult](
         self.require_recipient(current, owner)
         return result
 
-    async def unavailable_answer(
-        self, comms: Comms, owner: ThreadIncarnation, cut: RegistryCut,
+    async def retained_answer(
+        self, answer: Callable[[Comms, ThreadIncarnation], Result], comms: Comms,
+        owner: ThreadIncarnation, cut: RegistryCut,
     ) -> Result:
         """Keep blocking retained reads inside the captured registry cut's worker."""
         def retained() -> Result:
             with cut.current():
-                result = self.unavailable(comms, owner)
+                result = answer(comms, owner)
                 if not cut.matches_current():
                     raise StaleFence("Registry changed during the retained read")
                 return result
@@ -114,6 +117,11 @@ class OwnerScopedRead[Result: ToolResult = ToolResult](
 
     @abstractmethod
     def unavailable(self, comms: Comms, owner: ThreadIncarnation) -> Result: ...
+
+    def held(self, comms: Comms, owner: ThreadIncarnation) -> Result:
+        """The answer for an owner whose state the bus holds (an external CLI). A read with
+        no bus-held answer of its own answers as it does for a native owner not running."""
+        return self.unavailable(comms, owner)
 
     def decode_reply(self, raw: object) -> Result:
         """The owner's reply, decoded into the result the declaration binds."""
