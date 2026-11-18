@@ -132,3 +132,44 @@ def test_a_channel_mention_is_answered_in_the_channel_by_a_connected_endpoint(
     assert connected
     assert target == "#model_test"
     assert body.startswith("echo: @rl2 are you there")
+
+
+def test_a_message_sent_while_the_bridge_was_down_is_answered_after_the_restart(
+        comms: Comms) -> None:
+    """The live failure: a replace=true restart skipped every DM sent during the gap, because a
+    fresh bridge started at the inbox tail. Replies now name what they answer, and a restart
+    resumes after the newest answered message."""
+    declare_test_bus(comms, channels=("model_test",), threads=(
+        NativeThread(name="tristan", tags=frozenset({"model_test"}),
+                     worktree=Checkout(Path("/tmp/wt1"))),
+    ))
+
+    async def serve_until_replied(send_after_start: str | None, after: int) -> str:
+        serving = asyncio.create_task(agent_on(comms).run())
+        try:
+            while not (comms.registry.snapshot().taken("rl2")
+                       and comms.registry.require("rl2").process_alive):
+                if serving.done():
+                    serving.result()
+                await asyncio.sleep(0.05)
+            await asyncio.sleep(0.2)  # the agent starts its watch
+            if send_after_start is not None:
+                after = comms.messaging.send(
+                    "tristan", "rl2", send_after_start, InfoKind).message.reference.seq
+            async for message in comms.watch("tristan", after=TakenInputStart()):
+                if message.sender == "rl2" and message.reference.seq > after:
+                    return message.body
+            raise AssertionError("watch ended without a reply")
+        finally:
+            serving.cancel()
+            await asyncio.gather(serving, return_exceptions=True)
+
+    async def scenario() -> tuple[str, str]:
+        before = await serve_until_replied("first", 0)
+        gap = comms.messaging.send("tristan", "rl2", "sent during the gap", InfoKind)
+        after = await serve_until_replied(None, gap.message.reference.seq)
+        return before, after
+
+    before, after = asyncio.run(asyncio.wait_for(scenario(), timeout=60))
+    assert before.startswith("echo: first")
+    assert after.startswith("echo: sent during the gap")
