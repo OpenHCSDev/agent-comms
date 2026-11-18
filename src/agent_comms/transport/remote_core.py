@@ -34,6 +34,8 @@ from agent_comms.transport.mcp import (
     StreamedLine,
     ToolsCallMessage,
     ToolsCallReply,
+    ToolsListMessage,
+    ToolsListReply,
 )
 from agent_comms.transport.progress import WireExportCancelled
 from agent_comms.transport.request import (
@@ -237,6 +239,11 @@ class RemoteCoreAccess(
     ) -> dict[str, JsonValue]:
         """One round trip on this thread's kept connection, so a call pays no new handshake."""
         envelope = ToolsCallMessage(jsonrpc="2.0", id=1, params=request.called())
+        return FieldCodec.decode(ToolsCallReply, json.loads(self.round_trip(envelope))).structured()
+
+    def round_trip(self, envelope: object) -> bytes:
+        """One JSON-RPC message posted on this thread's kept connection, and its reply's bytes.
+        A dropped connection may be a restarted connector, which may serve other tools."""
         body = FieldCodec.compact(FieldCodec.encode(envelope)).encode()
         connection = self.connections.connection
         try:
@@ -245,13 +252,28 @@ class RemoteCoreAccess(
             payload = response.read()
         except (OSError, http.client.HTTPException) as error:
             connection.close()
+            self.forget_served()
             raise ConnectionDropped(
                 f"The connection to {self.endpoint.url.host} dropped: {error}") from error
         if response.status >= 400:
             raise urllib.error.HTTPError(
                 str(self.endpoint.url), response.status, response.reason, response.headers,
                 io.BytesIO(payload))
-        return FieldCodec.decode(ToolsCallReply, json.loads(payload)).structured()
+        return payload
+
+    @cached_property
+    def served_tools(self) -> frozenset[str]:
+        """The names of the tools this connector exposes to this caller, listed once per
+        connection: an older bus lists only the tools it had."""
+        reply = FieldCodec.decode(ToolsListReply, json.loads(
+            self.round_trip(ToolsListMessage(jsonrpc="2.0", id=1))))
+        return frozenset(tool.name for tool in reply.result.tools)
+
+    def serves(self, request_type: type[ToolRequest]) -> bool:
+        return request_type.declared_name in self.served_tools
+
+    def forget_served(self) -> None:
+        self.__dict__.pop("served_tools", None)
 
     def post_observed[R: ToolResult](self, request: ObservedRequest[R]) -> dict[str, JsonValue]:
         """A call the client asked progress for: its events reach the request's observer, and a

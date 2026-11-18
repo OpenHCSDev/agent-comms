@@ -38,6 +38,10 @@ class LocalCoreAccess(CoreAccess, MroDispatch):
     def call[R: ToolResult](self, request: ToolRequest[R]) -> R:
         return cast(R, type(self).handler_for(type(request))(self, request))
 
+    def serves(self, request_type: type[ToolRequest]) -> bool:
+        """This process's Core declares every request this process can name."""
+        return True
+
     @handles(ReadRequest)
     def read_in_child[R: ToolResult](self, request: ReadRequest[R]) -> R:
         """The child already serving this root's reads answers this one, as the same caller."""

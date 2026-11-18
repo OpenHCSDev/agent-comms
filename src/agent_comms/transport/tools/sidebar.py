@@ -92,6 +92,7 @@ from agent_comms.registry.thread_text import ExpectedSession
 from agent_comms.registry.threads import Thread
 from agent_comms.transport.request import (
     ObservedRequest,
+    OptionalRead,
     ReadRequest,
     ToolRequest,
     tool_field,
@@ -615,8 +616,9 @@ class MessageFileRead:
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsMessageFilesTool(MessageFileRead, ReadRequest[MessageFilesRead]):
-    """The files a page's messages carry, read beside the page; the page itself never names them."""
+class CommsMessageFilesTool(MessageFileRead, OptionalRead[MessageFilesRead]):
+    """The files a page's messages carry, read beside the page; the page itself never names them.
+    A bus older than message files carries none, so its pages list none."""
 
     label = "Message files"
     description = (
@@ -624,6 +626,9 @@ class CommsMessageFilesTool(MessageFileRead, ReadRequest[MessageFilesRead]):
         "Every message must be in the conversation you may read.")
     messages: Annotated[
         tuple[MessageReference, ...], *tool_field("The messages whose files to list")]
+
+    def absent(self) -> MessageFilesRead:
+        return MessageFilesRead(files=())
 
 
 @dataclass(frozen=True, kw_only=True)

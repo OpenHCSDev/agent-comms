@@ -78,6 +78,13 @@ class RelationViolationError(ValueError, DrainUnavailable):
     """A required relation between declarations cannot be proved."""
 
 
+class UnexposedToolError(ToolRefusedError, RelationViolationError):
+    """The connector exposes no tool by this name to this caller: a bus older than the tool,
+    or a grant that leaves it out. A client asks `CoreAccess.serves` before a call it can do
+    without; this is the refusal a stale answer meets. Still a RelationViolationError, as every
+    refusal decoded before it was."""
+
+
 class ThreadNotVisibleError(RelationViolationError, RejectedEnforcementError):
     """A direct target refused publication before a standing-rule action could apply."""
 

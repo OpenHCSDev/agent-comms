@@ -21,6 +21,7 @@ from pydantic import JsonValue
 
 from agent_comms.cli_bridges.cli_protocol import CoreError
 from agent_comms.coordination.errors import CommandFailure, Refused
+from agent_comms.errors import UnexposedToolError
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -43,7 +44,6 @@ from agent_comms.transport.progress import (
 )
 from agent_comms.transport.request import ToolCall, ToolRequest
 from agent_comms.transport.tool_request import ServedRequest
-from agent_comms_hooks import ToolRefusedError
 
 JsonRpcId = int | str
 PROTOCOL_VERSION = "2025-06-18"
@@ -515,7 +515,7 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
         tool = caller.exposed().get(self.params.name)
         if tool is None:
             return ToolsCallResult.failed(
-                ToolRefusedError(f"The connector exposes no tool {self.params.name!r}.")
+                UnexposedToolError(f"The connector exposes no tool {self.params.name!r}.")
             )
         try:
             answered = await connector.call(tool, self.params.arguments, caller, observer)
@@ -565,6 +565,13 @@ class ToolsCallResult(McpResult):
     @classmethod
     def failed(cls, error: Exception) -> ToolsCallResult:
         return cls((TextContent(CoreError.from_exception(error).model_dump_json()),), True)
+
+
+@dataclass(frozen=True)
+class ToolsListReply(McpReply):
+    """The tools/list answer: the tools this connector exposes to the caller who asked."""
+
+    result: ToolsListResult
 
 
 @dataclass(frozen=True)

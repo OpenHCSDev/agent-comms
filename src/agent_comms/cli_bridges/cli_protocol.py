@@ -22,7 +22,7 @@ from typing_extensions import TypeForm
 
 from agent_comms.cli_bridges.wire_models import DeclaredWireFamily, WireModel
 from agent_comms.coordination.errors import CoordinationReadUnavailable
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import RelationViolationError, UnexposedToolError
 from agent_comms.execution.turn_item import NativeTurnId, TurnItem
 from agent_comms.nominal.declared_family import UnknownFamilyMember
 from agent_comms.nominal.field_codec import TimestampText
@@ -193,6 +193,12 @@ class HeldCoreError(CoreError, declared_name="held"):
     """The bus went into maintenance."""
 
     exception_type = MaintenanceHeldError
+
+
+class UnexposedCoreError(CoreError, declared_name="unexposed"):
+    """The connector exposes no such tool to this caller (`UnexposedToolError`)."""
+
+    exception_type = UnexposedToolError
 
 
 class FailedCoreError(CoreError, declared_name="failed"):

@@ -19,6 +19,7 @@ import time
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -76,6 +77,7 @@ from agent_comms.transport.connector import (
 from agent_comms.transport.connector_caller import (
     CALLER,
     ActingFork,
+    ConnectorCaller,
     GrantRefusedError,
     ReadOnlyConnectorCaller,
     ScopedUiCaller,
@@ -84,7 +86,9 @@ from agent_comms.transport.connector_caller import (
 )
 from agent_comms.transport.connector_profile import (
     OBSERVE_PATH,
+    BearerSecret,
     HttpsMcpEndpoint,
+    UiCredential,
     UiConnectionProfile,
     UiGrantId,
     UiGrantSummary,
@@ -134,8 +138,12 @@ from agent_comms.transport.tools.served import (
     ServedCommsUserSendTool,
     invoke_tool,
 )
+from agent_comms.errors import RelationViolationError, UnexposedToolError
+from agent_comms.transport.remote_core import RemoteCoreAccess
 from agent_comms.transport.tools.sidebar import (
     CommsConversationPageTool,
+    CommsMessageFilesTool,
+    CommsMessageFileTool,
     CommsConversationRevisionTool,
     CommsExportWireTool,
     CommsLatestSequenceTool,
@@ -1590,3 +1598,110 @@ async def test_the_connector_names_work_neither_collection_holds(tmp_path, comms
         connector.running_requests.pop(task, None)
         held.set()
         await task
+
+
+class ForwardingConnection:
+    """RemoteCoreAccess's kept connection, posting each request to the connector under test from
+    the worker thread the access runs on, as the real client does over TLS."""
+
+    def __init__(self, client: TestClient, loop: asyncio.AbstractEventLoop, token: str) -> None:
+        self.client, self.loop, self.token, self.methods = client, loop, token, []
+
+    def request(self, method, path, body, headers) -> None:
+        message = json.loads(body)
+        self.methods.append(f'{message["method"]}:{message.get("params", {}).get("name", "")}')
+        posted = self.client.post(path, data=body, headers={
+            "Authorization": f"Bearer {self.token}", "Content-Type": "application/json"})
+        self.reply = asyncio.run_coroutine_threadsafe(self.read(posted), self.loop)
+
+    @staticmethod
+    async def read(posted):
+        response = await posted
+        return response.status, await response.read()
+
+    def getresponse(self):
+        status, payload = self.reply.result(timeout=30)
+
+        class Reply:
+            reason, headers = "", {}
+
+            def read(self) -> bytes:
+                return payload
+        reply = Reply()
+        reply.status = status
+        return reply
+
+    def close(self) -> None:
+        pass
+
+
+FILE_TOOLS = (CommsMessageFilesTool.declared_name, CommsMessageFileTool.declared_name)
+
+
+@pytest.fixture
+def older_connector(monkeypatch):
+    """The connector a bus older than message files runs: it exposes every tool but those."""
+    exposed = ConnectorCaller.exposed
+
+    def without_files(self):
+        return {name: tool for name, tool in exposed(self).items()
+                if name not in FILE_TOOLS}
+    monkeypatch.setattr(ConnectorCaller, "exposed", without_files)
+
+
+async def remote_access(
+    client: TestClient, comms: Comms,
+) -> tuple[RemoteCoreAccess, ForwardingConnection]:
+    access = RemoteCoreAccess(
+        HttpsMcpEndpoint(URL("https://core.example/mcp")),
+        UiCredential(UiGrantId("1" * 32), RootId("a" * 32), 2**31, BearerSecret("token")))
+    token = await approved_token(client, comms)
+    connection = ForwardingConnection(client, asyncio.get_running_loop(), token)
+    # The kept connection is per thread; the calls below run on a worker thread, so every
+    # thread is given this one.
+    access.__dict__["connections"] = SimpleNamespace(connection=connection)
+    return access, connection
+
+
+FILES = CommsMessageFilesTool(conversation="#comms", messages=())
+
+
+async def test_a_newer_client_reads_no_files_from_a_bus_without_them(
+    client, comms, older_connector,
+):
+    """The page read a newer client makes beside every page answers its declared nothing from
+    a bus older than message files, and is never posted there: the tools are listed once."""
+    access, connection = await remote_access(client, comms)
+    assert not await asyncio.to_thread(access.serves, CommsMessageFilesTool)
+    assert await asyncio.to_thread(access.call, FILES) == FILES.absent()
+    assert await asyncio.to_thread(access.call, FILES) == FILES.absent()
+    assert connection.methods == ["tools/list:"]
+
+
+async def test_a_bus_with_files_answers_the_read(client, comms):
+    access, connection = await remote_access(client, comms)
+    assert await asyncio.to_thread(access.serves, CommsMessageFilesTool)
+    assert (await asyncio.to_thread(access.call, FILES)).files == ()
+    assert connection.methods == ["tools/list:", "tools/call:comms_message_files"]
+
+
+async def test_a_stale_tool_list_meets_a_typed_refusal_and_lists_again(
+    client, comms, older_connector,
+):
+    """A list read before the connector changed: the call is refused as unexposed, by type, so
+    the optional read answers its nothing and the next `serves` lists the tools again."""
+    access, connection = await remote_access(client, comms)
+    access.__dict__["served_tools"] = frozenset({CommsMessageFilesTool.declared_name})
+    assert await asyncio.to_thread(access.call, FILES) == FILES.absent()
+    assert "served_tools" not in access.__dict__
+    assert not await asyncio.to_thread(access.serves, CommsMessageFilesTool)
+    assert connection.methods == ["tools/call:comms_message_files", "tools/list:"]
+
+
+async def test_an_unexposed_tool_is_refused_as_unexposed(client, comms, older_connector):
+    """Posted anyway, a call to a tool the connector does not expose is refused by type, and
+    every earlier handler of a refusal (RelationViolationError) still catches it."""
+    access, _ = await remote_access(client, comms)
+    with pytest.raises(UnexposedToolError) as refused:
+        await asyncio.to_thread(access.exchange, FILES)
+    assert isinstance(refused.value, RelationViolationError)

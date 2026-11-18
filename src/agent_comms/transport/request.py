@@ -13,6 +13,7 @@ from pydantic import JsonValue
 from typing_extensions import TypeVarTuple
 
 from agent_comms.coordination.errors import CoordinationReadUnavailable
+from agent_comms.errors import UnexposedToolError
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     ArgumentsExclude,
@@ -225,6 +226,25 @@ class RemoteReadUnavailable(CoordinationReadUnavailable, ConnectionError):
         return ConnectionError.__new__(cls, *args)
 
 
+class OptionalRead[Result: ToolResult = ToolResult](ReadRequest[Result], declared_name=None):
+    """A read its caller can do without. A Core that does not serve it (a bus older than the
+    tool, or a grant that leaves it out) answers `absent()`, the read's declared nothing,
+    never a refusal: a newer client on an older bus draws what that bus has."""
+
+    @abstractmethod
+    def absent(self) -> Result:
+        """What this read answers from a Core that does not serve it."""
+
+    def posted(self, remote: RequestPoster) -> dict[str, JsonValue]:
+        if remote.serves(type(self)):
+            try:
+                return super().posted(remote)
+            except UnexposedToolError:
+                # The connector changed since its tools were listed: list them again next time.
+                remote.forget_served()
+        return cast(dict[str, JsonValue], FieldCodec.encode(self.absent()))
+
+
 @dataclass(frozen=True, kw_only=True)
 class ThreadReadRequest[Result: ToolResult = ToolResult](ReadRequest[Result], declared_name=None):
     """A read about one thread; empty names the caller's own."""
@@ -254,6 +274,14 @@ class RequestPoster(ABC):
         self, request: ObservedRequest[R],
     ) -> dict[str, JsonValue]: ...
 
+    @abstractmethod
+    def serves(self, request_type: type[ToolRequest]) -> bool:
+        """Whether the Core across the connector serves this request to this caller."""
+
+    @abstractmethod
+    def forget_served(self) -> None:
+        """What the connector serves is asked again on the next `serves`."""
+
 
 class CoreAccess(ABC):
     """Where a UI's Core requests are answered: in this process or across the connector. The
@@ -262,3 +290,8 @@ class CoreAccess(ABC):
     @abstractmethod
     def call[R: ToolResult](self, request: ToolRequest[R]) -> R:
         """The request's declared result, from whichever Core this access reaches."""
+
+    @abstractmethod
+    def serves(self, request_type: type[ToolRequest]) -> bool:
+        """Whether this Core answers `request_type`: a Core in this process serves every request
+        it declares; across a connector, the tools that connector exposes to this caller."""
