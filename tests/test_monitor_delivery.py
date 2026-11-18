@@ -182,7 +182,7 @@ def emitted_delivery(bridge):
     async def emit(body, target='viewer'):
         message = bridge.comms.messaging.send('claude-code', target, body).message
         delivery = replace(bridge.attempt(message, EmittedOutcome),
-                           monitor=ReceivingMonitor(len(bridge.incoming_frame(message).parts)))
+                           monitor=ReceivingMonitor(len((await bridge.frame(message)).parts)))
         assert await bridge.coordinator_write(lambda _, db: delivery.first_write(db))
         return message
     return emit

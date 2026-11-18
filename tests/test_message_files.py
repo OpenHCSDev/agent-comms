@@ -142,7 +142,8 @@ def test_files_over_the_message_limit_are_refused_before_anything_is_written(thr
         send_human(comms, "recipient", "two halves", upload("a.bin", b"a" * half), upload("b.bin", b"b" * half))
     assert comms.bus.bus.revision() == before
     assert not MessageFiles(comms.root).path.exists()
-    for name, mime_type, data in (("../escape", "text/plain", "aGk="), ("note.txt", "not a type", "aGk="),
+    for name, mime_type, data in (("../escape", "text/plain", "aGk="), ("..", "text/plain", "aGk="),
+                                  ("note.txt", "not a type", "aGk="),
                                   ("note.txt", "text/plain", "not base64!"), ("empty.txt", "text/plain", "")):
         with pytest.raises(ValueError):
             FileUpload(name, mime_type, data)

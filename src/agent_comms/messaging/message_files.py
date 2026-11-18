@@ -64,7 +64,7 @@ class FileUpload:
     def __post_init__(self) -> None:
         if not self.name.strip() or len(self.name) > MAX_FILE_NAME_LENGTH:
             raise ValueError("A file name is 1 to 255 characters.")
-        if any(character in self.name for character in "/\\\0"):
+        if any(character in self.name for character in "/\\\0") or self.name in {".", ".."}:
             raise ValueError("A file name names no directory.")
         if not MIME_TYPE.fullmatch(self.mime_type):
             raise ValueError(f"Unsupported file type: {self.mime_type!r}")
