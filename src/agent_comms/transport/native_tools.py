@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from abc import abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -155,7 +156,10 @@ class NamedArgumentsCall(NativeExecutableTool, declared_name=None):
 
 @dataclass(frozen=True, kw_only=True)
 class CoordinationCall(GlobalCommsExtension, NamedArgumentsCall, declared_name=None):
-    """Core's CLI owns argument decoding; this call owns identity and live events."""
+    """Core owns decoding and execution under this exact native call."""
+
+    async def owner_reply(self, execute: Callable[[str, dict[str, object]], Awaitable[dict[str, object]]]) -> dict[str, object]:
+        return {"ok": True, "result": await execute(self.declared_name, self.arguments)}
 
     def published_goal(self, result: PiToolResult, permission: TurnGoalPermission) -> None:
         result.published_goal(permission)

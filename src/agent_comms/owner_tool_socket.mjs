@@ -23,6 +23,10 @@ class UnavailableOwnerToolConnection {
   request() {
     return Promise.reject(new ToolNotStarted());
   }
+
+  execute() {
+    return Promise.reject(new ToolNotStarted());
+  }
 }
 
 export class OwnerToolConnection {
@@ -55,12 +59,27 @@ export class OwnerToolConnection {
     if (request.length > maxRequest) throw new Error("Native tool request exceeds bound");
     return requestOwnerTool(this.#path, request, maxResponse);
   }
+
+  async execute(callId, name, args) {
+    const response = await this.request(
+      { call_id: callId, name, arguments: args, operation: { kind: "execute" } },
+      1024 * 1024,
+      64 * 1024 * 1024,
+    );
+    if (response?.ok !== true) throw new Error(response?.error ?? "Core tool execution failed.");
+    if (!response.result || typeof response.result !== "object" || Array.isArray(response.result)) {
+      throw new ToolOutcomeUnknown();
+    }
+    return response.result;
+  }
 }
 
 export function requestOwnerTool(path, request, maxResponse) {
   return new Promise((resolve, reject) => {
     const socket = createConnection(path);
-    let received = Buffer.alloc(0);
+    const chunks = [];
+    let receivedBytes = 0;
+    let complete = false;
     // Until the request is written the owner cannot have claimed anything; only a
     // failure after the write leaves the claim's outcome unknown.
     let failure = ToolNotStarted;
@@ -74,19 +93,21 @@ export function requestOwnerTool(path, request, maxResponse) {
       socket.write(request);
     });
     socket.on("data", (part) => {
-      received = Buffer.concat([received, part]);
-      if (received.length > maxResponse) return fail();
-      if (received.includes(10)) {
+      chunks.push(part);
+      receivedBytes += part.length;
+      if (receivedBytes > maxResponse) return fail();
+      if (part.includes(10)) {
+        complete = true;
         socket.end();
         try {
-          resolve(JSON.parse(received.toString("utf8")));
+          resolve(JSON.parse(Buffer.concat(chunks, receivedBytes).toString("utf8")));
         } catch {
           fail();
         }
       }
     });
     socket.once("end", () => {
-      if (!received.includes(10)) fail();
+      if (!complete) fail();
     });
   });
 }
