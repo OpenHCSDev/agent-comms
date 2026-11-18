@@ -110,3 +110,15 @@ def test_sync_cannot_select_another_registered_projects_repository(tmp_path: Pat
         command.apply(comms)
     assert not project.test_environment.exists()
     assert not unrelated.test_environment.exists()
+
+
+def test_shared_prefix_cannot_follow_an_unrelated_environment(tmp_path: Path):
+    checkout = committed_checkout(tmp_path / 'repository')
+    elsewhere = tmp_path / 'retained-environment'
+    elsewhere.mkdir()
+    marker = elsewhere / 'retained-source.py'
+    marker.write_text('preserve me\n')
+    checkout.test_environment.symlink_to(elsewhere, target_is_directory=True)
+    with pytest.raises(ValueError, match='physical prefix'):
+        DeclaredTestEnvironment(checkout, Path('requirements-dev.txt')).require_unused()
+    assert marker.read_text() == 'preserve me\n'

@@ -40,6 +40,8 @@ class DeclaredTestEnvironment:
 
     def require_unused(self) -> None:
         prefix = self.environment.prefix
+        if prefix.resolve() != prefix:
+            raise ValueError(f"Test environment {prefix} must be a physical prefix, not a symlink")
         if LaunchRuntime.running().prefix == prefix:
             raise ValueError(f"Run this operation outside {prefix}; it would replace its own packages")
         observed = RuntimeProcesses.under(prefix)
