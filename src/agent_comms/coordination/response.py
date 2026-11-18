@@ -23,8 +23,9 @@ from typing import Annotated, Type
 from agent_comms.coordination.cohort_schema import ClaimBatchAcknowledgements, CohortTable
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (
-    IdentityConflict,
     CoordinationError,
+    IdentityConflict,
+    ResponseNotDispatched,
     StaleFence,
 )
 from agent_comms.coordination.obligation_states import PublishedResponse, PublishingResponse
@@ -100,6 +101,23 @@ class PublicationAppendDispatches(ResponseTable, WithoutRowid):
         )
 
     @classmethod
+    def unattempted(cls, store: Coordination, bus: MessageBus, snapshot: RecoverySnapshot) -> bool:
+        """Prove every frozen reply stayed before the first append barrier.
+
+        The acquired owner-loss capability calls this inside its settlement
+        transaction. A dispatch, even without a bus row, remains uncertain.
+        """
+        _require_bound_stores(bus, store)
+        if not store.session._connection.in_transaction:
+            raise CoordinationError("unattempted response proof requires the settlement transaction")
+        return all(
+            cls.one(store.session._connection, execution_id=intent.execution_id,
+                    exact_target=intent.exact_target) is None
+            and intent.published_message(bus.bus) is None
+            for intent in snapshot.publication_intents
+        )
+
+    @classmethod
     def resolve_retained(
         cls, store: Coordination, bus: MessageBus, boundary, *,
         owner_lookup: ThreadLookup, execution_id: str | None = None,
@@ -117,11 +135,13 @@ class PublicationAppendDispatches(ResponseTable, WithoutRowid):
                 store.session._connection.execute(
                     "SELECT DISTINCT i.execution_id FROM publication_intents i "
                     "JOIN executions e ON e.execution_id=i.execution_id "
-                    "WHERE e.owner_lookup=? AND NOT EXISTS "
+                    "JOIN obligations o ON o.execution_id=i.execution_id "
+                    "AND o.exact_target=i.exact_target "
+                    "WHERE e.owner_lookup=? AND o.state=? AND NOT EXISTS "
                     "(SELECT 1 FROM publication_receipts r "
                     "WHERE r.execution_id=i.execution_id "
                     "AND r.exact_target=i.exact_target) ORDER BY i.execution_id",
-                    (owner_lookup,),
+                    (owner_lookup, PublishingResponse.declared_name),
                 )
             ))
         for current_id in execution_ids:
@@ -145,7 +165,9 @@ class PublicationAppendDispatches(ResponseTable, WithoutRowid):
                     dispatch = cls.one(
                         db, execution_id=current_id, exact_target=frozen.exact_target
                     )
-                    if dispatch is None or not dispatch.matches_attempt(
+                    if dispatch is None:
+                        raise ResponseNotDispatched("frozen response has no durable append dispatch")
+                    if not dispatch.matches_attempt(
                         wire_root_id, current_id, attempt.owner_generation,
                         attempt.attempt_ordinal, frozen.exact_target,
                     ):
