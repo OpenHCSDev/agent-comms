@@ -130,6 +130,32 @@ def test_one_revision_captures_each_thread_activity_once(comms):
     assert later['surviving'].timestamp > first['surviving'].timestamp
 
 
+def test_activity_capture_survives_unrelated_revisions_and_reads_new_names(comms, monkeypatch):
+    declare(comms, 'surviving', 'other')
+    comms.agents.set_activity('surviving', ActivityState.IDLE)
+    snapshot_type = type(comms.registry.snapshot())
+    original = snapshot_type.observed_activity
+    captures = []
+
+    def captured(snapshot, agents, names):
+        captures.append(frozenset(names))
+        return original(snapshot, agents, names)
+
+    monkeypatch.setattr(snapshot_type, 'observed_activity', captured)
+    revision = comms.views.revision()
+    first = comms.views.observed_activity(revision, ('surviving',))
+    for _ in range(20):
+        revision = replace(revision, bus_seq=revision.bus_seq + 1)
+        assert comms.views.observed_activity(revision, ('surviving',)) == first
+    assert captures == [frozenset({'surviving'})]
+    assert set(comms.views.observed_activity(revision, ('surviving', 'other'))) == {'surviving', 'other'}
+    assert captures[-1] == {'other'}
+    comms.agents.set_activity('surviving', ActivityState.WORKING)
+    changed = comms.views.observed_activity(comms.views.revision(), ('surviving',))
+    assert changed['surviving'].timestamp > first['surviving'].timestamp
+    assert len(captures) == 3
+
+
 def test_a_busy_capture_ends_when_its_row_turns_stale_on_an_unchanged_revision(comms, monkeypatch):
     """A busy row turning idle with age moves no revision field, so a quiet bus showed an
     external thread working forever. The capture now expires with its earliest busy row."""
