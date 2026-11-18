@@ -168,10 +168,8 @@ class TeamBoardRead(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
             comms, self.observe(comms, self.prepare_board(comms, retention)), retention)
 
     def _progress_read(self) -> ProgressRead:
-        progress = ProgressRead()
-        if self._previous_reads is not None:
-            retained = RepositoryReads.retaining(self._previous_reads)
-            progress._histories = retained._histories
+        progress = (ProgressRead.retaining(self._previous_reads)
+                    if self._previous_reads is not None else ProgressRead())
         self._previous_reads = progress
         return progress
 

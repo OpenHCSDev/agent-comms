@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields
-from functools import cache, cached_property
+from functools import cached_property
 from itertools import combinations
 from pathlib import Path
 from subprocess import TimeoutExpired
@@ -35,6 +35,7 @@ from agent_comms.messaging.bus import BusReader
 from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
+from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily, RegisteredFamily
 from agent_comms.nominal.field_codec import (
     DefaultedName,
@@ -238,15 +239,17 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
         """Discovery completes the declarations: each rule's observation comparison
         compiles then, so a compared field with no codec owner refuses before any
         heartbeat keys an observation."""
-        members = super()._member_declarations()
-        for member in members:
-            cast(type[StandingRule], member).compiled_comparison()
+        return cls._compared_members
+
+    @ClassFact
+    @staticmethod
+    def _compared_members(cls: type[StandingRule]) -> tuple[type[DeclaredFamily], ...]:
+        """Validate the acquired declarations once, and again when membership changes."""
+        members = super(StandingRule, cls)._member_declarations()
+        if members:
+            FieldCodec.compile_comparison(members[0], *members[1:])
         return members
 
-    @classmethod
-    @cache
-    def compiled_comparison(cls) -> None:
-        FieldCodec.compile_comparison(cls)
     @classmethod
     def team_disposes(cls) -> bool:
         return True
