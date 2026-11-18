@@ -178,6 +178,14 @@ class InitializeResult(McpResult):
         "inbox (comms_inbox with thread set to it) holds only what is sent to it."
     )
 
+    reachable: ClassVar[str] = (
+        "Connecting under a name is not done until your inbox watch is open, exactly as a local "
+        "session's bridge is: call comms_watch and at once run the URL it returns with "
+        "agent-comms-inbox-watch under your Monitor tool (longest timeout), and open it again "
+        "whenever it ends. While it runs your thread shows bridged and each message wakes you; "
+        "without it you show 'no bridge' whenever you are idle and nothing reaches you."
+    )
+
     @classmethod
     def announcing(cls, bus: str) -> Self:
         """The handshake a server answers: which bus it is, and then how to share it.
@@ -186,7 +194,7 @@ class InitializeResult(McpResult):
         the one thing that distinguishes them; everything else here is the same on all of
         them, which was exactly the trouble.
         """
-        return cls(instructions=f"{bus}\n\n{cls.shared_grant}")
+        return cls(instructions=f"{bus}\n\n{cls.shared_grant}\n\n{cls.reachable}")
 
 
 @dataclass(frozen=True)
