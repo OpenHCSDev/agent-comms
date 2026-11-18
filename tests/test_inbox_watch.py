@@ -17,6 +17,8 @@ from aiohttp.test_utils import TestClient, TestServer, unused_port
 from pydantic import ValidationError
 from yarl import URL
 
+from agent_comms.messaging.message_files import FileUpload
+
 from agent_comms.cli_bridges.claude_protocol import (
     ClaudeMonitorFrame,
     MonitorTaskNotification,
@@ -109,14 +111,16 @@ async def watch_path(client: TestClient, token: str, name: str) -> str:
 
 
 async def frame(socket) -> dict:
-    return json.loads(await asyncio.wait_for(socket.receive_str(), timeout=30))
+    """The next pushed message (a WatchedDelivery carries it with its files)."""
+    return json.loads(await asyncio.wait_for(socket.receive_str(), timeout=30))["message"]
 
 
-async def delivered_lines(client, token: str, comms: Comms, exports: Path, capsys, body: str):
+async def delivered_lines(client, token: str, comms: Comms, exports: Path, capsys, body: str,
+                          files: tuple[FileUpload, ...] = ()):
     """What the cloud client prints for one message, as Monitor would show it."""
     url = str(client.make_url(await watch_path(client, token, "cloud")))
     watch = asyncio.create_task(InboxSocket(url, exports).carried())
-    comms.messaging.send("sender", "cloud", body)
+    comms.messaging.send("sender", "cloud", body, files=files)
     lines: list[str] = []
     async with asyncio.timeout(30):
         while not any(line.startswith(("Comms in", '{"protocol"')) for line in lines):
@@ -141,6 +145,23 @@ async def test_the_cloud_client_shows_a_message_that_fits_one_event_as_written(
     assert re.search(r" · \d+-[0-9a-f]{12}$", lines[start])
     assert lines[start + 1:start + 3] == ["short body", "second line"]
     assert not exports.exists() or not any(exports.iterdir())
+
+
+async def test_the_cloud_client_names_each_file_a_message_carries(
+    session, comms: Comms, tmp_path: Path, capsys
+) -> None:
+    """Tristan's photos arrived as their text alone: the pushed frame now carries the files, and
+    the printed event names each one with how to read it."""
+    client, token = session
+    exports = tmp_path / "state" / "messages"
+    exports.parent.mkdir(mode=0o700)
+    files = (FileUpload.of("crt.jpg", "image/jpeg", b"\xff\xd8" + b"x" * 2048),
+             FileUpload.of("phone.png", "image/png", b"\x89PNG" + b"y" * 512))
+    lines = await delivered_lines(client, token, comms, exports, capsys, "two pictures", files)
+    shown = "\n".join(lines)
+    for name, mime_type, size in (("crt.jpg", "image/jpeg", 2050), ("phone.png", "image/png", 516)):
+        assert name in shown and mime_type in shown and str(size) in shown, shown
+    assert "comms_message_file" in shown, shown
 
 
 async def test_the_cloud_client_names_the_whole_body_of_a_message_too_long_for_one_event(

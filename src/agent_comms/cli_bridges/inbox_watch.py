@@ -34,6 +34,7 @@ from agent_comms.cli_bridges.claude_transcript import (
     ReceivesWatchReports,
     ReconnectUrl,
     ReportedLedger,
+    WatchedDelivery,
     WatchReport,
 )
 from agent_comms.cli_bridges.harness_delivery_states import (
@@ -56,7 +57,7 @@ from agent_comms.messaging.message_files import MessageFile
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.messaging.watched import ChangeSignal, FileSource
-from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
+from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.package_stamp import STAMP
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
@@ -301,15 +302,16 @@ class InboxWatch:
         with client_wire(self.root) as comms:
             yield comms
 
-    def untaken(self, after: TakenInputPosition = TakenInputStart()) -> tuple[Message, ...]:
-        """What no harness took after ``after``: a socket that took a message never has an
-        older untaken one, so its next read starts past it instead of at the thread's birth."""
+    def untaken(self, after: TakenInputPosition = TakenInputStart()) -> tuple[WatchedDelivery, ...]:
+        """What no harness took after ``after``, with its files: a socket that took a message
+        never has an older untaken one, so its next read starts past it instead of at the
+        thread's birth."""
         with self.wire() as comms:
             request = CommsInboxTool(
                 thread=self.thread, after=after, wait=NoWait())
-            return request.messages(comms)
+            return WatchedDelivery.read(comms, request.messages(comms))
 
-    def taken(self, message: Message, ledger: TakingLedger) -> None:
+    def taken(self, delivery: WatchedDelivery, ledger: TakingLedger) -> None:
         """A message leaves the inbox before its frame goes out: the client may ack a print
         before a later write could land, and an attempt recorded but never sent is exactly what
         replay with proof sends again. The attempt stays unconfirmed until the session's
@@ -318,7 +320,7 @@ class InboxWatch:
         has no Read this side can check, so it stays unconfirmed. The attempt names the ledger
         it was taken under: only that ledger's silence can prove it was never printed."""
         with self.wire() as comms:
-            reference = message.reference
+            reference = delivery.message.reference
             incarnation = comms.registry.require(self.thread).incarnation
             delivery = HarnessDelivery(
                 RemoteWatchHistory,
@@ -326,7 +328,7 @@ class InboxWatch:
                 reference.message_id,
                 reference.seq,
                 UnconfirmedOutcome,
-                monitor=ClaudeMonitorFrame.of_wire(message).shown_evidence(ledger),
+                monitor=delivery.frame.shown_evidence(ledger),
             )
             path = str(CoordinationStore.path_in(comms.root))
             with Coordination(path) as store, store.session.writing() as db:
@@ -352,15 +354,16 @@ class InboxWatch:
 
     def unshown(
         self, before: frozenset[MessageReference], ledger: TakingLedger,
-    ) -> tuple[Message, ...]:
+    ) -> tuple[WatchedDelivery, ...]:
         """Of the attempts taken before this socket opened, those this ledger took and, its
-        report in, still unconfirmed: provably never printed."""
+        report in, still unconfirmed: provably never printed. They go again with their files."""
         references = tuple(sorted((
             attempt.reference for attempt in self.unconfirmed()
             if attempt.reference in before and attempt.monitor.taken_under(ledger)),
             key=lambda reference: reference.seq))
         with self.wire() as comms:
-            return tuple(comms.bus.bus.messages_for_references(references)) if references else ()
+            return (WatchedDelivery.read(comms, comms.bus.bus.messages_for_references(references))
+                    if references else ())
 
     async def replayed(self, socket: web.WebSocketResponse, before: frozenset[MessageReference],
                        reported: ReportedLedger) -> None:
@@ -368,8 +371,8 @@ class InboxWatch:
         reports it never printed. A client that sends no ledger, or a ledger newer than the
         attempt, proves nothing, so nothing is replayed."""
         await reported.arrival.wait()
-        for message in await asyncio.to_thread(self.unshown, before, reported.current):
-            await socket.send_str(FieldCodec.compact(FieldCodec.encode(message)))
+        for delivery in await asyncio.to_thread(self.unshown, before, reported.current):
+            await socket.send_str(delivery.line())
 
     def commit_sources(self) -> tuple[FileSource, ...]:
         """The bus's commit signal, read in a thread so no Comms is built or held on the loop."""
@@ -418,10 +421,10 @@ class InboxWatch:
             while True:
                 # Drained before the read, so a commit landing during it wakes the wait.
                 changes.prepare()
-                for message in await asyncio.to_thread(self.untaken, after):
-                    await asyncio.to_thread(self.taken, message, reported.current)
-                    await socket.send_str(FieldCodec.compact(FieldCodec.encode(message)))
-                    after = after.advanced(message.reference)
+                for delivery in await asyncio.to_thread(self.untaken, after):
+                    await asyncio.to_thread(self.taken, delivery, reported.current)
+                    await socket.send_str(delivery.line())
+                    after = after.advanced(delivery.message.reference)
                 await changes.wait()
 
     async def holding(self, socket: web.WebSocketResponse, here: ProcessIdentity) -> None:
