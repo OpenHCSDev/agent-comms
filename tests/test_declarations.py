@@ -444,3 +444,32 @@ def test_an_edit_that_removes_a_thread_retires_its_turn_row(tmp_path: Path) -> N
     del removed.threads["b"]
     assert TurnChange().leaving(original, removed).retired == (leased.turn_identity,)
     assert TurnChange().leaving(original, original.copy()) == TurnChange()
+
+
+def test_turn_retirement_preserves_renames_and_orders_removed_identities(tmp_path: Path, monkeypatch) -> None:
+    from agent_comms.registry.registry_document import ThreadRows
+
+    registry = Registration(RegistryFile.path_in(tmp_path))
+    leased = []
+    for name, turn in (("a", "d79d3458a58877cd8e48c18ebaf4c27b"),
+                       ("b", "d79d3458a58877cd8e48c18ebaf4c27c")):
+        registry.register(NativeThread(name, frozenset(), Checkout(tmp_path),
+                                       process_identity=ProcessIdentity.capture(os.getpid())))
+        thread, _ = registry.lease_local_turn(name, TurnId(turn))
+        leased.append(thread)
+    original = registry.store.read()
+    registry.rename("a", "renamed")
+    assert TurnChange().leaving(original, registry.store.read()) == TurnChange()
+    registry.remove("renamed")
+    registry.remove("b")
+    replacement = registry.declare(NativeThread("b", frozenset(), Checkout(tmp_path)))
+    current = registry.store.read()
+    assert replacement.created_at != leased[1].created_at
+
+    def no_complete_walk(_rows):
+        raise AssertionError("retiring changed turns enumerated every declaration")
+
+    monkeypatch.setattr(ThreadRows, "__iter__", no_complete_walk)
+    assert TurnChange().leaving(original, current).retired == tuple(
+        thread.turn_identity for thread in leased
+    )

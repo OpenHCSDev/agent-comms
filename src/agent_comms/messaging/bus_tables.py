@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Annotated
 from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.message_send_reads import PublishedMessageRead
 from agent_comms.messaging.messages import (
     Addressed,
     BusProjectionTables,
@@ -22,7 +23,8 @@ from agent_comms.messaging.messages import (
     MessageKind,
 )
 from agent_comms.messaging.read_basis import RepliesDisplayScope
-from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, ThreadLookup
+from agent_comms.storage.recorded_time import Timestamped
 from agent_comms.storage.typed_table import (
     Column,
     ComposedSchemas,
@@ -246,34 +248,41 @@ class AnsweredSource(BusProjectionTables):
         cls,
         db: sqlite3.Connection,
         keys: tuple[tuple[ThreadLookup, MessageReference], ...],
-    ) -> tuple[AnsweredSource, ...]:
-        """At most one reply per selected (original, frozen author), before body decoding."""
+    ) -> tuple[RecipientReply, ...]:
+        """The first reply's original identity, frozen author and clock, without its body."""
         selected = []
         for batch in batched(
             tuple(dict.fromkeys(keys)),
-            db.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // 2,
+            db.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // 3,
             strict=False,
         ):
-            values = ",".join("(?,?)" for _ in batch)
+            values = ",".join("(?,?,?)" for _ in batch)
             selected.extend(
-                cls.read(
+                RecipientReply.read(
                     db.execute(
-                        f"WITH selected(lookup,original) AS (VALUES {values}) "
-                        f"SELECT answer.original,answer.seq FROM selected "
+                        f"WITH selected(lookup,original,message_id) AS (VALUES {values}) "
+                        "SELECT answer.original,answer.seq,author.lookup,reply.message_id,"
+                        "original.message_id AS original_message_id,clock.timestamp FROM selected "
+                        f"JOIN {MessageIdentitySource.declared_name} original "
+                        "ON original.seq=selected.original AND original.message_id=selected.message_id "
                         f"JOIN {cls.declared_name} answer ON answer.original=selected.original "
                         f"AND answer.seq=(SELECT candidate.seq FROM {cls.declared_name} candidate "
                         f"CROSS JOIN {SentSource.declared_name} author "
                         "ON author.lookup=selected.lookup AND author.seq=candidate.seq "
-                        "WHERE candidate.original=selected.original ORDER BY candidate.seq LIMIT 1)",
+                        "WHERE candidate.original=selected.original ORDER BY candidate.seq LIMIT 1) "
+                        f"JOIN {SentSource.declared_name} author "
+                        "ON author.seq=answer.seq AND author.lookup=selected.lookup "
+                        f"JOIN {MessageIdentitySource.declared_name} reply ON reply.seq=answer.seq "
+                        f"JOIN {MessageInput.table.declared_name} clock ON clock.seq=answer.seq",
                         tuple(
                             value
                             for lookup, reference in batch
-                            for value in (lookup, reference.seq)
+                            for value in (lookup, reference.seq, reference.message_id)
                         ),
                     )
                 )
             )
-        return tuple(selected)
+        return tuple(sorted(selected, key=lambda reply: reply.seq))
 
     @classmethod
     def unanswered_references(
@@ -351,3 +360,20 @@ class AnsweredSource(BusProjectionTables):
         ))
         headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
+
+
+@dataclass(frozen=True)
+class RecipientReply(AnsweredSource, SentSource, MessageReference, Timestamped, PublishedMessageRead,
+                     declared_name=None):
+    """A read-only join of answer, author, identity and original message clock; no stored copy."""
+
+    original_message_id: MessageId
+    timestamp: float
+
+    @property
+    def reference(self) -> MessageReference:
+        return MessageReference(self.seq, self.message_id)
+
+    @property
+    def original_reference(self) -> MessageReference:
+        return MessageReference(self.original, self.original_message_id)

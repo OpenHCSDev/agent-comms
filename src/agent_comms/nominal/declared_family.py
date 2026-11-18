@@ -227,15 +227,9 @@ class DeclaredFamily(FamilyMember, metaclass=FamilyMeta):
         """Ordinary families may group several declarations in one module."""
 
     @classmethod
-    def _named_member(cls, name: object) -> type[DeclaredFamily]:
-        cls._member_declarations()
-        return cls.__registry__[cast(Hashable, name)]
-
-    @classmethod
     def acquire_declarations(cls) -> None:
-        """Import every module that may declare a member, as the first lookup by name does.
-        That first lookup costs the whole package tree, so a store asks before it locks."""
-        len(cls.__registry__)
+        """Acquire through this family's declaration owner before taking its store lock."""
+        cls._member_declarations()
 
     @classmethod
     def recorded_member(cls, name: object) -> type[Self]:
@@ -250,7 +244,7 @@ class DeclaredFamily(FamilyMember, metaclass=FamilyMeta):
         # and for_name turns that miss into an UndeclaredTool terminal.
         cls._member_declarations()
         try:
-            member = cls._named_member(name)
+            member = cls.__registry__[cast(Hashable, name)]
         except (KeyError, TypeError):
             raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}") from None
         if not issubclass(member, cls):

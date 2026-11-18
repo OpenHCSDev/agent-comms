@@ -432,17 +432,13 @@ class NotificationAssignment(NotificationSource):
         model-context proof. The bus returns only the first reply per selected key,
         in sequence order, including recipients with no claim at all.
         """
-        keys = frozenset(read.selection.keys)
-        if not keys:
+        if not read.selection.keys:
             return read
         captured = Bus(Bus.path_in(root)).recipient_replies(read.selection.keys)
-        responses: dict[tuple[ThreadLookup, MessageReference], AssignmentResponse] = {}
-        for record in captured:
-            for reply in record.deliveries():
-                for answered in reply.message.answers:
-                    key = (reply.sender_lookup, answered)
-                    if key in keys:
-                        responses[key] = responses.get(key, UnansweredResponse()).recorded(reply)
+        responses = {
+            (reply.lookup, reply.original_reference): UnansweredResponse().recorded(reply)
+            for reply in captured
+        }
         return replace(read, responses=MappingProxyType(responses))
 
     @classmethod

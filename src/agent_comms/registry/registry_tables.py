@@ -459,10 +459,12 @@ class TurnChange:
     def leaving(self, original: RegistryDocument, document: RegistryDocument) -> TurnChange:
         """This change, retiring too the turn of every thread the edit removes or recreates: a
         turn row exists exactly while its thread's row names it."""
-        kept = document.threads.lookup_names()
+        kept = document.threads.births()
         gone = tuple(thread.turn_identity for thread in (
-            original.threads[name] for lookup, name in original.threads.lookup_names().items()
-            if lookup not in kept) if thread.turn_generation)
+            original.threads[name]
+            for name in original.threads.changed_in_order(document.threads)
+            if name in original.threads and original.threads.birth(name) not in kept
+        ) if thread.turn_generation)
         return replace(self, retired=(*self.retired, *gone)) if gone else self
 
     def write_in(self, db) -> None:

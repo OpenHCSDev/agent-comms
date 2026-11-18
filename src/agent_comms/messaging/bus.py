@@ -30,6 +30,7 @@ from agent_comms.messaging.bus_tables import (
     MessageIdentitySource,
     ParticipantSource,
     ReceivedSource,
+    RecipientReply,
     RecordedAnswers,
     SentSource,
 )
@@ -551,12 +552,10 @@ class BusReader(
 
     def recipient_replies(
         self, keys: tuple[tuple[ThreadLookup, MessageReference], ...],
-    ) -> tuple[BusRecord, ...]:
-        """Read only the first reply of each bounded original/recipient pair."""
+    ) -> tuple[RecipientReply, ...]:
+        """Read only indexed evidence for each bounded original/frozen-recipient pair."""
         with self.observing() as db:
-            sequences = {row.seq for row in AnsweredSource.first_for_recipients(db, keys)}
-            headers = (BusRow.require(db, seq=seq) for seq in sorted(sequences))
-            return tuple(header.kind.read_from(db, header.seq) for header in headers)
+            return AnsweredSource.first_for_recipients(db, keys)
 
     def changed_names(self, after: int) -> frozenset[str]:
         with self.observing() as db:
