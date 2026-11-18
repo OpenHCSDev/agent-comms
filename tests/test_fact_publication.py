@@ -15,6 +15,11 @@ from agent_comms.execution.acp_failure import (
     RequestFailure,
 )
 from agent_comms.execution.controller import NO_CONTROLLER
+from agent_comms.execution.runtime_observations import (
+    NativeSessionPathObservation,
+    ReportedNativeSessionPath,
+    UnobservedNativeSessionPath,
+)
 from agent_comms.execution.session_updates import encode_updates
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.text_route_update import TextRouteUpdate
@@ -88,3 +93,20 @@ assert asyncio.run(NO_CONTROLLER.publish_facts(
 assert 'acp.schema' not in sys.modules
 """], capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("source, expected_type, attached", [
+    (None, UnobservedNativeSessionPath, ()),
+    ("", ReportedNativeSessionPath, ()),
+    ("/observed/native.jsonl", ReportedNativeSessionPath, ("/observed/native.jsonl",)),
+])
+async def test_native_path_observation_preserves_presence_and_attachment(source, expected_type, attached):
+    report = NativeSessionPathObservation.from_native(source)
+    assert type(report) is expected_type
+    observed = []
+
+    async def attach(path):
+        observed.append(path)
+
+    await report.attach(attach)
+    assert tuple(observed) == attached

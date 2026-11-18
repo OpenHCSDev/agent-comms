@@ -1,5 +1,7 @@
 """Runtime metadata observations and their shared consumer, independent of turn execution."""
 
+from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from functools import partial
 
@@ -11,6 +13,7 @@ from agent_comms.execution.pi_vocabulary import NoThinkingOverride, ThinkingLeve
 from agent_comms.execution.runtime_info import AgentRuntimeInfo
 from agent_comms.execution.runtime_info_projection import RuntimeInfoProjection
 from agent_comms.execution.runtime_info_source import RuntimeInfoSource
+from agent_comms.nominal.field_codec import NullMember, boundary_decoder
 from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 
@@ -69,11 +72,39 @@ class TranscriptModelUsage(ModelObservation, ContextUsageObservation):
     """A CLI transcript's answer names its model and context usage, never the window."""
 
 
+class NativeSessionPathObservation(ABC):
+    """A reported runtime path is evidence, never authority to replace its turn."""
+
+    @classmethod
+    @boundary_decoder
+    def from_native(cls, path: str | None) -> NativeSessionPathObservation:
+        return UnobservedNativeSessionPath() if path is None else ReportedNativeSessionPath(path)
+
+    @abstractmethod
+    async def attach(self, attachment: Callable[[str], Awaitable[None]]) -> None:
+        """Apply only this observation through the original attachment owner."""
+
+
+@dataclass(frozen=True)
+class UnobservedNativeSessionPath(NullMember, NativeSessionPathObservation):
+    async def attach(self, attachment: Callable[[str], Awaitable[None]]) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class ReportedNativeSessionPath(NativeSessionPathObservation):
+    path: str
+
+    async def attach(self, attachment: Callable[[str], Awaitable[None]]) -> None:
+        if self.path:
+            await attachment(self.path)
+
+
 @dataclass(frozen=True, kw_only=True)
 class NativeMetadataObservation(ModelObservation):
     """Only native state snapshots carry identity/configuration observations."""
 
-    session_file: str | None = None
+    session_file: NativeSessionPathObservation = UnobservedNativeSessionPath()
     thinking_level: ThinkingLevelField = NoThinkingOverride
 
     async def record_in[Client: RuntimeInfoSource[RuntimeInfoObservation]](

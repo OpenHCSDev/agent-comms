@@ -62,7 +62,7 @@ from agent_comms.execution.provider_records import (
     ToolCallContent as ToolCallContent,
     UnknownContent as UnknownContent,
 )
-from agent_comms.execution.runtime_observations import AgentInfo
+from agent_comms.execution.runtime_observations import AgentInfo, NativeSessionPathObservation
 from agent_comms.execution.tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from agent_comms.execution.turn_context import (
     ContextTurn,
@@ -1072,7 +1072,7 @@ class StateData(NativeSessionSnapshot, PiResponseData):
         return AgentInfo(
             model=self.model.thread_model(),
             thinking_level=self.thinking_level,
-            session_file=session.active_session_file,
+            session_file=NativeSessionPathObservation.from_native(session.active_session_file),
             context_size=self.model.context_window,
         )
 
