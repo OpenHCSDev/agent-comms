@@ -24,6 +24,7 @@ from agent_comms.messaging.notification_evidence import AllOutcomes, OutcomeView
 from agent_comms.messaging.notification_progress import DeliveryProgress
 from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.messaging.read_ledger import ReadLedger
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import (
@@ -174,3 +175,22 @@ def test_direct_human_self_row_disappears_without_read_or_unread_mutation(comms:
     ).changed_marks(shown.read_marks)
     assert comms.bus.reads.read() == document
     assert comms.views.viewer_snapshot(worktree).unread == unread
+
+
+@pytest.mark.parametrize('painted', ((), ('self',), ('self', 'other')))
+def test_unscoped_notifications_carry_display_evidence_the_wire_can_encode(
+    archived_readers: ArchivedReaders, painted: tuple[str, ...],
+) -> None:
+    """The phone's `ConnectorObserverClosed` loop (2026-11-17): a human read made
+    `ReadLedger.displayed_incarnation` hand back one bare incarnation (or None), the
+    unscoped viewer passed it straight into `MessageNotification.displayed_to`, and the
+    observation service died encoding `NotificationsObserved` for the wire. Every row's
+    display evidence is a tuple of readers, and the rows survive the service's codec."""
+    fixture = archived_readers
+    for name in painted:
+        fixture.paint(name)
+    rows = tuple(row for rows in fixture.notifications(AllOutcomes()).outcomes.values() for row in rows)
+    assert all(isinstance(row.displayed_to, tuple) for row in rows)
+    assert {reader.name for row in rows for reader in row.displayed_to} == set(painted)
+    wire = tuple[MessageNotification, ...]
+    assert FieldCodec.decode_document(wire, FieldCodec.encode_document(rows, wire)) == rows

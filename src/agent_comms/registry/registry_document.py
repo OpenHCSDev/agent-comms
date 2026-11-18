@@ -1448,7 +1448,7 @@ class RegistrySnapshot(
     ) -> float | None:
         return self.require(actor).role.unread_since(since, recorded_delivery)
 
-    def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None):
+    def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None) -> 'tuple[ThreadIncarnation, ...]':
         return thread.role.displayed_recipient_effect(reads, message, thread, self, document)
 
     def recipient(

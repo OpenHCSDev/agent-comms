@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
@@ -18,12 +20,15 @@ from agent_comms.registry.recipient_selection import RecipientSelection
 from agent_comms.registry.registry_names import RegistryNames as RegistryNames
 from agent_comms.registry.threads import Thread, ThreadProvenance
 
+if TYPE_CHECKING:
+    from agent_comms.registry.thread_identity import ThreadIncarnation
+
 
 @dataclass(frozen=True, slots=True)
 class KnownRecipient(RecipientSelection):
     thread: ThreadProvenance
 
-    def read_effect(self, reads, message, snapshot, *, document=None):
+    def read_effect(self, reads, message, snapshot, *, document=None) -> tuple[ThreadIncarnation, ...]:
         return snapshot.displayed_recipient_effect(
             reads, message, self.thread, document=document
         )
@@ -58,7 +63,7 @@ class RetiredRecipient(RecipientSelection):
     def activity(self, observations, snapshot):
         return UnavailableRecipientActivity()
 
-    def read_effect(self, reads, message, snapshot, *, document=None):
+    def read_effect(self, reads, message, snapshot, *, document=None) -> tuple[ThreadIncarnation, ...]:
         return ()
 
 
@@ -136,7 +141,7 @@ class RegistryProvenance(NamespaceRead[ThreadProvenance, RecipientSelection]):
         """An archived namespace supplies display history, never native input grants."""
         return since
 
-    def displayed_recipient_effect(self, reads, message, thread: ThreadProvenance, *, document=None):
+    def displayed_recipient_effect(self, reads, message, thread: ThreadProvenance, *, document=None) -> tuple[ThreadIncarnation, ...]:
         return reads.displayed_incarnation(message, thread.incarnation, self, document=document)
 
     def historical_recipient(
