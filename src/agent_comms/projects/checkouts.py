@@ -545,37 +545,24 @@ class RepositoryReads:
         self._remote_cuts: dict[Path, dict[str, dict[str, str]]] = {}
 
     @classmethod
-    def retaining(cls, previous: RepositoryReads) -> RepositoryReads:
-        """Carry forward commit histories whose refs haven't changed.
+    def retaining(cls, previous: RepositoryReads) -> Self:
+        """Retain a graph only while both refs and every worktree HEAD still agree.
 
-        Stat the packed-refs file instead of spawning git-for-each-ref.
-        One stat() (~0.01ms) guards the ref listing (~1ms) that guards
-        the graph walk (50+ms). Loose ref changes (local commits) are
-        caught on the next tick when for-each-ref runs on a cache miss.
+        Packed refs alone cannot observe loose refs, detached HEADs or worktree births.
+        Read a fresh cut each pass; unchanged cuts share their immutable graph work.
         """
         retained: dict[Path, CheckoutHistory] = {}
         for common_dir, history in previous._histories.items():
             if 'graph' not in history.__dict__:
                 continue
             try:
-                packed = common_dir / 'packed-refs'
-                try:
-                    current_mtime = packed.stat().st_mtime_ns
-                except FileNotFoundError:
-                    current_mtime = 0
-                prev_mtime = getattr(history, '_packed_refs_mtime', None)
-                if prev_mtime is not None and prev_mtime == current_mtime:
-                    retained[common_dir] = history
-                else:
-                    fresh = history.checkout.read()
-                    if fresh.refs == history.refs:
-                        retained[common_dir] = history
-                    else:
-                        retained[common_dir] = fresh
-                    object.__setattr__(
-                        retained[common_dir], '_packed_refs_mtime', current_mtime)
-            except Exception:
-                pass
+                fresh = history.checkout.read()
+                retained[common_dir] = (
+                    history if fresh.refs == history.refs and fresh.heads == history.heads
+                    else fresh)
+            except (GitCommandError, OSError):
+                # A later requested acquisition owns reporting its unreadable source.
+                continue
         reads = cls()
         reads._histories = retained
         return reads

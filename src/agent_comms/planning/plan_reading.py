@@ -60,7 +60,7 @@ class PlanReading:
         """Within one pass the same commit shares this reading's answers and parsed facts;
         a moved main carries only what the new commit still supports."""
         if main == self.main:
-            return replace(self, todos=todos)
+            return replace(self, todos=todos, main=self.main.following(main))
         return self.following(todos, main)
 
     def following(self, todos: tuple[Todo, ...], main: MainTree) -> PlanReading:
@@ -143,7 +143,7 @@ class RetainedPlanReadings(PlanReadings):
         with self.lock:
             prepared, self.prepared = self.prepared, ()
         retained = tuple(
-            reading.following(reading.todos, reading.main._refreshed_history())
+            reading.following(reading.todos, reading.main)
             for reading in prepared
         )
         repos = {reading.main.repo for reading in retained}

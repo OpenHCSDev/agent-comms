@@ -74,12 +74,15 @@ class MainTree:
         default_factory=dict, compare=False, repr=False, kw_only=True,
     )
 
+    tree_entries: dict[tuple[str, ...], dict[str, str]] = field(
+        default_factory=dict, compare=False, repr=False, kw_only=True,
+    )
+    selections: dict[tuple[str, ...], tuple[tuple[str, str], ...]] = field(
+        default_factory=dict, compare=False, repr=False, kw_only=True,
+    )
+
     def __post_init__(self) -> None:
         self.history.include(self.commit)
-
-    def _refreshed_history(self) -> MainTree:
-        """Drop parsed sources; keep the immutable history and commit."""
-        return replace(self, bindings={}, facts={})
 
     @classmethod
     def of(cls, repo: Repo, census: Census) -> MainTree:
@@ -92,15 +95,22 @@ class MainTree:
     def has(self, path: str) -> bool:
         return not self.missing((path,))[0]
 
-    @cached_property
+    def listed(self, *options: str) -> dict[str, str]:
+        """Git's exact tree listing, shared only by readings of this commit."""
+        if options not in self.tree_entries:
+            self.tree_entries[options] = Repo.tree_objects(
+                self.repo.checkout, self.commit, (), *options)
+        return self.tree_entries[options]
+
+    @property
     def objects(self) -> dict[str, str]:
         """This tree's membership, including directories, without requiring blob contents."""
-        return Repo.tree_objects(self.repo.checkout, self.commit, (), "-r", "-t")
+        return self.listed("-r", "-t")
 
-    @cached_property
+    @property
     def files(self) -> dict[str, str]:
         """This tree's blobs, listed once per commit: every module read filters this listing."""
-        return Repo.tree_objects(self.repo.checkout, self.commit, (), "-r")
+        return self.listed("-r")
 
     def missing(self, paths: tuple[str, ...]) -> tuple[bool, ...]:
         """Tree membership does not require a present path's promised contents."""
@@ -159,10 +169,13 @@ class MainTree:
 
     def selected(self, paths: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
         """The exact Python blobs under the declared paths, in Git's tree order."""
-        roots = tuple(path.rstrip("/") for path in paths)
-        return tuple((blob, name) for name, blob in self.files.items()
-                     if name.endswith(self.source)
-                     and any(name == root or name.startswith(f"{root}/") for root in roots))
+        if paths not in self.selections:
+            roots = tuple(path.rstrip("/") for path in paths)
+            self.selections[paths] = tuple(
+                (blob, name) for name, blob in self.files.items()
+                if name.endswith(self.source)
+                and any(name == root or name.startswith(f"{root}/") for root in roots))
+        return self.selections[paths]
 
     def modules(self, paths: tuple[str, ...]) -> Iterator[MainModule]:
         """Parse only the requested modules and release each tree after its consumer advances."""
@@ -230,7 +243,8 @@ class MainTree:
         """Carry only facts whose source blob the next tree still holds; the same commit holds
         every blob, so its facts carry without listing the tree again."""
         if current == self:
-            return replace(current, bindings=dict(self.bindings), facts=dict(self.facts))
+            return replace(current, bindings=dict(self.bindings), facts=dict(self.facts),
+                           tree_entries=self.tree_entries, selections=self.selections)
         return replace(current, bindings={
             key: bindings for key, bindings in self.bindings.items()
             if bindings.retained(current)

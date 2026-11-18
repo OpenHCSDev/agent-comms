@@ -526,6 +526,70 @@ def test_main_evidence_reads_once_per_commit_and_unknown_is_reported(tmp_path):
     assert unreadable not in reading.following((), reading.main).reads
 
 
+def test_retained_readings_keep_commit_views_and_refresh_history(tmp_path, monkeypatch):
+    from agent_comms.planning.nominal_census import NominalPlanReadings
+    from agent_comms.planning.plan_reading import RetainedPlanReadings
+    from agent_comms.projects.checkouts import Checkout
+
+    class Readings(RetainedPlanReadings, NominalPlanReadings):
+        pass
+
+    initial = main_of(tmp_path, {"src/a.py": "class First: pass\n"})
+    repo = initial.main.repo
+    listings = []
+    tree_objects = Repo.tree_objects
+
+    def listed(*args, **kwargs):
+        listings.append(args[1])
+        return tree_objects(*args, **kwargs)
+
+    monkeypatch.setattr(Repo, "tree_objects", listed)
+    evidence_reads = []
+
+    class PerPass(PatternPresent):
+        def read(self, main):
+            evidence_reads.append(main.commit)
+            return super().read(main)
+
+        def retained(self, previous, current):
+            return False
+
+    live = PerPass("First")
+    readings = Readings()
+    readings.begin_pass()
+    first = readings.observed(repo, (), Checkout(repo.checkout).read())
+    selection = first.main.selected(("src",))
+    assert first.main.missing(("src/a.py", "gone.py")) == (False, True)
+    assert first.holds(ClassDeclared("First"))
+    assert first.holds(live)
+    readings.finish_pass()
+    readings.begin_pass()
+    history = Checkout(repo.checkout).read()
+    second = readings.observed(repo, (), history)
+    assert second.main.history is history
+    assert second.main.selected(("src",)) is selection
+    assert second.holds(ClassDeclared("First"))
+    assert second.holds(live)
+    assert len(evidence_reads) == 2
+    assert second.main.missing(("src/a.py", "gone.py")) == (False, True)
+    assert len(listings) == 2
+    another_history = Checkout(repo.checkout).read()
+    assert readings.observed(repo, (), another_history).main.history is another_history
+    readings.finish_pass()
+
+    (repo.checkout / "src/a.py").write_text("class Second: pass\n")
+    git(repo.checkout, "add", ".")
+    git(repo.checkout, "commit", "-qm", "new source")
+    git(repo.checkout, "update-ref", "refs/remotes/origin/main", git(repo.checkout, "rev-parse", "HEAD"))
+    readings.begin_pass()
+    changed = readings.observed(repo, (), Checkout(repo.checkout).read())
+    assert changed.main.selected(("src",)) != selection
+    assert changed.holds(ClassDeclared("Second"))
+    assert not changed.holds(ClassDeclared("First"))
+    assert first.holds(ClassDeclared("First"))
+    assert first.main.selected(("src",)) == selection
+
+
 def test_module_map_requires_artifacts_not_a_prose_completion_marker(tmp_path):
     reading = main_of(tmp_path, {
         ModuleMapPhase.plan.document: "- P0 measured: 1 modules, 1 lines\n",

@@ -50,3 +50,39 @@ def test_a_worktree_gone_before_the_pass_reads_it_refuses_by_its_git_error(main:
     git(main, "worktree", "remove", str(gone))
     with pytest.raises(FailedGitCommand):
         reads.history_for(Checkout(gone))
+
+
+@pytest.mark.parametrize("change", ("loose", "deleted", "detached", "worktree", "unchanged"))
+def test_retention_checks_refs_and_worktree_heads(main: Path, change: str) -> None:
+    git(main, "branch", "retirable")
+    git(main, "pack-refs", "--all", "--prune")
+    reads = RepositoryReads()
+    original = reads.history_for(Checkout(main))
+    original.graph
+    reads = RepositoryReads.retaining(reads)
+    before_refs, before_heads = dict(original.refs), dict(original.heads)
+    if change == "loose":
+        git(main, "commit", "--allow-empty", "-m", "loose ref moved")
+    elif change == "deleted":
+        # A loose-only ref disappears without touching packed-refs.
+        git(main, "branch", "loose-only")
+        reads = RepositoryReads()
+        original = reads.history_for(Checkout(main))
+        original.graph
+        reads = RepositoryReads.retaining(reads)
+        before_refs, before_heads = dict(original.refs), dict(original.heads)
+        git(main, "branch", "-D", "loose-only")
+    elif change == "detached":
+        git(main, "checkout", "--detach", "-q")
+        git(main, "commit", "--allow-empty", "-m", "detached moved")
+    elif change == "worktree":
+        git(main, "worktree", "add", "--detach", str(main.parent / "later-cut"))
+    following = RepositoryReads.retaining(reads).history_for(Checkout(main))
+    actual = Checkout(main).read()
+    assert following.refs == actual.refs
+    assert following.heads == actual.heads
+    assert original.refs == before_refs and original.heads == before_heads
+    if change == "unchanged":
+        assert following is original
+    else:
+        assert following.refs != before_refs or following.heads != before_heads
