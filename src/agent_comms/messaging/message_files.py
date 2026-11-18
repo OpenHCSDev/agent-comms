@@ -15,7 +15,7 @@ import hashlib
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Annotated, ClassVar
 
 from agent_comms.messaging.message_reference import MessageReference
@@ -74,6 +74,11 @@ class FileUpload:
             raise ValueError("File data is empty.")
         if self.size > MAX_MESSAGE_FILE_BYTES:
             raise ValueError("Files exceed the 8 MiB message limit.")
+
+    @classmethod
+    def of(cls, name: str, mime_type: str, content: bytes) -> FileUpload:
+        """The upload of bytes a picker returned, named by the last part of their name."""
+        return cls(PurePath(name).name, mime_type, base64.b64encode(content).decode("ascii"))
 
     @property
     def content(self) -> bytes:
