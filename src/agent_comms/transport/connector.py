@@ -64,6 +64,7 @@ from agent_comms.host_services import HostService
 from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
 from agent_comms.messaging.bus_identity import BusIdentityStore
 from agent_comms.messaging.channel_targets import NamedTarget
+from agent_comms.messaging.message_files import MAX_SEND_REQUEST_BYTES
 from agent_comms.messaging.messages import QuestionKind
 from agent_comms.messaging.send_result import MessagePublished
 from agent_comms.messaging.task_sources import OwnerRequestAttachment
@@ -674,7 +675,7 @@ class Connector(ConnectorService, McpServer):
 
     def application(self) -> web.Application:
         self.store.read()  # Refuse an unreadable store before binding any port.
-        app = web.Application(middlewares=[self.log_route])
+        app = web.Application(middlewares=[self.log_route], client_max_size=MAX_SEND_REQUEST_BYTES)
         app.cleanup_ctx.append(self.watch_orders)
         app.on_shutdown.append(self.begin_shutdown)
         app.on_shutdown.append(self.stop_calls)

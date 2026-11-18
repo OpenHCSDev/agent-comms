@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import join_retirement
+from agent_comms.messaging.message_files import MAX_SEND_REQUEST_BYTES
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord, Token256Text
 from agent_comms.nominal.lifecycle_capability import Complete
 from agent_comms.pi_payloads import AssistantMessage
@@ -296,7 +297,7 @@ class NativeToolMode(ABC):
 class ToolTransport(Generic[Call]):
     """A child-bound request policy. An instance always has its authenticated PID."""
 
-    max_request = 1024 * 1024
+    max_request = MAX_SEND_REQUEST_BYTES
     turn: TurnSession
 
     @property

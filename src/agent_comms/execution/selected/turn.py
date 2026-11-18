@@ -59,6 +59,7 @@ from agent_comms.execution.turn_phase import (
     PublishingPhase,
 )
 from agent_comms.messaging.envelope_claim_transitions import WakeClaim
+from agent_comms.messaging.message_files import MessageFile
 from agent_comms.waking.wake_candidate_index import WakeCandidateIndex
 
 
@@ -75,6 +76,11 @@ class SelectedPrompt:
             tuple(segments),
         )
 
+    def files(self) -> tuple[MessageFile, ...]:
+        participant = self.participant
+        return participant.comms.messaging.files.of(
+            source.delivery.message.reference for source in participant.batch.sources)
+
     def sent_outcomes(self):
         return self.participant.sent_outcomes[:SelectedWakeSegment.sent_limit]
 
@@ -87,7 +93,10 @@ class SelectedPrompt:
             sent_outcomes=self.sent_outcomes(),
         )
         return self.context(
-            (*frame.input_segments(), SelectedTriageSegment.capture(participant, frame.provenance))
+            (
+                *frame.input_segments(self.files()),
+                SelectedTriageSegment.capture(participant, frame.provenance),
+            )
         ).render()
 
     async def full(self, assignments, obligations, action: SelectedAction) -> RenderedInput:
@@ -116,7 +125,7 @@ class SelectedPrompt:
         )
         return self.context(
             (
-                *frame.input_segments(),
+                *frame.input_segments(self.files()),
                 *awareness,
                 SelectedWorkSegment.capture(participant, action, frame.provenance),
                 participant.batch.response_segment(),

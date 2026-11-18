@@ -39,7 +39,6 @@ from agent_comms.cli_bridges.runtime_updates import (
 )
 from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
 from agent_comms.cli_bridges.shared import (
-    IncomingFrame,
     Operation,
     Options,
     SessionBinding,
@@ -143,7 +142,8 @@ class CodexBridge(CodexAppServer, DirectDeliveryBridge[CodexOptions]):
                                                ThreadOutput(transcript, self.comms.agents)))
 
     async def deliver(self, message: Message) -> type[Outcome]:
-        request = BusInput.for_message(self.thread, message.message_id, IncomingFrame(message).text)
+        frame = self.incoming_frame(message, await self.files_of(message))
+        request = BusInput.for_message(self.thread, message.message_id, frame.text)
         retries = 0
         while True:
             try:

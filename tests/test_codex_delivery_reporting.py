@@ -8,7 +8,9 @@ from agent_comms.cli_bridges.codex_protocol import BusClientId, ItemStream, RpcN
 from agent_comms.cli_bridges.harness_delivery_states import AcceptedOutcome, DeliveredOutcome, ObservedBridgeInput, UnconfirmedOutcome
 from agent_comms.cli_bridges.runtime_updates import FailedTurn, FinishedTurn, ThreadOutput
 from agent_comms.cli_bridges.shared import Binding, IncomingFrame, StoredBinding, Watch
+from agent_comms.errors import RelationViolationError
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
+from agent_comms.messaging.message_files import FileUpload
 from agent_comms.messaging.notification_evidence import AllOutcomes
 from agent_comms.messaging.notification_progress import HarnessConsumedProgress
 from agent_comms.projects.checkouts import Checkout
@@ -34,7 +36,7 @@ async def test_original_input_proof_survives_either_acceptance_order(tmp_path, e
             'threadId': 'codex-thread', 'turnId': 'actual-turn', 'completedAtMs': 2000,
             'item': {'type': 'userMessage', 'id': 'actual-input',
                      'clientId': BusClientId(message.message_id).external,
-                     'content': [{'type': 'text', 'text': IncomingFrame(message).text}]},
+                     'content': [{'type': 'text', 'text': IncomingFrame(message, ()).text}]},
         }))
         if echo_first:
             await observed.observed(bridge)
@@ -48,6 +50,34 @@ async def test_original_input_proof_survives_either_acceptance_order(tmp_path, e
         current, = comms.views.message_notifications_for_references(AllOutcomes(), (message.reference,)).outcomes[message.seq, message.message_id]
         assert current.state.is_consumed()
         assert current.label == current.timed_state(HarnessConsumedProgress.label, 2000)
+
+
+async def test_a_bridge_frames_a_message_with_its_files_and_refuses_an_echo_without_them(tmp_path):
+    root, _, comms, initial, people = _root(tmp_path, direct=True)
+    message = initial.message
+    upload = FileUpload('shot.png', 'image/png', 'iVBORw==')
+    comms.messaging.files.keep((upload,))
+    comms.messaging.files.attach(message.reference, (upload,))
+    binding = Binding(root=str(root), owner=people[2].incarnation, thread='codex-thread', start=Binding.bus_head(str(root)))
+    with Binding.open(tmp_path / 'bridge') as db:
+        options = CodexOptions(Watch(), StoredBinding(), tmp_path / 'bridge', tmp_path, str(tmp_path / 'unused.sock'))
+        bridge = CodexBridge(options, binding.address(), db)
+        await options.operation.prepare(bridge)
+        frame = bridge.incoming_frame(message, await bridge.files_of(message))
+        (file,) = comms.messaging.files.of((message.reference,))
+        assert frame.text == IncomingFrame(message, (file,)).text
+        assert frame.text.endswith('\n\n' + file.mention)
+        original = bridge.attempt(message, UnconfirmedOutcome)
+        assert await bridge.coordinator_write(original.begin)
+        stream = ItemStream('codex-thread')
+        body_only = stream.receive(RpcNotification(method='item/completed', params={
+            'threadId': 'codex-thread', 'turnId': 'actual-turn', 'completedAtMs': 2000,
+            'item': {'type': 'userMessage', 'id': 'actual-input',
+                     'clientId': BusClientId(message.message_id).external,
+                     'content': [{'type': 'text', 'text': IncomingFrame(message, ()).text}]},
+        }))
+        with pytest.raises(RelationViolationError):
+            await body_only.observed(bridge)
 
 
 def test_failed_turn_retains_the_original_error_without_an_answer(tmp_path):

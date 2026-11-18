@@ -851,10 +851,10 @@ async def test_a_pushed_message_is_delivered_only_once_the_transcript_shows_it(
     await inbox_emptied(comms, "cloud")
     assert {attempt_outcome(comms, message) for message in (shown, mangled, wrapped)} == {"unconfirmed"}
 
-    await socket.send_str(monitor_event_record(ClaudeMonitorFrame(shown).shown_inline()))
+    await socket.send_str(monitor_event_record(ClaudeMonitorFrame(shown, ()).shown_inline()))
     await socket.send_str(monitor_event_record(
-        ClaudeMonitorFrame(mangled).shown_inline().replace("wrong", "otherwise")))
-    await socket.send_str(monitor_event_record(ClaudeMonitorFrame(wrapped).shown_inline()))
+        ClaudeMonitorFrame(mangled, ()).shown_inline().replace("wrong", "otherwise")))
+    await socket.send_str(monitor_event_record(ClaudeMonitorFrame(wrapped, ()).shown_inline()))
     async with asyncio.timeout(20):
         while {attempt_outcome(comms, shown), attempt_outcome(comms, wrapped)} != {"delivered"}:
             await asyncio.sleep(0.05)
@@ -1050,13 +1050,13 @@ async def test_a_cloud_message_sent_as_a_file_is_delivered_once_its_read_shows_i
     for _ in range(2):
         await frame(socket)
     await inbox_emptied(comms, "cloud")
-    assert not ClaudeMonitorFrame(whole).fits_one_event
+    assert not ClaudeMonitorFrame(whole, ()).fits_one_event
 
     def numbered(lines: tuple[str, ...]) -> str:
         return "\n".join(f"{number}\t{line}" for number, line in enumerate(lines, 1))
 
-    for message, lines in ((whole, ClaudeMonitorFrame(whole).export_lines),
-                           (forged, ClaudeMonitorFrame(whole).export_lines)):
+    for message, lines in ((whole, ClaudeMonitorFrame(whole, ()).export_lines),
+                           (forged, ClaudeMonitorFrame(whole, ()).export_lines)):
         path = f"/elsewhere/state/messages/{message.reference.name}.txt"
         for record in read_records(path, numbered(lines)):
             await socket.send_str(record)
@@ -1090,7 +1090,7 @@ async def test_a_cloud_message_sent_as_a_file_is_delivered_once_a_cat_shows_it(
     await inbox_emptied(comms, "cloud")
     for message in (whole, edited):
         path = f"/elsewhere/state/messages/{message.reference.name}.txt"
-        for record in cat_records(path, "\n".join(ClaudeMonitorFrame(whole).export_lines)):
+        for record in cat_records(path, "\n".join(ClaudeMonitorFrame(whole, ()).export_lines)):
             await socket.send_str(record)
     async with asyncio.timeout(20):
         while attempt_outcome(comms, whole) != "delivered":

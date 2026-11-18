@@ -52,6 +52,7 @@ from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.messaging.agent_inbox import NoWait, TakenInputPosition, TakenInputStart
+from agent_comms.messaging.message_files import MessageFile
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.messaging.watched import ChangeSignal, FileSource
@@ -213,6 +214,11 @@ class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJ
     delivery_kind: ClassVar[type[RemoteWatchHistory]] = RemoteWatchHistory
     incoming_frame: ClassVar[type[ClaudeMonitorFrame]] = ClaudeMonitorFrame
 
+    async def files_of(self, message: Message) -> tuple[MessageFile, ...]:
+        """The session's machine frames the wire message, which names no files, so this side
+        names none either."""
+        return ()
+
     def exported(self, path: str) -> tuple[MonitorReadFile, ...]:
         """The file is on the session's machine, wherever its client keeps exports: its name
         gives the reference and read_parts judges the lines against the bus message, so the
@@ -320,7 +326,7 @@ class InboxWatch:
                 reference.message_id,
                 reference.seq,
                 UnconfirmedOutcome,
-                monitor=ClaudeMonitorFrame(message).shown_evidence(ledger),
+                monitor=ClaudeMonitorFrame.of_wire(message).shown_evidence(ledger),
             )
             path = str(CoordinationStore.path_in(comms.root))
             with Coordination(path) as store, store.session.writing() as db:

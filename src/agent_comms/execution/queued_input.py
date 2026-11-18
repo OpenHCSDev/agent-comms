@@ -427,6 +427,8 @@ class DeliveredInput(QueuedInput):
             document = inputs.dispositions.read(tuple(
                 source.message.bus_key(owner) for source, _ in accepted
             ))
+            files = inputs.comms.messaging.files.of(
+                source.message.reference for source, _ in accepted)
             with Coordination(str(CoordinationStore.path_in(inputs.comms.root))) as store:
                 for source, assignment in accepted:
                     message = source.message
@@ -434,7 +436,7 @@ class DeliveredInput(QueuedInput):
                     if document.lookup(key).is_stored():
                         continue
                     rendered = TurnContext.render_segments(
-                        (MessageDelivery(source, assignment, owner).segment(),)
+                        (MessageDelivery(source, assignment, owner, files).segment(),)
                     )
                     row = ReservedInput(
                         key, message.seq, canonical, context.claimed_identity.claimed_generation,

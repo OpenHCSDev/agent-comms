@@ -22,6 +22,7 @@ from agent_comms.execution.native_runtime_input import NativeRuntimeInput, Nativ
 from agent_comms.execution.pi_vocabulary import HighThinkingLevel
 from agent_comms.execution.turn_context import TurnContext
 from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.message_files import FileUpload
 from agent_comms.messaging.message_notification import MessageNotification
 from agent_comms.messaging.notification_progress import HumanReadProgress
 from agent_comms.nominal.field_codec import FieldCodec
@@ -101,11 +102,31 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
         assignment = sealed_cohort_assignments(store, lookup)[0]
     frame = TurnContext.render_segments(SelectedWakeSegment.capture(
         ((initial, assignment),), people[1], comms.goals,
-    ).input_segments()).text
+    ).input_segments(())).text
     assert f'"source_seq":{initial.message.seq}' in frame
     assert '"wake_mode":"bounded_triage"' in frame
     assert f'"body":{json.dumps(initial.message.body)}' in frame
     assert len(read_history(comms, "#team")) == 1
+
+
+def test_delivered_frame_names_each_file_with_the_read_that_returns_it(tmp_path: Path) -> None:
+    root, _root_id, comms, initial, people = _root(tmp_path)
+    upload = FileUpload("trace.txt", "text/plain", "dHJhY2U=")
+    comms.messaging.files.keep((upload,))
+    comms.messaging.files.attach(initial.message.reference, (upload,))
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        assignment = sealed_cohort_assignments(store, people[1].incarnation.lookup)[0]
+    files = comms.messaging.files.of((initial.message.reference,))
+    frame = TurnContext.render_segments(SelectedWakeSegment.capture(
+        ((initial, assignment),), people[1], comms.goals,
+    ).input_segments(files)).text
+    (file,) = files
+    assert json.dumps(file.mention)[1:-1] in frame
+    assert f"message={initial.message.reference.name} position=0" in file.mention
+    unrelated = TurnContext.render_segments(SelectedWakeSegment.capture(
+        ((initial, assignment),), people[1], comms.goals,
+    ).input_segments(())).text
+    assert "comms_message_file" not in unrelated
 
 
 def test_channel_wake_frame_carries_effective_goal_execution(tmp_path: Path) -> None:
@@ -117,7 +138,7 @@ def test_channel_wake_frame_carries_effective_goal_execution(tmp_path: Path) -> 
         assignment = sealed_cohort_assignments(store, lookup)[0]
     frame = TurnContext.render_segments(SelectedWakeSegment.capture(
         ((initial, assignment),), comms.registry.require("alpha"), comms.goals,
-    ).input_segments()).text
+    ).input_segments(())).text
     context = json.loads(next(
         line.removeprefix("work_context: ") for line in frame.splitlines()
         if line.startswith("work_context: ")
@@ -143,7 +164,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
     assert sent_outcome is not None
     frame = TurnContext.render_segments(SelectedWakeSegment.capture(
         ((initial, assignment),), people[1], _comms.goals, sent_outcomes=(sent_outcome,)
-    ).input_segments()).text
+    ).input_segments(())).text
     assert 'recent_sent_outcomes: [{"source_seq":' in frame
     assert '"state":"Read"' in frame
     assert replace(notification, changed=False).sent_outcome() is None
@@ -162,8 +183,8 @@ def test_selected_and_following_use_the_original_question_contract(tmp_path: Pat
                        sealed_cohort_assignments(store, people[1].incarnation.lookup)}
     sources = ((peer, assignments[peer.message.seq]), (original, assignments[question.seq]))
     frame = SelectedWakeSegment.capture(sources, people[1], comms.goals)
-    metadata, peer_segment, question_segment = frame.input_segments()
-    following = MessageDelivery(original, assignments[question.seq], people[1]).segment()
+    metadata, peer_segment, question_segment = frame.input_segments(())
+    following = MessageDelivery(original, assignments[question.seq], people[1], ()).segment()
     assert metadata is frame and frame.sources == sources
     assert tuple(reference for source in metadata.provenance
                  for reference in source.bus_references()) == ()

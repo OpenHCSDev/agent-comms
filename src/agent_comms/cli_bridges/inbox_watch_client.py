@@ -535,7 +535,7 @@ class InboxSocket:
         The ledger is written first: a freeze between it and the print leaves a message the bus
         never replays, never one the session saw twice."""
         message = FieldCodec.decode(Delivered, FieldCodec.parse(frame))
-        _, line = ClaudeMonitorFrame(message).event(self.exports)
+        _, line = ClaudeMonitorFrame.of_wire(message).event(self.exports)
         self.ledger.record(message.reference)
         print(line, flush=True)
         await socket.send_str(PrintedNow(printed=(message.reference,)).line())

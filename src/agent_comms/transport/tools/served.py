@@ -55,7 +55,8 @@ from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget
 from agent_comms.messaging.channels import Channel, SavedView, ViewMatch, ViewPredicate
 from agent_comms.messaging.display_references import ReferenceNames
 from agent_comms.messaging.exporting import WireExportProvenance
-from agent_comms.messaging.historical_views import ConversationRevision
+from agent_comms.messaging.historical_views import ChannelHistory, ConversationRevision, DMHistory
+from agent_comms.messaging.message_files import MessageFileContent, MessageFilesRead
 from agent_comms.messaging.history_result import HistoryPageResult
 from agent_comms.messaging.message_notification import MessageNotification
 from agent_comms.messaging.message_page import MessagePage
@@ -190,7 +191,10 @@ from agent_comms.transport.tools.sidebar import (
     CommsThreadConfigurationTool,
     CommsThreadPresentationTool,
     CommsThreadRelationshipsTool,
+    CommsMessageFilesTool,
+    CommsMessageFileTool,
     CommsUserSendTool,
+    MessageFileRead,
     CommsWireRevisionTool,
     ContextInspectionRead,
     HistoricalThreadsRead,
@@ -1027,8 +1031,53 @@ class ServedCommsUserSendTool(PublishingToolRequest[ToolCaller, MessagePublished
     def publish(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
         caller.require_human()
         message = comms.messaging.send_user_message(
-            CommandTarget.named(self.target), self.body, worktree=Checkout(comms.root))
+            CommandTarget.named(self.target), self.body, worktree=Checkout(comms.root),
+            files=self.files)
         return MessagePublished.from_send(SendResult(message, CorrectionComplete()))
+
+
+class ServedMessageFileRead(MessageFileRead):
+    """Files are read through their messages, by the rule that reads the messages: the
+    conversation's display scope, captured for this caller, must include every one."""
+
+    def readable(self, comms: Comms, caller: ToolCaller,
+                 references: tuple[MessageReference, ...]) -> tuple[MessageReference, ...]:
+        target = CommandTarget.named(
+            CommandTarget.named(self.conversation).canonical_name(
+                lambda name: comms.registry.require(name).name))
+        scope = target.history_view(
+            caller.history_viewer(self.participant), comms.bus.require_channel,
+            ChannelHistory, DMHistory,
+        ).capture(comms.registry.snapshot())
+        found = {message.reference: message
+                 for message in comms.bus.bus.messages_for_references(references)}
+        refused = tuple(reference.name for reference in references
+                        if reference not in found or not scope.includes(found[reference]))
+        if refused:
+            raise ToolRefusedError(
+                f"Not in {self.conversation} as you may read it: {', '.join(refused)}")
+        return references
+
+
+class ServedCommsMessageFilesTool(
+    ServedMessageFileRead, CoreRead[MessageFilesRead], CommsMessageFilesTool,
+):
+    """Serving CommsMessageFilesTool."""
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> MessageFilesRead:
+        return MessageFilesRead(
+            comms.messaging.files.of(self.readable(comms, caller, self.messages)))
+
+
+class ServedCommsMessageFileTool(
+    ServedMessageFileRead, CoreRead[MessageFileContent], CommsMessageFileTool,
+):
+    """Serving CommsMessageFileTool."""
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> MessageFileContent:
+        (message,) = self.readable(comms, caller, (self.message,))
+        files = comms.messaging.files
+        return files.content(files.require(message, self.position))
 
 
 class ServedCommsMarkThreadViewReadTool(HumanToolRequest[ThreadViewMarked], CommsMarkThreadViewReadTool):
