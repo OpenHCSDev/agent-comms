@@ -26,6 +26,7 @@ from agent_comms.messaging.channel_targets import (
 )
 from agent_comms.messaging.initial_origin import HumanOrigin, InitialOrigin
 from agent_comms.messaging.message_bus import MessageBus
+from agent_comms.messaging.message_files import FileUpload, MessageFiles
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.message_send_reads import PresenceMessageSender
 from agent_comms.messaging.messages import (
@@ -98,15 +99,25 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
         self.bus = bus
         self.goals = goals
 
+    @property
+    def files(self) -> MessageFiles:
+        return MessageFiles(self.root)
+
     def _publish(self, message: Message, origin: InitialOrigin,
-                 *, destination: NamedTarget) -> Message:
-        """Record the meaning of a committed ordinary send beyond its bus transaction."""
+                 *, destination: NamedTarget, files: tuple[FileUpload, ...] = ()) -> Message:
+        """Record the meaning of a committed ordinary send beyond its bus transaction.
+
+        Its files' bytes are kept before the message is published and named as its files once
+        it has a reference, so a message is never published over bytes that failed to write."""
+        self.files.keep(files)
         try:
             committed = self.bus.publisher.publish_ordinary(
                 message, origin=origin, destination=destination)
         except CommittedMessageError as error:
+            self.files.attach(error.record.reference, files)
             origin.complete(self.goals, error.record)
             raise
+        self.files.attach(committed.reference, files)
         return origin.complete(self.goals, committed)
 
     def send(
@@ -123,6 +134,7 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
         origin: AutomatedOrigin = AgentOrigin(),
         source_turn: SourceTurn = NoSourceTurn(),
         answerer: AnswerAuthority = SenderReceipts(),
+        files: tuple[FileUpload, ...] = (),
     ) -> SendResult:
         """Return the committed envelope and its separate wording-correction outcome."""
         type.require_sendable()
@@ -151,7 +163,8 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
             report=report,
             answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target, source_turn)))),
         )
-        committed = self._publish(message, origin, destination=CommandTarget.named(target))
+        committed = self._publish(
+            message, origin, destination=CommandTarget.named(target), files=files)
         correction: CorrectionResult
         try:
             todos.correct(owner.incarnation, committed.message_id, body)
@@ -182,10 +195,11 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
         return self.registry.user_thread().or_create(lambda: self.registry.claim_user(worktree))
 
     def send_user_message(self, target: NamedTarget, body: str, *, worktree: Checkout,
-                          task: TaskAttachment = NoTaskAttachment()) -> Message:
+                          task: TaskAttachment = NoTaskAttachment(),
+                          files: tuple[FileUpload, ...] = ()) -> Message:
         """Cooperative local UI send, not cryptographic same-UID authentication."""
         user = self.user_identity(worktree)
-        return self._publish_user(user, target, body, task)
+        return self._publish_user(user, target, body, task, files=files)
 
     def send_owner_notice(self, target: NamedTarget, body: str, notice: TaskAttachment, *,
                           role: MessageRole) -> Message:
@@ -226,8 +240,9 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
             task, role=NoticeRole())
 
     def _publish_user(self, user: Thread, target: NamedTarget, body: str,
-                      task: TaskAttachment, *, role: MessageRole = ConversationRole()) -> Message:
+                      task: TaskAttachment, *, role: MessageRole = ConversationRole(),
+                      files: tuple[FileUpload, ...] = ()) -> Message:
         return self._publish(
             Message(user.name, target.name, body, InfoKind, task=task, role=role),
-            HumanOrigin.of(user), destination=target,
+            HumanOrigin.of(user), destination=target, files=files,
         )

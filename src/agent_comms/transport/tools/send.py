@@ -13,6 +13,7 @@ from typing import Annotated, Type
 from agent_comms.comms import Comms
 from agent_comms.coordination.tables.refusals import SendRefusal
 from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
+from agent_comms.messaging.message_files import SendsFiles
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import InfoKind, MessageKind, SendableMessageKind
 from agent_comms.messaging.send_result import MessagePublished
@@ -26,7 +27,7 @@ from agent_comms.transport.tool_request import PublishingTool, ThreadToolRequest
 from agent_comms_hooks import ToolRefusedError
 
 @dataclass(frozen=True, kw_only=True)
-class SendTool(PublishingTool[ThreadCaller, MessagePublished]):
+class SendTool(SendsFiles, PublishingTool[ThreadCaller, MessagePublished]):
     label = "Comms Send"
     description = (
         "Send a message to another thread or channel. Address specific threads with "
@@ -62,7 +63,7 @@ class SendTool(PublishingTool[ThreadCaller, MessagePublished]):
             result = comms.messaging.send(
                 sender, target.name, body, self.type, report=self.report,
                 task=self.attachment(comms, target), origin=caller.origin(),
-                answers=self.answers)
+                answers=self.answers, files=self.files)
         except ToolRefusedError as error:
             # The caller hears the refusal now; the record waits for the wire lock on its own.
             threading.Thread(target=SendRefusal.record,

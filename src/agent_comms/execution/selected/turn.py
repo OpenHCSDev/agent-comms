@@ -75,6 +75,11 @@ class SelectedPrompt:
             tuple(segments),
         )
 
+    def files(self):
+        participant = self.participant
+        return participant.comms.messaging.files.of(
+            source.delivery.message.reference for source in participant.batch.sources)
+
     def sent_outcomes(self):
         return self.participant.sent_outcomes[:SelectedWakeSegment.sent_limit]
 
@@ -84,6 +89,7 @@ class SelectedPrompt:
             tuple((source.delivery, source.assignment) for source in participant.batch.sources),
             participant.owner.thread,
             participant.comms.goals,
+            files=self.files(),
             sent_outcomes=self.sent_outcomes(),
         )
         return self.context(
@@ -99,6 +105,7 @@ class SelectedPrompt:
             ),
             participant.owner.thread,
             participant.comms.goals,
+            files=self.files(),
             obligations=obligations,
             sent_outcomes=self.sent_outcomes(),
         )

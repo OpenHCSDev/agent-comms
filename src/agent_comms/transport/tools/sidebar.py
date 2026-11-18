@@ -59,6 +59,12 @@ from agent_comms.messaging.historical_views import (
     HistoricalThread,
     UnobservedConversation,
 )
+from agent_comms.messaging.message_files import (
+    MessageFileContent,
+    MessageFilesRead,
+    SendsFiles,
+)
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
 from agent_comms.messaging.page_traversal import LatestSequence
 from agent_comms.messaging.send_result import MessagePublished
@@ -585,7 +591,7 @@ class CommsThreadRelationshipsTool(ReadRequest[ThreadCommsSnapshot]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsUserSendTool(ToolRequest[MessagePublished]):
+class CommsUserSendTool(SendsFiles, ToolRequest[MessagePublished]):
     """Local and connector UI input use the existing durable human publication."""
 
     label = "Send human input"
@@ -595,6 +601,40 @@ class CommsUserSendTool(ToolRequest[MessagePublished]):
     )
     target: Annotated[str, *tool_field("Target thread name or channel", WireName("to"))]
     body: Annotated[str, *tool_field("Human input text")]
+
+
+@dataclass(frozen=True, kw_only=True)
+class MessageFileRead:
+    """A read of message files names the conversation its caller reads them in; a message
+    outside what that reader may read is refused, as its page would be."""
+
+    conversation: Annotated[
+        str, *tool_field("The #channel, or the DM's other participant, the messages are in")]
+    participant: Annotated[
+        str, *tool_field("Participant reading a DM; omit to use the caller")] = ""
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsMessageFilesTool(MessageFileRead, ReadRequest[MessageFilesRead]):
+    """The files a page's messages carry, read beside the page; the page itself never names them."""
+
+    label = "Message files"
+    description = (
+        "List the files these messages carry: name, MIME type, size and SHA-256 for each. "
+        "Every message must be in the conversation you may read.")
+    messages: Annotated[tuple[MessageReference, ...], *tool_field("The messages whose files to list")]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsMessageFileTool(MessageFileRead, ReadRequest[MessageFileContent]):
+    """One file of one message, with its bytes."""
+
+    label = "Message file"
+    description = (
+        "Read one file a message carries, with its bytes as base64. The message must be in "
+        "the conversation you may read.")
+    message: Annotated[MessageReference, *tool_field("The message that carries the file")]
+    position: Annotated[int, *tool_field("The file's position among the message's files, from 0")]
 
 
 @dataclass(frozen=True, kw_only=True)

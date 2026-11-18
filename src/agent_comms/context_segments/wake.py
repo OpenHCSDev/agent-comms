@@ -24,6 +24,7 @@ from agent_comms.execution.turn_context import (
     WireSources,
 )
 from agent_comms.messaging.bus_publication import Delivered
+from agent_comms.messaging.message_files import MessageFile
 from agent_comms.messaging.message_notification import SentMessageOutcome
 from agent_comms.messaging.task_callbacks import DeliveredContext
 from agent_comms.nominal.field_codec import FieldCodec
@@ -37,6 +38,7 @@ class SelectedWakeSegment(WireSources, InstructionSegment):
 
     sources: tuple[tuple[Delivered, WakeAssignment], ...]
     owner: Thread
+    files: tuple[MessageFile, ...]
     obligations: tuple[ResponseObligation, ...]
     relevance: InstructionFile
     sent_outcomes: tuple[SentMessageOutcome, ...]
@@ -45,7 +47,7 @@ class SelectedWakeSegment(WireSources, InstructionSegment):
     sent_limit = 5
 
     @classmethod
-    def capture(cls, sources, owner, goals, *, obligations=(), sent_outcomes=()):
+    def capture(cls, sources, owner, goals, *, files, obligations=(), sent_outcomes=()):
         relevance = WakePolicy.relevance_instruction()
         sent_outcomes = tuple(sent_outcomes)
         if len(sent_outcomes) > cls.sent_limit:
@@ -58,6 +60,7 @@ class SelectedWakeSegment(WireSources, InstructionSegment):
             ),
             sources=tuple(sources),
             owner=owner,
+            files=tuple(files),
             obligations=tuple(obligations),
             relevance=relevance,
             sent_outcomes=sent_outcomes,
@@ -65,7 +68,7 @@ class SelectedWakeSegment(WireSources, InstructionSegment):
         )
 
     def input_segments(self) -> tuple[ContextSegment, ...]:
-        return (self, *(MessageDelivery(source, assignment, self.owner).segment()
+        return (self, *(MessageDelivery(source, assignment, self.owner, self.files).segment()
                         for source, assignment in self.sources))
 
     def values(self):
@@ -133,6 +136,7 @@ class DeliveredMessageSegment(WireSources, InstructionSegment):
 
     def values(self):
         message = self.delivery.source.message
+        files = {"files": [file.mention for file in self.delivery.own_files]} if self.delivery.own_files else {}
         return dict(
             message=FieldCodec.compact(
                 {
@@ -141,6 +145,7 @@ class DeliveredMessageSegment(WireSources, InstructionSegment):
                     "target": message.target,
                     "audience": self.delivery.assignment.audience.value,
                     "body": message.body,
+                    **files,
                 }, ensure_ascii=True,
             ),
             reply_to=message.exact_reply_target,
@@ -155,9 +160,17 @@ class MessageDelivery(DeliveredContext):
     source: Delivered
     assignment: WakeAssignment
     owner: Thread
+    files: tuple[MessageFile, ...]
+    """The files of the batch this delivery is read in; the reader supplies them, so framing
+    reads no store."""
 
     def __post_init__(self) -> None:
         self.assignment.require_selected_source(self.source, self.owner)
+
+    @property
+    def own_files(self) -> tuple[MessageFile, ...]:
+        reference = self.source.message.reference
+        return tuple(file for file in self.files if file.message == reference)
 
     @property
     def provenance(self) -> tuple[WireProvenance, ...]:

@@ -213,6 +213,10 @@ class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJ
     delivery_kind: ClassVar[type[RemoteWatchHistory]] = RemoteWatchHistory
     incoming_frame: ClassVar[type[ClaudeMonitorFrame]] = ClaudeMonitorFrame
 
+    async def frame(self, message: Message) -> ClaudeMonitorFrame:
+        """The session's machine frames the wire message, so this side frames it alike."""
+        return self.incoming_frame.of_wire(message)
+
     def exported(self, path: str) -> tuple[MonitorReadFile, ...]:
         """The file is on the session's machine, wherever its client keeps exports: its name
         gives the reference and read_parts judges the lines against the bus message, so the
@@ -320,7 +324,7 @@ class InboxWatch:
                 reference.message_id,
                 reference.seq,
                 UnconfirmedOutcome,
-                monitor=ClaudeMonitorFrame(message).shown_evidence(ledger),
+                monitor=ClaudeMonitorFrame.of_wire(message).shown_evidence(ledger),
             )
             path = str(CoordinationStore.path_in(comms.root))
             with Coordination(path) as store, store.session.writing() as db:

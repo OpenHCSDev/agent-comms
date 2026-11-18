@@ -44,6 +44,7 @@ from aiohttp.typedefs import Handler
 from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRoute
 from yarl import URL
 
+from agent_comms.messaging.message_files import MAX_SEND_REQUEST_BYTES
 from agent_comms.cli_bridges.claude_transcript import WATCH_REPLACED
 from agent_comms.cli_bridges.inbox_watch import InboxWatch, OpenWatch, WatchRoute, WatchTickets
 from agent_comms.cli_bridges.open_viewer import OpenObservation, OpenViewer
@@ -674,7 +675,7 @@ class Connector(ConnectorService, McpServer):
 
     def application(self) -> web.Application:
         self.store.read()  # Refuse an unreadable store before binding any port.
-        app = web.Application(middlewares=[self.log_route])
+        app = web.Application(middlewares=[self.log_route], client_max_size=MAX_SEND_REQUEST_BYTES)
         app.cleanup_ctx.append(self.watch_orders)
         app.on_shutdown.append(self.begin_shutdown)
         app.on_shutdown.append(self.stop_calls)

@@ -599,7 +599,7 @@ async def test_a_larger_message_is_one_notice_and_one_whole_read_confirms_it(bri
         assert stat.S_IMODE(export.stat().st_mode) == 0o600
         text = export.read_text(newline='')
         lines = text.split('\n')[:-1]
-        assert lines[0] == ClaudeMonitorFrame(message).header.removesuffix('\n')
+        assert lines[0] == ClaudeMonitorFrame(message, ()).header.removesuffix('\n')
         assert '\n'.join(lines[1:]) == body
         # The notice frees its own reservation and proves nothing about the body.
         await observe(bridge, notification(line, record_id=transcript_record('notice')).updates(
@@ -829,7 +829,7 @@ async def test_an_uncertain_export_stays_and_reopening_never_replays_it(bridge):
 @pytest.mark.parametrize('sender', ['claude-code', 'a · b " 😀'])
 def test_frame_parts_rebuild_the_body_and_cut_only_at_line_ends(body, sender):
     message=Message(sender=sender,target='viewer',type=InfoKind,body=body,timestamp=1.,seq=1)
-    frame=ClaudeMonitorFrame(message)
+    frame=ClaudeMonitorFrame(message, ())
     shown_rows=tuple(enumerate(frame.export_lines,1))
     assert ''.join(part.body for part in frame.read_parts(shown_rows))==body
     assert all(part.sender==sender for part in frame.read_parts(shown_rows))
@@ -841,7 +841,7 @@ def test_frame_parts_rebuild_the_body_and_cut_only_at_line_ends(body, sender):
 def test_a_heartbeat_sized_message_is_one_readable_file_not_fragments():
     body='\n'.join(f'row {number} '+'word '*40 for number in range(40))
     message=Message(sender='user',target='viewer',type=InfoKind,body=body,timestamp=1.,seq=1)
-    frame=ClaudeMonitorFrame(message)
+    frame=ClaudeMonitorFrame(message, ())
     assert frame.export_lines[1:]==tuple(body.split('\n'))
     assert sum(line.startswith(frame.HEADER) for line in frame.export_lines)==1
 
@@ -1158,7 +1158,7 @@ def test_only_the_one_empty_row_after_the_final_lf_is_the_read_terminator(rows, 
     this message, so that read confirms nothing."""
     message = Message(sender='peer', target='viewer', type=InfoKind, body='one\ntwo',
                       timestamp=1., seq=1)
-    frame = ClaudeMonitorFrame(message)
+    frame = ClaudeMonitorFrame(message, ())
     physical = (*frame.export_lines, '', '')
     read = tuple((number, physical[number - 1]) for number in rows)
     assert tuple(part.body for part in frame.read_parts(read)) == parts

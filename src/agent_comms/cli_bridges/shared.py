@@ -107,6 +107,7 @@ from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.installer.harness_install import HarnessSession
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.messaging.message_files import MessageFile
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_tables import MessageIdentitySource
 from agent_comms.messaging.message_reference import (
@@ -1153,6 +1154,8 @@ class Enrol[EnrolBridge: LineMonitorBridge](Operation[EnrolBridge]):
 @dataclass(frozen=True)
 class IncomingFrame(ABC):
     message: Message
+    files: tuple[MessageFile, ...]
+    """The message's files, each named after its body with the read that returns its bytes."""
 
     HEADER = 'Comms in'
     HEADER_PREFIX = HEADER + ' · '
@@ -1167,7 +1170,8 @@ class IncomingFrame(ABC):
 
     @property
     def text(self) -> str:
-        return self.header + self.message.body
+        files = "".join(f"\n{file.mention}" for file in self.files)
+        return self.header + self.message.body + (f"\n{files}" if files else "")
 
 class BridgeLog(io.TextIOBase):
     """The bridge process's stderr, including tracebacks and partial print writes."""
@@ -1198,10 +1202,16 @@ class HarnessDeliveryRecords(WaitsOnBusyStore, ABC):
     through this parent: neither can store an outcome the other would have had to prove."""
 
     comms: Comms
+    incoming_frame: ClassVar[type[IncomingFrame]] = IncomingFrame
 
     @property
     @abstractmethod
     def recipient_lookup(self) -> ThreadLookup: ...
+
+    async def frame(self, message: Message) -> IncomingFrame:
+        """How this route shows a message: its header, its body and the files it carries."""
+        files = await asyncio.to_thread(self.comms.messaging.files.of, (message.reference,))
+        return self.incoming_frame(message, files)
 
     @property
     @abstractmethod
@@ -1792,7 +1802,7 @@ class BridgeInputObserved(DeliveredInput, HiddenItem):
             message = await bridge.message(delivery.reference)
             if message is None:
                 continue
-            if self.text != IncomingFrame(message).text:
+            if self.text != (await bridge.frame(message)).text:
                 raise RelationViolationError("Observed bus input differs from its original delivery")
             await bridge.finish(delivery, partial(replace, outcome=DeliveredOutcome, monitor=self.record))
             references.extend(message.opening_references(bridge.transcript_thread))
@@ -1865,7 +1875,7 @@ class TranscriptConfirmsDelivery(PublishesToBus, HarnessDeliveryRecords):
                 for exact in (attempt for attempt in await self.attempts(identity)
                               if attempt.reference == notice.reference):
                     message = await self.message(exact.reference)
-                    for part in self.incoming_frame(message).read_parts(rows):
+                    for part in (await self.frame(message)).read_parts(rows):
                         references.extend(await part.confirm(self, read.record))
                     await self.retire_read(exact, read, notice)
         return tuple(references)
@@ -1964,7 +1974,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         return await self.reader.deliver(self, message)
 
     async def deliver_to(self, attachment: MonitorAttachment, message: Message) -> type[Outcome]:
-        frame = self.incoming_frame(message)
+        frame = await self.frame(message)
         receiving = partial(replace, monitor=frame.shown_evidence(TakingLedger()))
         attempt = self.attempt(message, UnconfirmedOutcome)
         await self.coordinator_write(partial(attempt.apply, receiving))

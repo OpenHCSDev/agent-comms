@@ -77,6 +77,7 @@ from agent_comms.execution.turn_item import (
 )
 from agent_comms.execution.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import (
     MalformedRecord,
     ToolCallId,
@@ -111,6 +112,13 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     XML_UNSAFE = re.compile('[^\t\x20-퟿-�\U00010000-\U0010ffff]')
     """What a transcript's XML envelope cannot carry as written: control characters, CR and
     the two noncharacters."""
+
+    @classmethod
+    def of_wire(cls, message: Message) -> Self:
+        """The frame a remote watch client builds from the wire message alone. The wire names
+        no files, and a watch client installed before files existed decodes no field that
+        would, so both ends of a remote watch frame the body without them."""
+        return cls(message, ())
 
     @staticmethod
     def units(line: str) -> int:
@@ -292,11 +300,12 @@ class MonitorShown(MonitorFrame, declared_name='shown'):
                 if message is None:
                     continue
                 observed = tuple(line.rstrip() for line in self.lines)
-                if ClaudeMonitorFrame(message).observed != observed:
+                frame = await bridge.frame(message)
+                if frame.observed != observed:
                     await bridge.record_mismatch(
                         delivery, 'Shown lines do not equal the original message')
                     continue
-                return await ClaudeMonitorFrame(message).whole_part.confirm(bridge, record)
+                return await frame.whole_part.confirm(bridge, record)
         return ()
 
 
