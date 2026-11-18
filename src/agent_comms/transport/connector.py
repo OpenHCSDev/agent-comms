@@ -54,10 +54,16 @@ from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.execution.child_process import (
     GitChildren,
     HelperStart,
+    OutlivesLauncherLifetime,
     OwnedGitOpening,
+    Platform,
+    ProcessIdentity,
     SpawnedHelper,
+    SpawnedProcess,
     join_retirement,
 )
+from agent_comms.installer.native_build_inputs import DetachedChildStdio
+from agent_comms_hooks import ToolRefusedError
 from agent_comms.execution.launch_root import started
 from agent_comms.execution.watch_passes import Watch
 from agent_comms.host_services import HostService
@@ -194,6 +200,80 @@ class ConnectorWatchTool(ConnectorTool, declared_name="comms_watch"):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ToolResult:
         return self.service.watch_url(caller.identity(comms).name)
+
+
+@dataclass(frozen=True)
+class ModelServed(ToolResult):
+    """The model-agent bridge serving one thread: its process, its log and what it runs."""
+
+    name: str
+    process: ProcessIdentity
+    log: str
+    endpoint: str
+    model: str
+    started: bool  # False: a bridge for this name was already alive and was kept
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectorServeModelTool(ConnectorTool, declared_name="comms_serve_model"):
+    """Starts agent-comms-model-agent on the bus host, the machine the connector runs on, so a
+    session anywhere can put a served model on the bus without anyone pasting a command
+    (Tristan, 2026-11-18: "add a mcp command so it can be run remotely"). The bridge reads the
+    bus from this host's disk, which is why it is started here and not by the caller."""
+
+    label = "Serve Model"
+    description = (
+        "Put an OpenAI-compatible chat model on the bus as a thread, by starting "
+        "agent-comms-model-agent on the bus host. Messages to the thread go to the endpoint and "
+        "its replies come back on the bus. One bridge per name: calling again for a live name "
+        "keeps it unless replace is true (use replace when the endpoint URL changed). Returns "
+        "the bridge's process and log path. Changes the bus."
+    )
+    name: Annotated[str, *tool_field("Thread name the model answers as, e.g. rl2")]
+    endpoint: Annotated[str, *tool_field("OpenAI-compatible chat/completions URL")]
+    model: Annotated[str, *tool_field("Model id the endpoint serves, e.g. rl2")]
+    channels: Annotated[str, *tool_field(
+        "Comma-separated channels a new thread joins, e.g. #model_test")] = ""
+    max_tokens: Annotated[int, *tool_field(
+        "Reply token budget; leave room for long thinking")] = 12000
+    replace: Annotated[bool, *tool_field(
+        "Stop a live bridge for this name and start a new one")] = False
+
+    state_directory: ClassVar[str] = "model-agents"
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> ToolResult:
+        if URL(self.endpoint).scheme not in {"http", "https"}:
+            raise ToolRefusedError(f"endpoint must be an http(s) URL, not {self.endpoint!r}")
+        directory = comms.root / self.state_directory
+        directory.mkdir(mode=0o700, exist_ok=True)
+        record, log = directory / f"{self.name}.json", directory / f"{self.name}.log"
+        live = self.live_bridge(record)
+        if live is not None and not self.replace:
+            return ModelServed(self.name, live, str(log), self.endpoint, self.model, started=False)
+        if live is not None:
+            live.signal(signal.SIGTERM)
+            Platform.current().wait_any_exited((live,), 10.0)
+        command = (
+            sys.executable, "-m", "agent_comms.cli_bridges.model_agent_client",
+            "--name", self.name, "--endpoint", self.endpoint, "--model", self.model,
+            "--max-tokens", str(self.max_tokens), "--channels", self.channels,
+            "--root", str(comms.root),
+        )
+        with log.open("ab") as output:
+            child = SpawnedProcess.launch(
+                command, stdio=DetachedChildStdio(stdout=output),
+                lifetime=OutlivesLauncherLifetime)
+        record.write_text(json.dumps(FieldCodec.encode(child.identity)), encoding="utf-8")
+        return ModelServed(self.name, child.identity, str(log), self.endpoint, self.model,
+                           started=True)
+
+    @staticmethod
+    def live_bridge(record: Path) -> ProcessIdentity | None:
+        """The recorded bridge if that exact process (pid and start time) is still running."""
+        if not record.is_file():
+            return None
+        identity = FieldCodec.decode(ProcessIdentity, json.loads(record.read_text(encoding="utf-8")))
+        return identity if identity.alive() else None
 
 
 @dataclass(frozen=True, kw_only=True)
