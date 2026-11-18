@@ -8,6 +8,7 @@ import os
 import stat
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from typing import Annotated
 
 import pytest
 
@@ -22,6 +23,7 @@ from agent_comms.execution.runtime_info import (
     RuntimeInfoDocument,
     RuntimeInfoStore,
 )
+from agent_comms.nominal.field_codec import WireExclude
 from agent_comms.pi_counts import PiCount
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.storage.locked_store import (
@@ -32,6 +34,7 @@ from agent_comms.storage.locked_store import (
 )
 from agent_comms.storage.private_path import FileRevision, MissingFile
 from agent_comms.storage.store_files import (
+    DependentStateTier,
     ExclusiveLock,
     StoreGuard,
     StoreLockBusyError,
@@ -53,6 +56,79 @@ def test_document_bytes_captures_original_missing_or_existing_file(tmp_path, exi
     else:
         assert captured == DocumentBytes(MissingFile(), b"")
         assert not path.exists() and not path.parent.exists()
+
+
+@dataclass(frozen=True, slots=True)
+class CountingRuntimeStore(RuntimeInfoStore, declared_name=None):
+    decoded: list[object] = field(default_factory=list, compare=False)
+
+    def _decode_capture(self, source):
+        self.decoded.append(source)
+        return super()._decode_capture(source)
+
+
+def test_conditional_replacement_reuses_only_its_captured_revision(tmp_path):
+    store = CountingRuntimeStore(tmp_path / "retained.json")
+    first = RuntimeInfoDocument({"first": observation("first")})
+    second = RuntimeInfoDocument({"second": observation("second")})
+    store.replace(first)
+    assert store.read() == first
+    captured = store.decoded[-1]
+    before = store.path.stat()
+    store.replace_if_changed(first)
+    assert store.path.stat() == before
+    assert store.decoded == [captured]
+    store.replace_if_changed(second)
+    assert store.decoded == [captured]
+    assert store.read() == second
+    assert len(store.decoded) == 2
+
+    # An independent writer and a saved older cut are distinct sources.
+    older = DocumentBytes.capture(store.path)
+    RuntimeInfoStore(store.path).replace(first)
+    assert store.read() == first
+    assert len(store.decoded) == 3
+    assert store.read_copied(older) == second
+    assert store.read() == first
+    assert len(store.decoded) == 4
+
+    # A merge reads actual bytes, not a mutable value a prior reader changed.
+    store.read().observations.clear()
+    seen = []
+    def merge(document):
+        seen.append(document)
+        return DocumentChange.to(second)
+    store.update(merge)
+    assert seen == [first]
+    assert store.read() == second
+    store.retire()
+    missing = store.read()
+    missing.observations["local"] = observation("local")
+    assert store.read() == RuntimeInfoDocument()
+    store.replace_if_changed(first)
+    assert store.read() == first
+
+
+@dataclass(frozen=True)
+class TransientDocument:
+    value: str = ""
+    local: Annotated[str, WireExclude()] = "not persisted"
+
+
+@dataclass(frozen=True, slots=True)
+class TransientStore(LockedStore[TransientDocument], DependentStateTier, declared_name=None):
+    record_type = TransientDocument
+
+    def empty(self):
+        return TransientDocument()
+
+
+def test_replacement_input_is_not_the_decoded_published_value(tmp_path):
+    store = TransientStore(tmp_path / "transient.json")
+    supplied = TransientDocument("published", "only in the caller")
+    store.replace_if_changed(supplied)
+    assert store.read() == TransientDocument("published")
+    assert store.read() != supplied
 
 
 def observation(thread="goal"):

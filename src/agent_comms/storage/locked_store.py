@@ -19,7 +19,7 @@ from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
 from threading import local
-from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Self, TypeVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Self, TypeVar, cast
 from weakref import finalize
 
 from pydantic import JsonValue
@@ -399,7 +399,6 @@ class JsonDocument(RootFile, ABC, Generic[T]):
         return self._read_unlocked()
 
     def _publish_unlocked(self, value: T) -> None:
-        _read_cache.pop(self.path, None)
         self._write_unlocked(
             json.dumps(self._encode(value), indent=self.json_indent, sort_keys=self.json_sort_keys)
             + self.json_suffix
@@ -1221,6 +1220,13 @@ class DocumentBytes:
             return cls(MissingFile(), b"")
 
 
+@dataclass(frozen=True, slots=True)
+class DecodedDocument[T](DocumentBytes):
+    """A value and the exact captured bytes and revision that supplied it."""
+
+    value: T
+
+
 class CopyingStore(RootFile, RankedStoreLock, declared_name=None):
     """Capture dependent documents together; release their guards before decoding."""
 
@@ -1242,6 +1248,50 @@ class CopyingStore(RootFile, RankedStoreLock, declared_name=None):
 
 class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, declared_name=None):
     """Document changes own their write guard, independent of path construction."""
+
+    def _cached_value(self, revision: FileObservation, obtain: Callable[[], T]) -> T:
+        cached = _read_cache.get(self.path)
+        if cached is not None and cached.revision == revision:
+            return cast(T, cached.value)
+        return obtain()
+
+    def _decode_source(self, source: DocumentBytes) -> T:
+        value = self._decode_capture(source)
+        _read_cache[self.path] = DecodedDocument(source.revision, source.content, value)
+        return value
+
+    def _decode_retained(self, source: DocumentBytes) -> T:
+        return source.revision.either(
+            lambda revision: self._cached_value(revision, partial(self._decode_source, source)),
+            self.empty,
+        )
+
+    def _read_current(self) -> T:
+        return self._read_captured(lambda: self._copy_sources(self)[0], self._decode_retained)
+
+    def read(self) -> T:
+        try:
+            revision = FileRevision.from_stat(self.path.stat())
+        except FileNotFoundError:
+            _read_cache.pop(self.path, None)
+            return self.empty()
+        return self._cached_value(revision, self._read_current)
+
+    def _publish_unlocked(self, value: T) -> None:
+        _read_cache.pop(self.path, None)
+        super()._publish_unlocked(value)
+
+    def replace_if_changed(self, value: T) -> None:
+        """Compare and replace one current cut; an equal value leaves its file alone."""
+        def apply(current: T) -> None:
+            if current != value:
+                self._publish_unlocked(value)
+
+        self.change_current(
+            self._capture_unlocked,
+            lambda source: nullcontext(self._read_captured(lambda: source, self._decode_retained)),
+            apply,
+        )
 
     def update[R](self, change: Callable[[T], DocumentChange[T, R]]) -> R:
         result, = self.update_each(lambda original: (change(original),))
@@ -1299,32 +1349,12 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
             store_lock_path(self.path).unlink(missing_ok=True)
 
 
-_read_cache: dict[Path, tuple[FileRevision, object]] = {}
+_read_cache: dict[Path, DecodedDocument[object]] = {}
 
 
 @dataclass(frozen=True, slots=True)
 class LockedStore(FileStore, LockedFile, DocumentTransactions[T], declared_name=None):
     """Each copy ends before decoding; each change owns its complete write."""
-
-    def read(self) -> T:
-        try:
-            stat = self.path.stat()
-        except FileNotFoundError:
-            _read_cache.pop(self.path, None)
-            return self.empty()
-        current = FileRevision.from_stat(stat)
-        cached = _read_cache.get(self.path)
-        if cached is not None and cached[0] == current:
-            return cached[1]  # type: ignore[return-value]
-        result = self._read_captured(lambda: self._copy_sources(self)[0], self._decode_capture)
-        try:
-            post_stat = self.path.stat()
-            post_rev = FileRevision.from_stat(post_stat)
-            if post_rev == current:
-                _read_cache[self.path] = (current, result)
-        except FileNotFoundError:
-            pass
-        return result
 
     def read_pair[U](self, other: LockedStore[U]) -> tuple[T, U]:
         first, second = self._copy_sources(self, other)

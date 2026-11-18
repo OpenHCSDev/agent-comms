@@ -43,7 +43,7 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.storage.locked_store import DocumentChange, DurableFile, LockedStore, PatternFile
+from agent_comms.storage.locked_store import DurableFile, LockedStore, PatternFile
 from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 from agent_comms.storage.typed_table import TypedTable
@@ -488,9 +488,7 @@ class TeamUpdateStore(PatternFile, SingleFileStore, DurableFile,
     @classmethod
     def record(cls, root: Path, packet: TeamUpdate) -> None:
         store = cls.for_team(root, packet.teammate)
-        if store.read() == (packet,):
-            return
-        store.update(lambda previous: DocumentChange.to((packet,)))
+        store.replace_if_changed((packet,))
 
 
 class AlarmGroup(ViewHeading, affix="Alarms"):
