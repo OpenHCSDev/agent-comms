@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from agent_comms.execution.turn_lease import TurnCompletion, TurnLeaseFence
 from agent_comms.messaging.assignment_notice import AssignmentNotice
+from agent_comms.messaging.human_read_cut import HumanReadCut
 from agent_comms.messaging.message_reads import MessageDeliveryRead, MessageReferencesRead
 from agent_comms.messaging.notification_contracts import NotificationEvidenceSource, RevisionChanges, RecipientActivityRead
 
@@ -134,10 +135,10 @@ class NotificationPass:
 
 
 @dataclass(frozen=True)
-class CapturedNotificationEvidence:
+class CapturedNotificationEvidence(HumanReadCut):
     root: Path
-    ledger: ReadLedger
-    document: ReadDocument
+    ledger: ReadLedger = field()
+    document: ReadDocument = field()
     snapshot: RegistrySnapshot
 
     def changed_marks(
@@ -249,11 +250,13 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
     ) -> NotificationWindow:
         """Borrow mounted references in the original bounded delivery windows, as this
         viewer may see them."""
+        read_cut = HumanReadCut(root)
+
         def project(sources: Sequence[MessageDeliveryRead[Message]]) -> NotificationWindow:
             read = NotificationAssignment.read(
                 root, NotificationSelection.of(viewer, sources, after=after, limit=limit)
             )
-            return cls.delivery_window(root, registry, read, snapshot=snapshot)
+            return cls.delivery_window(read_cut, registry, read, snapshot=snapshot)
 
         return cls.read_references(log, references, project)
 
@@ -277,7 +280,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
     @classmethod
     def delivery_window(
         cls,
-        root: Path,
+        read_cut: HumanReadCut,
         registry: ActivityRegistration[Thread, NativeThread, RegistrySnapshot, StorageRule, Routing, TurnLeaseFence, TurnCompletion],
         assignment_read: NotificationAssignmentRead,
         *,
@@ -289,7 +292,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
             return CapturedNotificationWindow({}, (assignment_read,))
         if snapshot is None:
             snapshot = registry.snapshot()
-        observations = AgentActivity(root, registry).observe_recipients(
+        observations = AgentActivity(read_cut.root, registry).observe_recipients(
             (
                 (page.source, recipient)
                 for page in assignment_read.selection.pages
@@ -298,7 +301,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
             snapshot=snapshot,
         )
         return cls.project_delivery_window(
-            root,
+            read_cut,
             snapshot,
             observations,
             assignment_read=assignment_read,
@@ -307,7 +310,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
     @classmethod
     def recorded_delivery_window[Member: ThreadIdentitySource, Selection](
         cls,
-        root: Path,
+        read_cut: HumanReadCut,
         namespace: NamespaceRead[Member, Selection],
         sources: Sequence[MessageDeliveryRead[Message]],
         *,
@@ -321,9 +324,9 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
             for page in selection.pages
             for recipient in page.recipients
         }
-        read = NotificationAssignment.read(root, selection)
+        read = NotificationAssignment.read(read_cut.root, selection)
         return cls.project_delivery_window(
-            root,
+            read_cut,
             namespace,
             observations,
             assignment_read=read,
@@ -332,7 +335,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
     @classmethod
     def project_delivery_window[Member: ThreadIdentitySource, Selection](
         cls,
-        root: Path,
+        read_cut: HumanReadCut,
         snapshot: NamespaceRead[Member, Selection],
         observations: Mapping[ThreadLookup, RecipientActivityRead[AssignmentNotice[DeliveryProgress], AssignmentProgress, DeliveryProgress]],
         *,
@@ -349,8 +352,8 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
         rows = NotificationAssignment.resolve(assignment_read)
         evidence = assignment_read.evidence
         read_marks = []
-        reads = ReadLedger.at(root)
-        document = reads.read()
+        reads = read_cut.ledger
+        document = read_cut.document
         for source, outcomes in NotificationAssignment.for_deliveries(
             assignment_read.selection, rows
         ):
@@ -443,7 +446,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
         """Attach notification outcomes, as the read's viewer sees them, to the public
         envelopes of the messages the caller already checked."""
         projected = cls.delivery_window(
-            root,
+            HumanReadCut(root),
             registry,
             assignment_read,
             snapshot=snapshot,

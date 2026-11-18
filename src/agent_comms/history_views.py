@@ -55,13 +55,14 @@ from agent_comms.messaging.notification_evidence import (
     RecipientCursor,
     RecipientLimit,
 )
+from agent_comms.messaging.notification_source import NotificationSource
 from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
 from agent_comms.messaging.revision_views import ActivityView
 from agent_comms.messaging.sent_message import AssignedSourceIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, PresenceExclude, WireForm
-from agent_comms.notification_assignment import AssignmentSource
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.registry.history_read_source import HistoryReadSource
 from agent_comms.registry.notification_selection_read import ThreadSourceReader
 from agent_comms.registry.activity import ActivityCapture, ObservedActivity
 from agent_comms.registry.agent_activity import AgentActivity
@@ -72,7 +73,6 @@ from agent_comms.registry.registry_document import (
     RegistrySnapshot,
     RosterVisibility,
 )
-from agent_comms.registry.relationship_source import RelationshipSource
 from agent_comms.registry.shared_ledger import LedgerDocument
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
@@ -188,7 +188,7 @@ class RetiredViews(ToolResult):
 
 
 @dataclass(frozen=True)
-class ThreadPresentations(AssignmentSource, ThreadSourceReader[ThreadPresentation]):
+class ThreadPresentations(NotificationSource, ThreadSourceReader[ThreadPresentation]):
     """One status acquisition shared by a reader's thread presentations.
 
     These rows and their shared assignment acquisition belong to this cut,
@@ -278,7 +278,7 @@ class SidebarCut:
         return replace(snapshot, thread_unread={**snapshot.thread_unread, **self.thread_unread})
 
 
-class HistoryViews(RelationshipSource):
+class HistoryViews(HistoryReadSource):
     def __init__(
         self,
         root: Path,

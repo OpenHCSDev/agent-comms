@@ -11,7 +11,6 @@ from agent_comms.coordination.assignment_states import DeferredAssignment
 from agent_comms.coordination.cohort import sealed_cohort_assignments
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import (
-    CoordinationReadUnavailable,
     ReloadRequired,
     StaleRevision,
 )
@@ -55,7 +54,7 @@ from conftest import accept_initial, publish_initial
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 
-def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_path):  # noqa: F811
+def test_original_wal_reads_retain_receipts_while_writer_is_uncommitted(tmp_path):  # noqa: F811
 
     root, _root_id, comms, initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
@@ -64,16 +63,18 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
     original = NotificationAssignment.resolve(captured)
     wire_before = comms.bus.bus.revision()
     assert original
+    uncaptured = NotificationSelection.of(
+        OwnerOutcomes(initial.recipients[0].recipient_lookup), (initial,))
     with Coordination(str(database)) as writer:
         with writer.session.writing():
-            with pytest.raises(CoordinationReadUnavailable) as unavailable:
-                NotificationAssignment.read(root, selection)
-            assert unavailable.value.__cause__.sqlite_errorcode & 0xFF in (
-                sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED,
-            )
-            with pytest.raises(CoordinationReadUnavailable):
-                with TranscriptRead.publication_source(root):
-                    pytest.fail("Busy acquisition reached the native schema decoder")
+            # WAL readers retain committed evidence independently of this writer.
+            assert NotificationAssignment.read(root, selection) == captured
+            limited = NotificationAssignment.read(root, uncaptured)
+            assert limited.rows == tuple(
+                row for row in captured.rows
+                if row[0].recipient_lookup == initial.recipients[0].recipient_lookup)
+            with TranscriptRead.publication_source(root) as native_read:
+                assert native_read is not None
     reopened = NotificationAssignment.read(root, selection)
     assert reopened == captured
     assert NotificationAssignment.resolve(reopened) == original

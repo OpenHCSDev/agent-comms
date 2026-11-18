@@ -10,6 +10,7 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import PublicationActivationBlocked
 from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
+from agent_comms.messaging.human_read_cut import HumanReadCut
 from agent_comms.messaging.message_notification import MessageNotification
 from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.messaging.notification_evidence import AllOutcomes, OwnerOutcomes
@@ -79,7 +80,7 @@ def test_viewer_selects_the_outcomes_of_a_delivery_window(tmp_path, viewer_of, s
                for name, thread in comms.registry.snapshot().threads.items()}
     viewer = viewer_of(lookups)
     window = MessageNotification.delivery_window(
-        comms.root, comms.registry,
+        HumanReadCut(comms.root), comms.registry,
         NotificationAssignment.read(comms.root, NotificationSelection.of(viewer, (original,))),
     )
     assert {item.recipient for item in window.outcomes[(sent.seq, sent.message_id)]} == seen
@@ -97,7 +98,7 @@ def test_a_viewer_follows_frozen_lookups_through_rename_and_never_into_a_rebirth
         viewer = OwnerOutcomes.of(comms.registry.require(name).incarnation)
         read = NotificationAssignment.read(comms.root, NotificationSelection.of(viewer, (original,)))
         assert read.selection.viewer == viewer
-        window = MessageNotification.delivery_window(comms.root, comms.registry, read)
+        window = MessageNotification.delivery_window(HumanReadCut(comms.root), comms.registry, read)
         return {item.recipient for item in window.outcomes[key]}
 
     assert seen_by("peer-a") == {"peer-a"}
@@ -120,7 +121,7 @@ def test_a_public_root_without_a_coordinator_keeps_its_viewer_and_projects_visib
     viewer = OwnerOutcomes.of(comms.registry.require("peer-a").incarnation)
     read = NotificationAssignment.read(comms.root, NotificationSelection.of(viewer, (original,)))
     assert (read.sources, read.rows, read.consumption, read.selection.viewer) == ((original,), (), {}, viewer)
-    window = MessageNotification.delivery_window(comms.root, comms.registry, read)
+    window = MessageNotification.delivery_window(HumanReadCut(comms.root), comms.registry, read)
     assert {item.recipient for item in window.outcomes[(sent.seq, sent.message_id)]} == {"peer-a"}
 
 
