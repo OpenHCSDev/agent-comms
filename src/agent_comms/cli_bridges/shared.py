@@ -1208,10 +1208,9 @@ class HarnessDeliveryRecords(WaitsOnBusyStore, ABC):
     @abstractmethod
     def recipient_lookup(self) -> ThreadLookup: ...
 
-    async def frame(self, message: Message) -> IncomingFrame:
-        """How this route shows a message: its header, its body and the files it carries."""
-        files = await asyncio.to_thread(self.comms.messaging.files.of, (message.reference,))
-        return self.incoming_frame(message, files)
+    async def files_of(self, message: Message) -> tuple[MessageFile, ...]:
+        """The files this route names under a message, each with the read that returns it."""
+        return await asyncio.to_thread(self.comms.messaging.files.of, (message.reference,))
 
     @property
     @abstractmethod
@@ -1802,7 +1801,7 @@ class BridgeInputObserved(DeliveredInput, HiddenItem):
             message = await bridge.message(delivery.reference)
             if message is None:
                 continue
-            if self.text != (await bridge.frame(message)).text:
+            if self.text != bridge.incoming_frame(message, await bridge.files_of(message)).text:
                 raise RelationViolationError("Observed bus input differs from its original delivery")
             await bridge.finish(delivery, partial(replace, outcome=DeliveredOutcome, monitor=self.record))
             references.extend(message.opening_references(bridge.transcript_thread))
@@ -1875,7 +1874,10 @@ class TranscriptConfirmsDelivery(PublishesToBus, HarnessDeliveryRecords):
                 for exact in (attempt for attempt in await self.attempts(identity)
                               if attempt.reference == notice.reference):
                     message = await self.message(exact.reference)
-                    for part in (await self.frame(message)).read_parts(rows):
+                    if message is None:
+                        continue
+                    files = await self.files_of(message)
+                    for part in self.incoming_frame(message, files).read_parts(rows):
                         references.extend(await part.confirm(self, read.record))
                     await self.retire_read(exact, read, notice)
         return tuple(references)
@@ -1974,7 +1976,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         return await self.reader.deliver(self, message)
 
     async def deliver_to(self, attachment: MonitorAttachment, message: Message) -> type[Outcome]:
-        frame = await self.frame(message)
+        frame = self.incoming_frame(message, await self.files_of(message))
         receiving = partial(replace, monitor=frame.shown_evidence(TakingLedger()))
         attempt = self.attempt(message, UnconfirmedOutcome)
         await self.coordinator_write(partial(attempt.apply, receiving))

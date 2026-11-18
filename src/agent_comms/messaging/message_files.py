@@ -36,6 +36,8 @@ MAX_MESSAGE_FILE_BYTES = 8 * 1024 * 1024
 """The most file bytes one message carries, all its files together."""
 
 MAX_FILE_NAME_LENGTH = 255
+REFUSED_NAME_CHARACTERS = frozenset("\\\0")
+"""A backslash is a directory on Windows; NUL ends a path on every system."""
 
 MIME_TYPE = re.compile(r"[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*")
 
@@ -58,8 +60,10 @@ def require_file_name(name: str) -> None:
     part, not only dots, and no backslash or NUL."""
     if not name.strip() or len(name) > MAX_FILE_NAME_LENGTH:
         raise ValueError("A file name is 1 to 255 characters.")
-    if PurePath(name).name != name or not name.strip(".") or "\\" in name or "\0" in name:
+    if PurePath(name).name != name or not name.strip("."):
         raise ValueError("A file name names no directory.")
+    if not REFUSED_NAME_CHARACTERS.isdisjoint(name):
+        raise ValueError("A file name holds no backslash or NUL.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,8 +141,10 @@ class MessageFile:
     @property
     def mention(self) -> str:
         """How an agent's delivered message names it, with the read that returns its bytes."""
-        return (f"File {self.position}: {self.name} ({self.mime_type}, {self.size} bytes); "
-                f"comms_message_file message={self.message.name} position={self.position}")
+        return (
+            f"File {self.position}: {self.name} ({self.mime_type}, {self.size} bytes); "
+            f"comms_message_file message={self.message.name} position={self.position}"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,8 +190,14 @@ class MessageFileRow(MessageFilesRows, WithoutRowid, TypedTable):
 
     @property
     def file(self) -> MessageFile:
-        return MessageFile(MessageReference(self.seq, self.message_id), self.position,
-                           self.name, self.mime_type, self.size, self.sha256)
+        return MessageFile(
+            MessageReference(self.seq, self.message_id),
+            self.position,
+            self.name,
+            self.mime_type,
+            self.size,
+            self.sha256,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,8 +224,15 @@ class MessageFiles(DurableStore):
             return
         with self.writing() as db:
             for position, upload in enumerate(uploads):
-                MessageFileRow(message.seq, position, message.message_id, upload.name,
-                               upload.mime_type, upload.size, upload.sha256).insert(db)
+                MessageFileRow(
+                    message.seq,
+                    position,
+                    message.message_id,
+                    upload.name,
+                    upload.mime_type,
+                    upload.size,
+                    upload.sha256,
+                ).insert(db)
 
     def of(self, messages: Iterable[MessageReference]) -> tuple[MessageFile, ...]:
         """The files of these messages, in bus and send order."""
@@ -222,9 +241,11 @@ class MessageFiles(DurableStore):
             return ()
         with self.snapshot() as db:
             rows = MessageFileRow.select(
-                db, where="{seq} IN (" + ", ".join("?" for _ in references) + ")",
+                db,
+                where="{seq} IN (" + ", ".join("?" for _ in references) + ")",
                 parameters=tuple(reference.seq for reference in references),
-                order_by=("seq", "position"))
+                order_by=("seq", "position"),
+            )
         return tuple(row.file for row in rows if row.file.message in references)
 
     def content(self, file: MessageFile) -> MessageFileContent:

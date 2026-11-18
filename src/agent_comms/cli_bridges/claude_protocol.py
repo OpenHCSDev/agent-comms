@@ -300,7 +300,7 @@ class MonitorShown(MonitorFrame, declared_name='shown'):
                 if message is None:
                     continue
                 observed = tuple(line.rstrip() for line in self.lines)
-                frame = await bridge.frame(message)
+                frame = ClaudeMonitorFrame(message, await bridge.files_of(message))
                 if frame.observed != observed:
                     await bridge.record_mismatch(
                         delivery, 'Shown lines do not equal the original message')

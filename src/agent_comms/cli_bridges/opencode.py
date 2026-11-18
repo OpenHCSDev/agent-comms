@@ -234,7 +234,8 @@ class OpenCodeBridge(OpenCodeServer, DirectDeliveryBridge[OpenCodeOptions]):
 
     async def deliver(self, message: Message) -> type[Outcome]:
         async with self.connection() as connection:
-            await connection.deliver((await self.frame(message)).text)
+            frame = self.incoming_frame(message, await self.files_of(message))
+            await connection.deliver(frame.text)
         return PersistedOutcome
 
     async def show_sent(self, result: SendResult) -> None:

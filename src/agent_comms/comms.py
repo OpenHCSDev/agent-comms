@@ -57,6 +57,7 @@ class Comms(
     NotificationEvidenceSource[CapturedNotificationEvidence],
 ):
     input_dispositions: ClassVar[Callable[[Path], InputLookup[InputAttempt]]] = InputDispositions
+    messaging: Messaging
 
     def __init__(self, root: CommsRoute) -> None:
         super().__init__(root)

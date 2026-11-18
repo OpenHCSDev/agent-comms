@@ -622,7 +622,8 @@ class CommsMessageFilesTool(MessageFileRead, ReadRequest[MessageFilesRead]):
     description = (
         "List the files these messages carry: name, MIME type, size and SHA-256 for each. "
         "Every message must be in the conversation you may read.")
-    messages: Annotated[tuple[MessageReference, ...], *tool_field("The messages whose files to list")]
+    messages: Annotated[
+        tuple[MessageReference, ...], *tool_field("The messages whose files to list")]
 
 
 @dataclass(frozen=True, kw_only=True)

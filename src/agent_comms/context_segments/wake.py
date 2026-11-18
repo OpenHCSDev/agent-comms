@@ -38,7 +38,6 @@ class SelectedWakeSegment(WireSources, InstructionSegment):
 
     sources: tuple[tuple[Delivered, WakeAssignment], ...]
     owner: Thread
-    files: tuple[MessageFile, ...]
     obligations: tuple[ResponseObligation, ...]
     relevance: InstructionFile
     sent_outcomes: tuple[SentMessageOutcome, ...]
@@ -47,7 +46,7 @@ class SelectedWakeSegment(WireSources, InstructionSegment):
     sent_limit = 5
 
     @classmethod
-    def capture(cls, sources, owner, goals, *, files, obligations=(), sent_outcomes=()):
+    def capture(cls, sources, owner, goals, *, obligations=(), sent_outcomes=()):
         relevance = WakePolicy.relevance_instruction()
         sent_outcomes = tuple(sent_outcomes)
         if len(sent_outcomes) > cls.sent_limit:
@@ -60,15 +59,16 @@ class SelectedWakeSegment(WireSources, InstructionSegment):
             ),
             sources=tuple(sources),
             owner=owner,
-            files=tuple(files),
             obligations=tuple(obligations),
             relevance=relevance,
             sent_outcomes=sent_outcomes,
             work_context=owner.wake_context(goals),
         )
 
-    def input_segments(self) -> tuple[ContextSegment, ...]:
-        return (self, *(MessageDelivery(source, assignment, self.owner, self.files).segment()
+    def input_segments(self, files: tuple[MessageFile, ...]) -> tuple[ContextSegment, ...]:
+        """This frame, then one delivery per source naming the files its message carries out
+        of `files`, which the reader read for the whole batch."""
+        return (self, *(MessageDelivery(source, assignment, self.owner, files).segment()
                         for source, assignment in self.sources))
 
     def values(self):
@@ -136,7 +136,8 @@ class DeliveredMessageSegment(WireSources, InstructionSegment):
 
     def values(self):
         message = self.delivery.source.message
-        files = {"files": [file.mention for file in self.delivery.own_files]} if self.delivery.own_files else {}
+        own_files = self.delivery.own_files
+        files = {"files": [file.mention for file in own_files]} if own_files else {}
         return dict(
             message=FieldCodec.compact(
                 {

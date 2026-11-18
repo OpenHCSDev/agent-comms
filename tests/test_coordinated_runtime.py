@@ -88,10 +88,10 @@ def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -
         selected = sealed_cohort_assignments(store, beta_lookup)[0]
     # A pending FULL claim has no response obligation, and no frame may grant one.
     with pytest.raises(IdentityConflict):
-        TurnContext.render_segments((SelectedWakeSegment.capture(((initial, selected),), people[2], comms.goals, files=()),)).text
+        TurnContext.render_segments((SelectedWakeSegment.capture(((initial, selected),), people[2], comms.goals),)).text
     forged = replace(selected, recipient=people[0].name, recipient_lookup=excluded_lookup)
     with pytest.raises(IdentityConflict):
-        TurnContext.render_segments((SelectedWakeSegment.capture(((initial, forged),), people[0], comms.goals, files=()),)).text
+        TurnContext.render_segments((SelectedWakeSegment.capture(((initial, forged),), people[0], comms.goals),)).text
     assert len(read_history(comms, "#team")) == 1  # Framing never publishes a row.
 
 
@@ -101,8 +101,8 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
         lookup = people[1].incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     frame = TurnContext.render_segments(SelectedWakeSegment.capture(
-        ((initial, assignment),), people[1], comms.goals, files=(),
-    ).input_segments()).text
+        ((initial, assignment),), people[1], comms.goals,
+    ).input_segments(())).text
     assert f'"source_seq":{initial.message.seq}' in frame
     assert '"wake_mode":"bounded_triage"' in frame
     assert f'"body":{json.dumps(initial.message.body)}' in frame
@@ -118,14 +118,14 @@ def test_delivered_frame_names_each_file_with_the_read_that_returns_it(tmp_path:
         assignment = sealed_cohort_assignments(store, people[1].incarnation.lookup)[0]
     files = comms.messaging.files.of((initial.message.reference,))
     frame = TurnContext.render_segments(SelectedWakeSegment.capture(
-        ((initial, assignment),), people[1], comms.goals, files=files,
-    ).input_segments()).text
+        ((initial, assignment),), people[1], comms.goals,
+    ).input_segments(files)).text
     (file,) = files
     assert json.dumps(file.mention)[1:-1] in frame
     assert f"message={initial.message.reference.name} position=0" in file.mention
     unrelated = TurnContext.render_segments(SelectedWakeSegment.capture(
-        ((initial, assignment),), people[1], comms.goals, files=(),
-    ).input_segments()).text
+        ((initial, assignment),), people[1], comms.goals,
+    ).input_segments(())).text
     assert "comms_message_file" not in unrelated
 
 
@@ -137,8 +137,8 @@ def test_channel_wake_frame_carries_effective_goal_execution(tmp_path: Path) -> 
         lookup = people[1].incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     frame = TurnContext.render_segments(SelectedWakeSegment.capture(
-        ((initial, assignment),), comms.registry.require("alpha"), comms.goals, files=(),
-    ).input_segments()).text
+        ((initial, assignment),), comms.registry.require("alpha"), comms.goals,
+    ).input_segments(())).text
     context = json.loads(next(
         line.removeprefix("work_context: ") for line in frame.splitlines()
         if line.startswith("work_context: ")
@@ -163,8 +163,8 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
     sent_outcome = notification.sent_outcome()
     assert sent_outcome is not None
     frame = TurnContext.render_segments(SelectedWakeSegment.capture(
-        ((initial, assignment),), people[1], _comms.goals, files=(), sent_outcomes=(sent_outcome,)
-    ).input_segments()).text
+        ((initial, assignment),), people[1], _comms.goals, sent_outcomes=(sent_outcome,)
+    ).input_segments(())).text
     assert 'recent_sent_outcomes: [{"source_seq":' in frame
     assert '"state":"Read"' in frame
     assert replace(notification, changed=False).sent_outcome() is None
@@ -182,8 +182,8 @@ def test_selected_and_following_use_the_original_question_contract(tmp_path: Pat
         assignments = {assignment.wire_seq: assignment for assignment in
                        sealed_cohort_assignments(store, people[1].incarnation.lookup)}
     sources = ((peer, assignments[peer.message.seq]), (original, assignments[question.seq]))
-    frame = SelectedWakeSegment.capture(sources, people[1], comms.goals, files=())
-    metadata, peer_segment, question_segment = frame.input_segments()
+    frame = SelectedWakeSegment.capture(sources, people[1], comms.goals)
+    metadata, peer_segment, question_segment = frame.input_segments(())
     following = MessageDelivery(original, assignments[question.seq], people[1], ()).segment()
     assert metadata is frame and frame.sources == sources
     assert tuple(reference for source in metadata.provenance

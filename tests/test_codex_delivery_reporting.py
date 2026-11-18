@@ -63,7 +63,7 @@ async def test_a_bridge_frames_a_message_with_its_files_and_refuses_an_echo_with
         options = CodexOptions(Watch(), StoredBinding(), tmp_path / 'bridge', tmp_path, str(tmp_path / 'unused.sock'))
         bridge = CodexBridge(options, binding.address(), db)
         await options.operation.prepare(bridge)
-        frame = await bridge.frame(message)
+        frame = bridge.incoming_frame(message, await bridge.files_of(message))
         (file,) = comms.messaging.files.of((message.reference,))
         assert frame.text == IncomingFrame(message, (file,)).text
         assert frame.text.endswith('\n\n' + file.mention)

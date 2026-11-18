@@ -142,7 +142,8 @@ class CodexBridge(CodexAppServer, DirectDeliveryBridge[CodexOptions]):
                                                ThreadOutput(transcript, self.comms.agents)))
 
     async def deliver(self, message: Message) -> type[Outcome]:
-        request = BusInput.for_message(self.thread, message.message_id, (await self.frame(message)).text)
+        frame = self.incoming_frame(message, await self.files_of(message))
+        request = BusInput.for_message(self.thread, message.message_id, frame.text)
         retries = 0
         while True:
             try:

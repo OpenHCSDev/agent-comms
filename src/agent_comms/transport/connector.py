@@ -44,7 +44,6 @@ from aiohttp.typedefs import Handler
 from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRoute
 from yarl import URL
 
-from agent_comms.messaging.message_files import MAX_SEND_REQUEST_BYTES
 from agent_comms.cli_bridges.claude_transcript import WATCH_REPLACED
 from agent_comms.cli_bridges.inbox_watch import InboxWatch, OpenWatch, WatchRoute, WatchTickets
 from agent_comms.cli_bridges.open_viewer import OpenObservation, OpenViewer
@@ -65,6 +64,7 @@ from agent_comms.host_services import HostService
 from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
 from agent_comms.messaging.bus_identity import BusIdentityStore
 from agent_comms.messaging.channel_targets import NamedTarget
+from agent_comms.messaging.message_files import MAX_SEND_REQUEST_BYTES
 from agent_comms.messaging.messages import QuestionKind
 from agent_comms.messaging.send_result import MessagePublished
 from agent_comms.messaging.task_sources import OwnerRequestAttachment
