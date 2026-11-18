@@ -237,3 +237,43 @@ def test_stored_schema_text_is_the_same_whichever_bridge_imports_first(table):
         ).stdout
 
     assert ddl("claude", "codex") == ddl("codex", "claude")
+
+
+def test_pre_lock_acquisition_uses_the_familys_original_declaration_reader():
+    acquisitions = []
+
+    class OwnedFamily(DeclaredFamily):
+        @classmethod
+        def _member_declarations(cls):
+            acquisitions.append(cls)
+            return super()._member_declarations()
+
+    class Member(OwnedFamily):
+        pass
+
+    OwnedFamily.acquire_declarations()
+    assert acquisitions == [OwnedFamily]
+    acquisitions.clear()
+    assert OwnedFamily.member_named('member') is Member
+    assert acquisitions == [OwnedFamily]
+    with pytest.raises(ValueError):
+        OwnedFamily.member_named('missing')
+
+
+def test_registry_opening_acquires_only_its_rows_in_a_fresh_process():
+    probe = '''
+import sys
+from agent_comms.registry.registry_tables import RegistryNamedRow, RegistryRows
+from agent_comms.storage.typed_table import TypedTable
+before = {row.declared_name: row for row in RegistryNamedRow.families()}
+RegistryNamedRow.acquire_declarations()
+assert {row.declared_name: row for row in RegistryNamedRow.families()} == before
+assert before
+assert 'agent_comms.transport.connector' not in sys.modules
+assert 'agent_comms.coordinated_runtime' not in sys.modules
+print(len(before))
+'''
+    result = subprocess.run([sys.executable, '-c', probe], capture_output=True,
+                            text=True, timeout=45)
+    assert result.returncode == 0, result.stderr
+    assert int(result.stdout.strip()) > 0

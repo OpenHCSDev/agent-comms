@@ -135,7 +135,60 @@ def test_reply_acquisition_returns_only_first_reply_of_selected_frozen_author(
     comms.messaging.send(other.canonical_thread, source.message.sender, "other author's answer",
                          answers=(source.message.reference,))
     replies = comms.bus.bus.recipient_replies(((selected.recipient_lookup, source.message.reference),))
-    assert tuple(reply.message.reference for reply in replies) == (first.reference,)
+    assert tuple(reply.reference for reply in replies) == (first.reference,)
+
+
+def test_answer_badges_read_indexed_evidence_without_decoding_message_bodies(
+    frozen_window: tuple[Comms, Delivered], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent_comms.messaging.messages import MessageInput
+
+    comms, source = frozen_window
+    selection = NotificationSelection.of(AllOutcomes(), (source,), limit=RecipientLimit(1))
+    recipient = selection.pages[0].recipients[0]
+    first = comms.messaging.send(
+        recipient.canonical_thread, source.message.sender, "The original answer",
+        answers=(source.reference,),
+    ).message
+    comms.messaging.send(
+        recipient.canonical_thread, source.message.sender, "A later answer",
+        answers=(source.reference,),
+    )
+
+    def decoded_body(*_args, **_kwargs):
+        raise AssertionError("answer badge decoded a complete message body")
+
+    monkeypatch.setattr(MessageInput.table, "_decode_row", decoded_body)
+    captured = NotificationAssignment.capture_responses(
+        comms.root, selection.read_without_assignments(),
+    )
+    assert captured.responses == {
+        (recipient.recipient_lookup, source.reference):
+            AnsweredResponse(first.reference, first.at_ms),
+    }
+
+
+def test_indexed_reply_evidence_corroborates_the_whole_original_reference(
+    frozen_window: tuple[Comms, Delivered],
+) -> None:
+    from agent_comms.messaging.message_reference import MessageReference
+    from agent_comms.nominal.field_codec import MessageId
+
+    comms, source = frozen_window
+    recipient = source.recipients[0]
+    first = comms.messaging.send(recipient.canonical_thread, source.message.sender, "answer",
+                                 answers=(source.reference,)).message
+    wrong = MessageReference(source.reference.seq, MessageId.mint("another original"))
+    assert comms.bus.bus.recipient_replies(((recipient.recipient_lookup, wrong),)) == ()
+    replies = comms.bus.bus.recipient_replies((
+        (recipient.recipient_lookup, wrong),
+        (recipient.recipient_lookup, source.reference),
+        (recipient.recipient_lookup, source.reference),
+    ))
+    assert tuple((reply.lookup, reply.original_reference, reply.reference, reply.at_ms)
+                 for reply in replies) == (
+        (recipient.recipient_lookup, source.reference, first.reference, first.at_ms),
+    )
 
 
 def test_independent_reply_changes_retained_evidence_without_claiming_context(
