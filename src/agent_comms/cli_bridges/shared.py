@@ -1254,9 +1254,13 @@ class HarnessDeliveryRecords(WaitsOnBusyStore, ABC):
         return await self.coordinator_read(lambda db: tuple(HarnessDelivery.select(
             db, bridge=self.delivery_kind, recipient_lookup=self.recipient_lookup, message_id=message_id)))
 
+    async def messages(self, references: tuple[MessageReference, ...]) -> tuple[Message, ...]:
+        """The messages the bus still holds at these references; a gone one is simply absent."""
+        return await self.comms.bus.when_open(
+            partial(self.comms.bus.bus.messages_for_references, references))
+
     async def message(self, reference: MessageReference) -> Message | None:
-        messages = await self.comms.bus.when_open(
-            partial(self.comms.bus.bus.messages_for_references, (reference,)))
+        messages = await self.messages((reference,))
         return messages[0] if messages else None
 
     @contextmanager
@@ -1873,13 +1877,11 @@ class TranscriptConfirmsDelivery(PublishesToBus, HarnessDeliveryRecords):
             with self.uncertain_on_contention(identity):
                 for exact in (attempt for attempt in await self.attempts(identity)
                               if attempt.reference == notice.reference):
-                    message = await self.message(exact.reference)
-                    if message is None:
-                        continue
-                    files = await self.files_of(message)
-                    for part in self.incoming_frame(message, files).read_parts(rows):
-                        references.extend(await part.confirm(self, read.record))
-                    await self.retire_read(exact, read, notice)
+                    for message in await self.messages((exact.reference,)):
+                        files = await self.files_of(message)
+                        for part in self.incoming_frame(message, files).read_parts(rows):
+                            references.extend(await part.confirm(self, read.record))
+                        await self.retire_read(exact, read, notice)
         return tuple(references)
 
 
