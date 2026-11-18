@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from agent_comms.execution.child_process import IdentityMismatchError, Platform, ProcessIdentity
@@ -273,6 +273,28 @@ class UnretiredRuntimeProcess(RuntimeProcessOutcome):
         return ()
 
 
+class RuntimeProcessScope:
+    """Every named interpreter counts when deciding whether a prefix is in use."""
+
+    def skips(self, runtime: LaunchRuntime, identity: ProcessIdentity,
+              observer: ProcessIdentity) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class InstallerRuntimeScope(RuntimeProcessScope):
+    """Retirement keeps the selected runtime and the installer's own process tree separately."""
+
+    target: LaunchRuntime
+    lineage: frozenset[ProcessIdentity] = field(default_factory=lambda: frozenset(
+        ProcessIdentity.capture(os.getpid()).lineage()))
+
+    def skips(self, runtime: LaunchRuntime, identity: ProcessIdentity,
+              observer: ProcessIdentity) -> bool:
+        return (runtime.prefix == self.target.prefix or identity in self.lineage
+                or observer in identity.lineage())
+
+
 @dataclass(frozen=True)
 class RuntimeProcesses:
     """A read-only snapshot, not a process handle or permission to signal an app.
@@ -321,11 +343,15 @@ class RuntimeProcesses:
 
     @classmethod
     def observe(cls, target: LaunchRuntime, proc: Path = Path("/proc")) -> RuntimeProcesses:
-        directory = target.prefix.parent
+        return cls.under(target.prefix.parent, scope=InstallerRuntimeScope(target), proc=proc)
+
+    @classmethod
+    def under(cls, directory: Path, *, scope: RuntimeProcessScope = RuntimeProcessScope(),
+              proc: Path = Path("/proc")) -> RuntimeProcesses:
+        """Read references below this exact directory; grants no stop authority."""
         outcomes: list[RuntimeProcessOutcome] = []
         platform = Platform.current()
         observer = ProcessIdentity.capture(os.getpid())
-        lineage: frozenset[ProcessIdentity] = frozenset(observer.lineage())
         for entry in proc.iterdir():
             if not entry.name.isdecimal():
                 continue
@@ -350,10 +376,8 @@ class RuntimeProcesses:
                 outcomes.extend(command.as_unattributed_process(pid))
                 continue
             runtime = LaunchRuntime.from_interpreter(interpreter)
-            if runtime.prefix == target.prefix:
-                continue
             try:
-                if identity in lineage or observer in identity.lineage():
+                if scope.skips(runtime, identity, observer):
                     continue
                 parent = platform.parent_identity(pid)
                 application = RuntimeApplication(parent, platform.process_name(parent.pid))
