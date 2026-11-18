@@ -23,6 +23,7 @@ from pydantic import JsonValue
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.turn_registry import TurnRows
+from agent_comms.nominal.declared_family import AcquiredMembers
 from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup, WireValue
 from agent_comms.registry.presence import PresenceCapture, PresenceChange, PresenceRevision
 from agent_comms.registry.registry_document import RegistryDocument
@@ -88,7 +89,7 @@ class RevisionStamped(ChangeStamped, RegistryRow, declared_name=None):
 
 
 @dataclass(frozen=True)
-class RegistryNamedRow(RevisionStamped, declared_name=None):
+class RegistryNamedRow(AcquiredMembers, RevisionStamped, declared_name=None):
     """One entry of a mapping section of the registry document, under its key; each family
     declares its section's place in the document and its value's wire type."""
 

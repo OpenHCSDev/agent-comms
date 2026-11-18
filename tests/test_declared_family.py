@@ -15,6 +15,83 @@ from agent_comms.planning.orders import FoundProgress
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 
 
+def test_module_owned_name_lookup_imports_only_its_original_module(tmp_path):
+    package = tmp_path / "module_owned_cases"
+    package.mkdir()
+    (package / "__init__.py").write_text("")
+    (package / "root.py").write_text(
+        "from agent_comms.nominal.declared_family import DeclaredFamily, ModuleMembers\n"
+        "class Command(ModuleMembers, DeclaredFamily, affix='Case', "
+        "discovery_package=__package__): pass\n"
+    )
+    for stem in ("selected", "unrelated"):
+        (package / f"{stem}.py").write_text(
+            "from module_owned_cases.root import Command\n"
+            f"class {stem.title()}Case(Command): pass\n"
+        )
+    checked = subprocess.run(
+        (sys.executable, "-c", """
+import importlib
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from module_owned_cases.root import Command
+from agent_comms.nominal.declared_family import UnknownFamilyMember
+selected = Command.member_named('selected')
+assert selected.__module__ == 'module_owned_cases.selected'
+assert 'module_owned_cases.unrelated' not in sys.modules
+for invalid in ('absent', 'selected.missing', '../selected', [], None):
+    try:
+        Command.member_named(invalid)
+    except UnknownFamilyMember:
+        pass
+    else:
+        raise AssertionError(invalid)
+assert set(Command.names()) == {'selected', 'unrelated'}
+try:
+    selected.member_named('unrelated')
+except UnknownFamilyMember:
+    pass
+else:
+    raise AssertionError('a sibling became a selected subclass member')
+Path(sys.argv[1], 'module_owned_cases', 'dependency.py').write_text(
+    'import absent_command_dependency\\n')
+importlib.invalidate_caches()
+try:
+    Command.member_named('dependency')
+except ModuleNotFoundError as error:
+    assert error.name == 'absent_command_dependency'
+else:
+    raise AssertionError('a missing required dependency was hidden')
+print('selected-only lookup, complete enumeration, unknown names, subtypes, dependency errors')
+""", str(tmp_path)),
+        capture_output=True, text=True, timeout=45,
+    )
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+
+
+def test_registry_tombstones_decode_through_the_original_row_scope(tmp_path):
+    from agent_comms.projects.checkouts import Checkout
+    from agent_comms.registry.registration import Registration
+    from agent_comms.registry.threads import NativeThread
+    from agent_comms.storage.locked_store import RegistryFile
+
+    registry = Registration(RegistryFile.path_in(tmp_path))
+    registry.declare(NativeThread("removed", frozenset(), Checkout(tmp_path)))
+    registry.remove("removed")
+    checked = subprocess.run(
+        (sys.executable, "-c", """
+import sys
+from pathlib import Path
+from agent_comms.registry.registry_store import RegistryStore
+snapshot = RegistryStore.at(Path(sys.argv[1])).snapshot()
+assert not snapshot.threads
+assert 'agent_comms.transport.connector' not in sys.modules
+""", str(tmp_path)), capture_output=True, text=True, timeout=45,
+    )
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+
+
 class SampleFamily(DeclaredFamily, affix="Case"):
     @abstractmethod
     def execute(self): ...
