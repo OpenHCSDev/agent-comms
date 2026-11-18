@@ -1999,7 +1999,7 @@ class FixScope(OrderScope[CheckedDelivery]):
         return (order.owner.declaration(root), where.declaration(root))
 
     def instructions(self, problem: str) -> tuple[str, ...]:
-        return ("Scope: fix", "Parents: " + ", ".join(p.to_wire() for p in self.shape.parents),
+        return ("Scope: " + self.declared_name, "Parents: " + ", ".join(p.to_wire() for p in self.shape.parents),
                 "Members: " + ", ".join(m.to_wire() for m in self.shape.members),
                 f"Open the PR with agent-comms-team order pr {problem} "
                 "--title '<title>' --body-file <file>; Core records its link on this order.",
@@ -2014,6 +2014,25 @@ class FixScope(OrderScope[CheckedDelivery]):
 
     def completed(self, todo: Todo, delivery: CheckedDelivery) -> Todo:
         return replace(todo, order=todo.order.delivered(delivery), revision=todo.revision + 1)
+
+
+@dataclass(frozen=True)
+class RequirementChangeScope(FixScope):
+    """Edit to meet a changed requirement, not repair a previously required guarantee.
+
+    The explanation records what the owner changed. Source checks, checks on
+    the completed work and delivery are the same as for a fix.
+    """
+
+    change: PlainText
+
+    def recurrence_declarations(
+        self, order: CheckedProblemOrder, where: FileLine, root: Path,
+    ) -> tuple[Declaration, ...]:
+        return ()
+
+    def instructions(self, problem: str) -> tuple[str, ...]:
+        return (*super().instructions(problem), "Changed requirement: " + self.change.text)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -6264,6 +6283,8 @@ class TodoStore(OwnerRequestStore, TodoHistory, GoalAssignments, DirectiveWriter
         slop: tuple[Slop, ...], now: float,
     ) -> None:
         declarations = order.scope.recurrence_declarations(order, where, root)
+        if not declarations:
+            return
         previous = tuple(line for todo in self.list(Repo.of(root).github)
                          if (line := todo.recurrence(declarations, root, now)) is not None)
         if not previous:
