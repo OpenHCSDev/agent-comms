@@ -1,16 +1,20 @@
 """Real command defaults retain the wire capabilities of their declarations."""
 import json
+from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
 from agent_comms.cli_verbs.fork import ForkCliCommand
+from agent_comms.cli_verbs.cli_command import TargetAction
+from agent_comms.cli_verbs.new import NewThreadCliCommand
 from agent_comms.execution.pi_vocabulary import (
     HighThinkingLevel,
     NoThinkingOverride,
     ThinkingLevelField,
 )
-from agent_comms.nominal.field_codec import FieldCodec, compile_decoder
-from agent_comms.projects.checkouts import LaunchCheckout
+from agent_comms.nominal.field_codec import FieldCodec, SingleFieldValue, compile_decoder
+from agent_comms.projects.checkouts import Checkout, LaunchCheckout
 from agent_comms.registry.thread_model import UndeclaredModel
 from agent_comms.registry.threads import ExternalThread, Thread
 
@@ -43,3 +47,35 @@ def test_fork_default_retains_annotated_thinking_representation(source_repositor
     payload.update(command.editor_arguments({'thinking_level': '"high"'}))
     assert FieldCodec.decode(ForkCliCommand, payload).thinking_level is HighThinkingLevel
     assert compile_decoder(str).encode_editor('literal text') == 'literal text'
+
+
+def test_new_thread_project_edits_are_path_text_not_json(tmp_path):
+    command, = NewThreadCliCommand.project_bindings(None, Checkout(tmp_path))
+    action = TargetAction((command,), (), NewThreadCliCommand)
+    values = {field.name: field.editor_default for field in action.editable_fields}
+    project = tmp_path / 'a project with "quotes"'
+    values.update(name='new-child', task='Keep the original task text', project=str(project))
+    edited, = action.edited(values).bound
+    assert edited.project.path == project
+    assert (edited.name, edited.task) == ('new-child', 'Keep the original task text')
+    field = next(field for field in edited.editable_fields if field.name == 'project')
+    assert field.editor_default == str(project)
+    assert FieldCodec.encode(edited.project) == str(project)
+    with pytest.raises(ValueError, match='Project path must not be empty'):
+        action.edited({**values, 'project': ''})
+
+
+def test_single_field_editor_derives_the_original_fields_editor():
+    @dataclass(frozen=True)
+    class Text(SingleFieldValue):
+        value: str
+
+    @dataclass(frozen=True)
+    class Numbers(SingleFieldValue):
+        value: tuple[int, ...]
+
+    for value, text in ((Text('unquoted "text"'), 'unquoted "text"'),
+                        (Numbers((1, 2)), '[1, 2]')):
+        decoder = compile_decoder(type(value))
+        assert decoder.encode_editor(value) == text
+        assert FieldCodec.decode(type(value), decoder.decode_editor(text)) == value

@@ -1395,6 +1395,18 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
         return text
 
 
+class _TextEditorDecoder[T](ValueDecoder[T]):
+    """Text values keep their wire spelling in an unrestricted editor."""
+
+    __slots__ = ()
+
+    def encode_editor(self, value: T) -> str:
+        return self.encode(value)
+
+    def decode_editor(self, value):
+        return value
+
+
 @dataclass(frozen=True, slots=True)
 class _RepresentedDecoder[T](ValueDecoder[T]):
     """A declared representation capability; null without one decodes structurally."""
@@ -1459,8 +1471,31 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
         return self.representation.decode_field(data, self.structural)
 
 
+class _TextRepresentedDecoder[T](_RepresentedDecoder[T], _TextEditorDecoder[T]):
+    """A declared text representation uses its spelling in the editor too."""
+
+    __slots__ = ()
+
+
+class _SingleFieldDecoder[T](_RepresentedDecoder[T]):
+    """The original field owns the editor as well as the whole wire value."""
+
+    __slots__ = ()
+
+    @property
+    def editor_annotation(self):
+        return self.representation.wire_field().value.editor_annotation
+
+    def encode_editor(self, value: T):
+        entry = self.representation.wire_field()
+        return entry.editor_default(entry.current(value))
+
+    def decode_editor(self, value):
+        return self.representation.wire_field().editor_payload(value)
+
+
 @dataclass(frozen=True, slots=True)
-class _NominalTextDecoder[T: str](_RepresentedDecoder[T]):
+class _NominalTextDecoder[T: str](_TextRepresentedDecoder[T]):
     """The field owns the decoded kind; its inherited spelling owns wire text."""
 
     structural: _ScalarDecoder[T, type[T]]
@@ -1683,6 +1718,8 @@ class SingleValueEncoding(WireValue):
 
 class SingleFieldValue(ExternalJsonShape, SingleValueEncoding):
     """One declared field is the whole wire value, not an object envelope."""
+
+    decoder = _SingleFieldDecoder
 
     @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
@@ -2056,6 +2093,8 @@ class TextRepresentation[V](FieldRepresentation[V]):
     Its schema names the representation, so text with no declared spelling never shares a stored
     form with plain ``str`` or with another representation; SpelledText declares one.
     """
+
+    decoder = _TextRepresentedDecoder
 
     @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
@@ -3276,7 +3315,7 @@ class _ExactScalarDecoder[T](_ScalarDecoder[T], JsonScalar):
         return value
 
 
-class _PathDecoder(PathText, ValueDecoder[Path]):
+class _PathDecoder(PathText, _TextEditorDecoder[Path]):
     """The path representation also owns direct and concrete-subclass values."""
 
     origins = (Path,)
@@ -3295,7 +3334,7 @@ class _NullDecoder(_ExactScalarDecoder[None]):
         return (f"{column} IS NULL",)
 
 
-class _TextDecoder(_ExactScalarDecoder[str]):
+class _TextDecoder(_ExactScalarDecoder[str], _TextEditorDecoder[str]):
     __slots__ = ()
     annotations = (str,)
     json_type = "string"
@@ -3303,11 +3342,6 @@ class _TextDecoder(_ExactScalarDecoder[str]):
     def encode(self, value: str) -> str:
         return str(super().encode(value))
 
-    def encode_editor(self, value: str) -> str:
-        return value
-
-    def decode_editor(self, value):
-        return value
 
 
 class _FlagDecoder(_ExactScalarDecoder[bool]):
