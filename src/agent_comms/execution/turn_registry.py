@@ -36,7 +36,12 @@ class TurnRegistry[Record, Declaration](ABC):
         turn, = self.read_turns((held,))
         return turn
 
-    @abstractmethod
     def read_turns(self, held: tuple[Record, ...]) -> tuple[Declaration, ...]:
         """Each held turn, in order, under one registry copy."""
+        source = self.capture_turns(held)
+        return tuple(source[record] for record in held)
+
+    @abstractmethod
+    def capture_turns(self, held: tuple[Record, ...]) -> Mapping[Record, Declaration]:
+        """Capture once; decode a selected row only when its own reader asks."""
 

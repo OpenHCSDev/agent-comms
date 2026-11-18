@@ -4,7 +4,7 @@ import logging
 import sqlite3
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
 from functools import cached_property
 
@@ -45,7 +45,7 @@ from agent_comms.planning.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.planning.goal_attempts import GoalAttemptStore
-from agent_comms.planning.goal_events import GoalChange, GoalChanged, GoalUnchanged
+from agent_comms.planning.goal_events import GoalChange, GoalReadFailed
 from agent_comms.planning.goal_failure_observation import GoalFailureEvidence
 from agent_comms.planning.goal_history import GoalHistoryEntry, RecordedGoalHistory
 from agent_comms.planning.goal_ledger import FailedTurnEvidence, Generation
@@ -229,6 +229,53 @@ class BornGoalTarget(GoalTarget):
         return thread
 
 
+@dataclass(frozen=True)
+class GoalPublicationRead:
+    """A publication batch borrows one fresh cut of each original source, lazily.
+
+    The cut ends before dispatch. It neither changes goals nor authorizes turns.
+    An owner's failed read remains that owner's failure, not the other replies'.
+    """
+
+    goals: Goals
+    resources: ExitStack
+    names: tuple[str, ...]
+
+    @cached_property
+    def registry(self) -> RegistrySnapshot:
+        return self.goals.registry.snapshot()
+
+    @cached_property
+    def turns(self) -> Mapping[StoredTurnRecord, TurnDeclaration]:
+        return TurnRecord.read_all(
+            self.registry.threads[canonical].turn_record for name in self.names
+            for canonical in (self.registry.canonical_name(name),)
+            if canonical in self.registry.threads and self.registry.threads[canonical].goal
+        )
+
+    @cached_property
+    def connection(self) -> sqlite3.Connection:
+        return self.resources.enter_context(self.goals.open_goal_store().reader_snapshot())
+
+    @cached_property
+    def wait_connection(self) -> sqlite3.Connection:
+        return self.resources.enter_context(self.goals.waits.snapshot())
+
+    def wait(self, goal: GoalDeclaration) -> GoalWait:
+        return self.goals.waits.resolve_in(self.wait_connection, goal)
+
+    def change(self, name: str, previous: GoalPublicationSnapshot) -> GoalChange:
+        try:
+            owner = self.registry.threads[self.registry.canonical_name(name)]
+            current = self.goals._snapshot_in(
+                lambda: self.connection, owner, self.registry, self.wait,
+                self.goals.agents, self.turns,
+            )
+            return GoalChange.observed(current, previous)
+        except Exception as error:
+            return GoalReadFailed(error)
+
+
 class Goals(
     GoalRecords,
     ProblemGoals,
@@ -402,7 +449,15 @@ class Goals(
     def goal_changed(self, name: str, previous: GoalPublicationSnapshot) -> GoalChange:
         """Compare a rebuilt view after its publication owner observed a source change."""
         current = self.goal_snapshot(name)
-        return GoalChanged(current) if previous.changed_by(current) else GoalUnchanged()
+        return GoalChange.observed(current, previous)
+
+    def goal_changes(
+        self, requests: tuple[tuple[str, GoalPublicationSnapshot], ...],
+    ) -> tuple[GoalChange, ...]:
+        """Ready publication owners share reads, retaining one result per request."""
+        with ExitStack() as resources:
+            source = GoalPublicationRead(self, resources, tuple(name for name, _previous in requests))
+            return tuple(source.change(name, previous) for name, previous in requests)
 
     def goal_snapshot(self, name: str) -> GoalSnapshot:
         """Read current goal and its scheduling projection as one owner snapshot."""
@@ -431,18 +486,18 @@ class Goals(
             return tuple(GoalSnapshot(owner.goal, IdleGoalExecution()) for owner in owners)
         turns = TurnRecord.read_all(owner.turn_record for owner in owners if owner.goal)
         with self.open_goal_store().reader_snapshot() as connection:
-            return tuple(self._snapshot_in(connection, owner, snapshot, wait, activity, turns)
+            return tuple(self._snapshot_in(lambda: connection, owner, snapshot, wait, activity, turns)
                          for owner in owners)
 
     @staticmethod
-    def _snapshot_in(connection: sqlite3.Connection, owner: Thread, snapshot: RegistrySnapshot,
+    def _snapshot_in(connection: Callable[[], sqlite3.Connection], owner: Thread, snapshot: RegistrySnapshot,
                      wait: Callable[[GoalDeclaration], GoalWait], activity: ActivityAnswers,
                      turns: Mapping[StoredTurnRecord, TurnDeclaration]) -> GoalSnapshot:
         for goal in owner.goal:
-            generation = Generation.require_in(connection, goal.id)
+            generation = Generation.require_in(connection(), goal.id)
             source = GoalExecutionSource(
                 goal=goal, wait=wait(goal), generation=generation,
-                evidence=generation.lifecycle.evidence(connection, generation),
+                evidence=generation.lifecycle.evidence(connection(), generation),
                 owner=owner, snapshot=snapshot, agents=activity, turns=turns,
             )
             return GoalSnapshot(goal, source.execution())

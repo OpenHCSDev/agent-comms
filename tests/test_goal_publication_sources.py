@@ -22,7 +22,8 @@ from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.input_drain import UnreadRegistry
 from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_phase import IdlePhase, ToolRunningPhase
-from agent_comms.nominal.field_codec import AcpSessionId, TurnId
+from agent_comms.execution.turn_lease import TurnRecord
+from agent_comms.nominal.field_codec import AcpSessionId, MalformedRecord, TurnId
 from agent_comms.planning.goal_actions import (
     EditGoalAction,
     SetGoalAction,
@@ -323,3 +324,183 @@ async def test_cancelled_observation_releases_retirement_admission(publication):
     finally:
         observing.cancel()
         await asyncio.gather(observing, return_exceptions=True)
+
+
+async def hosted_goals(comms, agent, total):
+    sessions = []
+    for index in range(total):
+        directory = comms.root / f"hosted-{index}"
+        directory.mkdir()
+        thread = agent.sessions.declare_thread(str(directory))
+        session = AcpSessionId(thread.name)
+        await agent.sessions.bind_owned(thread, session)
+        comms.goals.update_goal(thread.name, SetGoalAction(text=f"Objective {index}"))
+        sessions.append(session)
+    return tuple(sessions)
+
+
+async def test_ready_goal_publications_share_one_source_cut_and_late_locks_read_fresh(
+    publication, monkeypatch,
+):
+    comms, agent, first, client = publication
+    others = await hosted_goals(comms, agent, 2)
+    sessions = (first, *others)
+    scheduler = agent.turns.goals
+    leases = [comms.agents.begin_turn(session, TurnId.mint()).turn_lease for session in sessions]
+    snapshots, turns, generations, waits = [], [], [], []
+    original_registry = type(comms.registry.store).snapshot
+    original_turns = type(comms.registry.store).capture_turns
+    original_generations = GoalAttemptStore.reader_snapshot
+    original_waits = GoalWaits.snapshot
+
+    def registry(store):
+        snapshots.append(store.path)
+        return original_registry(store)
+
+    def turn_source(store, held):
+        turns.append(tuple(held))
+        return original_turns(store, held)
+
+    def generation_source(store):
+        generations.append(store.path)
+        return original_generations(store)
+
+    def wait_source(store):
+        waits.append(store.path)
+        return original_waits(store)
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(type(comms.registry.store), "snapshot", registry)
+            patch.setattr(type(comms.registry.store), "capture_turns", turn_source)
+            patch.setattr(GoalAttemptStore, "reader_snapshot", generation_source)
+            patch.setattr(GoalWaits, "snapshot", wait_source)
+            await asyncio.gather(*(scheduler.sync_goal_execution(session) for session in sessions))
+            assert len(snapshots) == len(generations) == len(waits) == 1
+            # READY goals need no turn evidence; batching must keep that lazy boundary.
+            assert turns == []
+            snapshots.clear()
+            generations.clear()
+            waits.clear()
+            for session in sessions:
+                comms.goals.goal_changed(session, scheduler.publication(session).snapshot)
+            assert len(snapshots) == len(generations) == len(waits) == len(sessions)
+            assert turns == []
+        assert {session for session, _update in client.published} == set(sessions)
+        before = {session: scheduler.publication(session).snapshot for session in sessions}
+        await asyncio.gather(*(scheduler.sync_goal_execution(session) for session in sessions))
+        assert all(scheduler.publication(session).snapshot is before[session] for session in sessions)
+        assert len(client.published) == len(sessions)
+
+        # The first owner's queued read must not borrow the other owners' earlier cut.
+        async with scheduler.publication(first).lock:
+            delayed = asyncio.create_task(scheduler.sync_goal_execution(first))
+            await scheduler.sync_goal_execution(others[0])
+            changed = comms.goals.update_goal(first, EditGoalAction(text="After the earlier cut"))
+            assert not delayed.done()
+        await delayed
+        assert scheduler.publication(first).snapshot.goal == changed
+        assert client.published[-1][1].goal == changed
+    finally:
+        for lease in leases:
+            comms.agents.finish_turn(lease)
+
+
+async def test_batched_goal_read_keeps_each_source_failure_and_retries_failed_dispatch(
+    publication, monkeypatch,
+):
+    comms, agent, first, client = publication
+    second, = await hosted_goals(comms, agent, 1)
+    scheduler = agent.turns.goals
+    requests = (
+        ("never-registered", scheduler.publication(first).snapshot),
+        (first, scheduler.publication(first).snapshot),
+        (second, scheduler.publication(second).snapshot),
+    )
+    failed, *good = comms.goals.goal_changes(requests)
+    with pytest.raises(KeyError):
+        await failed.publish(lambda event: asyncio.sleep(0), requests[0][1])
+    for event, (_, previous) in zip(good, requests[1:], strict=True):
+        assert await event.publish(lambda event: asyncio.sleep(0), previous) is not previous
+
+    original = client.publish_update
+    fail = True
+
+    async def dispatch(*, session_id, update):
+        if session_id == first and fail:
+            raise OSError("Original consumer failed")
+        return await original(session_id=session_id, update=update)
+
+    monkeypatch.setattr(client, "publish_update", dispatch)
+    before = scheduler.publication(first).snapshot
+    outcomes = await asyncio.gather(*(scheduler.sync_goal_execution(session)
+                                      for session in (first, second)), return_exceptions=True)
+    assert isinstance(outcomes[0], OSError)
+    assert outcomes[1] is None
+    assert scheduler.publication(first).snapshot is before
+    assert {session for session, _update in client.published} == {second}
+    fail = False
+    await scheduler.sync_goal_execution(first)
+    assert scheduler.publication(first).snapshot is not before
+    assert {session for session, _update in client.published} == {first, second}
+
+
+async def test_cancelled_goal_reader_joins_its_batch_without_cancelling_the_peer(
+    publication, monkeypatch,
+):
+    _comms, agent, first, client = publication
+    scheduler = agent.turns.goals
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = scheduler.read_goal_changes
+
+    async def held_batch():
+        entered.set()
+        await release.wait()
+        await original()
+
+    monkeypatch.setattr(scheduler, "read_goal_changes", held_batch)
+    previous = scheduler.publication(first).snapshot
+    reader = asyncio.create_task(scheduler.read_goal_change(first, previous))
+    peer = asyncio.create_task(scheduler.read_goal_change(first, previous))
+    try:
+        await entered.wait()
+        reader.cancel()
+        await asyncio.sleep(0)
+        assert not reader.done()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await reader
+        event = await peer
+        assert await event.publish(lambda event: asyncio.sleep(0), previous) is not previous
+        assert client.published == []
+    finally:
+        release.set()
+        await asyncio.gather(reader, peer, return_exceptions=True)
+
+
+async def test_captured_turn_rows_decode_independently_and_keep_their_original_cut(publication):
+    comms, agent, first, _client = publication
+    second, = await hosted_goals(comms, agent, 1)
+    leases = tuple(comms.agents.begin_turn(session, TurnId.mint()).turn_lease
+                   for session in (first, second))
+    good, bad = (lease.record for lease in leases)
+    rows = comms.registry.store.rows
+    original = rows.turn_wires((bad.identity,))[bad.identity]
+    try:
+        # Deliberately corrupt one foreign stored wire, through its real row owner.
+        rows.change_turn_wire(bad.identity, lambda _wire: (({"not_a_turn": True}, None),))
+        captured = TurnRecord.read_all((good, bad))
+        actual = captured[good]
+        assert actual == good.read()
+        assert captured[good] is actual
+        with pytest.raises(MalformedRecord):
+            captured[bad]
+        rows.change_turn_wire(bad.identity, lambda _wire: ((original, None),))
+        assert TurnRecord.read_all((bad,))[bad] == bad.read()
+        # Repairing the live row must not rewrite the cut that supplied the old failure.
+        with pytest.raises(MalformedRecord):
+            captured[bad]
+    finally:
+        rows.change_turn_wire(bad.identity, lambda _wire: ((original, None),))
+        for lease in leases:
+            comms.agents.finish_turn(lease)

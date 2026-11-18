@@ -644,17 +644,15 @@ class TurnReads(Mapping["StoredTurnRecord", TurnDeclaration]):
         self.held = tuple(dict.fromkeys(held))
 
     @cached_property
-    def turns(self) -> Mapping[StoredTurnRecord, TurnDeclaration]:
+    def sources(self) -> Mapping[tuple[Path, type], Mapping[StoredTurnRecord, TurnDeclaration]]:
         by_registry: dict[tuple[Path, type], list[StoredTurnRecord]] = {}
         for stored in self.held:
             by_registry.setdefault((stored.registry_path, stored.registry_type), []).append(stored)
-        turns: dict[StoredTurnRecord, TurnDeclaration] = {}
-        for held in by_registry.values():
-            turns.update(zip(held, held[0].registry.read_turns(tuple(held)), strict=True))
-        return turns
+        return {key: held[0].registry.capture_turns(tuple(held))
+                for key, held in by_registry.items()}
 
     def __getitem__(self, record: StoredTurnRecord) -> TurnDeclaration:
-        return self.turns[record]
+        return self.sources[(record.registry_path, record.registry_type)][record]
 
     def __iter__(self) -> Iterator[StoredTurnRecord]:
         return iter(self.held)
