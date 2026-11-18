@@ -45,7 +45,7 @@ def observing_notifications(
             comms.views.transcript_reads.close()
 
 
-def notification_reply(client: Connection) -> NotificationsObserved:
+async def notification_reply(service: ObservationService, client: Connection) -> NotificationsObserved:
     """Both real pipe frames must arrive; a missed wake fails without a blocking recv."""
     assert client.poll()
     revision: object = client.recv()
@@ -55,6 +55,10 @@ def notification_reply(client: Connection) -> NotificationsObserved:
     assert isinstance(result, NotificationsObserved)
     assert result.revision == revision.revision
     assert not client.poll()
+    # Finish this answered read only after draining its pipe. A subsequent
+    # source wake must not still be finishing this read's generator.
+    while service.stepping:
+        await service.pass_once()
     return result
 
 
@@ -71,7 +75,7 @@ async def test_open_notification_interest_refreshes_after_input_only_context(tmp
         comms = claim.selected.comms
         with observing_notifications(comms, case.references) as (service, client):
             await watched_pass(service)
-            before = notification_reply(client)
+            before = await notification_reply(service, client)
             old, = before.outcomes[case.references[0].seq, case.references[0].message_id]
             assert not old.state.is_consumed() and old.answer == UnansweredResponse()
             coordinator = coordinator_revision(comms)
@@ -79,7 +83,7 @@ async def test_open_notification_interest_refreshes_after_input_only_context(tmp
             case.acknowledge(proof)
 
             await watched_pass(service)
-            after = notification_reply(client)
+            after = await notification_reply(service, client)
             assert coordinator_revision(comms) == coordinator
             assert after.revision.bus_changes == before.revision.bus_changes
             assert after.revision.bus_seq == before.revision.bus_seq
@@ -100,7 +104,7 @@ async def test_open_notification_interest_refreshes_after_reply_only_commit(
     reference = source.reference
     with observing_notifications(comms, (reference,)) as (service, client):
         await watched_pass(service)
-        before = notification_reply(client)
+        before = await notification_reply(service, client)
         old, = before.outcomes[reference.seq, reference.message_id]
         assert old.answer == UnansweredResponse() and not old.state.is_consumed()
         coordinator = coordinator_revision(comms)
@@ -111,7 +115,7 @@ async def test_open_notification_interest_refreshes_after_reply_only_commit(
         ).message
 
         await watched_pass(service)
-        after = notification_reply(client)
+        after = await notification_reply(service, client)
         assert coordinator_revision(comms) == coordinator
         assert after.revision.registry == before.revision.registry
         assert after.revision.activity == before.revision.activity
