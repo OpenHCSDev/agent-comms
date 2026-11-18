@@ -88,7 +88,8 @@ from agent_comms.messaging.revision_views import (
 )
 from agent_comms.messaging.watched import FileSource
 from agent_comms.transport.tool_caller import HumanCaller
-from agent_comms.transport.tool_request import CoreRead, ServedRequest
+from agent_comms.nominal.declared_family import UnknownFamilyMember
+from agent_comms.transport.tool_request import ReadTool, ServedRequest
 from agent_comms.nominal.field_codec import (
     DeclaredError,
     FieldCodec,
@@ -569,12 +570,16 @@ class CoreReadOperation(ReadRequest):
 
     @property
     def refusal_errors(self) -> tuple[type[Exception], ...]:
-        return (*super().refusal_errors, ToolRefusedError, WorkBranchError)
+        # A request outside ReadTool was routed here by mistake: refuse that read, never the
+        # whole observer (every view's live updates die with it).
+        return (*super().refusal_errors, ToolRefusedError, WorkBranchError, UnknownFamilyMember)
 
     def read(self, comms: Comms) -> object:
-        # CoreRead admits only the reads it declares, so a mutating request never decodes or
-        # runs here; LocalCoreAccess keeps every other request on its own path.
-        return CoreRead.serving(self.operation).apply_without_thread(comms, HumanCaller())
+        # ReadTool is the served form of every ReadRequest, the very family LocalCoreAccess
+        # routes here: Core reads and thread reads alike (comms_transcript_page is a thread
+        # read). Serving only CoreRead made the child die on every thread read the UI sent.
+        # A mutating request is not a ReadTool, so it never decodes or runs here.
+        return ReadTool.serving(self.operation).apply_without_thread(comms, HumanCaller())
 
     def answered_value(self, value: object) -> ReadOutcome:
         try:

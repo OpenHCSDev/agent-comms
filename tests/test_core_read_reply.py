@@ -134,3 +134,25 @@ async def test_an_unencodable_reply_fails_its_own_read_and_the_child_keeps_answe
         good = CoreReadOperation(str(comms.root), CommsRegistrySliceTool(threads=("sliced",)))
         sliced = await asyncio.to_thread(process.read_from_thread, good)
     assert "sliced" in sliced.threads
+
+
+async def test_a_thread_read_is_served_by_the_child_and_never_kills_it(tmp_path):
+    """LocalCoreAccess sends every ReadRequest to the child, thread reads included. On 2026-11-18
+    the child served only CoreRead, so comms_transcript_page (a thread read) raised
+    UnknownFamilyMember and killed the observer: every local view's live updates died with it
+    and the UI restarted it on its next read. The child serves ReadTool, the family the UI routes
+    on, and keeps answering after the thread read."""
+    from agent_comms.transport.tools.reads import TranscriptPageRead
+    from agent_comms.ui_model.observation import ObserverProcessDied
+
+    comms = wire(tmp_path / "wire")
+    comms.registry.declare(NativeThread("paged", frozenset(), Checkout(tmp_path)))
+    async with ObservationProcess.awaited(comms.route) as process:
+        page = CoreReadOperation(str(comms.root), TranscriptPageRead(thread="paged"))
+        try:
+            await asyncio.to_thread(process.read_from_thread, page)
+        except Exception as refused:
+            assert not isinstance(refused, ObserverProcessDied), refused
+        after = CoreReadOperation(str(comms.root), CommsThreadPresentationTool(thread="paged"))
+        assert isinstance(await asyncio.to_thread(process.read_from_thread, after),
+                          NotifiedThreadPresentation)
