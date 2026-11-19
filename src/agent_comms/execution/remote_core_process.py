@@ -10,7 +10,7 @@ from typing import ClassVar, cast
 
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
-from agent_comms.execution.child_process import HelperStart, SpawnedHelper
+from agent_comms.execution.child_process import HelperStart, ProcessName, SpawnedHelper
 from agent_comms.execution.launch_runtime import ThreadLaunch
 from agent_comms.transport.remote_core import RemoteCoreAccess
 from agent_comms.transport.request import ReadRequest, ToolRequest
@@ -18,11 +18,13 @@ from agent_comms.transport.tool_result import ToolResult
 from agent_comms.ui_model.observation import ViewerEnd
 
 _remote: RemoteCoreAccess
+REMOTE_READ_PROCESS = ProcessName("ac-core-read")
 
 
 def _initialize_remote(access: RemoteCoreAccess) -> None:
     """Each child retains its own TLS context and kept connection."""
     global _remote
+    REMOTE_READ_PROCESS.publish()
     ThreadLaunch.strip(os.environ)
     _remote = access
 

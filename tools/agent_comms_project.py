@@ -33,6 +33,7 @@ import agent_comms
 from agent_comms.coordination import schema as coordination_schema
 from agent_comms.execution.child_process import (
     ForkedProcessPool,
+    ProcessName,
     SpawnedProcess,
 )
 from agent_comms.execution.launch_runtime import RestoredRuntime
@@ -56,6 +57,7 @@ from agent_comms_hooks import process_claim
 SOURCES = Path(inspect.getfile(agent_comms)).parents[1]
 REPOSITORY = SOURCES.parent
 READER = Path(inspect.getfile(stored_formats)).relative_to(REPOSITORY)
+NRA_GATE_PROCESS = ProcessName("ac-nra-gate")
 
 
 class StoredFormatReader(ABC):
@@ -127,7 +129,7 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
         return (Path(inspect.getfile(stored_formats)).parent, SOURCES)
 
     def pool(self, workers: int) -> Executor:
-        return ForkedProcessPool(workers)
+        return ForkedProcessPool(workers, NRA_GATE_PROCESS)
 
     def run(self, command: tuple[str, ...], *, cwd: Path, env: dict[str, str],
             timeout: float) -> CompletedProcess[bytes]:

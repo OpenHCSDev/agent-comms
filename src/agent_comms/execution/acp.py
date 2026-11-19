@@ -68,6 +68,7 @@ from agent_comms.coordination.working_memory_worker import AnnotationWorker
 from agent_comms.execution import manual_compaction_bridge
 from agent_comms.execution.acp_failure import NativeTurnError
 from agent_comms.execution.acp_request_consumer import AcpRequestConsumer
+from agent_comms.execution.child_process import ProcessName
 from agent_comms.execution.controller import (
     ACP_PERMISSION_TIMEOUT_SECONDS,
     CancelledOutcome,
@@ -687,7 +688,11 @@ class CommsClient(CommsAgent):
     session_lifecycle_class = AttachedSessionLifecycle
 
 
+ACP_PROCESS = ProcessName("ac-acp")
+
+
 def main() -> int:
+    ACP_PROCESS.publish()
     root = LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
     started()
     if "--login" in sys.argv[1:]:

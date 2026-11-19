@@ -100,6 +100,7 @@ from agent_comms.nominal.sealed import Sealed
 from agent_comms.registry.thread_identity import ThreadIncarnation, ThreadRole
 
 STOP_GRACE_SECONDS = 2.0
+PR_SET_NAME = 15
 
 
 @dataclass(frozen=True)
@@ -369,6 +370,25 @@ class NoProcess(NullMember, ProcessState):
     def held_external_stop(self, release: Callable[[], None], name: str) -> str | None:
         """Nothing holds the endpoint, so the ordinary stop finishes it on the bus."""
         return name
+
+
+@dataclass(frozen=True)
+class ProcessName:
+    """One short kernel-visible name published by the process that owns the role."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        encoded = self.value.encode("utf-8")
+        if not encoded or len(encoded) > 15 or not self.value.isprintable():
+            raise ValueError("A process name needs 1-15 safe UTF-8 bytes")
+
+    @property
+    def encoded(self) -> bytes:
+        return self.value.encode("utf-8")
+
+    def publish(self) -> None:
+        Platform.current().publish_process_name(self)
 
 
 @dataclass(frozen=True)
@@ -741,6 +761,10 @@ class Platform(DeclaredFamily, affix="Platform"):
     @abstractmethod
     def process_name(self, pid: int) -> str: ...
 
+    def publish_process_name(self, name: ProcessName) -> None:
+        """Keep the inherited executable name on platforms without a naming operation."""
+        return None
+
     def lock_holders(self, descriptor: int) -> tuple[LockHolder, ...]:
         return (UnidentifiedLockHolder(),)
 
@@ -895,6 +919,16 @@ class LinuxPlatform(PidfdHandles, Platform):
             return Path(f"/proc/{pid}/comm").read_text().strip()
         except FileNotFoundError:
             raise ProcessLookupError(pid) from None
+
+    def publish_process_name(self, name: ProcessName) -> None:
+        operation = ctypes.CDLL(None, use_errno=True).prctl
+        operation.argtypes = (
+            ctypes.c_int, ctypes.c_char_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong,
+        )
+        operation.restype = ctypes.c_int
+        if operation(PR_SET_NAME, name.encoded, 0, 0, 0):
+            code = ctypes.get_errno()
+            raise OSError(code, os.strerror(code))
 
     def lock_holders(self, descriptor: int) -> tuple[LockHolder, ...]:
         """Identify actual flock owners of this opened file, not merely open FDs.
@@ -2709,8 +2743,8 @@ class PoolWorkerStopped(BaseException):
 class ForkedProcessPool(ExitStack, ProcessPoolExecutor, ParentLifeline):
     """Parallel work whose workers and nested child owners cannot outlive its parent."""
 
-    def __init__(self, workers: int) -> None:
-        """The caller declares the width; no default multiplies it under a parallel runner."""
+    def __init__(self, workers: int, process_name: ProcessName) -> None:
+        """The caller declares width and role; the generic pool cannot invent either one."""
         if workers < 1:
             raise ValueError("A pool needs at least one worker")
         ExitStack.__init__(self)
@@ -2719,7 +2753,8 @@ class ForkedProcessPool(ExitStack, ProcessPoolExecutor, ParentLifeline):
         try:
             ProcessPoolExecutor.__init__(
                 self, max_workers=workers, mp_context=multiprocessing.get_context("fork"),
-                initializer=self._initialize, initargs=(self.read_fd, self.write_fd),
+                initializer=self._initialize,
+                initargs=(self.read_fd, self.write_fd, process_name),
             )
         except BaseException:
             self.close()
@@ -2733,7 +2768,8 @@ class ForkedProcessPool(ExitStack, ProcessPoolExecutor, ParentLifeline):
         raise PoolWorkerStopped()
 
     @classmethod
-    def _initialize(cls, read_fd: int, write_fd: int) -> None:
+    def _initialize(cls, read_fd: int, write_fd: int, process_name: ProcessName) -> None:
+        process_name.publish()
         signal.signal(signal.SIGTERM, cls._stopped)
         os.close(write_fd)
         cls.watch(read_fd, partial(os.kill, os.getpid(), signal.SIGTERM))

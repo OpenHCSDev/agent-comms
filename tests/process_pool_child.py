@@ -5,11 +5,12 @@ from pathlib import Path
 
 from agent_comms.execution.child_process import (
     ForkedProcessPool,
+    ProcessName,
     SpawnedProcess,
 )
 from process_tree_fixture import TREE
 
 if __name__ == "__main__":
-    with ForkedProcessPool(2) as pool:
+    with ForkedProcessPool(2, ProcessName("ac-test-pool")) as pool:
         pool.submit(SpawnedProcess.run, (sys.executable, "-c", TREE, sys.argv[1]),
                     timeout=60, cwd=Path.cwd(), env=dict(os.environ)).result()

@@ -7,10 +7,11 @@ import signal
 import sys
 from contextlib import suppress
 
-from agent_comms.execution.acp import CommsAgent
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
+from agent_comms.execution.acp import CommsAgent
+from agent_comms.execution.child_process import ProcessName
 from agent_comms.execution.launch_root import LaunchRoot, started
 from agent_comms.execution.root_runtime import RootRuntimeStore
 from agent_comms.execution.worker import (
@@ -20,6 +21,9 @@ from agent_comms.execution.worker import (
 )
 from agent_comms.installer.active_route import ActiveRoute
 from agent_comms.transport.owner_connection import socket_path
+
+
+CORE_WORKER_PROCESS = ProcessName("ac-core-worker")
 
 
 async def run() -> None:
@@ -56,6 +60,7 @@ async def run_host(comms: Comms, listener_fd: int) -> None:
 
 
 def main() -> int:
+    CORE_WORKER_PROCESS.publish()
     with suppress(KeyboardInterrupt):
         asyncio.run(run())
     return 0
