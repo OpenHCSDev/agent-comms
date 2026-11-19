@@ -202,8 +202,12 @@ class TeamHeartbeatEffects(TeamService):
                     not_applied=not_applied,
                 )
                 deliveries = tuple(
-                    pings.delivery(recipient, published=announced[recipient])
-                    for recipient in held
+                    pings.delivery(
+                        recipient.incarnation,
+                        published=announced[recipient.incarnation],
+                        delivery=recipient.heartbeat_delivery,
+                    )
+                    for recipient in recipients
                 )
                 if not deliveries:
                     continue
