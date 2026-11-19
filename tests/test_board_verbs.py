@@ -3,13 +3,15 @@
 import shlex
 import time
 from contextlib import chdir
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from inspect import isabstract
 
 import pytest
 
 from agent_comms.errors import TodoError
+from agent_comms.heartbeat_subjects import TeamHistory
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
+from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.order_words import (
     StrikeReason,
@@ -37,10 +39,18 @@ from agent_comms.planning.orders import (
 from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.projects.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.registry.threads import ExternalThread, ForkThread
 from agent_comms.storage.recorded_time import RecordedEventTime
-from agent_comms.task_attachments.team_pings import RulePing
+from agent_comms.task_attachments.team_pings import (
+    FoldedRule,
+    RulePing,
+    TeamPings,
+    TeamUpdateNotice,
+    TeamUpdateStore,
+)
 from agent_comms.team import judge, order
+from agent_comms.team.board_actions import BoardActionApplied, BoardActionOffer
 from agent_comms.team.standing import DeliveryAwaitingJudgement
 from agent_comms.team.standing_rules import (
     HeadReviewTimerUp,
@@ -49,7 +59,8 @@ from agent_comms.team.standing_rules import (
     ReviewTimerUp,
     StandingRule,
 )
-from agent_comms.transport.tool_caller import ForkCaller, PeerCaller, ThreadCaller
+from agent_comms.transport.tool_caller import ForkCaller, HumanCaller, PeerCaller, ThreadCaller
+from agent_comms.transport.tools.orders import CommsBoardActionTool
 from agent_comms_hooks import ToolRefusedError
 from github_fixture import GitHubFixture
 from team_heartbeat_fixture import capture_frame
@@ -210,8 +221,65 @@ def test_orderless_board_commands_do_not_invent_a_problem(board_review):
     rule, = OrderlessUnreviewedHead.scan_reviews(comms.goals, ProgressRead(()))
     assert judge.PromoteVerb not in rule.clearing_actions()
     assert "problem" not in rule.command_values()
-    assert "--problem" not in rule.clearing_commands()
+    recipient = comms.registry.require("colleague").incarnation
+    offers = rule.action_offers(recipient)
+    assert offers
+    assert all(offer.recipient == recipient and offer.observation == rule.observation_key()
+               for offer in offers)
+    assert all("--problem" not in offer.arguments for offer in offers)
+    for offer in offers:
+        assert FieldCodec.decode(BoardActionOffer, FieldCodec.encode(offer)) == offer
+        assert offer.text().startswith(f"{offer.verb.tool()} {offer.verb.declared_name} ")
+    delivery = TeamPings(
+        (), (rule,), (), now=time.time(), history=TeamHistory.of_team(comms),
+    ).delivery(recipient, published=())
+    carried, = delivery.packet.handled
+    assert isinstance(carried, RulePing) and carried.offers == offers
+    assert FieldCodec.decode(RulePing, FieldCodec.encode(carried)) == carried
+    rendered = "\n".join(FoldedRule.of(carried.alarm_kind, (carried,)).lines(time.time()))
+    assert all(offer.text() in rendered for offer in offers)
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
+
+
+def test_board_action_refuses_stale_source_and_dispatches_current_offer_once(board_review):
+    comms, request, _, _ = board_review
+    rule, = OrderlessUnreviewedHead.scan_reviews(comms.goals, ProgressRead(()))
+    recipient = comms.registry.require("colleague").incarnation
+    dispatched: list[str] = []
+
+    @dataclass(frozen=True)
+    class ProbeOffer(BoardActionOffer):
+        observation: TextDigest
+        recipient: ThreadIncarnation
+
+        @property
+        def label(self) -> str:
+            return "Probe board action"
+
+        @property
+        def words(self) -> tuple[str, ...]:
+            return ("probe", self.observation.value)
+
+        def execute(self, root, actor: str) -> BoardActionApplied:
+            dispatched.append(actor)
+            return BoardActionApplied((f"applied for {actor}",))
+
+    try:
+        current = ProbeOffer(rule.observation_key(), recipient)
+        ping = replace(RulePing.capture(rule), offers=(current,))
+        TeamUpdateStore.record(comms.root, TeamUpdateNotice(recipient, (ping,)))
+        stale = ProbeOffer(TextDigest.of("older board source"), recipient)
+        with pytest.raises(ToolRefusedError, match="human UI"):
+            CommsBoardActionTool(offer=current).apply(comms, PeerCaller("colleague"))
+        with pytest.raises(ToolRefusedError, match="stale"):
+            CommsBoardActionTool(offer=stale).apply(comms, HumanCaller())
+        assert dispatched == []
+        assert CommsBoardActionTool(offer=current).apply(
+            comms, HumanCaller()
+        ) == BoardActionApplied(("applied for colleague",))
+        assert dispatched == ["colleague"]
+    finally:
+        ProbeOffer.withdraw()
 
 
 def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal(
@@ -348,8 +416,16 @@ def test_review_scope_requires_the_actual_registered_birth(board_review):
     assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
 
 
-def test_unreviewed_head_line_names_each_verb_once_and_every_argument() -> None:
-
+def test_unreviewed_head_offers_each_verb_once_with_every_bound_argument() -> None:
     head = "a" * 40
-    line = OrderlessUnreviewedHead(request=PullRequestHead(RepositoryName.from_wire("o/r"), 7, head), due_at=0).line()
-    assert line.count("judge ") == 1 and all(part in line for part in ("--pr 7", f"--head {head}", "--repo o/r"))
+    rule = OrderlessUnreviewedHead(
+        request=PullRequestHead(RepositoryName.from_wire("o/r"), 7, head), due_at=0,
+    )
+    offers = rule.action_offers(RecordedThreadIncarnation("reader", 1.0))
+    expected = tuple(verb for verb in rule.clearing_actions()
+                     if verb.command_arguments(rule.command_values()))
+    assert tuple(offer.verb for offer in offers) == expected
+    text = "\n".join(offer.text() for offer in offers)
+    assert all(part in text for part in ("--pr 7", f"--head {head}", "--repo o/r"))
+    assert all(sum(offer.verb is verb for offer in offers) == 1
+               for verb in expected)

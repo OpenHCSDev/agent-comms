@@ -57,6 +57,7 @@ from agent_comms.task_attachments.disclosure_text import (
     WarningTone,
 )
 from agent_comms.task_attachments.owner_notices import OwnerNotice
+from agent_comms.team.board_actions import BoardActionOffer
 from agent_comms.team.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.ui_model.message_category import HeartbeatCategory, MessageCategory
 from agent_comms.ui_model.teammate_state import AwaitingTeam, TeammateState
@@ -178,11 +179,23 @@ class Ping(FrozenRecordMember, TaggedRecordMember, DeclaredFamily, affix="Ping")
     def alarm_pings(self) -> tuple[Ping, ...]:
         return (self,)
 
+    def for_recipient(
+        self,
+        recipient: ThreadIncarnation,
+        rules: Mapping[tuple[type[StandingRule], TextDigest], StandingRule],
+    ) -> Ping:
+        """A ping without a rule action is already recipient-complete."""
+        return self
+
+    def board_actions(self) -> tuple[BoardActionOffer, ...]:
+        return ()
+
 
 @dataclass(frozen=True)
 class RulePing(Ping):
     rule: type[StandingRule]
     observation: TextDigest
+    offers: tuple[BoardActionOffer, ...] = field(default=(), compare=False, kw_only=True)
 
     @property
     def urgent(self) -> bool:
@@ -211,6 +224,17 @@ class RulePing(Ping):
     def capture(cls, rule: StandingRule) -> Self:
         return cls(type(rule), rule.observation_key(), text=rule.line(), subjects=rule.subjects(),
                    threads=cls.stored_threads(rule.named_threads()))
+
+    def for_recipient(
+        self,
+        recipient: ThreadIncarnation,
+        rules: Mapping[tuple[type[StandingRule], TextDigest], StandingRule],
+    ) -> RulePing:
+        rule = rules[(self.rule, self.observation)]
+        return replace(self, offers=rule.action_offers(recipient))
+
+    def board_actions(self) -> tuple[BoardActionOffer, ...]:
+        return self.offers
 
 
 @dataclass(frozen=True)
@@ -309,6 +333,7 @@ class TeamPings(PingLines):
             *(TeammatePing.capture(state) for state in states if state.attention()),
             *(RulePing.capture(rule) for rule in rules),
         )
+        self.rules = {(type(rule), rule.observation_key()): rule for rule in rules}
         self.handled = tuple(sorted(
             (replace(ping, since=began.get(ping, ping.since).continued_from(now))
              for ping in captures),
@@ -329,11 +354,15 @@ class TeamPings(PingLines):
         announced = {ping.key: ping for packet in published for ping in packet.handled}
         new = tuple(ping for ping in self.handled if announced.get(ping.key) != ping)
         wakes = self.open_wakes or any(not ping.parked(self.stopped_threads) for ping in new)
-        packet = (TeamDecisions(recipient, self.handled, new, self.waiting,
+        bind = lambda pings: tuple(ping.for_recipient(recipient, self.rules) for ping in pings)
+        handled, decisions, waiting, opened = map(
+            bind, (self.handled, new, self.waiting, self.opened),
+        )
+        packet = (TeamDecisions(recipient, handled, decisions, waiting,
                                 not_applied=self.not_applied)
                   if wakes or self.not_applied
-                  else TeamUpdateNotice(recipient, self.handled, not_applied=self.not_applied))
-        return TeamDelivery(packet, self.opened)
+                  else TeamUpdateNotice(recipient, handled, not_applied=self.not_applied))
+        return TeamDelivery(packet, opened)
 
 
 @dataclass(frozen=True)
@@ -626,7 +655,7 @@ class AlarmSection:
         """The section in one line: how many of each rule, and the line left longest, so the
         reader sees what is owed and for how long before reading any row."""
         oldest = min(self.pings, key=lambda ping: ping.since.chronology())
-        words = oldest.text.partition(FoldedRule.arrow)[0].split(" ")
+        words = oldest.text.split(" ")
         named = " ".join(words[:14]) + (" …" if len(words) > 14 else "")
         counts = ", ".join(f"{len(pings)} {kind.display_label().lower()}"
                            for kind, pings in self.by_kind().items())
@@ -718,9 +747,8 @@ class FoldedRule:
 
     @classmethod
     def of(cls, kind: type[DeclaredFamily], pings: tuple[Ping, ...]) -> FoldedRule:
-        split = tuple(ping.text.partition(cls.arrow) for ping in pings)
-        words = tuple(tuple(observed.split(" ")) for observed, _, _ in split)
-        actions = tuple(tuple(action.split(" ")) if arrow else () for _, arrow, action in split)
+        words = tuple(tuple(ping.text.split(" ")) for ping in pings)
+        actions = tuple(cls.action_words(ping.board_actions()) for ping in pings)
         # A lone row shares nothing with anyone: it keeps every word it has.
         room = min(len(row) for row in words) - 1 if len(pings) > 1 else 0
         prefix = cls.common(words, room)
@@ -729,6 +757,11 @@ class FoldedRule:
         return cls(kind, prefix, suffix, template, tuple(
             RuleRow(ping, row[len(prefix):len(row) - len(suffix)], action)
             for ping, row, action in zip(pings, words, actions)))
+
+    @staticmethod
+    def action_words(offers: tuple[BoardActionOffer, ...]) -> tuple[str, ...]:
+        return tuple(word for index, offer in enumerate(offers)
+                     for word in (("or", *offer.words) if index else offer.words))
 
     @staticmethod
     def common(rows: tuple[tuple[str, ...], ...], room: int) -> tuple[str, ...]:
