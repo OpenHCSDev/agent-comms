@@ -13,25 +13,29 @@ from __future__ import annotations
 import json
 from typing import ClassVar
 
+from cutover.carry_shared_team_frames import FlatTeamFrameFile, SharedTeamFrames
+
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.storage.store_files import AtomicFile
-from agent_comms.team.team_frame_file import TeamFrameFile, TeamPlanFile
+from agent_comms.team.team_frame_file import TeamPlanFile
 
 
 class TeamPlanFrames(Carry, declared_name="team_plan_frames"):
     """Each frame's stored ``phases`` moves out; the team plan file holds them once."""
 
+    precedes: ClassVar[tuple[type[Carry], ...]] = (SharedTeamFrames,)
+
     stored: ClassVar[str] = "phases"
 
     @property
     def opened_files(self) -> tuple[type[RootFile], ...]:
-        return (TeamFrameFile, TeamPlanFile)
+        return (FlatTeamFrameFile, TeamPlanFile)
 
     def carry(self, *, apply: bool) -> Carried:
         frames = {
             path: document
-            for path in sorted(TeamFrameFile.matching_in(self.root))
+            for path in sorted(FlatTeamFrameFile.matching_in(self.root))
             if self.stored in (document := json.loads(path.read_text(encoding="utf-8")))
         }
         # One board writes every frame of a pass, so each frame holds the same phases.

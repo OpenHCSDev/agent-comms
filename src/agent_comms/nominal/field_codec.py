@@ -1207,6 +1207,65 @@ class DecoderPlan(ABC):
         return ()
 
 
+class CapturedJson:
+    """An already encoded leaf: its representation owns the complete JSON value."""
+
+
+class CapturedJsonObject(dict, CapturedJson):
+    """Object spelling remains usable by the existing inline-field operation."""
+
+
+class CapturedJsonArray(list, CapturedJson):
+    """Array spelling remains JSON while its contents stay one represented leaf."""
+
+
+class ValueEncoding:
+    """The encoding operation supplied to a declaration's existing traversal."""
+
+    def json_text(self, text: str) -> object:
+        return self.literal(json.loads(text))
+
+    def literal(self, value: object) -> object:
+        return value
+
+    def encode(self, decoder: ValueDecoder, value: object) -> object:
+        return decoder.encode(value)
+
+
+@dataclass
+class SharedValueEncoding(ValueEncoding):
+    """One synchronous publication cut, keyed by source identity and its declaration.
+
+    Retaining each source prevents id reuse. This never caches across publications,
+    equates logical values, or lends a cached encoding to a public caller.
+    """
+
+    captured: dict[tuple[int, int], tuple[object, object]] = field(default_factory=dict)
+    texts: dict[str, object] = field(default_factory=dict)
+
+    def json_text(self, text: str) -> object:
+        # Complete immutable wire text, including tags and occurrence evidence.
+        if text not in self.texts:
+            self.texts[text] = super().json_text(text)
+        return self.texts[text]
+
+    def literal(self, value: object) -> object:
+        # This is the raw JSON boundary of a representation, not domain dispatch.
+        if isinstance(value, dict):
+            return CapturedJsonObject(value)
+        if isinstance(value, list):
+            return CapturedJsonArray(value)
+        return value
+
+    def encode(self, decoder: ValueDecoder, value: object) -> object:
+        key = (id(decoder), id(value))
+        if key in self.captured:
+            return self.captured[key][1]
+        encoded = decoder.encode_shared(value, self)
+        self.captured[key] = (value, encoded)
+        return encoded
+
+
 @dataclass(frozen=True, slots=True)
 class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
     """One annotation owns its wire conversion, draft projection and choice domain."""
@@ -1308,6 +1367,10 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
 
     @abstractmethod
     def encode(self, value: T) -> object: ...
+
+    def encode_shared(self, value: T, encoding: ValueEncoding) -> object:
+        """Custom representations and scalars keep their own encoding contract."""
+        return encoding.literal(self.encode(value))
 
     def comparison(self, value: T) -> object:
         """The nominal value and its declaration-owned comparison content."""
@@ -1457,6 +1520,9 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     def encode(self, value: T) -> object:
         return None if value is None else self.representation.encode(value)
 
+    def encode_shared(self, value: T, encoding: ValueEncoding) -> object:
+        return None if value is None else self.representation.encode_shared(value, encoding)
+
     def compared(self, value: T) -> object:
         return self.structural.represented_comparison(self, value)
 
@@ -1580,6 +1646,10 @@ class FieldRepresentation[T](MroDispatch, ABC, JsonSchemaOwner):
     @classmethod
     @abstractmethod
     def encode(cls, value: T) -> object: ...
+
+    @classmethod
+    def encode_shared(cls, value: T, encoding: ValueEncoding) -> object:
+        return encoding.literal(cls.encode(value))
 
     @classmethod
     @abstractmethod
@@ -2886,6 +2956,11 @@ class FieldCodec(MroDispatch, Sealed):
             _member_decoders[declaration].compile_comparison(compiled)
 
     @classmethod
+    def encode_shared(cls, value: object, declared: object) -> object:
+        """Encode one batch while retaining shared source occurrences inside that cut."""
+        return SharedValueEncoding().encode(compile_decoder(declared), value)
+
+    @classmethod
     def encode_document(cls, value: object, declared: object) -> object:
         """A document whose declaration names its leaf member stores that member untagged."""
         return compile_decoder(declared).encode_document(value)
@@ -3584,7 +3659,10 @@ class UnionDecoder[T](_ContextDecoder[T]):
         raise TypeError(f"Value does not match {self.target}")
 
     def encode(self, value: T) -> object:
-        return self.selected(value).encode(value)
+        return self.encode_shared(value, ValueEncoding())
+
+    def encode_shared(self, value: T, encoding: ValueEncoding) -> object:
+        return encoding.encode(self.selected(value), value)
 
     def compared(self, value: T) -> object:
         return self.selected(value).compared(value)
@@ -3667,7 +3745,10 @@ class _ArrayDecoder[T: Iterable[object]](ValueDecoder[T]):
         return isinstance(value, self.container)
 
     def encode(self, value: T) -> list[object]:
-        return self.encode_items(value)
+        return self.encode_shared(value, ValueEncoding())
+
+    def encode_shared(self, value: T, encoding: ValueEncoding) -> list[object]:
+        return self.encode_items(value, encoding)
 
     def compared(self, value: T) -> list[object]:
         return [plan.comparison(item) for plan, item in self.plan_items(list(value))]
@@ -3679,8 +3760,8 @@ class _ArrayDecoder[T: Iterable[object]](ValueDecoder[T]):
     def decode(self, data: object) -> T:
         return self.decode_items(data, lambda plan, value: plan.decode_bound(value, {}))
 
-    def encode_items(self, items: Iterable[object]) -> list[object]:
-        return [self.items[0].encode(item) for item in items]
+    def encode_items(self, items: Iterable[object], encoding: ValueEncoding) -> list[object]:
+        return [encoding.encode(self.items[0], item) for item in items]
 
     def decode_items(
         self, data: object, read: Callable[[ValueDecoder[object], object], object],
@@ -3699,7 +3780,10 @@ class _FrozenSetDecoder[E](_ArrayDecoder[frozenset[E]]):
     container = frozenset
 
     def encode(self, value: frozenset[E]) -> list[object]:
-        return sorted(self.encode_items(value), key=FieldCodec.ordering)
+        return self.encode_shared(value, ValueEncoding())
+
+    def encode_shared(self, value: frozenset[E], encoding: ValueEncoding) -> list[object]:
+        return sorted(self.encode_items(value, encoding), key=FieldCodec.ordering)
 
     def compared(self, value: frozenset[E]) -> list[object]:
         return sorted(super().compared(value), key=FieldCodec.ordering)
@@ -3746,8 +3830,8 @@ class _FixedTupleDecoder[E](_TupleDecoder[E]):
             raise self.shape_refusal(data)
         return tuple(zip(self.items, data, strict=True))
 
-    def encode_items(self, items: Iterable[object]) -> list[object]:
-        return [plan.encode(item) for plan, item in zip(self.items, items, strict=True)]
+    def encode_items(self, items: Iterable[object], encoding: ValueEncoding) -> list[object]:
+        return [encoding.encode(plan, item) for plan, item in zip(self.items, items, strict=True)]
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -3905,7 +3989,10 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
         return self.tagged(data)
 
     def encode(self, value: Member) -> dict[str, object]:
-        return {**value.record_tag(), **_member_decoders[type(value)].encode(value)}
+        return self.encode_shared(value, ValueEncoding())
+
+    def encode_shared(self, value: Member, encoding: ValueEncoding) -> dict[str, object]:
+        return {**value.record_tag(), **encoding.encode(_member_decoders[type(value)], value)}
 
     def compared(self, value: Member) -> object:
         return _member_decoders[type(value)].compared(value)
@@ -3992,10 +4079,13 @@ class _RecordDecoder[T](_ContextDecoder[T]):
         return plan.required_wire_keys <= data.keys() <= plan.accepted_keys
 
     def encode(self, value: object) -> dict[str, object]:
+        return self.encode_shared(value, ValueEncoding())
+
+    def encode_shared(self, value: object, encoding: ValueEncoding) -> dict[str, object]:
         if not isinstance(value, self.target):
             raise MalformedRecord(f"Expected {self.target.__name__} record")
         result = self.plan.encoded(
-            value, WireExclude, lambda entry, current: entry.value.encode(current)
+            value, WireExclude, lambda entry, current: encoding.encode(entry.value, current)
         )
         result.update(
             (member.wire_name, FieldCodec.encode(getattr(value, name)))

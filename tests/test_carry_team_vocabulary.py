@@ -5,6 +5,7 @@ import json
 import sqlite3
 from contextlib import closing
 
+from cutover.carry_shared_team_frames import FlatTeamFrameFile, SharedTeamFrames
 from cutover.carry_team_vocabulary import (
     TeamVocabulary,
     TeamVocabularyFiles,
@@ -128,8 +129,9 @@ def test_retained_packets_passes_and_channel_move_to_team_names(team_bus):
         packets=(),
         open_pings=(),
     )
-    TeamFrame.replace_all(root, TeamPlan(hud.phases), (hud,))
-    frame = TeamFrame.at(root, teammate).path
+    frame = FlatTeamFrameFile.path_in(root, lookup=str(teammate.lookup))
+    frame.parent.mkdir(parents=True)
+    frame.write_text(json.dumps(FieldCodec.encode(hud, TeamHud)))
     retired_frame = root / "commander_frames" / frame.name
     retired_frame.parent.mkdir()
     retired_frame.write_text(json.dumps(previous(json.loads(frame.read_text()))))
@@ -147,6 +149,7 @@ def test_retained_packets_passes_and_channel_move_to_team_names(team_bus):
     assert (root / "commander_updates").is_dir() and not retired.exists()
     assert step.after_acceptance().changed == 2
     assert TeamUpdateStore.for_team(root, teammate).read() == (packet,)
+    carried(SharedTeamFrames, root)
     # A HUD read finds the teammate's own frame before the heartbeat writes another.
     assert TeamFrame.current(team_bus, "unit-x").teammate == teammate
     assert not (root / "commander_updates").exists() and not (root / "commander_frames").exists()

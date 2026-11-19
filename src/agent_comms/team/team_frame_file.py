@@ -19,18 +19,18 @@ class TeamPlanFile(RuntimeFile):
 
 
 class TeamFrameFile(RuntimeFile, PatternFile):
-    """Where the heartbeat writes each teammate's newest HUD frame.
+    """Where the heartbeat writes the team's shared HUD snapshot.
 
     Views watch these paths below Comms; the HUD that decodes them sits above it.
     """
 
     __slots__ = ()
 
-    filename = "team_frames/{lookup}.json"
+    filename = "team_frames.json"
 
     @classmethod
     def source_paths(cls, root: Path) -> tuple[Path, ...]:
         """Frame readers hydrate service health and the team plan too; each file wakes
         their open view."""
-        return (*sorted(cls.matching_in(root)), ServicePassStore.path_in(root),
+        return (cls.path_in(root), ServicePassStore.path_in(root),
                 TeamPlanFile.path_in(root))

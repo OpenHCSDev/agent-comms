@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
-from copy import deepcopy
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
@@ -41,6 +40,7 @@ from agent_comms.nominal.field_codec import (
     StructuralRepresentation,
     TaggedRecordMember,
     ThreadLookup,
+    ValueEncoding,
 )
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.registry.registry_document import RegistrySnapshot
@@ -82,17 +82,21 @@ class Ping(TaggedRecordMember, DeclaredFamily, affix="Ping"):
     threads: tuple[str, ...] = field(default=(), compare=False, kw_only=True)
 
     @cached_property
-    def _encoded_record(self) -> dict[str, object]:
+    def _encoded_text(self) -> str:
         # This frozen occurrence owns its text, source subjects and clock. Equal
         # pings may carry different evidence; never share this cache by equality.
-        return FieldCodec.encode_record(self)
+        return FieldCodec.compact(FieldCodec.encode_record(self))
 
     @classmethod
     def encode(cls, value: Ping) -> object:
+        # The direct encoding role returns fresh mutable JSON to each caller.
+        return cls.encode_shared(value, ValueEncoding())
+
+    @classmethod
+    def encode_shared(cls, value: Ping, encoding: ValueEncoding) -> object:
         if not isinstance(value, cls):
             raise MalformedRecord(f"Expected {cls.__name__} record")
-        # Encoded JSON is caller-owned, so mutation cannot alter later answers.
-        return deepcopy(value._encoded_record)
+        return encoding.json_text(value._encoded_text)
 
     @classmethod
     def schema(cls) -> dict[str, object]:

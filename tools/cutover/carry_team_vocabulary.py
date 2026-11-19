@@ -15,6 +15,8 @@ from contextlib import closing
 from pathlib import Path
 from typing import ClassVar
 
+from cutover.carry_shared_team_frames import FlatTeamFrameFile, SharedTeamFrames
+
 from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.messaging.bus import Bus
@@ -30,7 +32,6 @@ from agent_comms.storage.locked_store import PatternFile, RootFile
 from agent_comms.storage.store_files import AtomicFile, is_store_lock
 from agent_comms.storage.typed_table import TypedTable
 from agent_comms.task_attachments.team_pings import TeamUpdateStore
-from agent_comms.team.team_frame_file import TeamFrameFile
 
 
 class TeamVocabulary(Carry, declared_name=None):
@@ -207,10 +208,12 @@ class TeamVocabularyFiles(TeamVocabulary):
     retained packet and HUD frame move from the lead's directory to the team's, renamed: a HUD
     read needs its frame before the heartbeat's next pass writes one."""
 
+    precedes: ClassVar[tuple[type[Carry], ...]] = (SharedTeamFrames,)
+
     opened_files: ClassVar[tuple[type[RootFile], ...]] = (ServicePassStore, ChannelCatalog)
     retired: ClassVar[tuple[tuple[str, type[PatternFile]], ...]] = (
         ("commander_updates", TeamUpdateStore),
-        ("commander_frames", TeamFrameFile),
+        ("commander_frames", FlatTeamFrameFile),
     )
     """Each old per-teammate directory and the store its files now live in."""
 
