@@ -42,6 +42,7 @@ from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.cli_verbs.target_action import TargetActionCliCommand
 from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.root_host_store import RootHostStore
 from agent_comms.execution.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.execution.runtime_processes import RuntimeProcesses
 from agent_comms.host_services import HostService, RestartedService
@@ -541,7 +542,7 @@ class OwnersStopped:
         for outcome in stack.owners(root, StopCliCommand, running):
             outcome.require_success(UpgradeRefused)
         # Restart candidates do not describe the physical host's lifetime.
-        RootRuntimeStore.at(root).retire_host().require_retired(root)
+        RootHostStore.at(root).retire_host().require_retired(root)
 
     @contextmanager
     def given_back_on(self, stack: Stack, root: Path) -> Iterator[None]:

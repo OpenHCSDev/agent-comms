@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.root_host_store import RootHostStore
 from agent_comms.execution.root_runtime import (
     NoRootHost,
     RecordedRootHost,
     RootRuntime,
-    RootRuntimeStore,
 )
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBus
@@ -26,11 +26,11 @@ def unreadable_registry(root: Path) -> None:
     RegistryStore.at(root).rewrite_stored(lambda raw: {**raw, "version": None})
 
 
-def store_with(root: Path, process: ProcessIdentity) -> RootRuntimeStore:
+def store_with(root: Path, process: ProcessIdentity) -> RootHostStore:
     bus = Bus.path_in(root)
     bus.parent.mkdir(parents=True, exist_ok=True)
     bus.touch()
-    store = RootRuntimeStore.at(root)
+    store = RootHostStore.at(root)
     store.replace(RootRuntime(root / "prefix", RecordedRootHost(
         process, RecordedBus(FileIdentity.from_stat(bus.stat())))))
     return store
@@ -38,7 +38,7 @@ def store_with(root: Path, process: ProcessIdentity) -> RootRuntimeStore:
 
 def test_a_retired_host_needs_no_registry(tmp_path):
     unreadable_registry(tmp_path)
-    store = RootRuntimeStore.at(tmp_path)
+    store = RootHostStore.at(tmp_path)
     store.replace(RootRuntime(tmp_path / "prefix"))
     store.retire_host().require_retired(tmp_path)
     assert store.read().host == NoRootHost()

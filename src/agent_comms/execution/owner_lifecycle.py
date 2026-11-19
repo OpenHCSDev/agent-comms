@@ -47,7 +47,7 @@ from agent_comms.execution.restart_refusals import (
     OwnerSelectionChangedRefusal,
 )
 from agent_comms.execution.restart_scope import AllOwners, RestartScope
-from agent_comms.execution.root_runtime import RootRuntimeStore
+from agent_comms.execution.root_host_store import RootHostStore
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.active_route import resolve_comms_route
 from agent_comms.messaging.channel_targets import ThreadTarget
@@ -313,7 +313,7 @@ class OwnerLifecycle:
         with ThreadPoolExecutor() as calls:
             tuple(calls.map(lambda request: OwnerConnection.exchange(
                 self.root, self.registry.require(request.thread).require_process(), request), requests))
-        RootRuntimeStore.at(self.root).retire_host()
+        RootHostStore.at(self.root).retire_host()
 
     def stop_requests(self, owners: Sequence[tuple[Thread, int]]) -> tuple[StopOwnerRuntimeRequest, ...]:
         """Project the fenced originals into the one session retirement operation."""
@@ -404,7 +404,7 @@ class OwnerLifecycle:
         env = initial_input.launch(thread.launch()).apply(env)
         env[NativeArguments.binary_key] = agent_bin
         agent_args.apply(env)
-        host = RootRuntimeStore.at(self.root).acquire_host(
+        host = RootHostStore.at(self.root).acquire_host(
             launch_runtime,
             (str(launch_runtime.interpreter), "-m", agent_comms.execution.worker.__name__,
              *LaunchRoot.from_path(self.launch_authority.child_root).arguments()),
@@ -414,7 +414,7 @@ class OwnerLifecycle:
             room_for_start=partial(self.registry.storage_rule.room_for_start, thread, self.root),
         )
         with self.registry.store.editing() as edit:
-            recorded = RootRuntimeStore.at(self.root).read().host.observed(self.root)
+            recorded = RootHostStore.at(self.root).read().host.observed(self.root)
             if recorded != host or not recorded.alive():
                 raise RelationViolationError("Worker host retired before owner registration")
             owned = self._register_owner(edit, thread, host, initial_input)

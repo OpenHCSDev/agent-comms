@@ -2,40 +2,33 @@
 
 from __future__ import annotations
 
-import socket
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
-from contextlib import AbstractContextManager, ExitStack
-from dataclasses import dataclass, replace
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, TextIO
+from typing import Annotated
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import (
     NoProcess,
     ObservedProcess,
-    OutlivesLauncherLifetime,
     ProcessIdentity,
     ProcessState,
-    SpawnedProcess,
 )
 from agent_comms.execution.launch_runtime import LaunchRuntime
-from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBus, RecordedBusIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import PathText, WireOmitDefault
-from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.storage.locked_store import (
     DocumentChange,
+    FileStore,
     LockedStore,
     RegistryFile,
     RollbackRetained,
 )
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
-from agent_comms.storage.private_path import FileIdentity, PrivateSocketRole
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
-from agent_comms.transport.owner_connection import socket_path
 
 
 class Attachment(ABC):
@@ -76,6 +69,13 @@ class Succession(Attachment):
         )
 
 
+class HostRetirement(FileStore, ABC):
+    """Only a host lifecycle store can decide retirement against its current owners."""
+
+    @abstractmethod
+    def host_retired_once_ownerless(self) -> RootHost: ...
+
+
 class RootHost(DeclaredFamily, affix="RootHost"):
     def observed(self, root: Path) -> ProcessState:
         return NoProcess()
@@ -83,7 +83,7 @@ class RootHost(DeclaredFamily, affix="RootHost"):
     def retire(self, root: Path, ready: Callable[[ProcessIdentity], bool]) -> bool:
         return True
 
-    def retired_through(self, store: RootRuntimeStore) -> RootHost:
+    def retired_through(self, store: HostRetirement) -> RootHost:
         """Nothing runs, so no owner's registry row can matter: an install's target asks after
         the outgoing runtime retired the host, before a carry lets the target read that registry."""
         return self
@@ -112,7 +112,7 @@ class RecordedRootHost(RootHost):
             ObservedProcess(process).stop_sync()
         return True
 
-    def retired_through(self, store: RootRuntimeStore) -> RootHost:
+    def retired_through(self, store: HostRetirement) -> RootHost:
         if self.observed(store.path.parent).alive():
             return store.host_retired_once_ownerless()
         return super().retired_through(store)
@@ -167,57 +167,6 @@ class RootRuntimeStore(SingleFileStore, LockedStore[RootRuntime], RollbackRetain
 
     def empty(self) -> RootRuntime:
         raise FileNotFoundError(self.path)
-
-    def retire_host(self) -> RootHost:
-        """Retire this root's physical host only after its logical owners detached."""
-        return self.read().host.retired_through(self)
-
-    def host_retired_once_ownerless(self) -> RootHost:
-        """Keep the registry cut current through the host write: no new owner may
-        attach between the ownership decision and the physical retirement.
-        """
-        with RegistryStore.at(self.path.parent).current_snapshot() as cut:
-            def retire(data: RootRuntime) -> DocumentChange[RootRuntime, RootHost]:
-                if data.host.retire(
-                    self.path.parent, lambda process: not cut.snapshot.process_owners(process),
-                ):
-                    data = replace(data, host=NoRootHost())
-                return DocumentChange(data, data.host)
-            return self.update(retire)
-
-    def acquire_host(
-        self, runtime: LaunchRuntime, command: tuple[str, ...], *,
-        environment: Mapping[str, str], cwd: str,
-        output: Callable[[], AbstractContextManager[TextIO]],
-        room_for_start: Callable[[], AbstractContextManager[None]],
-    ) -> ProcessIdentity:
-        """Publish the root's one host while its existing exec gate is still closed."""
-        observed = self.read().available_host(self.path.parent, runtime)
-        if observed.alive():
-            return observed.require("Recorded worker host has no process")
-        # Wait for memory without holding either writer.
-        # Re-read under the writer before launch so concurrent starters share one host.
-        # The launch remains gated until update has published the winning host.
-        with room_for_start(), ExitStack() as resources:
-            def launch(current: RootRuntime) -> DocumentChange[RootRuntime, ProcessIdentity]:
-                observed = current.available_host(self.path.parent, runtime)
-                if observed.alive():
-                    return DocumentChange(current, observed.require("Recorded worker host has no process"))
-                capture = resources.enter_context(output())
-                listener = resources.enter_context(socket.socket(socket.AF_UNIX))
-                child = resources.enter_context(SpawnedProcess.launching(
-                    (*command, "--listener-fd", str(listener.fileno())),
-                    env=environment, cwd=cwd, stdio=DetachedChildStdio(stdout=capture), runtime=runtime,
-                    pass_fds=(listener.fileno(),), lifetime=OutlivesLauncherLifetime,
-                ))
-                path = socket_path(self.path.parent, child.identity.pid)
-                path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-                with PrivateSocketRole.address(path) as address:
-                    listener.bind(str(address))
-                listener.listen()
-                bus = RecordedBus(FileIdentity.from_stat(Bus.path_in(self.path.parent).stat()))
-                return DocumentChange(replace(current, host=RecordedRootHost(child.identity, bus)), child.identity)
-            return self.update(launch)
 
     def publish_runtime(self, runtime: LaunchRuntime) -> None:
         self.owner(runtime)
