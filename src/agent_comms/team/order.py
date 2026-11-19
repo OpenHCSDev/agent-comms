@@ -47,6 +47,7 @@ from agent_comms.nominal.field_codec import (
     MalformedRecord,
     MessageId,
     Normalize,
+    OrderId,
     NullMember,
     RecordProblems,
     SingleFieldValue,
@@ -138,6 +139,121 @@ def refuse(text, *families):
         sys.exit('REFUSED, nothing recorded: ' + ' '.join(refused))
 
 
+class OrderActionIdentity(DeclaredFamily, affix="OrderActionIdentity"):
+    """One typed identity an order action affected or attempted."""
+
+    @abstractmethod
+    def text(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class ProblemActionIdentity(OrderActionIdentity):
+    problem: ProblemNumber
+
+    def text(self) -> str:
+        return f"problem={self.problem}"
+
+
+@dataclass(frozen=True)
+class ReplacementProblemIdentity(OrderActionIdentity):
+    problem: ProblemNumber
+
+    def text(self) -> str:
+        return f"replacement={self.problem}"
+
+
+@dataclass(frozen=True)
+class FoldDestinationIdentity(OrderActionIdentity):
+    problem: ProblemNumber
+
+    def text(self) -> str:
+        return f"into={self.problem}"
+
+
+@dataclass(frozen=True)
+class OrderProblemIdentity(OrderActionIdentity):
+    problem: ProblemNumber
+
+    def text(self) -> str:
+        return f"order_problem={self.problem}"
+
+
+@dataclass(frozen=True)
+class OrderIdentity(OrderActionIdentity):
+    order: OrderId
+
+    def text(self) -> str:
+        return f"order={self.order}"
+
+
+@dataclass(frozen=True)
+class MessageIdentity(OrderActionIdentity):
+    message: MessageId
+
+    def text(self) -> str:
+        return f"message={self.message}"
+
+
+@dataclass(frozen=True)
+class PullRequestIdentity(OrderActionIdentity):
+    pull_request: PullRequestLink
+
+    def text(self) -> str:
+        return f"pull_request={self.pull_request.url}"
+
+
+@dataclass(frozen=True)
+class ThreadActionIdentity(OrderActionIdentity):
+    thread: ThreadIncarnation
+
+    def text(self) -> str:
+        return f"thread={self.thread.name}@{self.thread.created_at}"
+
+
+@dataclass(frozen=True)
+class PhaseActionIdentity(OrderActionIdentity):
+    phase: type[OrderPhase]
+
+    def text(self) -> str:
+        return f"phase={self.phase.declared_name}"
+
+
+@dataclass(frozen=True)
+class SourceActionIdentity(OrderActionIdentity):
+    source: FileLine
+
+    def text(self) -> str:
+        return f"source={self.source.to_wire()}"
+
+
+@dataclass(frozen=True)
+class InstallActionIdentity(OrderActionIdentity):
+    launch: str
+
+    def text(self) -> str:
+        return f"install={self.launch}"
+
+
+class NoInstallIdentity(OrderActionIdentity):
+    def text(self) -> str:
+        return "installs=none"
+
+
+class NoForkIdentity(OrderActionIdentity):
+    def text(self) -> str:
+        return "forks=none"
+
+
+class HuntQueueIdentity(OrderActionIdentity):
+    def text(self) -> str:
+        return "queue=hunts"
+
+
+class TeamRosterIdentity(OrderActionIdentity):
+    def text(self) -> str:
+        return "roster=team"
+
+
 class OrderActionResult(DeclaredFamily, affix="OrderActionResult"):
     """One unmistakable outcome from the shared teammate-verb boundary."""
 
@@ -150,13 +266,13 @@ class OrderActionResult(DeclaredFamily, affix="OrderActionResult"):
 
 @dataclass(frozen=True)
 class AppliedOrderAction(OrderActionResult):
-    verb: str
-    identity: tuple[str, ...]
+    verb: type[TeamVerb]
+    identity: tuple[OrderActionIdentity, ...]
     notes: tuple[str, ...] = ()
 
     def lines(self) -> tuple[str, ...]:
-        detail = " ".join(self.identity) if self.identity else "completed"
-        return (f"APPLIED {self.verb}: {detail}", *self.notes)
+        detail = " ".join(identity.text() for identity in self.identity) or "completed"
+        return (f"APPLIED {self.verb.declared_name}: {detail}", *self.notes)
 
     def with_notes(self, notes: tuple[str, ...]) -> AppliedOrderAction:
         return replace(self, notes=(*self.notes, *notes))
@@ -166,12 +282,12 @@ class AppliedOrderAction(OrderActionResult):
 class ReadOrderAction(OrderActionResult):
     """An attempted action that changed nothing, with its declared target identity."""
 
-    verb: str
-    identity: tuple[str, ...]
+    verb: type[TeamVerb]
+    identity: tuple[OrderActionIdentity, ...]
 
     def lines(self) -> tuple[str, ...]:
-        detail = " ".join(self.identity) if self.identity else "no target changed"
-        return (f"NO CHANGE {self.verb}: {detail}",)
+        detail = " ".join(identity.text() for identity in self.identity)
+        return (f"NO CHANGE {self.verb.declared_name}: {detail}",)
 
 
 # Eliminate forwarding with inheritance and multiple parents; decompose the hierarchy if it is not sound.
@@ -1070,13 +1186,13 @@ class TeamVerb(ClearingVerb, affix="Verb"):
     def act(self, ctx: Team) -> OrderActionResult:
         return self.run(ctx)
 
-    def applied(self, *identity: str) -> AppliedOrderAction:
+    def applied(self, *identity: OrderActionIdentity) -> AppliedOrderAction:
         """Build this declared member's result from identities its own code supplies."""
-        return AppliedOrderAction(type(self).declared_name, tuple(identity))
+        return AppliedOrderAction(type(self), tuple(identity))
 
-    def unchanged(self, *identity: str) -> ReadOrderAction:
+    def unchanged(self, *identity: OrderActionIdentity) -> ReadOrderAction:
         """Name the attempted member and targets when no state changed."""
-        return ReadOrderAction(type(self).declared_name, tuple(identity))
+        return ReadOrderAction(type(self), tuple(identity))
 
     @abstractmethod
     def run(self, ctx: Team) -> OrderActionResult: ...
@@ -1259,10 +1375,7 @@ class SendVerb(RequestedOrderVerb):
         sent = ctx.send(self.unit, document, clean=self.clean,
              reassign=self.reassign, traced=self.traced,
              disk=self.disk, answers=references, request=self.request)
-        return AppliedOrderAction(
-            type(self).declared_name,
-            (f"order={document.order.id}", f"message={sent}"),
-        )
+        return self.applied(OrderIdentity(document.order.id), MessageIdentity(sent))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1292,7 +1405,7 @@ class StrikeVerb(Reasoned, OrderVerb, DirectiveVerb):
         ctx.strike(self.unit, self.pid, self.why, self.caught,
                    evidence=(FileLine.from_wire(self.where),),
                    answers=references)
-        return AppliedOrderAction(type(self).declared_name, (f"problem={self.pid}",))
+        return self.applied(ProblemActionIdentity(ProblemNumber.parse(self.pid)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1303,9 +1416,11 @@ class FireVerb(Reasoned, OrderVerb):
     def run(self, ctx: Team) -> OrderActionResult:
         problems = ctx.fire(self.unit, self.why)
         return (
-            self.applied(*(f"problem={problem}" for problem in problems))
+            self.applied(*(ProblemActionIdentity(ProblemNumber.parse(problem))
+                           for problem in problems))
             if problems
-            else self.unchanged(f"unit={self.unit}")
+            else self.unchanged(ThreadActionIdentity(
+                ctx.comms.registry.require(self.unit).incarnation))
         )
 
 
@@ -1322,7 +1437,7 @@ class UnstrikeVerb(Reasoned, OrderVerb):
 
     def run(self, ctx: Team) -> OrderActionResult:
         ctx.unstrike(self.pid, self.why, self.at)
-        return self.applied(f"problem={self.pid}")
+        return self.applied(ProblemActionIdentity(ProblemNumber.parse(self.pid)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1339,7 +1454,7 @@ class WithdrawVerb(Reasoned, OrderVerb):
 
     def run(self, ctx: Team) -> OrderActionResult:
         ctx.withdraw(self.pid, self.why, self.superseded_by)
-        return self.applied(f"problem={self.pid}")
+        return self.applied(ProblemActionIdentity(ProblemNumber.parse(self.pid)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1389,9 +1504,9 @@ class DoneVerb(OrderVerb):
             problem=todo.id, order_id=order.id,
             delivery=SourceCompletion(self.source, self.screenshot, self.seen), claims=()))
         print(f'{todo.holder_state.previous_assignment().owner}: order {order.id} delivered')
-        return AppliedOrderAction(
-            type(self).declared_name,
-            (f"problem={todo.id}", f"order={order.id}"),
+        return self.applied(
+            ProblemActionIdentity(ProblemNumber.parse(todo.id)),
+            OrderIdentity(order.id),
         )
 
 
@@ -1399,17 +1514,17 @@ class DoneVerb(OrderVerb):
 class PullRequestSelection(DeclaredFamily, affix="PullRequestSelection"):
     @abstractmethod
     def run(self, ctx: Team, todo: Todo, source: Repo,
-            title: str, body_file: str) -> str: ...
+            title: str, body_file: str) -> PullRequestLink: ...
 
 
 class NewPullRequestSelection(PullRequestSelection):
     def run(self, ctx: Team, todo: Todo, source: Repo,
-            title: str, body_file: str) -> str:
+            title: str, body_file: str) -> PullRequestLink:
         if not title or not body_file:
             raise ValueError("Creating a PR requires --title and --body-file.")
         return todo.order.checked().open_pull_request(
             todo, source, title, Path(body_file).read_text(),
-            ctx.comms.goals.todos, ctx.incarnation).url
+            ctx.comms.goals.todos, ctx.incarnation)
 
 
 @dataclass(frozen=True)
@@ -1421,7 +1536,7 @@ class ExistingPullRequestSelection(PullRequestSelection):
         return cls(int(text))
 
     def run(self, ctx: Team, todo: Todo, source: Repo,
-            title: str, body_file: str) -> str:
+            title: str, body_file: str) -> PullRequestLink:
         if title or body_file:
             raise ValueError("--existing does not create or edit the PR; omit title and body.")
         # The project's repository rule refuses before any forge read, as creation does.
@@ -1430,7 +1545,7 @@ class ExistingPullRequestSelection(PullRequestSelection):
         link = PullRequestLink.existing(source.github, self.number)
         ctx.comms.goals.todos.apply(todo.id, RecordPullRequest.for_order(
             todo, ctx.incarnation, link))
-        return link.url
+        return link
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1459,9 +1574,12 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
         holder = ctx.comms.registry.require(todo.held().owner)
         storage = ctx.comms.registry.storage_rule
         storage.require_owned_checkout(holder, source.checkout, source.github, RepositoryReads())
-        url = self.existing.run(ctx, todo, source, self.title, self.body_file)
-        print(url)
-        return self.applied(f"problem={self.pid}", f"pull_request={url}")
+        link = self.existing.run(ctx, todo, source, self.title, self.body_file)
+        print(link.url)
+        return self.applied(
+            ProblemActionIdentity(ProblemNumber.parse(self.pid)),
+            PullRequestIdentity(link),
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1485,7 +1603,7 @@ class CheckVerb(OrderVerb):
         check = ctx.read_check(self.check)
         ctx.call(CommsOrderCheckTool(problem=self.pid, check=check, why=self.why))
         print(f'{self.pid}: order now checks `{check.command}`')
-        return self.applied(f"problem={self.pid}")
+        return self.applied(ProblemActionIdentity(ProblemNumber.parse(self.pid)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1502,7 +1620,7 @@ class RunVerb(OrderVerb):
     def run(self, ctx: Team) -> OrderActionResult:
         ctx.call(CommsOrderRunTool(problem=self.pid, run=self.text, why=self.why))
         print(f'{self.pid}: order now works when {self.text}')
-        return self.applied(f"problem={self.pid}")
+        return self.applied(ProblemActionIdentity(ProblemNumber.parse(self.pid)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1520,7 +1638,10 @@ class UnlinkVerb(Reasoned, OrderVerb):
             todo.revision, ctx.incarnation, self.why,
             previous=todo.order.pull_requests, link=link)))
         print(f'{self.pid}: order no longer links {link.url}')
-        return self.applied(f"problem={self.pid}", f"pull_request={link.url}")
+        return self.applied(
+            ProblemActionIdentity(ProblemNumber.parse(self.pid)),
+            PullRequestIdentity(link),
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1535,9 +1656,13 @@ class ServeVerb(OrderVerb):
     ]
 
     def run(self, ctx: Team) -> OrderActionResult:
-        ctx.call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.member_named(self.phase)))
+        phase = OrderPhase.member_named(self.phase)
+        ctx.call(CommsOrderServeTool(problem=self.pid, serves=phase))
         print(f'{self.pid} serves {self.phase}')
-        return self.applied(f"problem={self.pid}", f"phase={self.phase}")
+        return self.applied(
+            ProblemActionIdentity(ProblemNumber.parse(self.pid)),
+            PhaseActionIdentity(phase),
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1564,7 +1689,7 @@ class SayVerb(OrderVerb, DirectiveVerb):
 
     def respond(self, ctx: Team, references: tuple[MessageReference, ...]) -> OrderActionResult:
         sent = ctx.say(self.units, self.body_file, references)
-        return AppliedOrderAction(type(self).declared_name, (f"message={sent}",))
+        return self.applied(MessageIdentity(sent))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1576,7 +1701,7 @@ class EndsForkVerb(OrderVerb):
         ctx = self.acting(ctx)
         if ctx.actor_name not in ctx.comms.registry:
             print(f'{ctx.actor_name} never joined; nothing to end')
-            return self.unchanged(f"fork={ctx.actor_name}")
+            return self.unchanged(NoForkIdentity())
         result = self.act(ctx)
         for line in result.lines():
             print(line)
@@ -1588,9 +1713,10 @@ class RetireVerb(EndsForkVerb):
     help = "stop and archive a teammate fork without discarding its open orders"
 
     def run(self, ctx: Team) -> OrderActionResult:
+        identity = ctx.actor_identity
         ctx.actor.retire(ctx.comms)
         print(f'{ctx.actor_name} retired')
-        return self.applied(f"fork={ctx.actor_name}")
+        return self.applied(ThreadActionIdentity(identity))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1598,9 +1724,10 @@ class EndVerb(EndsForkVerb):
     help = "archive a teammate fork that has stopped, reporting the work it left unrecorded"
 
     def run(self, ctx: Team) -> OrderActionResult:
+        identity = ctx.actor_identity
         ctx.actor.end(ctx.comms)
         print(f'{ctx.actor_name} ended')
-        return self.applied(f"fork={ctx.actor_name}")
+        return self.applied(ThreadActionIdentity(identity))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1613,14 +1740,19 @@ class SessionEndVerb(OrderVerb, declared_name="session-end"):
 
     def run(self, ctx: Team) -> OrderActionResult:
         """A session's subagents end with it, whether or not each one stopped on its own."""
+        identities = {
+            name: ctx.comms.registry.require(name).incarnation
+            for name in self.forks
+            if name in ctx.comms.registry
+        }
         registered = ForkCaller.end_session(
             ctx.comms, tuple(ForkCaller(fork) for fork in self.forks))
         names = tuple(caller.name for caller in registered)
         print(f'session forks ended: {" ".join(names)}')
         return (
-            self.applied(*(f"fork={name}" for name in names))
+            self.applied(*(ThreadActionIdentity(identities[name]) for name in names))
             if names
-            else self.unchanged("forks=none")
+            else self.unchanged(NoForkIdentity())
         )
 
 
@@ -1654,9 +1786,10 @@ class ProblemVerb(RequestedOrderVerb):
                         finding=LocatedProblemFinding(location), answers=references,
                         request=self.request)
         print(pid)
-        return AppliedOrderAction(
-            type(self).declared_name,
-            (f"problem={pid}", f"order={document.order.id}", f"message={sent}"),
+        return self.applied(
+            ProblemActionIdentity(ProblemNumber.parse(pid)),
+            OrderIdentity(document.order.id),
+            MessageIdentity(sent),
         )
 
 
@@ -1682,7 +1815,10 @@ class DropVerb(OrderVerb):
     def run(self, ctx: Team) -> OrderActionResult:
         ctx.comms.goals.todos.drop(ctx.incarnation, self.unit, self.problem, self.by)
         print(f'{self.unit}: {self.problem} replaced by {self.by}')
-        return self.applied(f"problem={self.problem}", f"replacement={self.by}")
+        return self.applied(
+            ProblemActionIdentity(ProblemNumber.parse(self.problem)),
+            ReplacementProblemIdentity(ProblemNumber.parse(self.by)),
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1694,7 +1830,10 @@ class FoldVerb(Reasoned, OrderVerb):
     def run(self, ctx: Team) -> OrderActionResult:
         ctx.comms.goals.todos.fold(ctx.incarnation, self.pid, self.into, self.why)
         print(f'{self.pid} folded into {self.into}')
-        return self.applied(f"problem={self.pid}", f"into={self.into}")
+        return self.applied(
+            ProblemActionIdentity(ProblemNumber.parse(self.pid)),
+            FoldDestinationIdentity(ProblemNumber.parse(self.into)),
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1713,7 +1852,10 @@ class LinkVerb(OrderVerb):
     def run(self, ctx: Team) -> OrderActionResult:
         ctx.comms.goals.todos.link(ctx.incarnation, self.pid, self.unit, self.problem)
         print(f'{self.pid} held by {self.unit} through {self.problem}')
-        return self.applied(f"problem={self.pid}", f"order_problem={self.problem}")
+        return self.applied(
+            ProblemActionIdentity(ProblemNumber.parse(self.pid)),
+            OrderProblemIdentity(ProblemNumber.parse(self.problem)),
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1730,7 +1872,7 @@ class CloseVerb(OrderVerb):
 
     def run(self, ctx: Team) -> OrderActionResult:
         ctx.close(self.pid, self.works, self.artifact)
-        return self.applied(f"problem={self.pid}")
+        return self.applied(ProblemActionIdentity(ProblemNumber.parse(self.pid)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1752,7 +1894,11 @@ class HuntVerb(Reasoned, OrderVerb):
 
     def run(self, ctx: Team) -> OrderActionResult:
         ctx.hunt(self.where, self.why, self.sent)
-        return self.applied(f"source={self.where}", *(f"problem={self.sent}",) if self.sent else ())
+        identities: tuple[OrderActionIdentity, ...] = (
+            SourceActionIdentity(FileLine.from_wire(self.where)),
+            *((ProblemActionIdentity(ProblemNumber.parse(self.sent)),) if self.sent else ()),
+        )
+        return self.applied(*identities)
 
 
 class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
@@ -1762,7 +1908,7 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
         for path in HuntDue.next_hunt(ctx.comms,
                                       HeldOrders.read(ctx.comms).todos):
             print(path)
-        return self.unchanged("queue=hunts")
+        return self.unchanged(HuntQueueIdentity())
 
 
 class InstallVerb(OrderVerb):
@@ -1774,9 +1920,9 @@ class InstallVerb(OrderVerb):
         for launch in launches:
             print(launch)
         return (
-            self.applied(*(f"install={launch}" for launch in launches))
+            self.applied(*(InstallActionIdentity(launch) for launch in launches))
             if launches
-            else self.unchanged("installs=none")
+            else self.unchanged(NoInstallIdentity())
         )
 
 
@@ -1786,7 +1932,7 @@ class IdleVerb(OrderVerb):
     def run(self, ctx: Team) -> OrderActionResult:
         for unit in UnownedWheelSpin.read_idle(ctx.comms):
             print(unit.name)
-        return self.unchanged("roster=team")
+        return self.unchanged(TeamRosterIdentity())
 
 
 
