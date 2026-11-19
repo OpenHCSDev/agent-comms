@@ -88,8 +88,8 @@ def test_conditional_replacement_reuses_only_its_captured_revision(tmp_path):
     assert store.path.stat() == before
     assert store.decoded == [captured]
     store.replace_if_changed(second)
-    assert store.encoded[-2:] == [second, second]  # Comparison and existing writer.
-    assert len(store.encoded) == 5
+    assert store.encoded[-1:] == [second]  # One encoded source supplies comparison and write.
+    assert len(store.encoded) == 4
     assert store.decoded == [captured]
     assert store.read() == second
     assert len(store.decoded) == 2

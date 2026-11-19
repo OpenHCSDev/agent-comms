@@ -21,6 +21,7 @@ from agent_comms.task_attachments.team_pings import (
     NewAlarms,
     RulePing,
     TeamDecisions,
+    TeamDelivery,
     WatchingAlarms,
 )
 from agent_comms.team.standing_rules import ServicePassFailing
@@ -140,6 +141,13 @@ def test_display_facts_ignore_only_hidden_clocks_and_paint_time() -> None:
     assert hud.display_facts != replace(hud, usage=CodexUsage(
         UnreadableUsage(reason="a different visible usage observation"))).display_facts
     assert hud.display_facts != replace(hud, units=(replace(unit, state=Stuck), *hud.units[1:])).display_facts
+
+
+def test_recipient_huds_reuse_the_heartbeat_shared_tables() -> None:
+    hud = example_hud()
+    delivered = hud.for_delivery(TeamDelivery(hud.packets[0], hud.open_pings))
+
+    assert delivered.groups is hud.groups
 
 
 def test_disclosure_reuses_original_children_and_declared_identity() -> None:

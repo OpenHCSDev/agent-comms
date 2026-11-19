@@ -330,10 +330,10 @@ class NoFleetCompactionPolicy(NullMember, FleetCompactionPolicy, declared_name=N
 class Gpt56SolCompactionPolicy(
     FleetCompactionPolicy, declared_name="openai-codex/gpt-5.6-sol"
 ):
-    """Apply Tristan's 400k fleet limit to GPT-5.6 Sol sessions."""
+    """Apply Tristan's 500k fleet limit to GPT-5.6 Sol sessions."""
 
     context_window: ClassVar[int] = 1_050_000
-    compact_at: ClassVar[int] = 400_000
+    compact_at: ClassVar[int] = 500_000
     keep_recent_tokens: ClassVar[int] = 20_000
 
     @classmethod
