@@ -426,4 +426,4 @@ def test_unreviewed_head_offers_each_verb_once_with_every_bound_argument() -> No
     text = "\n".join(offer.text() for offer in offers)
     assert all(part in text for part in ("--pr 7", f"--head {head}", "--repo o/r"))
     assert all(sum(offer.verb is verb for offer in offers) == 1
-               for verb in rule.clearing_actions())
+               for verb in expected)
