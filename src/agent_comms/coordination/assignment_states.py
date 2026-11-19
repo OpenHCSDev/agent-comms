@@ -562,20 +562,6 @@ class FailedAssignment(Failed, Terminal, InterruptedAssignment):
         return (super().source_settlement(evidence, policy, claim_id)
                 if evidence else SettledWithoutInput())
 
-    def notification(
-        self,
-        recipient: FrozenRecipient,
-        sender_lookup: ThreadLookup,
-        *,
-        observation: RecipientActivity,
-        activity: AssignmentActivity | None,
-        updated_at_ms: int = 0,
-        triage_inflight: bool = False,
-    ) -> MessageNotification:
-        notification = super().notification(
-            recipient, sender_lookup, observation=observation, activity=activity
-        )
-        return replace(notification, state=FailedProgress(notification.state))
 
     def rejected_triage_history(self, execution: TriageNativeExecution, **source) -> FailedTriageHistoricalNativeInput:
         """A proved rejected result is delivered source, never an IGNORE decision."""

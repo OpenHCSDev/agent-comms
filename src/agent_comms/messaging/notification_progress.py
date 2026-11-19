@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import ClassVar, Self
 
 from agent_comms.messaging.assignment_notice import AssignmentNotice
 from agent_comms.messaging.message_reference import MessageReference
@@ -114,6 +114,9 @@ class DeliveryProgress(ThreadPresentationStatus):
     def rank(self) -> int:
         return DeliveryRank.position_of(type(self))
 
+    def contextual_notification_label(self, notification: AssignmentNotice[DeliveryProgress], label: str) -> str:
+        return label
+
     def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return self.label
 
@@ -194,6 +197,12 @@ class ContextualProgress(WaitingDelivery, DeliveryProgress):
     """A lifecycle label surrounds the original proof without copying its facts."""
     proof: DeliveryProgress
 
+    def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
+        return self.contextual_notification_label(notification, self.label)
+
+    def contextual_notification_label(self, notification: AssignmentNotice[DeliveryProgress], label: str) -> str:
+        return self.proof.contextual_notification_label(notification, label)
+
     def is_consumed(self) -> bool:
         return self.proof.is_consumed()
 
@@ -256,7 +265,7 @@ class WorkingTakenProgress(ActiveDelivery, TakenProgress, WorkingThreadPresentat
 
 
 class InterruptedProgress(ContextualProgress):
-    label = "Interrupted before consumed"
+    label = "Interrupted"
 
 
 class FailedProgress(ContextualProgress):
@@ -330,6 +339,10 @@ class QueuedProgress(ActiveDelivery, SentProgress):
 @dataclass(frozen=True)
 class ShownToModelProgress(ConsumedDelivery, AssignmentProgress):
     consumed_at_ms: int
+
+    def contextual_notification_label(self, notification: AssignmentNotice[DeliveryProgress], label: str) -> str:
+        read = notification.timed_state(ConsumedDelivery.label, self.consumed_at_ms)
+        return f"{read} · {label.lower()}"
 
     @property
     def at_ms(self) -> int:
