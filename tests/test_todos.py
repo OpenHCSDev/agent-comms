@@ -69,6 +69,7 @@ from agent_comms.planning.orders import (
     Todo,
     TodoCommand,
     TodoConflict,
+    TodoHistory,
     TodoState,
     TodoStore,
     UnmergedListedPullRequest,
@@ -692,7 +693,8 @@ def test_associations_preserve_shared_sources_order_identity_and_replacement(ass
                        PullRequestLink(foreign, 3))))
     # Same declared order identity in a captured problem with no direct PR link.
     historical = replace(base, id='P3')
-    rows = {todo.id: todo for todo in (first, second, historical)}
+    fourth = replace(first, id='P4')
+    rows = {todo.id: todo for todo in (first, second, historical, fourth)}
     pulls = PullRequests(tuple(rows.values()))
 
     def check():
@@ -724,6 +726,26 @@ def test_associations_preserve_shared_sources_order_identity_and_replacement(ass
     exposed = pulls.linked(repo)
     exposed.clear()
     check()
+
+
+def test_associations_require_history_only_for_indirect_candidates(associations_source):
+    base = replace(associations_source, history=TodoHistory())
+    repo = base.repo
+    foreign = RepositoryName.from_wire('example/other')
+    pulls = PullRequests()
+    assert pulls.associations(repo, base) == ()
+    other = replace(base, id='P2', order=replace(base.order, id=OrderId('b' * 12),
+        pull_requests=(PullRequestLink(foreign, 7),)))
+    pulls.register((other,))
+    assert pulls.associations(repo, base) == ()
+    linked = replace(base, order=replace(base.order, pull_requests=(PullRequestLink(repo, 3),)))
+    own, = pulls.associations(repo, linked)
+    assert own.problems == (linked.id,) and own.orders == (linked.order.id,)
+    # An indirect same-repository candidate genuinely needs the unavailable history.
+    pulls.register((replace(other, order=replace(other.order,
+        pull_requests=(PullRequestLink(repo, 7),))),))
+    with pytest.raises(TodoError, match='history requires'):
+        pulls.associations(repo, linked)
 
 
 def test_associations_register_and_selected_reads_are_linear_in_independent_sources(
