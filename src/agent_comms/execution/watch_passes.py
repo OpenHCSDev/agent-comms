@@ -27,6 +27,10 @@ class Watch(AsyncWork, WatchPhase, DeclaredFamily):
         """A service may report its failed pass; ordinary watches need no extra action."""
 
 
+class ConnectorWatch:
+    """A changed-rule watch the connector owns; root publications do not inherit it."""
+
+
 class JoinedWatch(Watch):
     """The whole pass is one joined operation under maintenance."""
 

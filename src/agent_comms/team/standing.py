@@ -20,7 +20,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination.service_passes import ServicePassStore, TeamPass
 from agent_comms.execution.turn_bound import TurnsSince
 from agent_comms.execution.turn_digests import TurnDigestRead
-from agent_comms.execution.watch_passes import WatchPass
+from agent_comms.execution.watch_passes import ConnectorWatch, WatchPass
 from agent_comms.heartbeat_subjects import (
     HeadSubject,
     HeartbeatSubject,
@@ -646,7 +646,7 @@ class RetainedHolderWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
                 f" hand the row away? -> keep {self.todo.id} with {self.previous.owner}")
 
 
-class UnownedOrderWatch(WatchPass[tuple[UnownedWheelSpin, ...]]):
+class UnownedOrderWatch(WatchPass[tuple[UnownedWheelSpin, ...]], ConnectorWatch):
     """Keep dispatch preparation joined; only individually audited readers can be dropped.
     One pairing over every unowned order, so an idle unit is offered once; each rule acts as
     its own order's creator."""
