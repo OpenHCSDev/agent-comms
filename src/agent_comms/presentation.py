@@ -40,18 +40,18 @@ from agent_comms.messaging.read_selection import CapturedSelection
 from agent_comms.messaging.recorded_bus import NoRecordedBus, RecordedBusIdentity
 from agent_comms.messaging.revision_views import (
     ActivityView,
-    AssignmentEvidenceView,
     BusSourceView,
     ExternalTranscriptsView,
     HumanReadEvidenceView,
     NotificationsView,
+    NotificationEvidenceView,
     RegistrationsView,
     RetainedTeamFramesView,
     RevisionView,
     RosterView,
     SidebarBasisView,
     SidebarView,
-    StatusSourced,
+    StatusSourceView,
     StoresView,
     TeamBoardView,
     TeamFramesView,
@@ -543,7 +543,7 @@ class WireRevision(ReadState, ToolResult):
         tuple[FileRevision, ...],
         *revision_source(
             lambda views: views.registry.store.source_paths(views.root),
-            *StatusSourced.views(),
+            StatusSourceView,
             RegistrationsView,
             ActivityView,
         ),
@@ -551,45 +551,45 @@ class WireRevision(ReadState, ToolResult):
     catalog: Annotated[
         tuple[FileRevision, ...],
         *revision_source(
-            lambda views: (views.channels.catalog.path,), *StatusSourced.views(), SidebarBasisView, RegistrationsView
+            lambda views: (views.channels.catalog.path,), StatusSourceView, SidebarBasisView, RegistrationsView
         ),
     ]
     bus_changes: Annotated[
         tuple[FileRevision, ...],
         *revision_source(
-            lambda views: views.bus.bus.source_paths(views.root), *StatusSourced.views(), SidebarBasisView
+            lambda views: views.bus.bus.source_paths(views.root), StatusSourceView, SidebarBasisView
         ),
     ]
     bus_identity: Annotated[
-        RecordedBusIdentity, WatchViews((*StatusSourced.views(), BusSourceView, SidebarBasisView)),
+        RecordedBusIdentity, WatchViews((StatusSourceView, BusSourceView, SidebarBasisView)),
         Differs(lambda before, current: not before.matches(current)),
     ]
-    bus_seq: Annotated[int, WatchViews((*StatusSourced.views(), SidebarBasisView))]
+    bus_seq: Annotated[int, WatchViews((StatusSourceView, SidebarBasisView))]
     history: Annotated[
         tuple[FileRevision, ...],
         *revision_source(lambda views: (views.bus.history.path,),
-                         *StatusSourced.views(), SidebarBasisView, NotificationsView),
+                         StatusSourceView, SidebarBasisView, NotificationsView),
     ]
     activity: Annotated[
         tuple[FileRevision, ...],
         *revision_source(
             lambda views: views.agents.activity.source_paths(views.root),
-            *StatusSourced.views(), ActivityView,
+            StatusSourceView, ActivityView,
         ),
     ]
     runtime_info: Annotated[
         tuple[FileRevision, ...],
         *revision_source(lambda views: (views.agents.runtime_info.path,),
-                         *StatusSourced.views(), ActivityView),
+                         StatusSourceView, ActivityView),
     ]
     work_room: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root), *StatusSourced.views(), ActivityView),
+        *revision_source(lambda views: RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root), StatusSourceView, ActivityView),
     ]
     reads: Annotated[
         tuple[FileRevision, ...],
         *revision_source(
-            lambda views: (views.bus.reads.path,), *StatusSourced.views(), SidebarBasisView,
+            lambda views: (views.bus.reads.path,), StatusSourceView, SidebarBasisView,
             NotificationsView, HumanReadEvidenceView,
         ),
     ]
@@ -601,16 +601,22 @@ class WireRevision(ReadState, ToolResult):
     ]
     goal_execution: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: GoalWakeFile.watched_paths_in(views.root), *StatusSourced.views(), RosterView),
+        *revision_source(lambda views: GoalWakeFile.watched_paths_in(views.root), StatusSourceView, RosterView),
     ]
     relationships: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: (RelationshipFile.path_in(views.root),), *StatusSourced.views(), SidebarView),
+        *revision_source(lambda views: (RelationshipFile.path_in(views.root),), StatusSourceView, SidebarView),
     ]
     notifications: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: NotificationAssignment.source_paths(views.root), *StatusSourced.views(), NotificationsView,
-                         AssignmentEvidenceView),
+        *revision_source(
+            lambda views: NotificationAssignment.source_paths(views.root),
+            NotificationEvidenceView,
+        ),
+    ]
+    notification_evidence: Annotated[
+        int,
+        WatchViews((NotificationEvidenceView,)),
     ]
     external_transcripts: Annotated[
         tuple[FileRevision, ...],
@@ -642,7 +648,7 @@ class WireRevision(ReadState, ToolResult):
                 for plan in FieldCodec.field_plans(cls)
                 if WatchPaths.single(plan.annotation)
             },
-            bus_identity=NoRecordedBus(), bus_seq=0, expiry_tick=0,
+            bus_identity=NoRecordedBus(), bus_seq=0, notification_evidence=0, expiry_tick=0,
         )
 
     @classmethod

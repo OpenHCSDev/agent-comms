@@ -22,6 +22,7 @@ from agent_comms.coordination.assignment_store import AssignmentStore
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.coordination.tables.notification_evidence import BumpsNotificationEvidenceRevision
 from agent_comms.coordination.tables.participants import Participants
 from agent_comms.execution.input_origin import HarnessAttemptOrigin
 from agent_comms.installer.harness_install import HarnessSession
@@ -42,7 +43,13 @@ from agent_comms.storage.typed_table import (
 )
 
 @dataclass(frozen=True, slots=True)
-class HarnessDelivery(RetainsChildren, NoDelete, CoordinatorRow, declared_name="harness_deliveries"):
+class HarnessDelivery(
+    BumpsNotificationEvidenceRevision,
+    RetainsChildren,
+    NoDelete,
+    CoordinatorRow,
+    declared_name="harness_deliveries",
+):
     """One original attempt to put a bus message into a recipient's harness session."""
 
     bridge: Annotated[type[HarnessSession], FrozenColumn(primary_key=True)]

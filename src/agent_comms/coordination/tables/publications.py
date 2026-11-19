@@ -15,6 +15,7 @@ from agent_comms.coordination.contracts import (
 from agent_comms.coordination.errors import CoordinationError
 from agent_comms.coordination.response_acknowledgement import canonical_publication_key
 from agent_comms.coordination.schema import CoordinatorRow
+from agent_comms.coordination.tables.notification_evidence import BumpsNotificationEvidenceRevision
 from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.errors import RelationViolationError
@@ -153,6 +154,7 @@ class PublicationIntents(
 
 @dataclass(frozen=True, kw_only=True)
 class PublicationEvidence(
+    BumpsNotificationEvidenceRevision,
     GuardedInserts,
     ImmutableRows,
     CoordinatorRow,

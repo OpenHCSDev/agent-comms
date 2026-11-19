@@ -8,14 +8,6 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.storage.file_observation import FileObservation, MissingFile
 
 
-class StatusSourced:
-    """A view fed by every thread-status source."""
-
-    @classmethod
-    def views(cls) -> tuple[type[RevisionView], ...]:
-        return RevisionView.members_with(cls)
-
-
 class RevisionView(DeclaredFamily, affix="View"):
     """A view derived from the revision sources that declare they feed it."""
 
@@ -23,11 +15,19 @@ class RevisionView(DeclaredFamily, affix="View"):
         return before != current
 
 
+class NotificationEvidenceView(RevisionView):
+    """A projection whose answer depends on notification evidence."""
+
+
+class StatusSourceView(NotificationEvidenceView):
+    """A projection fed by every source of thread status."""
+
+
 class RegistrationsView(RevisionView):
     pass
 
 
-class StoresView(StatusSourced, RevisionView):
+class StoresView(StatusSourceView):
     """Every observed store; the activity expiry tick is not a store."""
 
 
@@ -39,7 +39,7 @@ class RosterView(ActivityView):
     """Thread rows: registration, activity, runtime information and goal execution."""
 
 
-class StatusView(StatusSourced, ActivityView):
+class StatusView(StatusSourceView, ActivityView):
     """Activity, assignments and bus reads supply thread status.
 
     Draft and finished CLI items share one store. Neither changes the
@@ -63,7 +63,7 @@ class ExternalTranscriptsView(RevisionView):
     """CLI drafts and finished items, independently of coordination status."""
 
 
-class NotificationsView(ActivityView):
+class NotificationsView(NotificationEvidenceView, ActivityView):
     """Whole-window changes; activity is attributed to its message participants."""
 
 
@@ -71,11 +71,11 @@ class HumanReadEvidenceView(RevisionView):
     """Human display marks, independent of assignment and activity updates."""
 
 
-class AssignmentEvidenceView(RevisionView):
+class AssignmentEvidenceView(NotificationEvidenceView):
     """Assignment evidence, independent of human display and activity updates."""
 
 
-class TeamBoardView(StatusSourced, RevisionView):
+class TeamBoardView(StatusSourceView):
     """Store changes requiring board preparation, excluding its own publications and clock."""
 
 

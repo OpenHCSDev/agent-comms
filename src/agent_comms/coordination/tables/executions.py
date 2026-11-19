@@ -17,6 +17,7 @@ from agent_comms.coordination.errors import (
 from agent_comms.coordination.execution_states import ExecutionState
 from agent_comms.coordination.reason_codes import ReasonCode
 from agent_comms.coordination.schema import CoordinatorRow
+from agent_comms.coordination.tables.notification_evidence import BumpsNotificationEvidenceRevision
 from agent_comms.coordination.tables.attempts import (
     APPROVED_REPLAY_FACT_MASK,
     AttemptRecord,
@@ -223,6 +224,7 @@ class NoPointedAttempt(DefaultWhenAbsent, IdlePointer, NullMember, PointerAttemp
 
 @dataclass(frozen=True, slots=True)
 class CurrentExecutions(
+    BumpsNotificationEvidenceRevision,
     IncrementingColumn, GuardedInserts, NoDelete, CoordinatorRow
 ):
     revision_column = "pointer_revision"
