@@ -2,6 +2,7 @@
 
 
 import os
+import sys
 import subprocess
 from pathlib import Path
 
@@ -94,3 +95,26 @@ def test_comms_creates_a_private_root_and_refuses_foreign_stores(tmp_path):
         wire(root)
     assert not RegistryFile.path_in(root).exists()
     assert all(path.read_bytes() == data for path, data in original.items())
+
+
+def test_root_attachment_does_not_load_execution_backends(tmp_path):
+    """A fresh reader of an existing root does not load the worker's backend family."""
+    RootRuntimeStore.at(tmp_path / "root").adopt(LaunchRuntime.running())
+    script = """
+import sys
+from pathlib import Path
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.root_runtime import RootRuntime, RootRuntimeStore
+root = Path(sys.argv[1])
+runtime = LaunchRuntime.running()
+RootRuntime.require_attachable(root, runtime)
+assert RootRuntimeStore.at(root).read().prefix == runtime.prefix
+assert not any(name in sys.modules for name in (
+    'agent_comms.pi_native_backend', 'agent_comms.pi_durable_backend',
+    'agent_comms.registry.registry_store', 'agent_comms.execution.root_host_store',
+))
+"""
+    subprocess.run(
+        (sys.executable, "-c", script, str(tmp_path / "root")),
+        env=os.environ, capture_output=True, text=True, check=True,
+    )
