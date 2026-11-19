@@ -1,9 +1,14 @@
 """Saved check commands are data; revision policy is enforced when writing new checks."""
 
+import shlex
+import signal
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
+from agent_comms.execution.child_process import ExitedOutcome
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.goals import (
     CountCheckResult,
@@ -12,6 +17,7 @@ from agent_comms.planning.goals import (
 from agent_comms.projects.work_branches import WorkBranches
 from agent_comms.team.order import CheckRequest
 from agent_comms_hooks.shell_commands import ShellCommand
+from process_tree_fixture import TREE, identities
 
 
 @pytest.mark.parametrize('command', ['git checkout main', 'git -C /repo switch work',
@@ -60,6 +66,40 @@ def test_acceptance_refuses_passing_and_unmeasurable_checks(source_repository, t
     with pytest.raises(ValueError):
         check.require_acceptance(WorkBranches.main, tmp_path / 'checks')
     assert not tuple((tmp_path / 'checks').iterdir())
+
+
+@pytest.mark.parametrize('parent_exits', (False, True))
+def test_check_retires_real_descendants_before_checkout_retirement(
+        source_repository, tmp_path, monkeypatch, parent_exits):
+    acknowledgement = tmp_path / 'check-tree.json'
+    # The grandchild keeps its own pipe, never the check's captured error stream.
+    program = TREE.replace('stdout=subprocess.PIPE)',
+                           'stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)')
+    if parent_exits:
+        program = program.replace('time.sleep(60)\n', 'sys.exit(0)\n')
+    command = shlex.join((sys.executable, '-c', program, str(acknowledgement)))
+    check = OrderCheck(source_repository.checkout, command)
+    monkeypatch.setattr(OrderCheck, 'timeout', 5)
+    checkouts = tmp_path / 'checkouts'
+    try:
+        if parent_exits:
+            result = check.run_at(source_repository.main_commit, source_repository.checkout, checkouts)
+            assert result.outcome == ExitedOutcome(0) and result.stdout == b'tree ready\n'
+        else:
+            with pytest.raises(subprocess.TimeoutExpired):
+                check.run_at(source_repository.main_commit, source_repository.checkout, checkouts)
+        assert acknowledgement.is_file(), 'The real process tree must have started.'
+        assert all(not member.alive() for member in identities(acknowledgement))
+        assert not tuple(checkouts.iterdir())
+    finally:
+        # Baseline failures must not leave their unowned grandchildren on the host.
+        if acknowledgement.exists():
+            for member in identities(acknowledgement):
+                if member.alive():
+                    try:
+                        member.signal(signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
 
 
 def test_check_uses_configured_persistent_checkout_and_retains_real_result(source_repository, tmp_path):

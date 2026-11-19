@@ -39,7 +39,7 @@ from agent_comms.execution.child_process import (
     TimedOutOutcome,
 )
 from agent_comms.execution.launch_runtime import LaunchRuntime
-from agent_comms.installer.native_build_inputs import DetachedChildStdio
+from agent_comms.installer.native_build_inputs import ConfiguredChildStdio, DetachedChildStdio
 from agent_comms.nominal.field_codec import FieldCodec
 from process_tree_fixture import TREE, identities, ready
 
@@ -192,6 +192,19 @@ async def test_fork_pool_parent_death_retires_workers_and_nested_child_group(tmp
         for member in observed:
             if member.alive():
                 ObservedProcess(member).stop_sync()
+
+
+def test_synchronous_run_can_borrow_an_open_input_stream(tmp_path: Path) -> None:
+    payload = tmp_path / "input"
+    payload.write_bytes(b"borrowed input\n")
+    with payload.open("rb") as input_stream:
+        result = SpawnedProcess.run(
+            (sys.executable, "-c", "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())"),
+            timeout=5, cwd=tmp_path, env=dict(os.environ),
+            stdio=ConfiguredChildStdio(stdin=input_stream, stdout=subprocess.PIPE,
+                                      stderr=subprocess.PIPE),
+        )
+    assert (result.returncode, result.stdout, result.stderr) == (0, b"borrowed input\n", b"")
 
 
 def test_synchronous_run_collects_both_streams_and_returncode(tmp_path: Path) -> None:

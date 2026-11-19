@@ -2530,6 +2530,7 @@ class SpawnedProcess(SynchronousProcess):
         cwd: str | Path,
         env: dict[str, str],
         runtime: LaunchRuntime = LaunchRuntime.running(),
+        stdio: ChildStdio = DetachedChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
     ) -> subprocess.CompletedProcess[bytes]:
         """A one-shot interpreter exchange, including forced descendant retirement.
 
@@ -2544,7 +2545,7 @@ class SpawnedProcess(SynchronousProcess):
             cwd=cwd,
             env=env,
             runtime=runtime,
-            stdio=DetachedChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+            stdio=stdio,
         ) as child:
             try:
                 return child.collect(timeout=max(0, deadline - time.monotonic()))
