@@ -933,7 +933,7 @@ class PullRequests(RepositoryReads):
         self._open: dict[RepositoryName, tuple[int, ...]] = {}
         self._worktrees: dict[Path, Mapping[str, tuple[str, ...]]] = {}
         self._todos: dict[str, PullRequestRegistration] = {}
-        self._linked: dict[PullRequestLink, dict[int, PullRequestRegistration]] = {}
+        self._linked: dict[RepositoryName, dict[int, dict[int, PullRequestRegistration]]] = {}
         self._orders: dict[OrderId, dict[PullRequestLink, dict[int, PullRequestRegistration]]] = {}
         self.register(todos)
 
@@ -945,9 +945,11 @@ class PullRequests(RepositoryReads):
                 continue
             if previous is not None:
                 for link, orders in previous.links.items():
-                    del self._linked[link][previous.position]
-                    if not self._linked[link]:
-                        del self._linked[link]
+                    del self._linked[link.repo][link.number][previous.position]
+                    if not self._linked[link.repo][link.number]:
+                        del self._linked[link.repo][link.number]
+                    if not self._linked[link.repo]:
+                        del self._linked[link.repo]
                     for order in orders:
                         del self._orders[order][link][previous.position]
                         if not self._orders[order][link]:
@@ -958,7 +960,7 @@ class PullRequests(RepositoryReads):
                 previous.position if previous is not None else len(self._todos), todo)
             self._todos[todo.id] = current
             for link, orders in current.links.items():
-                self._linked.setdefault(link, {})[current.position] = current
+                self._linked.setdefault(link.repo, {}).setdefault(link.number, {})[current.position] = current
                 for order in orders:
                     self._orders.setdefault(order, {}).setdefault(link, {})[current.position] = current
         return self
@@ -1020,26 +1022,30 @@ class PullRequests(RepositoryReads):
 
     def linked(self, repo: RepositoryName) -> dict[int, list[Todo]]:
         return {link.number: [row.todo for row in sorted(
-                    self._linked[link].values(), key=lambda row: row.position)]
-                for link in sorted((link for link in self._linked if link.repo == repo),
+                    self._linked[repo][link.number].values(), key=lambda row: row.position)]
+                for link in sorted((PullRequestLink(repo, number)
+                                    for number in self._linked.get(repo, ())),
                                    key=self.link_position)}
 
     def link_position(self, link: PullRequestLink) -> tuple[int, int]:
-        first = self._linked[link][min(self._linked[link])]
+        candidates = self._linked[link.repo][link.number]
+        first = candidates[min(candidates)]
         return first.link_position(link)
 
     def associations(self, repo: RepositoryName, todo: Todo) -> tuple[PullRequestOrders, ...]:
         """Select by problem or historical order identity before joining shared PR sources."""
         self.register((todo,))
-        links = set(self._todos[todo.id].links)
-        for identity in todo.held_order_ids:
-            links.update(self._orders.get(identity, ()))
+        links = {link for link in self._todos[todo.id].links if link.repo == repo}
+        # With every candidate directly linked, history cannot add an answer.
+        if len(links) < len(self._linked.get(repo, ())):
+            for identity in todo.held_order_ids:
+                links.update(self._orders.get(identity, ()))
         selected = sorted((link for link in links if link.repo == repo), key=self.link_position)
         return tuple(PullRequestOrders(
             link.number, tuple(row.todo.id for row in candidates),
             tuple(dict.fromkeys(order for row in candidates for order in row.links[link])))
             for link in selected
-            for candidates in (sorted(self._linked[link].values(), key=lambda row: row.position),))
+            for candidates in (sorted(self._linked[link.repo][link.number].values(), key=lambda row: row.position),))
 
     @staticmethod
     def linked_among(todos: Iterable[Todo], repo: RepositoryName) -> dict[int, list[Todo]]:
