@@ -3,7 +3,8 @@ import { existsSync } from 'node:fs';
 import { realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
-import { CONFIG_DIR_NAME, getAgentDir, ProjectTrustStore } from '@earendil-works/pi-coding-agent';
+import { CONFIG_DIR_NAME, ProjectTrustStore } from '@earendil-works/pi-coding-agent';
+import { getMcpAgentDir } from '../src/agent-directory.mjs';
 import { writeNativeServer } from '../src/config-write.mjs';
 import { decideCallGrant, decideProjectServer } from '../src/commands.mjs';
 import { declarationDigest, parseNativeConfig } from '../src/config.mjs';
@@ -127,7 +128,7 @@ async function add(opts, agentDir) {
 try {
   const [action, ...args] = process.argv.slice(2);
   const opts = action === 'trust' || action === 'calls' ? {} : options(args);
-  const agentDir = getAgentDir();
+  const agentDir = getMcpAgentDir();
   if (action === 'status') {
     if (Object.keys(opts).some((key) => !['arg', 'env', 'envFrom', 'project', 'json'].includes(key))) {
       throw new Error('status accepts only --project and --json');

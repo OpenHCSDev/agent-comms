@@ -82,9 +82,16 @@ Each entry requires `id`, `enabled`, `instructionsPolicy:"status-only"`, and
 Optional user-scope `env` supplies literal values; `envFrom` maps child
 variables to host variable names. Project-scope literal `env` is ineligible;
 use `envFrom` for owner-controlled values. Unknown fields/transports fail. User config is
-`getAgentDir()/mcp.json`; project config is `<cwd>/<CONFIG_DIR_NAME>/mcp.json`.
+`getMcpAgentDir()/mcp.json`; project config is `<cwd>/<CONFIG_DIR_NAME>/mcp.json`.
+The CLI and extension use the same user configuration directory. In native Comms,
+`AGENT_COMMS_NATIVE_CONFIG_DIR` retains the original user profile while
+`PI_CODING_AGENT_DIR` isolates writable session resources. MCP declarations, saved
+project trust and the approval ledger stay in that original profile; they are not
+copied into each session. Outside Comms, the SDK's `getAgentDir()` remains the
+default. An explicitly supplied native directory must be absolute. This directory
+selection does not grant project trust or override an untrusted session context.
 The project file is not read until explicit saved Pi project trust is active. The package-owned
-`getAgentDir()/mcp-trust.json` separately approves the *exact* canonical
+`getMcpAgentDir()/mcp-trust.json` separately approves the *exact* canonical
 project, scope, server ID and complete declaration digest. Changed declarations
 need a new approval; project overlays never fall back to user commands. On
 POSIX, decision writes durably stage a `.unsafe` marker before rename and
