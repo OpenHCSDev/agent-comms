@@ -1178,6 +1178,30 @@ class CountWire(WireValue):
         return cls(int(str(data).removeprefix("count=")))
 
 
+def test_record_members_use_their_field_decoder_without_reencoding_raw_input(monkeypatch):
+    calls = []
+    encode = FieldCodec.encode
+
+    def counted(value, annotation=None):
+        calls.append(value)
+        return encode(value, annotation)
+
+    monkeypatch.setattr(FieldCodec, "encode", counted)
+    assert FieldCodec.decode(SecretMember, {"name": "kept", "token": "secret"}) == SecretMember("kept", "secret")
+    assert calls == []
+    # Arbitrary wire-value forms retain their independent validation contract.
+    assert FieldCodec.decode(CountWire, "count=4") == CountWire(4)
+    assert calls == ["count=4"]
+
+
+@pytest.mark.parametrize("raw", [None, [], {"name": "kept"},
+    {"name": 2, "token": "secret"}, {"name": "kept", "token": object()},
+    {"name": "kept", "token": "secret", "extra": True}])
+def test_direct_record_shape_still_validates_every_declared_field(raw):
+    with pytest.raises(MalformedRecord):
+        FieldCodec.decode(SecretMember, raw)
+
+
 def test_represented_value_projects_as_its_record_only_when_its_record_is_its_wire_form() -> None:
     member = SecretMember("kept", "secret")
     assert FieldCodec.encode(member) == {"name": "kept", "token": "secret"}
