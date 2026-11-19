@@ -53,6 +53,8 @@ def test_changed_requirement_at_the_same_manuscript_is_not_a_repeated_defect(
     manuscript = source_repository.checkout / "paper" / "manuscript.md"
     manuscript.parent.mkdir()
     manuscript.write_text("# Study\n\n## Introduction\n\nThe current introduction.\n")
+    source_repository.commit_change("Publish the original manuscript", "paper/manuscript.md")
+    source_repository.git(source_repository.checkout, "push", "origin", "main")
     where = FileLine("paper/manuscript.md", 3)
     earlier = replace(order(source_repository), owner=where, at=RecordedEventTime(10))
     store = private_comms.goals.todos
