@@ -3832,7 +3832,8 @@ class VerdictAudience:
             snapshot, goals.bus.require_channel)
         reached = {sender, *recipients, *target.direct_names}
         named = tuple(name for named in dict.fromkeys(
-            snapshot.canonical_name(name) for name in self.threads)
+            name for target_name in self.threads
+            for name in CommandTarget.named(snapshot.canonical_name(target_name)).direct_names)
             for name in snapshot.status(named).publish_heartbeat(lambda: (named,), ()))
         return ((target, target.addressed(tuple(name for name in named if name in reached), text)),
                 *((CommandTarget.named(name), text) for name in named if name not in reached))
