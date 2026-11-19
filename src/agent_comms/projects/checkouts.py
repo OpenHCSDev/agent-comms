@@ -454,7 +454,7 @@ class GitReference:
     @classmethod
     def listed(cls, row: str) -> GitReference:
         name, commit, upstream, remote, remote_ref = row.split("\0")
-        sha = GitCommitText.decode(commit)
+        sha = GitCommitText.from_text(commit)
         if name.startswith(BranchUpstream.prefix):
             return LocalGitReference(
                 name, sha, BranchUpstream.from_git(name, upstream, remote, remote_ref),
@@ -490,7 +490,7 @@ class GitHead(ABC):
         symbolic = next((line.removeprefix("branch ") for line in attributes
                          if line.startswith("branch ")), "")
         checkout = Checkout(Path(path).resolve())
-        commit = GitCommitText.decode(sha)
+        commit = GitCommitText.from_text(sha)
         if not commit.strip("0"):
             return UnbornGitHead(checkout, symbolic)
         if symbolic:
@@ -881,8 +881,8 @@ class CheckoutHistory:
                 continue
             sha, parents, at, message = row.split("\0", 3)
             commit = GitCommit(
-                GitCommitText.decode(sha),
-                tuple(map(GitCommitText.decode, parents.split())), float(at), message,
+                GitCommitText.from_text(sha),
+                tuple(map(GitCommitText.from_text, parents.split())), float(at), message,
             )
             commits[commit.sha] = commit
         return MappingProxyType(commits)
