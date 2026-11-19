@@ -6,8 +6,8 @@ from pathlib import Path
 
 from agent_comms import agent_events as events
 from agent_comms.execution import pi_commands as commands
-from agent_comms.execution.acp_failure import FailureSource
 from agent_comms.agent_backend import InputStartListener
+from agent_comms.execution.failure_source import FailureSource
 from agent_comms.execution.native_child import NativeChildState, PiSessionChild
 from agent_comms.execution.native_pi import NativePiRpcLaunch
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity

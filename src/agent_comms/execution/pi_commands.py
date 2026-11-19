@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from pydantic import JsonValue
 
 from agent_comms import agent_events as events
-from agent_comms.execution.acp_failure import UnrecordedFailureSource
 from agent_comms.execution.child_process import BoundedRun
+from agent_comms.execution.failure_source import UnrecordedFailureSource
 from agent_comms.execution.image_input import ImageInput
 from agent_comms.execution.launch_runtime import RestartEnvironment
 from agent_comms.execution.native_entries import NativeEvidenceScope

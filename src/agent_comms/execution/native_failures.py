@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING
 
 from agent_comms.coordination.errors import DrainDeferred
-
-if TYPE_CHECKING:
-    from agent_comms.messaging.send_result import SendResult
-
+from agent_comms.execution.failure_source import FailureSource, UnrecordedFailureSource
 
 class NativeRequestFailure(RuntimeError, DrainDeferred):  # noqa: N818 - nominal request outcome
     """A failed input is reported and settled without authorizing a retry."""
 
+    native_source: FailureSource = UnrecordedFailureSource()
+
     def diagnostic_evidence(self) -> dict[str, object]:
-        return {}
+        return self.native_source.diagnostic_evidence()
 
     def attach_stderr(self, text: str) -> None:
         pass
@@ -24,7 +22,7 @@ class NativeRequestFailure(RuntimeError, DrainDeferred):  # noqa: N818 - nominal
     def public_failure(self) -> str:
         return str(self)
 
-    def publish(self, publisher: Callable[..., SendResult]) -> SendResult:
+    def publish[Result](self, publisher: Callable[..., Result]) -> Result:
         """An ordinary failure has no rejected native response to publish."""
         return publisher(self.public_failure, source_error=self)
 
@@ -35,7 +33,7 @@ class NativePiUnavailable(NativeRequestFailure):  # noqa: N818 - nominal fail-cl
     native_stderr = ""
 
     def diagnostic_evidence(self) -> dict[str, object]:
-        return {"stderr": self.native_stderr}
+        return {**super().diagnostic_evidence(), "stderr": self.native_stderr}
 
     def attach_stderr(self, text: str) -> None:
         self.native_stderr = text

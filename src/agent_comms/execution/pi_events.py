@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import ConvertedEvent, UnconvertedEvent
-from agent_comms.execution.acp_failure import UnrecordedFailureSource
 from agent_comms.execution.controller import ChoiceRequest, PermissionOptionId
+from agent_comms.execution.failure_source import UnrecordedFailureSource
 from agent_comms.execution.native_failure_reads import (
     NativeOperationFailureRead,
     NativeResponseFailureRead,

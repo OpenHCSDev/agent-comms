@@ -28,6 +28,7 @@ from agent_comms.transport.tool_declaration import ToolDeclaration
 class ProviderDiagnosticError(PiPayload, DeclaredFamily, affix="ProviderDiagnosticError"):
     message: str
     name: PiField[ReportedText | PiOmitted] = PiOmitted()
+    stack: PiField[ReportedText | PiOmitted] = PiOmitted()
 
     @classmethod
     def wire_member(cls, value: dict[str, object]) -> type[ProviderDiagnosticError]:

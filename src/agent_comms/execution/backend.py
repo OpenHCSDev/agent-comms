@@ -15,6 +15,7 @@ message also fail the turn, carrying ``errorMessage`` and typed diagnostics.
 
 from __future__ import annotations
 
+from agent_comms.execution.failure_source import UnrecordedFailureSource
 from agent_comms.execution.runtime_observations import ContextInfo
 from agent_comms.execution.stats_callbacks import WatchdogSessionRead
 
@@ -43,7 +44,7 @@ from agent_comms.agent_backend import NO_INPUT_START_LISTENER, InputStartListene
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution import pi_commands as commands
 from agent_comms.execution import pi_events as pi
-from agent_comms.execution.acp_failure import ProviderRetryResult, UnrecordedFailureSource
+from agent_comms.execution.acp_failure import ProviderRetryResult
 from agent_comms.execution.cursor_publication import CursorDelivery
 from agent_comms.execution.extension_ui import ExtensionUiSession
 from agent_comms.execution.finish_signal import NO_FINISH_SIGNAL, FinishSignal

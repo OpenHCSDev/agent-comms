@@ -7,7 +7,7 @@ from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms import agent_events as events
 from agent_comms.execution import pi_commands as commands
-from agent_comms.execution.acp_failure import UnrecordedFailureSource
+from agent_comms.execution.failure_source import UnrecordedFailureSource
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_session_callbacks import (
     NativeSessionCallbacks,
