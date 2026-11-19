@@ -88,7 +88,6 @@ from agent_comms.ui_model.teammate_state import AwaitingTeam, TeammateState
 from agent_comms_hooks import SubagentId
 
 
-
 @dataclass(frozen=True)
 class UninstalledMerge:
     """One first-parent commit on main the installed build lacks, decoded from git's log once."""
@@ -426,10 +425,11 @@ class UnitAskUnanswered(TeammateOwedAnswer, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHeadReviewCommands):
-    """A holder's delivery needs a verdict or a replacement order, never a chat reply; it offers
-    only the verdicts its claimed order takes, the same as every linked head line."""
+class DeliveryAwaitingJudgement(OwedAnswer, UndatedStandingRule, OrderHeadReviewCommands):
+    """One team-wide delivery debt; routing a read names no exclusive judge."""
 
+    author: ThreadIncarnation
+    reviewer: ThreadIncarnation
     problem: str
 
     @classmethod
@@ -437,7 +437,8 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], debtors: tuple[Thread, ...],
                   requests: Mapping[ThreadIncarnation, Sequence[OwnerRequest]]) -> tuple[Self, ...]:
         """One team debt per retained claim, even before its original reaches the bus."""
-        return tuple(cls(message=claim.message, unit=owner, problem=todo.id,
+        return tuple(cls(message=claim.message, author=owner,
+                         reviewer=claim.reviewer.identity(todo), problem=todo.id,
                          request=claim.request(), todo=todo)
                      for owner, todos in held.items() for todo in todos
                      for claim in todo.order.owed_claims())
@@ -452,26 +453,24 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
         return (HeadSubject(self.request),)
 
     def command_values(self) -> Mapping[str, str]:
-        return {"unit": self.unit.name, **super().command_values()}
+        return {"unit": self.author.name, **super().command_values()}
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         return False
 
     def blocks(self, reached: frozenset[str], action: ClearingVerb,
                answered: tuple[OwedAnswer, ...]) -> bool:
-        """Work sent to the holder waits on this judgement; an answer to the holder's own ask
-        never does, or the gate would refuse the conversation the answer gate demands."""
-        return (self.unit.name in reached
-                and not action.resolves_claim(self.unit.name, self.problem)
-                and not any(rule.asked_by(frozenset((self.unit.name,))) for rule in answered))
+        """The team obligation stays visible but never serializes unrelated work."""
+        return False
 
     def clearing_action(self) -> str:
         DeclaredFamily.discover_package(team)  # The verbs that clear it, for its action.
         return self.clearing_commands()
 
     def line(self) -> str:
-        return (f"JUDGE {self.unit.name} delivered {self.problem} ({self.cited})."
-                f" you judged it yet? -> {self.clearing_action()}")
+        return (f"JUDGE TEAM: {self.author.name} delivered {self.problem} ({self.cited}); "
+                f"review routed to {self.reviewer.name}. First sound verdict settles it. "
+                f"-> {self.clearing_action()}")
 
 
 @dataclass(frozen=True)

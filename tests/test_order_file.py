@@ -3,7 +3,9 @@
 import json
 import time
 from dataclasses import replace
+from inspect import isabstract
 from pathlib import Path
+from typing import get_type_hints
 
 import pytest
 
@@ -12,11 +14,62 @@ from agent_comms.planning.goals import OrderCheck
 from agent_comms.planning.orders import VerdictAudience
 from agent_comms.projects.repo import Repo
 from agent_comms.storage.recorded_time import RecordedEventTime
-from agent_comms.team.order import OrderFile, forwarders_added, main, overrides
+from agent_comms.team.order import (
+    EndVerb,
+    InstallVerb,
+    OrderActionResult,
+    OrderFile,
+    OrderVerb,
+    ReadOrderAction,
+    SessionEndVerb,
+    forwarders_added,
+    main,
+    overrides,
+)
 from agent_comms.team.request import RequestAddVerb
+from agent_comms.team.standing import InstallDue
+from agent_comms.transport.tool_caller import ForkCaller
 from test_todos import order, thread
 
-pytest_plugins = ("test_todos",)
+pytest_plugins = ("test_todos", "test_held_problem_orders")
+
+
+def test_every_concrete_order_verb_returns_the_shared_result_family():
+    verbs = tuple(verb for verb in OrderVerb.members_with(OrderVerb) if not isabstract(verb))
+    assert verbs
+    assert all(get_type_hints(verb.run)["return"] is OrderActionResult for verb in verbs)
+
+
+def test_unknown_fork_targets_keep_distinct_no_change_identities(held_team, capsys):
+    first = EndVerb(fork=ForkCaller("missing-a")).apply(held_team)
+    second = EndVerb(fork=ForkCaller("missing-b")).apply(held_team)
+
+    assert isinstance(first, ReadOrderAction)
+    assert isinstance(second, ReadOrderAction)
+    assert first.lines() != second.lines()
+    assert "unregistered_thread=missing-a" in first.lines()[0]
+    assert "unregistered_thread=missing-b" in second.lines()[0]
+    output = capsys.readouterr().out
+    assert first.lines()[0] in output and second.lines()[0] in output
+
+
+def test_empty_batch_actions_name_their_no_change_result(held_team, monkeypatch, capsys):
+    monkeypatch.setattr(InstallDue, "launch_due", lambda comms: ())
+    monkeypatch.setattr(ForkCaller, "end_session", lambda comms, forks: ())
+
+    install = InstallVerb().apply(held_team)
+    session = SessionEndVerb().apply(held_team)
+    unmatched = SessionEndVerb(forks=("missing-a", "missing-b")).apply(held_team)
+
+    assert isinstance(install, ReadOrderAction)
+    assert isinstance(session, ReadOrderAction)
+    assert isinstance(unmatched, ReadOrderAction)
+    output = capsys.readouterr().out.splitlines()
+    assert "NO CHANGE install: installs=none" in output
+    assert "NO CHANGE session-end: forks=none" in output
+    assert unmatched.lines()[0] in output
+    assert "unregistered_thread=missing-a" in unmatched.lines()[0]
+    assert "unregistered_thread=missing-b" in unmatched.lines()[0]
 
 
 @pytest.mark.parametrize('definition', [
