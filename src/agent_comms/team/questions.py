@@ -65,11 +65,10 @@ class UnansweredTeammateAsks(SenderMessages):
         questions = cls(
             RepliesDisplayScope(snapshot.names_for(teammate), peers), since, before,
         ).read_opened(source)
-        return {
-            owner: tuple(message for message in questions
-                         if snapshot.canonical_name(message.sender) == owner.name)
-            for owner in held
-        }
+        by_sender: dict[str, list[Message]] = {}
+        for message in questions:
+            by_sender.setdefault(snapshot.canonical_name(message.sender), []).append(message)
+        return {owner: tuple(by_sender.get(owner.name, ())) for owner in held}
 
     def page(self, source: BusReader, lower: float, upper: int) -> tuple[Message, ...]:
         return source.unanswered_page(

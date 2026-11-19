@@ -51,11 +51,17 @@ from agent_comms.transport.tool_result import ToolResult
 from agent_comms.ui_model.teammate_state import TeammateState
 
 
-class Escalation:
+class Escalation(OwedAnswer, declared_name=None):
     """An answer owed to an escalation itself. Ignoring one is the chokehold's signal."""
 
-    message: Message
     notice: ClassVar[type[EscalationNotice]]
+
+    @classmethod
+    def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtors: tuple[Thread, ...],
+                  requests: Mapping[ThreadIncarnation, Sequence[OwnerRequest]]) -> tuple[Self, ...]:
+        return tuple(cls(message) for debtor in debtors for message in
+                     cls.notice.unanswered(source, snapshot, debtor.name, time.time()))
 
     def clearing_action(self) -> str:
         return (f"Answer the {self.notice.title} burst by its protocol, naming it with "
@@ -162,19 +168,12 @@ class VibeCheck(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
+class VibeCheckUnanswered(Escalation, UndatedStandingRule):
     """A vibe check is owed an answer like a directive: the gate refuses until it gets one."""
 
     notice = VibeCheckNotice
 
     seconds: ClassVar[int] = 5 * 60
-
-    @classmethod
-    def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: Thread,
-                  requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
-        return tuple(cls(message) for message in
-                     VibeCheckNotice.unanswered(source, snapshot, debtor.name, time.time()))
 
     def due(self, now: float) -> bool:
         return self.message.timestamp <= now - self.seconds
@@ -270,17 +269,10 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
+class ChokeholdUnanswered(Escalation, UndatedStandingRule):
     """Every chokehold message gates the teammate it paused from the moment it lands."""
 
     notice = ChokeholdNotice
-
-    @classmethod
-    def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: Thread,
-                  requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
-        return tuple(cls(message) for message in
-                     ChokeholdNotice.unanswered(source, snapshot, debtor.name, time.time()))
 
     def line(self) -> str:
         return (f"chokehold {self.cited} to {self.message.target} is still unanswered. why?"
