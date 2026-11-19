@@ -4,6 +4,7 @@ import getopt
 import signal
 import subprocess
 import tempfile
+import os
 from abc import abstractmethod
 from collections.abc import (
     Callable,
@@ -29,6 +30,7 @@ from agent_comms.execution.child_process import (
     CountPrinted,
     ExitedOutcome,
     SignaledOutcome,
+    SpawnedProcess,
     TimedOutOutcome,
 )
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
@@ -38,6 +40,7 @@ from agent_comms.execution.turn_goal_permission import (
     GoalPermission,
     InactiveGoalPermission,
 )
+from agent_comms.installer.native_build_inputs import ConfiguredChildStdio
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -460,8 +463,11 @@ class OrderCheck(CheckCommand):
             tree = str(Path(scratch) / "tree")
             checkout = ScratchCheckout.add(repository, tree, DetachedStart(revision))
             try:
-                run = subprocess.run(("bash", "-c", self.command), cwd=tree, capture_output=True,
-                                     timeout=self.timeout)
+                run = SpawnedProcess.run(
+                    ("bash", "-c", self.command), cwd=tree, timeout=self.timeout,
+                    env=dict(os.environ),
+                    stdio=ConfiguredChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+                )
             finally:
                 checkout.retire()
         return ChildResult(ChildOutcome.from_returncode(run.returncode), run.stdout)
