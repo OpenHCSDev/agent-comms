@@ -12,6 +12,7 @@ function catalog(size) {
 
 test('125 tools retain every schema; lookup selects any tool with bounded active exposure and unchanged approval', async () => {
   const definitions = catalog(125);
+  definitions.tools[0].name = 'x'.repeat(128);
   let calls = 0;
   const runtime = {
     snapshot: () => [{ id: 'fixture', scope: 'user', status: 'ready' }],
@@ -35,6 +36,12 @@ test('125 tools retain every schema; lookup selects any tool with bounded active
   assert.equal(broad.details.matching, definitions.tools.length);
   assert.equal(broad.details.active, 64);
   assert.equal(pi.getActiveTools().length, 66);
+  assert.equal(broad.content[0].text.includes(definitions.tools[0].name), false);
+  const firstPage = JSON.parse(broad.content[0].text);
+  const next = await picker.execute('next', { query: 'fixture', offset: firstPage.nextOffset });
+  const lastPage = JSON.parse(next.content[0].text);
+  assert.equal(lastPage.nextOffset, null);
+  assert.deepEqual(new Set([...firstPage.active, ...lastPage.active]), new Set(records.map(({ name }) => name)));
   const last = records.at(-1);
   await picker.execute('last', { query: last.name });
   assert.deepEqual(pi.getActiveTools(), ['read', 'mcp_find_tools', last.name]);

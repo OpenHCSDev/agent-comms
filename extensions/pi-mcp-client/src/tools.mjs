@@ -79,9 +79,10 @@ export function registerReadyTools(pi, runtime) {
       description: 'Find registered MCP tools by server, exact tool name or descriptive words. ' +
         'Activate the matches for the next request, replacing the previous active MCP selection. ' +
         'Every remote tool remains registered and searchable; exact names can select any tool. ' +
-        `At most ${MAX_ACTIVE_MCP_TOOLS} remote tools are active at once.`,
-      parameters: Type.Object({ query: Type.String({ minLength: 1, maxLength: 256 }) }),
-      async execute(_toolCallId, { query }) {
+        `Select up to ${MAX_ACTIVE_MCP_TOOLS} remote tools per search page; use offset to reach later matches.`,
+      parameters: Type.Object({ query: Type.String({ minLength: 1, maxLength: 256 }),
+        offset: Type.Optional(Type.Integer({ minimum: 0 })) }),
+      async execute(_toolCallId, { query, offset = 0 }) {
         const needle = query.trim().toLowerCase();
         const exact = definitions.filter(({ name, serverId, remote }) =>
           [name, remote.name, `${serverId}/${remote.name}`].some((value) => value.toLowerCase() === needle));
@@ -90,12 +91,13 @@ export function registerReadyTools(pi, runtime) {
           const text = `${name} ${serverId} ${remote.name} ${remote.description ?? ''}`.toLowerCase();
           return words.every((word) => text.includes(word));
         });
-        const selected = matching.slice(0, MAX_ACTIVE_MCP_TOOLS);
+        const selected = matching.slice(offset, offset + MAX_ACTIVE_MCP_TOOLS);
         const otherActive = pi.getActiveTools().filter((name) => !remoteNames.has(name));
         pi.setActiveTools([...otherActive, ...selected.map(({ name }) => name)]);
         return { content: [{ type: 'text', text: JSON.stringify({ registered: definitions.length,
-          matching: matching.length, limit: MAX_ACTIVE_MCP_TOOLS,
-          active: selected.map(({ name, serverId, remote }) => ({ name, serverId, remoteName: remote.name })) }) }],
+          matching: matching.length, limit: MAX_ACTIVE_MCP_TOOLS, offset,
+          nextOffset: offset + selected.length < matching.length ? offset + selected.length : null,
+          active: selected.map(({ name }) => name) }) }],
         details: { registered: definitions.length, matching: matching.length, active: selected.length } };
       },
     });

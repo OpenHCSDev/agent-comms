@@ -5,9 +5,11 @@ It connects approved stdio servers when a Pi session starts, discovers tools,
 resources and prompts, registers bounded discovered Pi tools (including a
 resource/prompt catalog and read/get operations), and closes children on session
 shutdown. Catalogs with more than64 remote tools retain every registered schema;
-`mcp_find_tools` selects at most64 active remote tools by name or descriptive
-words. It replaces only the active MCP selection, never other active tools or
-the registered catalog. Exact generated names can select every remote tool.
+`mcp_find_tools` selects up to64 remote tools per search page by name or
+descriptive words; `offset` reaches later matches. It replaces only the active
+MCP selection, never other active tools or the registered catalog. Replies carry
+Pi aliases without repeating remote names. Exact generated names
+can select every remote tool.
 Activation itself makes no remote call and never grants call permission.
 It provides `/mcp-status`, `/mcp-approve <id>`, `/mcp-deny <id>`, and
 `/mcp-allow-calls <id>` / `/mcp-confirm-calls <id>`. Tool calls normally require
