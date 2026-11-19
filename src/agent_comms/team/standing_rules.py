@@ -174,6 +174,20 @@ class RepeatedTodoChange(StaleTodoDecision):
                 f"to revision {self.current.revision}")
 
 
+@dataclass(frozen=True)
+class CommandArgumentBinding:
+    """One argparse-owned destination in a declaration-derived board command."""
+
+    destination: str
+    option: tuple[str, ...]
+    missing_positional: str | None
+
+    def bind(self, values: Mapping[str, str]) -> tuple[str, ...]:
+        if self.destination in values:
+            return (*self.option, values[self.destination])
+        return (self.missing_positional,) if self.missing_positional is not None else ()
+
+
 class ClearingVerb(DeclaredVerb, declared_name=None):
     """A declared action owns the standing rules it clears and the hints they render."""
 
@@ -195,6 +209,36 @@ class ClearingVerb(DeclaredVerb, declared_name=None):
         """Ordinary verbs do not select a head verdict."""
         return True
 
+    @ClassFact
+    @staticmethod
+    def _command_binding_plans(
+        cls: type[ClearingVerb],
+    ) -> tuple[tuple[CommandArgumentBinding, ...], ...]:
+        """The argument relation declared by this verb, derived once per declarations cut.
+
+        Values belong to each rule occurrence and remain live. Parser construction belongs to
+        the verb declaration; rebuilding it for every recipient on every heartbeat changes no
+        answer and used to dominate the Core worker.
+        """
+        verbs = argparse.ArgumentParser(prog=cls.tool()).add_subparsers()
+        cls.add_parser(verbs)
+        plans = []
+        for parser in verbs.choices.values():
+            placeholder = parser._get_formatter()._format_args
+            plans.append(tuple(
+                CommandArgumentBinding(
+                    destination=action.dest,
+                    option=tuple(action.option_strings[:1]),
+                    missing_positional=(
+                        placeholder(action, action.dest)
+                        if action.required and not action.option_strings
+                        else None
+                    ),
+                )
+                for action in parser._actions
+            ))
+        return tuple(plans)
+
     def resolves_claim(self, unit: str, problem: str) -> bool:
         """Ordinary messages and actions do not judge a delivery claim."""
         return False
@@ -206,17 +250,11 @@ class ClearingVerb(DeclaredVerb, declared_name=None):
         A parameter variant with no parser contributes no second binding. Required review
         prose remains the reviewer's, not something the board can manufacture.
         """
-        verbs = argparse.ArgumentParser(prog=cls.tool()).add_subparsers()
-        cls.add_parser(verbs)
         bindings = []
-        for parser in verbs.choices.values():
-            placeholder = parser._get_formatter()._format_args
+        for plan in cls._command_binding_plans:
             arguments: list[str] = []
-            for action in parser._actions:
-                if action.dest in values:
-                    arguments += [*action.option_strings[:1], values[action.dest]]
-                elif action.required and not action.option_strings:
-                    arguments.append(placeholder(action, action.dest))
+            for binding in plan:
+                arguments.extend(binding.bind(values))
             bindings.append(tuple(arguments))
         return tuple(bindings)
 
@@ -308,10 +346,15 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
                               for member in family.members_with(family))
         return tuple(verb for verb in verbs if self.review_allowed(verb))
 
-    def action_offers(self, recipient: ThreadIncarnation) -> tuple[BoardActionOffer, ...]:
+    def action_offers(
+        self,
+        recipient: ThreadIncarnation,
+        *,
+        observation: TextDigest | None = None,
+    ) -> tuple[BoardActionOffer, ...]:
         """The applicable declarations with this observation's exact arguments and recipient."""
         values = self.command_values()
-        observation = self.observation_key()
+        observation = observation if observation is not None else self.observation_key()
         return tuple(offer
                      for verb in self.clearing_actions()
                      for offer in verb.action_offers(values, observation, recipient))
