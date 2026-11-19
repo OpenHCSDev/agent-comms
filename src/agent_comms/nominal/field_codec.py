@@ -2076,7 +2076,8 @@ class FrozenRecordMember(SharedRecordMember):
     Mutable records retain SharedRecordMember's deep-copy contract.
     """
 
-    def detached(self) -> Self:
+    def __deepcopy__(self, memo: dict[int, object]) -> Self:
+        """Mutable and frozen reads share the native copy protocol; only this leaf differs."""
         return copy(self)
 
 

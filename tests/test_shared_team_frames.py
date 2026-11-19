@@ -10,6 +10,7 @@ from cutover.carry_shared_team_frames import FlatTeamFrameFile, SharedTeamFrames
 from agent_comms.coordination.service_passes import BoardUnavailable
 from agent_comms.nominal.field_codec import (
     FieldCodec,
+    FrozenRecordMember,
     MalformedRecord,
     OrderId,
     RecordMember,
@@ -19,7 +20,14 @@ from agent_comms.nominal.shared_json import JsonArray, JsonCapture, JsonLiteral,
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.storage.recorded_time import RecordedEventTime
-from agent_comms.task_attachments.team_pings import Ping, RulePing, TeamDecisions, TeamUpdateNotice
+from agent_comms.task_attachments.team_pings import (
+    Ping,
+    RulePing,
+    TeamDecisions,
+    TeamUpdate,
+    TeamUpdateNotice,
+    TeamUpdateStore,
+)
 from agent_comms.team.standing_rules import ReviewTimerUp
 from agent_comms.team.team_hud import (
     AllTeamBoards,
@@ -57,6 +65,31 @@ def huds():
 def values(items):
     # Full typed wire data, never TeamHud/Ping logical equality.
     return FieldCodec.encode(items, tuple[TeamHudRecord, ...])
+
+
+def test_retained_packet_copies_use_frozen_occurrences_without_losing_evidence(tmp_path, monkeypatch):
+    packet = huds()[0].packets[0]
+    expected = FieldCodec.encode((packet,), tuple[TeamUpdate, ...])
+    TeamUpdateStore.record(tmp_path, packet)
+    store = TeamUpdateStore.for_team(tmp_path, packet.teammate)
+    calls = []
+    native_copy = FrozenRecordMember.__deepcopy__
+    def counted(self, memo):
+        calls.append(id(self))
+        return native_copy(self, memo)
+    monkeypatch.setattr(FrozenRecordMember, '__deepcopy__', counted)
+    first = store.read()
+    copied = len(calls)
+    assert copied > 0
+    second = store.read()
+    assert len(calls) == 2 * copied
+    assert first[0].handled[0] is not second[0].handled[0]
+    assert first[0].handled[0] is not first[0].handled[2]
+    assert first[0].handled[0].text != first[0].handled[1].text
+    encoded = FieldCodec.encode(first, tuple[TeamUpdate, ...])
+    encoded[0]['handled'][0]['text'] = 'An edit to returned JSON.'
+    assert FieldCodec.encode(second, tuple[TeamUpdate, ...]) == expected
+    assert FieldCodec.encode(store.read(), tuple[TeamUpdate, ...]) == expected
 
 
 def test_one_snapshot_preserves_every_recipient_and_encodes_each_ping_once(tmp_path, monkeypatch):

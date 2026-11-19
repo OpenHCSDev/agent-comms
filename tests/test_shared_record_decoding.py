@@ -1,12 +1,18 @@
 """Shared decoding retains source identity and independent public occurrences."""
 import asyncio
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import ClassVar
 
 import pytest
 
 from agent_comms.nominal.field_codec import (
-    FieldCodec, MalformedRecord, RecordMember, SharedRecordMember, SharedValueDecoding,
+    FieldCodec,
+    FrozenRecordMember,
+    MalformedRecord,
+    RecordMember,
+    SharedRecordMember,
+    SharedValueDecoding,
 )
 
 
@@ -19,6 +25,33 @@ class SharedSample(SharedRecordMember):
     def from_wire(cls, data):
         cls.calls += 1
         return FieldCodec.decode_record(cls, data)
+
+
+@dataclass(frozen=True)
+class FrozenSample(FrozenRecordMember):
+    values: tuple[int, ...]
+    calls: ClassVar[int] = 0
+
+    def __deepcopy__(self, memo):
+        type(self).calls += 1
+        return super().__deepcopy__(memo)
+
+
+def test_native_copy_uses_the_frozen_record_contract_and_preserves_aliases():
+    FrozenSample.calls = 0
+    original = FrozenSample((1, 2))
+    first, second = deepcopy((original, original))
+    assert FrozenSample.calls == 1
+    assert first is second and first is not original
+    assert first.values is original.values
+    assert FieldCodec.encode(first) == FieldCodec.encode(original)
+    # Shared decoding reaches the same concrete copy override, not another leaf body.
+    FrozenSample.calls = 0
+    raw = {'values': [1, 2]}
+    one, two = FieldCodec.decode_shared(tuple[FrozenSample, ...], [raw, raw])
+    assert FrozenSample.calls == 2
+    assert one is not two and one.values is two.values
+    assert FieldCodec.encode(one) == FieldCodec.encode(original)
 
 
 @dataclass
