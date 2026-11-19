@@ -14,11 +14,11 @@ from agent_comms.coordination.errors import (
     CoordinationBeginUnavailable,
     CoordinationReadUnavailable,
 )
-from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.errors import (
     HumanSendRefusedError,
     TodoError,
 )
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.messaging.bus_tables import AuthoredAnswers
 from agent_comms.messaging.messages import HandoffKind, Message, QuestionKind
 from agent_comms.nominal.field_codec import (
@@ -76,7 +76,7 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.storage.store_files import StoreBusy, StoreWait
-from agent_comms.team.order import OrderFile, TeamContext, main
+from agent_comms.team.order import OrderFile, SayVerb, TeamContext, main
 from agent_comms.team.standing import DeliveryAwaitingJudgement, Scrutinize
 from agent_comms.team.standing_rules import OwedAnswer
 from agent_comms.transport.tool_caller import ThreadCaller
@@ -478,7 +478,11 @@ def test_an_unsent_claim_stays_owed_and_the_same_call_publishes_it_once(held_tea
     opened = OwedAnswer.opened(comms, ctx.incarnation)
     owed, = (rule for rule in opened if isinstance(rule, DeliveryAwaitingJudgement))
     assert (owed.problem, owed.request, owed.message) == ("P1", claim.request(), claim.message)
+    assert owed.author == claimed.held().owner_identity
+    assert owed.reviewer == claim.reviewer.identity(claimed)
     assert owed.cited == f"P1 claim of {claim.head[:9]}"
+    assert owed.line().startswith("JUDGE TEAM:")
+    assert not owed.blocks(frozenset(), SayVerb, ())
     assert not owed.answered_by((claim.message,))
     # Two identical resumptions at once publish one original with its retained content.
     with ThreadPoolExecutor(max_workers=2) as pool:

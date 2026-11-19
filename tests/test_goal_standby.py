@@ -8,6 +8,7 @@ import pytest
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.nominal.field_codec import GoalWaitId, TurnId
 from agent_comms.planning.goal_actions import (
+    ClearGoalAction,
     EditGoalAction,
     GoalPrecondition,
     OwnerInvocable,
@@ -67,6 +68,21 @@ def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_pa
     comms.goals.update_goal("parent", PausedGoalAction(), actor=OwnerInvocable)
     comms.goals.update_goal("parent", EditGoalAction(text="Edited @mention"))
     assert comms.registry.require("parent").goal.state.pause_source.declared_name == "owner"
+
+
+def test_replacing_a_goal_clears_its_previous_wait(tmp_path):
+    comms = live_wire(tmp_path, "alice", "bob")
+    original = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+    standby(comms, "alice", original, "bob")
+
+    comms.goals.update_goal(
+        "alice", ClearGoalAction(expect=GoalPrecondition(goal_id=OneGoal(original.id)))
+    )
+    replacement = comms.goals.update_goal("alice", SetGoalAction(text="Current work"))
+
+    assert isinstance(comms.goals.goal_wait("alice"), NoGoalWait)
+    assert comms.registry.require("alice").goal.require().id == replacement.id
+    assert isinstance(comms.goals.goal_execution("alice"), RunnableExecution)
 
 
 def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path):

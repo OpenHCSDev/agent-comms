@@ -3,7 +3,10 @@
 import json
 import time
 from dataclasses import replace
+from inspect import isabstract
 from pathlib import Path
+from types import SimpleNamespace
+from typing import get_type_hints
 
 import pytest
 
@@ -12,11 +15,38 @@ from agent_comms.planning.goals import OrderCheck
 from agent_comms.planning.orders import VerdictAudience
 from agent_comms.projects.repo import Repo
 from agent_comms.storage.recorded_time import RecordedEventTime
-from agent_comms.team.order import OrderFile, forwarders_added, main, overrides
+from agent_comms.team.order import (
+    InstallVerb,
+    OrderActionResult,
+    OrderFile,
+    OrderVerb,
+    ReadOrderAction,
+    SessionEndVerb,
+    forwarders_added,
+    main,
+    overrides,
+)
 from agent_comms.team.request import RequestAddVerb
+from agent_comms.team.standing import InstallDue
+from agent_comms.transport.tool_caller import ForkCaller
 from test_todos import order, thread
 
 pytest_plugins = ("test_todos",)
+
+
+def test_every_concrete_order_verb_returns_the_shared_result_family():
+    verbs = tuple(verb for verb in OrderVerb.members_with(OrderVerb) if not isabstract(verb))
+    assert verbs
+    assert all(get_type_hints(verb.run)["return"] is OrderActionResult for verb in verbs)
+
+
+def test_empty_batch_actions_report_no_mutation(monkeypatch):
+    context = SimpleNamespace(comms=object())
+    monkeypatch.setattr(InstallDue, "launch_due", lambda comms: ())
+    monkeypatch.setattr(ForkCaller, "end_session", lambda comms, forks: ())
+
+    assert isinstance(InstallVerb().run(context), ReadOrderAction)
+    assert isinstance(SessionEndVerb().run(context), ReadOrderAction)
 
 
 @pytest.mark.parametrize('definition', [
