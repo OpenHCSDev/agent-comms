@@ -233,7 +233,9 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
         if not births:
             raise BirthChangedError()
         (current,) = births
-        if not any(goal.state.protected for goal in current.goal):
+        # The state's declared transition table decides whether work can be paused. The
+        # ignored check still earns its notice when terminal or blocked work cannot be.
+        if any(goal.state.accepts_pause() and not goal.state.protected for goal in current.goal):
             comms.goals.update_born_goal(self.teammate, ChokeholdPausedGoalAction())
         ChokeholdNotice.burst_once(comms, self.teammate, self.burst(), self.ignored())
 
