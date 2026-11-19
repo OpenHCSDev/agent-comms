@@ -1,4 +1,5 @@
-import { CONFIG_DIR_NAME, getAgentDir } from '@earendil-works/pi-coding-agent';
+import { CONFIG_DIR_NAME } from '@earendil-works/pi-coding-agent';
+import { getMcpAgentDir } from './src/agent-directory.mjs';
 import { decideCallGrant, decideProjectServer } from './src/commands.mjs';
 import { loadEffectiveDeclarations } from './src/sources.mjs';
 import { McpRuntime } from './src/runtime.mjs';
@@ -9,7 +10,7 @@ import { registerResourceTools } from './src/resources.mjs';
 /** Package-owned Pi session; approved stdio connections start by default. */
 export default function (pi) {
   let runtime;
-  const options = (ctx) => ({ ctx, agentDir: getAgentDir(), configDirName: CONFIG_DIR_NAME });
+  const options = (ctx) => ({ ctx, agentDir: getMcpAgentDir(), configDirName: CONFIG_DIR_NAME });
   pi.on('session_start', async (_event, ctx) => {
     runtime = new McpRuntime(options(ctx));
     try {
