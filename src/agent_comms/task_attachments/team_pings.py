@@ -6,7 +6,6 @@ subject actions dispose of requests, never a delivery setting or publication att
 """
 from __future__ import annotations
 
-import json
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, fields, replace
@@ -41,6 +40,7 @@ from agent_comms.nominal.field_codec import (
     StructuralRepresentation,
     TaggedRecordMember,
     ThreadLookup,
+    ValueEncoding,
 )
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.registry.registry_document import RegistrySnapshot
@@ -89,10 +89,14 @@ class Ping(TaggedRecordMember, DeclaredFamily, affix="Ping"):
 
     @classmethod
     def encode(cls, value: Ping) -> object:
+        # The direct encoding role returns fresh mutable JSON to each caller.
+        return cls.encode_shared(value, ValueEncoding())
+
+    @classmethod
+    def encode_shared(cls, value: Ping, encoding: ValueEncoding) -> object:
         if not isinstance(value, cls):
             raise MalformedRecord(f"Expected {cls.__name__} record")
-        # Parsing the immutable occurrence text gives the caller fresh mutable JSON.
-        return json.loads(value._encoded_text)
+        return encoding.json_text(value._encoded_text)
 
     @classmethod
     def schema(cls) -> dict[str, object]:

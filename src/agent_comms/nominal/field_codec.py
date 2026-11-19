@@ -1222,6 +1222,9 @@ class CapturedJsonArray(list, CapturedJson):
 class ValueEncoding:
     """The encoding operation supplied to a declaration's existing traversal."""
 
+    def json_text(self, text: str) -> object:
+        return self.literal(json.loads(text))
+
     def literal(self, value: object) -> object:
         return value
 
@@ -1238,6 +1241,13 @@ class SharedValueEncoding(ValueEncoding):
     """
 
     captured: dict[tuple[int, int], tuple[object, object]] = field(default_factory=dict)
+    texts: dict[str, object] = field(default_factory=dict)
+
+    def json_text(self, text: str) -> object:
+        # Complete immutable wire text, including tags and occurrence evidence.
+        if text not in self.texts:
+            self.texts[text] = super().json_text(text)
+        return self.texts[text]
 
     def literal(self, value: object) -> object:
         # This is the raw JSON boundary of a representation, not domain dispatch.
@@ -1510,6 +1520,9 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     def encode(self, value: T) -> object:
         return None if value is None else self.representation.encode(value)
 
+    def encode_shared(self, value: T, encoding: ValueEncoding) -> object:
+        return None if value is None else self.representation.encode_shared(value, encoding)
+
     def compared(self, value: T) -> object:
         return self.structural.represented_comparison(self, value)
 
@@ -1633,6 +1646,10 @@ class FieldRepresentation[T](MroDispatch, ABC, JsonSchemaOwner):
     @classmethod
     @abstractmethod
     def encode(cls, value: T) -> object: ...
+
+    @classmethod
+    def encode_shared(cls, value: T, encoding: ValueEncoding) -> object:
+        return encoding.literal(cls.encode(value))
 
     @classmethod
     @abstractmethod

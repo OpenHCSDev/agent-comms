@@ -20,6 +20,7 @@ from agent_comms.installer.build_identity import InstalledBuild
 from agent_comms.nominal.field_codec import (
     DisclosedRecord,
     HudExclude,
+    MalformedRecord,
     PublicationExclude,
     WireExclude,
     WireTransient,
@@ -362,11 +363,17 @@ class TeamFramesDocument(TeamFrameFile, JsonDocument[SharedJson]):
         return SharedJson()
 
     def huds(self) -> tuple[TeamHud, ...]:
-        return self.read().decode(tuple[TeamHud, ...])
+        huds = self.read().decode(tuple[TeamHud, ...])
+        identities = tuple(hud.teammate.require_recorded().lookup for hud in huds)
+        if len(identities) != len(set(identities)):
+            raise MalformedRecord("A team snapshot repeats a recipient")
+        return huds
 
     def publish(self, huds: tuple[TeamHud, ...]) -> None:
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        self._publish_unlocked(SharedJson.of(huds, tuple[TeamHudRecord, ...]))
+        # The former per-recipient file writer retained the last cut for each birth.
+        recipients = {hud.teammate.require_recorded().lookup: hud for hud in huds}
+        self._publish_unlocked(SharedJson.of(tuple(recipients.values()), tuple[TeamHudRecord, ...]))
 
 
 @dataclass(frozen=True)
@@ -390,10 +397,6 @@ class TeamFrame(TeamFrameFile):
         for hud in frames:
             if hud.teammate == self.recipient:
                 return hud
-        if any(hud.teammate.require_recorded().lookup == self.recipient.require_recorded().lookup
-               for hud in frames):
-            raise BoardUnavailable(self.reading,
-                f'Tristan frame belongs to another incarnation of {self.recipient.name}')
         raise BoardUnavailable(self.reading, f'Tristan frame missing for {self.recipient.name}: {self.path}')
 
     @classmethod
