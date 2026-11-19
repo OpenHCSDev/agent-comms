@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
@@ -24,7 +25,10 @@ from agent_comms.nominal.field_codec import (
     FieldCodec,
     HudExclude,
     MalformedRecord,
+    NullMember,
     PublicationExclude,
+    TaggedRecordMember,
+    TaggedUnion,
     WireExclude,
     WireTransient,
     projected,
@@ -55,6 +59,50 @@ from agent_comms.team.team_service import TeamService
 from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.ui_model.teammate_state import TeammateState
 from agent_comms_hooks.board import BoardEntry
+
+
+class TeamBoardSelection(TaggedUnion, affix="TeamBoards"):
+    """The recipients requested by visible board pages, shared by reader and view."""
+
+    @classmethod
+    def named(cls, name: str) -> TeamBoardSelection:
+        """An empty user filter requests the whole board."""
+        return NamedTeamBoards(frozenset((name,))) if name else AllTeamBoards()
+
+    @abstractmethod
+    def includes(self, recipient: ThreadIncarnation) -> bool: ...
+
+    @abstractmethod
+    def combined(self, other: TeamBoardSelection) -> TeamBoardSelection: ...
+
+    @abstractmethod
+    def with_names(self, names: frozenset[str]) -> TeamBoardSelection: ...
+
+
+@dataclass(frozen=True)
+class AllTeamBoards(NullMember, TeamBoardSelection):
+    def includes(self, recipient: ThreadIncarnation) -> bool:
+        return True
+
+    def combined(self, other: TeamBoardSelection) -> TeamBoardSelection:
+        return self
+
+    def with_names(self, names: frozenset[str]) -> TeamBoardSelection:
+        return self
+
+
+@dataclass(frozen=True)
+class NamedTeamBoards(TaggedRecordMember, TeamBoardSelection):
+    names: frozenset[str]
+
+    def includes(self, recipient: ThreadIncarnation) -> bool:
+        return recipient.name in self.names
+
+    def combined(self, other: TeamBoardSelection) -> TeamBoardSelection:
+        return other.with_names(self.names)
+
+    def with_names(self, names: frozenset[str]) -> TeamBoardSelection:
+        return type(self)(self.names | names)
 
 
 @dataclass(frozen=True)
@@ -374,8 +422,9 @@ class TeamFramesDocument(TeamFrameFile, JsonDocument[SharedJson]):
             raise MalformedRecord("A team snapshot repeats a recipient")
         return dict(records)
 
-    def huds(self) -> tuple[TeamHud, ...]:
-        return tuple(FieldCodec.decode(TeamHud, raw) for raw in self.records().values())
+    def huds(self, selection: TeamBoardSelection = AllTeamBoards()) -> tuple[TeamHud, ...]:
+        return tuple(FieldCodec.decode(TeamHud, raw) for recipient, raw in self.records().items()
+                     if selection.includes(recipient))
 
     def publish(self, huds: tuple[TeamHud, ...]) -> None:
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -433,10 +482,10 @@ class TeamFrame(TeamFrameFile):
         return frozenset((document.path,))
 
     @classmethod
-    def read_all(cls, root: Path) -> tuple[TeamHud, ...]:
+    def read_all(cls, root: Path, selection: TeamBoardSelection = AllTeamBoards()) -> tuple[TeamHud, ...]:
         passes = ServicePassStore.at(root).read()
         health = ServiceReading(services=passes)
-        frames = TeamFramesDocument(cls.path_in(root)).huds()
+        frames = TeamFramesDocument(cls.path_in(root)).huds(selection)
         plan = TeamPlanDocument.at(root, health).read() if frames else TeamPlan()
         huds = tuple(sorted((hud.with_services(passes, hud.teammate.require_recorded()).with_plan(plan)
             for hud in frames), key=lambda hud: hud.teammate.name))

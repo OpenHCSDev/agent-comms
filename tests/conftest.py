@@ -43,6 +43,9 @@ from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.installer.deal_prompt import DealPrompt
 from agent_comms.installer.logs import InstallLogs
 from agent_comms.installer.native_package import (
+    MANIFEST,
+    RESOURCES,
+    NativePackageStore,
     VerifiedNativePackage,
     pinned_location,
     pinned_native_package,
@@ -338,11 +341,13 @@ def pinned_native() -> Path:
     held = os.open(stack, os.O_RDONLY)
     try:
         fcntl.flock(held, fcntl.LOCK_EX)
+        # A prepared store artifact needs its declared link, not another build.
+        NativePackageStore.at_home(Path.home()).link(MANIFEST, RESOURCES)
         if not pinned_location().is_dir():
             subprocess.run([str(stack / "native/prepare-pi-native"), "--python", sys.executable], check=True)
     finally:
         os.close(held)
-    return pinned_native_package()
+    return VerifiedNativePackage.qualify(pinned_native_package()).path
 
 
 @pytest.fixture(scope="session")

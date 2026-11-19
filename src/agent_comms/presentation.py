@@ -46,6 +46,7 @@ from agent_comms.messaging.revision_views import (
     HumanReadEvidenceView,
     NotificationsView,
     RegistrationsView,
+    RetainedTeamFramesView,
     RevisionView,
     RosterView,
     SidebarBasisView,
@@ -617,7 +618,7 @@ class WireRevision(ReadState, ToolResult):
     ]
     team_frames: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: TeamFrameFile.source_paths(views.root), TeamFramesView),
+        *revision_source(lambda views: TeamFrameFile.source_paths(views.root), RetainedTeamFramesView),
     ]
     # Activity-derived views change once per expiry period, not per tick.
     expiry_tick: Annotated[

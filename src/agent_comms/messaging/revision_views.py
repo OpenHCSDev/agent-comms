@@ -79,7 +79,11 @@ class TeamBoardView(StatusSourced, RevisionView):
     """Store changes requiring board preparation, excluding its own publications and clock."""
 
 
-class TeamFramesView(TeamBoardView, declared_name="team_frames"):
+class RetainedTeamFramesView(RevisionView):
+    """Only the retained frames, plan and their service-health source."""
+
+
+class TeamFramesView(TeamBoardView, RetainedTeamFramesView, declared_name="team_frames"):
     """The retained board and the source revisions that require its next preparation."""
 
 

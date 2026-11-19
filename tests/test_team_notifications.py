@@ -966,7 +966,7 @@ def test_preparing_the_board_answers_each_read_outcome_through_its_owner(
     service = PreparingService(comms, comms.views.revision())
     reading.prepared_revision = service.revision
 
-    def failing_board(_comms):
+    def failing_board(_comms, selection):
         raise failure
 
     reading.read_board = failing_board
