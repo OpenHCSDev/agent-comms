@@ -52,7 +52,7 @@ from agent_comms.execution.selected.triage import (
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MessageId, RootId, ThreadLookup
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.storage.private_path import FileIdentity
+from agent_comms.storage.file_observation import FileIdentity
 
 
 def cursor() -> CurrentNativeCursor:

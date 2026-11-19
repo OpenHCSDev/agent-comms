@@ -50,7 +50,7 @@ from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.storage.private_path import FileObservation, FileRevision
+from agent_comms.storage.file_observation import FileObservation, FileRevision
 from agent_comms.storage.typed_table import BooleanStorage, TypedRow
 from agent_comms.waking.wake_policy import RecipientDecision
 

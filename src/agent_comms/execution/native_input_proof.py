@@ -30,8 +30,9 @@ from agent_comms.nominal.field_codec import (
     Sha256Text,
     WireName,
 )
+from agent_comms.storage.file_observation import FileIdentity
 from agent_comms.storage.locked_store import DurableFile, PatternFile, SQLiteFile
-from agent_comms.storage.private_path import FileIdentity, PrivateFileRole
+from agent_comms.storage.private_path import PrivateFileRole
 from agent_comms.storage.typed_table import (
     Column,
     DurableTables,

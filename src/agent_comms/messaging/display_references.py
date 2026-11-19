@@ -25,7 +25,7 @@ from agent_comms.nominal.field_codec import SlicePolicy
 from agent_comms.registry.registry_names import RegistryNames
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_identity_source import ThreadIdentitySource
-from agent_comms.storage.private_path import FileObservation
+from agent_comms.storage.file_observation import FileObservation
 from agent_comms.transport.tool_result import ToolResult
 
 

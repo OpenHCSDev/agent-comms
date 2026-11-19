@@ -21,7 +21,8 @@ from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_store import RegistryCut
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
-from agent_comms.storage.private_path import FileRevision, ObservedPath
+from agent_comms.storage.file_observation import FileRevision
+from agent_comms.storage.private_path import ObservedPath
 from agent_comms.transcript.transcripts import TranscriptRead
 from agent_comms.transport.owner_connection import (
     OwnerConnection,

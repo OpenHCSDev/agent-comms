@@ -82,11 +82,13 @@ from agent_comms.registry.registry_provenance import RegistryProvenance
 from agent_comms.registry.registry_tables import RegistryRowRevision
 from agent_comms.registry.thread_identity import UnrecordedThreadIncarnation
 from agent_comms.registry.threads import Thread, ThreadProvenance
+from agent_comms.storage.file_observation import (
+    FileObservation,
+    FileRevision,
+)
 from agent_comms.storage.locked_store import DocumentChange, RegistryFile, RootFile
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.private_path import (
-    FileObservation,
-    FileRevision,
     ObservedPath,
     PrivateDirectoryRole,
 )

@@ -32,6 +32,7 @@ from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
 from agent_comms.registry.threads import Thread
+from agent_comms.storage.file_observation import FileObservation, FileRevision, MissingFile
 from agent_comms.storage.locked_store import (
     PublishedSQLiteFile,
     RuntimeFile,
@@ -39,7 +40,6 @@ from agent_comms.storage.locked_store import (
 )
 from agent_comms.registry.registry_document import RegistrySnapshot, RosterVisibility
 from agent_comms.storage.locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
-from agent_comms.storage.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.storage.store_files import StoreBusy
 from agent_comms.storage.typed_table import (
     Column,

@@ -37,7 +37,7 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_privacy import RegistryPrivacy
-from agent_comms.storage.private_path import FileObservation, FileRevision
+from agent_comms.storage.file_observation import FileObservation, FileRevision
 
 @dataclass(frozen=True, slots=True)
 class TakenInputCursor(ReadCursor):

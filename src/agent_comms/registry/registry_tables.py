@@ -28,8 +28,8 @@ from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup, Wi
 from agent_comms.registry.presence import PresenceCapture, PresenceChange, PresenceRevision
 from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.registry.thread_identity import TurnIdentity
+from agent_comms.storage.file_observation import FileIdentity, FileRevision, MissingFile
 from agent_comms.storage.locked_store import RegistryFile
-from agent_comms.storage.private_path import FileIdentity, FileRevision, MissingFile
 from agent_comms.storage.row_mapping import RowMapping
 from agent_comms.storage.typed_table import (
     Column,

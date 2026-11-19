@@ -38,10 +38,12 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import LockHolder, Platform
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import PathText, ScratchName
-from agent_comms.storage.private_path import (
+from agent_comms.storage.file_observation import (
     FileIdentity,
     FileObservation,
     FileRevision,
+)
+from agent_comms.storage.private_path import (
     OwnedDirectoryRole,
     PrivateFileRole,
 )

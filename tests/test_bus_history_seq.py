@@ -34,8 +34,8 @@ from agent_comms.presentation import WireRevision
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import NativeThread
+from agent_comms.storage.file_observation import FileIdentity
 from agent_comms.storage.locked_store import RegistryFile
-from agent_comms.storage.private_path import FileIdentity
 from agent_comms.storage.typed_table import RowNotFoundError
 
 

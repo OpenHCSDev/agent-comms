@@ -38,7 +38,8 @@ from agent_comms.presentation import ReadThrough
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
-from agent_comms.storage.private_path import FileIdentity, ObservedPath
+from agent_comms.storage.file_observation import FileIdentity
+from agent_comms.storage.private_path import ObservedPath
 from bus_record_fixture import prepare_native_comms
 
 

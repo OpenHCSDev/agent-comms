@@ -89,8 +89,8 @@ from agent_comms.registry.thread_identity import (
     ThreadIncarnation,
 )
 from agent_comms.registry.thread_incarnation_read import ReadsThreadIncarnation
+from agent_comms.storage.file_observation import FileIdentity, FileRevision, MissingFile
 from agent_comms.storage.locked_store import RegistryFile
-from agent_comms.storage.private_path import FileIdentity, FileRevision, MissingFile
 from agent_comms.storage.recorded_time import (
     EventTime,
     GeneratedTimestamp,

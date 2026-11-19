@@ -25,10 +25,12 @@ from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText, ScratchName
-from agent_comms.storage.locked_store import DocumentBytes
-from agent_comms.storage.private_path import (
+from agent_comms.storage.file_observation import (
+    DocumentBytes,
     FileRevision,
     MissingFile,
+)
+from agent_comms.storage.private_path import (
     ObservedPath,
     OwnedDirectoryRole,
     PrivateDirectoryRole,

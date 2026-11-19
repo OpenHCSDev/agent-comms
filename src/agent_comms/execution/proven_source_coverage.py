@@ -41,7 +41,8 @@ from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup
 from agent_comms.nominal.lifecycle_capability import Active
 from agent_comms.registry.registry_privacy import RegistryPrivacy
-from agent_comms.storage.private_path import FileIdentity, ObservedPath, PresentPath
+from agent_comms.storage.file_observation import FileIdentity
+from agent_comms.storage.private_path import ObservedPath, PresentPath
 from agent_comms.waking.wake_policy import RecipientDecision
 
 if TYPE_CHECKING:

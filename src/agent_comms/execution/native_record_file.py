@@ -14,7 +14,7 @@ from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.messaging.transcript_read_mark import MarksTranscriptRead
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-from agent_comms.storage.private_path import FileIdentity, FileRevision, MissingFile
+from agent_comms.storage.file_observation import FileIdentity, FileRevision, MissingFile
 
 
 
