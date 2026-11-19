@@ -55,6 +55,7 @@ Issues = "https://github.com/OpenHCSDev/agent-comms/issues"
 
 [project.scripts]
 agent-comms = "agent_comms.cli:main"
+agent-comms-practice-fixture = "agent_comms.practice_fixture:main"
 agent-comms-acp = "agent_comms.execution.acp:main"
 agent-comms-agent = "agent_comms.execution.worker.__main__:main"
 agent-comms-nk-foreground = "agent_comms.execution.nk_foreground:main"
