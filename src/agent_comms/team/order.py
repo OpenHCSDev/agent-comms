@@ -1060,7 +1060,7 @@ class DirectiveVerb(TeamVerb):
         # Debts and replies follow the exact represented owners, not every request the
         # actor may maintain.
         owers = ctx.actor_identity.represented_owners
-        opened = tuple(rule for owner in owers for rule in OwedAnswer.opened(ctx.comms, owner))
+        opened = OwedAnswer.read_scan(ctx.comms, owers, HeldOrders.read(ctx.comms))
         owed = frozenset(rule.message.message_id for rule in opened)
         snapshot = ctx.comms.registry.snapshot()
         problems: dict[str, str] = {}

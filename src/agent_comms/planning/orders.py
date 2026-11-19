@@ -3831,7 +3831,9 @@ class VerdictAudience:
             sender, Message(sender=sender, target=target.name, body=text, type=InfoKind),
             snapshot, goals.bus.require_channel)
         reached = {sender, *recipients, *target.direct_names}
-        named = tuple(dict.fromkeys(snapshot.canonical_name(name) for name in self.threads))
+        named = tuple(name for named in dict.fromkeys(
+            snapshot.canonical_name(name) for name in self.threads)
+            for name in snapshot.status(named).publish_heartbeat(lambda: (named,), ()))
         return ((target, target.addressed(tuple(name for name in named if name in reached), text)),
                 *((CommandTarget.named(name), text) for name in named if name not in reached))
 
@@ -6058,6 +6060,20 @@ class OwnerRequestStore(DurableStore):
                 ) if teammate.acts_for(request.teammate)
             )
             return tuple(islice(requests, None if limit < 0 else limit))
+
+    def open_requests_by(
+        self, teammates: tuple[ThreadIncarnation, ...],
+    ) -> dict[ThreadIncarnation, tuple[OwnerRequest, ...]]:
+        """One request read, with each actor's existing maintenance authority preserved."""
+        found: dict[ThreadIncarnation, list[OwnerRequest]] = {teammate: [] for teammate in teammates}
+        if found:
+            with self.snapshot() as db:
+                for request in OwnerRequest.stream(
+                        db, state=OpenRequestState(), order_by=("created_at", "id"), descending=True):
+                    for teammate, requests in found.items():
+                        if teammate.acts_for(request.teammate):
+                            requests.append(request)
+        return {teammate: tuple(requests) for teammate, requests in found.items()}
 
     def open_requests_of(self, teammates: tuple[ThreadIncarnation, ...]) -> tuple[OwnerRequest, ...]:
         """The open requests any of these teammates acts for, each once."""

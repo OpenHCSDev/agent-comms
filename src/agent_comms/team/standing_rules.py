@@ -847,9 +847,9 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
     @classmethod
     @abstractmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: Thread,
-                  requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
-        """This member's open debts, inside their window or past it, on one bus cut."""
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtors: tuple[Thread, ...],
+                  requests: Mapping[ThreadIncarnation, Sequence[OwnerRequest]]) -> tuple[Self, ...]:
+        """This member's debts for the selected actors on one bus cut."""
 
     @abstractmethod
     def clearing_action(self) -> str:
@@ -860,11 +860,12 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
 
     @classmethod
     def violations(cls, comms: Comms) -> tuple[Self, ...]:
-        """Every live teammate's due debts: the team board shows them all."""
+        """Every live teammate's due debts, with shared team debts read once."""
         now = time.time()
-        return tuple(rule
-                     for teammate in TeamService.teammates(comms.registry.snapshot(), comms.goals)
-                     for rule in cls.opened(comms, teammate.incarnation) if rule.due(now))
+        owners = tuple(teammate.incarnation for teammate in
+                       TeamService.teammates(comms.registry.snapshot(), comms.goals))
+        return tuple(rule for rule in cls.read_scan(comms, owners, HeldOrders.read(comms))
+                     if rule.due(now))
 
     @classmethod
     def scan_observed(cls, comms: Comms,
@@ -874,33 +875,39 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
 
     @classmethod
     def opened(cls, comms: Comms, owner: ThreadIncarnation) -> tuple[Self, ...]:
-        return cls.read_scan(comms, owner, HeldOrders.read(comms))
+        return cls.read_scan(comms, (owner,), HeldOrders.read(comms))
 
     @classmethod
-    def read_scan(cls, comms: Comms, owner: ThreadIncarnation, scan: HeldOrders) -> tuple[Self, ...]:
-        # Capture committed order/directive references before the bus cut.
+    def read_scan(cls, comms: Comms, owners: tuple[ThreadIncarnation, ...],
+                  scan: HeldOrders) -> tuple[Self, ...]:
+        owners = tuple(dict.fromkeys(owners))
+        if not owners:
+            return ()
+        # Every actor and private transcript read belongs to this registry/privacy cut.
         cut = comms.registry.store.snapshot_with_authority()
         snapshot = cut.snapshot
-        thread = snapshot.require(owner.name)
-        if thread.incarnation != owner:
-            raise RelationViolationError(
-                f"Answer owner {owner.name} changed incarnation; read the current owner before retrying")
+        threads = tuple(snapshot.require(owner.name) for owner in owners)
+        for owner, thread in zip(owners, threads):
+            if thread.incarnation != owner:
+                raise RelationViolationError(
+                    f"Answer owner {owner.name} changed incarnation; read the current owner before retrying")
+        by_actor = comms.goals.todos.open_requests_by(tuple(thread.acting_identity for thread in threads))
         # Maintaining another owner's work does not make its private directives ours.
-        requests = comms.goals.todos.open_requests(thread.acting_identity)
-        held = scan.holders
+        requests = {thread.incarnation: by_actor[thread.acting_identity] for thread in threads}
         with comms.bus.bus.reading() as source:
             opened = tuple(rule for member in cls.members_with(cls)
                            for rule in member.read_open(
-                               source, snapshot, held, thread, requests))
-        questions: dict[str, tuple[Thread, dict[MessageReference, None]]] = {}
+                               source, snapshot, scan.holders, threads, requests))
+        readers = {thread.incarnation: thread for thread in threads}
+        questions: dict[ThreadIncarnation, dict[MessageReference, None]] = {}
         for rule in opened:
-            answerer = rule.session_answerer(thread)
-            _, references = questions.setdefault(answerer.name, (answerer, {}))
-            references.update(dict.fromkeys(rule.session_questions()))
-        answered = frozenset().union(*(
-            comms.transcripts.answered_inputs(answerer, tuple(references), cut.privacy)
-            for answerer, references in questions.values()
-        ))
+            for answerer in rule.session_readers():
+                references = questions.setdefault(answerer, {})
+                references.update(dict.fromkeys(rule.session_questions()))
+        answered = {
+            answerer: comms.transcripts.answered_inputs(readers[answerer], tuple(references), cut.privacy)
+            for answerer, references in questions.items()
+        }
         return tuple(rule for rule in opened if rule.undecided(comms.goals.todos)
                      and not rule.answered_in_session(answered))
 
@@ -908,13 +915,19 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
         """Ordinary owed answers still require their existing bus answer relation."""
         return ()
 
-    def session_answerer(self, reader: Thread) -> Thread:
-        """Whose transcript answers this debt's session questions: by default its reader's."""
-        return reader
+    def session_readers(self) -> tuple[ThreadIncarnation, ...]:
+        """Ordinary bus debts need no private transcript reader."""
+        return ()
 
-    def answered_in_session(self, answered: frozenset[MessageReference]) -> bool:
+    def answered_in_session(
+        self, answered: Mapping[ThreadIncarnation, frozenset[MessageReference]],
+    ) -> bool:
+        """Only this debt's actual reader can supply its private answer evidence."""
         questions = self.session_questions()
-        return bool(questions) and all(question in answered for question in questions)
+        return bool(questions) and any(
+            all(question in answered[reader] for question in questions)
+            for reader in self.session_readers()
+        )
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """Whether an action naming these open messages answers this one."""
@@ -1024,8 +1037,8 @@ class HeartbeatFrame(TeamInputs):
             inputs.pulls,
             plan,
             tuple({answer.observation_key(): answer
-                   for teammate in TeamService.teammates(snapshot, comms.goals)
-                   for answer in OwedAnswer.read_scan(comms, teammate.incarnation, inputs)
+                   for answer in OwedAnswer.read_scan(comms, tuple(
+                       teammate.incarnation for teammate in TeamService.teammates(snapshot, comms.goals)), inputs)
                    }.values()),
             closed,
             reviews,
@@ -1515,25 +1528,24 @@ class DirectiveUnacted(OwnerFlaggedStandingRule, OwedAnswer, DatedStandingRule):
 
     request: OwnerRequestId
     directive: RequestDirective
-    answerer: Thread = field(compare=False)
+    answerer: ThreadIncarnation
 
     def session_questions(self) -> tuple[MessageReference, ...]:
         return (self.message.reference,)
 
-    def session_answerer(self, reader: Thread) -> Thread:
-        return self.answerer
+    def session_readers(self) -> tuple[ThreadIncarnation, ...]:
+        return (self.answerer,)
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: Thread,
-                  requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
-        """The frozen recipient owes the private directive, not every request maintainer.
-        Stored request associations cannot substitute a different mailbox or birth.
-        """
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtors: tuple[Thread, ...],
+                  requests: Mapping[ThreadIncarnation, Sequence[OwnerRequest]]) -> tuple[Self, ...]:
+        """Each private directive stays with its frozen recipient, not its request maintainer."""
         return tuple(
             cls(message=original, request=request.id, directive=directive,
-                answerer=debtor)
-            for request in requests
+                answerer=debtor.incarnation)
+            for debtor in debtors
+            for request in requests[debtor.incarnation]
             for directive, original in request.directive_messages(
                 source, debtor.incarnation.require_recorded().lookup)
         )

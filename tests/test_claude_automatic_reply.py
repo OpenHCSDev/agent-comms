@@ -277,10 +277,11 @@ async def test_codex_send_answers_only_the_question_that_opened_its_turn(
             stream = ItemStream('codex-session')
 
             async def receive(item: dict) -> None:
-                updates = stream.receive(RpcNotification(method='item/completed', params=dict(
+                update = stream.receive(RpcNotification(method='item/completed', params=dict(
                     threadId='codex-session', turnId='codex-turn', item=item,
                     completedAtMs=1761699600000)))
-                output.publish_batch([await update.observed(codex) for update in updates])
+                assert update is not None
+                output.publish_batch([await update.observed(codex)])
 
             async def deliver(original: Message) -> None:
                 await codex.accept(original)

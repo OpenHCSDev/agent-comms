@@ -391,9 +391,10 @@ class UnitAskUnanswered(TeammateOwedAnswer, UndatedStandingRule):
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: Thread,
-                  requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtors: tuple[Thread, ...],
+                  requests: Mapping[ThreadIncarnation, Sequence[OwnerRequest]]) -> tuple[Self, ...]:
         return tuple(cls(message, owner, debtor=debtor.incarnation)
+                     for debtor in debtors
                      for owner, questions in UnansweredTeammateAsks.for_orders(
                          source, snapshot, debtor.name, held, time.time(),
                      ).items()
@@ -433,10 +434,9 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtor: Thread,
-                  requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
-        """The retained claim owns the report and the head owed a verdict, published or not:
-        a claim whose answer never reached the bus is still owed its judgement."""
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], debtors: tuple[Thread, ...],
+                  requests: Mapping[ThreadIncarnation, Sequence[OwnerRequest]]) -> tuple[Self, ...]:
+        """One team debt per retained claim, even before its original reaches the bus."""
         return tuple(cls(message=claim.message, unit=owner, problem=todo.id,
                          request=claim.request(), todo=todo)
                      for owner, todos in held.items() for todo in todos

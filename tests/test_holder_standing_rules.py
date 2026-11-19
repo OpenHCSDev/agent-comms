@@ -20,6 +20,7 @@ from agent_comms.errors import (
     CommittedMessageError,
     HumanSendRefusedError,
     RelationViolationError,
+    ThreadNotVisibleError,
     TodoError,
 )
 from agent_comms.execution.child_process import ProcessIdentity
@@ -82,11 +83,13 @@ from agent_comms.planning.orders import (
     DraftListedPullRequest,
     OrderClaim,
     OrderMessage,
+    OwnerRequest,
     PendingProblemOrder,
     ProgressRead,
     ReleaseTodo,
     ResumeClaimOrder,
     TodoConflict,
+    VerdictAudience,
     WithdrawTodo,
 )
 from agent_comms.planning.owner_requests import NewestOpenRequest, RequestDirective
@@ -105,13 +108,14 @@ from agent_comms.task_attachments.team_pings import TeamUpdate
 from agent_comms.team.order import ListedProblems, OrderFile, SayVerb, SendVerb, Team
 from agent_comms.team.questions import UnansweredTeammateAsks
 from agent_comms.team.standing import (
+    DeliveryAwaitingJudgement,
     HeartbeatNotStarted,
     HeartbeatSilent,
     HolderGone,
     MissedHeartbeat,
     UnitAskUnanswered,
 )
-from agent_comms.team.standing_rules import OwedAnswer, StandingRule
+from agent_comms.team.standing_rules import DirectiveUnacted, OwedAnswer, StandingRule
 from agent_comms.team.team_heartbeat import TeamHeartbeat
 from agent_comms.team.team_hud import TeamFrame
 from agent_comms.team.vibe_check import ChokeholdUnanswered, VibeCheck, VibeCheckUnanswered
@@ -630,6 +634,58 @@ def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
     )
 
 
+@pytest.mark.parametrize('read', (
+    lambda comms: OwedAnswer.violations(comms),
+    lambda comms: capture_frame(comms, ProgressRead()).answers,
+), ids=('all-answers', 'heartbeat-frame'))
+def test_shared_delivery_is_filtered_once_and_individual_questions_keep_their_debtors(
+        held_bus, claim_order, monkeypatch, read):
+    claim = claim_order('P1')
+    for name in ('worker', 'outsider'):
+        held_bus.goals.todos.add_request(
+            held_bus.registry.require(name).incarnation, 'Keep this colleague on the board')
+    asked = held_bus.bus.publisher.publish_ordinary(
+        Message(sender='worker', target='#comms', type=QuestionKind,
+                body='@colleague @outsider Please inspect the work', timestamp=time.time() - 900),
+        destination=CommandTarget.named('#comms'), origin=AgentOrigin())
+    judged = []
+    original = DeliveryAwaitingJudgement.undecided
+    def undecided(self, store):
+        judged.append(self.request)
+        return original(self, store)
+    monkeypatch.setattr(DeliveryAwaitingJudgement, 'undecided', undecided)
+    answers = read(held_bus)
+    deliveries = tuple(answer for answer in answers
+                       if isinstance(answer, DeliveryAwaitingJudgement))
+    assert len(deliveries) == 1
+    assert deliveries[0].request == claim.request()
+    assert judged == [claim.request()]
+    questions = tuple(answer for answer in answers if isinstance(answer, UnitAskUnanswered)
+                      and answer.message.reference == asked.reference)
+    assert {answer.debtor.name for answer in questions} == {'colleague', 'outsider'}
+    assert all(answer.unit.name == 'worker' for answer in questions)
+    # The individual gate uses the same source with one selected debtor.
+    own = OwedAnswer.opened(held_bus, held_bus.registry.require('colleague').incarnation)
+    assert len(tuple(answer for answer in own
+                     if isinstance(answer, DeliveryAwaitingJudgement))) == 1
+    assert {answer.debtor.name for answer in own if isinstance(answer, UnitAskUnanswered)
+            and answer.message.reference == asked.reference} == {'colleague'}
+    assert judged == [claim.request(), claim.request()]
+
+
+def test_represented_gate_reports_a_shared_claim_once(held_bus, claim_order, tmp_path, capsys):
+    claim = claim_order('P1')
+    child = ForkCaller('shared-claim-reader')
+    child.join(held_bus, 'colleague')
+    reply = tmp_path / 'shared-claim-reply.txt'
+    reply.write_text('The shared claim keeps its existing reviewer and remains open.')
+    capsys.readouterr()
+    SayVerb(acting_as=child, units='#comms', body_file=str(reply)).apply(
+        team_as(held_bus.root, 'colleague'))
+    output = capsys.readouterr().out
+    assert output.count(f'P1 claim of {claim.request().head[:9]}') == 1
+
+
 def test_an_unanswered_ask_is_a_row_on_its_debtors_tool_calls(held_bus):
     """The teammate an ask was sent to owes it: the row names that teammate, and the same
     ask owed by two teammates is two rows, so neither debtor's row is deduplicated away."""
@@ -742,6 +798,15 @@ def test_an_order_to_an_archived_thread_records_nothing(held_bus, tmp_path):
     with pytest.raises(RelationViolationError, match="outsider cannot take an order"):
         ctx.send("outsider", document, request=NewestOpenRequest())
     assert {todo.id for todo in ctx.todos()} == before
+
+
+def test_private_record_for_a_retired_addressee_does_not_spill_into_the_channel(held_bus):
+    held_bus.registry.archive('worker')
+    revision = held_bus.bus.bus.revision()
+    with pytest.raises(ThreadNotVisibleError):
+        team_as(held_bus.root, 'colleague').published(
+            VerdictAudience(('worker',)), 'A specifically private result stays private.')
+    assert held_bus.bus.bus.revision() == revision
 
 
 def test_withdrawing_from_an_archived_holder_releases_the_order_in_the_channel(held_bus):
@@ -897,6 +962,39 @@ def test_bound_child_owes_actual_parents_directive_not_the_storage_leads_mail(he
                    for rule in OwedAnswer.opened(held_bus, held_bus.registry.require("worker").incarnation))
     assert foreign.reference in {rule.message.reference for rule in OwedAnswer.opened(
         held_bus, held_bus.registry.require("colleague").incarnation)}
+
+
+@pytest.mark.parametrize('answered_owner', ('worker', 'nobody'))
+def test_batched_private_answers_do_not_clear_another_frozen_recipient(held_bus, monkeypatch, answered_owner):
+    original = held_bus.bus.publisher.publish_ordinary(
+        Message(sender='outsider', target='#comms', type=QuestionKind,
+                body='@worker @colleague Carry out this instruction', timestamp=time.time() - 900),
+        destination=CommandTarget.named('#comms'), origin=AgentOrigin())
+    owners = tuple(held_bus.registry.require(name).incarnation for name in ('worker', 'colleague'))
+    request = held_bus.goals.todos.add_request(owners[0], 'The same original reaches two recipients')
+    held_bus.goals.todos.record_directive(
+        request.id, RequestDirective(original.seq, time.time() - 1))
+    requests_read = []
+    stream = OwnerRequest.stream.__func__
+    def request_stream(cls, *args, **kwargs):
+        requests_read.append(True)
+        yield from stream(cls, *args, **kwargs)
+    monkeypatch.setattr(OwnerRequest, 'stream', classmethod(request_stream))
+    reads = []
+    def transcript_answers(self, thread, references, privacy):
+        reads.append((thread.incarnation, references))
+        return frozenset(references) if thread.name == answered_owner else frozenset()
+    monkeypatch.setattr(type(held_bus.transcripts), 'answered_inputs', transcript_answers)
+    answers = OwedAnswer.read_scan(held_bus, (*owners, owners[0]), HeldOrders.read(held_bus))
+    assert requests_read == [True]
+    directives = tuple(rule for rule in answers if isinstance(rule, DirectiveUnacted))
+    expected = tuple(owner for owner in owners if owner.name != answered_owner)
+    assert tuple(rule.answerer for rule in directives) == expected
+    assert len({rule.observation_key() for rule in directives}) == len(expected)
+    assert len(set(directives)) == len(expected)
+    assert directives[0].message.reference == original.reference
+    assert {(owner, references) for owner, references in reads} == {
+        (owner, (original.reference,)) for owner in owners}
 
 
 def test_shared_request_directive_is_owed_only_by_its_frozen_recipient(held_bus):
