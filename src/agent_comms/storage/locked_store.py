@@ -1229,6 +1229,14 @@ class DecodedDocument[T](DocumentBytes):
         return self.decode_value(self)
 
     @cached_property
+    def encoded_content(self) -> JsonValue:
+        """The stored JSON value, or the declaration's empty value before first publish."""
+        return self.revision.either(
+            lambda _revision: FieldCodec.parse(self.content),
+            lambda: self.encode_value(self.value),
+        )
+
+    @cached_property
     def persisted_content(self) -> str:
         """Compare all stored fields, independently of the value's logical identity."""
         return FieldCodec.compact(self.encode_value(self.value), sort_keys=True)
@@ -1313,10 +1321,13 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
     def replace_if_changed(self, value: T) -> None:
         """Replace only changed stored content; logical identity does not decide writes."""
         encoded = self._encode(value)
-        persisted_content = FieldCodec.compact(encoded, sort_keys=True)
 
         def apply(current: DecodedDocument[T]) -> None:
-            if current.persisted_content != persisted_content:
+            if current.encoded_content == encoded:
+                return
+            # Structural JSON equality is the hot unchanged path. The canonical fallback
+            # preserves the existing behavior for alternate numeric spellings and NaN.
+            if current.persisted_content != FieldCodec.compact(encoded, sort_keys=True):
                 self._publish_encoded_unlocked(encoded)
 
         self.change_current(

@@ -485,8 +485,11 @@ class TeamBoardPublicationStore(
         try:
             previous = store.read()
         except RecordProblems:
-            previous = TeamBoardPublication()
-        store._publish_unlocked(cls.publication(plan, huds, previous))
+            store._publish_unlocked(cls.publication(plan, huds, TeamBoardPublication()))
+            return
+        successor = cls.publication(plan, huds, previous)
+        if successor != previous:
+            store._publish_unlocked(successor)
 
     @classmethod
     def write_all(cls, root: Path, huds: tuple[TeamHud, ...]) -> frozenset[Path]:
