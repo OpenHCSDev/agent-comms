@@ -119,6 +119,34 @@ def test_one_snapshot_preserves_every_recipient_and_encodes_each_ping_once(tmp_p
     assert values(TeamBoardPublicationStore.read_all(tmp_path)) == expected
 
 
+def test_unchanged_heartbeat_does_not_replace_retained_packet_or_board(tmp_path):
+    original = huds()
+    packet = original[0].packets[0]
+    TeamUpdateStore.record(tmp_path, packet)
+    packet_path = TeamUpdateStore.for_team(tmp_path, packet.teammate).path
+    packet_inode = packet_path.stat().st_ino
+    TeamUpdateStore.record(tmp_path, packet)
+    assert packet_path.stat().st_ino == packet_inode
+
+    changed_ping = replace(packet.handled[0], text="changed wire evidence")
+    TeamUpdateStore.record(tmp_path, replace(
+        packet, handled=(changed_ping, *packet.handled[1:])
+    ))
+    assert packet_path.stat().st_ino != packet_inode
+
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original)
+    # The following pass clears the previous pass's changed-recipient notice.
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original)
+    board_path = TeamBoardPublicationStore.path_in(tmp_path)
+    board_inode = board_path.stat().st_ino
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original)
+    assert board_path.stat().st_ino == board_inode
+
+    changed = (replace(original[0], packets=(), open_pings=()), *original[1:])
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), changed)
+    assert board_path.stat().st_ino != board_inode
+
+
 @pytest.mark.parametrize("selection, names", [
     (AllTeamBoards(), ("first", "second", "third")),
     (NamedTeamBoards(frozenset(("second",))), ("second",)),

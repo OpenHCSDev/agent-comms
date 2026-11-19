@@ -61,6 +61,7 @@ from agent_comms.messaging.revision_views import ActivityView
 from agent_comms.messaging.sent_message import AssignedSourceIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, PresenceExclude, WireForm
+from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.history_read_source import HistoryReadSource
 from agent_comms.registry.notification_selection_read import ThreadSourceReader
