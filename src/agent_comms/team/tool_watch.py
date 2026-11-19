@@ -48,8 +48,7 @@ def follow(ctx: Team, turns: dict[str, list[str]], thread: str, data: bytes) -> 
         for message in entry.messages:
             for call_id, denial in message.storage_refusals():
                 enforce_storage(ctx, thread, call_id, denial)
-            if message.assistant:
-                walk(ctx, turns, thread, message)
+            walk(ctx, turns, thread, message)
 
 
 def walk(ctx: Team, turns: dict[str, list[str]], thread: str,

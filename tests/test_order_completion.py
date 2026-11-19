@@ -242,6 +242,34 @@ class TestOrderCompletion:
                 corrected.review_at, corrected.strike_count) == (
                     original.order.id, original.assignment, original.review_at, original.strike_count)
 
+    def test_done_seen_is_a_file_and_success_reports_the_order_identity(
+        self, held_team, capsys,
+    ):
+        ctx = held_team
+        original = ctx.comms.goals.todos.get("P1")
+        with pytest.raises(RecordProblems, match="existing file"):
+            main(["done", "worker", "P1", "--op", "--seen", "not evidence"], ctx)
+        assert ctx.comms.goals.todos.get("P1") == original
+
+        evidence = ctx.root / "working.txt"
+        evidence.write_text("The operation ran through the requested behavior.")
+        capsys.readouterr()
+        main(["done", "worker", "P1", "--op", "--seen", str(evidence)], ctx)
+        output = capsys.readouterr().out
+        assert f"APPLIED done: problem=P1 order={original.order.checked().id}" in output
+
+    def test_done_help_names_seen_as_a_file(self, held_team):
+        launcher = shutil.which("agent-comms-team")
+        assert launcher is not None
+        result = subprocess.run(
+            [sys.executable, launcher, "--root", str(held_team.root),
+             "order", "done", "--help"],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "--seen FILE" in result.stdout
+        assert "existing FILE" in result.stdout
+
     def test_triage_done_reads_the_report_without_a_sha(self, held_team):
         ctx = held_team
         self.record(ctx, replace(ctx.comms.goals.todos.get('P1').order, scope=TriageScope()))

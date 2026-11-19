@@ -18,6 +18,14 @@ SOURCE_READ_FAILURES = (OSError, SourceReadFailure, TimeoutExpired)
 
 @dataclass(frozen=True)
 class DeliveryEvidence(DeclaredFamily, affix="DeliveryEvidence"):
+    @classmethod
+    def cli_options(cls) -> dict[str, str]:
+        """The evidence declaration owns the command's spelling and explanation."""
+        return {
+            "metavar": "FILE",
+            "help": "existing FILE containing the requested application or report evidence",
+        }
+
     def artifact(self) -> str:
         raise TodoError("No application evidence was supplied at delivery; pass --artifact FILE.")
 

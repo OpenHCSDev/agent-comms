@@ -105,7 +105,14 @@ from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice, VibeCheckNotice
 from agent_comms.task_attachments.team_pings import TeamUpdate
-from agent_comms.team.order import ListedProblems, OrderFile, SayVerb, SendVerb, Team
+from agent_comms.team.order import (
+    AppliedOrderAction,
+    ListedProblems,
+    OrderFile,
+    SayVerb,
+    SendVerb,
+    Team,
+)
 from agent_comms.team.questions import UnansweredTeammateAsks
 from agent_comms.team.standing import (
     DeliveryAwaitingJudgement,
@@ -187,11 +194,11 @@ def held_bus(comms, tmp_path, source_repository, configured_repository, installe
         native_id=InputId.mint(),
         text="Do not replay this input",
     )
-    configured_repository(comms)
+    configured_repository(comms, source)
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
     copied_bus = wire(copied)
-    configured_repository(copied_bus)
+    configured_repository(copied_bus, source)
     return copied_bus
 
 
@@ -393,7 +400,8 @@ def order_file(comms, tmp_path):
     """A well-formed order for the worker, so a send reaches the answer gate."""
     order = replace(comms.goals.todos.get("P1").order.checked(), id=OrderId.mint())
     document = OrderFile(order, "The worker's next step waits on the teammate's answer.",
-                         "This is stupid because an owed answer stalls the worker.")
+                         "This is stupid because an owed answer stalls the worker.",
+                         problems=("P1", "P2"))
     path = tmp_path / "order.json"
     path.write_text(json.dumps(FieldCodec.encode(document)))
     return str(path)
@@ -770,13 +778,20 @@ def test_team_say_answers_an_unanswered_teammate_message(held_bus, target, body,
     assert held_bus.bus.bus.revision() == revision
 
 
-def test_an_unanswered_teammate_message_gates_send_until_a_say_answers_it(held_bus, tmp_path):
+def test_a_current_requested_order_applies_while_unrelated_answer_debt_warns(held_bus, tmp_path):
     question = publish(held_bus, "worker", "colleague", time.time() - AwaitingTeam.seconds - 1)
     ctx = team_as(held_bus.root, "colleague")
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
-    with pytest.raises(RecordProblems, match=question.message_id):
-        SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
+
+    result = SendVerb(
+        unit="worker", body_file=order_file(held_bus, tmp_path), clean=True
+    ).apply(ctx)
+
+    assert isinstance(result, AppliedOrderAction)
+    assert result.lines()[0].startswith("APPLIED send: order=")
+    assert any(question.message_id in line for line in result.notes)
+    assert [owed.message.message_id for owed in unanswered(held_bus)] == [question.message_id]
     # A reply to the asker answers its open asks without naming them.
     SayVerb(units="worker", body_file=str(reply)).apply(ctx)
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (question.reference,)
@@ -832,8 +847,6 @@ def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, caps
     assert f"{first.seq}:{first.message_id}" not in out
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (first.reference,)
     assert [owed.message.message_id for owed in unanswered(held_bus)] == [second.message_id]
-    with pytest.raises(RecordProblems, match=second.message_id):
-        SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
 
 
 def test_a_refusal_lists_the_asks_still_inside_their_answer_window(held_bus, tmp_path):
