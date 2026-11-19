@@ -37,6 +37,7 @@ from agent_comms.nominal.field_codec import (
     MalformedRecord,
     OrderId,
     PublicationExclude,
+    SharedRecordMember,
     StructuralRepresentation,
     TaggedRecordMember,
     ThreadLookup,
@@ -68,7 +69,7 @@ class OrderKey:
 
 
 @dataclass(frozen=True)
-class Ping(TaggedRecordMember, DeclaredFamily, affix="Ping"):
+class Ping(SharedRecordMember, TaggedRecordMember, DeclaredFamily, affix="Ping"):
     """One heartbeat line: the work it asks for, what disposes of it, and when it began.
 
     ``since`` is carried from the previous packet while the observation is unchanged, so a

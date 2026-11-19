@@ -98,18 +98,43 @@ def test_selected_frames_decode_only_requested_recipients(tmp_path, monkeypatch,
     TeamFrame.replace_all(tmp_path, TeamPlan(), original)
     selection = FieldCodec.decode(TeamBoardSelection, FieldCodec.encode(selection, TeamBoardSelection))
     decoded = []
-    decode = FieldCodec.decode
+    construct = FieldCodec.construct
 
     def counted(annotation, raw):
         if annotation is TeamHud:
             decoded.append(raw)
-        return decode(annotation, raw)
+        return construct(annotation, raw)
 
-    monkeypatch.setattr(FieldCodec, "decode", counted)
+    monkeypatch.setattr(FieldCodec, "construct", counted)
     selected = TeamFrame.read_all(tmp_path, selection)
     assert tuple(hud.teammate.name for hud in selected) == names
     assert len(decoded) == len(names)
     assert values(selected) == values(tuple(hud for hud in original if hud.teammate.name in names))
+
+
+def test_shared_board_decodes_each_original_ping_once_and_detaches_every_membership(tmp_path, monkeypatch):
+    original = huds()
+    expected = values(original)
+    TeamFrame.replace_all(tmp_path, TeamPlan(), original)
+    calls = []
+    decode = Ping.from_wire.__func__
+
+    def counted(cls, raw):
+        calls.append(raw)
+        return decode(cls, raw)
+
+    monkeypatch.setattr(Ping, "from_wire", classmethod(counted))
+    restored = TeamFrame.read_all(tmp_path)
+    assert len(calls) == 2
+    first = restored[0].open_pings[0]
+    assert first is not restored[0].packets[0].handled[0]
+    assert first is not restored[1].open_pings[0]
+    assert first is not restored[0].open_pings[2]
+    # Every public occurrence retains its own derived encoding cache.
+    assert "_encoded_text" not in first.__dict__
+    Ping.encode(first)
+    assert "_encoded_text" not in restored[1].open_pings[0].__dict__
+    assert values(restored) == expected
 
 
 def test_combined_board_selection_keeps_every_visible_page_and_full_board():

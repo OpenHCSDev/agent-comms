@@ -423,8 +423,9 @@ class TeamFramesDocument(TeamFrameFile, JsonDocument[SharedJson]):
         return dict(records)
 
     def huds(self, selection: TeamBoardSelection = AllTeamBoards()) -> tuple[TeamHud, ...]:
-        return tuple(FieldCodec.decode(TeamHud, raw) for recipient, raw in self.records().items()
-                     if selection.includes(recipient))
+        return FieldCodec.decode_shared(tuple[TeamHud, ...], [
+            raw for recipient, raw in self.records().items() if selection.includes(recipient)
+        ])
 
     def publish(self, huds: tuple[TeamHud, ...]) -> None:
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
