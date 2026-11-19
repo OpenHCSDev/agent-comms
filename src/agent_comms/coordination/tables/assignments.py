@@ -19,6 +19,7 @@ from agent_comms.coordination.contracts import (
 )
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.schema import CoordinatorRow
+from agent_comms.coordination.tables.notification_evidence import BumpsNotificationEvidenceRevision
 from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.participants import Participants
 from agent_comms.coordination.tables.responses import ResponseObligation
@@ -61,6 +62,7 @@ from agent_comms.waking.wake_policy import (
 
 @dataclass(frozen=True, slots=True)
 class WakeAssignment(
+    BumpsNotificationEvidenceRevision,
     WriteOnceColumns,
     FirstValueState,
     RequiredColumn,
@@ -298,6 +300,7 @@ class WakeAssignment(
 
 @dataclass(frozen=True, slots=True)
 class ExecutionAssignmentLink(
+    BumpsNotificationEvidenceRevision,
     GuardedInserts, ImmutableRows, CoordinatorRow, declared_name="execution_claims"
 ):
 

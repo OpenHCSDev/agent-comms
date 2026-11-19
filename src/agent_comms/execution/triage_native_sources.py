@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from agent_comms.coordination.tables.notification_evidence import BumpsNotificationEvidenceRevision
 from agent_comms.nominal.field_codec import AssignmentId, InputId
 from agent_comms.storage.typed_table import (
     Column,
@@ -21,6 +22,7 @@ from agent_comms.storage.typed_table import (
 
 @dataclass(frozen=True)
 class TriageNativeSource(
+    BumpsNotificationEvidenceRevision,
     GuardedInserts,
     ImmutableRows,
     NativeRuntimeTable,

@@ -69,6 +69,7 @@ from agent_comms.messaging.routing import MessageRoute, NoMessageRoute, Schedule
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, GoalId, TurnId
 from agent_comms.planning.goals import Goal
 from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
 from agent_comms.transport.native_tool_transport import NativeToolMode
 from agent_comms.transport.tools.goals import CommsSetGoalTool
 
@@ -360,30 +361,34 @@ class OwnedTurn(ProgressTurn):
         return self.goal_permit.prepare_launch(permits, self.runner.comms.goals.open_goal_store())
 
     def prepare_prompt(self, batch: InputBatch):
+        registry = self.runner.comms.registry.snapshot()
+        self.registry_owner.require_source_snapshot(registry)
+        # The registry cut supplies current peers. This turn's captured owner still supplies
+        # its project/model/settings: edits made during a running turn belong to the next one.
+        owner = self.thread
         self.env_extra = self.runner.inputs.state(self.session_id).owned().configuration.native_environment(
-            self.thread, self.runner.comms.registry.snapshot()
+            owner, registry
         )
 
-
-        self.relations = self.runner.comms.relationships.context_relations(self.thread.name)
+        self.relations = self.runner.comms.relationships.context_relations_at(registry, owner)
         self.context = TurnContext.for_owner(
-            self.thread,
+            owner,
             RecordedContextTurn(self.turn_id, self.turn_lease.identity),
             self.task,
-            tuple(view.thread for view in self.runner.comms.views.thread_views()),
+            tuple(registry.visible_threads(DEFAULT_ROSTER)),
             self.relations,
             self.runner.comms.goals,
             tuple(origin.reference for origin in self.origins),
             batch.originals,
         )
-        self.context = self.goal_permit.add_context(self.context, self.thread, self.runner.comms.goals)
-        if self.thread.auto_title_pending:
+        self.context = self.goal_permit.add_context(self.context, owner, self.runner.comms.goals)
+        if owner.auto_title_pending:
             self.context = self.context.prepend(AutomaticTitleSegment.capture(
-                (TurnProvenance(self.thread.incarnation, self.turn_id),)))
+                (TurnProvenance(owner.incarnation, self.turn_id),)))
         response_targets = batch.native_reply_targets or self.reply_targets
         if response_targets:
             self.context = self.context.prepend(ReplyRouteSegment.capture(
-                (TurnProvenance(self.thread.incarnation, self.turn_id),), targets=response_targets))
+                (TurnProvenance(owner.incarnation, self.turn_id),), targets=response_targets))
 
     def reserve_input(self, batch: InputBatch):
         """Acquire the original durable input before opening loop capabilities."""

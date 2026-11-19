@@ -21,6 +21,7 @@ from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTa
 from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.participants import OwnerGenerations, Participants
 from agent_comms.coordination.tables.responses import ResponseObligation
+from agent_comms.coordination.tables.notification_evidence import BumpsNotificationEvidenceRevision
 from agent_comms.execution.native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
 from agent_comms.execution.native_input_proof import (
     NativeContextProof,
@@ -104,6 +105,7 @@ class PublishedReplyRevision(TypedRow):
 
 @dataclass(frozen=True)
 class NativeRuntimeInput(
+    BumpsNotificationEvidenceRevision,
     RetainsChildren,
     WriteOnceColumns,
     RequiredUpdateColumns,

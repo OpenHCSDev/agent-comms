@@ -9,6 +9,7 @@ from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.planning.goal_management import Goals
 from agent_comms.registry.peer_relation import PeerRelation
 from agent_comms.registry.relationships import ThreadRelationships
+from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
 
 
 class ContextAssembly:
@@ -21,10 +22,12 @@ class ContextAssembly:
 
     def context_for(self, owner: ContextOwner) -> TurnContext:
         """Preview the next Core context, without recording or authorizing a native request."""
-        relations = self.relationships.context_relations(owner.name)
+        registry = self.views.registry.snapshot()
+        owner = registry.require(owner.name)
+        relations = self.relationships.context_relations_at(registry, owner)
         context = TurnContext.for_owner(
             owner, NextContextTurn(), "",
-            tuple(view.thread for view in self.views.thread_views()), relations, self.goals,
+            tuple(registry.visible_threads(DEFAULT_ROSTER)), relations, self.goals,
         ).with_goal(owner, self.goals)
         return self.context_with_awareness(context, owner, relations)
 

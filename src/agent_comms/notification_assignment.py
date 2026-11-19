@@ -21,6 +21,7 @@ from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import CurrentExecutions
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordination.tables.publications import PublicationEvidence
+from agent_comms.coordination.tables.notification_evidence import NotificationEvidenceRevision
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
@@ -374,12 +375,27 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def source_paths(cls, root: Path) -> tuple[Path, ...]:
-        """Commit sources for coordinator, independent replies and stored inputs."""
+        """File revisions for independent replies and stored inputs.
+
+        Coordination commits have their own row-derived revision below: the database file
+        contains many unrelated tables, so its file revision is only a wake signal.
+        """
         return (
-            *CoordinationStore.source_paths(root),
             *Bus.source_paths(root),
             *InputDispositions.source_paths(root),
         )
+
+    @classmethod
+    def wake_paths(cls, root: Path) -> tuple[Path, ...]:
+        """Every file that can advance notification evidence."""
+        return (*CoordinationStore.source_paths(root), *cls.source_paths(root))
+
+    @classmethod
+    def evidence_revision(cls, root: Path) -> int:
+        """The coordination revision owned only by rows notification display reads."""
+        store = CoordinationStore.observed(CoordinationStore.path_in(root))
+        with store.observing(NotificationEvidenceRevisionRead) as revision:
+            return revision
 
     @classmethod
     def changed(
@@ -624,6 +640,25 @@ class NotificationAssignment(NotificationSource):
         )
 
 
+class NotificationEvidenceRevisionRead:
+    """Read the one notification-evidence revision through the store's classified view."""
+
+    @staticmethod
+    def capture(connection: sqlite3.Connection) -> int:
+        rows = NotificationEvidenceRevision.select(connection)
+        if len(rows) > 1:
+            raise ValueError("Notification evidence has more than one revision row")
+        return rows[0].revision if rows else 0
+
+    @staticmethod
+    def missing_store(_store: MissingStore) -> int:
+        return 0
+
+    @staticmethod
+    def invalid_store(store: InvalidStore) -> NoReturn:
+        raise ValueError(f"Notification evidence unavailable: {store.failure_reason}")
+
+
 @dataclass(frozen=True)
 class AssignmentSource:
     """One root's assignment evidence: its coordinator classified once and its registry
@@ -667,8 +702,11 @@ class AssignmentSource:
         return held.reads[selection]
 
     def _current_held(self) -> HeldAssignmentReads:
-        cut = tuple(FileRevision.capture(path)
-                    for path in NotificationAssignment.source_paths(self.root))
+        cut = (
+            NotificationAssignment.evidence_revision(self.root),
+            *(FileRevision.capture(path)
+              for path in NotificationAssignment.source_paths(self.root)),
+        )
         held = AssignmentSource._held.get(self.root)
         if held is None or held.cut != cut or held.registry is not self.registry:
             held = AssignmentSource._held[self.root] = HeldAssignmentReads(cut, self.registry)
@@ -679,6 +717,6 @@ class AssignmentSource:
 class HeldAssignmentReads:
     """The reads taken at one commit of every assignment source, under one registry cut."""
 
-    cut: tuple[FileObservation, ...]
+    cut: tuple[int | FileObservation, ...]
     registry: RegistrySnapshot
     reads: dict[NotificationSelection, NotificationAssignmentRead] = field(default_factory=dict)

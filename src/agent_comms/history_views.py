@@ -587,7 +587,9 @@ class HistoryViews(HistoryReadSource):
         }
         return WireRevision(
             **captured, bus_identity=RecordedBusIdentity.capture(self.bus.bus.path),
-            bus_seq=self.bus.bus.revision(), expiry_tick=expiry_tick,
+            bus_seq=self.bus.bus.revision(),
+            notification_evidence=NotificationAssignment.evidence_revision(self.root),
+            expiry_tick=expiry_tick,
         )
 
     def who(self) -> tuple[ThreadView, ...]:

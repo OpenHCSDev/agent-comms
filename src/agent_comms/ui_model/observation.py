@@ -109,6 +109,7 @@ from agent_comms.notification_read import (
     StaleNotificationsRead,
     UnreadableNotificationsRead,
 )
+from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.planning.goal_presentation import GoalExecutionControls
 from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.presentation import (
@@ -1949,9 +1950,13 @@ class ObservationService:
             request.receive(self)
 
     async def watch(self) -> None:
-        sources = tuple(FileSource(path)
-                        for group in WireRevision.source_paths(self.comms.views).values()
-                        for path in group)
+        paths = {
+            path
+            for group in WireRevision.source_paths(self.comms.views).values()
+            for path in group
+        }
+        paths.update(NotificationAssignment.wake_paths(self.comms.root))
+        sources = tuple(FileSource(path) for path in paths)
         async with aclosing(self.comms.bus.bus.watch(*sources)) as changes:
             async for _ in changes:
                 self.observe_again()

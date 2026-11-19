@@ -436,7 +436,13 @@ class ThreadRelationships:
     def peer_relations(self, owner: str) -> tuple[PeerRelation, ...]:
         """Every other registered thread with its relevance to ``owner``, most relevant first."""
         registry = self.views.registry.snapshot()
-        thread = self.views.registry.require(owner)
+        thread = registry.require(owner)
+        return self.peer_relations_at(registry, thread)
+
+    def peer_relations_at(
+        self, registry: RegistrySnapshot, thread: Thread,
+    ) -> tuple[PeerRelation, ...]:
+        """Derive peer relevance from the caller's already-owned registry cut."""
         edges = self.store.read().resolved(registry).collaborations
         contacts, _ = self._goal_contacts(registry, thread)
         granted: dict[ThreadIncarnation, list[type[PeerRelevance]]] = {}
@@ -470,7 +476,13 @@ class ThreadRelationships:
         """Open contacts, the parent and current-incarnation recent direct work."""
         registry = self.views.registry.snapshot()
         thread = registry.require(owner)
-        relations = self.peer_relations(owner)
+        return self.context_relations_at(registry, thread)
+
+    def context_relations_at(
+        self, registry: RegistrySnapshot, thread: Thread,
+    ) -> tuple[PeerRelation, ...]:
+        """Select context peers from one registry cut supplied by the owning turn."""
+        relations = self.peer_relations_at(registry, thread)
         messages, _ = self._recent_messages()
         correspondents: dict[str, float] = {}
         for message in messages:
