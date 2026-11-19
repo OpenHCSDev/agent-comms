@@ -34,7 +34,7 @@ from abc import abstractmethod
 from dataclasses import asdict, dataclass, replace
 from functools import cached_property
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, NoReturn
 
 from agent_comms.comms import Comms
 from agent_comms.errors import TodoError
@@ -163,7 +163,7 @@ def show(ctx, pending: list[Edit]) -> None:
     print(f'{len(pending)} unjudged')
 
 
-def alarm(ctx):
+def alarm(ctx) -> NoReturn:
     while True:
         late = [edit for edit in Edit.unjudged(ctx.comms, ctx.actor_name)
                 if edit.at.before(time.time() - 300)]
@@ -181,6 +181,38 @@ class JudgeVerb(TeamVerb):
     """A verb of `judge`."""
 
 
+@dataclass(frozen=True)
+class JudgedEditActionIdentity(order.OrderActionIdentity):
+    edit: str
+
+    def text(self) -> str:
+        return f"edit={self.edit}"
+
+
+@dataclass(frozen=True)
+class JudgedHeadActionIdentity(order.OrderActionIdentity):
+    head: PullRequestHead
+
+    def text(self) -> str:
+        return f"head={self.head.repo.to_wire()}#{self.head.pr}@{self.head.head}"
+
+
+@dataclass(frozen=True)
+class JudgeThreadFilterIdentity(order.OrderActionIdentity):
+    thread: str
+
+    def text(self) -> str:
+        return f"thread_filter={self.thread or 'all'}"
+
+
+@dataclass(frozen=True)
+class JudgeBatchFileIdentity(order.OrderActionIdentity):
+    file: Path
+
+    def text(self) -> str:
+        return f"file={self.file}"
+
+
 @dataclass(frozen=True, kw_only=True)
 class ShowVerb(JudgeVerb):
     help = "every teammate's unjudged edits in full, beside its current orders"
@@ -191,14 +223,15 @@ class ShowVerb(JudgeVerb):
     def selects(self, edit: Edit) -> bool:
         return not self.thread or edit.thread == self.thread
 
-    def run(self, ctx: order.Team) -> None:
+    def run(self, ctx: order.Team) -> order.OrderActionResult:
         show(ctx, [edit for edit in Edit.unjudged(ctx.comms, ctx.actor_name) if self.selects(edit)])
+        return self.unchanged(JudgeThreadFilterIdentity(self.thread))
 
 
 class AlarmVerb(JudgeVerb):
     help = "loop: every minute, name edits unjudged for 5 min"
 
-    def run(self, ctx: order.Team) -> None:
+    def run(self, ctx: order.Team) -> NoReturn:
         alarm(ctx)
 
 
@@ -241,7 +274,9 @@ class ReviewSubject(DeclaredFamily):
     def decode_options(cls, options: HeadVerdictVerb, ctx: order.Team) -> ReviewSubject: ...
 
     @abstractmethod
-    def run(self, options: VerdictVerb, ctx: order.Team) -> None: ...
+    def run(
+        self, options: VerdictVerb, ctx: order.Team
+    ) -> tuple[order.OrderActionIdentity, ...]: ...
 
     @abstractmethod
     def verdicts(self, options: VerdictVerb, ctx: order.Team,
@@ -265,9 +300,13 @@ class EditReview(ReviewSubject):
     def decode_options(cls, options: HeadVerdictVerb, ctx: order.Team) -> EditReview:
         return cls(options.ids)
 
-    def run(self, options: VerdictVerb, ctx: order.Team) -> None:
+    def run(
+        self, options: VerdictVerb, ctx: order.Team
+    ) -> tuple[order.OrderActionIdentity, ...]:
         unjudged = Edit.unjudged(ctx.comms, ctx.actor_name)
-        record(ctx, options, self.verdicts(options, ctx, unjudged), len(unjudged))
+        verdicts = self.verdicts(options, ctx, unjudged)
+        record(ctx, options, verdicts, len(unjudged))
+        return tuple(JudgedEditActionIdentity(call.operation.tool_call_id) for call in verdicts)
 
     def verdicts(self, options: VerdictVerb, ctx: order.Team,
                  unjudged: list[Edit]) -> tuple[JudgedCall, ...]:
@@ -327,7 +366,9 @@ class PullRequestReview(ReviewSubject):
             ctx.project.repository_names(options.repo),
             options.pr, options.head))
 
-    def run(self, options: HeadVerdictVerb, ctx: order.Team) -> None:
+    def run(
+        self, options: HeadVerdictVerb, ctx: order.Team
+    ) -> tuple[order.OrderActionIdentity, ...]:
         options.check_edits([])
         linked = OrderHeadReview.for_request(ctx.todos(), self.request, options.order_link,
                                             options.problem)
@@ -335,6 +376,7 @@ class PullRequestReview(ReviewSubject):
         print(f'PR #{self.request.pr} head {self.request.head}: {options.declared_name}')
         for line in reviewed.merge.lines(self.request):
             print(line)
+        return (JudgedHeadActionIdentity(self.request),)
 
     def verdicts(self, options: VerdictVerb, ctx: order.Team,
                  unjudged: list[Edit]) -> tuple[JudgedCall, ...]:
@@ -448,8 +490,8 @@ class VerdictVerb(JudgeVerb):
     def subject(self, ctx: order.Team) -> ReviewSubject:
         return EditReview(self.ids)
 
-    def run(self, ctx: order.Team) -> None:
-        self.subject(ctx).run(self, ctx)
+    def run(self, ctx: order.Team) -> order.OrderActionResult:
+        return self.applied(*self.subject(ctx).run(self, ctx))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -483,8 +525,8 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
         """Reading or rejecting a head carries out no clause of the order it is linked to."""
         return UnquotedHeadReview.of(todo, self.head_evidence())
 
-    def act(self, ctx: order.Team) -> None:
-        self.subject(ctx).run(self, ctx)
+    def act(self, ctx: order.Team) -> order.OrderActionResult:
+        return self.applied(*self.subject(ctx).run(self, ctx))
 
     def head_evidence(self) -> tuple[FileLine, ...]:
         return ()
@@ -803,7 +845,7 @@ class BatchVerb(JudgeVerb):
             'verdicts, each with the fields its verb takes ({"kind": "ok", "ids": ["ID:CODE"], ...})')
     file: Annotated[Path, Argument(flags=("file",), options={"metavar": "FILE"})]
 
-    def run(self, ctx: order.Team) -> None:
+    def run(self, ctx: order.Team) -> order.OrderActionResult:
         entries = FieldCodec.decode(tuple[VerdictVerb, ...], FieldCodec.parse(self.file.read_bytes()))
         unjudged = Edit.unjudged(ctx.comms, ctx.actor_name)
         verdicts: list[JudgedCall] = []
@@ -820,6 +862,12 @@ class BatchVerb(JudgeVerb):
         if refusals:
             raise RecordProblems(refusals)
         record(ctx, self, tuple(verdicts), len(unjudged))
+        identities = tuple(JudgedEditActionIdentity(edit) for edit in judged)
+        return (
+            self.applied(*identities)
+            if identities
+            else self.unchanged(JudgeBatchFileIdentity(self.file))
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -831,7 +879,7 @@ class RewrittenVerb(ReasonedVerb):
         str, Argument(flags=("--by",), options={"metavar": "COMMIT", "help": "the later pushed commit"})
     ]
 
-    def run(self, ctx: order.Team) -> None:
+    def run(self, ctx: order.Team) -> order.OrderActionResult:
         orders = {todo.id: todo for todo in ctx.held_by(self.unit)}
         unjudged = Edit.unjudged(ctx.comms, ctx.actor_name)
         verdicts: list[JudgedCall] = []
@@ -852,6 +900,16 @@ class RewrittenVerb(ReasonedVerb):
         for reason in dict.fromkeys(live.values()):
             print(f'{reason}: ' + ' '.join(i for i, why in live.items() if why == reason))
         print(f'{len(live)} edits of {self.unit} stay for ok or back: ' + ' '.join(live))
+        identities = tuple(
+            JudgedEditActionIdentity(call.operation.tool_call_id) for call in verdicts
+        )
+        return (
+            self.applied(*identities)
+            if identities
+            else self.unchanged(order.ThreadActionIdentity(
+                ctx.comms.registry.require(self.unit).incarnation
+            ))
+        )
 
 
 def main(args, ctx):

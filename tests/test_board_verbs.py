@@ -214,7 +214,8 @@ def test_orderless_board_commands_do_not_invent_a_problem(board_review):
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
 
 
-def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal(board_review):
+def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal(
+        board_review, capsys):
     comms, request, claim, _ = board_review
     original = claim()
     previous = original.held()
@@ -243,6 +244,10 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     command, = judge.OkVerb.commands({**rule.command_values(),
         "why": shlex.quote(REASON.text), "serves": shlex.quote(QUOTE)})
     judge.main(shlex.split(command)[1:], order.Team(root=comms.root, actor=PeerCaller("colleague")))
+    assert (
+        f"APPLIED ok: head={request.repo.to_wire()}#{request.pr}@{request.head}"
+        in capsys.readouterr().out
+    )
     accepted = comms.goals.todos.get(original.id)
     assert accepted.order.holds_head(request)
     assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == original.id
