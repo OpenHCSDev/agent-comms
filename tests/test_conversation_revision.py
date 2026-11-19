@@ -12,7 +12,7 @@ from agent_comms.messaging.historical_views import (
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.storage.private_path import FileRevision
+from agent_comms.storage.file_observation import FileRevision
 from bus_record_fixture import prepare_native_comms
 
 

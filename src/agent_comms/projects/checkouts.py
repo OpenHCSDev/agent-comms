@@ -12,6 +12,7 @@ from bisect import bisect_right
 from collections.abc import (
     Callable,
     Iterator,
+    Mapping,
 )
 from contextlib import (
     ExitStack,
@@ -24,6 +25,7 @@ from dataclasses import (
 from functools import cached_property
 from itertools import accumulate
 from pathlib import Path
+from types import MappingProxyType
 from typing import (
     Annotated,
     ClassVar,
@@ -43,6 +45,7 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.projects.git_errors import GitCommandError, UnavailableCommitError
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_environment import RepositoryEnvironment
+from agent_comms.storage.file_observation import DocumentBytes
 
 
 class CheckoutHoldsWorkError(ValueError):
@@ -439,6 +442,16 @@ class GitReference:
     commit: Annotated[str, GitCommitText]
 
     @classmethod
+    def read(cls, repository: Path, *prefixes: str) -> dict[str, GitReference]:
+        """Capture Git's refs and decode their declared upstreams once."""
+        return {reference.name: reference for reference in map(cls.listed, Repo.git(
+            repository, "for-each-ref",
+            "--format=%(refname)%00%(objectname)%00%(upstream)"
+            "%00%(upstream:remotename)%00%(upstream:remoteref)",
+            *prefixes,
+        ).splitlines())}
+
+    @classmethod
     def listed(cls, row: str) -> GitReference:
         name, commit, upstream, remote, remote_ref = row.split("\0")
         sha = GitCommitText.decode(commit)
@@ -549,7 +562,7 @@ class RepositoryReads:
 
     @classmethod
     def retaining(cls, previous: RepositoryReads) -> Self:
-        """Retain a graph only while both refs and every worktree HEAD still agree.
+        """Retain a graph only while refs, every worktree HEAD and walk policy agree.
 
         Packed refs alone cannot observe loose refs, detached HEADs or worktree births.
         Read a fresh cut each pass; unchanged cuts share their immutable graph work.
@@ -772,6 +785,15 @@ class CommitsNaming(CommitFilter):
         return walk.naming(naming)
 
 
+@dataclass(frozen=True)
+class GitHistoryPolicy:
+    """The captured Git sources that can change a walk without moving branch tips."""
+
+    replacements: tuple[GitReference, ...]
+    replacement_setting: str
+    boundary_files: tuple[tuple[Path, DocumentBytes], ...]
+
+
 class CheckoutHistory:
     """A pass's selected refs and immutable commit graph, never a command-output cache.
 
@@ -794,29 +816,40 @@ class CheckoutHistory:
         return Repo.of(self.checkout.path)
 
     @cached_property
-    def refs(self) -> dict[str, GitReference]:
-        return {reference.name: reference for reference in map(GitReference.listed, Repo.git(
-            self.checkout.common_dir, "for-each-ref",
-            "--format=%(refname)%00%(objectname)%00%(upstream)"
-            "%00%(upstream:remotename)%00%(upstream:remoteref)",
-            "refs/heads/", "refs/remotes/",
-        ).splitlines())}
+    def refs(self) -> Mapping[str, GitReference]:
+        return MappingProxyType(GitReference.read(
+            self.checkout.common_dir, "refs/heads/", "refs/remotes/"))
 
     @cached_property
-    def heads(self) -> dict[Path, GitHead]:
+    def policy(self) -> GitHistoryPolicy:
+        """Retain replacement refs, their effective setting and original boundary bytes."""
+        common = self.checkout.common_dir
+        boundaries = tuple(Path(Repo.git(
+            common, "rev-parse", "--path-format=absolute", "--git-path", name,
+        ).removesuffix("\n")) for name in ("shallow", "info/grafts"))
+        return GitHistoryPolicy(
+            tuple(GitReference.read(common, "refs/replace/").values()),
+            Repo.git(common, "config", "--show-origin", "--show-scope", "--type=bool",
+                     "--default", "true", "--get", "core.useReplaceRefs"),
+            tuple((path, DocumentBytes.capture(path)) for path in boundaries),
+        )
+
+    @cached_property
+    def heads(self) -> Mapping[Path, GitHead]:
         """One listing supplies every linked worktree's distinct HEAD before the graph cut."""
         listed = Repo.git(self.checkout.common_dir, "worktree", "list", "--porcelain", "-z")
-        return {head.checkout.path: head for head in (
+        return MappingProxyType({head.checkout.path: head for head in (
             GitHead.listed(record) for record in listed.split("\0\0")
-            if record and "bare" not in record.split("\0"))}
+            if record and "bare" not in record.split("\0"))})
 
-    def require_read(self) -> dict[str, GitReference]:
+    def require_read(self) -> Mapping[str, GitReference]:
         """Read the ref cut, propagating unreadable-checkout errors to its caller."""
         return self.refs
 
     def following(self, fresh: CheckoutHistory) -> CheckoutHistory:
-        """Fresh refs/HEADs keep their own graph; acquired message work can survive."""
-        if fresh.refs == self.refs and fresh.heads == self.heads:
+        """Only agreeing Git sources share a graph; acquired message work can survive."""
+        if (fresh.refs == self.refs and fresh.heads == self.heads
+                and fresh.policy == self.policy):
             return self
         fresh._message_seed = self._message_seed.acquired_index()
         return fresh
@@ -830,13 +863,15 @@ class CheckoutHistory:
         self.required.update(heads)
 
     @cached_property
-    def graph(self) -> dict[str, GitCommit]:
+    def graph(self) -> Mapping[str, GitCommit]:
+        # Capture policy before Git walks: a later comparison must not reread the old cut.
+        self.policy
         heads = tuple(dict.fromkeys((
             *self.required, *(reference.commit for reference in self.refs.values()),
             *(sha for head in self.heads.values() for sha in head.required()),
         )))
         if not heads:
-            return {}
+            return MappingProxyType({})
         text = Repo.git(self.checkout.common_dir, "rev-list", "--stdin", "--no-commit-header",
                         "--format=%H%x00%P%x00%ct%x00%B%x00",
                         input="".join(f"{head}\n" for head in heads))
@@ -850,7 +885,7 @@ class CheckoutHistory:
                 tuple(map(GitCommitText.decode, parents.split())), float(at), message,
             )
             commits[commit.sha] = commit
-        return commits
+        return MappingProxyType(commits)
 
     def resolve(self, revision: str) -> str:
         """Resolve captured ref names or an unambiguous captured commit abbreviation."""

@@ -20,7 +20,7 @@ from agent_comms.coordination.tables.attempts import ReplayFact
 from agent_comms.coordination.tables.executions import CurrentExecutions
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.storage.private_path import FileRevision
+from agent_comms.storage.file_observation import FileRevision
 from test_coordination_response import _ready
 from test_native_failure_recovery import ClaimedHistory, release_native_input
 from test_native_unknown_recovery import input_evidence, leave

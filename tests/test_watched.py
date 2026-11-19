@@ -31,8 +31,8 @@ from agent_comms.registry.view_unread import (
     ReplyReading,
     TranscriptReadState,
 )
+from agent_comms.storage.file_observation import FileRevision
 from agent_comms.storage.locked_store import RegistryFile, SQLiteStorage
-from agent_comms.storage.private_path import FileRevision
 
 
 @pytest.fixture

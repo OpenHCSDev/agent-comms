@@ -37,7 +37,7 @@ from agent_comms.registry.notification_selection_read import NotificationSelecti
 from agent_comms.registry.privacy_reads import CursorMetadataRead, NativeAnswerRead
 from agent_comms.registry.registry_tables import RegistryNamespace, RegistryRowStore
 from agent_comms.registry.thread_identity import ClaimedIdentity
-from agent_comms.storage.private_path import FileObservation
+from agent_comms.storage.file_observation import FileObservation
 from agent_comms.storage.typed_table import TableSchema
 from agent_comms.transport.attachment_scope import CursorScope, LiveCursorScope, NoCursorScope
 

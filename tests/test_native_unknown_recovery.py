@@ -45,7 +45,7 @@ from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import InputId, TurnId
 from agent_comms.nominal.lifecycle_capability import Failed
 from agent_comms.registry.thread_model import DeclaredModel
-from agent_comms.storage.private_path import FileRevision
+from agent_comms.storage.file_observation import FileRevision
 from agent_comms.transport.owner_connection import socket_path
 from native_backend_fixture import native_backend_fixture
 from test_coordinated_runtime import _root

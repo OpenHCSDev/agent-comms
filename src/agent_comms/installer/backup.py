@@ -29,6 +29,11 @@ from agent_comms.installer.active_route import (
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.storage.file_observation import (
+    FileObservation,
+    FileRevision,
+    MissingFile,
+)
 from agent_comms.storage.locked_store import (
     DeclaredFile,
     FilesRequest,
@@ -44,12 +49,7 @@ from agent_comms.storage.maintenance_barrier import (
     MaintenanceOperator,
     MaintenanceState,
 )
-from agent_comms.storage.private_path import (
-    FileObservation,
-    FileRevision,
-    MissingFile,
-    PrivateDirectoryRole,
-)
+from agent_comms.storage.private_path import PrivateDirectoryRole
 from agent_comms.storage.store_files import AtomicFile, DirectoryAtomicFile
 from agent_comms.storage.typed_table import ExternalStore
 

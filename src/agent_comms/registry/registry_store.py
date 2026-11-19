@@ -59,13 +59,13 @@ from agent_comms.registry.registry_tables import (
 )
 from agent_comms.registry.thread_identity import TurnIdentity
 from agent_comms.registry.threads import Thread
+from agent_comms.storage.file_observation import FileObservation, FileRevision, MissingFile
 from agent_comms.storage.locked_store import (
     LockedStore,
     PublishedProperty,
     RegistryFile,
 )
 from agent_comms.storage.maintenance_barrier import CarriedDocument
-from agent_comms.storage.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.storage.store_files import RegistryLocking
 from agent_comms.storage.typed_table import TableSchema
 

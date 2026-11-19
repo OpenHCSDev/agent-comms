@@ -77,6 +77,7 @@ from agent_comms.registry.shared_ledger import LedgerDocument
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
 from agent_comms.registry.view_unread import transcript_read_state
+from agent_comms.storage.file_observation import FileRevision
 from agent_comms.transcript.transcripts import Transcripts
 from agent_comms.transport.tool_result import ToolResult
 
@@ -113,7 +114,6 @@ from agent_comms.registry.thread_presentation import (
     NoThreadPresentation,
     ThreadPresentation,
 )
-from agent_comms.storage.private_path import FileRevision
 from agent_comms.transport.progress import WireExportObserver
 from agent_comms.ui_model.unread import UnreadPresentation
 

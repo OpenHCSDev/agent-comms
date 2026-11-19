@@ -5,7 +5,7 @@ from __future__ import annotations
 from itertools import zip_longest
 
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.storage.private_path import FileObservation, MissingFile
+from agent_comms.storage.file_observation import FileObservation, MissingFile
 
 
 class StatusSourced:

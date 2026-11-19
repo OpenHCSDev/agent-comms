@@ -45,7 +45,7 @@ from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.storage.private_path import FileRevision
+from agent_comms.storage.file_observation import FileRevision
 from agent_comms.waking.mute_ledger import MuteLedger
 
 

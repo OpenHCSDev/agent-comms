@@ -27,13 +27,12 @@ from agent_comms.execution.runtime_info import (
 from agent_comms.nominal.field_codec import WireExclude
 from agent_comms.pi_counts import PiCount
 from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.storage.file_observation import DocumentBytes, FileRevision, MissingFile
 from agent_comms.storage.locked_store import (
-    DocumentBytes,
     DocumentChange,
     LockedStore,
     RegistryFile,
 )
-from agent_comms.storage.private_path import FileRevision, MissingFile
 from agent_comms.storage.store_files import (
     DependentStateTier,
     ExclusiveLock,

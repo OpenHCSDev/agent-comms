@@ -134,8 +134,8 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
         return SpawnedProcess.run(command, cwd=cwd, env=env, timeout=timeout)
 
     def lock_owners(self) -> tuple[str, ...]:
-        return tuple(Path(inspect.getfile(module)).relative_to(SOURCES).as_posix()
-                     for module in (store_files, locked_store, process_claim))
+        return tuple(Path(source).relative_to(SOURCES).as_posix()
+                     for source in (store_files.__file__, locked_store.__file__, process_claim.__file__))
 
     def lock_functions(self) -> frozenset[str]:
         return frozenset(function.__name__

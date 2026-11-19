@@ -15,7 +15,7 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.execution.queued_input import DeliveredInput
 from agent_comms.input_attempt import NotSentInput
 from agent_comms.nominal.field_codec import InputId, TurnId
-from agent_comms.storage.private_path import FileRevision
+from agent_comms.storage.file_observation import FileRevision
 from conftest import publish_initial
 from stored_inputs import stored_inputs
 from test_acp_private_nk_delivery import _session

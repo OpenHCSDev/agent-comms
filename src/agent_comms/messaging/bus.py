@@ -69,6 +69,7 @@ from agent_comms.messaging.messages import (
 from agent_comms.messaging.read_basis import CursorRow, ReadCursor, RepliesDisplayScope, UnreadQuery
 from agent_comms.messaging.watched import Watched
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
+from agent_comms.storage.file_observation import FileIdentity, FileRevision
 from agent_comms.storage.locked_store import (
     BusFile,
     CompleteInputReader,
@@ -77,7 +78,7 @@ from agent_comms.storage.locked_store import (
     SQLiteReader,
     StoreCommittedError,
 )
-from agent_comms.storage.private_path import FileIdentity, FileRevision, PresentPath
+from agent_comms.storage.private_path import PresentPath
 from agent_comms.storage.store_files import DEFAULT_STORE_CONTENTION
 from agent_comms.storage.typed_table import (
     CarriedWriter,

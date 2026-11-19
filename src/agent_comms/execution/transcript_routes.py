@@ -22,7 +22,7 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.pi_payloads import UserMessage
-from agent_comms.storage.private_path import FileObservation, FileRevision
+from agent_comms.storage.file_observation import FileObservation, FileRevision
 from agent_comms.storage.typed_table import (
     Column,
     DurableStore,

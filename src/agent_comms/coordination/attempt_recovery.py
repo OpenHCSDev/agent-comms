@@ -48,8 +48,8 @@ from agent_comms.nominal.lifecycle_capability import Deferred
 from agent_comms.registry.owner_release import OwnerRelease, OwnerReleaseEvidence
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import Thread
+from agent_comms.storage.file_observation import FileRevision, MissingFile
 from agent_comms.storage.locked_store import RegistryFile
-from agent_comms.storage.private_path import FileRevision, MissingFile
 from agent_comms.storage.typed_table import RowNotFoundError
 
 if TYPE_CHECKING:

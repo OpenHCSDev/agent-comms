@@ -46,7 +46,7 @@ from agent_comms.registry.tagged_thread_source import TaggedThreadSource
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.registry.user_thread_lookup import UserThreadLookup
 from agent_comms.storage.bound_set import BoundSet
-from agent_comms.storage.private_path import FileObservation, MissingFile
+from agent_comms.storage.file_observation import FileObservation, MissingFile
 
 if TYPE_CHECKING:
     import sqlite3

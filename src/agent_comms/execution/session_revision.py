@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.storage.private_path import FileRevision
+from agent_comms.storage.file_observation import FileRevision
 
 
 class SessionRevisionUnavailable(ValueError):

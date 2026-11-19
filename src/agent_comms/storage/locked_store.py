@@ -35,10 +35,12 @@ from agent_comms.execution.child_process import Platform
 from agent_comms.execution.publication_measurements import TransactionWait
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText
-from agent_comms.storage.private_path import (
+from agent_comms.storage.file_observation import (
+    DocumentBytes,
     FileObservation,
     FileRevision,
-    MissingFile,
+)
+from agent_comms.storage.private_path import (
     PrivateDirectoryRole,
     PrivateFileRole,
 )
@@ -1202,22 +1204,6 @@ class RegistryFile(RollbackRetained, PublishedSQLiteFile, GoalWakeFile):
                 cls.copy_file(source, target)
         RegistryStore(target).retire_processes()
         return copied
-
-
-@dataclass(frozen=True, slots=True)
-class DocumentBytes:
-    """A file's revision and bytes from the same descriptor, before decoding."""
-
-    revision: FileObservation
-    content: bytes
-
-    @classmethod
-    def capture(cls, path: Path) -> DocumentBytes:
-        try:
-            with path.open("rb") as source:
-                return cls(FileRevision.from_file(source), source.read())
-        except FileNotFoundError:
-            return cls(MissingFile(), b"")
 
 
 @dataclass(frozen=True)

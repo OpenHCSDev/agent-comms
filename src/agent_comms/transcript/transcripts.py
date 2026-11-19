@@ -92,7 +92,7 @@ from agent_comms.registry.thread_presentation import ThreadOwnerBinding, ThreadP
 from agent_comms.registry.thread_text import ThreadParent, ThreadText
 from agent_comms.registry.threads import Thread, ThreadProvenance
 from agent_comms.registry.view_unread import TranscriptReadState
-from agent_comms.storage.private_path import (
+from agent_comms.storage.file_observation import (
     FileObservation,
     FileRevision,
 )

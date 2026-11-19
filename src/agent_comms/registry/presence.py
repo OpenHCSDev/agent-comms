@@ -12,7 +12,7 @@ from typing import Self
 
 from agent_comms.messaging.snapshot_slices import SharedRowsSlice
 from agent_comms.nominal.field_codec import MalformedRecord
-from agent_comms.storage.private_path import FileIdentity, MissingFile
+from agent_comms.storage.file_observation import FileIdentity, MissingFile
 from agent_comms.storage.row_mapping import ReadOnlyRows, RowKeys, RowMapping, SnapshotRows
 
 

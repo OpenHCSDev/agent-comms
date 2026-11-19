@@ -20,7 +20,7 @@ from agent_comms.execution.turn_phase import CancellingPhase
 from agent_comms.messaging.messages import AlertKind, InfoKind, Message, NoticeRole
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.storage.private_path import FileRevision
+from agent_comms.storage.file_observation import FileRevision
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from bus_history import read_history
 from conftest import publish_initial

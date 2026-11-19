@@ -60,7 +60,7 @@ from agent_comms.registry.thread_identity import (
     UserThreadRole,
 )
 from agent_comms.registry.threads import NativeThread
-from agent_comms.storage.private_path import FileRevision, MissingFile
+from agent_comms.storage.file_observation import FileRevision, MissingFile
 from agent_comms.team.team_hud_records import TeammateDetail
 from agent_comms.transcript.transcripts import RecordedPageSource
 from agent_comms.transport.request import ToolRequest

@@ -11,7 +11,7 @@ from agent_comms.execution.transcript_sources import (
     TranscriptCursor,
     WireFrontier,
 )
-from agent_comms.storage.private_path import FileIdentity, MissingFile
+from agent_comms.storage.file_observation import FileIdentity, MissingFile
 
 
 @dataclass(frozen=True, slots=True)

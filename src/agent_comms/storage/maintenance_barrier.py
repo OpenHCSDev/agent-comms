@@ -34,8 +34,9 @@ from agent_comms.nominal.field_codec import (
     WireOmitDefault,
 )
 from agent_comms.nominal.lifecycle import LifecycleState
+from agent_comms.storage.file_observation import FileObservation, FileRevision
 from agent_comms.storage.locked_store import DurableFile, LockedStore, RegistryFile, WrittenFile
-from agent_comms.storage.private_path import FileObservation, FileRevision, PrivateFileRole
+from agent_comms.storage.private_path import PrivateFileRole
 from agent_comms.storage.store_files import (
     UNBOUNDED_STORE_READ,
     AtomicFile,

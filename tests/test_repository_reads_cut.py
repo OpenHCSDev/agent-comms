@@ -1,7 +1,9 @@
 """One pass's repository cut against worktrees that appear or vanish while it reads."""
 import subprocess
 import re
+import pickle
 from itertools import product
+from operator import setitem
 from pathlib import Path
 
 import pytest
@@ -91,6 +93,140 @@ def test_retention_checks_refs_and_worktree_heads(main: Path, change: str) -> No
         assert following is original
     else:
         assert following.refs != before_refs or following.heads != before_heads
+
+
+def test_retaining_reloads_changed_git_replacement_policy(main: Path) -> None:
+    git(main, 'commit', '--allow-empty', '-m', 'P303 original')
+    original = git(main, 'rev-parse', 'HEAD')
+    replacement = git(main, 'commit-tree', 'HEAD^{tree}', '-m', 'P304 replacement')
+    reads = RepositoryReads()
+    previous = reads.history_for(Checkout(main))
+    before = previous.graph.copy()
+    assert previous.messages.naming('P303') == {original}
+    git(main, 'replace', original, replacement)
+    following_reads = RepositoryReads.retaining(reads)
+    following = following_reads.history_for(Checkout(main))
+    assert following.refs == previous.refs and following.heads == previous.heads
+    assert following.graph == Checkout(main).read().graph
+    assert following.graph[original].parents == ()
+    assert following.messages.naming('P304') == {original}
+    assert previous.graph == before and previous.messages.naming('P303') == {original}
+    git(main, 'pack-refs', '--all')
+    assert RepositoryReads.retaining(following_reads).history_for(Checkout(main)) is following
+    git(main, 'replace', '-d', original)
+    restored = RepositoryReads.retaining(following_reads).history_for(Checkout(main))
+    assert restored.graph == before
+    assert following.messages.naming('P304') == {original}
+
+
+def test_retaining_reloads_changed_shallow_boundary(main: Path) -> None:
+    git(main, 'commit', '--allow-empty', '-m', 'P303 shallow tip')
+    tip = git(main, 'rev-parse', 'HEAD')
+    shallow = Path(git(main, 'rev-parse', '--path-format=absolute', '--git-path', 'shallow'))
+    reads = RepositoryReads()
+    previous = reads.history_for(Checkout(main))
+    before = previous.graph.copy()
+    shallow.write_text(tip + '\n')
+    following_reads = RepositoryReads.retaining(reads)
+    following = following_reads.history_for(Checkout(main))
+    assert following.refs == previous.refs and following.heads == previous.heads
+    assert following.graph == Checkout(main).read().graph
+    assert tuple(following.graph) == (tip,)
+    assert previous.graph == before
+    shallow.unlink()
+    restored = RepositoryReads.retaining(following_reads).history_for(Checkout(main))
+    assert restored.graph == before
+    assert tuple(following.graph) == (tip,)
+    assert dict(following.policy.boundary_files)[shallow].content == (tip + "\n").encode()
+
+
+def test_retaining_reloads_changed_graft_boundary(main: Path) -> None:
+    git(main, 'commit', '--allow-empty', '-m', 'P303 graft tip')
+    tip = git(main, 'rev-parse', 'HEAD')
+    graft = Path(git(main, 'rev-parse', '--path-format=absolute', '--git-path', 'info/grafts'))
+    reads = RepositoryReads()
+    previous = reads.history_for(Checkout(main))
+    before = previous.graph.copy()
+    graft.write_text(tip + '\n')
+    following_reads = RepositoryReads.retaining(reads)
+    following = following_reads.history_for(Checkout(main))
+    assert following.refs == previous.refs and following.heads == previous.heads
+    assert following.graph == Checkout(main).read().graph
+    assert tuple(following.graph) == (tip,)
+    assert previous.graph == before
+    graft.unlink()
+    restored = RepositoryReads.retaining(following_reads).history_for(Checkout(main))
+    assert restored.graph == before
+    assert tuple(following.graph) == (tip,)
+    assert dict(following.policy.boundary_files)[graft].content == (tip + "\n").encode()
+
+
+def test_retaining_reloads_changed_replacement_setting(main: Path) -> None:
+    git(main, 'commit', '--allow-empty', '-m', 'P303 original')
+    original = git(main, 'rev-parse', 'HEAD')
+    replacement = git(main, 'commit-tree', 'HEAD^{tree}', '-m', 'P304 replacement')
+    git(main, 'replace', original, replacement)
+    reads = RepositoryReads()
+    previous = reads.history_for(Checkout(main))
+    before = previous.graph.copy()
+    assert previous.messages.naming('P304') == {original}
+    git(main, 'config', 'core.useReplaceRefs', 'false')
+    following_reads = RepositoryReads.retaining(reads)
+    following = following_reads.history_for(Checkout(main))
+    assert following.refs == previous.refs and following.heads == previous.heads
+    assert following.graph == Checkout(main).read().graph
+    assert following.messages.naming('P303') == {original}
+    assert previous.graph == before
+    git(main, 'config', 'core.useReplaceRefs', 'true')
+    restored = RepositoryReads.retaining(following_reads).history_for(Checkout(main))
+    assert restored.graph == before
+    assert following.messages.naming('P303') == {original}
+
+
+def test_changed_invalid_policy_reports_its_source_failure(main: Path) -> None:
+    reads = RepositoryReads()
+    previous = reads.history_for(Checkout(main))
+    before = previous.graph.copy()
+    policy = previous.policy
+    git(main, 'config', 'core.useReplaceRefs', 'not-a-boolean')
+    with pytest.raises(FailedGitCommand, match='not-a-boolean'):
+        following = RepositoryReads.retaining(reads).history_for(Checkout(main))
+        following.graph
+    assert previous.graph == before and previous.policy is policy
+
+
+@pytest.mark.parametrize('name', ('shallow', 'info/grafts'))
+def test_unreadable_boundary_reports_its_original_file(main: Path, name: str) -> None:
+    reads = RepositoryReads()
+    previous = reads.history_for(Checkout(main))
+    before = previous.graph.copy()
+    boundary = Path(git(main, 'rev-parse', '--path-format=absolute', '--git-path', name))
+    boundary.mkdir()
+    following = RepositoryReads.retaining(reads).history_for(Checkout(main))
+    with pytest.raises(IsADirectoryError) as raised:
+        following.graph
+    assert raised.value.filename == str(boundary)
+    assert previous.graph == before
+
+
+@pytest.mark.parametrize('read', (
+    lambda history: history.refs,
+    lambda history: history.heads,
+    lambda history: history.graph,
+))
+def test_captured_history_maps_keep_order_and_reject_reader_mutation(main: Path, read) -> None:
+    reads = RepositoryReads()
+    history = reads.history_for(Checkout(main))
+    history.graph
+    captured = read(history)
+    key, value = next(iter(captured.items()))
+    with pytest.raises(TypeError):
+        setitem(captured, key, value)
+    restored = pickle.loads(pickle.dumps(captured))
+    assert list(restored.items()) == list(captured.items())
+    with pytest.raises(TypeError):
+        setitem(restored, key, value)
+    assert RepositoryReads.retaining(reads).history_for(Checkout(main)) is history
 
 
 def test_indexed_commit_words_and_literal_phrases_keep_the_boundary_contract():

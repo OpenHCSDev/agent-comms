@@ -10,7 +10,7 @@ from agent_comms.execution.native_evidence_read import (
     VerifiedNativeEvidencePrefix,
 )
 from agent_comms.execution.native_failures import NativePiUnavailable
-from agent_comms.storage.private_path import FileRevision
+from agent_comms.storage.file_observation import FileRevision
 from test_native_pi import _evidence
 
 APPEND = (json.dumps({"type": "custom", "timestamp": "2026-10-01T00:00:00.000Z", "id": "concurrent-append",

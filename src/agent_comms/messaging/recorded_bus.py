@@ -12,7 +12,8 @@ from agent_comms.nominal.field_codec import (
     NullMember,
     SubclassUnion,
 )
-from agent_comms.storage.private_path import AbsentPath, FileIdentity, ObservedPath, PresentPath
+from agent_comms.storage.file_observation import FileIdentity
+from agent_comms.storage.private_path import AbsentPath, ObservedPath, PresentPath
 
 
 class RecordedBusIdentity(SubclassUnion, ObservedPath, affix=""):
