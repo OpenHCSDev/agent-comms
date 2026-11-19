@@ -75,6 +75,42 @@ def test_seeded_source_publishes_descendants_and_merges_main_without_replacing_a
     assert source.git(source.checkout, "show", f"{final}:main_only.py") == "advanced = True\n"
 
 
+@pytest.mark.parametrize("pull_request", (False, True))
+@pytest.mark.parametrize("disk", ("absent", "different"))
+def test_recurrence_uses_cited_source_and_retains_its_actual_reader(tmp_path, pull_request, disk):
+    source = SourceRepository.create(tmp_path)
+    location = FileLine("branch.py" if pull_request else "owner.py", 2)
+    expected = "BranchOnly" if pull_request else "Parent"
+    declared = replace(order(source), owner=location,
+                       pull_requests=(source.link,) if pull_request else ())
+    path = source.checkout / location.file
+    if disk == "absent":
+        path.unlink(missing_ok=True)
+    else:
+        path.write_text("class WrongDiskOwner:\n    pass\n")
+    answers = declared.scope.recurrence_declarations(declared, location, source.checkout)
+    assert tuple(answer.name for answer in answers) == (expected, expected)
+    assert all(expected in "\n".join(answer.source.lines(source.checkout, location.file))
+               for answer in answers)
+    assert path.exists() == (disk == "different")
+    if path.exists():
+        assert "WrongDiskOwner" in path.read_text()
+
+
+def test_declaration_keeps_the_candidate_that_actually_supplied_its_lines(tmp_path):
+    source = SourceRepository.create(tmp_path)
+    location = FileLine("new_main.py", 1)
+    source.commit_change("Add source after the PR branched", *source.write_files({
+        Path(location.file): "class NewMain:\n    pass\n"}))
+    source.git(source.checkout, "push", "origin", "main")
+    declared = replace(order(source), owner=location, pull_requests=(source.link,))
+    (source.checkout / location.file).unlink()
+    answer = location.declaration(source.checkout, declared.cited_revision)
+    assert answer.name == "NewMain"
+    assert answer.source.resolve(source.checkout) == source.main_commit
+    assert "NewMain" in "\n".join(answer.source.lines(source.checkout, location.file))
+
+
 def test_main_revision_refuses_branch_lines_and_ignores_dirty_disk(tmp_path):
     source = SourceRepository.create(tmp_path)
     (source.checkout / 'owner.py').write_text('disk-only\n' * 100)

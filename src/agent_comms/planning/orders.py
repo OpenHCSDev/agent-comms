@@ -1996,7 +1996,8 @@ class FixScope(OrderScope[CheckedDelivery]):
     def recurrence_declarations(
         self, order: CheckedProblemOrder, where: FileLine, root: Path,
     ) -> tuple[Declaration, ...]:
-        return (order.owner.declaration(root), where.declaration(root))
+        source = order.cited_revision
+        return (order.owner.declaration(root, source), where.declaration(root, source))
 
     def instructions(self, problem: str) -> tuple[str, ...]:
         return ("Scope: " + self.declared_name, "Parents: " + ", ".join(p.to_wire() for p in self.shape.parents),

@@ -46,16 +46,15 @@ class SourceText(ABC):
         """The sources a cite may stand on; one source stands alone."""
         return (self,)
 
-    def require_any(self, check: Callable[[SourceText], None]) -> None:
+    def require_any[T](self, check: Callable[[SourceText], T]) -> T:
         """A cite stands when one candidate source passes its check."""
         *earlier, last = self.candidates()
         for revision in earlier:
             try:
-                check(revision)
-                return
+                return check(revision)
             except MissingSourceLine:
                 pass
-        check(last)
+        return check(last)
 
 
 @dataclass(frozen=True)
@@ -325,6 +324,7 @@ class Declaration:
     at: FileLine
     lines: range
     name: str
+    source: SourceText = field(default_factory=WorkingTree, compare=False, kw_only=True)
 
     def __str__(self) -> str:
         return f"{self.name} at {self.at.to_wire()}-{self.lines.stop - 1}"
@@ -361,14 +361,19 @@ class FileLine(WireValue, SourceReference):
     def same_file(self, other: FileLine, root: Path) -> bool:
         return (root / self.file).resolve() == (root / other.file).resolve()
 
-    def declaration(self, root: Path) -> Declaration:
+    def declaration(self, root: Path, source: SourceText = WorkingTree()) -> Declaration:
+        """Parse the declaration from the cited source, retaining its selected reader."""
+        return source.require_any(lambda selected: self.declaration_at(root, selected))
+
+    def declaration_at(self, root: Path, source: SourceText) -> Declaration:
         """The enclosing Python declaration or Markdown rule block, otherwise the file."""
-        text = (root / self.file).read_text()
+        text = "\n".join(self.require_line(root, source))
         at = replace(self, file=str((root / self.file).resolve()))
-        declarations = [Declaration(replace(at, line=1), range(1, text.count("\n") + 2), self.file)]
+        fallback = Declaration(replace(at, line=1), range(1, text.count("\n") + 2), self.file, source=source)
+        declarations: list[Declaration] = []
         if self.file.endswith(".py"):
             declarations += (Declaration(replace(at, line=node.lineno),
-                                         range(node.lineno, end + 1), node.name)
+                                         range(node.lineno, end + 1), node.name, source=source)
                              for node in ast.walk(ast.parse(text, filename=self.file))
                              if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
                              for end in (cast(int, node.end_lineno),)
@@ -392,18 +397,20 @@ class FileLine(WireValue, SourceReference):
                     starts.append((number, title[1] or title[2]))
             for (start, name), (stop, _) in zip(starts, (*starts[1:], (len(lines) + 1, ""))):
                 if start <= self.line < stop:
-                    declarations.append(Declaration(replace(at, line=start), range(start, stop), name))
-        return min(declarations, key=lambda declaration: len(declaration.lines))
+                    declarations.append(Declaration(replace(at, line=start), range(start, stop), name, source=source))
+        return min(declarations, key=lambda declaration: len(declaration.lines), default=fallback)
 
     def require_exists(self, roots: SourceRoots, revision: SourceText) -> None:
         repository, revision = self.repository.source(roots, revision)
         revision.require_any(lambda candidate: self.require_line(repository, candidate))
 
-    def require_line(self, repository: Path, revision: SourceText) -> None:
-        if self.line > len(revision.prepare(repository, self.file)):
+    def require_line(self, repository: Path, revision: SourceText) -> tuple[str, ...]:
+        lines = revision.prepare(repository, self.file)
+        if self.line > len(lines):
             raise MissingSourceLine(
                 f"Source owner {self.to_wire()} does not exist at the cited revision."
             )
+        return lines
 
     @classmethod
     def class_declaration(
