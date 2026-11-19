@@ -1117,3 +1117,47 @@ def test_rows_waiting_on_a_stopped_thread_leave_the_main_view():
     assert groups[ParkedAlarms].text_lines(2.0) == ()
     assert not ParkedAlarms.needs_disposal()
     assert parked.parked(frozenset({"pi-stopped"})) and not live.parked(frozenset({"pi-stopped"}))
+
+
+def test_board_delivery_reads_one_cut_per_transaction(notification_bus, monkeypatch):
+    """Every row keeps its own clock; a quiet reply reads one reader cut, not N keys."""
+    comms = notification_bus
+    reader = comms.registry.require("colleague").incarnation
+    other = comms.registry.require("worker").incarnation
+    entries = tuple(BoardEntry(str(i), f"row {i}", 1000.0, 1300.0) for i in range(40))
+    queries = []
+    original = CoordinationSession._open_connection
+
+    def traced(self, contention):
+        db = original(self, contention)
+        db.set_trace_callback(queries.append)
+        return db
+
+    monkeypatch.setattr(CoordinationSession, "_open_connection", traced)
+
+    def deliver(who, rows, now, expected_queries):
+        queries.clear()
+        result = ReaderBoardDelivery.deliver(comms.root, who, rows, now)
+        selected = [sql for sql in queries
+                    if sql.lstrip().upper().startswith("SELECT")
+                    and f'FROM "{ReaderBoardDelivery.declared_name}"' in sql]
+        assert len(selected) == expected_queries, selected
+        return result.lines
+
+    assert deliver(reader, entries, 1001.0, 2) == tuple(e.line(1001.0) for e in entries)
+    assert deliver(reader, entries, 1002.0, 1) == ()
+    assert deliver(other, entries, 1003.0, 2) == tuple(e.line(1003.0) for e in entries)
+    assert deliver(reader, entries, 1004.0, 1) == ()
+    # Content identity and exact start are separate: a new start owes the row again.
+    changed = (replace(entries[0], since=1100.0, alarm_at=1400.0), *entries[1:])
+    assert deliver(reader, changed, 1101.0, 2) == (changed[0].line(1101.0),)
+    assert deliver(reader, changed, 1299.0, 1) == ()
+    assert deliver(reader, changed, 1300.0, 2) == tuple(e.line(1300.0) for e in changed[1:])
+    assert deliver(reader, changed, 1301.0, 1) == ()
+    assert deliver(reader, changed, 1400.0, 2) == (changed[0].line(1400.0),)
+    # The input's order and multiplicity survive; no selection is equality-interned.
+    fresh = BoardEntry("new", "new row", 1500.0, 1800.0)
+    assert deliver(reader, (fresh, fresh), 1501.0, 2) == (fresh.line(1501.0),) * 2
+    assert deliver(reader, (), 1502.0, 2) == ()
+    assert deliver(reader, (), 1503.0, 1) == ()
+    assert deliver(other, entries, 1200.0, 1) == ()
