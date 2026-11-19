@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Annotated
 
@@ -18,6 +19,26 @@ from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage.typed_table import Column, WithoutRowid
 from agent_comms.task_attachments.team_pings import TeamUpdate
 from agent_comms_hooks.board import BoardEntry, SessionBoard
+
+
+@dataclass(frozen=True)
+class ReaderBoardRead:
+    """Delivery rows captured for one reader inside one coordinator transaction."""
+
+    rows: tuple[ReaderBoardDelivery, ...]
+
+    @cached_property
+    def by_start(self) -> dict[tuple[str, float], ReaderBoardDelivery]:
+        return {(row.content, row.since): row for row in self.rows}
+
+    def due(self, entries: tuple[BoardEntry, ...], now: float) -> tuple[BoardEntry, ...]:
+        return tuple(entry for entry in entries
+                     if (entry.content, entry.since) not in self.by_start
+                     or self.by_start[entry.content, entry.since].alarm_due(entry, now))
+
+    def forgotten(self, entries: tuple[BoardEntry, ...]) -> tuple[ReaderBoardDelivery, ...]:
+        current = {entry.content for entry in entries}
+        return tuple(row for row in self.rows if row.content not in current)
 
 
 @dataclass(frozen=True)
@@ -40,22 +61,9 @@ class ReaderBoardDelivery(CoordinatorRow, WithoutRowid):
         return str(reader.lookup)
 
     @classmethod
-    def due(cls, db: sqlite3.Connection, reader: RecordedThreadIncarnation,
-            entries: tuple[BoardEntry, ...], now: float) -> tuple[BoardEntry, ...]:
-        """The entries this reader has not been shown since they last changed or alarmed."""
-        return tuple(
-            entry for entry in entries
-            if all(delivered.alarm_due(entry, now)
-                   for delivered in cls.select(db, reader=cls.column(reader),
-                                               content=entry.content, since=entry.since)))
-
-    @classmethod
-    def forgotten(cls, db: sqlite3.Connection, reader: RecordedThreadIncarnation,
-                  entries: tuple[BoardEntry, ...]) -> tuple[ReaderBoardDelivery, ...]:
-        """Delivery evidence for rows no longer on the board."""
-        current = {entry.content for entry in entries}
-        return tuple(delivered for delivered in cls.select(db, reader=cls.column(reader))
-                     if delivered.content not in current)
+    def read_for(cls, db: sqlite3.Connection, reader: RecordedThreadIncarnation) -> ReaderBoardRead:
+        """One keyed source supplies both owed and obsolete rows in this transaction."""
+        return ReaderBoardRead(tuple(cls.select(db, reader=cls.column(reader))))
 
     @classmethod
     def deliver(cls, root: Path, reader: ThreadIncarnation, entries: tuple[BoardEntry, ...],
@@ -72,13 +80,15 @@ class ReaderBoardDelivery(CoordinatorRow, WithoutRowid):
             with store.read():
                 db = store._connection
                 cls.require_schema(db)
-                if not (cls.due(db, recorded, entries, now) or cls.forgotten(db, recorded, entries)):
+                observed = cls.read_for(db, recorded)
+                if not (observed.due(entries, now) or observed.forgotten(entries)):
                     return SessionBoard.presented((), now)
             try:
                 with store.writing() as db:
-                    for delivered in cls.forgotten(db, recorded, entries):
+                    observed = cls.read_for(db, recorded)
+                    for delivered in observed.forgotten(entries):
                         cls.delete(db, reader=delivered.reader, content=delivered.content)
-                    due = cls.due(db, recorded, entries, now)
+                    due = observed.due(entries, now)
                     for entry in due:
                         cls(cls.column(recorded), entry.content, entry.since, now).upsert(db)
             except CoordinationBeginUnavailable:
