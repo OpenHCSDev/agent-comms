@@ -325,7 +325,7 @@ class NativePiRpcLaunch:
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         # Native SettingsManager and AgentSession own tracked retry/compaction
         # policy. This directory isolates writable resources, not policy copies.
-        agent_dir = NativeAgentSettings.prepare_directory(session_dir)
+        agent_dir = NativeAgentSettings.prepare_directory(session_dir, model)
         tool_arguments = selected_tool_mode.launch_arguments(package.path)
         arguments = [
             "--mode",
