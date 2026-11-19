@@ -32,6 +32,8 @@ class AgentsSlice(SystemdUnit):
     unit = "agents.slice"
     reserved: ClassVar[int] = 2
 
+    owner_initialization_capacity: ClassVar[int] = 2
+
     @classmethod
     def unit_text(cls, arguments: tuple[str, ...] = ()) -> str:
         count = multiprocessing.cpu_count()
