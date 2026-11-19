@@ -115,7 +115,7 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from agent_comms.storage.recorded_time import EventTime, RecordedEventTime
 from agent_comms.storage.typed_table import RowNotFoundError
-from agent_comms.team.board_actions import BoardActionOffer
+from agent_comms.team.board_actions import BoardActionApplied, BoardActionOffer
 from agent_comms.team.standing import DeliveryAwaitingJudgement, InstallDue, UnownedWheelSpin
 from agent_comms.team.standing_rules import ClearingVerb, HuntDue, OwedAnswer
 from agent_comms.team.team_hud import TeamBoardPublicationStore
@@ -1232,6 +1232,13 @@ class TeamVerbActionOffer(BoardActionOffer):
     @property
     def words(self) -> tuple[str, ...]:
         return (self.verb.tool(), self.verb.declared_name, *self.arguments)
+
+    def execute(self, root: Path, actor: str) -> BoardActionApplied:
+        action = TeamVerb.parse((self.verb.declared_name, *self.arguments))
+        if type(action) is not self.verb:
+            raise RelationViolationError("The board action declaration changed")
+        result = action.apply(Team(root=root, actor=PeerCaller(actor)))
+        return BoardActionApplied(result.lines())
 
 
 @dataclass(frozen=True, kw_only=True)

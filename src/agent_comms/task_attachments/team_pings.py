@@ -187,6 +187,9 @@ class Ping(FrozenRecordMember, TaggedRecordMember, DeclaredFamily, affix="Ping")
         """A ping without a rule action is already recipient-complete."""
         return self
 
+    def board_actions(self) -> tuple[BoardActionOffer, ...]:
+        return ()
+
 
 @dataclass(frozen=True)
 class RulePing(Ping):
@@ -229,6 +232,9 @@ class RulePing(Ping):
     ) -> RulePing:
         rule = rules[(self.rule, self.observation)]
         return replace(self, offers=rule.action_offers(recipient))
+
+    def board_actions(self) -> tuple[BoardActionOffer, ...]:
+        return self.offers
 
 
 @dataclass(frozen=True)
