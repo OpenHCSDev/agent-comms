@@ -15,6 +15,7 @@ from agent_comms.planning.orders import VerdictAudience
 from agent_comms.projects.repo import Repo
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.order import (
+    EndVerb,
     InstallVerb,
     OrderActionResult,
     OrderFile,
@@ -39,18 +40,36 @@ def test_every_concrete_order_verb_returns_the_shared_result_family():
     assert all(get_type_hints(verb.run)["return"] is OrderActionResult for verb in verbs)
 
 
+def test_unknown_fork_targets_keep_distinct_no_change_identities(held_team, capsys):
+    first = EndVerb(fork=ForkCaller("missing-a")).apply(held_team)
+    second = EndVerb(fork=ForkCaller("missing-b")).apply(held_team)
+
+    assert isinstance(first, ReadOrderAction)
+    assert isinstance(second, ReadOrderAction)
+    assert first.lines() != second.lines()
+    assert "unregistered_thread=missing-a" in first.lines()[0]
+    assert "unregistered_thread=missing-b" in second.lines()[0]
+    output = capsys.readouterr().out
+    assert first.lines()[0] in output and second.lines()[0] in output
+
+
 def test_empty_batch_actions_name_their_no_change_result(held_team, monkeypatch, capsys):
     monkeypatch.setattr(InstallDue, "launch_due", lambda comms: ())
     monkeypatch.setattr(ForkCaller, "end_session", lambda comms, forks: ())
 
     install = InstallVerb().apply(held_team)
     session = SessionEndVerb().apply(held_team)
+    unmatched = SessionEndVerb(forks=("missing-a", "missing-b")).apply(held_team)
 
     assert isinstance(install, ReadOrderAction)
     assert isinstance(session, ReadOrderAction)
+    assert isinstance(unmatched, ReadOrderAction)
     output = capsys.readouterr().out.splitlines()
     assert "NO CHANGE install: installs=none" in output
     assert "NO CHANGE session-end: forks=none" in output
+    assert unmatched.lines()[0] in output
+    assert "unregistered_thread=missing-a" in unmatched.lines()[0]
+    assert "unregistered_thread=missing-b" in unmatched.lines()[0]
 
 
 @pytest.mark.parametrize('definition', [

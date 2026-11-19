@@ -239,6 +239,14 @@ class NoInstallIdentity(OrderActionIdentity):
         return "installs=none"
 
 
+@dataclass(frozen=True)
+class UnregisteredThreadActionIdentity(OrderActionIdentity):
+    name: str
+
+    def text(self) -> str:
+        return f"unregistered_thread={self.name}"
+
+
 class NoForkIdentity(OrderActionIdentity):
     def text(self) -> str:
         return "forks=none"
@@ -1178,7 +1186,10 @@ class TeamVerb(ClearingVerb, affix="Verb"):
     def apply(self, ctx: Team) -> OrderActionResult:
         ctx = self.acting(ctx)
         ctx.actor.rejoin(ctx.comms)
-        result = self.act(ctx)
+        return self.present(self.act(ctx))
+
+    @staticmethod
+    def present(result: OrderActionResult) -> OrderActionResult:
         for line in result.lines():
             print(line)
         return result
@@ -1701,11 +1712,9 @@ class EndsForkVerb(OrderVerb):
         ctx = self.acting(ctx)
         if ctx.actor_name not in ctx.comms.registry:
             print(f'{ctx.actor_name} never joined; nothing to end')
-            return self.unchanged(NoForkIdentity())
-        result = self.act(ctx)
-        for line in result.lines():
-            print(line)
-        return result
+            return self.present(self.unchanged(
+                UnregisteredThreadActionIdentity(ctx.actor_name)))
+        return self.present(self.act(ctx))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1748,12 +1757,17 @@ class SessionEndVerb(OrderVerb, declared_name="session-end"):
         registered = ForkCaller.end_session(
             ctx.comms, tuple(ForkCaller(fork) for fork in self.forks))
         names = tuple(caller.name for caller in registered)
+        missing = tuple(name for name in self.forks if name not in names)
         print(f'session forks ended: {" ".join(names)}')
-        return (
-            self.applied(*(ThreadActionIdentity(identities[name]) for name in names))
-            if names
-            else self.unchanged(NoForkIdentity())
+        results: tuple[OrderActionIdentity, ...] = (
+            *(ThreadActionIdentity(identities[name]) for name in names),
+            *(UnregisteredThreadActionIdentity(name) for name in missing),
         )
+        if names:
+            return self.applied(*results)
+        if missing:
+            return self.unchanged(*results)
+        return self.unchanged(NoForkIdentity())
 
 
 @dataclass(frozen=True, kw_only=True)
