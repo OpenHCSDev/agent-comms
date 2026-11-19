@@ -83,21 +83,22 @@ def test_conditional_replacement_reuses_only_its_captured_revision(tmp_path):
     assert store.encoded == [first]  # Ordinary reads do not encode.
     before = store.path.stat()
     store.replace_if_changed(first)
-    assert store.encoded == [first, first, first]  # Current cut, proposed value.
+    assert store.encoded == [first, first]  # Published bytes, proposed value.
     store.replace_if_changed(first)
-    assert store.encoded == [first, first, first, first]  # Current cut stays encoded.
+    assert store.encoded == [first, first, first]  # Published cut stays encoded.
     assert store.path.stat() == before
     assert store.decoded == [captured]
     store.replace_if_changed(second)
     assert store.encoded[-2:] == [second, second]  # Comparison and existing writer.
-    assert len(store.encoded) == 6
+    assert len(store.encoded) == 5
     assert store.decoded == [captured]
     assert store.read() == second
     assert len(store.decoded) == 2
 
     # An independent writer and a saved older cut are distinct sources.
     older = DocumentBytes.capture(store.path)
-    RuntimeInfoStore(store.path).replace(first)
+    # Both writer instances report the actual decoder now owned by the captured source.
+    CountingRuntimeStore(store.path, decoded=store.decoded).replace(first)
     assert store.read() == first
     assert len(store.decoded) == 3
     assert store.read_copied(older) == second
@@ -608,3 +609,43 @@ def test_conditional_publication_preserves_json_scalar_types(tmp_path, old, new)
     before = DocumentBytes.capture(store.path)
     store.replace_if_changed(ScalarDocument(new))
     assert DocumentBytes.capture(store.path) == before
+
+
+@pytest.mark.parametrize("existing", (False, True))
+def test_publication_capture_failure_restores_previous_bytes(tmp_path, monkeypatch, existing):
+    store = RuntimeInfoStore(tmp_path / "capture.json")
+    if existing:
+        store.replace(RuntimeInfoDocument({"first": observation("first")}))
+        store.path.chmod(0o640)
+    before = DocumentBytes.capture(store.path)
+    def failed_capture(cls, path):
+        raise OSError("injected published-source capture failure")
+    with monkeypatch.context() as patch:
+        patch.setattr(DocumentBytes, "capture", classmethod(failed_capture))
+        with pytest.raises(OSError, match="published-source capture"):
+            store.replace(RuntimeInfoDocument({"next": observation("next")}))
+    after = DocumentBytes.capture(store.path)
+    assert after.content == before.content
+    assert store.path.exists() is existing
+    if existing:
+        assert stat.S_IMODE(store.path.stat().st_mode) == 0o640
+    assert not list(tmp_path.glob("*.tmp"))
+    assert not list(tmp_path.glob("*.previous"))
+
+
+def test_published_content_compares_without_decoding_or_borrowing_input(tmp_path):
+    store = CountingRuntimeStore(tmp_path / "lazy.json")
+    supplied = RuntimeInfoDocument({"first": observation("first")})
+    expected = RuntimeInfoDocument(dict(supplied.observations))
+    store.replace(supplied)
+    supplied.observations.clear()
+    before = DocumentBytes.capture(store.path)
+    store.replace_if_changed(expected)
+    assert DocumentBytes.capture(store.path) == before
+    assert store.decoded == []
+    assert store.read() == expected
+    assert len(store.decoded) == 1
+    store.read().observations.clear()
+    store.replace_if_changed(expected)
+    assert DocumentBytes.capture(store.path) == before
+    assert len(store.decoded) == 1

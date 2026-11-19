@@ -396,12 +396,15 @@ class JsonDocument(RootFile, ABC, Generic[T]):
         return self._read_unlocked()
 
     def _publish_unlocked(self, value: T) -> None:
-        self._write_unlocked(
+        self._retain_published(self._write_unlocked(
             json.dumps(self._encode(value), indent=self.json_indent, sort_keys=self.json_sort_keys)
             + self.json_suffix
-        )
+        ))
 
-    def _write_unlocked(self, text: str) -> None:
+    def _retain_published(self, source: DocumentBytes) -> None:
+        """Stateless writers retain nothing; captured-read writers own their published cut."""
+
+    def _write_unlocked(self, text: str) -> DocumentBytes:
         """Stage before publication; retain the old bytes and mode until directory sync.
 
         A reported staging/publication/fsync failure restores the old bytes and
@@ -422,7 +425,9 @@ class JsonDocument(RootFile, ABC, Generic[T]):
         try:
             try:
                 AtomicFile(self.path, mode).write_text(text)
+                published = DocumentBytes.capture(self.path)
                 backup.unlink(missing_ok=True)
+                return published
             except BaseException:
                 if backup.exists():
                     if not self.path.exists() or not self.path.samefile(backup):
@@ -1219,8 +1224,13 @@ class DocumentBytes:
 class DecodedDocument[T](DocumentBytes):
     """A value and the exact captured bytes and revision that supplied it."""
 
-    value: T
+    decode_value: Callable[[DocumentBytes], T] = field(compare=False, repr=False)
     encode_value: Callable[[T], JsonValue] = field(compare=False, repr=False)
+
+    @cached_property
+    def value(self) -> T:
+        """Decode this exact captured source only when a value is needed."""
+        return self.decode_value(self)
 
     @cached_property
     def persisted_content(self) -> str:
@@ -1230,6 +1240,15 @@ class DecodedDocument[T](DocumentBytes):
     def detached(self) -> T:
         """Readers own their value; the captured source keeps its comparison evidence."""
         return deepcopy(self.value)
+
+
+@dataclass(frozen=True)
+class PublishedDocument[T](DecodedDocument[T]):
+    """The native encoder supplied these committed bytes; no round trip is needed."""
+
+    @cached_property
+    def persisted_content(self) -> str:
+        return FieldCodec.compact(FieldCodec.parse(self.content), sort_keys=True)
 
 
 class CopyingStore(RootFile, RankedStoreLock, declared_name=None):
@@ -1263,14 +1282,14 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
         return obtain()
 
     def _decode_source(self, source: DocumentBytes) -> DecodedDocument[T]:
-        decoded = DecodedDocument(source.revision, source.content, self.read_copied(source), self._encode)
+        decoded = DecodedDocument(source.revision, source.content, self.read_copied, self._encode)
         _read_cache[self.path] = decoded
         return decoded
 
     def _decode_retained(self, source: DocumentBytes) -> DecodedDocument[T]:
         return source.revision.either(
             lambda revision: self._cached_value(revision, partial(self._decode_source, source)),
-            lambda: DecodedDocument(source.revision, source.content, self.empty(), self._encode),
+            lambda: DecodedDocument(source.revision, source.content, self.read_copied, self._encode),
         )
 
     def _read_current(self) -> DecodedDocument[T]:
@@ -1290,6 +1309,10 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
     def _publish_unlocked(self, value: T) -> None:
         _read_cache.pop(self.path, None)
         super()._publish_unlocked(value)
+
+    def _retain_published(self, source: DocumentBytes) -> None:
+        _read_cache[self.path] = PublishedDocument(
+            source.revision, source.content, self.read_copied, self._encode)
 
     def replace_if_changed(self, value: T) -> None:
         """Replace only changed stored content; logical identity does not decide writes."""
