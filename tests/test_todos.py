@@ -16,6 +16,7 @@ from contextlib import chdir, nullcontext
 from dataclasses import dataclass, replace
 from multiprocessing import Manager
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
@@ -41,6 +42,7 @@ from agent_comms.planning.order_runs import ApplicationOrderRun, MechanicalOrder
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     Assignment,
+    BoardTodoHistory,
     ChangeTodoState,
     ClaimOrder,
     ClosedListedPullRequest,
@@ -57,11 +59,13 @@ from agent_comms.planning.orders import (
     OrderMessage,
     PendingProblemOrder,
     ProgressRead,
+    PullRequestOrders,
     PullRequests,
     PullRequestSource,
     RecordPullRequest,
     ReleaseTodo,
     StoredOrderStory,
+    StoryFacts,
     Todo,
     TodoCommand,
     TodoConflict,
@@ -668,6 +672,91 @@ def test_only_retired_holder_or_closed_pr_allows_cross_holder_dispatch(
         assert by_problem['P615'].unit == 'aaa-idle'
         assert all(isinstance(by_problem[pid], RetainedHolderWheelSpin) for pid in ('P637', 'P667'))
         assert all(c.goals.todos.get(pid).holder is None for pid in originals)
+
+
+@pytest.fixture
+def associations_source(pr_team):
+    """Stored public order input; matrix rows are immutable snapshots, not cache writes."""
+    base = pr_order(pr_team, 'P1')
+    facts = StoryFacts.by_problem((f'P{number}' for number in range(1, 129)), ())
+    return replace(base, history=BoardTodoHistory(pr_team.root, MappingProxyType(facts)))
+
+
+def test_associations_preserve_shared_sources_order_identity_and_replacement(associations_source):
+    base = associations_source
+    repo = base.repo
+    foreign = RepositoryName.from_wire('example/other')
+    first = replace(base, order=replace(base.order, pull_requests=(PullRequestLink(repo, 3),)))
+    second = replace(base, id='P2', order=replace(base.order, id=OrderId('b' * 12),
+        pull_requests=(PullRequestLink(repo, 3), PullRequestLink(repo, 99),
+                       PullRequestLink(foreign, 3))))
+    # Same declared order identity in a captured problem with no direct PR link.
+    historical = replace(base, id='P3')
+    rows = {todo.id: todo for todo in (first, second, historical)}
+    pulls = PullRequests(tuple(rows.values()))
+
+    def check():
+        for repository in (repo, foreign):
+            expected = PullRequests.linked_among(rows.values(), repository)
+            actual = pulls.linked(repository)
+            assert tuple(actual.items()) == tuple(expected.items())
+            for todo in rows.values():
+                associations = tuple(PullRequestOrders(
+                    number, tuple(candidate.id for candidate in candidates),
+                    tuple(dict.fromkeys(order.id for candidate in candidates
+                        for order in candidate.order.declarations
+                        if PullRequestLink(repository, number) in order.pull_requests)))
+                    for number, candidates in expected.items())
+                assert pulls.associations(repository, todo) == tuple(
+                    row for row in associations if row.belongs_to(todo))
+
+    check()
+    # Replacing the earliest contributor keeps its registration position, removes
+    # obsolete edges, and cannot remove another problem's shared order contribution.
+    for changed in (replace(first, order=replace(first.order, pull_requests=())),
+                    replace(second, order=replace(second.order,
+                        pull_requests=(PullRequestLink(repo, 7),))), first,
+                    replace(first, order=FoldedProblemOrder(original=first.order,
+                        into='P2', why='Keep the original declaration readable.'))):
+        rows[changed.id] = changed
+        pulls.register((changed,))
+        check()
+    exposed = pulls.linked(repo)
+    exposed.clear()
+    check()
+
+
+def test_associations_register_and_selected_reads_are_linear_in_independent_sources(
+        associations_source, monkeypatch):
+    base = associations_source
+    rows = tuple(replace(base, id=f'P{number}', order=replace(base.order,
+        id=OrderId(f'{number:012x}'), pull_requests=(PullRequestLink(base.repo, number),)))
+        for number in range(1, 129))
+    calls = []
+    declarations = PendingProblemOrder.declarations.fget
+
+    def counted(order):
+        calls.append(order.id)
+        return declarations(order)
+
+    monkeypatch.setattr(PendingProblemOrder, 'declarations', property(counted))
+    pulls = PullRequests(rows)
+    for todo in rows:
+        result, = pulls.associations(todo.repo, todo)
+        assert result.problems == (todo.id,)
+        assert result.orders == (todo.order.id,)
+    assert len(calls) <= 3 * len(rows)
+    assert len(pulls.linked(base.repo)) == len(rows)
+
+
+def test_empty_dispatch_associations_do_not_acquire_held_orders(pr_team, monkeypatch):
+    assert pr_team.comms.goals.todos.reassignable() == ()
+
+    def unexpected_read(comms):
+        raise AssertionError('An empty dispatch set has no held-order dependency.')
+
+    monkeypatch.setattr(HeldOrders, 'read', unexpected_read)
+    assert UnownedOrderWatch().observe(pr_team.comms, None) == ()
 
 
 @pytest.fixture
