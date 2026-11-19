@@ -853,6 +853,11 @@ def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification
     assert isinstance(repeated.task, TeamDecisions)
     assert repeated.task.decisions == ()
     assert aged(repeated.task.handled) == aged(original.task.handled)
+    retained, = TeamUpdateStore.for_team(comms.root, repeated.task.teammate).read()
+    assert tuple(ping.text for ping in retained.handled) == tuple(
+        ping.text for ping in repeated.task.handled)
+    assert tuple(ping.text for ping in retained.handled) != tuple(
+        ping.text for ping in original.task.handled)
 
 
 def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):

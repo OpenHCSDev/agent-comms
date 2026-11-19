@@ -20,7 +20,7 @@ from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
 from threading import local
-from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Self, TypeVar, cast
+from typing import Annotated, ClassVar, Generic, Self, TypeVar, cast
 from weakref import finalize
 
 from pydantic import JsonValue
@@ -58,10 +58,6 @@ from agent_comms.storage.store_files import (
     is_store_lock,
     store_lock_path,
 )
-
-if TYPE_CHECKING:
-    from sqlite3 import _IsolationLevel
-
 
 T = TypeVar("T")
 
@@ -680,9 +676,7 @@ class WrittenFile(InstallableFile, RootFile, ABC):
     """A file whose kind declares when maintenance permits its writers."""
 
     __slots__ = ()
-    if TYPE_CHECKING:
-        @property
-        def path(self) -> Path: ...
+    path: Path
 
     @property
     def store(self) -> Self:
@@ -850,7 +844,7 @@ class SQLiteStorage(RootFile, SqliteStore):
     @classmethod
     def writer(
         cls, path: str | os.PathLike[str], contention: StoreContention = DEFAULT_STORE_CONTENTION,
-        *, isolation_level: _IsolationLevel = DEFAULT_ISOLATION,
+        *, isolation_level: str | None = DEFAULT_ISOLATION,
         uri: bool = False, check_same_thread: bool = True,
     ) -> sqlite3.Connection:
         """Open a writer through the store family's typed busy behavior."""
@@ -1221,11 +1215,17 @@ class DocumentBytes:
             return cls(MissingFile(), b"")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class DecodedDocument[T](DocumentBytes):
     """A value and the exact captured bytes and revision that supplied it."""
 
     value: T
+    encode_value: Callable[[T], JsonValue] = field(compare=False, repr=False)
+
+    @cached_property
+    def persisted_content(self) -> str:
+        """Compare all stored fields, independently of the value's logical identity."""
+        return FieldCodec.compact(self.encode_value(self.value), sort_keys=True)
 
     def detached(self) -> T:
         """Readers own their value; the captured source keeps its comparison evidence."""
@@ -1263,14 +1263,14 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
         return obtain()
 
     def _decode_source(self, source: DocumentBytes) -> DecodedDocument[T]:
-        decoded = DecodedDocument(source.revision, source.content, self.read_copied(source))
+        decoded = DecodedDocument(source.revision, source.content, self.read_copied(source), self._encode)
         _read_cache[self.path] = decoded
         return decoded
 
     def _decode_retained(self, source: DocumentBytes) -> DecodedDocument[T]:
         return source.revision.either(
             lambda revision: self._cached_value(revision, partial(self._decode_source, source)),
-            lambda: DecodedDocument(source.revision, source.content, self.empty()),
+            lambda: DecodedDocument(source.revision, source.content, self.empty(), self._encode),
         )
 
     def _read_current(self) -> DecodedDocument[T]:
@@ -1292,9 +1292,9 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
         super()._publish_unlocked(value)
 
     def replace_if_changed(self, value: T) -> None:
-        """Compare and replace one current cut; an equal value leaves its file alone."""
+        """Replace only changed stored content; logical identity does not decide writes."""
         def apply(current: DecodedDocument[T]) -> None:
-            if current.value != value:
+            if current.persisted_content != FieldCodec.compact(self._encode(value), sort_keys=True):
                 self._publish_unlocked(value)
 
         self.change_current(

@@ -62,6 +62,11 @@ def test_document_bytes_captures_original_missing_or_existing_file(tmp_path, exi
 @dataclass(frozen=True, slots=True)
 class CountingRuntimeStore(RuntimeInfoStore, declared_name=None):
     decoded: list[object] = field(default_factory=list, compare=False)
+    encoded: list[object] = field(default_factory=list, compare=False)
+
+    def _encode(self, value):
+        self.encoded.append(value)
+        return super()._encode(value)
 
     def _decode_capture(self, source):
         self.decoded.append(source)
@@ -75,11 +80,17 @@ def test_conditional_replacement_reuses_only_its_captured_revision(tmp_path):
     store.replace(first)
     assert store.read() == first
     captured = store.decoded[-1]
+    assert store.encoded == [first]  # Ordinary reads do not encode.
     before = store.path.stat()
     store.replace_if_changed(first)
+    assert store.encoded == [first, first, first]  # Current cut, proposed value.
+    store.replace_if_changed(first)
+    assert store.encoded == [first, first, first, first]  # Current cut stays encoded.
     assert store.path.stat() == before
     assert store.decoded == [captured]
     store.replace_if_changed(second)
+    assert store.encoded[-2:] == [second, second]  # Comparison and existing writer.
+    assert len(store.encoded) == 6
     assert store.decoded == [captured]
     assert store.read() == second
     assert len(store.decoded) == 2
@@ -532,3 +543,68 @@ def test_only_a_read_that_waited_out_a_writer_is_retried_as_contended(tmp_path):
         reader.close()
         writer.close()
 
+@dataclass(frozen=True)
+class StoredEvidence:
+    identity: str
+    words: str = field(compare=False)
+    transient: Annotated[str, WireExclude()] = "local"
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceStore(LockedStore[StoredEvidence], DependentStateTier, declared_name=None):
+    record_type = StoredEvidence
+
+    def empty(self):
+        return StoredEvidence("", "")
+
+
+@pytest.mark.parametrize("present", (False, True))
+def test_conditional_publication_compares_persisted_content_not_identity(tmp_path, present):
+    store = EvidenceStore(tmp_path / "evidence.json")
+    old = store.empty() if not present else StoredEvidence("same", "old words")
+    if present:
+        store.replace(old)
+    new = replace(old, words="new evidence")
+    assert old == new
+    store.replace_if_changed(new)
+    assert store.read_copied(DocumentBytes.capture(store.path)).words == "new evidence"
+    before = DocumentBytes.capture(store.path)
+    store.replace_if_changed(replace(new, transient="changed local context"))
+    assert DocumentBytes.capture(store.path) == before
+    # Readers cannot alter the private comparison source or its declared content.
+    read = store.read()
+    assert read.transient == "local"
+    store.replace_if_changed(new)
+    assert DocumentBytes.capture(store.path) == before
+
+
+def test_conditional_publication_leaves_missing_empty_document_absent(tmp_path):
+    store = EvidenceStore(tmp_path / "missing.json")
+    store.replace_if_changed(replace(store.empty(), transient="only local"))
+    assert not store.path.exists()
+
+
+@dataclass(frozen=True, slots=True)
+class ScalarDocument:
+    value: bool | int | float = False
+
+
+@dataclass(frozen=True, slots=True)
+class ScalarStore(LockedStore[ScalarDocument], DependentStateTier, declared_name=None):
+    record_type = ScalarDocument
+
+    def empty(self):
+        return ScalarDocument()
+
+
+@pytest.mark.parametrize("old,new", ((True, 1), (1, 1.0), (False, 0)))
+def test_conditional_publication_preserves_json_scalar_types(tmp_path, old, new):
+    store = ScalarStore(tmp_path / "scalar.json")
+    store.replace(ScalarDocument(old))
+    store.replace_if_changed(ScalarDocument(new))
+    actual = store.read_copied(DocumentBytes.capture(store.path))
+    assert type(actual.value) is type(new)
+    assert actual.value == new
+    before = DocumentBytes.capture(store.path)
+    store.replace_if_changed(ScalarDocument(new))
+    assert DocumentBytes.capture(store.path) == before
