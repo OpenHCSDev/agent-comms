@@ -205,6 +205,17 @@ class EditableCheckoutAllocation(CheckoutAllocation):
             raise StorageDenied(f'Cannot authorize source write in {path}: {error}') from error
 
 
+class WorkCheckoutAllocation(EditableCheckoutAllocation, declared_name=None):
+    """An allocation whose paths are declared from a problem or goal identity."""
+
+    @classmethod
+    @abstractmethod
+    def declared_for_work(cls, rule: StorageRule, owner: Thread, problem: str,
+                          primary: RepositoryName, companions: tuple[RepositoryName, ...],
+                          generation: GoalId) -> Mapping[RepositoryName, Path]:
+        ...
+
+
 @dataclass(frozen=True)
 class AdoptedCheckoutAllocation(EditableCheckoutAllocation):
     """An existing tree whose retired owner handed this incarnation its grant."""
@@ -227,7 +238,7 @@ class AdoptedCheckoutAllocation(EditableCheckoutAllocation):
         return reads.repository(path).github == self.repository
 
 
-class ProblemCheckoutAllocation(EditableCheckoutAllocation):
+class ProblemCheckoutAllocation(WorkCheckoutAllocation):
     """A checkout allocated to one problem; ``verb`` is the command that creates it."""
 
     verb: ClassVar[str]
@@ -316,7 +327,7 @@ class RepositoryCheckoutAllocation(ProblemCheckoutAllocation, RepositoryAllocati
 
 
 @dataclass(frozen=True)
-class GoalCheckoutAllocation(RepositoryAllocation, EditableCheckoutAllocation):
+class GoalCheckoutAllocation(RepositoryAllocation, WorkCheckoutAllocation):
     goal: GoalId
     suffix: str
 

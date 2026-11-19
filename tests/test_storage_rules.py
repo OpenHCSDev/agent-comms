@@ -43,11 +43,11 @@ from agent_comms.projects.shell_effects import (
 from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.projects.storage_rules import (
     CheckoutAllocation,
-    EditableCheckoutAllocation,
     GoalCheckoutAllocation,
     ScopedDirectory,
     StorageRule,
     UnitStorage,
+    WorkCheckoutAllocation,
 )
 from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.thread_creation import RecordedCreationTime
@@ -409,11 +409,11 @@ def test_goal_donor_allocation_never_grants_source_writes(checkout_comms: Comms)
         rule.require_repository_donor(next_birth, name, donor)
 
 
-@pytest.mark.parametrize("allocation", CheckoutAllocation.members_with(EditableCheckoutAllocation),
+@pytest.mark.parametrize("allocation", CheckoutAllocation.members_with(WorkCheckoutAllocation),
                          ids=lambda member: member.__name__)
 @pytest.mark.parametrize("select_other", (False, True))
 def test_existing_work_boundaries_do_not_select_a_new_checkout(
-        checkout_comms: Comms, allocation: type[EditableCheckoutAllocation], select_other: bool):
+        checkout_comms: Comms, allocation: type[WorkCheckoutAllocation], select_other: bool):
     comms = checkout_comms
     rule = comms.registry.storage_rule
     owner = comms.registry.require('worker')
