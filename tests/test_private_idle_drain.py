@@ -11,6 +11,7 @@ import pytest
 
 import agent_comms.agent_events as events
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import ReadableStore
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.owned_turn import OwnedTurn
@@ -32,10 +33,14 @@ from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 @pytest.mark.asyncio
 async def test_observation_waits_for_the_held_coordinator_snapshot(tmp_path):
     comms, agent, root_id, _ = _session(tmp_path)
+    # Retire this fixture's idle readers before choosing its blocking journal mode.
+    ReadableStore(comms.root / "coordination.sqlite3").idle_handles.retire()
     held, release = threading.Event(), threading.Event()
 
     def holder():
         with sqlite3.connect(comms.root / "coordination.sqlite3", isolation_level=None) as db:
+            # Rollback-journal writers hold new readers; WAL writers do not.
+            assert db.execute("PRAGMA journal_mode=DELETE").fetchone() == ("delete",)
             db.execute("BEGIN EXCLUSIVE")
             held.set()
             assert release.wait(5)

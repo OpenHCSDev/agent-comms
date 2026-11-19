@@ -503,8 +503,6 @@ class TranscriptReadState(
         self._pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="reply-read")
         self._resources.callback(self._pool.shutdown, wait=True, cancel_futures=True)
         self._resources.callback(self._cancelled.set)
-        self._cached_counts: TranscriptUnread | None = None
-        self._counts_cache_key: tuple | None = None
         # Capture the resource stack, not this state: dead roots must remain collectible.
         self._cleanup = finalize(self, self._resources.close)
 
@@ -672,12 +670,6 @@ class TranscriptReadState(
             self._refresh_keys(registry)
             keys = {name: keys for name, keys in self._thread_keys.items()
                     if registry.status(name).in_view(visibility)}
-            cache_key = (
-                viewer, visibility, document.notice,
-                tuple((name, tuple(sorted(k.revisions.items()))) for name, k in sorted(keys.items())),
-            )
-            if cache_key == self._counts_cache_key and self._cached_counts is not None:
-                return self._cached_counts
             try:
                 result = self._counts_locked(viewer, document, keys)
             except sqlite3.DatabaseError as error:
@@ -685,8 +677,6 @@ class TranscriptReadState(
                     CoordinationReadUnavailable.raise_from(error)
                 self._discard_database()
                 result = self._counts_locked(viewer, document, keys)
-            self._cached_counts = result
-            self._counts_cache_key = cache_key
             return result
         finally:
             self._lock.release()
