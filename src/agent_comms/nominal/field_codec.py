@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-import annotationlib
+try:
+    import annotationlib
+except ImportError:  # Python 3.12/3.13 consumers of the nominal runtime.
+    import typing_extensions as annotationlib
 import argparse
 import hashlib
 import inspect
@@ -2934,7 +2937,7 @@ class FieldCodec(MroDispatch, Sealed):
         own.__annotations__ = annotations
         return get_type_hints(
             own, globalns=vars(sys.modules[declaration.__module__]),
-            localns={param.__name__: param for param in declaration.__type_params__}
+            localns={param.__name__: param for param in getattr(declaration, "__type_params__", ())}
             | dict(vars(declaration)), include_extras=True,
         )
 
