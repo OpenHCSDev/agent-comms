@@ -286,8 +286,13 @@ class TeamHud(TeamHudRecord):
     def for_delivery(self, delivery: TeamDelivery) -> TeamHud:
         """Keep the prepared shared board; packet history and completion belong to its recipient."""
         owner = delivery.packet.teammate.require_recorded()
-        return replace(self, teammate=owner, packets=(delivery.packet,),
-                       open_pings=delivery.open_pings).with_services(self.services, owner)
+        hud = replace(self, teammate=owner, packets=(delivery.packet,),
+                      open_pings=delivery.open_pings).with_services(self.services, owner)
+        # Units, problems and plan phases are the heartbeat's one shared board.  Dataclass
+        # replacement deliberately drops cached properties; without carrying this derived
+        # owner every recipient rebuilt every table and field-dispatch plan independently.
+        object.__setattr__(hud, "groups", self.groups)
+        return hud
 
     @property
     def board(self) -> tuple[BoardEntry, ...]:
@@ -556,4 +561,3 @@ class TeamBoardPublicationStore(
             )
         hud = FieldCodec.decode(TeamHud, records[owner])
         return hud.with_services(passes, owner).with_plan(publication.plan)
-

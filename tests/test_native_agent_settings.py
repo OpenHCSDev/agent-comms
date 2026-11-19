@@ -27,7 +27,7 @@ def test_gpt_56_sol_compaction_policy_merges_and_preserves_settings(tmp_path):
             "enabled": True,
             "keepRecentTokens": 20_000,
             "keepThis": "owned by Pi",
-            "reserveTokens": 650_000,
+            "reserveTokens": 550_000,
         },
     }
     first_revision = settings.stat().st_mtime_ns

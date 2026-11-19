@@ -398,8 +398,18 @@ class JsonDocument(RootFile, ABC, Generic[T]):
         return self._read_unlocked()
 
     def _publish_unlocked(self, value: T) -> None:
+        self._publish_encoded_unlocked(self._encode(value))
+
+    def _publish_encoded_unlocked(self, encoded: JsonValue) -> None:
+        """Publish a value already encoded by this owner.
+
+        A compare-before-replace transaction must encode the candidate to compare its
+        persisted content.  Encoding the same declaration again for the write doubled the
+        hottest heartbeat path once per teammate.  The captured publication remains the
+        source retained by this store; only the redundant derivation is removed.
+        """
         self._retain_published(self._write_unlocked(
-            json.dumps(self._encode(value), indent=self.json_indent, sort_keys=self.json_sort_keys)
+            json.dumps(encoded, indent=self.json_indent, sort_keys=self.json_sort_keys)
             + self.json_suffix
         ))
 
@@ -1292,9 +1302,9 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
             lambda captured: captured.detached(),
         )
 
-    def _publish_unlocked(self, value: T) -> None:
+    def _publish_encoded_unlocked(self, encoded: JsonValue) -> None:
         _read_cache.pop(self.path, None)
-        super()._publish_unlocked(value)
+        super()._publish_encoded_unlocked(encoded)
 
     def _retain_published(self, source: DocumentBytes) -> None:
         _read_cache[self.path] = PublishedDocument(
@@ -1302,9 +1312,12 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
 
     def replace_if_changed(self, value: T) -> None:
         """Replace only changed stored content; logical identity does not decide writes."""
+        encoded = self._encode(value)
+        persisted_content = FieldCodec.compact(encoded, sort_keys=True)
+
         def apply(current: DecodedDocument[T]) -> None:
-            if current.persisted_content != FieldCodec.compact(self._encode(value), sort_keys=True):
-                self._publish_unlocked(value)
+            if current.persisted_content != persisted_content:
+                self._publish_encoded_unlocked(encoded)
 
         self.change_current(
             self._capture_unlocked,

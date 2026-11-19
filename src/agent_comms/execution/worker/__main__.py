@@ -5,13 +5,20 @@ import asyncio
 import os
 import signal
 import sys
-from contextlib import suppress
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager, suppress
 
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.execution.acp import CommsAgent
-from agent_comms.execution.child_process import ProcessName
+from agent_comms.execution.child_process import (
+    GitChildren,
+    OwnedGitOpening,
+    ProcessName,
+    join_retirement,
+)
 from agent_comms.execution.launch_root import LaunchRoot, started
 from agent_comms.execution.root_runtime import RootRuntimeStore
 from agent_comms.execution.worker import (
@@ -20,10 +27,46 @@ from agent_comms.execution.worker import (
     open_every_file_this_host_may_need,
 )
 from agent_comms.installer.active_route import ActiveRoute
+from agent_comms.team.team_heartbeat import TeamHeartbeat
 from agent_comms.transport.owner_connection import socket_path
 
 
 CORE_WORKER_PROCESS = ProcessName("ac-core-worker")
+
+
+@asynccontextmanager
+async def team_heartbeat_host(comms: Comms) -> AsyncIterator[None]:
+    """Run the root's one board scheduler for this worker's lifetime.
+
+    The connector serves transport requests and retains only its connector-owned watches.
+    Board acquisition and publication belong to the persistent root worker, so opening a
+    second viewer or restarting the connector cannot start another heartbeat.
+    """
+    children = GitChildren()
+    heartbeat = TeamHeartbeat()
+
+    @contextmanager
+    def opened_wire() -> Iterator[Comms]:
+        # A pass gets a fresh wire without borrowing an external request route.
+        yield wire(comms.root)
+
+    with OwnedGitOpening(children).bound():
+        pending = asyncio.create_task(
+            Coordination.watch_worker(
+                heartbeat,
+                opened_wire,
+                ServicePassStore.at(comms.root),
+            ),
+            name=type(heartbeat).__name__,
+        )
+    try:
+        yield
+    finally:
+        retirement = children.start_shutdown()
+        pending.cancel()
+        with suppress(asyncio.CancelledError):
+            await pending
+        await join_retirement(retirement)
 
 
 async def run() -> None:
@@ -52,7 +95,7 @@ async def run_host(comms: Comms, listener_fd: int) -> None:
             loop = asyncio.get_running_loop()
             for sig in (signal.SIGTERM, signal.SIGINT):
                 loop.add_signal_handler(sig, stopped.set)
-            async with agent.host(listener_fd):
+            async with agent.host(listener_fd), team_heartbeat_host(comms):
                 await stopped.wait()
     finally:
         # The launcher bound this path before we ran, so a host that dies before serving owns it too.
