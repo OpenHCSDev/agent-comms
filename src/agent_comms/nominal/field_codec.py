@@ -23,7 +23,7 @@ from collections.abc import (
     MutableMapping,
 )
 from contextvars import ContextVar
-from copy import deepcopy
+from copy import copy, deepcopy
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum, IntFlag
@@ -1272,10 +1272,10 @@ class SharedValueDecoding:
     """One synchronous read of stable shared JSON, never a cache between reads.
 
     Only declared pure copyable records participate. Sources stay alive to prevent id
-    reuse; each caller receives a deep copy, including the first occurrence.
+    reuse; each caller receives a detached occurrence, including the first.
     """
 
-    captured: dict[tuple[type, int], tuple[object, object]] = field(default_factory=dict)
+    captured: dict[tuple[type, int], tuple[object, SharedRecordMember]] = field(default_factory=dict)
     closed: bool = field(default=False, init=False)
     current: ClassVar[ContextVar[SharedValueDecoding | None]] = ContextVar('shared_record_read', default=None)
 
@@ -1285,7 +1285,7 @@ class SharedValueDecoding:
         key = (declaration, id(data))
         if key not in self.captured:
             self.captured[key] = (data, declaration.from_wire(data))
-        return deepcopy(self.captured[key][1])
+        return self.captured[key][1].detached()
 
     def close(self) -> None:
         """A task inheriting this context after return must decode normally."""
@@ -2057,6 +2057,9 @@ class SharedRecordMember(RecordMember):
     and deepcopy retains every occurrence field. Plain record/custom forms do not opt in.
     """
 
+    def detached(self) -> Self:
+        return deepcopy(self)
+
     @handles(object)
     @classmethod
     def decode_value(cls, data: object, structural: ValueDecoder[T]) -> T:
@@ -2064,6 +2067,17 @@ class SharedRecordMember(RecordMember):
         if reading is None:
             return super().decode_value(data, structural)
         return cast(T, reading.decode(cls, data))
+
+
+class FrozenRecordMember(SharedRecordMember):
+    """A record declaring immutable wire fields can share those values between copies.
+
+    Its copy protocol must retain all occurrence fields and detach derived mutable state.
+    Mutable records retain SharedRecordMember's deep-copy contract.
+    """
+
+    def detached(self) -> Self:
+        return copy(self)
 
 
 class TaggedRecordMember(RecordMember):
