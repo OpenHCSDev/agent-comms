@@ -9,6 +9,7 @@ import pytest
 
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.orders import VerdictAudience
 from agent_comms.projects.repo import Repo
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.order import OrderFile, forwarders_added, main, overrides
@@ -65,6 +66,37 @@ def test_override_scan_excludes_nested_and_qualified_names():
 ])
 def test_forwarder_scan_distinguishes_added_source_from_context(diff: str, expected: bool):
     assert bool(forwarders_added(diff)) is expected
+
+
+@pytest.mark.parametrize("command_path", (False, True))
+@pytest.mark.parametrize("in_channel", (False, True))
+def test_verdict_reaches_its_named_holder_without_changing_channel_membership(
+        pr_team, command_path, in_channel):
+    ctx = pr_team
+    worker = thread('outside', ctx.root, 3.0)
+    if in_channel:
+        ctx.comms.registry.register(replace(worker, tags=frozenset({'comms'})))
+    ctx.comms.channels.create_tag('comms')
+    before = ctx.comms.registry.require(worker.name)
+    audience = VerdictAudience((ctx.actor_name, worker.name, worker.name))
+    text = 'Reviewed the actual holder without enrolling it in a channel.'
+    if command_path:
+        primary = ctx.published(audience, text)
+        assert primary.target == '#comms'
+    else:
+        audience.publish(ctx.comms.goals, ctx.incarnation, text)
+    messages = tuple(message for message in ctx.comms.bus.bus.message_history()
+                     if text in message.body)
+    assert tuple(message.target for message in messages) == (
+        ('#comms',) if in_channel else ('#comms', worker.name))
+    reached = tuple(tuple(recipient.canonical_thread
+                          for recipient in ctx.comms.bus.bus.delivery(message.seq).recipients)
+                    for message in messages)
+    assert (worker.name in reached[0]) == in_channel
+    if not in_channel:
+        assert reached[1] == (worker.name,)
+        assert '@outside' not in messages[0].body
+    assert ctx.comms.registry.require(worker.name).tags == before.tags
 
 
 def test_problem_and_send_share_field_refusals_and_record_only_valid_documents(pr_team):

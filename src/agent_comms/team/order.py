@@ -578,10 +578,10 @@ class TeamContext(BaseModel):
 
     def published(self, audience: VerdictAudience, body: str,
                   answers: tuple[MessageReference, ...] = ()) -> Message:
-        target = audience.target_from(self.actor_name)
-        return self.comms.messaging.send(self.actor_name, target.name,
-            target.addressed(audience.threads, body), answers=answers,
-            answerer=self.receipts).message
+        messages = tuple(self.comms.messaging.send(self.actor_name, target.name,
+            text, answers=answers, answerer=self.receipts).message
+            for target, text in audience.deliveries(self.comms.goals, self.actor_name, body))
+        return messages[0]
 
     @property
     def receipts(self) -> TeamReceipts:
