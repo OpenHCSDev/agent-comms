@@ -37,7 +37,7 @@ from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Annotated, ClassVar, Self, cast
+from typing import Annotated, ClassVar, Self
 
 from aiohttp import web
 from aiohttp.typedefs import Handler
@@ -65,7 +65,7 @@ from agent_comms.execution.child_process import (
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.execution.launch_root import started
-from agent_comms.execution.watch_passes import Watch
+from agent_comms.execution.watch_passes import ConnectorWatch, Watch
 from agent_comms.host_services import HostService
 from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
 from agent_comms.messaging.bus_identity import BusIdentityStore
@@ -92,7 +92,6 @@ from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.service_sender import ServiceSender
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.team.standing import UnownedOrderWatch
-from agent_comms.team.team_heartbeat import TeamHeartbeat
 from agent_comms.transport.connector_caller import (
     CALLER,
     ConnectorCaller,
@@ -568,7 +567,9 @@ class Connector(ConnectorService, McpServer):
     issuer: str
     root: Path
     watches: Mapping[type[Watch], Watch] = field(
-        default_factory=lambda: MappingProxyType({member: member() for member in Watch.members_with(Watch)}),
+        default_factory=lambda: MappingProxyType({
+            member: member() for member in Watch.members_with(ConnectorWatch)
+        }),
         init=False, repr=False, compare=False,
     )
 
@@ -716,10 +717,6 @@ class Connector(ConnectorService, McpServer):
         for call, tool in pending:
             tool.cancel_on_shutdown(call)
         await asyncio.gather(*(call for call, tool in pending), return_exceptions=True)
-
-    @property
-    def heartbeat(self) -> TeamHeartbeat:
-        return cast(TeamHeartbeat, self.watches[TeamHeartbeat])
 
     @property
     def resource_metadata_url(self) -> str:

@@ -7,7 +7,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 
 from agent_comms.comms import Comms
-from agent_comms.execution.watch_passes import JoinedWatch
+from agent_comms.execution.watch_passes import ConnectorWatch, JoinedWatch
 from agent_comms.planning.orders import (
     PullRequests,
     StoredClosedHead,
@@ -89,7 +89,7 @@ class ClosedHeadScan:
                              db, self.repo, commit.patches - self.new_patches))
 
 
-class ClosedPullRequestWatch(JoinedWatch):
+class ClosedPullRequestWatch(JoinedWatch, ConnectorWatch):
     """Each completed repository publishes before the next external observation starts."""
 
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
