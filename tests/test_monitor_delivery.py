@@ -62,7 +62,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination.assignment_states import DeferredAssignment, DeliveredAssignment
 from agent_comms.coordination.cohort import pending_sealed_assignments
 from agent_comms.coordination.coordinator import Coordination
-from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.database import CoordinationStore, ReadableStore
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
@@ -177,6 +177,16 @@ def bridge(comms, tmp_path):
         yield selected
 
 
+@pytest.fixture(params=("DELETE", "WAL"))
+def coordinator_journal(request, bridge):
+    """Choose the private store's real journal before its monitor owns any work."""
+    path = CoordinationStore.path_in(bridge.comms.root)
+    ReadableStore(path).idle_handles.retire()
+    with closing(sqlite3.connect(path, isolation_level=None)) as db:
+        assert db.execute("PRAGMA journal_mode=" + request.param).fetchone() == (request.param.lower(),)
+    return request.param
+
+
 @pytest.fixture
 def emitted_delivery(bridge):
     async def emit(body, target='viewer'):
@@ -251,22 +261,31 @@ async def begin_waits(capsys, message):
 
 
 @pytest.mark.asyncio
-async def test_busy_read_holds_the_watch_resume_until_the_store_frees(bridge, capsys):
-    """Real contention on the read that opens the core watch: the wait keeps the bridge up."""
+async def test_busy_read_holds_the_watch_resume_until_the_store_frees(bridge, capsys, coordinator_journal):
+    """Rollback writers hold a new reader; WAL writers leave its snapshot readable."""
     path = CoordinationStore.path_in(bridge.comms.root)
-    with Coordination(str(path)):
-        pass
-    with closing(sqlite3.connect(path, isolation_level=None)) as held:
-        held.execute('BEGIN EXCLUSIVE')
-        resuming = asyncio.create_task(bridge.once_available('Watch resume', bridge.resume_after))
-        seen = ''
-        async with asyncio.timeout(60):
-            while 'Watch resume waits for the store' not in seen:
-                await asyncio.sleep(.01)
-                seen += capsys.readouterr().err
-        assert not resuming.done()
-        held.execute('ROLLBACK')
-    assert await asyncio.wait_for(resuming, 30) == bridge.binding.start
+    resuming = None
+    try:
+        with closing(sqlite3.connect(path, isolation_level=None)) as held:
+            held.execute('BEGIN EXCLUSIVE')
+            try:
+                resuming = asyncio.create_task(bridge.once_available('Watch resume', bridge.resume_after))
+                if coordinator_journal == "WAL":
+                    assert await asyncio.wait_for(asyncio.shield(resuming), 2) == bridge.binding.start
+                else:
+                    seen = ''
+                    async with asyncio.timeout(10):
+                        while 'Watch resume waits for the store' not in seen:
+                            await asyncio.sleep(.01)
+                            seen += capsys.readouterr().err
+                    assert not resuming.done()
+            finally:
+                held.execute('ROLLBACK')
+        assert await asyncio.wait_for(resuming, 5) == bridge.binding.start
+    finally:
+        if resuming is not None:
+            resuming.cancel()
+            await asyncio.gather(resuming, return_exceptions=True)
 
 
 @pytest.mark.asyncio
@@ -1276,23 +1295,32 @@ def test_a_failure_outside_the_reported_family_crashes_instead_of_queueing():
 
 
 @pytest.mark.asyncio
-async def test_a_held_store_during_the_read_keeps_the_bridge_up_and_delivers_once(bridge, capsys):
-    """Real contention on the store a busy read reports: it waits, it does not end the watch."""
+async def test_a_held_store_during_the_read_keeps_the_bridge_up_and_delivers_once(bridge, capsys, coordinator_journal):
+    """The original waits at the journal's actual boundary, then delivers exactly once."""
     path = CoordinationStore.path_in(bridge.comms.root)
-    async with attached_monitor(bridge, timeout=120) as reader:
+    async with attached_monitor(bridge, timeout=30) as reader:
         sent = bridge.comms.messaging.send('peer', 'viewer', 'read while the store is held').message
-        with closing(sqlite3.connect(path, isolation_level=None)) as held:
-            held.execute('BEGIN EXCLUSIVE')
-            watching = asyncio.create_task(bridge.comms.bus.when_open(bridge.watch_bus))
-            seen = ''
-            async with asyncio.timeout(60):
-                while 'Watch read waits for the store' not in seen:
-                    await asyncio.sleep(.01)
-                    seen += capsys.readouterr().err
-            assert not watching.done(), seen
-            held.execute('ROLLBACK')
-        await delivered_line(bridge, reader, 'held-store')
-        assert not watching.done()
-        await stopped(watching)
-        rows = await stored_attempts(bridge)
-        assert [row.reference for row in rows] == [sent.reference]
+        watching = None
+        try:
+            with closing(sqlite3.connect(path, isolation_level=None)) as held:
+                held.execute('BEGIN EXCLUSIVE')
+                try:
+                    watching = asyncio.create_task(bridge.comms.bus.when_open(bridge.watch_bus))
+                    if coordinator_journal == "WAL":
+                        await asyncio.wait_for(begin_waits(capsys, sent), 10)
+                    else:
+                        seen = ''
+                        async with asyncio.timeout(10):
+                            while 'Watch read waits for the store' not in seen:
+                                await asyncio.sleep(.01)
+                                seen += capsys.readouterr().err
+                    assert not watching.done()
+                finally:
+                    held.execute('ROLLBACK')
+            await delivered_line(bridge, reader, 'held-store')
+            assert not watching.done()
+            rows = await stored_attempts(bridge)
+            assert [row.reference for row in rows] == [sent.reference]
+        finally:
+            if watching is not None:
+                await stopped(watching)
