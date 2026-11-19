@@ -892,6 +892,32 @@ class MergedListedPullRequest(ListedPullRequest):
                                  problems=problems, status_contexts=self.status_contexts)
 
 
+@dataclass(frozen=True)
+class PullRequestRegistration:
+    """One source in this read, with its original registration position and derived links."""
+
+    position: int
+    todo: Todo
+
+    @cached_property
+    def links(self) -> dict[PullRequestLink, tuple[OrderId, ...]]:
+        by_link: dict[PullRequestLink, dict[OrderId, None]] = {}
+        numbers: dict[RepositoryName, set[int]] = {}
+        for order in self.todo.order.declarations:
+            for link in order.pull_requests:
+                by_link.setdefault(link, {})[order.id] = None
+                numbers.setdefault(link.repo, set()).add(link.number)
+        return {link: tuple(by_link[link]) for repo, selected in numbers.items()
+                for number in selected for link in (PullRequestLink(repo, number),)}
+
+    @cached_property
+    def positions(self) -> dict[PullRequestLink, int]:
+        return {link: position for position, link in enumerate(self.links)}
+
+    def link_position(self, link: PullRequestLink) -> tuple[int, int]:
+        return self.position, self.positions[link]
+
+
 class PullRequests(RepositoryReads):
     """Forge facts and repository reads shared within one board read."""
 
@@ -906,20 +932,41 @@ class PullRequests(RepositoryReads):
         self._read: dict[tuple[RepositoryName, int], ListedPullRequest] = {}
         self._open: dict[RepositoryName, tuple[int, ...]] = {}
         self._worktrees: dict[Path, Mapping[str, tuple[str, ...]]] = {}
-        self._todos: dict[str, Todo] = {}
+        self._todos: dict[str, PullRequestRegistration] = {}
+        self._linked: dict[PullRequestLink, dict[int, PullRequestRegistration]] = {}
+        self._orders: dict[OrderId, dict[PullRequestLink, dict[int, PullRequestRegistration]]] = {}
         self.register(todos)
 
     def register(self, todos: Sequence[Todo]) -> Self:
         """Register a frame's orders while preserving this read's existing GitHub facts."""
         for todo in todos:
-            self._todos[todo.id] = todo
+            previous = self._todos.get(todo.id)
+            if previous is not None and previous.todo is todo:
+                continue
+            if previous is not None:
+                for link, orders in previous.links.items():
+                    del self._linked[link][previous.position]
+                    if not self._linked[link]:
+                        del self._linked[link]
+                    for order in orders:
+                        del self._orders[order][link][previous.position]
+                        if not self._orders[order][link]:
+                            del self._orders[order][link]
+                        if not self._orders[order]:
+                            del self._orders[order]
+            current = PullRequestRegistration(
+                previous.position if previous is not None else len(self._todos), todo)
+            self._todos[todo.id] = current
+            for link, orders in current.links.items():
+                self._linked.setdefault(link, {})[current.position] = current
+                for order in orders:
+                    self._orders.setdefault(order, {}).setdefault(link, {})[current.position] = current
         return self
 
     def retained_assignments(self, todo: Todo, assignment: Assignment) -> tuple[Assignment, ...]:
         """An explicit closure releases work; missing forge links do not retire its author."""
-        self.register((todo,))
-        linked = self.linked(todo.repo)
-        numbers = tuple(number for number, candidates in linked.items() if todo in candidates)
+        numbers = tuple(row.number for row in self.associations(todo.repo, todo)
+                        if todo.id in row.problems)
         if not numbers:
             return (assignment,)
         return tuple(dict.fromkeys(
@@ -972,7 +1019,27 @@ class PullRequests(RepositoryReads):
                     yield claim, request
 
     def linked(self, repo: RepositoryName) -> dict[int, list[Todo]]:
-        return self.linked_among(self._todos.values(), repo)
+        return {link.number: [row.todo for row in sorted(
+                    self._linked[link].values(), key=lambda row: row.position)]
+                for link in sorted((link for link in self._linked if link.repo == repo),
+                                   key=self.link_position)}
+
+    def link_position(self, link: PullRequestLink) -> tuple[int, int]:
+        first = self._linked[link][min(self._linked[link])]
+        return first.link_position(link)
+
+    def associations(self, repo: RepositoryName, todo: Todo) -> tuple[PullRequestOrders, ...]:
+        """Select by problem or historical order identity before joining shared PR sources."""
+        self.register((todo,))
+        links = set(self._todos[todo.id].links)
+        for identity in todo.held_order_ids:
+            links.update(self._orders.get(identity, ()))
+        selected = sorted((link for link in links if link.repo == repo), key=self.link_position)
+        return tuple(PullRequestOrders(
+            link.number, tuple(row.todo.id for row in candidates),
+            tuple(dict.fromkeys(order for row in candidates for order in row.links[link])))
+            for link in selected
+            for candidates in (sorted(self._linked[link].values(), key=lambda row: row.position),))
 
     @staticmethod
     def linked_among(todos: Iterable[Todo], repo: RepositoryName) -> dict[int, list[Todo]]:
@@ -1052,14 +1119,7 @@ class PullRequests(RepositoryReads):
 
     def listed(self, repo: RepositoryName, kind: type[ListedPullRequest],
                todo: Todo) -> tuple[PullRequest, ...]:
-        self.register((todo,))
-        associations = (PullRequestOrders(
-            number, tuple(candidate.id for candidate in candidates),
-            tuple(dict.fromkeys(order.id for candidate in candidates
-                                for order in candidate.order.declarations
-                                if PullRequestLink(repo, number) in order.pull_requests)))
-            for number, candidates in self.linked(repo).items())
-        linked = {row.number: row for row in associations if row.belongs_to(todo)}
+        linked = {row.number: row for row in self.associations(repo, todo)}
         requests = tuple(picked.parsed(
             linked[picked.number].problems, linked[picked.number].orders)
             for row in self.rows(repo, tuple(linked)) for picked in kind.picked(row))

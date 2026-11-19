@@ -654,6 +654,8 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedWheelSpin, ...]]):
 
     def observe(self, comms: Comms, prepared: None) -> tuple[UnownedWheelSpin, ...]:
         available = comms.goals.todos.reassignable()
+        if not available:
+            return ()
         return UnownedWheelSpin.paired(
             comms, available, HeldOrders.read(comms), PullRequests(available))
 
