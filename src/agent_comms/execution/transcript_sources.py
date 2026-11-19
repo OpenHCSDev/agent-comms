@@ -488,7 +488,7 @@ class TranscriptSource(ReadsPublishedMessages, ResolvesSentReports):
 
     def current_draft(self, root: Path, incarnation: ThreadIncarnation) -> TranscriptDraft:
         with self.draft_snapshot(root, incarnation) as connection:
-            return DraftRow.one(connection, thread=incarnation.require_recorded().lookup) or NoDraft()
+            return DraftFold.current(connection, incarnation.require_recorded().lookup)
 
     def draft_snapshot(self, root: Path, incarnation: ThreadIncarnation):
         return ExternalTranscript(root, incarnation).snapshot()
@@ -1101,10 +1101,37 @@ class Through(PageLimit):
 
 
 @dataclass(frozen=True)
-class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_name="external_draft"):
-    """The assigned transcript's current message, shared by native and CLI writers."""
+class DraftAppendRow(ExternalTranscriptRows, TypedTable, declared_name="external_draft_append"):
+    """One ordered event append for one live draft message."""
 
     thread: Annotated[ThreadLookup, Column(primary_key=True)]
+    turn_id: Annotated[NativeTurnId, Column(primary_key=True)]
+    item_id: Annotated[NativeItemId, Column(primary_key=True)]
+    ordinal: Annotated[int, Column(primary_key=True)]
+    event: TranscriptEvent
+
+    @classmethod
+    def append(cls, connection: Connection, thread: ThreadLookup,
+               turn_id: NativeTurnId, item_id: NativeItemId,
+               events: tuple[TranscriptEvent, ...]) -> None:
+        if not events:
+            return
+        row = connection.execute(
+            f'SELECT coalesce(max(ordinal), -1) FROM "{cls.declared_name}" '
+            'WHERE thread=? AND turn_id=? AND item_id=?',
+            (thread, turn_id, item_id),
+        ).fetchone()
+        ordinal = row[0] + 1
+        for event in events:
+            cls(thread, turn_id, item_id, ordinal, event).insert(connection)
+            ordinal += 1
+
+
+@dataclass(frozen=True)
+class DraftFold(TranscriptDraft):
+    """The current draft value folded from its single ordered append log."""
+
+    thread: ThreadLookup
     turn_id: NativeTurnId
     item_id: NativeItemId
     events: tuple[TranscriptEvent, ...]
@@ -1130,13 +1157,42 @@ class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_nam
             finally:
                 publication.retire_message()
 
-    def publish(self, transcript: StoreWriter) -> None:
-        with transcript.writing() as connection:
-            self.upsert(connection)
+    @classmethod
+    def current(cls, connection: Connection, thread: ThreadLookup) -> TranscriptDraft:
+        rows = tuple(DraftAppendRow.select(
+            connection, thread=thread, order_by=("ordinal",)))
+        if not rows:
+            return NoDraft()
+        identity = (rows[0].turn_id, rows[0].item_id)
+        if any((row.turn_id, row.item_id) != identity for row in rows):
+            raise MalformedRecord("A thread has more than one live draft identity")
+        events: list[TranscriptEvent] = []
+        for row in rows:
+            row.event.append_to(events)
+        return cls(thread, *identity, tuple(events))
+
+    def appended(self, events: tuple[TranscriptEvent, ...]) -> tuple[TranscriptEvent, ...]:
+        before = self.events
+        shared = 0
+        while shared < min(len(before), len(events)) and before[shared] == events[shared]:
+            shared += 1
+        if shared == len(before):
+            return events[shared:]
+        if shared != len(before) - 1 or shared >= len(events):
+            raise MalformedRecord("A draft update rewrote committed draft events")
+        prior = before[shared]
+        current = events[shared]
+        if not isinstance(prior, AssistantTranscript) or not isinstance(current, AssistantTranscript):
+            raise MalformedRecord("A draft update replaced a non-text event")
+        if not current.text.startswith(prior.text) or replace(current, text=prior.text) != prior:
+            raise MalformedRecord("A draft update replaced assistant text")
+        suffix = replace(current, text=current.text[len(prior.text):])
+        return (suffix, *events[shared + 1:])
 
     def end_turn(self, transcript: StoreWriter) -> None:
         with transcript.writing() as connection:
-            self.delete(connection, thread=self.thread, turn_id=self.turn_id, item_id=self.item_id)
+            DraftAppendRow.delete(
+                connection, thread=self.thread, turn_id=self.turn_id, item_id=self.item_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1200,17 +1256,15 @@ class StoreRead(TranscriptSource):
                 for turn_id in ids)
 
     def tool_call_count(self, since: float) -> int:
-        """Count each original call once, including its still-open draft in this snapshot."""
         call = "$." + FieldCodec.record_key(ToolStartTranscript, "tool_call_id")
         stamp = "$." + FieldCodec.record_key(ToolStartTranscript, "timestamp")
         kind = "$." + ToolStartTranscript.family_discriminator
         return self.connection.execute(
             'SELECT count(DISTINCT call_id) FROM ('
-            f'SELECT call_id,kind,timestamp FROM "{ExternalEventRow.declared_name}" WHERE thread=? '
-            'UNION ALL '
-            'SELECT json_extract(item.value,?),json_extract(item.value,?),json_extract(item.value,?) '
-            f'FROM "{DraftRow.declared_name}" AS draft,json_each(draft.events) AS item '
-            'WHERE draft.thread=?) WHERE kind=? AND timestamp>=?',
+    f'SELECT call_id,kind,timestamp FROM "{ExternalEventRow.declared_name}" WHERE thread=? '
+    'UNION ALL '
+    'SELECT json_extract(event,?),json_extract(event,?),json_extract(event,?) '
+    f'FROM "{DraftAppendRow.declared_name}" WHERE thread=?) WHERE kind=? AND timestamp>=?',
             (self.transcript.lookup, call, kind, stamp, self.transcript.lookup,
              FieldCodec.encode(ToolStartTranscript), since),
         ).fetchone()[0]
@@ -1299,12 +1353,12 @@ class ExternalTranscript(TranscriptSource, DurableStore):
 
     def finish(self, *, turn_id: NativeTurnId, item_id: NativeItemId,
                events: tuple[TranscriptEvent, ...]) -> None:
-        """Append a finished item once; an item with no presentation adds nothing."""
         with self.writing() as connection:
             self.observe_output(connection, turn_id, events)
             if events:
                 self._insert_once(connection, turn_id, item_id, events, self._cut(connection).offset + 1)
-            DraftRow.delete(connection, thread=self.lookup, turn_id=turn_id, item_id=item_id)
+            DraftAppendRow.delete(
+                connection, thread=self.lookup, turn_id=turn_id, item_id=item_id)
 
     def _insert_once(self, connection, turn_id, item_id, events, seq) -> bool:
         key = dict(thread=self.lookup, turn_id=turn_id, item_id=item_id)
@@ -1361,7 +1415,16 @@ class ExternalTranscript(TranscriptSource, DurableStore):
               events: tuple[TranscriptEvent, ...]) -> None:
         with self.writing() as connection:
             self.observe_output(connection, turn_id, events)
-            DraftRow(self.lookup, turn_id, item_id, events).upsert(connection)
+            current = DraftFold.current(connection, self.lookup)
+            if isinstance(current, NoDraft):
+                appended = events
+            elif (current.turn_id, current.item_id) == (turn_id, item_id):
+                appended = current.appended(events)
+            else:
+                DraftAppendRow.delete(connection, thread=self.lookup)
+                appended = events
+            DraftAppendRow.append(
+                connection, self.lookup, turn_id, item_id, appended)
 
     def end_turn(self) -> None:
         with self.reading() as records:
@@ -1384,12 +1447,16 @@ class ExternalTranscript(TranscriptSource, DurableStore):
 
 
 class DraftPublication:
-    """Unassigned native turns have no assigned draft to publish."""
+    """Unassigned native turns have no assigned draft to append."""
 
     def begin_message(self, timestamp: float) -> None:
         pass
 
-    def publish(self, parts: Iterable[str]) -> None:
+    @staticmethod
+    def append(publication: DraftPublication, parts: Iterable[str]):
+        return Coordination.run_worker(lambda: publication.append_parts(parts))
+
+    def append_parts(self, parts: Iterable[str]) -> None:
         pass
 
     def retire_message(self) -> None:
@@ -1398,7 +1465,7 @@ class DraftPublication:
 
 @dataclass(eq=False, repr=False)
 class TurnDraftPublication(DraftPublication, StoreWriter):
-    """A native turn owns one connection; each message owns one draft identity."""
+    """A native turn owns one connection and appends each text chunk once."""
 
     transcript: ExternalTranscript
     connection: Connection
@@ -1417,14 +1484,19 @@ class TurnDraftPublication(DraftPublication, StoreWriter):
         self.item_id = NativeItemId.fresh()
         self.timestamp = timestamp
 
-    def publish(self, parts: Iterable[str]) -> None:
-        DraftRow(self.transcript.lookup, self.turn_id, self.item_id,
-                 (AssistantTranscript(''.join(parts), position=self.item_id,
-                                      timestamp=self.timestamp),)).publish(self)
+    def append_parts(self, parts: Iterable[str]) -> None:
+        events = tuple(
+            AssistantTranscript(part, position=self.item_id, timestamp=self.timestamp)
+            for part in parts if part
+        )
+        with self.writing() as connection:
+            DraftAppendRow.append(
+                connection, self.transcript.lookup, self.turn_id, self.item_id, events)
 
     def retire_message(self) -> None:
         with self.writing() as connection:
-            DraftRow.delete(connection, thread=self.transcript.lookup, turn_id=self.turn_id)
+            DraftAppendRow.delete(
+                connection, thread=self.transcript.lookup, turn_id=self.turn_id)
 
 
 @dataclass(frozen=True)

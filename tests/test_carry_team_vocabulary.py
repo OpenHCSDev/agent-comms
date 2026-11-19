@@ -26,7 +26,7 @@ from agent_comms.planning.orders import (
 from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.storage.store_files import store_lock_path
 from agent_comms.task_attachments.team_pings import TeamUpdate, TeamUpdateNotice, TeamUpdateStore
-from agent_comms.team.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, UnreadableUsage
+from agent_comms.team.team_hud import CodexUsage, TeamBoardPublicationStore, TeamHud, TeamPlan, UnreadableUsage
 from agent_comms.team.vibe_check import OverloadDegradation
 from conftest import maintenance_held
 from test_reconcile_stores import reconcile
@@ -129,7 +129,7 @@ def test_retained_packets_passes_and_channel_move_to_team_names(team_bus):
         packets=(),
         open_pings=(),
     )
-    frame = FlatTeamFrameFile.path_in(root, lookup=str(teammate.lookup))
+    frame = FlatTeamBoardPublicationStoreFile.path_in(root, lookup=str(teammate.lookup))
     frame.parent.mkdir(parents=True)
     frame.write_text(json.dumps(FieldCodec.encode(hud, TeamHud)))
     retired_frame = root / "commander_frames" / frame.name
@@ -149,9 +149,9 @@ def test_retained_packets_passes_and_channel_move_to_team_names(team_bus):
     assert (root / "commander_updates").is_dir() and not retired.exists()
     assert step.after_acceptance().changed == 2
     assert TeamUpdateStore.for_team(root, teammate).read() == (packet,)
-    carried(SharedTeamFrames, root)
+    carried(SharedTeamBoardPublicationStores, root)
     # A HUD read finds the teammate's own frame before the heartbeat writes another.
-    assert TeamFrame.current(team_bus, "unit-x").teammate == teammate
+    assert TeamBoardPublicationStore.read_for(team_bus, "unit-x").teammate == teammate
     assert not (root / "commander_updates").exists() and not (root / "commander_frames").exists()
     carried_passes = services.read()
     assert set(carried_passes.failing) == {"TeamHeartbeat"}

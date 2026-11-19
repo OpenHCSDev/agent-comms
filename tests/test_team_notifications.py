@@ -82,7 +82,7 @@ from agent_comms.team.standing_rules import (
     UndatedStandingRule,
 )
 from agent_comms.team.team_heartbeat import TeamHeartbeat, TeamObservation
-from agent_comms.team.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, UnreadableUsage
+from agent_comms.team.team_hud import CodexUsage, TeamBoardPublicationStore, TeamHud, TeamPlan, UnreadableUsage
 from agent_comms.team.team_hud_records import Teammate, TeamPhase
 from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.transcript.transcript_events import IncomingTranscript
@@ -163,7 +163,7 @@ def test_heartbeat_delivery_preserves_membership_board_history_and_direct_messag
     again = beat(comms, (rule,))
     assert aged(again.packets[0].handled) == aged(hud.packets[0].handled)
     assert bool(notifications(comms)) is bool(publications)
-    assert TeamFrame.current(comms, "colleague") == again
+    assert TeamBoardPublicationStore.read_for(comms, "colleague") == again
     direct = independent_instruction(comms, "ordinary direct request")
     assert direct.role.counts_as_conversation()
     assert direct.category is InboundCategory
@@ -225,7 +225,7 @@ def test_muted_changed_quiet_display_publishes_once_when_enabled(notification_bu
     muted = beat(comms)
     assert muted.display_facts != first.display_facts
     assert notifications(comms) == (original,)
-    assert TeamFrame.current(comms, "colleague") == muted
+    assert TeamBoardPublicationStore.read_for(comms, "colleague") == muted
     comms.threads.set_heartbeat_delivery("colleague", OnHeartbeatDelivery)
     enabled = beat(comms)
     assert enabled.display_facts == muted.display_facts
@@ -282,7 +282,7 @@ def lead_hud(comms, states=()):
     tests compare its status fields with that publication, and the live account answers a
     second read with whatever its reset clock says by then."""
     return current_hud(comms, "colleague", capture_frame(comms, ProgressRead()), states,
-                       TeamFrame.current(comms, "colleague").usage)
+                       TeamBoardPublicationStore.read_for(comms, "colleague").usage)
 
 
 def assert_status_fields(message, hud):
@@ -297,7 +297,7 @@ def beat(comms, rules=(), *, states=()):
         rules, states)
     # Deliberately construct a fresh watcher on every pass, never reuse a cache.
     asyncio.run(ObservedHeartbeat(observed).run(lambda: nullcontext(comms)))
-    return TeamFrame.current(comms, "colleague")
+    return TeamBoardPublicationStore.read_for(comms, "colleague")
 
 
 def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_stale_selection(
@@ -496,7 +496,7 @@ def test_unchanged_open_alarm_wakes_each_beat_until_a_recorded_action(notificati
     assert isinstance(second.task, TeamDecisions)
     assert second.task.decisions == ()
     assert second.task.handled[0].since == first.task.handled[0].since
-    hud = TeamFrame.current(comms, "colleague")
+    hud = TeamBoardPublicationStore.read_for(comms, "colleague")
     assert hud.board == second.task.board(comms)
     assert len(hud.board) == 1
 
@@ -673,8 +673,8 @@ def test_frame_keeps_original_ping_order_and_folded_idle_records(tmp_path):
         usage=CodexUsage(UnreadableUsage(reason="not requested")),
         packets=(packet,), open_pings=pings,
     )
-    TeamFrame.replace_all(tmp_path, TeamPlan(hud.phases), (hud,))
-    restored, = TeamFrame.read_all(tmp_path)
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(hud.phases), (hud,))
+    restored, = TeamBoardPublicationStore.read_all(tmp_path)
     assert restored == hud
     assert restored.open_pings == pings
     assert restored.board == tuple(ping.board_entry() for ping in pings)
@@ -715,7 +715,7 @@ def test_quiet_completion_is_per_teammate_even_when_a_later_recipient_fails(
     assert len(notifications(comms)) == 2
     # A pass with no board retires the frames and no teammate's completion.
     asyncio.run(ObservedHeartbeat().run(lambda: nullcontext(comms)))
-    assert TeamFrame.read_all(comms.root) == ()
+    assert TeamBoardPublicationStore.read_all(comms.root) == ()
     assert set(ServicePassStore.at(comms.root).read().teammate_completed) == {colleague.incarnation}
     # Only the registry retiring the incarnation drops its completion.
     comms.registry.unregister("colleague")
@@ -746,7 +746,7 @@ def test_recreated_watcher_retains_non_disposable_observation_without_nagging(no
     assert aged(unchanged.task.handled) == aged(first.task.handled)
     assert lead_hud(comms).board == ()
 
-    section, = TeamFrame.current(comms, "colleague").alarms
+    section, = TeamBoardPublicationStore.read_for(comms, "colleague").alarms
     assert section.group is WatchingAlarms
     assert tuple(ping.text for ping in section.pings) == (failing.line(),)
 
@@ -798,11 +798,11 @@ def test_rule_packets_compact_new_lines_keep_originals_then_repeat_without_a_new
     beat(comms, rules)
     _, unchanged = notifications(comms)
     assert isinstance(unchanged.task, TeamUpdateNotice)
-    assert TeamFrame.current(comms, "colleague").board == ()
+    assert TeamBoardPublicationStore.read_for(comms, "colleague").board == ()
     # Changed diagnostic wording is visible but not another failed occurrence.
     beat(comms, tuple(replace(rule, error="new diagnostic detail") for rule in rules))
     assert len(notifications(comms)) == 3
-    changed = TeamFrame.current(comms, "colleague")
+    changed = TeamBoardPublicationStore.read_for(comms, "colleague")
     assert aged(changed.packets[0].handled) == aged(first.task.handled)
     assert all("new diagnostic detail" in ping.text for ping in changed.packets[0].handled)
 
@@ -917,7 +917,7 @@ def test_a_frame_this_reader_cannot_decode_reaches_the_page_not_the_observer(not
     comms = notification_bus
     reading = ObserveTeamHud().observation()
     beat(comms, states=state_cards(comms, TeammateState))
-    frame, = TeamFrame.matching_in(comms.root)
+    frame, = TeamBoardPublicationStore.matching_in(comms.root)
     written = json.loads(frame.read_text())
     frame.write_text(json.dumps({**written, "field_from_a_newer_build": []}))
     unreadable, = reading.read(comms, comms.views.revision())
@@ -927,7 +927,7 @@ def test_a_frame_this_reader_cannot_decode_reaches_the_page_not_the_observer(not
     assert "field_from_a_newer_build" in str(unreadable.error)
     beat(comms, states=state_cards(comms, TeammateState))
     recovered, = reading.read(comms, comms.views.revision())
-    assert pickle.loads(pickle.dumps(recovered)).huds == TeamFrame.read_all(comms.root)
+    assert pickle.loads(pickle.dumps(recovered)).huds == TeamBoardPublicationStore.read_all(comms.root)
 
 
 @dataclass
@@ -1048,7 +1048,7 @@ def test_failed_quiet_publication_retries_identical_display_until_committed(noti
     with refused_publication(comms), pytest.raises(HumanSendRefusedError):
         beat(comms)
     owner = comms.registry.require("colleague").incarnation
-    unsent = TeamFrame.current(comms, "colleague")
+    unsent = TeamBoardPublicationStore.read_for(comms, "colleague")
     assert first_hud.display_facts != unsent.display_facts
     assert TeamUpdate.latest(comms, owner) == unsent.packets
     assert TeamUpdate.published(comms, owner) == (first.task,)
@@ -1171,7 +1171,7 @@ def test_a_closed_session_leaves_the_board_for_the_live_teammates(notification_b
                                     error="independent source", failed_at=time.time()),))
     worker = comms.registry.require("worker").incarnation
     assert TeamUpdate.latest(comms, worker)
-    assert TeamFrame.current(comms, "worker").teammate == worker
+    assert TeamBoardPublicationStore.read_for(comms, "worker").teammate == worker
 
 
 def test_one_pass_gives_every_team_its_own_packet(notification_bus):
@@ -1200,7 +1200,7 @@ def test_one_pass_gives_every_team_its_own_packet(notification_bus):
     served = (lead_packet.teammate, worker, outsider)
     assert set(ServicePassStore.at(comms.root).read().teammate_completed) == set(served)
     for recipient in served:
-        hud = TeamFrame.current(comms, recipient.name)
+        hud = TeamBoardPublicationStore.read_for(comms, recipient.name)
         assert hud.teammate == recipient
         assert hud.packets == TeamUpdate.latest(comms, recipient)
         assert len(notifications(comms, recipient.name)) == 1
@@ -1212,7 +1212,7 @@ def test_one_pass_gives_every_team_its_own_packet(notification_bus):
         assert isinstance(quiet.task, TeamUpdateNotice)
         assert quiet.task.teammate == recipient
         assert aged(quiet.task.handled) == aged(first.task.handled)
-        assert TeamFrame.current(comms, recipient.name).packets == (quiet.task,)
+        assert TeamBoardPublicationStore.read_for(comms, recipient.name).packets == (quiet.task,)
 
 
 def test_fork_cli_inherits_channels_without_a_rank_exception(notification_bus):

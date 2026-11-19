@@ -40,6 +40,37 @@ def test_unbuilt_pin_is_native_pi_unavailable_and_names_its_preparation(tmp_path
         native_package.pinned_native_package()
 
 
+def test_native_resource_donor_is_the_manifest_pinned_package(tmp_path, monkeypatch):
+    deployments = tmp_path / "deployments"
+    manifest = deployments / "pi-native.sha256"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("pinned native package\n")
+    monkeypatch.setattr(native_package, "MANIFEST", manifest)
+    fence = Path("dist/agent-comms-import-fence.mjs")
+    pinned = native_package.pinned_package_for(manifest)
+    others = tuple(
+        deployments / name / native_package.PACKAGE_LAYOUT
+        for name in (".pi-native-0000", ".pi-native-ffff")
+    )
+    for package in (pinned, *others):
+        imported = package / fence
+        imported.parent.mkdir(parents=True)
+        imported.write_bytes(b"fence")
+        imported.chmod(0o444)
+        package.chmod(0o555)
+    root = tmp_path / "new"
+    target = root / fence
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"fence")
+    assert native_package.pinned_resource_donor(
+        root, deployments, fence, b"fence"
+    ) == pinned
+    manifest.write_text("another accepted package\n")
+    assert native_package.pinned_resource_donor(
+        root, deployments, fence, b"fence"
+    ) is None
+
+
 def test_pinned_inputs_refuse_changed_patch(tmp_path):
     stack = tmp_path / "stack"
     (stack / "native").mkdir(parents=True)

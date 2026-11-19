@@ -96,7 +96,7 @@ from agent_comms.registry.threads import Thread
 from agent_comms.storage.file_observation import FileRevision
 from agent_comms.storage.locked_store import GoalWakeFile
 from agent_comms.storage.storage_room import RoomLedger
-from agent_comms.team.team_frame_file import TeamFrameFile
+from agent_comms.team.team_frame_file import TeamBoardFile
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.ui_model.unread import (
     ExactUnread,
@@ -618,7 +618,7 @@ class WireRevision(ReadState, ToolResult):
     ]
     team_frames: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: TeamFrameFile.source_paths(views.root), RetainedTeamFramesView),
+        *revision_source(lambda views: TeamBoardFile.source_paths(views.root), RetainedTeamFramesView),
     ]
     # Activity-derived views change once per expiry period, not per tick.
     expiry_tick: Annotated[

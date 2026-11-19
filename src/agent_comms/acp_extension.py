@@ -28,7 +28,7 @@ from agent_comms.execution.owner_protocol import IncompatibleOwner
 from agent_comms.execution.pi_wire import McpLiveAcknowledgement
 from agent_comms.execution.queue_publication import QueuePublication
 from agent_comms.execution.reported_turn import ReportedTurn, ReportedTurnState
-from agent_comms.execution.transcript_sources import DraftRow, TranscriptCursor
+from agent_comms.execution.transcript_sources import DraftFold, TranscriptCursor
 from agent_comms.execution.turn_context import ContextManifest
 from agent_comms.execution.turn_inbox import SendNow, TurnInbox
 from agent_comms.execution.turn_lease import TurnState
@@ -485,14 +485,14 @@ class TranscriptDraftUpdate(AgentCommsUpdate):
     """Current draft beside an unchanged, already published transcript page."""
 
     identity: TranscriptReadIdentity
-    draft: DraftRow | NoDraft
+    draft: DraftFold | NoDraft
 
 
 @dataclass(frozen=True)
 class TranscriptSnapshotUpdate(AgentCommsUpdate, ToolResult):
     page: TranscriptPage
     identity: TranscriptReadIdentity
-    draft: DraftRow | NoDraft = NoDraft()
+    draft: DraftFold | NoDraft = NoDraft()
 
     @classmethod
     def from_read(cls, read: TranscriptRead) -> Self:

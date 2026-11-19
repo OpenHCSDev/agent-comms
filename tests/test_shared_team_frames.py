@@ -33,9 +33,9 @@ from agent_comms.team.team_hud import (
     AllTeamBoards,
     CodexUsage,
     NamedTeamBoards,
+    TeamBoardPublication,
+    TeamBoardPublicationStore,
     TeamBoardSelection,
-    TeamFrame,
-    TeamFramesDocument,
     TeamHud,
     TeamHudRecord,
     TeamPlan,
@@ -101,12 +101,12 @@ def test_one_snapshot_preserves_every_recipient_and_encodes_each_ping_once(tmp_p
         calls.append(id(value))
         return encode(cls, value, encoding)
     monkeypatch.setattr(Ping, "encode_shared", classmethod(counted))
-    TeamFrame.replace_all(tmp_path, TeamPlan(), original)
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original)
     assert len(calls) == len(set(calls)) == 2
-    assert len(TeamFrame.matching_in(tmp_path)) == 1
-    assert values(TeamFrame.read_all(tmp_path)) == expected
+    assert len(TeamBoardPublicationStore.matching_in(tmp_path)) == 1
+    assert values(TeamBoardPublicationStore.read_all(tmp_path)) == expected
     for item in original:
-        assert values((TeamFrame.at(tmp_path, item.teammate).read(),)) == values((item,))
+        assert values((TeamBoardPublicationStore.read_cut(tmp_path, NamedTeamBoards(frozenset((item.teammate.name,)))).huds[0],)) == values((item,))
     assert original[0].open_pings[0].text != original[0].open_pings[1].text
     # Public encoding is still detached from the Ping's private cached representation.
     public = Ping.encode(original[0].open_pings[0])
@@ -116,7 +116,7 @@ def test_one_snapshot_preserves_every_recipient_and_encodes_each_ping_once(tmp_p
     captured[0]["open_pings"][0]["subjects"].clear()
     captured[0]["open_pings"][0]["text"] = "another caller edit"
     assert Ping.encode(original[0].open_pings[0])["text"] != "another caller edit"
-    assert values(TeamFrame.read_all(tmp_path)) == expected
+    assert values(TeamBoardPublicationStore.read_all(tmp_path)) == expected
 
 
 @pytest.mark.parametrize("selection, names", [
@@ -128,7 +128,7 @@ def test_one_snapshot_preserves_every_recipient_and_encodes_each_ping_once(tmp_p
 ])
 def test_selected_frames_decode_only_requested_recipients(tmp_path, monkeypatch, selection, names):
     original = huds()
-    TeamFrame.replace_all(tmp_path, TeamPlan(), original)
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original)
     selection = FieldCodec.decode(TeamBoardSelection, FieldCodec.encode(selection, TeamBoardSelection))
     decoded = []
     construct = FieldCodec.construct
@@ -139,16 +139,28 @@ def test_selected_frames_decode_only_requested_recipients(tmp_path, monkeypatch,
         return construct(annotation, raw)
 
     monkeypatch.setattr(FieldCodec, "construct", counted)
-    selected = TeamFrame.read_all(tmp_path, selection)
+    selected = TeamBoardPublicationStore.read_all(tmp_path, selection)
     assert tuple(hud.teammate.name for hud in selected) == names
     assert len(decoded) == len(names)
     assert values(selected) == values(tuple(hud for hud in original if hud.teammate.name in names))
 
 
+def test_atomic_publication_names_only_the_changed_recipient(tmp_path):
+    original = huds()
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original)
+    first = TeamBoardPublicationStore.read_cut(tmp_path)
+    assert first.changed == frozenset(hud.teammate for hud in original)
+    changed = replace(original[0], packets=(), open_pings=())
+    TeamBoardPublicationStore.write_all(tmp_path, (changed,))
+    second = TeamBoardPublicationStore.read_cut(tmp_path)
+    assert second.changed == frozenset((changed.teammate,))
+    assert values(second.huds) == values((changed, *original[1:]))
+
+
 def test_shared_board_decodes_each_original_ping_once_and_detaches_every_membership(tmp_path, monkeypatch):
     original = huds()
     expected = values(original)
-    TeamFrame.replace_all(tmp_path, TeamPlan(), original)
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original)
     calls = []
     decode = Ping.from_wire.__func__
 
@@ -157,7 +169,7 @@ def test_shared_board_decodes_each_original_ping_once_and_detaches_every_members
         return decode(cls, raw)
 
     monkeypatch.setattr(Ping, "from_wire", classmethod(counted))
-    restored = TeamFrame.read_all(tmp_path)
+    restored = TeamBoardPublicationStore.read_all(tmp_path)
     assert len(calls) == 2
     first = restored[0].open_pings[0]
     assert first is not restored[0].packets[0].handled[0]
@@ -182,35 +194,37 @@ def test_combined_board_selection_keeps_every_visible_page_and_full_board():
 
 def test_partial_and_full_passes_keep_their_actual_membership_and_old_cuts(tmp_path):
     original = huds()
-    TeamFrame.replace_all(tmp_path, TeamPlan(), original)
-    path = TeamFrame.path_in(tmp_path)
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original)
+    path = TeamBoardPublicationStore.path_in(tmp_path)
     before = path.read_bytes()
-    assert TeamFrame.write_all(tmp_path, ()) == frozenset()
+    assert TeamBoardPublicationStore.write_all(tmp_path, ()) == frozenset()
     assert path.read_bytes() == before
     changed = replace(original[0], packets=(), open_pings=())
-    TeamFrame.write_all(tmp_path, (changed,))
-    assert values(TeamFrame.read_all(tmp_path)) == values((changed, *original[1:]))
-    TeamFrame.replace_all(tmp_path, TeamPlan(), (changed,))
-    assert values(TeamFrame.read_all(tmp_path)) == values((changed,))
-    with pytest.raises(BoardUnavailable):
-        TeamFrame.at(tmp_path, original[1].teammate).read()
+    TeamBoardPublicationStore.write_all(tmp_path, (changed,))
+    assert values(TeamBoardPublicationStore.read_all(tmp_path)) == values((changed, *original[1:]))
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), (changed,))
+    assert values(TeamBoardPublicationStore.read_all(tmp_path)) == values((changed,))
+    with pytest.raises(IndexError):
+        TeamBoardPublicationStore.read_cut(tmp_path, NamedTeamBoards(frozenset((original[1].teammate.name,)))).huds[0]
     replacement = replace(changed, teammate=replace(changed.teammate, created_at=9.0))
-    TeamFrame.replace_all(tmp_path, TeamPlan(), (replacement,))
-    with pytest.raises(BoardUnavailable):
-        TeamFrame.at(tmp_path, changed.teammate).read()
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), (replacement,))
+    selected = TeamBoardPublicationStore.read_cut(
+        tmp_path, NamedTeamBoards(frozenset((changed.teammate.name,)))
+    ).huds[0]
+    assert selected.teammate == replacement.teammate
 
 
 def test_a_failed_atomic_publication_keeps_the_previous_complete_snapshot(tmp_path, monkeypatch):
     original = huds()
-    TeamFrame.replace_all(tmp_path, TeamPlan(), original)
-    before = TeamFrame.path_in(tmp_path).read_bytes()
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original)
+    before = TeamBoardPublicationStore.path_in(tmp_path).read_bytes()
     def failed(self, text):
         raise OSError("staging failed")
-    monkeypatch.setattr(TeamFramesDocument, "_write_unlocked", failed)
+    monkeypatch.setattr(TeamBoardPublicationStore, "_publish_unlocked", failed)
     with pytest.raises(OSError, match="staging failed"):
-        TeamFrame.replace_all(tmp_path, TeamPlan(), original[:1])
-    assert TeamFrame.path_in(tmp_path).read_bytes() == before
-    assert values(TeamFrame.read_all(tmp_path)) == values(original)
+        TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original[:1])
+    assert TeamBoardPublicationStore.path_in(tmp_path).read_bytes() == before
+    assert values(TeamBoardPublicationStore.read_all(tmp_path)) == values(original)
 
 
 def test_flat_frames_carry_once_without_advancing_an_existing_recipient(tmp_path):
@@ -220,13 +234,13 @@ def test_flat_frames_carry_once_without_advancing_an_existing_recipient(tmp_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(FieldCodec.encode(item, TeamHudRecord)))
     step = SharedTeamFrames(LiveFilesRequest(tmp_path), tmp_path / "spill")
-    assert TeamFrame.path_in(tmp_path) in step.input_files()
+    assert TeamBoardPublicationStore.path_in(tmp_path) in step.input_files()
     assert step.carry(apply=False).changed == 3
-    assert not TeamFrame.path_in(tmp_path).exists()
+    assert not TeamBoardPublicationStore.path_in(tmp_path).exists()
     changed = replace(original[0], packets=(), open_pings=())
-    TeamFrame.replace_all(tmp_path, TeamPlan(), (changed,))
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), (changed,))
     assert step.carry(apply=True).changed == 3
-    assert values(TeamFrame.read_all(tmp_path)) == values((changed, *original[1:]))
+    assert values(TeamBoardPublicationStore.read_all(tmp_path)) == values((changed, *original[1:]))
     assert not FlatTeamFrameFile.matching_in(tmp_path)
     assert step.carry(apply=False).changed == 0
 
@@ -241,12 +255,12 @@ def test_invalid_graph_references_fail_at_the_typed_boundary(document):
 def test_last_recipient_cut_and_duplicate_stored_roots(tmp_path):
     original = huds()
     latest = replace(original[0], packets=(), open_pings=())
-    TeamFramesDocument(TeamFrame.path_in(tmp_path)).publish((*original, latest))
-    assert values(TeamFrame.read_all(tmp_path)) == values((latest, *original[1:]))
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), (*original, latest))
+    assert values(TeamBoardPublicationStore.read_all(tmp_path)) == values((latest, *original[1:]))
     invalid = SharedJson.of((original[0], latest), tuple[TeamHudRecord, ...])
-    TeamFrame.path_in(tmp_path).write_text(FieldCodec.compact(FieldCodec.encode(invalid)))
+    TeamBoardPublicationStore.path_in(tmp_path).write_text(FieldCodec.compact(FieldCodec.encode(TeamBoardPublication(TeamPlan(), invalid), TeamBoardPublication)))
     with pytest.raises(MalformedRecord, match="repeats a recipient"):
-        TeamFrame.read_all(tmp_path)
+        TeamBoardPublicationStore.read_all(tmp_path)
 
 
 def test_shared_capture_retains_inline_fields_fixed_tuples_sets_and_custom_values():
@@ -283,22 +297,22 @@ def test_shared_json_keeps_scalar_types_signed_zero_and_inline_custom_shapes():
         JsonCapture().capture(cycle)
 
 
-def test_one_recipient_decodes_only_its_board_and_checks_every_identity(tmp_path, monkeypatch):
+def test_one_recipient_decodes_only_its_board_and_checks_every_identity(tmp_path):
     original = huds()
-    TeamFrame.replace_all(tmp_path, TeamPlan(), original)
-    decoded = []
-    decode = FieldCodec.decode
-
-    def counted(target, data):
-        if target is TeamHud:
-            decoded.append(target)
-        return decode(target, data)
-
-    monkeypatch.setattr(FieldCodec, "decode", counted)
-    selected = TeamFrame.at(tmp_path, original[1].teammate).read()
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original)
+    selected = TeamBoardPublicationStore.read_cut(
+        tmp_path, NamedTeamBoards(frozenset((original[1].teammate.name,)))
+    ).huds[0]
     assert values((selected,)) == values((original[1],))
-    assert decoded == [TeamHud]
-    invalid = SharedJson.of((original[0], original[0]), tuple[TeamHudRecord, ...])
-    TeamFrame.path_in(tmp_path).write_text(FieldCodec.compact(FieldCodec.encode(invalid)))
+    invalid = SharedJson.of(
+        (original[0], original[0]), tuple[TeamHudRecord, ...]
+    )
+    TeamBoardPublicationStore.path_in(tmp_path).write_text(FieldCodec.compact(
+        FieldCodec.encode(
+            TeamBoardPublication(TeamPlan(), invalid), TeamBoardPublication
+        )
+    ))
     with pytest.raises(MalformedRecord, match="repeats a recipient"):
-        TeamFrame.at(tmp_path, original[0].teammate).read()
+        TeamBoardPublicationStore.read_cut(
+            tmp_path, NamedTeamBoards(frozenset((original[0].teammate.name,)))
+        )

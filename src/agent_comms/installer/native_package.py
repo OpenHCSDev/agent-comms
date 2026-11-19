@@ -276,62 +276,70 @@ def package_tree_digest(root: Path) -> str:
     return inventory.digest.hexdigest()
 
 
-def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:
-    """Share a new package's read-only file inodes before final directory sealing.
+def pinned_resource_donor(
+    root: Path, deployments: Path, fence: Path, current_fence: bytes
+) -> Path | None:
+    """Use only the previously accepted package named by the source manifest."""
+    try:
+        package = pinned_native_package()
+    except NativePackageMissing:
+        return None
+    deployment = package.parents[2]
+    imported = package / fence
+    if (
+        deployment.parent.resolve() != deployments.resolve()
+        or package == root
+        or package.is_symlink()
+        or package.lstat().st_mode & 0o222
+        or not imported.is_file()
+        or imported.is_symlink()
+        or imported.lstat().st_mode & 0o222
+        or imported.read_bytes() != current_fence
+    ):
+        return None
+    return package
 
-    The existing build lifetime calls this only after every patch. Old handed
-    packages have a different import fence and are never changed or borrowed.
-    No donor metadata becomes authority: every shared byte/mode must equal the
-    already built resource, and the resulting tree still requires its own pin.
-    """
+
+def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:
     root = root.resolve(strict=True)
     package_tree_digest(root)
     fence = Path("dist/agent-comms-import-fence.mjs")
     current_fence = (root / fence).read_bytes()
-    donors = []
-    for deployment in sorted(deployments.glob(".pi-native-*")):
-        donor = deployment / "node_modules/@earendil-works/pi-coding-agent"
-        candidate = donor / fence
-        if not candidate.is_file() or candidate.is_symlink() or donor == root:
-            continue
-        info = candidate.lstat()
-        if info.st_mode & 0o222 or candidate.read_bytes() != current_fence:
-            continue
-        # Reject all foreign, mutable-shared and aliased filesystem shapes before
-        # any resource borrow. This remains content verification, not a cache.
+    donor = pinned_resource_donor(root, deployments, fence, current_fence)
+    if donor is not None:
         package_tree_digest(donor)
-        donors.append(donor)
     shared_files = shared_bytes = 0
     for path in sorted(root.rglob("*")):
         before = path.lstat()
         if not stat.S_ISREG(before.st_mode):
             continue
         path.chmod(stat.S_IMODE(before.st_mode) & ~0o222)
-        for donor in donors:
-            source = donor / path.relative_to(root)
-            if not source.is_file() or source.is_symlink():
-                continue
-            observed = source.lstat()
-            if observed.st_mode & 0o222 or observed.st_dev != before.st_dev:
-                continue
-            if observed.st_size != before.st_size or observed.st_mode & 0o111 != before.st_mode & 0o111:
-                continue
-            if source.read_bytes() != path.read_bytes():
-                continue
-            # The build owns this unpublished path. Create the replacement first;
-            # failure cannot discard its independent compiled resource.
-            replacement = path.with_name(path.name + ".sharing")
-            if not Platform.current().share_file(source, replacement):
-                continue
-            try:
-                if replacement.read_bytes() != path.read_bytes():
-                    raise NativePackageError("Native resource changed while sharing")
-                os.replace(replacement, path)
-            finally:
-                replacement.unlink(missing_ok=True)
-            shared_files += 1
-            shared_bytes += before.st_size
-            break
+        if donor is None:
+            continue
+        source = donor / path.relative_to(root)
+        if not source.is_file() or source.is_symlink():
+            continue
+        observed = source.lstat()
+        if observed.st_mode & 0o222 or observed.st_dev != before.st_dev:
+            continue
+        if (
+            observed.st_size != before.st_size
+            or observed.st_mode & 0o111 != before.st_mode & 0o111
+        ):
+            continue
+        if source.read_bytes() != path.read_bytes():
+            continue
+        replacement = path.with_name(path.name + ".sharing")
+        if not Platform.current().share_file(source, replacement):
+            continue
+        try:
+            if replacement.read_bytes() != path.read_bytes():
+                raise NativePackageError("Native resource changed while sharing")
+            os.replace(replacement, path)
+        finally:
+            replacement.unlink(missing_ok=True)
+        shared_files += 1
+        shared_bytes += before.st_size
     package_tree_digest(root)
     return {"shared_files": shared_files, "shared_content_bytes": shared_bytes}
 

@@ -122,11 +122,12 @@ from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_presentation import ThreadPresentation
 from agent_comms.registry.view_unread import ReplyIndexResult
-from agent_comms.team.team_heartbeat import TeamBoardRead
+from agent_comms.team.team_heartbeat import TeamBoardAcquisition
 from agent_comms.team.team_hud import (
     AllTeamBoards,
+    TeamBoardCut,
+    TeamBoardPublicationStore,
     TeamBoardSelection,
-    TeamFrame,
     TeamHud,
     TeamPlan,
 )
@@ -970,99 +971,47 @@ class StopTeamHud(TaggedRecordMember, ObservationRequest):
 
 @dataclass(frozen=True)
 class RetainedTeamFrames:
-    """Before this reading prepares a board, the page sees the heartbeat's retained frames."""
+    """The heartbeat's retained atomic publication for one reader selection."""
 
     selection: TeamBoardSelection
 
-    def prepared(self, revision: ReadState, huds: tuple[TeamHud, ...]) -> RetainedTeamFrames:
-        """No prepared recipient supplies a replacement for the retained publication."""
-        return PreparedTeamBoard(self.selection, revision, huds) if huds else RetainedTeamFrames(self.selection)
-
-    def observed(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
+    def observed(
+        self,
+        comms: Comms,
+        revision: WireRevision,
+    ) -> Generator[ObservationStep]:
         yield UnreadableHistory.outcome(
-            lambda: TeamHudObserved(revision, TeamFrame.read_all(comms.root, self.selection)),
+            lambda: TeamHudObserved(
+                revision,
+                TeamBoardPublicationStore.read_cut(comms.root, self.selection),
+            ),
         ).answer(
             lambda observed: observed,
-            lambda error: ObservationStep(),  # Keep the interest until its source can be read.
+            lambda error: ObservationStep(),
             lambda error: TeamHudUnreadable(revision, error),
-            lambda error: ObservationStep(),  # Bounds-free: only a frame replaced under both reads.
+            lambda error: ObservationStep(),
         )
 
 
-@dataclass(frozen=True)
-class PreparedTeamBoard(RetainedTeamFrames):
-    """The board this reading derived: the page sees it until the next one is prepared."""
+class TeamHudReading(ReadingObservation[ObserveTeamHud]):
+    """Read the heartbeat publication; views never acquire the board themselves."""
 
-    revision: ReadState
-    huds: tuple[TeamHud, ...]
+    view = RetainedTeamFramesView()
 
-    def observed(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
-        if revision.changed_since(RetainedTeamFramesView(), self.revision):
-            yield from super().observed(comms, revision)
-        else:
-            yield TeamHudObserved(revision, self.huds)
+    def prepare(
+        self,
+        comms: Comms,
+        revision: WireRevision,
+    ) -> Generator[ObservationStep]:
+        """Consume the root-owned atomic publication for this selection."""
+        return RetainedTeamFrames(self.request.selection).observed(comms, revision)
 
-
-class TeamHudReading(TeamBoardRead, ReadingObservation[ObserveTeamHud]):
-    """Serve held frames immediately; prepare changed stores outside the service loop.
-
-    The prepared board is this view's own: it is held here and published, never written back
-    into the heartbeat's retained frames, which have one writer."""
-
-    view = TeamFramesView()
-
-    def __init__(self, request: ObserveTeamHud):
-        super().__init__(request=request)
-        self.preparation: set[asyncio.Task[None]] = set()
-        self.prepared_revision: ReadState = NoRevision()
-        self.board: RetainedTeamFrames = RetainedTeamFrames(request.selection)
-
-    def close(self) -> None:
-        super().close()
-        for task in tuple(self.preparation):
-            task.cancel()
-
-    def after_read(self, service: ObservationService) -> None:
-        if self.preparation or not service.revision.changed_since(
-            TeamBoardView(), self.prepared_revision,
-        ):
-            return
-        self.prepared_revision = service.revision
-        task = service.tasks.create_task(self.prepare(service))
-        self.preparation.add(task)
-        task.add_done_callback(self.preparation.discard)
-
-    async def prepare(self, service: ObservationService) -> None:
-        """Preparation can retire with the service; it publishes only to this view.
-
-        The board is read through the stored-read owner ``read`` uses: a deferred or reloading
-        read prepares again on the next look, an unreadable one reaches the page, and any other
-        failure is a defect and raises."""
-        board = await service.comms.bus.when_open(
-            lambda: self.run_async(partial(
-                self.enter_phase, service.comms.root,
-                partial(UnreadableHistory.outcome, partial(self.read_board, service.comms, self.request.selection)))))
-        await board.answer(
-            partial(self.publish, service),
-            lambda deferred: self.prepare_again(),
-            partial(self.unreadable, service),
-            lambda reload: self.prepare_again(),
-        )
-
-    async def publish(self, service: ObservationService,
-                      board: tuple[TeamPlan, tuple[TeamHud, ...]]) -> None:
-        self.board = self.board.prepared(self.prepared_revision, board[1])
-        service.interest.prepared(self, service)
-
-    async def unreadable(self, service: ObservationService, cause: UnreadableHistory) -> None:
-        service.send(TeamHudUnreadable(service.revision, cause))
-
-    async def prepare_again(self) -> None:
-        """A read that was only deferred has not prepared this revision."""
-        self.prepared_revision = NoRevision()
-
-    def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
-        return self.board.observed(comms, revision)
+    def read(
+        self,
+        comms: Comms,
+        revision: WireRevision,
+    ) -> Generator[ObservationStep]:
+        return self.prepare(comms, revision)
 
 
 @dataclass(frozen=True)
@@ -1819,9 +1768,9 @@ class NotificationsUnreadable(Absorbs, NotificationAnswer):
 
 @dataclass(frozen=True)
 class TeamHudObserved(Observed):
-    """Every beating teammate's newest frame, by teammate name."""
+    """The selected atomic board cut and its publication-owned changes."""
 
-    huds: tuple[TeamHud, ...]
+    cut: TeamBoardCut
 
 
 @dataclass(frozen=True)

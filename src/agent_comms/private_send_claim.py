@@ -39,6 +39,7 @@ from agent_comms.execution.tracked_turn import (
     NO_FOLLOWING_INPUTS,
     NO_NATIVE_OBSERVER,
     NativeObserver,
+    TrackedTurn,
     TrackedTurnSession,
 )
 from agent_comms.execution.turn_context import RenderedInput
@@ -138,80 +139,80 @@ class PrivateSendClaim(FollowingPromptBoundary):
         self.selected.owner.require_running_turn(self.selected.bus._registry)
 
     async def execute(
-        self,
-        execution: PackagedNativeExecution,
-        *,
-        model: SelectedModel,
-        selected_tool_mode: NativeToolMode,
-        observe_event: NativeObserver = NO_NATIVE_OBSERVER,
-        following: FollowingInputs = NO_FOLLOWING_INPUTS,
-    ) -> NativeTurnResult:
-        """Return only live corroborated proof, or settle a proved terminal failure.
+            self,
+            execution: PackagedNativeExecution,
+            *,
+            model: SelectedModel,
+            selected_tool_mode: NativeToolMode,
+            observe_event: NativeObserver = NO_NATIVE_OBSERVER,
+            following: FollowingInputs = NO_FOLLOWING_INPUTS,
+        ) -> NativeTurnResult:
+            """Return only live corroborated proof, or settle a proved terminal failure.
 
         TrackedTurnSession owns the child and tool resources. Its return or exception
         follows cleanup; disconnect and unknown outcomes are never committed here.
         The raw writer keeps the single-use send token after the input is recorded.
         """
-        lease = self.selected.owner.thread.require_turn_lease()
-        startup = NativeStartup(self.selected.bus.bus.path.parent, measurements=self.measurements)
-        def snapshot_registry() -> RegistrySnapshot:
-            with self.measurements.operation("selected_registry_snapshot_worker"):
-                return self.selected.bus._registry.snapshot()
+            lease = self.selected.owner.thread.require_turn_lease()
+            startup = NativeStartup(self.selected.bus.bus.path.parent, measurements=self.measurements)
+            def snapshot_registry() -> RegistrySnapshot:
+                with self.measurements.operation("selected_registry_snapshot_worker"):
+                    return self.selected.bus._registry.snapshot()
 
-        try:
-            with self.measurements.operation("selected_registry_snapshot"):
-                registry = await Coordination.run_worker(snapshot_registry)
-            result = await TrackedTurnSession.execute(
-                execution.native_package,
-                input_id=self.input_id,
-                prompt=self.prompt.text,
-                context_contributions=self.prompt.contributions,
-                worktree=self.selected.owner.thread.worktree.path.absolute(),
-                session=self.session,
-                model=model,
-                thinking_level=self.selected.owner.thread.thinking_level,
-                environment=ProjectRuntimeRequest.native_environment(
-                    self.selected.owner.thread,
-                    self.selected.bus.bus.path.parent, registry,
-                ),
-                ingress=MaintenanceBarrier(self.selected.bus._registry.store.path),
-                startup=startup,
-                selected_tool_mode=selected_tool_mode,
-                observe_event=observe_event,
-                request_observer=partial(
-                    record_request_progress, self.selected.bus.bus.path.parent, lease,
-                ),
-                prompt_send_boundary=self,
-                execution=execution,
-                following=following,
-            )
-        except NativePiTerminalFailure as error:
-            def settle(store: Coordination, terminal: NativePiTerminalFailure[NativeContextProof] = error) -> object:
-                self.verify(store, terminal.context, source_reads)
-                return self.stage.fail_terminal(
-                    store, self.selected.identity, self.input_id, self.token_digest,
-                    terminal.context, terminal.failure,
-                )
-
-            async with self.selected.cursor_delivery.reading() as source_reads:
-                settlement = await Coordination.run_async(self.store_path, settle)
             try:
-                await self.stage.continue_after_failure(settlement, error.failure)
-            except RetryScheduled as retry:
-                raise retry from error
-            raise
-        finally:
-            await Coordination.run_worker(partial(
-                record_acquisition_progress, self.selected.bus.bus.path.parent, lease,
-                self.input_id, self.measurements, startup.native_process,
-                # Copied here, on the loop that changes them, before a worker encodes them.
-                copy.deepcopy(self.selected.cursor_delivery.measurements),
-            ))
-        async with self.selected.cursor_delivery.reading() as source_reads:
-            await Coordination.run_read_async(
-                self.store_path, lambda store: self.verify(store, result.context, source_reads),
-            )
-        return result
+                with self.measurements.operation("selected_registry_snapshot"):
+                    registry = await Coordination.run_worker(snapshot_registry)
+                result = await TrackedTurn.execute(
+                    execution.native_package,
+                    input_id=self.input_id,
+                    prompt=self.prompt.text,
+                    context_contributions=self.prompt.contributions,
+                    worktree=self.selected.owner.thread.worktree.path.absolute(),
+                    session=self.session,
+                    model=model,
+                    thinking_level=self.selected.owner.thread.thinking_level,
+                    environment=ProjectRuntimeRequest.native_environment(
+                        self.selected.owner.thread,
+                        self.selected.bus.bus.path.parent, registry,
+                    ),
+                    ingress=MaintenanceBarrier(self.selected.bus._registry.store.path),
+                    startup=startup,
+                    selected_tool_mode=selected_tool_mode,
+                    observe_event=observe_event,
+                    request_observer=partial(
+                        record_request_progress, self.selected.bus.bus.path.parent, lease,
+                    ),
+                    prompt_send_boundary=self,
+                    execution=execution,
+                    following=following,
+                )
+            except NativePiTerminalFailure as error:
+                def settle(store: Coordination, terminal: NativePiTerminalFailure[NativeContextProof] = error) -> object:
+                    self.verify(store, terminal.context, source_reads)
+                    return self.stage.fail_terminal(
+                        store, self.selected.identity, self.input_id, self.token_digest,
+                        terminal.context, terminal.failure,
+                    )
+
+                async with self.selected.cursor_delivery.reading() as source_reads:
+                    settlement = await Coordination.run_async(self.store_path, settle)
+                try:
+                    await self.stage.continue_after_failure(settlement, error.failure)
+                except RetryScheduled as retry:
+                    raise retry from error
+                raise
+            finally:
+                await Coordination.run_worker(partial(
+                    record_acquisition_progress, self.selected.bus.bus.path.parent, lease,
+                    self.input_id, self.measurements, startup.native_process,
+                    # Copied here, on the loop that changes them, before a worker encodes them.
+                    copy.deepcopy(self.selected.cursor_delivery.measurements),
+                ))
+            async with self.selected.cursor_delivery.reading() as source_reads:
+                await Coordination.run_read_async(
+                    self.store_path, lambda store: self.verify(store, result.context, source_reads),
+                )
+            return result
 
     async def context_committed(
         self, context: NativeContextProof, source_reads: NativeEvidenceScope,

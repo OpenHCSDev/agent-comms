@@ -24,7 +24,14 @@ from agent_comms.task_attachments.team_pings import (
     TeamUpdateStore,
 )
 from agent_comms.team.standing_rules import ServicePassFailing
-from agent_comms.team.team_hud import CodexUsage, TeamFrame, TeamHud, TeamPlan, UnreadableUsage
+from agent_comms.team.team_hud import (
+    CodexUsage,
+    NamedTeamBoards,
+    TeamBoardPublicationStore,
+    TeamHud,
+    TeamPlan,
+    UnreadableUsage,
+)
 from agent_comms.team.vibe_check import OverloadDegradation
 
 
@@ -37,7 +44,7 @@ def carry_bus(comms: Comms, tmp_path: Path) -> Comms:
     now = time.time()
     original = TeamUpdateNotice(colleague, ())
     original.send(comms, ("original quiet publication",))
-    TeamFrame.replace_all(comms.root, TeamPlan(), (TeamHud(
+    TeamBoardPublicationStore.replace_all(comms.root, TeamPlan(), (TeamHud(
         teammate=colleague, units=(), phases=(), forks=(),
         load=OverloadDegradation.from_orders((), 0, 0),
         usage=CodexUsage(UnreadableUsage(reason="carry fixture needs no account")),
@@ -58,7 +65,7 @@ def test_carry_preserves_indexed_failure_and_age_without_rewriting_history(
     comms = carry_bus
     colleague = comms.registry.require("carry-colleague").incarnation
     expected = TeamUpdate.published(comms, colleague)
-    stale, = TeamFrame.at(comms.root, colleague).read().packets
+    stale, = TeamBoardPublicationStore.read_cut(comms.root, NamedTeamBoards(frozenset((colleague.name,)))).huds[0].packets
     assert expected[0].handled and not stale.handled
     store = TeamUpdateStore.for_team(comms.root, colleague)
     step = TeamObservations(LiveFilesRequest(comms.root), tmp_path / "spill")
