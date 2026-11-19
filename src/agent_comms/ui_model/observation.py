@@ -58,7 +58,12 @@ from agent_comms.coordination.errors import (
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError
-from agent_comms.execution.child_process import HelperStart, SpawnedHelper, join_retirement
+from agent_comms.execution.child_process import (
+    HelperStart,
+    ProcessName,
+    SpawnedHelper,
+    join_retirement,
+)
 from agent_comms.execution.launch_root import started
 from agent_comms.history_views import RetiredViews, SidebarCut
 from agent_comms.input_disposition import DeliveryOverview
@@ -2250,6 +2255,9 @@ class ViewerEnd(EncodedConnection):
     receives = ServiceResult
 
 
+OBSERVATION_SERVICE_PROCESS = ProcessName("ac-observation")
+
+
 def serve_encoded(route: CommsRoute, service_socket: socket.socket) -> None:
     """Serve one remote viewer over its socket, decoding only declared records."""
     serve(route, ServiceEnd(service_socket.detach()))
@@ -2257,6 +2265,7 @@ def serve_encoded(route: CommsRoute, service_socket: socket.socket) -> None:
 
 def serve(route: CommsRoute, connection: Connection) -> None:
     """Observe the caller's selected route, including its reviewed native package."""
+    OBSERVATION_SERVICE_PROCESS.publish()
     started()
     try:
         asyncio.run(ObservationService(Comms(route), connection).run())
