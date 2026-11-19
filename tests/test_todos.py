@@ -83,7 +83,7 @@ from agent_comms.planning.pull_requests import PullRequestCommit, PullRequestLin
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import StorageRule
-from agent_comms.projects.work_branches import WorkBranches
+from agent_comms.projects.work_branches import WorkBranchError, WorkBranches
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import CoreWatcherIncarnation
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
@@ -681,6 +681,101 @@ def associations_source(pr_team):
     base = pr_order(pr_team, 'P1')
     facts = StoryFacts.by_problem((f'P{number}' for number in range(1, 129)), ())
     return replace(base, history=BoardTodoHistory(pr_team.root, MappingProxyType(facts)))
+
+
+@pytest.fixture
+def registered_forge_rows(associations_source, monkeypatch):
+    base = associations_source
+    todos = tuple(replace(base, id=f'P{number}', order=replace(base.order,
+        id=OrderId(f'{number:012x}'), pull_requests=(PullRequestLink(base.repo, number),)))
+        for number in range(1, 54))
+    calls = []
+    def query(self, repo, numbers):
+        calls.append((repo, numbers))
+        return tuple(ClosedListedPullRequest(number=number, branch='captured', head='a' * 40,
+            updated='2026-11-19T00:00:00Z', closed_at='2026-11-19T00:00:00Z', base='main',
+            reviewable_times=('2026-11-19T00:00:00Z',)) for number in numbers)
+    monkeypatch.setattr(PullRequests, 'query', query)
+    monkeypatch.setattr(RepositoryName, 'rest', lambda *args: subprocess.CompletedProcess(
+        ('gh',), 0, '', ''))
+    return todos, calls
+
+
+def test_registered_closed_requests_are_queried_in_batches(registered_forge_rows):
+    todos, calls = registered_forge_rows
+    reader = PullRequests(todos)
+    reader.read_open((todos[0].repo, todos[0].repo))
+    for todo in reversed(todos):
+        row, = reader.listed(todo.repo, ClosedListedPullRequest, todo)
+        assert row.number == todo.order.pull_requests[0].number
+        assert row.problems == (todo.id,) and row.orders == (todo.order.id,)
+    assert len(calls) == 3
+    assert tuple(number for repo, numbers in calls for number in numbers) == tuple(range(1, 54))
+    assert all(repo == todos[0].repo and len(numbers) <= reader.query_batch for repo, numbers in calls)
+    assert reader.rows(todos[0].repo, (2, 1, 2)) == (
+        reader.rows(todos[0].repo, (2,))[0], reader.rows(todos[0].repo, (1,))[0],
+        reader.rows(todos[0].repo, (2,))[0])
+    assert len(calls) == 3
+
+
+def test_failed_registered_batch_is_retained_only_for_its_readers(
+        registered_forge_rows, monkeypatch):
+    todos, calls = registered_forge_rows
+    original = PullRequests.query
+    failure = WorkBranchError('The captured forge batch could not be read.')
+    failed = True
+    def query(self, repo, numbers):
+        if failed and 1 in numbers:
+            calls.append((repo, numbers))
+            raise failure
+        return original(self, repo, numbers)
+    monkeypatch.setattr(PullRequests, 'query', query)
+    reader = PullRequests(todos)
+    reader.read_open((todos[0].repo,))
+    for todo in todos[:2]:
+        with pytest.raises(WorkBranchError) as captured:
+            reader.listed(todo.repo, ClosedListedPullRequest, todo)
+        assert captured.value is failure
+    row, = reader.listed(todos[25].repo, ClosedListedPullRequest, todos[25])
+    assert row.number == 26 and len(calls) == 3
+    failed = False
+    fresh = PullRequests(todos)
+    fresh.read_open((todos[0].repo,))
+    row, = fresh.listed(todos[0].repo, ClosedListedPullRequest, todos[0])
+    assert row.number == 1 and len(calls) == 6
+
+
+@pytest.mark.parametrize('failure', (ValueError('Malformed query result'), KeyboardInterrupt()))
+def test_unexpected_query_failure_finishes_its_capture_before_propagating(
+        registered_forge_rows, monkeypatch, failure):
+    todos, calls = registered_forge_rows
+    def query(self, repo, numbers):
+        calls.append((repo, numbers))
+        raise failure
+    monkeypatch.setattr(PullRequests, 'query', query)
+    reader = PullRequests(todos)
+    with pytest.raises(type(failure)) as captured:
+        reader.read_open((todos[0].repo,))
+    assert captured.value is failure
+    with pytest.raises(type(failure)) as captured:
+        reader.rows(todos[0].repo, (1,))
+    assert captured.value is failure and len(calls) == 1
+
+
+def test_missing_registered_row_keeps_its_missing_result(registered_forge_rows, monkeypatch):
+    todos, calls = registered_forge_rows
+    original = PullRequests.query
+    def query(self, repo, numbers):
+        return tuple(row for row in original(self, repo, numbers) if row.number != 17)
+    monkeypatch.setattr(PullRequests, 'query', query)
+    reader = PullRequests(todos)
+    reader.read_open((todos[0].repo,))
+    for _ in range(2):
+        with pytest.raises(KeyError) as captured:
+            reader.rows(todos[0].repo, (17,))
+        assert captured.value.args == ((todos[0].repo, 17),)
+    assert reader.rows(todos[0].repo, (18,))[0].number == 18
+    assert len(calls) == 3
 
 
 def test_associations_preserve_shared_sources_order_identity_and_replacement(associations_source):

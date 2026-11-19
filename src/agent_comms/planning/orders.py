@@ -9,7 +9,7 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from contextvars import copy_context
 from dataclasses import dataclass, field, fields, replace
@@ -929,7 +929,7 @@ class PullRequests(RepositoryReads):
 
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         super().__init__()
-        self._read: dict[tuple[RepositoryName, int], ListedPullRequest] = {}
+        self._read: dict[tuple[RepositoryName, int], Future[dict[tuple[RepositoryName, int], ListedPullRequest]]] = {}
         self._open: dict[RepositoryName, tuple[int, ...]] = {}
         self._worktrees: dict[Path, Mapping[str, tuple[str, ...]]] = {}
         self._todos: dict[str, PullRequestRegistration] = {}
@@ -1058,11 +1058,34 @@ class PullRequests(RepositoryReads):
                 linked.setdefault(number, []).append(candidate)
         return linked
 
-    def rows(self, repo: RepositoryName, numbers: tuple[int, ...]) -> tuple[ListedPullRequest, ...]:
-        missing = tuple(number for number in numbers if (repo, number) not in self._read)
+    def acquire(self, repo: RepositoryName, numbers: tuple[int, ...]) -> None:
+        """Capture each missing batch once; its readers retain its exact result or failure."""
+        missing = tuple(number for number in dict.fromkeys(numbers)
+                        if (repo, number) not in self._read)
         for batch in batched(missing, self.query_batch):
-            self._read.update(((repo, row.number), row) for row in self.query(repo, batch))
-        return tuple(self._read[repo, number] for number in numbers)
+            captured: Future[dict[tuple[RepositoryName, int], ListedPullRequest]] = Future()
+            self._read.update(((repo, number), captured) for number in batch)
+            try:
+                captured.set_result({(repo, row.number): row for row in self.query(repo, batch)})
+            except WorkBranchError as error:
+                captured.set_exception(error)
+            except BaseException as error:
+                captured.set_exception(error)
+                raise
+
+    def rows(self, repo: RepositoryName, numbers: tuple[int, ...]) -> tuple[ListedPullRequest, ...]:
+        self.acquire(repo, numbers)
+        return tuple(self._read[repo, number].result()[repo, number] for number in numbers)
+
+    def prepare_repository(self, repo: RepositoryName) -> None:
+        """Discover open requests, then capture registered closed links in bounded batches.
+
+        An unread linked batch stays unread for only its consumers in this frame. Open
+        discovery still raises here; an individual row raises its original batch failure
+        when requested. A new read owns a new acquisition, never a silent retry.
+        """
+        self.open(repo)
+        self.acquire(repo, tuple(self._linked.get(repo, ())))
 
     def open(self, repo: RepositoryName) -> tuple[UnmergedListedPullRequest, ...]:
         """Discover orderless open identities, then use the same metadata owner as linked PRs."""
@@ -1072,15 +1095,15 @@ class PullRequests(RepositoryReads):
                 raise TodoError(result.stderr.strip() or "Open pull requests could not be read.")
             self._open[repo] = tuple(FieldCodec.decode(int, FieldCodec.parse(line))
                                      for line in result.stdout.splitlines())
-        self.rows(repo, self._open[repo])
-        return tuple(picked for number in self._open[repo]
-                     for picked in self._read[repo, number].as_unmerged())
+        return tuple(picked for row in self.rows(repo, self._open[repo])
+                     for picked in row.as_unmerged())
 
     def read_open(self, repos: Iterable[RepositoryName]) -> None:
         """Each repository's forge round side by side: every call waits on the network and writes
         only its own repository's keys, so one after another only adds their waits."""
         with ThreadPoolExecutor() as calls:
-            tuple(calls.map(lambda repo: copy_context().run(self.open, repo), repos))
+            tuple(calls.map(lambda repo: copy_context().run(self.prepare_repository, repo),
+                            dict.fromkeys(repos)))
 
     def worktrees(self, repository: Repo) -> Mapping[str, tuple[str, ...]]:
         """One canonical local checkout's retained listing, not its forge namesake's."""
@@ -1116,11 +1139,11 @@ class PullRequests(RepositoryReads):
                         carried = review.verdict.carry(goals, review, current, reader)
                     except ToolRefusedError as refused:
                         # One repository's forge refusal is that head's alarm, not every board's.
-                        self._read[repo, row.number] = replace(row, merge_blocks=(
+                        self._read[repo, row.number].result()[repo, row.number] = replace(row, merge_blocks=(
                             *row.merge_blocks, RefusedCarryMergeBlock(row.updated, str(refused))))
                         break
                     if carried:
-                        self._read[repo, row.number] = replace(
+                        self._read[repo, row.number].result()[repo, row.number] = replace(
                             row, status_contexts=(*row.status_contexts, HeadReview.context))
 
     def listed(self, repo: RepositoryName, kind: type[ListedPullRequest],
