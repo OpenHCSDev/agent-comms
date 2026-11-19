@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, NoReturn
 
 from agent_comms.coordination.errors import Refused
 from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.failure_source import FailureSource, UnrecordedFailureSource
 from agent_comms.execution.pi_wire import PiDiagnostic
 from agent_comms.execution.session_updates import AgentCommsUpdate
 from agent_comms.execution.turn_failure import TurnFailure
@@ -38,32 +39,6 @@ if TYPE_CHECKING:
     from agent_comms.agent_events import Done, Error
     from agent_comms.execution.turn_input_source import OriginalTurnInput
     from agent_comms.input_disposition import InputDocument
-    from agent_comms.pi_payloads import NativeMessageFailureSource
-
-
-class FailureSource(DeclaredFamily, affix="FailureSource"):
-    """Native message provenance, distinct from failures without a history source."""
-
-    @property
-    @abstractmethod
-    def retained_in_history(self) -> bool:
-        """Whether feedback belongs to native history, not a local failure notice.
-
-        This declares ownership; it does not claim the journal append has finished.
-        """
-
-    def for_publication(self, text: str, sensitive: bool) -> FailureSource:
-        return self
-
-    def require_native(self) -> NativeMessageFailureSource:
-        raise ValueError("Provider retry ended without its native failure message")
-
-
-@dataclass(frozen=True)
-class UnrecordedFailureSource(FailureSource):
-    @property
-    def retained_in_history(self) -> bool:
-        return False
 
 
 class DeliveryFailure(DeliveryPresentation, DeclaredFamily, affix="Failure"):

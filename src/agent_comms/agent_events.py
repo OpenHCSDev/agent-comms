@@ -14,13 +14,15 @@ from typing import ClassVar
 
 from agent_comms.execution.agent_event import AgentEvent as AgentEvent
 from agent_comms.execution.acp_failure import (
-    FailureSource,
     NativeTurnOutcome,
     NoRetry,
     ProviderRetryResult,
     SuccessfulNativeTurnOutcome,
-    UnrecordedFailureSource,
     UnresolvedNativeTurnOutcome,
+)
+from agent_comms.execution.failure_source import (
+    FailureSource,
+    UnrecordedFailureSource,
 )
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_output import NativeOutputLocation, NativeRecordLocation

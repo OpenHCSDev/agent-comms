@@ -15,12 +15,13 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from pydantic import JsonValue
 
 from agent_comms import agent_events as events
-from agent_comms.execution.acp_failure import ExhaustedRetry, FailureSource, RecoveredRetry
+from agent_comms.execution.acp_failure import ExhaustedRetry, RecoveredRetry
 from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.annotation_disclosure import (
     PublicInstructionAnnotations,
     WithheldAnnotations,
 )
+from agent_comms.execution.failure_source import FailureSource
 from agent_comms.execution.native_file_artifact import NativeFileArtifact
 from agent_comms.execution.native_output import AssistantOutput, NativeOutputScope, ToolOutput
 from agent_comms.execution.native_session_reopen import (
@@ -115,6 +116,9 @@ from agent_comms.transport.tool_result import DeclaredReply
 @dataclass(frozen=True)
 class NativeMessageFailureSource(FailureSource):
     message: AssistantMessage
+
+    def diagnostic_evidence(self) -> dict[str, object]:
+        return {"diagnostics": [item.to_wire() for item in self.message.diagnostics]}
 
     def require_native(self) -> NativeMessageFailureSource:
         return self

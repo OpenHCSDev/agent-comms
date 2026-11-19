@@ -2,23 +2,24 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
 from agent_comms import agent_events as events
 from agent_comms.execution.acp_failure import (
-    FailureSource,
     NoRetry,
     ProviderRetryResult,
+)
+from agent_comms.execution.failure_source import (
+    FailureSource,
     UnrecordedFailureSource,
 )
 from agent_comms.execution.native_arguments import SelectedModel
+from agent_comms.execution.native_failures import NativeRequestFailure
 from agent_comms.execution.native_session_callbacks import (
     NativeSessionCallbacks,
     SessionOutputCallbacks,
 )
 from agent_comms.execution.pi_wire import PiDiagnostic
 from agent_comms.execution.turn_failure import NoTurnFailure, TurnFailure
-from agent_comms.execution.turn_failure_reads import TerminalOutputRead
 from agent_comms.pi_payloads import AssistantMessage, NativeMessageFailureSource
 
 
@@ -61,7 +62,7 @@ class TurnOutput(SessionOutputCallbacks):
         self._failed_message_source = NativeMessageFailureSource(message)
 
     @property
-    def native_failure_source(self) -> NativeMessageFailureSource:
+    def native_failure_source(self) -> FailureSource:
         return self._failed_message_source.require_native()
 
     def record_failure(self, failure: TurnFailure) -> None:
@@ -84,7 +85,12 @@ class TurnOutput(SessionOutputCallbacks):
         self.record_failure(failure)
 
     def raise_if_failed(self, proof, model: SelectedModel) -> None:
-        self.declared_failure.raise_native(proof, model)
+        try:
+            self.declared_failure.raise_native(proof, model)
+        except NativeRequestFailure as error:
+            error.native_source = self._failed_message_source.for_publication(
+                self.redact(self.failure_text), self.sensitive)
+            raise
 
     @property
     def declared_failure(self) -> TurnFailure:
