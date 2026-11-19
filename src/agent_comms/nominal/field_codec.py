@@ -2004,7 +2004,7 @@ class RecordTag(MroDispatch):
         return {}
 
 
-class RecordMember(WireValue):
+class RecordMember(ExternalJsonShape, WireValue):
     """A wire union's record case uses the declared record codec."""
 
     @classmethod
