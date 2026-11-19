@@ -3800,13 +3800,24 @@ class VerdictAudience:
         direct = len(self.threads) == 1 and self.threads[0] != sender
         return CommandTarget.named(self.threads[0] if direct else CommsTag.channel())
 
+    def deliveries(self, goals: ProblemGoals, sender: str, text: str) -> tuple[tuple[NamedTarget, str], ...]:
+        """Keep the public verdict and directly notify named threads outside its actual reach."""
+        target = self.target_from(sender)
+        snapshot = goals.registry.snapshot()
+        _, _, recipients = target.initial_delivery(
+            sender, Message(sender=sender, target=target.name, body=text, type=InfoKind),
+            snapshot, goals.bus.require_channel)
+        reached = {sender, *recipients, *target.direct_names}
+        named = tuple(dict.fromkeys(snapshot.canonical_name(name) for name in self.threads))
+        return ((target, target.addressed(tuple(name for name in named if name in reached), text)),
+                *((CommandTarget.named(name), text) for name in named if name not in reached))
+
     def publish(self, goals: ProblemGoals, actor: ThreadIncarnation, text: str) -> None:
-        target = self.target_from(actor.name)
-        goals.bus.publisher.publish_ordinary(
-            Message(sender=actor.name, target=target.name,
-                    body=target.addressed(self.threads, text), type=InfoKind),
-            destination=target, origin=AgentOrigin(),
-        )
+        for target, body in self.deliveries(goals, actor.name, text):
+            goals.bus.publisher.publish_ordinary(
+                Message(sender=actor.name, target=target.name, body=body, type=InfoKind),
+                destination=target, origin=AgentOrigin(),
+            )
 
 
 @dataclass(frozen=True)

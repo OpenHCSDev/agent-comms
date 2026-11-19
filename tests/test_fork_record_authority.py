@@ -136,7 +136,7 @@ def test_a_fork_whose_record_is_a_head_verdict_may_stop(fork_bus):
 def test_a_task_notification_is_never_owner_words():
     header = ClaudeUserHeader.model_validate(
         {"type": "user", "promptId": "p", "origin": {"kind": TaskNotification.declared_name}})
-    assert header.record_type() == TaskUserRecord.declared_name
+    assert header.record_type() is TaskUserRecord
     text = "<task-notification><task-id>x</task-id></task-notification>"
     assert TaskNotification(kind=TaskNotification.declared_name).owner_words(text) == ()
     assert HumanPrompt().owner_words("ship it") == ("ship it",)
