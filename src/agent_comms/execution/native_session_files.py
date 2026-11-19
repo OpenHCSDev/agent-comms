@@ -345,6 +345,16 @@ class Gpt56SolCompactionPolicy(
         )
 
 
+class NativeAgentSettingsFileRole(PrivateFileRole):
+    """Pi's owner-written settings file inside its private agent directory."""
+
+    @classmethod
+    def accepts_permissions(cls, observed: os.stat_result) -> bool:
+        # Pi writes settings as 0644. The enclosing 0700 agent directory owns
+        # privacy; the file itself must still refuse writes by another user.
+        return not bool(observed.st_mode & 0o022)
+
+
 class NativeAgentSettings(DurableFile, PatternFile):
     """Pi's SettingsManager writes this file in the session's private agent directory."""
 
@@ -380,14 +390,13 @@ class NativeAgentSettings(DurableFile, PatternFile):
 
     @staticmethod
     def _read(path: Path) -> dict[str, object]:
-        try:
-            observed = path.lstat()
-        except FileNotFoundError:
+        if not path.exists():
             return {}
         refusal = NativePiUnavailable("Native Pi settings must be one owner-private file")
-        PrivateFileRole.require(observed, refusal)
+        PrivateDirectoryRole.require(path.parent.lstat(), refusal)
         try:
-            settings = json.loads(path.read_text())
+            with NativeAgentSettingsFileRole.stream(path, refusal) as stream:
+                settings = json.load(stream)
         except (OSError, json.JSONDecodeError) as error:
             raise refusal from error
         if type(settings) is not dict:
