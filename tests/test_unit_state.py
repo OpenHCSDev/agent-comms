@@ -43,7 +43,7 @@ from agent_comms.team.standing_rules import (
     TeamInputs,
 )
 from agent_comms.team.team_heartbeat import TeamObservation
-from agent_comms.team.team_hud import TeamFrame
+from agent_comms.team.team_hud import TeamBoardPublicationStore
 from agent_comms.transcript.external_transcript_rows import ExternalItemRow
 from agent_comms.transcript.transcript_events import ToolStartTranscript
 from agent_comms.ui_model.teammate_state import (
@@ -434,7 +434,7 @@ def test_heartbeat_keeps_every_teammate_when_one_checkout_is_unreadable(
         else:
             assert not isinstance(worker, Unreadable)
         asyncio.run(ObservedHeartbeat(observed).run(lambda: nullcontext(held_bus)))
-        published, = TeamFrame.read_all(held_bus.root)
+        published, = TeamBoardPublicationStore.read_all(held_bus.root)
         assert published == current_hud(held_bus, colleague.name, observed.frame, cards,
                                         published.usage)
         assert tuple(unit.unit for unit in published.units) == tuple(card.unit for card in cards)

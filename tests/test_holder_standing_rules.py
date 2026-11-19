@@ -124,7 +124,7 @@ from agent_comms.team.standing import (
 )
 from agent_comms.team.standing_rules import DirectiveUnacted, OwedAnswer, StandingRule
 from agent_comms.team.team_heartbeat import TeamHeartbeat
-from agent_comms.team.team_hud import TeamFrame
+from agent_comms.team.team_hud import TeamBoardPublicationStore
 from agent_comms.team.vibe_check import ChokeholdUnanswered, VibeCheck, VibeCheckUnanswered
 from agent_comms.transport.connector import ConnectorSendTool
 from agent_comms.transport.connector_caller import DirectorCaller
@@ -1232,7 +1232,7 @@ def test_pass_missing_a_restarting_team_keeps_its_completion(held_bus):
     held_bus.registry.register(colleague)
     asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
     # Stopped for one pass, it still holds the owner's open request, so it keeps its frame.
-    assert [hud.teammate for hud in TeamFrame.read_all(held_bus.root)] == [colleague.incarnation]
+    assert [hud.teammate for hud in TeamBoardPublicationStore.read_all(held_bus.root)] == [colleague.incarnation]
     held_bus.registry.register(alive)
     assert passes.read().teammate_completed[colleague.incarnation] >= completed
     assert HeartbeatSilent.violations(held_bus) == ()

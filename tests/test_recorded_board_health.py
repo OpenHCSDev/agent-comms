@@ -18,7 +18,7 @@ from agent_comms.registry.threads import ExternalThread
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.team_heartbeat import TeamHeartbeat, TeamObservation
-from agent_comms.team.team_hud import TeamFrame
+from agent_comms.team.team_hud import TeamBoardPublicationStore
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.orders import (
     CommsBoardTool,
@@ -53,7 +53,7 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
     comms = published_board
     owner = comms.registry.require('colleague').incarnation.require_recorded()
     services = ServicePassStore.at(comms.root)
-    original = TeamFrame.current(comms, 'colleague')
+    original = TeamBoardPublicationStore.read_for(comms, 'colleague')
     old_completion = time.time() - 3600
     services.update(lambda passes: DocumentChange.to(replace(
         passes, teammate_completed=passes.teammate_completed | {owner: old_completion})))
@@ -78,8 +78,8 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
     assert services.read().teammate_completed[owner] == old_completion
     services.failed(TeamHeartbeat.__name__, ValueError('newest failure'))
     assert services.read().failing['TeamHeartbeat'].since == failure.since
-    assert 'newest failure' in TeamFrame.current(comms, 'colleague').frame[0]
-    published_before = tuple((path, path.read_bytes()) for path in TeamFrame.matching_in(comms.root))
+    assert 'newest failure' in TeamBoardPublicationStore.read_for(comms, 'colleague').frame[0]
+    published_before = tuple((path, path.read_bytes()) for path in TeamBoardPublicationStore.matching_in(comms.root))
 
     async def recover():
         task = asyncio.create_task(Coordination.watch_worker(
@@ -94,7 +94,7 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
                 await task
 
     asyncio.run(recover())
-    recovered = TeamFrame.current(comms, 'colleague')
+    recovered = TeamBoardPublicationStore.read_for(comms, 'colleague')
     assert recovered.services.failing == {}
     assert recovered.heartbeat.since(old_completion)
     assert any(path.read_bytes() != before for path, before in published_before)
@@ -107,7 +107,7 @@ def test_stopped_heartbeat_without_failure_explains_stale_board_and_refuses_deta
     services = ServicePassStore.at(comms.root)
     services.update(lambda passes: DocumentChange.to(replace(
         passes, teammate_completed=passes.teammate_completed | {owner: time.time() - 3600})))
-    hud = TeamFrame.current(comms, 'colleague')
+    hud = TeamBoardPublicationStore.read_for(comms, 'colleague')
     assert not hud.services.failing
     # One line says it, not two. The header no longer opens with the double negative
     # service_status used to add beside this; retained_status is the only place the
@@ -130,7 +130,7 @@ def test_a_pass_still_inside_its_declared_duration_is_not_called_dead(published_
     services.update(lambda passes: DocumentChange.to(replace(
         passes, teammate_completed=passes.teammate_completed | {
             owner: time.time() - TeamHeartbeat.pass_duration})))
-    hud = TeamFrame.current(comms, 'colleague')
+    hud = TeamBoardPublicationStore.read_for(comms, 'colleague')
     assert hud.retained_status() == 'The team, right now:'
     hud.require_current()
 
@@ -141,7 +141,7 @@ def test_failing_watch_does_not_make_a_fresh_heartbeat_stale(published_board):
     owner = comms.registry.require('colleague').incarnation.require_recorded()
     services.heartbeat_passed((owner,), (owner,))
     services.failed('another-watch', OSError('independent watch failed'))
-    hud = TeamFrame.current(comms, 'colleague')
+    hud = TeamBoardPublicationStore.read_for(comms, 'colleague')
     assert 'independent watch failed' in hud.header[0]
     assert hud.retained_status() == 'The team, right now:'
     hud.require_current()
@@ -152,13 +152,13 @@ def test_missing_frame_reports_recorded_failure_without_fabricating_a_board(fork
     services = ServicePassStore.at(comms.root)
     services.failed(TeamHeartbeat.__name__, KeyError('no readable publication'))
     with pytest.raises(ToolRefusedError) as refused:
-        TeamFrame.current(comms, 'colleague')
+        TeamBoardPublicationStore.read_for(comms, 'colleague')
     lines = str(refused.value).splitlines()
     assert 'no readable publication' in lines[0]
     assert 'Board unavailable:' in lines[-1]
-    assert not TeamFrame.matching_in(comms.root)
+    assert not TeamBoardPublicationStore.matching_in(comms.root)
     with pytest.raises(ToolRefusedError, match='no readable publication'):
-        TeamFrame.read_all(comms.root)
+        TeamBoardPublicationStore.read_all(comms.root)
 
 
 def test_one_unreadable_source_preserves_the_other_original_edit(

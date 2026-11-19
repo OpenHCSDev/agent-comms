@@ -97,7 +97,7 @@ from agent_comms.projects.head_review import (
 from agent_comms.projects.work_branches import WorkBranchError
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.team.pi_rule_gate import PiThreadGate
-from agent_comms.team.team_hud import TeamFrame, TeamHud, TeamLoad
+from agent_comms.team.team_hud import TeamBoardPublicationStore, TeamHud, TeamLoad
 from agent_comms.team.team_hud_records import Teammate, TeammateDetail, TeamOrderDetail
 from agent_comms.transcript.transcripts import TranscriptRead
 from agent_comms.transport.native_tools import CommunicationCall
@@ -292,7 +292,7 @@ class CommsTeamLoadTool(BoardReadTool, declared_name="comms_team_load"):
     description = "Read retained teammate load with recorded service failures and its original completion clock."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TeamLoad:
-        return TeamHud.read(comms, caller.subject(self.thread)).load_reading()
+            return TeamBoardPublicationStore.read_for(comms, caller.subject(self.thread)).load_reading()
 
 
 @dataclass(frozen=True)
@@ -311,7 +311,7 @@ class CommsBoardTool(BoardReadTool):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TeamBoard:
-        return TeamBoard(TeamHud.read(comms, caller.subject(self.thread)).frame)
+            return TeamBoard(TeamBoardPublicationStore.read_for(comms, caller.subject(self.thread)).frame)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -324,7 +324,7 @@ class CommsHudTool(ThreadReadTool):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TeamHud:
-        return TeamHud.read(comms, caller.subject(self.thread))
+            return TeamBoardPublicationStore.read_for(comms, caller.subject(self.thread))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -675,12 +675,14 @@ class ServedTeammateRead(UiRead, ReadTool, NativeToolRequest, TeammateRead):
             raise ToolRefusedError(
                 "The selected teammate or teammate incarnation is no longer current"
             )
-        hud = TeamFrame.current(comms, self.frame_owner.name)
+        hud = TeamBoardPublicationStore.read_for(comms, self.frame_owner.name)
         hud.require_current()
         for card in hud.units:
             if card.unit == self.unit:
                 return self.detail(comms, card)
-        raise ToolRefusedError("The selected teammate is no longer in this teammate's published frame")
+        raise ToolRefusedError(
+            "The selected teammate is no longer in this teammate's published frame"
+        )
 
     def detail(self, comms: Comms, card: Teammate) -> TeammateDetail:
         """Expand the published card this read selected from its original record owners."""

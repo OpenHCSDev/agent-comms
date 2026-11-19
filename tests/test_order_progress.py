@@ -35,7 +35,7 @@ from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.work_branches import WorkBranchError, WorkBranches
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.recorded_time import RecordedEventTime
-from agent_comms.team.team_hud import TeamFrame
+from agent_comms.team.team_hud import TeamBoardPublicationStore
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.orders import CommsTodoCreateTool
 from agent_comms.ui_model.teammate_state import Unreadable
@@ -159,7 +159,7 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus):
         git(checkout, 'update-ref', '-d', f'refs/heads/{branch}')
         interrupted = observe_team(comms, ProgressRead())
         asyncio.run(ObservedHeartbeat(interrupted).run(lambda: nullcontext(comms)))
-        published, = TeamFrame.read_all(comms.root)
+        published, = TeamBoardPublicationStore.read_all(comms.root)
         assert tuple(card.unit for card in published.units) == tuple(card.unit for card in interrupted.states)
         assert branch not in WorkBranches(checkout).worktrees()
         for _ in range(2):
@@ -171,7 +171,7 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus):
             assert broken.reason == str(source_failure.value)
             assert tuple(card for card in frame.states if card.unit.name != 'worker') == healthy
             asyncio.run(ObservedHeartbeat(frame).run(lambda: nullcontext(comms)))
-            published, = TeamFrame.read_all(comms.root)
+            published, = TeamBoardPublicationStore.read_all(comms.root)
             assert published == current_hud(comms, colleague.name, frame.frame, frame.states,
                                             published.usage)
 

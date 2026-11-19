@@ -12,6 +12,7 @@ from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 
+import agent_comms.execution.transcript_sources as transcript_sources
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution import pi_commands as commands
@@ -42,7 +43,7 @@ from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.pi_vocabulary import NoThinkingOverride, ThinkingChoice
 from agent_comms.execution.request_progress import NO_REQUEST_OBSERVER, RequestObserver
 from agent_comms.execution.selected.session import SelectedSession
-from agent_comms.execution.transcript_sources import DraftPublication, DraftRow
+from agent_comms.execution.transcript_sources import DraftFold, DraftPublication
 from agent_comms.execution.turn_context import InputContributionCoordinates
 from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.execution.turn_inbox import TurnInbox
@@ -315,7 +316,7 @@ class TrackedTurnSession(TurnSession, FollowingTurnSource[OwnedSend]):
                     ownership.push_async_callback(self.retain_or_close)
                     def acquire_draft() -> DraftPublication:
                         with self.startup.measurements.operation("draft_publication_worker"):
-                            return drafts.enter_context(DraftRow.publication(
+                            return drafts.enter_context(DraftFold.publication(
                                 self.startup.root, self.command.input_id))
 
                     with self.startup.measurements.operation("draft_publication_acquisition"):
@@ -475,11 +476,6 @@ class TrackedTurnSession(TurnSession, FollowingTurnSource[OwnedSend]):
 
     async def text_received(self, text: str) -> None:
         await super().text_received(text)
-        now = time.monotonic()
-        if now - self.draft_written_at >= .1:
-            await Coordination.run_worker(partial(
-                self.draft_publication.publish, tuple(self.output.message_parts)))
-            self.draft_written_at = now
 
     async def assistant_ended(self) -> None:
         await Coordination.run_worker(self.draft_publication.retire_message)
@@ -522,3 +518,23 @@ class TrackedTurnSession(TurnSession, FollowingTurnSource[OwnedSend]):
                 response.strip(),
                 proof,
             )
+
+
+class TrackedTurn(TrackedTurnSession):
+    """The selected native turn appends each draft text chunk once."""
+
+    draft_publication: DraftPublication
+
+    async def assistant_started(self) -> None:
+        await super().assistant_started()
+        self.draft_pending = ()
+
+    async def text_received(self, text: str) -> None:
+        await super().text_received(text)
+        self.draft_pending += (text,)
+        now = time.monotonic()
+        if now - self.draft_written_at >= .1:
+            parts = tuple(self.draft_pending)
+            self.draft_pending = ()
+            await DraftPublication.append(self.draft_publication, parts)
+            self.draft_written_at = now

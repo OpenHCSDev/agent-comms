@@ -116,7 +116,7 @@ from agent_comms.storage.recorded_time import EventTime, RecordedEventTime
 from agent_comms.storage.typed_table import RowNotFoundError
 from agent_comms.team.standing import DeliveryAwaitingJudgement, InstallDue, UnownedWheelSpin
 from agent_comms.team.standing_rules import ClearingVerb, HuntDue, OwedAnswer
-from agent_comms.team.team_hud import TeamPlanDocument
+from agent_comms.team.team_hud import TeamBoardPublicationStore
 from agent_comms.transport.tool_caller import ForkCaller, NoThreadCaller, PeerCaller
 from agent_comms.transport.tools.orders import (
     CommsChangeProblemTool,
@@ -702,8 +702,7 @@ class TeamContext(BaseModel):
             sys.exit(f'Refused order, nothing recorded:\n{error}')
 
     def ready_phases(self) -> tuple[type[PlanPhase], ...]:
-        """The phases the heartbeat last found ready; the CLI never counts main itself."""
-        return TeamPlanDocument.at(self.root).read().ready()
+        return TeamBoardPublicationStore.at(self.root).read().plan.ready()
 
     @boundary_decoder
     def model_copy(self, *, update: Mapping[str, object] | None = None,

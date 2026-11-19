@@ -27,6 +27,7 @@ from agent_comms.nominal.field_codec import (
     MalformedRecord,
     NullMember,
     PublicationExclude,
+    RecordProblems,
     TaggedRecordMember,
     TaggedUnion,
     WireExclude,
@@ -46,7 +47,7 @@ from agent_comms.task_attachments.team_pings import (
     TeamUpdate,
 )
 from agent_comms.team.standing_rules import HeartbeatFrame
-from agent_comms.team.team_frame_file import TeamFrameFile, TeamPlanFile
+from agent_comms.team.team_frame_file import TeamBoardFile
 from agent_comms.team.team_hud_records import (
     FinishedPhases,
     HudSection,
@@ -116,31 +117,20 @@ class TeamPlan:
 
 
 @dataclass(frozen=True)
-class TeamPlanDocument(TeamPlanFile, JsonDocument[TeamPlan]):
-    """The heartbeat replaces it with the frames, from the same board; it keeps no history."""
+class TeamBoardCut:
+    """One selected board value and the publication-owned identities it changed."""
 
-    path: Path
-    reading: ServiceReading = field(default_factory=ServiceReading, compare=False, kw_only=True)
+    huds: tuple[TeamHud, ...] = ()
+    changed: frozenset[ThreadIncarnation] = frozenset()
 
-    record_type = TeamPlan
 
-    @classmethod
-    def at(cls, root: Path, reading: ServiceReading = ServiceReading()) -> Self:
-        """A frozen empty reading is the default; readers with health pass theirs."""
-        return cls(cls.path_in(root), reading=reading)
+@dataclass(frozen=True)
+class TeamBoardPublication:
+    """One atomic plan, recipient-frame and changed-identity cut."""
 
-    def empty(self) -> TeamPlan:
-        """No beat has published yet, so no phase is known ready: that is the empty plan.
-
-        The plan is a *publication* of readiness the heartbeat computes by counting main. Its
-        absence says only that nobody has counted, which is the same answer as "nothing is
-        ready" for every reader of `ready()` — and an order that serves no phase is legal
-        (`serves` is optional). A board *display* still refuses, through `TeamFrame.empty()`,
-        where a missing teammate frame has no meaningful empty value; a phase lookup does not.
-        Refusing here made every `agent-comms-team order` verb fail on a bus with no heartbeat,
-        which is exactly the bus where someone needs to be sent an order to fix the heartbeat.
-        """
-        return TeamPlan()
+    plan: TeamPlan = field(default_factory=TeamPlan)
+    frames: SharedJson = field(default_factory=SharedJson)
+    changed: tuple[ThreadIncarnation, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -226,7 +216,7 @@ class TeamHudRecord(TeamLoad):
     open_pings: tuple[Ping, ...] = field(kw_only=True)
     stopped: frozenset[str] = field(default=frozenset(), kw_only=True)
     phases: Annotated[tuple[TeamPhase, ...], WireTransient()] = field(default=(), kw_only=True)
-    """The team plan's phases, read from TeamPlanDocument with the frame, never stored in it."""
+    """The team plan's phases, read from the atomic board publication with the frame, never stored in it."""
 
 
 @dataclass(frozen=True)
@@ -241,10 +231,6 @@ class TeamHud(TeamHudRecord):
 
     def with_plan(self, plan: TeamPlan) -> Self:
         return replace(self, phases=plan.phases)
-
-    @classmethod
-    def read(cls, comms: Comms, teammate: str) -> TeamHud:
-        return TeamFrame.current(comms, teammate)
 
     @classmethod
     def of(cls, comms: Comms, frame: HeartbeatFrame,
@@ -404,93 +390,170 @@ class TeamHud(TeamHudRecord):
 
 
 @dataclass(frozen=True)
-class TeamFramesDocument(TeamFrameFile, JsonDocument[SharedJson]):
-    """One atomic board cut, retaining each recipient's distinct captured packet."""
+class TeamBoardPublicationStore(
+    TeamBoardFile,
+    JsonDocument[TeamBoardPublication],
+):
+    """The only retained board writer and reader."""
 
     path: Path
-    record_type = SharedJson
+    record_type = TeamBoardPublication
 
-    def empty(self) -> SharedJson:
-        return SharedJson()
+    @classmethod
+    def at(cls, root: Path) -> Self:
+        return cls(cls.path_in(root))
 
-    def records(self) -> dict[ThreadIncarnation, JsonValue]:
+    def empty(self) -> TeamBoardPublication:
+        return TeamBoardPublication()
+
+    @staticmethod
+    def frame_records(frames: SharedJson) -> dict[ThreadIncarnation, JsonValue]:
         recipient = FieldCodec.field_plan(TeamHudRecord, "teammate")
-        records = tuple((recipient.read(raw), raw)
-                        for raw in self.read().expanded())
-        identities = tuple(owner.require_recorded().lookup for owner, raw in records)
+        records = tuple(
+            (recipient.read(raw), raw)
+            for raw in frames.expanded()
+        )
+        identities = tuple(
+            owner.require_recorded().lookup for owner, _raw in records
+        )
         if len(identities) != len(set(identities)):
             raise MalformedRecord("A team snapshot repeats a recipient")
         return dict(records)
 
-    def huds(self, selection: TeamBoardSelection = AllTeamBoards()) -> tuple[TeamHud, ...]:
-        return FieldCodec.decode_shared(tuple[TeamHud, ...], [
-            raw for recipient, raw in self.records().items() if selection.includes(recipient)
-        ])
+    def records(
+        self,
+        publication: TeamBoardPublication | None = None,
+    ) -> dict[ThreadIncarnation, JsonValue]:
+        publication = self.read() if publication is None else publication
+        return self.frame_records(publication.frames)
 
-    def publish(self, huds: tuple[TeamHud, ...]) -> None:
-        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        # The former per-recipient file writer retained the last cut for each birth.
-        recipients = {hud.teammate.require_recorded().lookup: hud for hud in huds}
-        self._publish_unlocked(SharedJson.of(tuple(recipients.values()), tuple[TeamHudRecord, ...]))
+    def huds(
+        self,
+        selection: TeamBoardSelection = AllTeamBoards(),
+        publication: TeamBoardPublication | None = None,
+    ) -> tuple[TeamHud, ...]:
+        return FieldCodec.decode_shared(
+            tuple[TeamHud, ...],
+            [
+                raw
+                for recipient, raw in self.records(publication).items()
+                if selection.includes(recipient)
+            ],
+        )
 
-
-@dataclass(frozen=True)
-class TeamFrame(TeamFrameFile):
-    """A recipient selection in the heartbeat's single retained board cut.
-
-    Only the heartbeat writes. An interrupted pass replaces its completed recipients
-    in one publication and retains all others at their previous cut.
-    """
-
-    path: Path
-    recipient: ThreadIncarnation
-    reading: ServiceReading = field(default_factory=ServiceReading, compare=False, kw_only=True)
-
-    @classmethod
-    def at(cls, root: Path, recipient: ThreadIncarnation) -> Self:
-        return cls(cls.path_in(root), recipient.require_recorded())
-
-    def read(self) -> TeamHud:
-        records = TeamFramesDocument(self.path).records()
-        if self.recipient not in records:
-            raise BoardUnavailable(self.reading, f'Tristan frame missing for {self.recipient.name}: {self.path}')
-        return FieldCodec.decode(TeamHud, records[self.recipient])
+    @staticmethod
+    def captured_frames(huds: tuple[TeamHud, ...]) -> SharedJson:
+        recipients = {
+            hud.teammate.require_recorded().lookup: hud for hud in huds
+        }
+        return SharedJson.of(
+            tuple(recipients.values()),
+            tuple[TeamHudRecord, ...],
+        )
 
     @classmethod
-    def current(cls, comms: Comms, recipient: str) -> TeamHud:
-        thread = comms.registry.require(recipient)
-        owner = comms.registry.require(thread.teammate()).incarnation.require_recorded()
-        passes = ServicePassStore.at(comms.root).read()
-        health = ServiceReading().with_services(passes, owner)
-        hud = cls(cls.path_in(comms.root), owner, reading=health).read()
-        return hud.with_services(passes, owner).with_plan(TeamPlanDocument.at(comms.root, health).read())
+    def publication(
+        cls,
+        plan: TeamPlan,
+        huds: tuple[TeamHud, ...],
+        previous: TeamBoardPublication,
+    ) -> TeamBoardPublication:
+        frames = cls.captured_frames(huds)
+        before = cls.frame_records(previous.frames)
+        after = cls.frame_records(frames)
+        changed = tuple(sorted(
+            (owner for owner in before.keys() | after.keys()
+             if before.get(owner) != after.get(owner)),
+            key=lambda owner: (owner.name, owner.created_at),
+        ))
+        return TeamBoardPublication(plan, frames, changed)
 
     @classmethod
-    def replace_all(cls, root: Path, plan: TeamPlan, huds: tuple[TeamHud, ...]) -> None:
-        document = TeamPlanDocument.at(root)
-        document.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        document._publish_unlocked(plan)
-        TeamFramesDocument(cls.path_in(root)).publish(huds)
+    def replace_all(
+        cls,
+        root: Path,
+        plan: TeamPlan,
+        huds: tuple[TeamHud, ...],
+    ) -> None:
+        store = cls.at(root)
+        store.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        try:
+            previous = store.read()
+        except RecordProblems:
+            previous = TeamBoardPublication()
+        store._publish_unlocked(cls.publication(plan, huds, previous))
 
     @classmethod
     def write_all(cls, root: Path, huds: tuple[TeamHud, ...]) -> frozenset[Path]:
         if not huds:
             return frozenset()
-        document = TeamFramesDocument(cls.path_in(root))
-        retained = {hud.teammate.require_recorded().lookup: hud for hud in document.huds()}
-        retained.update((hud.teammate.require_recorded().lookup, hud) for hud in huds)
-        document.publish(tuple(retained.values()))
-        return frozenset((document.path,))
+        store = cls.at(root)
+        publication = store.read()
+        retained = {
+            hud.teammate.require_recorded().lookup: hud
+            for hud in store.huds(publication=publication)
+        }
+        retained.update(
+            (hud.teammate.require_recorded().lookup, hud) for hud in huds
+        )
+        store._publish_unlocked(cls.publication(
+            publication.plan, tuple(retained.values()), publication
+        ))
+        return frozenset((store.path,))
 
     @classmethod
-    def read_all(cls, root: Path, selection: TeamBoardSelection = AllTeamBoards()) -> tuple[TeamHud, ...]:
+    def read_cut(
+        cls,
+        root: Path,
+        selection: TeamBoardSelection = AllTeamBoards(),
+    ) -> TeamBoardCut:
         passes = ServicePassStore.at(root).read()
         health = ServiceReading(services=passes)
-        frames = TeamFramesDocument(cls.path_in(root)).huds(selection)
-        plan = TeamPlanDocument.at(root, health).read() if frames else TeamPlan()
-        huds = tuple(sorted((hud.with_services(passes, hud.teammate.require_recorded()).with_plan(plan)
-            for hud in frames), key=lambda hud: hud.teammate.name))
+        store = cls.at(root)
+        publication = store.read()
+        frames = store.huds(selection, publication)
+        huds = tuple(
+            sorted(
+                (
+                    hud.with_services(
+                        passes, hud.teammate.require_recorded()
+                    ).with_plan(publication.plan)
+                    for hud in frames
+                ),
+                key=lambda hud: hud.teammate.name,
+            )
+        )
         if not huds and passes.failing:
-            raise BoardUnavailable(health, 'no published teammate frame.')
-        return huds
+            raise BoardUnavailable(health, "no published teammate frame.")
+        return TeamBoardCut(
+            huds,
+            frozenset(owner for owner in publication.changed if selection.includes(owner)),
+        )
+
+    @classmethod
+    def read_all(
+        cls,
+        root: Path,
+        selection: TeamBoardSelection = AllTeamBoards(),
+    ) -> tuple[TeamHud, ...]:
+        return cls.read_cut(root, selection).huds
+
+    @classmethod
+    def read_for(cls, comms: Comms, recipient: str) -> TeamHud:
+        thread = comms.registry.require(recipient)
+        owner = comms.registry.require(
+            thread.teammate()
+        ).incarnation.require_recorded()
+        passes = ServicePassStore.at(comms.root).read()
+        health = ServiceReading().with_services(passes, owner)
+        store = cls.at(comms.root)
+        publication = store.read()
+        records = store.records(publication)
+        if owner not in records:
+            raise BoardUnavailable(
+                health,
+                f"Tristan frame missing for {owner.name}: {store.path}",
+            )
+        hud = FieldCodec.decode(TeamHud, records[owner])
+        return hud.with_services(passes, owner).with_plan(publication.plan)
 
