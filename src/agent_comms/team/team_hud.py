@@ -8,6 +8,8 @@ from functools import cached_property
 from pathlib import Path
 from typing import Annotated, Self
 
+from pydantic import JsonValue
+
 from agent_comms.cli_bridges.usage_reading import RateLimitReading
 from agent_comms.comms import Comms
 from agent_comms.coordination.service_passes import (
@@ -19,6 +21,7 @@ from agent_comms.coordination.service_passes import (
 from agent_comms.installer.build_identity import InstalledBuild
 from agent_comms.nominal.field_codec import (
     DisclosedRecord,
+    FieldCodec,
     HudExclude,
     MalformedRecord,
     PublicationExclude,
@@ -362,12 +365,17 @@ class TeamFramesDocument(TeamFrameFile, JsonDocument[SharedJson]):
     def empty(self) -> SharedJson:
         return SharedJson()
 
-    def huds(self) -> tuple[TeamHud, ...]:
-        huds = self.read().decode(tuple[TeamHud, ...])
-        identities = tuple(hud.teammate.require_recorded().lookup for hud in huds)
+    def records(self) -> dict[ThreadIncarnation, JsonValue]:
+        recipient = FieldCodec.field_plan(TeamHudRecord, "teammate")
+        records = tuple((recipient.read(raw), raw)
+                        for raw in self.read().expanded())
+        identities = tuple(owner.require_recorded().lookup for owner, raw in records)
         if len(identities) != len(set(identities)):
             raise MalformedRecord("A team snapshot repeats a recipient")
-        return huds
+        return dict(records)
+
+    def huds(self) -> tuple[TeamHud, ...]:
+        return tuple(FieldCodec.decode(TeamHud, raw) for raw in self.records().values())
 
     def publish(self, huds: tuple[TeamHud, ...]) -> None:
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -393,11 +401,10 @@ class TeamFrame(TeamFrameFile):
         return cls(cls.path_in(root), recipient.require_recorded())
 
     def read(self) -> TeamHud:
-        frames = TeamFramesDocument(self.path).huds()
-        for hud in frames:
-            if hud.teammate == self.recipient:
-                return hud
-        raise BoardUnavailable(self.reading, f'Tristan frame missing for {self.recipient.name}: {self.path}')
+        records = TeamFramesDocument(self.path).records()
+        if self.recipient not in records:
+            raise BoardUnavailable(self.reading, f'Tristan frame missing for {self.recipient.name}: {self.path}')
+        return FieldCodec.decode(TeamHud, records[self.recipient])
 
     @classmethod
     def current(cls, comms: Comms, recipient: str) -> TeamHud:

@@ -116,8 +116,11 @@ class SharedJson:
         roots = tuple(capture.capture(value) for value in encoded)
         return cls(tuple(capture.nodes), roots)
 
-    def decode[T](self, declaration: TypeForm[T]) -> T:
+    def expanded(self) -> tuple[JsonValue, ...]:
         expanded: list[JsonValue] = []
         for node in self.nodes:
             expanded.append(node.expand(expanded))
-        return FieldCodec.decode(declaration, [JsonNode.require(expanded, root) for root in self.roots])
+        return tuple(JsonNode.require(expanded, root) for root in self.roots)
+
+    def decode[T](self, declaration: TypeForm[T]) -> T:
+        return FieldCodec.decode(declaration, list(self.expanded()))

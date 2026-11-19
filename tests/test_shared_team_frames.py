@@ -178,3 +178,24 @@ def test_shared_json_keeps_scalar_types_signed_zero_and_inline_custom_shapes():
     cycle.append(cycle)
     with pytest.raises(MalformedRecord, match="cycle"):
         JsonCapture().capture(cycle)
+
+
+def test_one_recipient_decodes_only_its_board_and_checks_every_identity(tmp_path, monkeypatch):
+    original = huds()
+    TeamFrame.replace_all(tmp_path, TeamPlan(), original)
+    decoded = []
+    decode = FieldCodec.decode
+
+    def counted(target, data):
+        if target is TeamHud:
+            decoded.append(target)
+        return decode(target, data)
+
+    monkeypatch.setattr(FieldCodec, "decode", counted)
+    selected = TeamFrame.at(tmp_path, original[1].teammate).read()
+    assert values((selected,)) == values((original[1],))
+    assert decoded == [TeamHud]
+    invalid = SharedJson.of((original[0], original[0]), tuple[TeamHudRecord, ...])
+    TeamFrame.path_in(tmp_path).write_text(FieldCodec.compact(FieldCodec.encode(invalid)))
+    with pytest.raises(MalformedRecord, match="repeats a recipient"):
+        TeamFrame.at(tmp_path, original[0].teammate).read()
