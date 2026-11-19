@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from abc import ABC, abstractmethod
 from collections.abc import (
     Callable,
     Iterator,
@@ -166,6 +167,55 @@ class OwnerStartResult(RecordMember, TargetEditResult):
         return (self.thread,)
 
 
+@dataclass(frozen=True, slots=True)
+class PreparedOwnerStart(ABC):
+    thread: Thread
+
+    @classmethod
+    def preflight(cls, lifecycle: OwnerLifecycle, name: str) -> PreparedOwnerStart:
+        thread = lifecycle.registry.require_member(name, NativeThread)
+        status = lifecycle.registry.status(thread.name)
+        refusal = RelationViolationError("Only visible agent threads can be started.")
+        thread.role.require_executable(refusal)
+        status.require_visible(str(refusal))
+        if status.holds_process() and thread.process_alive:
+            status.require_active("Stopped owner session has not retired yet.")
+            return ExistingOwnerStart(
+                thread, OwnerStartResult(thread.name, thread.require_process().pid, False)
+            )
+        return LaunchingOwnerStart(thread)
+
+    @abstractmethod
+    def launch(
+        self, lifecycle: OwnerLifecycle, launches: ExitStack,
+        agent_bin: LaunchBinary, agent_args: LaunchArguments,
+    ) -> OwnerStartResult: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ExistingOwnerStart(PreparedOwnerStart):
+    result: OwnerStartResult
+
+    def launch(
+        self, lifecycle: OwnerLifecycle, launches: ExitStack,
+        agent_bin: LaunchBinary, agent_args: LaunchArguments,
+    ) -> OwnerStartResult:
+        return self.result
+
+
+@dataclass(frozen=True, slots=True)
+class LaunchingOwnerStart(PreparedOwnerStart):
+    def launch(
+        self, lifecycle: OwnerLifecycle, launches: ExitStack,
+        agent_bin: LaunchBinary, agent_args: LaunchArguments,
+    ) -> OwnerStartResult:
+        owner = launches.enter_context(lifecycle.launching_owner(
+            self.thread, agent_bin.configured(), agent_args,
+            launch_runtime=LaunchRuntime.running(),
+        ))
+        return OwnerStartResult(owner.name, owner.require_process().pid, True)
+
+
 from agent_comms.execution.owner_cutover import OwnerCutover, PreserveOwnerRuntime
 
 
@@ -262,21 +312,11 @@ class OwnerLifecycle:
         agent_args: LaunchArguments = InheritedArguments(),
     ) -> tuple[OwnerStartResult, ...]:
         """Join each admitted owner-start wave before admitting its successor."""
-        def start(launches: ExitStack, name: str) -> OwnerStartResult:
-            thread = self.registry.require_member(name, NativeThread)
-            status = self.registry.status(thread.name)
-            refusal = RelationViolationError("Only visible agent threads can be started.")
-            thread.role.require_executable(refusal)
-            status.require_visible(str(refusal))
-            if status.holds_process() and thread.process_alive:
-                status.require_active("Stopped owner session has not retired yet.")
-                return OwnerStartResult(thread.name, thread.require_process().pid, False)
-            owner = launches.enter_context(self.launching_owner(
-                thread, agent_bin.configured(), agent_args, launch_runtime=LaunchRuntime.running(),
-            ))
-            return OwnerStartResult(owner.name, owner.require_process().pid, True)
-
-        return self.launch_waves(names, start)
+        starts = tuple(PreparedOwnerStart.preflight(self, name) for name in names)
+        return self.launch_waves(
+            starts,
+            lambda launches, start: start.launch(self, launches, agent_bin, agent_args),
+        )
 
     @cached_property
     def launch_authority(self) -> RootLaunch:

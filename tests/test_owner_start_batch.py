@@ -53,7 +53,7 @@ def test_start_batch_attaches_every_owner_to_one_host(
     assert all(not comms.registry.require(name).process_alive for name in names)
 
 
-def test_later_selection_failure_joins_the_already_dispatched_start(
+def test_later_selection_failure_launches_none(
     tmp_path: Path, native_runtime_package: VerifiedNativePackage, comms: Comms,
 ) -> None:
     prepare_native_comms(comms)
@@ -61,11 +61,7 @@ def test_later_selection_failure_joins_the_already_dispatched_start(
     try:
         with pytest.raises(UnregisteredThreadError):
             comms.owners.start_many(("first", "missing"))
-        # The first request was sent once. Failure of another selection must
-        # join its attachment, not close the reply pipe or roll it back.
-        launch = attached_launch(comms, "first")
-        assert launch.process == comms.registry.require("first").require_process()
-        assert not comms.owners.start_many(("first",))[0].launched
+        assert not comms.registry.require("first").process_alive
     finally:
         comms.owners.stop("first")
 

@@ -120,9 +120,13 @@ def _launch_wave_lifecycle(count: int, events: list[tuple[str, str]]):
         )
         for index, thread in enumerate(threads)
     )
+    def require_member(name, _member):
+        events.append(("validate-start", name))
+        return threads[int(name.removeprefix("owner-"))]
+
     registry = SimpleNamespace(
         snapshot=lambda: object(),
-        require_member=lambda name, _member: threads[int(name.removeprefix("owner-"))],
+        require_member=require_member,
         status=lambda _name: SimpleNamespace(
             holds_process=lambda: False, require_visible=lambda _refusal: None
         ),
@@ -195,11 +199,35 @@ def test_the_normal_install_start_path_consumes_the_same_launch_budget(monkeypat
     results = OwnerLifecycle.start_many(lifecycle, names)
     assert peak == 3
     assert active == 0
+    assert tuple(name for event, name in events if event == "validate-start") == names
+    assert events.index(("validate-start", "owner-10")) < events.index(
+        ("start", "owner-0")
+    )
     assert tuple(name for event, name in events if event == "start") == names
     assert sorted(name for event, name in events if event == "join") == sorted(names)
     assert events.index(("join", "owner-0")) < events.index(("start", "owner-3"))
     assert tuple(result.thread for result in results) == names
     assert all(result.launched for result in results)
+
+
+def test_a_later_invalid_owner_starts_none(monkeypatch):
+    monkeypatch.setattr(AgentsSlice, "owner_initialization_capacity", 3)
+    events = []
+    _handoff, lifecycle, threads = _launch_wave_lifecycle(11, events)
+    original_require = lifecycle.registry.require_member
+
+    def require_member(name, member):
+        thread = original_require(name, member)
+        if name == "owner-10":
+            raise RuntimeError("invalid later owner")
+        return thread
+
+    lifecycle.registry.require_member = require_member
+    names = tuple(thread.name for thread in threads)
+    with pytest.raises(RuntimeError, match="invalid later owner"):
+        OwnerLifecycle.start_many(lifecycle, names)
+    assert tuple(name for event, name in events if event == "validate-start") == names
+    assert tuple(name for event, name in events if event == "start") == ()
 
 
 def test_a_failed_restart_wave_joins_admitted_owners_and_admits_no_successor(monkeypatch):
