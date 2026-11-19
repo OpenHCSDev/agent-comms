@@ -1,0 +1,55 @@
+{
+  "defect": "New Thread drops Service Tier because its creation records copy only Model and Thinking.",
+  "why_stupid": "This is slop because ThreadSettings already declares the complete configuration and its catalog roles, but creation keeps a separate incomplete field list.",
+  "order": {
+    "kind": "pending",
+    "owner": "src/agent_comms/registry/thread_settings.py:31",
+    "scope": {
+      "kind": "fix",
+      "shape": {
+        "parents": [
+          "src/agent_comms/registry/thread_settings.py:31"
+        ],
+        "members": [
+          "src/agent_comms/registry/native_settings.py:12",
+          "src/agent_comms/cli_verbs/new.py:29",
+          "src/agent_comms/registry/thread_management.py:191"
+        ]
+      }
+    },
+    "check": {
+      "directory": "/home/ts/code/projects/agent-comms",
+      "command": "grep -c '^class NewThreadSpec(ThreadSettings)' src/agent_comms/registry/thread_management.py",
+      "result": {
+        "kind": "count",
+        "expected": 1
+      }
+    },
+    "edits": [
+      "Inherit ThreadSettings on creation defaults, command and spec; retain meaningful model/thinking default overrides and derive their annotations from the original settings.",
+      "Derive catalog selection from ConfigurationSlot and carry the full settings projection through creation, fork bindings and work allocation.",
+      "Preserve saved configuration and native defaults; run one focused declaration/CLI/registration control and join the shared install batch."
+    ],
+    "banned": [
+      "A manually copied Service Tier field list",
+      "A second catalog or configuration cache",
+      "Another worktree or subagent",
+      "Broad app suites or separate per-PR installs"
+    ],
+    "report": "Source change, native plans, focused results, merged PR and installed boundary.",
+    "run": {
+      "kind": "application",
+      "text": "New Thread offers the declared Service Tier choices and carries the selected tier into the saved native thread, preserving defaults and fork selection."
+    }
+  },
+  "unplanned_reason": "Tristan reported the missing Service Tier in New Thread while trying the installed form.",
+  "slop": [
+    {
+      "pattern": "MEMB-5",
+      "fact": "The stored thread configuration fields are copied as a Model and Thinking pair in creation records.",
+      "at": "src/agent_comms/cli_verbs/new.py:29",
+      "derive": "mixin",
+      "by": "src/agent_comms/registry/thread_settings.py:31"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "remove-unread-configuration-imports",
+      "operations": [
+        {
+          "operation": "remove_import_bindings",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/thread_settings.py",
+          "bound_names": [
+            "ValueDirective"
+          ]
+        },
+        {
+          "operation": "remove_import_bindings",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/thread_model.py",
+          "bound_names": [
+            "NoThinkingOverride"
+          ]
+        },
+        {
+          "operation": "remove_import_bindings",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/new.py",
+          "bound_names": [
+            "ThinkingLevelField",
+            "Catalog",
+            "ThreadModel",
+            "ModelSetting",
+            "ThinkingSetting"
+          ]
+        }
+      ]
+    }
+  ]
+}

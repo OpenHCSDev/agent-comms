@@ -1,0 +1,99 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "exercise-original-settings-transports-and-creation-catalog",
+      "operations": [
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_json_flag_record.py",
+          "import_source": "from agent_comms.registry.thread_settings import ThreadSettings"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_json_flag_record.py",
+          "import_source": "from agent_comms.execution.pi_vocabulary import ServiceTier"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_json_flag_record.py",
+          "target_qualname": "selected_record",
+          "decorators": "include",
+          "replacements": [
+            {
+              "old_source": "NativeThreadDefaults(model=DeclaredModel('selected/model'))",
+              "new_source": "NativeThreadDefaults(model=DeclaredModel('selected/model'), service_tier=ServiceTier.PRIORITY)"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_json_flag_record.py",
+          "target_qualname": "test_settings_schema_still_comes_only_from_its_declared_data_fields",
+          "replacements": [
+            {
+              "old_source": "    assert set(FieldCodec.record_schema(NativeThreadDefaults)[\"properties\"]) == {\n        \"model\", \"thinking_level\",\n    }",
+              "new_source": "    assert FieldCodec.record_schema(NativeThreadDefaults)[\"properties\"].keys() == (\n        FieldCodec.record_schema(ThreadSettings)[\"properties\"].keys())"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_command_families.py",
+          "target_qualname": "test_cli_decodes_tag_sets_enums_json_and_shell_words_once",
+          "replacements": [
+            {
+              "old_source": "        assert configured.service_tier.tier is tier",
+              "new_source": "        assert configured.service_tier.tier is tier\n        created = parse([\"new\", \"--name\", \"a\", \"--project\", str(tmp_path),\n                         \"--service-tier\", tier.value])\n        assert created.service_tier is tier"
+            }
+          ]
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_command_target_catalog.py",
+          "import_source": "import asyncio"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_command_target_catalog.py",
+          "import_source": "from dataclasses import replace"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_command_target_catalog.py",
+          "import_source": "from agent_comms.cli_verbs.fork import ForkCliCommand"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_command_target_catalog.py",
+          "import_source": "from agent_comms.config_options import ServiceTierConfigOption"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_command_target_catalog.py",
+          "import_source": "from agent_comms.execution.pi_vocabulary import ServiceTier"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_command_target_catalog.py",
+          "import_source": "from agent_comms.projects.checkouts import LaunchCheckout"
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_command_target_catalog.py",
+          "import_source": "from agent_comms.registry.thread_settings import ThreadSettings"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/tests/test_command_target_catalog.py",
+          "target_qualname": "test_a_project_menu_offers_a_new_thread",
+          "replacements": [
+            {
+              "old_source": "    assert [action.declaration for action in actions] == [NewThreadCliCommand]",
+              "new_source": "    assert [action.declaration for action in actions] == [NewThreadCliCommand]\n    action, = actions\n    command, = action.bound\n    tier_field, = (entry for entry in action.editable_fields\n                   if entry.name == ServiceTierConfigOption.declared_field().name)\n    assert tier_field.catalog is ServiceTierConfigOption\n    prepared = asyncio.run(tier_field.prepare(comms.configuration_catalogs, command))\n    assert tuple(choice.value for choice in prepared.offered()) == tuple(tier.value for tier in ServiceTier)\n    for tier in ServiceTier:\n        selected = replace(command, name=f\"new-{tier.value}\", service_tier=tier)\n        spec = selected.spec_type.from_task(\n            name=selected.name, project=LaunchCheckout(tmp_path),\n            **ThreadSettings.field_values(selected))\n        stored = comms.registry.declare(spec.declaration())\n        read_back = comms.registry.require(stored.name)\n        assert ThreadSettings.capture(read_back) == ThreadSettings.capture(selected)\n        fork = ForkCliCommand.thread_binding(read_back)\n        assert ThreadSettings.capture(fork) == ThreadSettings.capture(read_back)"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

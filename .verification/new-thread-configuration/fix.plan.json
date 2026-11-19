@@ -1,0 +1,144 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "inherit-complete-thread-configuration-on-creation",
+      "operations": [
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/thread_settings.py",
+          "import_source": "from agent_comms.nominal.field_codec import Catalog"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/thread_settings.py",
+          "target_qualname": "ConfigurationSlot",
+          "replacements": [
+            {
+              "old_source": "class ConfigurationSlot(ValueDirective[type]):",
+              "new_source": "class ConfigurationSlot(Catalog):"
+            }
+          ]
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/native_settings.py",
+          "import_source": "from agent_comms.registry.thread_settings import ThreadSettings"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/native_settings.py",
+          "target_qualname": "NativeThreadDefaults",
+          "replacements": [
+            {
+              "old_source": "class NativeThreadDefaults(JsonFlagRecord):",
+              "new_source": "class NativeThreadDefaults(ThreadSettings, JsonFlagRecord):"
+            }
+          ]
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/new.py",
+          "import_source": "from agent_comms.registry.thread_settings import ThreadSettings"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/new.py",
+          "target_qualname": "NewThreadCliCommand",
+          "replacements": [
+            {
+              "old_source": "    CreatesThread, NameArgument, CatalogSelection, TargetActionCommand[ThreadCreatedResult],",
+              "new_source": "    ThreadSettings, CreatesThread, NameArgument, CatalogSelection, TargetActionCommand[ThreadCreatedResult],"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/new.py",
+          "target_qualname": "NewThreadCliCommand",
+          "replacements": [
+            {
+              "old_source": "    model: Annotated[\n        ThreadModel, Catalog(ModelSetting), Argument(flags=(\"--model\",)),\n    ] = NativeThreadDefaults.model\n    thinking_level: Annotated[\n        ThinkingLevelField,\n        Catalog(ThinkingSetting),\n        Argument(flags=(\"--thinking-level\",)),\n    ] = NativeThreadDefaults.thinking_level",
+              "new_source": "    model: FieldCodec.field_annotation(ThreadSettings, \"model\") = NativeThreadDefaults.model\n    thinking_level: FieldCodec.field_annotation(ThreadSettings, \"thinking_level\") = NativeThreadDefaults.thinking_level"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/new.py",
+          "target_qualname": "NewThreadCliCommand.project_bindings",
+          "replacements": [
+            {
+              "old_source": "        return (cls(name='', project=project, model=defaults.model,\n                    thinking_level=defaults.thinking_level),)",
+              "new_source": "        return (cls(name='', project=project, **NativeThreadDefaults.field_values(defaults)),)"
+            }
+          ]
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/thread_management.py",
+          "import_source": "from agent_comms.registry.thread_settings import ThreadSettings"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/thread_management.py",
+          "target_qualname": "NewThreadSpec",
+          "replacements": [
+            {
+              "old_source": "class NewThreadSpec:",
+              "new_source": "class NewThreadSpec(ThreadSettings):"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/thread_management.py",
+          "target_qualname": "NewThreadSpec",
+          "replacements": [
+            {
+              "old_source": "    model: ThreadModel\n    thinking_level: ThinkingLevelField",
+              "new_source": "    model: ThreadModel = field()\n    thinking_level: ThinkingLevelField = field()"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/thread_management.py",
+          "target_qualname": "NewThreadSpec.declaration",
+          "replacements": [
+            {
+              "old_source": "                      worktree=self.project, model=self.model, thinking_level=self.thinking_level)",
+              "new_source": "                      worktree=self.project, **ThreadSettings.field_values(self))"
+            }
+          ]
+        },
+        {
+          "operation": "ensure_import",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/fork.py",
+          "import_source": "from agent_comms.registry.thread_settings import ThreadSettings"
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/cli_verbs/fork.py",
+          "target_qualname": "ForkCliCommand.thread_binding",
+          "replacements": [
+            {
+              "old_source": "                   model=thread.model, thinking_level=thread.thinking_level)",
+              "new_source": "                   **ThreadSettings.field_values(thread))"
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/planning/work_dispatch.py",
+          "target_qualname": "WorkDispatch.start",
+          "replacements": [
+            {
+              "old_source": "            model=defaults.model,\n            thinking_level=defaults.thinking_level,",
+              "new_source": "            **NativeThreadDefaults.field_values(defaults),"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

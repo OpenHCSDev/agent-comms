@@ -1,0 +1,31 @@
+{
+  "recipes": [
+    {
+      "recipe_id": "remove-competing-catalog-selection-defaults",
+      "operations": [
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/thread_model.py",
+          "target_qualname": "CatalogSelection",
+          "replacements": [
+            {
+              "old_source": "    \"\"\"The model and thinking inputs a catalog reads; absent inputs select no override.\"\"\"",
+              "new_source": "    \"\"\"The settings and project supplied by the selection's actual owner.\"\"\""
+            }
+          ]
+        },
+        {
+          "operation": "patch_target",
+          "file_path": "/home/ts/wt/codex-live--P181/src/agent_comms/registry/thread_model.py",
+          "target_qualname": "CatalogSelection",
+          "replacements": [
+            {
+              "old_source": "    @property\n    def model(self) -> ModelSelection:\n        return UndeclaredModel()\n\n    @property\n    def thinking_level(self) -> type[ThinkingChoice]:\n        return NoThinkingOverride\n\n    @property\n    def service_tier(self) -> ServiceTier:\n        return ServiceTier.default()",
+              "new_source": "    model: ThreadModel\n    thinking_level: type[ThinkingChoice]\n    service_tier: ServiceTier"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
