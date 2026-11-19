@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 from abc import abstractmethod
 from collections.abc import AsyncIterator
@@ -12,16 +13,20 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, fields
 from functools import partial
 from pathlib import Path
-from typing import Self
+from typing import Annotated, ClassVar, Self
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import Platform, ProcessIdentity
+from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_input_proof import NativeInputProof
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.participant_identity import ParticipantIdentity
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.field_codec import FieldCodec, NullMember, WireName
 from agent_comms.storage.locked_store import DurableFile, PatternFile
-from agent_comms.storage.private_path import PrivateDirectoryRole, TrustedAncestorRole
+from agent_comms.storage.private_path import PrivateDirectoryRole, PrivateFileRole, TrustedAncestorRole
+from agent_comms.storage.store_files import AtomicFile
 from agent_comms_hooks.process_claim import ProcessSingleton
 
 
@@ -292,6 +297,54 @@ class CheckSession(DurableFile, BusTranscriptFile):
     filename = "native-sessions/{slot}/enrolled-{session_id}.jsonl"
 
 
+@dataclass(frozen=True)
+class PiCompactionSettings:
+    enabled: bool
+    reserve_tokens: Annotated[int, WireName("reserveTokens")]
+    keep_recent_tokens: Annotated[int, WireName("keepRecentTokens")]
+
+
+class FleetCompactionPolicy(DeclaredFamily, affix="CompactionPolicy"):
+    """A selected model's managed-session compaction settings."""
+
+    @classmethod
+    def for_model(cls, model: SelectedModel) -> type[FleetCompactionPolicy]:
+        try:
+            return cls.member_named(model.qualified)
+        except UnknownFamilyMember:
+            return NoFleetCompactionPolicy
+
+    @classmethod
+    @abstractmethod
+    def settings(cls) -> PiCompactionSettings | None: ...
+
+
+class NoFleetCompactionPolicy(NullMember, FleetCompactionPolicy, declared_name=None):
+    """Models without a fleet override keep Pi's own settings."""
+
+    @classmethod
+    def settings(cls) -> None:
+        return None
+
+
+class Gpt56SolCompactionPolicy(
+    FleetCompactionPolicy, declared_name="openai-codex/gpt-5.6-sol"
+):
+    """Apply Tristan's 400k fleet limit to GPT-5.6 Sol sessions."""
+
+    context_window: ClassVar[int] = 1_050_000
+    compact_at: ClassVar[int] = 400_000
+    keep_recent_tokens: ClassVar[int] = 20_000
+
+    @classmethod
+    def settings(cls) -> PiCompactionSettings:
+        return PiCompactionSettings(
+            enabled=True,
+            reserve_tokens=cls.context_window - cls.compact_at,
+            keep_recent_tokens=cls.keep_recent_tokens,
+        )
+
+
 class NativeAgentSettings(DurableFile, PatternFile):
     """Pi's SettingsManager writes this file in the session's private agent directory."""
 
@@ -299,10 +352,47 @@ class NativeAgentSettings(DurableFile, PatternFile):
     filename = f"native-sessions/{{lookup}}/{directory_name}/settings.json"
 
     @classmethod
-    def prepare_directory(cls, session_directory: Path) -> Path:
+    def prepare_directory(cls, session_directory: Path, model: SelectedModel) -> Path:
         directory = session_directory / cls.directory_name
         NativeSessionFiles.prepare_private_directory(directory)
+        cls.reconcile(directory, model)
         return directory
+
+    @classmethod
+    def reconcile(cls, directory: Path, model: SelectedModel) -> bool:
+        """Merge the selected fleet policy without owning unrelated Pi settings."""
+        policy = FleetCompactionPolicy.for_model(model).settings()
+        if policy is None:
+            return False
+        path = directory / "settings.json"
+        current = cls._read(path)
+        existing = current.get("compaction", {})
+        if type(existing) is not dict:
+            raise NativePiUnavailable("Native Pi compaction settings must be a JSON object")
+        updated = dict(current)
+        updated["compaction"] = {**existing, **FieldCodec.encode(policy)}
+        if updated == current:
+            return False
+        AtomicFile(path, PrivateFileRole.permissions).write_text(
+            json.dumps(updated, indent=2, sort_keys=True) + "\n"
+        )
+        return True
+
+    @staticmethod
+    def _read(path: Path) -> dict[str, object]:
+        try:
+            observed = path.lstat()
+        except FileNotFoundError:
+            return {}
+        refusal = NativePiUnavailable("Native Pi settings must be one owner-private file")
+        PrivateFileRole.require(observed, refusal)
+        try:
+            settings = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise refusal from error
+        if type(settings) is not dict:
+            raise NativePiUnavailable("Native Pi settings must be a JSON object")
+        return settings
 
 
 class RetainedNativeWriteMarker(DurableFile, PatternFile):
