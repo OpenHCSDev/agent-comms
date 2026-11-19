@@ -57,6 +57,7 @@ from agent_comms.task_attachments.disclosure_text import (
     WarningTone,
 )
 from agent_comms.task_attachments.owner_notices import OwnerNotice
+from agent_comms.team.board_actions import BoardActionOffer
 from agent_comms.team.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.ui_model.message_category import HeartbeatCategory, MessageCategory
 from agent_comms.ui_model.teammate_state import AwaitingTeam, TeammateState
@@ -178,11 +179,20 @@ class Ping(FrozenRecordMember, TaggedRecordMember, DeclaredFamily, affix="Ping")
     def alarm_pings(self) -> tuple[Ping, ...]:
         return (self,)
 
+    def for_recipient(
+        self,
+        recipient: ThreadIncarnation,
+        rules: Mapping[tuple[type[StandingRule], TextDigest], StandingRule],
+    ) -> Ping:
+        """A ping without a rule action is already recipient-complete."""
+        return self
+
 
 @dataclass(frozen=True)
 class RulePing(Ping):
     rule: type[StandingRule]
     observation: TextDigest
+    offers: tuple[BoardActionOffer, ...] = field(default=(), compare=False, kw_only=True)
 
     @property
     def urgent(self) -> bool:
@@ -211,6 +221,14 @@ class RulePing(Ping):
     def capture(cls, rule: StandingRule) -> Self:
         return cls(type(rule), rule.observation_key(), text=rule.line(), subjects=rule.subjects(),
                    threads=cls.stored_threads(rule.named_threads()))
+
+    def for_recipient(
+        self,
+        recipient: ThreadIncarnation,
+        rules: Mapping[tuple[type[StandingRule], TextDigest], StandingRule],
+    ) -> RulePing:
+        rule = rules[(self.rule, self.observation)]
+        return replace(self, offers=rule.action_offers(recipient))
 
 
 @dataclass(frozen=True)
@@ -309,6 +327,7 @@ class TeamPings(PingLines):
             *(TeammatePing.capture(state) for state in states if state.attention()),
             *(RulePing.capture(rule) for rule in rules),
         )
+        self.rules = {(type(rule), rule.observation_key()): rule for rule in rules}
         self.handled = tuple(sorted(
             (replace(ping, since=began.get(ping, ping.since).continued_from(now))
              for ping in captures),
@@ -329,11 +348,15 @@ class TeamPings(PingLines):
         announced = {ping.key: ping for packet in published for ping in packet.handled}
         new = tuple(ping for ping in self.handled if announced.get(ping.key) != ping)
         wakes = self.open_wakes or any(not ping.parked(self.stopped_threads) for ping in new)
-        packet = (TeamDecisions(recipient, self.handled, new, self.waiting,
+        bind = lambda pings: tuple(ping.for_recipient(recipient, self.rules) for ping in pings)
+        handled, decisions, waiting, opened = map(
+            bind, (self.handled, new, self.waiting, self.opened),
+        )
+        packet = (TeamDecisions(recipient, handled, decisions, waiting,
                                 not_applied=self.not_applied)
                   if wakes or self.not_applied
-                  else TeamUpdateNotice(recipient, self.handled, not_applied=self.not_applied))
-        return TeamDelivery(packet, self.opened)
+                  else TeamUpdateNotice(recipient, handled, not_applied=self.not_applied))
+        return TeamDelivery(packet, opened)
 
 
 @dataclass(frozen=True)

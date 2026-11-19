@@ -9,6 +9,7 @@ from inspect import isabstract
 import pytest
 
 from agent_comms.errors import TodoError
+from agent_comms.heartbeat_subjects import TeamHistory
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.order_words import (
@@ -39,7 +40,7 @@ from agent_comms.projects.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.registry.threads import ExternalThread, ForkThread
 from agent_comms.storage.recorded_time import RecordedEventTime
-from agent_comms.task_attachments.team_pings import RulePing
+from agent_comms.task_attachments.team_pings import RulePing, TeamPings
 from agent_comms.team import judge, order
 from agent_comms.team.board_actions import BoardActionOffer
 from agent_comms.team.standing import DeliveryAwaitingJudgement
@@ -221,6 +222,12 @@ def test_orderless_board_commands_do_not_invent_a_problem(board_review):
     for offer in offers:
         assert FieldCodec.decode(BoardActionOffer, FieldCodec.encode(offer)) == offer
         assert offer.text().startswith(f"{offer.verb.tool()} {offer.verb.declared_name} ")
+    delivery = TeamPings(
+        (), (rule,), (), now=time.time(), history=TeamHistory.of_team(comms),
+    ).delivery(recipient, published=())
+    carried, = delivery.packet.handled
+    assert isinstance(carried, RulePing) and carried.offers == offers
+    assert FieldCodec.decode(RulePing, FieldCodec.encode(carried)) == carried
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
 
 
