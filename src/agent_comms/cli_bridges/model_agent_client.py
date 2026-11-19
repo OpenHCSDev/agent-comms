@@ -15,20 +15,19 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
-from contextlib import ExitStack
-from functools import partial
 import urllib.error
 import urllib.request
 from abc import abstractmethod
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
-
-import os
+from functools import partial
 from pathlib import Path
 
 from agent_comms.comms import Comms
 from agent_comms.conversational_slop import ResponseContext, SlopVerdict, verify_all
-from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.child_process import ProcessIdentity, ProcessName
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.installer.active_route import resolve_comms_route
 from agent_comms.messaging.agent_inbox import TakenInputStart
@@ -37,6 +36,9 @@ from agent_comms.messaging.messages import InfoKind
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread
+
+
+MODEL_AGENT_PROCESS = ProcessName("ac-model-agent")
 
 
 class ModelReply(DeclaredFamily, affix="Reply"):
@@ -329,6 +331,7 @@ class ModelAgent:
 
 
 def main() -> None:
+    MODEL_AGENT_PROCESS.publish()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--name", required=True,
                         help="Thread name on the bus this agent speaks from")
