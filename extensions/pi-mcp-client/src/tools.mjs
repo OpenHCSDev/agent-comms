@@ -4,6 +4,9 @@ import { Compile } from 'typebox/compile';
 import { confirmedClient } from './operation.mjs';
 import { toPiResult } from './tool-result.mjs';
 
+const MAX_ACTIVE_MCP_TOOLS = 64;
+const PICKER_NAME = 'mcp_find_tools';
+
 function toolName(serverId, remoteName) {
   const prefix = `mcp_${serverId}_`;
   const suffix = createHash('sha256').update(remoteName).digest('hex').slice(0, 10);
@@ -31,11 +34,16 @@ export function registerReadyTools(pi, runtime) {
         name: toolName(entry.id, remote.name) });
     }
   }
-  if (definitions.length > 64 || new Set(definitions.map((item) => item.name)).size !== definitions.length) {
-    throw new Error('MCP tool catalog exceeds exposure limit or contains duplicate identities');
+  if (new Set(definitions.map((item) => item.name)).size !== definitions.length) {
+    throw new Error('MCP tool catalog contains duplicate identities');
   }
   const existing = new Set(pi.getAllTools().map((tool) => tool.name));
-  if (definitions.some(({ name }) => existing.has(name))) throw new Error('MCP tool name collision');
+  const deferred = definitions.length > MAX_ACTIVE_MCP_TOOLS;
+  if (definitions.some(({ name }) => existing.has(name)) || (deferred && existing.has(PICKER_NAME))) {
+    throw new Error('MCP tool name collision');
+  }
+  // Preserve the caller's active tools before registration makes remote tools active.
+  const previousActive = deferred ? pi.getActiveTools() : undefined;
   for (const { serverId, remote, name, parameters } of definitions) {
     const label = `MCP ${serverId}/${remote.name}`.replace(/[^\x20-\x7e]/g, '?');
     pi.registerTool({
@@ -62,6 +70,38 @@ export function registerReadyTools(pi, runtime) {
         return mapped;
       },
     });
+  }
+  if (deferred) {
+    const remoteNames = new Set(definitions.map(({ name }) => name));
+    pi.registerTool({
+      name: PICKER_NAME,
+      label: 'Find MCP tools',
+      description: 'Find registered MCP tools by server, exact tool name or descriptive words. ' +
+        'Activate the matches for the next request, replacing the previous active MCP selection. ' +
+        'Every remote tool remains registered and searchable; exact names can select any tool. ' +
+        `Select up to ${MAX_ACTIVE_MCP_TOOLS} remote tools per search page; use offset to reach later matches.`,
+      parameters: Type.Object({ query: Type.String({ minLength: 1, maxLength: 256 }),
+        offset: Type.Optional(Type.Integer({ minimum: 0 })) }),
+      async execute(_toolCallId, { query, offset = 0 }) {
+        const needle = query.trim().toLowerCase();
+        const exact = definitions.filter(({ name, serverId, remote }) =>
+          [name, remote.name, `${serverId}/${remote.name}`].some((value) => value.toLowerCase() === needle));
+        const words = needle.split(/\s+/);
+        const matching = exact.length ? exact : definitions.filter(({ name, serverId, remote }) => {
+          const text = `${name} ${serverId} ${remote.name} ${remote.description ?? ''}`.toLowerCase();
+          return words.every((word) => text.includes(word));
+        });
+        const selected = matching.slice(offset, offset + MAX_ACTIVE_MCP_TOOLS);
+        const otherActive = pi.getActiveTools().filter((name) => !remoteNames.has(name));
+        pi.setActiveTools([...otherActive, ...selected.map(({ name }) => name)]);
+        return { content: [{ type: 'text', text: JSON.stringify({ registered: definitions.length,
+          matching: matching.length, limit: MAX_ACTIVE_MCP_TOOLS, offset,
+          nextOffset: offset + selected.length < matching.length ? offset + selected.length : null,
+          active: selected.map(({ name }) => name) }) }],
+        details: { registered: definitions.length, matching: matching.length, active: selected.length } };
+      },
+    });
+    pi.setActiveTools([...previousActive, PICKER_NAME]);
   }
   return definitions.map(({ name, serverId, remote }) => ({ name, serverId, remoteName: remote.name }));
 }

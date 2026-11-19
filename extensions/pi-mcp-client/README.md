@@ -4,7 +4,14 @@ The Pi package manifest loads `index.mjs` **by default when the package is insta
 It connects approved stdio servers when a Pi session starts, discovers tools,
 resources and prompts, registers bounded discovered Pi tools (including a
 resource/prompt catalog and read/get operations), and closes children on session
-shutdown. It provides `/mcp-status`, `/mcp-approve <id>`, `/mcp-deny <id>`, and
+shutdown. Catalogs with more than64 remote tools retain every registered schema;
+`mcp_find_tools` selects up to64 remote tools per search page by name or
+descriptive words; `offset` reaches later matches. It replaces only the active
+MCP selection, never other active tools or the registered catalog. Replies carry
+Pi aliases without repeating remote names. Exact generated names
+can select every remote tool.
+Activation itself makes no remote call and never grants call permission.
+It provides `/mcp-status`, `/mcp-approve <id>`, `/mcp-deny <id>`, and
 `/mcp-allow-calls <id>` / `/mcp-confirm-calls <id>`. Tool calls normally require
 a local Pi TUI confirmation. An explicit, separate user-owned call grant permits
 headless/RPC calls for the exact project, scope, server and declaration digest;
@@ -37,7 +44,11 @@ whole existing declaration. Non-TTY writes are refused. A TTY can be simulated
 by another same-user process: this convenience check is **not** human
 attestation or an OS security boundary. This action does **not** grant Pi
 project trust, project-server approval, or autonomous call permission;
-those gates remain independent. Out-of-band `pi-mcp trust approve|deny --id ID
+those gates remain independent. `--cwd agent` explicitly selects the original
+user MCP profile instead of the project directory; it is user-scope only and
+requires an absolute executable. The launch root must resolve outside the
+current project. The default `--cwd project` retains both saved/session trust
+requirements. Out-of-band `pi-mcp trust approve|deny --id ID
 --digest SHA256 [--project PATH]` and `pi-mcp calls allow|ask --id ID
 --digest SHA256 [--project PATH]` require a local interactive TTY to show the
 full exact declaration and type an action/ID/digest challenge. The trust action
@@ -46,10 +57,14 @@ Decisions apply to the next Pi turn. A TTY is consent UX, not a security
 boundary against an already trusted same-user process. Non-TTY mutation fails;
 there is no headless `--yes` approval. Saved Pi project trust (`/trust` in Pi's local
 TUI, then restart) is required before the CLI writes project configuration.
-Every child uses project cwd, so **both scopes** require a saved Pi trust
-decision before MCP reads project declarations or launches: Pi auto-trusts
-projects without built-in `.pi` resources and does not recognize `.pi/mcp.json`
-as one, while relative user-command arguments could execute project code.
+Every **project-cwd** child, including user-scope servers, requires a saved Pi
+trust decision and a trusted current session. Pi auto-trusts projects without
+built-in `.pi` resources and does not recognize `.pi/mcp.json` as one, while
+relative user-command arguments could execute project code. An explicitly
+user-owned `cwd:"agent"` declaration instead resolves relative code from the
+original user MCP profile, outside the project, without enabling project-local
+resources. It works with `--no-approve`; project declarations remain unread and
+all existing exact call-approval rules still apply.
 Pi's temporary `--approve` alone is not a saved MCP project trust decision. Project-scope literal `env` is refused
 (hidden executable overrides are unsafe); use `envFrom`. User-scope literal
 `--env` values are saved in the owner-controlled `mcp.json`.
@@ -79,6 +94,8 @@ this active-turn snapshot. Stock Pi without native input proof emits no receipt.
 The native config is `{"version":1,"servers":[...]}` with unique server IDs.
 Each entry requires `id`, `enabled`, `instructionsPolicy:"status-only"`, and
 `transport:{"type":"stdio","command":"...","args":[],"cwd":"project"}`.
+The working-directory family also admits `"cwd":"agent"` in user scope only;
+unknown directory modes fail parsing, and project declarations cannot select it.
 Optional user-scope `env` supplies literal values; `envFrom` maps child
 variables to host variable names. Project-scope literal `env` is ineligible;
 use `envFrom` for owner-controlled values. Unknown fields/transports fail. User config is
@@ -107,7 +124,8 @@ TUI or CLI confirmation without exposing literal environment values. Project
 launch decisions and durable call grants remain refused through RPC even when
 per-call Pi extension-UI confirmation is available. The
 launch-spec builder rejects unapproved/mismatched project contexts and
-constructs a narrow SDK environment with explicit `envFrom`, canonical cwd and
+constructs a narrow SDK environment with explicit `envFrom`, a canonical
+project or user-profile cwd, and
 piped stderr. The package-owned Pi session uses the official SDK, drains child
 stderr without exposing it, and does not retry ambiguous calls. Every tool
 call rechecks the current declaration and ledger before one SDK request; a
@@ -124,7 +142,10 @@ gated bounded tools/resources/prompts discovery, operations, progress,
 cancellation and cleanup against a generic fixture. It also runs an isolated
 real Pi RPC process with `--no-approve` and `--approve`: untrusted files are not
 read, absent/stale digests cause zero spawns, and an approved generic fixture
-initializes/discovers and exits on shutdown. Offline local-PTY CLI tests cover
+initializes/discovers and exits on shutdown. Additional untrusted-session
+controls run user-profile code instead of a poisoned project-relative script,
+leave malformed project MCP config unread, retain project trust/call-policy state,
+and cover 125-tool catalogs without unbounded active schemas. Offline local-PTY CLI tests cover
 exact-digest launch/call decisions, denial and zero server spawn. No provider call is made. PR #77
 remains draft. ACP generic extension-UI projection and native-input-correlated
 status relay have provider-free fixture coverage; a real Pi→ACP→Toad linked

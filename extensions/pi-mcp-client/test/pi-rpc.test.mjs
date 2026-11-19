@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,12 +12,13 @@ import { declarationDigest, parseNativeConfig } from '../src/config.mjs';
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const cli = join(packageDir, 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'bundle', 'cli.js');
 
-async function rpc({ project, agentDir, trust }) {
+async function rpc({ project, agentDir, trust, extensions = [] }) {
   // Deliberately do not inherit model API keys, live Pi settings, or user extensions.
   const child = spawn(process.execPath, [cli, '--mode', 'rpc', '--no-session',
     '--no-extensions', '--no-skills', '--no-prompt-templates', '--no-themes',
     '--no-context-files', '--no-builtin-tools',
-    trust ? '--approve' : '--no-approve', '-e', packageDir], {
+    trust ? '--approve' : '--no-approve', '-e', packageDir,
+    ...extensions.flatMap((path) => ['-e', path])], {
     cwd: project,
     env: { PATH: process.env.PATH ?? '', HOME: dirname(agentDir),
       PI_CODING_AGENT_DIR: agentDir, CI: 'true', NO_COLOR: '1' },
@@ -126,3 +127,63 @@ test('real isolated Pi RPC starts only approved project fixture and closes it',
     await rm(root, { recursive: true, force: true });
   }
 });
+
+for (const extraTools of [0, 123]) {
+test(`real --no-approve Pi RPC connects ${extraTools + 2} user tools without project execution`, async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mcp-pi-user-rpc-'));
+  const project = join(root, 'project');
+  const agentDir = join(root, 'agent');
+  const marker = join(root, 'actual-cwd');
+  const projectMarker = join(root, 'project-executed');
+  const exitMarker = join(root, 'closed');
+  await mkdir(join(project, CONFIG_DIR_NAME), { recursive: true });
+  await mkdir(agentDir);
+  await writeFile(join(project, CONFIG_DIR_NAME, 'mcp.json'), '{malformed untrusted project');
+  await writeFile(join(project, 'relative.mjs'),
+    `import {writeFileSync} from 'node:fs'; writeFileSync(${JSON.stringify(projectMarker)}, 'wrong');\n`);
+  await writeFile(join(agentDir, 'relative.mjs'),
+    `import {writeFileSync} from 'node:fs';\n` +
+    `writeFileSync(${JSON.stringify(marker)}, process.cwd());\n` +
+    `process.on('exit', () => writeFileSync(${JSON.stringify(exitMarker)}, 'closed'));\n` +
+    `process.on('SIGTERM', () => process.exit(0));\n` +
+    `await import(${JSON.stringify(pathToFileURL(join(packageDir, 'test', 'fixture-server.mjs')).href)});\n`);
+  const probe = join(root, 'probe.mjs');
+  await writeFile(probe, `export default function(pi) { pi.registerCommand('fixture-tools', {
+    handler(_args, ctx) { ctx.ui.notify('fixture-tools:' + JSON.stringify({
+      all: pi.getAllTools().map(tool => tool.name), active: pi.getActiveTools()
+    }), 'info'); }
+  }); }`);
+  await writeFile(join(agentDir, 'mcp.json'), JSON.stringify({ version: 1, servers: [{
+    id: 'fixture', enabled: true, instructionsPolicy: 'status-only',
+    transport: { type: 'stdio', command: process.execPath,
+      args: ['relative.mjs', '--extra-tools', String(extraTools)], cwd: 'agent' },
+  }] }));
+  const client = await rpc({ project, agentDir, trust: false, extensions: [probe] });
+  try {
+    await client.request('get_commands');
+    await client.request('prompt', { message: '/mcp-status' });
+    assert.equal(client.events.some((message) => message.type === 'extension_ui_request' &&
+      JSON.stringify(message).includes('ready')), true, JSON.stringify(client.events));
+    await client.request('prompt', { message: '/fixture-tools' });
+    const notice = client.events.find((event) => event.type === 'extension_ui_request' &&
+      event.method === 'notify' && event.message.startsWith('fixture-tools:'));
+    assert.ok(notice, JSON.stringify(client.events));
+    const tools = JSON.parse(notice.message.slice('fixture-tools:'.length));
+    assert.equal(tools.all.filter((name) => name.startsWith('mcp_fixture_')).length, extraTools + 2);
+    if (extraTools > 0) {
+      assert.ok(tools.active.includes('mcp_find_tools'));
+      assert.equal(tools.active.some((name) => name.startsWith('mcp_fixture_')), false);
+    }
+    assert.equal(await readFile(marker, 'utf8'), await realpath(agentDir));
+    assert.equal(existsSync(projectMarker), false);
+    assert.notEqual(new ProjectTrustStore(agentDir).get(project), true);
+    assert.equal(existsSync(join(agentDir, 'mcp-trust.json')), false);
+  } finally {
+    client.child.stdin.end();
+    const forced = setTimeout(() => client.child.kill(), 5_000);
+    try { await client.closed; } finally { clearTimeout(forced); }
+    assert.equal(await readFile(exitMarker, 'utf8'), 'closed');
+    await rm(root, { recursive: true, force: true });
+  }
+});
+}

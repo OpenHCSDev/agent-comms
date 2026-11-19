@@ -10,6 +10,7 @@ import { decideCallGrant, decideProjectServer } from '../src/commands.mjs';
 import { declarationDigest, parseNativeConfig } from '../src/config.mjs';
 import { loadEffectiveDeclarations } from '../src/sources.mjs';
 import { inventorySnapshot } from '../src/inventory.mjs';
+import { WorkingDirectory } from '../src/working-directory.mjs';
 
 function options(args) {
   const parsed = { arg: [], env: {}, envFrom: {} };
@@ -20,7 +21,7 @@ function options(args) {
       parsed[flag.slice(2)] = true;
       continue;
     }
-    if (!['--project', '--scope', '--id', '--digest', '--command', '--arg', '--env', '--env-from'].includes(flag)) {
+    if (!['--project', '--scope', '--id', '--digest', '--command', '--cwd', '--arg', '--env', '--env-from'].includes(flag)) {
       throw new Error(`Unknown MCP option ${flag}`);
     }
     const value = args[++index];
@@ -95,17 +96,20 @@ async function add(opts, agentDir) {
   const projectRoot = await realpath(opts.project ?? process.cwd());
   const document = parseNativeConfig(JSON.stringify({ version: 1, servers: [{
     id: opts.id, enabled: true, instructionsPolicy: 'status-only', transport: {
-      type: 'stdio', command: opts.command, args: opts.arg, cwd: 'project',
+      type: 'stdio', command: opts.command, args: opts.arg,
+      cwd: opts.cwd ?? WorkingDirectory.defaultName,
       env: opts.env, envFrom: opts.envFrom,
     },
   }] }));
   const declaration = document.servers[0];
+  WorkingDirectory.of(declaration.transport.cwd).validateScope(opts.scope);
   if (opts.scope === 'project' && Object.keys(declaration.transport.env).length) {
     throw new Error('Project MCP literal environment is not supported; use envFrom');
   }
   const digest = declarationDigest(declaration);
   const receipt = { version: 1, scope: opts.scope, projectRoot, id: declaration.id,
     digest, command: declaration.transport.command, args: declaration.transport.args,
+    cwd: declaration.transport.cwd, agentDir,
     envNames: Object.keys(declaration.transport.env),
     envFrom: declaration.transport.envFrom, replace: !!opts.replace };
   if (opts['dry-run']) return { ...receipt, applied: false };
@@ -155,7 +159,7 @@ try {
   } else if (action === 'add') {
     process.stdout.write(JSON.stringify(await add(opts, agentDir)) + '\n');
   } else {
-    throw new Error('Usage: pi-mcp status|inventory [--project PATH] [--json] | trust approve|deny --id ID --digest SHA256 [--project PATH] | calls allow|ask --id ID --digest SHA256 [--project PATH] | add --scope user|project --id ID --command EXECUTABLE [--arg ARG ...] [--env NAME=VALUE] [--env-from NAME=SOURCE] [--dry-run] [--replace]');
+    throw new Error('Usage: pi-mcp status|inventory [--project PATH] [--json] | trust approve|deny --id ID --digest SHA256 [--project PATH] | calls allow|ask --id ID --digest SHA256 [--project PATH] | add --scope user|project --id ID --command EXECUTABLE [--cwd project|agent] [--arg ARG ...] [--env NAME=VALUE] [--env-from NAME=SOURCE] [--dry-run] [--replace]');
   }
 } catch (error) {
   console.error(`pi-mcp: ${error.message}`);
