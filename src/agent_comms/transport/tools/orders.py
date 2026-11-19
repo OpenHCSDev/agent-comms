@@ -109,6 +109,7 @@ from agent_comms.transport.serving.served_requests import OwnedRead, OwnerLiveRe
 from agent_comms.transport.tool_caller import ThreadCaller, ToolCaller
 from agent_comms.transport.tool_declaration import EditCall
 from agent_comms.transport.tool_request import (
+    HumanToolRequest,
     NativeToolRequest,
     PublishingToolRequest,
     ReadTool,
@@ -317,24 +318,24 @@ class CommsBoardTool(BoardReadTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsBoardActionTool(ThreadToolRequest):
+class CommsBoardActionTool(HumanToolRequest[BoardActionApplied]):
     label = "Apply board action"
-    description = "Apply one declaration-bound action from the caller's current Team board."
+    description = "Apply one declaration-bound action from the selected recipient's Team board."
     offer: Annotated[BoardActionOffer, *tool_field("The exact action offered by the board row")]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> BoardActionApplied:
-        actor = caller.identity(comms)
-        if actor != self.offer.recipient or not actor.current(comms.registry.snapshot()):
-            raise ToolRefusedError("The board action recipient is no longer this caller")
+    def answered(self, comms: Comms) -> BoardActionApplied:
+        recipient = self.offer.recipient
+        if not recipient.current(comms.registry.snapshot()):
+            raise ToolRefusedError("The board action recipient incarnation changed")
         current = tuple(
             action
-            for packet in TeamUpdate.latest(comms, actor)
+            for packet in TeamUpdate.latest(comms, recipient)
             for ping in packet.handled
             for action in ping.board_actions()
         )
         if self.offer not in current:
             raise ToolRefusedError("The board action is stale; read the current board")
-        return self.offer.execute(comms.root, actor.name)
+        return self.offer.execute(comms.root, recipient.name)
 
 
 @dataclass(frozen=True, kw_only=True)
