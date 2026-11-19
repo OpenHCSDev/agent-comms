@@ -164,7 +164,14 @@ class AppliedOrderAction(OrderActionResult):
 
 @dataclass(frozen=True)
 class ReadOrderAction(OrderActionResult):
-    """A read-only verb already printed the information it was asked for."""
+    """An attempted action that changed nothing, with its declared target identity."""
+
+    verb: str
+    identity: tuple[str, ...]
+
+    def lines(self) -> tuple[str, ...]:
+        detail = " ".join(self.identity) if self.identity else "no target changed"
+        return (f"NO CHANGE {self.verb}: {detail}",)
 
 
 # Eliminate forwarding with inheritance and multiple parents; decompose the hierarchy if it is not sound.
@@ -1067,6 +1074,10 @@ class TeamVerb(ClearingVerb, affix="Verb"):
         """Build this declared member's result from identities its own code supplies."""
         return AppliedOrderAction(type(self).declared_name, tuple(identity))
 
+    def unchanged(self, *identity: str) -> ReadOrderAction:
+        """Name the attempted member and targets when no state changed."""
+        return ReadOrderAction(type(self).declared_name, tuple(identity))
+
     @abstractmethod
     def run(self, ctx: Team) -> OrderActionResult: ...
 
@@ -1294,7 +1305,7 @@ class FireVerb(Reasoned, OrderVerb):
         return (
             self.applied(*(f"problem={problem}" for problem in problems))
             if problems
-            else ReadOrderAction()
+            else self.unchanged(f"unit={self.unit}")
         )
 
 
@@ -1565,7 +1576,7 @@ class EndsForkVerb(OrderVerb):
         ctx = self.acting(ctx)
         if ctx.actor_name not in ctx.comms.registry:
             print(f'{ctx.actor_name} never joined; nothing to end')
-            return ReadOrderAction()
+            return self.unchanged(f"fork={ctx.actor_name}")
         result = self.act(ctx)
         for line in result.lines():
             print(line)
@@ -1609,7 +1620,7 @@ class SessionEndVerb(OrderVerb, declared_name="session-end"):
         return (
             self.applied(*(f"fork={name}" for name in names))
             if names
-            else ReadOrderAction()
+            else self.unchanged("forks=none")
         )
 
 
@@ -1751,7 +1762,7 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
         for path in HuntDue.next_hunt(ctx.comms,
                                       HeldOrders.read(ctx.comms).todos):
             print(path)
-        return ReadOrderAction()
+        return self.unchanged("queue=hunts")
 
 
 class InstallVerb(OrderVerb):
@@ -1765,7 +1776,7 @@ class InstallVerb(OrderVerb):
         return (
             self.applied(*(f"install={launch}" for launch in launches))
             if launches
-            else ReadOrderAction()
+            else self.unchanged("installs=none")
         )
 
 
@@ -1775,7 +1786,7 @@ class IdleVerb(OrderVerb):
     def run(self, ctx: Team) -> OrderActionResult:
         for unit in UnownedWheelSpin.read_idle(ctx.comms):
             print(unit.name)
-        return ReadOrderAction()
+        return self.unchanged("roster=team")
 
 
 

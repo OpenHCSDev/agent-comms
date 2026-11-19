@@ -5,7 +5,6 @@ import time
 from dataclasses import replace
 from inspect import isabstract
 from pathlib import Path
-from types import SimpleNamespace
 from typing import get_type_hints
 
 import pytest
@@ -31,7 +30,7 @@ from agent_comms.team.standing import InstallDue
 from agent_comms.transport.tool_caller import ForkCaller
 from test_todos import order, thread
 
-pytest_plugins = ("test_todos",)
+pytest_plugins = ("test_todos", "test_held_problem_orders")
 
 
 def test_every_concrete_order_verb_returns_the_shared_result_family():
@@ -40,13 +39,18 @@ def test_every_concrete_order_verb_returns_the_shared_result_family():
     assert all(get_type_hints(verb.run)["return"] is OrderActionResult for verb in verbs)
 
 
-def test_empty_batch_actions_report_no_mutation(monkeypatch):
-    context = SimpleNamespace(comms=object())
+def test_empty_batch_actions_name_their_no_change_result(held_team, monkeypatch, capsys):
     monkeypatch.setattr(InstallDue, "launch_due", lambda comms: ())
     monkeypatch.setattr(ForkCaller, "end_session", lambda comms, forks: ())
 
-    assert isinstance(InstallVerb().run(context), ReadOrderAction)
-    assert isinstance(SessionEndVerb().run(context), ReadOrderAction)
+    install = InstallVerb().apply(held_team)
+    session = SessionEndVerb().apply(held_team)
+
+    assert isinstance(install, ReadOrderAction)
+    assert isinstance(session, ReadOrderAction)
+    output = capsys.readouterr().out.splitlines()
+    assert "NO CHANGE install: installs=none" in output
+    assert "NO CHANGE session-end: forks=none" in output
 
 
 @pytest.mark.parametrize('definition', [
