@@ -51,6 +51,7 @@ from agent_comms.team.standing_rules import (
 )
 from agent_comms.transport.tool_caller import ForkCaller, PeerCaller, ThreadCaller
 from agent_comms_hooks import ToolRefusedError
+from github_fixture import GitHubFixture
 from team_heartbeat_fixture import capture_frame
 from test_held_problem_orders import merge_two_commit_fix
 from test_team_notifications import beat, notifications
@@ -251,7 +252,7 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     assert reassigned.order.pull_requests == accepted.order.pull_requests
 
 
-def test_released_merged_work_refuses_late_review_but_can_be_delivered(
+def test_released_merged_work_can_be_reviewed_and_delivered_without_reacquiring(
         held_team, cited_source, tmp_path):
     ctx = held_team
     store = ctx.comms.goals.todos
@@ -268,12 +269,27 @@ def test_released_merged_work_refuses_late_review_but_can_be_delivered(
     assert request == current
     head = cited_source.git(cited_source.checkout, "rev-parse", "refs/heads/fix/42").strip()
     quote = " ".join(current.order.instructions(current).split()[:4])
+    owner_goal = ctx.comms.registry.require(previous.owner).goal
+    holder = current.holder_state
+    github = GitHubFixture(tmp_path / "bin")
+    calls_before = len(github.calls())
     with chdir(cited_source.checkout):
-        # The fixture already merged this PR. A late source review cannot reopen it.
-        with pytest.raises(TodoError):
-            judge.main(["ok", "--repo", todo.repo.to_wire(), "--problem", todo.id,
-                        "--pr", "42", "--head", head, "--why", REASON.text, "--serves", quote], ctx)
-        assert not StoredHeadReview.head_reviews(store, PullRequestHead(todo.repo, 42, head))
+        judge.main(["ok", "--repo", todo.repo.to_wire(), "--problem", todo.id,
+                    "--pr", "42", "--head", head, "--why", REASON.text, "--serves", quote], ctx)
+        request = PullRequestHead(todo.repo, 42, head)
+        record, = StoredHeadReview.head_reviews(store, request)
+        assert record.request == request
+        assert record.actor == ctx.incarnation
+        assert record.verdict == ReviewedHeadVerdict(REASON)
+        assert record.order.problem == todo.id
+        assert record.order.order_id == current.order.id
+        reviewed = store.get(todo.id)
+        assert reviewed.holder_state == holder
+        assert reviewed.current_holder.current_assignments() == ()
+        assert reviewed.order.holds_head(request)
+        assert ctx.comms.registry.require(previous.owner).goal == owner_goal
+        assert not any(call[:2] in (("pr", "merge"), ("pr", "reopen"))
+                       for call in github.calls()[calls_before:])
         order.main(["done", previous.owner, todo.id], ctx)
     delivered = store.get(todo.id)
     assert type(delivered.order) is DeliveredProblemOrder
