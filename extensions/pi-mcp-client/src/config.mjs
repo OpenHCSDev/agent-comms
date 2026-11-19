@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { parseUniqueJson } from './strict-json.mjs';
+import { WorkingDirectory } from './working-directory.mjs';
 
 const name = z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/);
 const variable = z.string().regex(/^[A-Z_][A-Z0-9_]*$/);
@@ -9,7 +10,7 @@ const transport = z.strictObject({
   type: z.literal('stdio'),
   command: z.string().min(1).max(4_096),
   args: z.array(z.string().max(8_192)).max(32),
-  cwd: z.literal('project'),
+  cwd: z.enum(WorkingDirectory.names()),
   env: variables,
   envFrom: z.record(variable, variable).default({}),
 }).superRefine((value, ctx) => {

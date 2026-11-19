@@ -32,6 +32,9 @@ test('native config writer adds/replaces whole declarations without launch or se
         declaration: input }), /Invalid MCP config destination/);
     }
     assert.equal(existsSync(join(root, 'mcp.json')), false);
+    const profile = { ...input, transport: { ...input.transport, cwd: 'agent' } };
+    await assert.rejects(writeNativeServer({ ...opts, declaration: profile }), /requires user scope/);
+    assert.equal(existsSync(join(projectRoot, '.pi', 'mcp.json')), false);
     const added = await writeNativeServer({ ...opts, declaration: input });
     assert.equal(added.id, 'fixture');
     assert.equal(existsSync(marker), false);
@@ -46,8 +49,11 @@ test('native config writer adds/replaces whole declarations without launch or se
     assert.equal(current.servers.length, 1);
     assert.equal(current.servers[0].transport.command, 'other');
     assert.equal(existsSync(marker), false);
-    const user = await writeNativeServer({ ...opts, scope: 'user', declaration: input });
-    assert.equal(parseNativeConfig(await readFile(user.configPath, 'utf8')).servers[0].id, 'fixture');
+    const user = await writeNativeServer({ ...opts, scope: 'user', declaration: profile });
+    assert.equal(parseNativeConfig(await readFile(user.configPath, 'utf8')).servers[0].transport.cwd, 'agent');
+    assert.equal((await loadEffectiveDeclarations({ agentDir, configDirName: '.pi',
+      ctx: { cwd: projectRoot, isProjectTrusted: () => false } }))[0].status, 'approved');
+    assert.equal(existsSync(marker), false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

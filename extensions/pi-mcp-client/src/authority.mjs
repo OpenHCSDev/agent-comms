@@ -2,6 +2,7 @@ import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { declarationDigest } from './config.mjs';
 import { parseUniqueJson } from './strict-json.mjs';
+import { WorkingDirectory } from './working-directory.mjs';
 
 const approval = z.strictObject({
   projectRoot: z.string().min(1),
@@ -64,7 +65,7 @@ export function callGrantDecision(ledger, entry) {
     row.digest === entry.digest)?.decision ?? 'ask';
 }
 
-export function effectiveDeclarations({ user, project, projectTrusted, projectRoot, ledger }) {
+export function effectiveDeclarations({ user, project, projectTrusted, projectRoot, ledger, agentDir }) {
   if (!isAbsolute(projectRoot)) throw new Error('Canonical absolute project root required');
   const combined = new Map(user.servers.map((server) => [server.id,
     { scope: 'user', declaration: server }]));
@@ -81,14 +82,15 @@ export function effectiveDeclarations({ user, project, projectTrusted, projectRo
       row.projectRoot === projectRoot && row.scope === 'project' &&
       row.serverId === declaration.id && row.digest === digest
     )?.decision;
-    // Every stdio child uses project cwd. Pi automatically trusts projects
-    // with no .pi resources; for user-scope declarations that is NOT consent
-    // to execute project-relative code. Require an explicit saved trust entry.
+    // User-owned profile execution does not read or resolve relative code from
+    // the project. Project execution still requires explicit saved/session trust.
+    const directory = WorkingDirectory.of(declaration.transport.cwd);
+    directory.validateScope(scope);
     const status = !declaration.enabled ? 'disabled'
-      : !projectTrusted ? 'trust_required'
+      : !directory.trusted(projectTrusted) ? 'trust_required'
       : scope === 'project' && Object.keys(declaration.transport.env).length ? 'unsupported_env'
       : scope === 'user' || decision === 'approve' ? 'approved'
       : decision === 'deny' ? 'denied' : 'trust_required';
-    return { projectRoot, scope, declaration, digest, status };
+    return { projectRoot, agentDir, scope, declaration, digest, status };
   });
 }

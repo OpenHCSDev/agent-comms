@@ -24,6 +24,17 @@ server.registerTool('count', {
   }
   return { content: [{ type: 'text', text: String(n) }] };
 });
+const extraOption = process.argv.indexOf('--extra-tools');
+const extraTools = extraOption < 0 ? 0 : Number(process.argv[extraOption + 1]);
+if (!Number.isInteger(extraTools) || extraTools < 0 || extraTools > 254) {
+  throw new Error('Invalid fixture tool count');
+}
+for (let index = 0; index < extraTools; index++) {
+  server.registerTool(`extra_${index}`, {
+    description: `Additional fixture tool ${index}`,
+    inputSchema: { message: z.string() },
+  }, async ({ message }) => ({ content: [{ type: 'text', text: message }] }));
+}
 server.registerResource('example', 'fixture://example', {
   description: 'Read a fixture resource', mimeType: 'text/plain',
 }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/plain', text: 'fixture data' }] }));

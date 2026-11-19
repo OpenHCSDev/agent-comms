@@ -74,7 +74,7 @@ export async function loadDeclarationSnapshot({ ctx, agentDir, configDirName }) 
     ? parseNativeConfig(await readOptional(join(projectRoot, configDirName, 'mcp.json')) ?? EMPTY_CONFIG)
     : undefined;
   return { projectRoot, projectTrusted, user, project, ledger,
-    effective: effectiveDeclarations({ user, project, projectTrusted, projectRoot, ledger }) };
+    effective: effectiveDeclarations({ user, project, projectTrusted, projectRoot, ledger, agentDir }) };
 }
 
 export async function loadEffectiveDeclarations(options) {

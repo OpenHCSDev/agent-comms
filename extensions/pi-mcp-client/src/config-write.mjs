@@ -3,6 +3,7 @@ import { isAbsolute, join } from 'node:path';
 import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import { updateJsonFile } from './atomic-file.mjs';
 import { declarationDigest, parseNativeConfig } from './config.mjs';
+import { WorkingDirectory } from './working-directory.mjs';
 
 const EMPTY_CONFIG = '{"version":1,"servers":[]}';
 
@@ -18,6 +19,7 @@ export async function writeNativeServer({ agentDir, projectRoot, configDirName, 
     throw new Error('Saved Pi project trust required before editing project MCP config');
   }
   const server = parseNativeConfig(JSON.stringify({ version: 1, servers: [declaration] })).servers[0];
+  WorkingDirectory.of(server.transport.cwd).validateScope(scope);
   if (scope === 'project' && Object.keys(server.transport.env).length) {
     throw new Error('Project MCP literal environment is not supported; use envFrom');
   }
